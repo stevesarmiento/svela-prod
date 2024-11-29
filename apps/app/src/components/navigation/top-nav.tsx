@@ -1,11 +1,11 @@
 "use client";
 
 import { Button } from "@v1/ui/button";
-import {
-  IconMegaphoneFill,
-  IconMagnifyingglass,
-} from "symbols-react";
-import { Input } from "@v1/ui/input";
+// import {
+//   IconMegaphoneFill,
+//   IconMagnifyingglass,
+// } from "symbols-react";
+// import { Input } from "@v1/ui/input";
 import { SidebarTrigger, useSidebar } from "@v1/ui/sidebar";
 
 export function TopNav() {
@@ -27,8 +27,7 @@ export function TopNav() {
           </SidebarTrigger>
         )}
 
-        {/* Search */}
-        <div className="flex-1 flex items-center">
+        {/* <div className="flex-1 flex items-center">
           <div className="relative w-full max-w-md">
             <IconMagnifyingglass className="absolute left-2 top-2.5 h-4 w-4 fill-muted-foreground" />
             <Input
@@ -38,14 +37,12 @@ export function TopNav() {
           </div>
         </div>
 
-        {/* Right side items */}
         <div className="flex items-center gap-4">
-          {/* Notifications */}
           <Button variant="ghost" size="icon" className="relative">
             <IconMegaphoneFill className="h-5 w-5 fill-muted-foreground" />
             <span className="absolute top-0 right-0 h-2 w-2 bg-destructive rounded-full" />
           </Button>
-        </div>
+        </div> */}
       </div>
     </div>
   );

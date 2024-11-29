@@ -13,7 +13,6 @@ import { useEffect, useState } from "react"
 import { Skeleton } from "@v1/ui/skeleton"
 import { CoinSearch } from "./coin-search"
 import { toast } from "@v1/ui/use-toast"
-import { MiniChart } from "./mini-chart";
 
 export function Watchlist() {
     const { watchlist, removeFromWatchlist, isLoading: isWatchlistLoading } = useWatchlist()
@@ -75,7 +74,7 @@ export function Watchlist() {
           <CardHeader>
             <CardTitle>
               <div className="flex w-full justify-between items-center gap-2">
-                Favorites
+                Watchlist
                 <CoinSearch />
               </div>
             </CardTitle>
@@ -122,7 +121,6 @@ export function Watchlist() {
               <TableHead>Token</TableHead>
               <TableHead>Price</TableHead>
               <TableHead>24h Change</TableHead>
-              <TableHead>1D Chart</TableHead>
               <TableHead>Volume 24h</TableHead>
               <TableHead>Market Cap</TableHead>
               <TableHead className="w-[50px]"></TableHead>
@@ -154,17 +152,6 @@ export function Watchlist() {
                     className={coin.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'}
                   >
                     {coin.quote.USD.percent_change_24h.toFixed(2)}%
-                  </TableCell>
-                  <TableCell>
-                    {coin.historical ? (
-                      <MiniChart 
-                        historical={coin.historical}
-                        currentPrice={coin.quote.USD.price}
-                      />
-                    ) : (
-                      // Add loading state or fallback
-                      <div className="w-[120px] h-[40px] animate-pulse bg-muted rounded" />
-                    )}
                   </TableCell>
                   <TableCell>${formatLargeNumber(coin.quote.USD.volume_24h)}</TableCell>
                   <TableCell>${formatLargeNumber(coin.quote.USD.market_cap)}</TableCell>

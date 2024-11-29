@@ -267,7 +267,6 @@
     scrollbar-width: none !important;
     -ms-overflow-style: none !important;
     overflow-y: auto !important;
-    z-index: 0 !important;
     background-color: transparent !important;
     background: transparent !important;
   }
@@ -276,7 +275,6 @@
     width: 0;
     height: 0;
     background: transparent !important;
-    z-index: 0 !important;
     background-color: transparent !important;
   }
 

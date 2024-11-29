@@ -8,6 +8,7 @@ import { CryptoCalendar } from "./crypto-calendar"
 import { ChevronLeft, LineChart, Wallet, Newspaper } from 'lucide-react'
 import Link from 'next/link'
 import { CoinMarketData } from '@/types/coins'
+import Image from "next/image"
 
 interface PageProps {
   params: {
@@ -33,17 +34,27 @@ export default async function TokenPage({ params }: PageProps) {
     return (
       <Tabs defaultValue="markets" className="min-h-screen bg-background w-full">
         <header className="border-b sticky top-0 bg-background/90 backdrop-blur-xl z-50">
-          <div className="flex w-full mx-auto items-center justify-between h-16 px-4">
+          <div className="container flex w-full mx-auto items-center justify-between h-16 px-4">
             <div className="flex items-center gap-4">
               <Link href="/charts" className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
                 <ChevronLeft className="h-4 w-4" />
-                Back
               </Link>
               <div>
-                <h1 className="text-xl font-semibold">Analysis</h1>
-                <p className="text-sm text-muted-foreground">
-                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                </p>
+                <div className="flex items-center gap-2">
+                  <Image
+                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${tokenData.id}.png`}
+                    alt={tokenData.name}
+                    className="w-10 h-10 rounded-full ring-1 ring-primary/5"
+                    width={40}
+                    height={40}
+                  />
+                  <div>
+                    <h1 className="text-xl font-semibold font-mono">{tokenData.name}</h1>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
             <TabsList className="flex space-x-2">

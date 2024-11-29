@@ -5,7 +5,7 @@ export const metadata = {
 
 export default function SettingsPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-8">
       <h1 className="text-3xl font-bold">Settings</h1>
     </div>
   );

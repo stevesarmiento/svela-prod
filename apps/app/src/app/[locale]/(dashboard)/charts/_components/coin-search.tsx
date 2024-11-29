@@ -120,9 +120,9 @@ export function CoinSearch() {
           <span className="sr-only">Add Token</span>
         </Button>
       </SheetTrigger>
-      <SheetContent className="hide-scrollbar p-0 bg-background z-40">
+      <SheetContent className="p-0 bg-background !z-50">
         <SheetHeader className="sticky top-0 bg-background/90 backdrop-blur-xl z-50 p-3 w-full">
-          <SheetTitle>Add Token to Watchlist</SheetTitle>
+          <SheetTitle className="font-mono">Add Token to Watchlist</SheetTitle>
           <SheetDescription>
             Search and add tokens to your watchlist
           </SheetDescription>
