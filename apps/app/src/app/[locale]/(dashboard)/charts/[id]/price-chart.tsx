@@ -1,7 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
-import { useTheme } from 'next-themes'
+import { useMemo, useState } from 'react'
 import { 
   LineChart, 
   Line, 
@@ -15,7 +14,9 @@ import {
   ChartTooltip, 
   ChartTooltipContent 
 } from "@v1/ui/chart"
+import NumberFlow from '@number-flow/react'
 import type { CoinMarketData } from '@/types/coins'
+import { motion } from 'framer-motion'
 
 interface PriceChartProps {
   data: CoinMarketData['quote']['USD'];
@@ -23,9 +24,9 @@ interface PriceChartProps {
 }
 
 export function PriceChart({ data, historical }: PriceChartProps) {
-  const { theme } = useTheme()
+  const [activePrice, setActivePrice] = useState<number | null>(null)
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-  // Updated logging to match the data structure
   console.log('PriceChart Raw Props:', {
     data: JSON.stringify(data, null, 2),
     historical: JSON.stringify(historical, null, 2),
@@ -78,16 +79,80 @@ export function PriceChart({ data, historical }: PriceChartProps) {
     return historicalPoints.sort((a, b) => a.time - b.time);
   }, [historical, data.price]);
 
+  const displayPrice = activePrice ?? data.price
+  
+  const calculatePercentageChange = useMemo(() => {
+    const currentPrice = displayPrice;
+    const oldestPrice = chartData[0]?.price;
+    if (!oldestPrice) return 0;
+    
+    return ((currentPrice - oldestPrice) / oldestPrice) * 100;
+  }, [displayPrice, chartData]);
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Price Chart (30 Days)</CardTitle>
+      <CardTitle className="flex flex-col items-left">
+        <span className="text-2xl font-semibold font-mono">
+          <NumberFlow
+            value={displayPrice}
+            format={{
+              style: 'currency',
+              currency: 'USD',
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }}
+            transformTiming={{ duration: 400, easing: 'ease-out' }}
+            continuous={true}
+          />
+        </span>
+        <div className={`text-lg ${calculatePercentageChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+          <motion.span
+            initial={{ rotate: calculatePercentageChange >= 0 ? 0 : 180 }}
+            animate={{ rotate: calculatePercentageChange >= 0 ? 0 : 180 }}
+            transition={{ type: "spring", bounce: 0.3, duration: 0.3 }}
+            className="inline-block mr-2"
+            style={{ transformOrigin: 'center' }}
+          >
+            ▲
+          </motion.span>
+          <NumberFlow
+            value={Math.abs(calculatePercentageChange)}
+            format={{ 
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }}
+            suffix="%"
+            transformTiming={{ duration: 400, easing: 'ease-out' }}
+            continuous={true}
+          />
+        </div>
+      </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[300px]">
-          <ChartContainer config={chartConfig}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
+        <div>
+          <ChartContainer 
+            config={chartConfig}
+          >
+            <LineChart 
+              data={chartData}
+              onMouseMove={(e) => {
+                if (e.activePayload?.[0]) {
+                  setActivePrice(e.activePayload[0].value as number);
+                  setActiveIndex(e.activeTooltipIndex ?? null);
+                }
+              }}
+              onMouseLeave={() => {
+                setActivePrice(null);
+                setActiveIndex(null);
+              }}
+            >
+              <CartesianGrid 
+                strokeDasharray="3 3" 
+                stroke="hsl(var(--border))"
+                vertical={false}
+                opacity={0.5}
+              />
               <XAxis 
                 dataKey="time"
                 type="number"
@@ -100,20 +165,21 @@ export function PriceChart({ data, historical }: PriceChartProps) {
                   })
                 }}
                 scale="time"
-              />
-              <YAxis 
-                domain={['auto', 'auto']}
-                tickFormatter={(value) => `$${value.toLocaleString()}`}
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                width={80}
+                dx={-20}
+                minTickGap={30}
               />
               <ChartTooltip
                 content={({ active, payload }) => {
                   if (!active || !payload?.length) return null
-                  const [item] = payload
                   return (
                     <ChartTooltipContent
                       active={active}
                       payload={payload}
-                      labelFormatter={(label) => {
+                      labelFormatter={() => {
                         if (!payload?.[0]) return '';
                         return new Date(payload[0].payload.time).toLocaleString(undefined, {
                           dateStyle: 'medium',
@@ -121,17 +187,67 @@ export function PriceChart({ data, historical }: PriceChartProps) {
                         });
                       }}
                       formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Price']}
+                      className="text-sm font-mono border-none shadow-none bg-background/5 backdrop-blur-xl"
                     />
                   )
                 }}
               />
+              <YAxis 
+                domain={[(dataMin: number) => dataMin * 0.90, (dataMax: number) => dataMax * 1.01]}
+                axisLine={false}
+                tickLine={false}
+                hide={true}
+                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                tickFormatter={(value) => `$${value.toLocaleString()}`}
+                width={80}
+              />
+              <defs>
+              <linearGradient id="priceGradient" x1="0" y1="0" x2="1" y2="0">
+                  {chartData.map((_, index) => {
+                    const offset = (index / (chartData.length - 1)) * 100;
+                    if (activeIndex !== null && index === activeIndex) {
+                      return (
+                        <>
+                          <stop 
+                            key={`color-${index}-before`}
+                            offset={`${offset}%`}
+                            stopColor="hsl(var(--primary))"
+                            stopOpacity={1}
+                          />
+                          <stop 
+                            key={`color-${index}-after`}
+                            offset={`${offset}%`}
+                            stopColor="hsl(var(--primary))"
+                            stopOpacity={0.05}
+                          />
+                        </>
+                      );
+                    }
+                    return (
+                      <stop 
+                        key={`color-${index}`}
+                        offset={`${offset}%`}
+                        stopColor="hsl(var(--primary))"
+                        stopOpacity={activeIndex === null || index <= activeIndex ? 1 : 0.05}
+                      />
+                    );
+                  })}
+                </linearGradient>
+              </defs>
               <Line 
                 type="monotone" 
                 dataKey="price"
                 name="price"
                 dot={false}
-                strokeWidth={2}
-                stroke={theme === 'dark' ? '#fff' : '#fff'} // Example theme-based stroke color
+                strokeWidth={3}
+                stroke="url(#priceGradient)"
+                activeDot={{
+                  r: 6,
+                  fill: 'hsl(var(--primary))',
+                  stroke: 'hsl(var(--background))',
+                  strokeWidth: 4,
+                  className: 'drop-shadow-md'
+                }}
               />
             </LineChart>
           </ChartContainer>

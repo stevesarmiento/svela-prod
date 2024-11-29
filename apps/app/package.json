@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@number-flow/react": "^0.3.0",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/supabase-js": "^2.46.1",
     "@v1/analytics": "workspace:*",
@@ -22,15 +23,17 @@
     "dub": "^0.36.5",
     "geist": "^1.3.1",
     "lodash.debounce": "^4.0.8",
-    "react": "19.0.0-rc-66855b96-20241106",
-    "react-dom": "19.0.0-rc-66855b96-20241106",
+    "motion": "^11.12.0",
     "next": "15.0.3",
     "next-international": "^1.2.4",
     "next-safe-action": "^7.9.0",
     "next-themes": "^0.3.0",
     "nuqs": "^1.18.0",
     "openai": "^4.73.1",
-    "zod": "^3.23.8"
+    "react": "19.0.0-rc-66855b96-20241106",
+    "react-dom": "19.0.0-rc-66855b96-20241106",
+    "zod": "^3.23.8",
+    "zustand": "^5.0.1"
   },
   "devDependencies": {
     "@sentry/nextjs": "^8",

@@ -9,6 +9,7 @@ import { CoinData } from "@/types/coins"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { Skeleton } from "@v1/ui/skeleton"
+import { CoinSearch } from "./coin-search"
 
 export function Watchlist() {
     const { watchlist, removeFromWatchlist, isLoading: isWatchlistLoading } = useWatchlist()
@@ -72,7 +73,12 @@ export function Watchlist() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Favorites</CardTitle>
+          <CardTitle>
+            <div className="flex w-full justify-between items-center gap-2">
+              Favorites
+              <CoinSearch />
+            </div>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">No coins added to watchlist yet</p>

@@ -5,10 +5,8 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { 
   IconHouseFill, 
-  IconDistributeHorizontalCenterFill, 
-  // IconBinocularsFill, 
-  // IconGear,
-  // IconNewspaperFill,
+  IconDistributeHorizontalCenterFill,  
+  IconGearshapeFill,
 } from "symbols-react";
 import {
   Sidebar,
@@ -17,7 +15,6 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarProvider,
   SidebarFooter,
 } from "@v1/ui/sidebar";
 import { Button } from "@v1/ui/button";
@@ -45,21 +42,11 @@ const menuItems = [
     href: "/charts",
     icon: IconDistributeHorizontalCenterFill,
   },
-  // {
-  //   title: "Watchlist",
-  //   href: "/watchlist",
-  //   icon: IconBinocularsFill,
-  // },
-  // {
-  //   title: "News",
-  //   href: "/news",
-  //   icon: IconNewspaperFill,
-  // },
-  // {
-  //   title: "Settings",
-  //   href: "/settings",
-  //   icon: IconGear,
-  // },
+  {
+    title: "Settings",
+    href: "/settings",
+    icon: IconGearshapeFill,
+  },
 ];
 
 export function SideNav() {
@@ -80,7 +67,6 @@ export function SideNav() {
   }, [supabase.auth]);
 
   return (
-    <SidebarProvider defaultOpen>
       <Sidebar className="flex flex-col items-center bg-foreground/5">
         <SidebarHeader className="flex justify-center items-center p-4">
           <Image 
@@ -108,7 +94,7 @@ export function SideNav() {
                     </SidebarMenuButton>
                   </Link>
                   {isActive && (
-                    <div className="absolute left-[47px] top-1/2 transform -translate-y-1/2 w-[4px] h-6 bg-primary rounded-l-full" />
+                    <div className="absolute left-[48.5px] top-1/2 transform -translate-y-1/2 w-[3px] h-6 bg-primary rounded-l-full" />
                   )}
                 </SidebarMenuItem>
               );
@@ -156,6 +142,5 @@ export function SideNav() {
           </DropdownMenu>
         </SidebarFooter>
       </Sidebar>
-    </SidebarProvider>
   );
 }
