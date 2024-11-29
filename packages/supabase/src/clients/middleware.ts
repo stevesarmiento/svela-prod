@@ -10,23 +10,34 @@ export const updateSession = async (
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll();
+        get(name: string) {
+          return request.cookies.get(name)?.value;
         },
-        setAll(cookiesToSet) {
-          // Only set cookies on the response to prevent malformed cookies
-          for (const { name, value, options } of cookiesToSet) {
-            response.cookies.set(name, value, options);
-          }
+        set(name: string, value: string, options: any) {
+          // Ensure cookie options are consistent
+          response.cookies.set({
+            name,
+            value,
+            ...options,
+            httpOnly: true,
+            sameSite: 'lax',
+            secure: process.env.NODE_ENV === 'production',
+          });
+        },
+        remove(name: string, options: any) {
+          response.cookies.delete({
+            name,
+            ...options,
+            httpOnly: true,
+            sameSite: 'lax',
+            secure: process.env.NODE_ENV === 'production',
+          });
         },
       },
     },
   );
 
-  // Ensure the session is updated
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { session }, error } = await supabase.auth.getSession();
 
-  return { response, user };
+  return { response, user: session?.user ?? null, error };
 };
