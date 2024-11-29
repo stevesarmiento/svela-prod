@@ -1,6 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@v1/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
-import { Table, TableBody, TableCell, TableHeader, TableRow } from "@v1/ui/table"
+import { Table, TableBody, TableCell, TableRow } from "@v1/ui/table"
 import { getCoinData } from "@/lib/coinmarketcap" 
 import { PriceChart } from "./price-chart"
 import { MarketMetrics } from "./market-metrics"
@@ -31,8 +31,8 @@ export default async function TokenPage({ params }: PageProps) {
     }
 
     return (
-      <Tabs defaultValue="markets" className="min-h-screen bg-background">
-        <header className="border-b sticky top-0 ">
+      <Tabs defaultValue="markets" className="min-h-screen bg-background w-full">
+        <header className="border-b sticky top-0 bg-background/90 backdrop-blur-xl z-50">
           <div className="flex w-full mx-auto items-center justify-between h-16 px-4">
             <div className="flex items-center gap-4">
               <Link href="/charts" className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
