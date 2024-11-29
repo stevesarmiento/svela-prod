@@ -181,13 +181,17 @@ export function PriceChart({ data, historical }: PriceChartProps) {
                       payload={payload}
                       labelFormatter={() => {
                         if (!payload?.[0]) return '';
-                        return new Date(payload[0].payload.time).toLocaleString(undefined, {
-                          dateStyle: 'medium',
-                          timeStyle: 'short'
+                        const date = new Date(payload[0].payload.time).toLocaleString(undefined, {
+                          dateStyle: 'medium'
                         });
+                        return <span className="text-muted-foreground text-xs">{date}</span>;
                       }}
-                      formatter={(value) => [`$${Number(value).toLocaleString()}`, 'Price']}
-                      className="text-sm font-mono border-none shadow-none bg-background/5 backdrop-blur-xl"
+                      formatter={(value) => [
+                        <span key="value" className="font-semibold text-foreground">
+                          ${Number(value).toLocaleString()}
+                        </span>,
+                      ]}
+                      className="text-sm font-mono border-none shadow-none bg-background/5 backdrop-blur-xl p-3"
                     />
                   )
                 }}
