@@ -30,8 +30,9 @@ const CoinDetailSchema = z.object({
   market_data: z.object({
     current_price: z.record(z.number()),
     market_cap: z.record(z.number()),
-    total_volume: z.record(z.number()),
+    total_volume: z.record(z.number()), 
     price_change_percentage_24h: z.number(),
+    volume_24h: z.record(z.number()),   
     high_24h: z.record(z.number()),
     low_24h: z.record(z.number()),
     ath: z.record(z.number()),

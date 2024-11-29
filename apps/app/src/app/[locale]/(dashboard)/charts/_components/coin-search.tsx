@@ -6,8 +6,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@v1/ui/button"
 import { toast } from "@v1/ui/use-toast"
 import { searchCoins, getTopCoins } from '@/lib/coinmarketcap'
-import type { Coin } from '@/types/coins'
+import type { CoinMarketData } from '@/types/coins'
 import debounce from 'lodash.debounce'
+import Image from 'next/image'
 import { IconPlusCircleFill } from 'symbols-react'
 import { useWatchlist } from "./watchlist-context"
 import { useUser } from '@/hooks/use-user'
@@ -19,14 +20,15 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@v1/ui/sheet"
+import { IconMagnifyingglass } from 'symbols-react'
 
 export function CoinSearch() {
     const { addToWatchlist } = useWatchlist()
     const { user } = useUser()
     const [isOpen, setIsOpen] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
-    const [searchResults, setSearchResults] = useState<Coin[]>([])
-    const [topCoins, setTopCoins] = useState<Coin[]>([])
+    const [searchResults, setSearchResults] = useState<CoinMarketData[]>([])
+    const [topCoins, setTopCoins] = useState<CoinMarketData[]>([])
     const [loading, setLoading] = useState(false)
   
     useEffect(() => {
@@ -77,7 +79,7 @@ export function CoinSearch() {
     }
   }, [searchQuery, debouncedSearch])
 
-  const handleAddCoin = async (coin: Coin) => {
+  const handleAddCoin = async (coin: CoinMarketData) => {
     if (!user) {
       toast({
         title: "Error",
@@ -118,24 +120,27 @@ export function CoinSearch() {
           <span className="sr-only">Add Token</span>
         </Button>
       </SheetTrigger>
-      <SheetContent>
-        <SheetHeader>
+      <SheetContent className="hide-scrollbar p-0 bg-background z-40">
+        <SheetHeader className="sticky top-0 bg-background/90 backdrop-blur-xl z-50 p-3 w-full">
           <SheetTitle>Add Token to Watchlist</SheetTitle>
           <SheetDescription>
             Search and add tokens to your watchlist
           </SheetDescription>
+          <div className="flex-1 flex items-center w-full">
+            <div className="relative min-w-full">
+              <IconMagnifyingglass className="absolute left-2 top-2.5 h-4 w-4 fill-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search for a token"
+                className="pl-8 w-full"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                />
+            </div>
+          </div>
         </SheetHeader>
         
-        <div className="space-y-6 mt-6">
-          <div className="max-w-full">
-            <Input
-              type="text"
-              placeholder="Search for a token"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-
+        <div className="space-y-6 p-3">
           {loading && <p className="text-center">Searching...</p>}
 
           <Table>
@@ -148,34 +153,36 @@ export function CoinSearch() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(searchQuery ? searchResults : topCoins).map((coin) => (
-                  <TableRow 
-                    key={coin.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => {
-                        console.log('Row clicked:', coin)
-                        handleAddCoin(coin)
-                      }}
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <img src={coin.logo} alt={coin.name} className="w-6 h-6" />
-                        <div>
-                          <div className="font-medium">{coin.name}</div>
-                          <div className="text-sm text-muted-foreground">{coin.symbol.toUpperCase()}</div>
-                        </div>
+              {(searchQuery ? searchResults : topCoins).map((coin) => (
+                <TableRow 
+                  key={coin.id}
+                  className="cursor-pointer hover:bg-primary/5 font-mono"
+                  onClick={() => handleAddCoin(coin)}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Image
+                        src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`}
+                        alt={coin.name}
+                        className="w-6 h-6 rounded-full"
+                        width={24}
+                        height={24}
+                      />
+                      <div>
+                        <div className="font-semibold">{coin.name}</div>
+                        <div className="text-xs text-muted-foreground">{coin.symbol.toUpperCase()}</div>
                       </div>
-                    </TableCell>
-                    <TableCell>${coin.quote.USD.price.toLocaleString()}</TableCell>
-                    <TableCell 
-                      className={coin.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'}
-                    >
-                      {coin.quote.USD.percent_change_24h.toFixed(2)}%
-                    </TableCell>
-                    {/* <TableCell>${coin.quote.USD.market_cap.toLocaleString()}</TableCell> */}
-                  </TableRow>
-                ))}
-              </TableBody>
+                    </div>
+                  </TableCell>
+                  <TableCell>${coin.quote.USD.price.toLocaleString()}</TableCell>
+                  <TableCell 
+                    className={coin.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'}
+                  >
+                    {coin.quote.USD.percent_change_24h.toFixed(2)}%
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
             </Table>
         </div>
       </SheetContent>

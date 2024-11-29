@@ -261,3 +261,62 @@
 .aria-selected\:text-accent-foreground[aria-selected="true"] {
   border-radius: 0px;
 }
+
+@layer utilities {
+  .hide-scrollbar {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+    overflow-y: auto !important;
+    z-index: 0 !important;
+    background-color: transparent !important;
+    background: transparent !important;
+  }
+
+  .hide-scrollbar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    background: transparent !important;
+    z-index: 0 !important;
+    background-color: transparent !important;
+  }
+
+  .hide-scrollbar:hover,
+  .hide-scrollbar:focus,
+  .hide-scrollbar:active {
+    scrollbar-width: auto;
+    -ms-overflow-style: auto;
+  }
+
+  .hide-scrollbar:hover::-webkit-scrollbar,
+  .hide-scrollbar:focus::-webkit-scrollbar,
+  .hide-scrollbar:active::-webkit-scrollbar {
+    width: auto;
+    height: auto;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes scaleOut {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(0);
+  }
+}
+
+.scale-in {
+  animation: scaleIn 0.2s forwards;
+}
+
+.scale-out {
+  animation: scaleOut 0.2s forwards;
+}

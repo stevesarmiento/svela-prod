@@ -18,7 +18,7 @@ export async function fetchWithErrorHandling(url: string) {
       });
   
       const data = await response.json();
-      console.log('Raw API Response:', data); // Log the raw response
+      console.log('Raw API Response:', data);
   
       if (!response.ok) {
         throw new Error(data.status?.error_message || `API error: ${response.status}`);

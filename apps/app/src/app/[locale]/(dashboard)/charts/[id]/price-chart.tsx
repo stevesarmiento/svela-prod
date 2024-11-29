@@ -27,13 +27,13 @@ export function PriceChart({ data, historical }: PriceChartProps) {
   const [activePrice, setActivePrice] = useState<number | null>(null)
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-  console.log('PriceChart Raw Props:', {
-    data: JSON.stringify(data, null, 2),
-    historical: JSON.stringify(historical, null, 2),
-    hasHistorical: !!historical,
-    hasQuotes: historical?.data?.quotes?.length,
-    quotesStructure: historical?.data?.quotes ? typeof historical.data.quotes : 'undefined'
-  });
+  // console.log('PriceChart Raw Props:', {
+  //   data: JSON.stringify(data, null, 2),
+  //   historical: JSON.stringify(historical, null, 2),
+  //   hasHistorical: !!historical,
+  //   hasQuotes: historical?.data?.quotes?.length,
+  //   quotesStructure: historical?.data?.quotes ? typeof historical.data.quotes : 'undefined'
+  // });
 
   const chartConfig = {
     price: {
@@ -205,39 +205,41 @@ export function PriceChart({ data, historical }: PriceChartProps) {
                 tickFormatter={(value) => `$${value.toLocaleString()}`}
                 width={80}
               />
-              <defs>
-              <linearGradient id="priceGradient" x1="0" y1="0" x2="1" y2="0">
-                  {chartData.map((_, index) => {
-                    const offset = (index / (chartData.length - 1)) * 100;
-                    if (activeIndex !== null && index === activeIndex) {
-                      return (
-                        <>
+                <defs>
+                  <linearGradient id="priceGradient" x1="0" y1="0" x2="1" y2="0">
+                    {chartData.map((_, index) => {
+                      const offset = (index / (chartData.length - 1)) * 100;
+                      const isActive = activeIndex !== null;
+                      const isBeforeActive = index <= (activeIndex ?? chartData.length);
+                      
+                      if (isActive && index === activeIndex) {
+                        return [
                           <stop 
-                            key={`color-${index}-before`}
-                            offset={`${offset}%`}
+                            key={`gradient-${index}-before`}
+                            offset={`${offset - 0.1}%`}
                             stopColor="hsl(var(--primary))"
                             stopOpacity={1}
-                          />
+                          />,
                           <stop 
-                            key={`color-${index}-after`}
-                            offset={`${offset}%`}
+                            key={`gradient-${index}-after`}
+                            offset={`${offset + 0.1}%`}
                             stopColor="hsl(var(--primary))"
                             stopOpacity={0.05}
                           />
-                        </>
+                        ];
+                      }
+                      
+                      return (
+                        <stop 
+                          key={`gradient-${index}`}
+                          offset={`${offset}%`}
+                          stopColor="hsl(var(--primary))"
+                          stopOpacity={!isActive || isBeforeActive ? 1 : 0.05}
+                        />
                       );
-                    }
-                    return (
-                      <stop 
-                        key={`color-${index}`}
-                        offset={`${offset}%`}
-                        stopColor="hsl(var(--primary))"
-                        stopOpacity={activeIndex === null || index <= activeIndex ? 1 : 0.05}
-                      />
-                    );
-                  })}
-                </linearGradient>
-              </defs>
+                    }).flat()}
+                  </linearGradient>
+                </defs>
               <Line 
                 type="monotone" 
                 dataKey="price"

@@ -11,10 +11,16 @@ export interface CoinData {
     current_price: {
       usd: number
     }
+    total_volume: {
+      usd: number
+    }
     price_change_percentage_24h: number
     market_cap: {
       usd: number
     }
+    total_supply: number | null
+    circulating_supply: number
+    max_supply: number | null
   }
 }
 
@@ -42,11 +48,11 @@ export interface HistoricalQuote {
   quote: {
     USD: {
       price: number;
-      volume_24h: number;
-      market_cap: number;
-      circulating_supply: number;
-      total_supply: number;
+      volume_24h?: number;
+      market_cap?: number;
       timestamp: string;
+      circulating_supply?: number;
+      total_supply?: number;
     }
   }
 }
