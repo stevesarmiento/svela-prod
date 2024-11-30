@@ -20,12 +20,12 @@ export default async function TokenPage({ params }: PageProps) {
   try {
     const tokenData: CoinMarketData = await getCoinData(params.id)
     
-    console.log('TokenPage Data:', {
-      hasTokenData: !!tokenData,
-      hasQuoteUSD: !!tokenData?.quote?.USD,
-      hasHistorical: !!tokenData?.historical,
-      historicalQuotes: tokenData?.historical?.data?.quotes?.length
-    })
+    // console.log('TokenPage Data:', {
+    //   hasTokenData: !!tokenData,
+    //   hasQuoteUSD: !!tokenData?.quote?.USD,
+    //   hasHistorical: !!tokenData?.historical,
+    //   historicalQuotes: tokenData?.historical?.data?.quotes?.length
+    // })
 
     if (!tokenData || !tokenData.quote?.USD) {
       throw new Error('Invalid token data received')

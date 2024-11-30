@@ -170,9 +170,17 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
                         const coin = coins.find(c => c.id.toString() === name)
                         return [
                             <span key="value" className="font-semibold text-foreground">
-                            {(value as number).toFixed(2)}%
-                          </span>,
-                          coin?.name || name
+                                {(value as number).toFixed(2)}%
+                            </span>,
+                            <div key="name" className="flex items-center gap-2">
+                                <div 
+                                className="w-2 h-2 rounded-full"
+                                style={{ 
+                                    backgroundColor: chartConfig[name]?.theme?.light || 'currentColor'
+                                }} 
+                                />
+                                <span>{coin?.name || name}</span>
+                          </div>
                         ]
                       }}
                     className="text-sm font-mono border-none shadow-none bg-background/5 backdrop-blur-xl p-3"

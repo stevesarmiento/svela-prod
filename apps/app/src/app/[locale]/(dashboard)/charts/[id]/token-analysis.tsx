@@ -1,49 +1,105 @@
-'use client'
-
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { useCompletion } from 'ai/react'
 import { Separator } from "@v1/ui/separator"
-import { generateAnalysis } from "./action"
 import { Card, CardContent } from "@v1/ui/card"
 import { Skeleton } from "@v1/ui/skeleton"
 
 interface TokenAnalysisProps {
-  tokenData: any
+  tokenData: {
+    name: string
+    quote: {
+      USD: {
+        price: number
+        percent_change_24h: number
+        market_cap: number
+        volume_24h: number
+      }
+    }
+  }
 }
 
 export function TokenAnalysis({ tokenData }: TokenAnalysisProps) {
-  const [analysis, setAnalysis] = useState<string>('')
-  const [isLoading, setIsLoading] = useState(true)
+  const { complete, completion, isLoading, error } = useCompletion({
+    api: '/api/analyze',
+    onError: (error) => {
+      console.error('Analysis error:', error)
+      toast({
+        title: "Analysis Error",
+        description: "Failed to generate analysis. Please try again.",
+        variant: "destructive",
+      })
+    },
+    onFinish: (result) => {
+      console.log('Analysis complete:', result)
+    }
+  })
 
   useEffect(() => {
-    async function fetchAnalysis() {
+    if (!tokenData?.quote?.USD) {
+      console.log('No token data available')
+      return
+    }
+
+    async function analyzeToken() {
       try {
-        const response = await generateAnalysis(tokenData)
+        console.log('Sending analysis request for:', tokenData.name)
+        const payload = {
+          name: tokenData.name,
+          quote: {
+            USD: {
+              price: tokenData.quote.USD.price,
+              percent_change_24h: tokenData.quote.USD.percent_change_24h,
+              market_cap: tokenData.quote.USD.market_cap,
+              volume_24h: tokenData.quote.USD.volume_24h,
+            }
+          }
+        }
+        console.log('Analysis payload:', payload)
         
-        if (!response?.body) {
-          throw new Error('No response body')
-        }
-
-        const reader = response.body.getReader()
-        const decoder = new TextDecoder()
-        let done = false
-        let analysisText = ''
-
-        while (!done) {
-          const { value, done: doneReading } = await reader.read()
-          done = doneReading
-          const chunk = decoder.decode(value)
-          analysisText += chunk
-          setAnalysis(analysisText)
-        }
+        const result = await complete(JSON.stringify(payload))
+        console.log('Analysis result:', result)
       } catch (error) {
-        console.error('Failed to generate analysis:', error)
-        setAnalysis('Failed to generate analysis. Please try again later.')
-      } finally {
-        setIsLoading(false)
+        console.error('Analysis request failed:', error)
       }
     }
 
-    fetchAnalysis()
+    analyzeToken()
+  }, [complete, tokenData])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    
+    async function testAPI() {
+      try {
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: tokenData.name,
+            quote: {
+              USD: {
+                price: tokenData.quote.USD.price,
+                percent_change_24h: tokenData.quote.USD.percent_change_24h,
+                market_cap: tokenData.quote.USD.market_cap,
+                volume_24h: tokenData.quote.USD.volume_24h,
+              }
+            }
+          }),
+          signal: controller.signal
+        })
+        
+        console.log('API test response:', {
+          status: response.status,
+          ok: response.ok,
+          headers: Object.fromEntries(response.headers.entries())
+        })
+      } catch (error) {
+        console.error('API test failed:', error)
+      }
+    }
+
+    testAPI()
+    return () => controller.abort()
   }, [tokenData])
 
   if (isLoading) {
@@ -58,15 +114,18 @@ export function TokenAnalysis({ tokenData }: TokenAnalysisProps) {
     )
   }
 
-  const [strengths, challenges, outlook] = analysis.split('\n\n')
+  const sections = completion?.split('\n\n\n') ?? [];
+  const strengths = sections.find(s => s.includes('Strengths:'))?.trim();
+  const challenges = sections.find(s => s.includes('Challenges:'))?.trim();
+  const outlook = sections.find(s => s.includes('Market outlook:'))?.trim();
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-semibold mb-4">Market Overview</h2>
         <p className="text-muted-foreground leading-7">
-          {tokenData.name}'s total market cap is ${tokenData.market_data.market_cap.usd.toLocaleString()}, 
-          with a 24h trading volume of ${tokenData.market_data.total_volume.usd.toLocaleString()}.
+          {tokenData.name}'s total market cap is ${tokenData.quote.USD.market_cap.toLocaleString()}, 
+          with a 24h trading volume of ${tokenData.quote.USD.volume_24h.toLocaleString()}.
         </p>
       </div>
 
