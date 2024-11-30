@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+'use client'
+
+import { useEffect, useMemo, useRef } from 'react'
 import { useCompletion } from 'ai/react'
-import { Separator } from "@v1/ui/separator"
-import { Card, CardContent } from "@v1/ui/card"
 import { Skeleton } from "@v1/ui/skeleton"
+import { toast } from "@v1/ui/use-toast"
 
 interface TokenAnalysisProps {
   tokenData: {
@@ -19,6 +20,8 @@ interface TokenAnalysisProps {
 }
 
 export function TokenAnalysis({ tokenData }: TokenAnalysisProps) {
+  const analysisRequested = useRef(false)
+
   const { complete, completion, isLoading, error } = useCompletion({
     api: '/api/analyze',
     onError: (error) => {
@@ -29,130 +32,85 @@ export function TokenAnalysis({ tokenData }: TokenAnalysisProps) {
         variant: "destructive",
       })
     },
-    onFinish: (result) => {
-      console.log('Analysis complete:', result)
+    onFinish: (completion) => {
+      console.log('Analysis completed:', completion)
+      analysisRequested.current = true
     }
   })
 
   useEffect(() => {
-    if (!tokenData?.quote?.USD) {
-      console.log('No token data available')
-      return
-    }
-
-    async function analyzeToken() {
-      try {
-        console.log('Sending analysis request for:', tokenData.name)
-        const payload = {
-          name: tokenData.name,
-          quote: {
-            USD: {
-              price: tokenData.quote.USD.price,
-              percent_change_24h: tokenData.quote.USD.percent_change_24h,
-              market_cap: tokenData.quote.USD.market_cap,
-              volume_24h: tokenData.quote.USD.volume_24h,
-            }
+    if (!analysisRequested.current && tokenData?.quote?.USD && !isLoading) {
+      analysisRequested.current = true
+      
+      // Send the data directly without nested prompt
+      const payload = {
+        name: tokenData.name,
+        quote: {
+          USD: {
+            price: tokenData.quote.USD.price,
+            percent_change_24h: tokenData.quote.USD.percent_change_24h,
+            market_cap: tokenData.quote.USD.market_cap,
+            volume_24h: tokenData.quote.USD.volume_24h,
           }
         }
-        console.log('Analysis payload:', payload)
-        
-        const result = await complete(JSON.stringify(payload))
-        console.log('Analysis result:', result)
-      } catch (error) {
-        console.error('Analysis request failed:', error)
       }
+      
+      complete(JSON.stringify(payload)).catch(error => {
+        console.error('Failed to start analysis:', error)
+        analysisRequested.current = false // Reset on error
+      })
     }
+  }, [tokenData, complete, isLoading])
 
-    analyzeToken()
-  }, [complete, tokenData])
-
-  useEffect(() => {
-    const controller = new AbortController()
+  const { strengths, challenges, outlook } = useMemo(() => {
+    if (!completion) return { strengths: '', challenges: '', outlook: '' }
     
-    async function testAPI() {
-      try {
-        const response = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: tokenData.name,
-            quote: {
-              USD: {
-                price: tokenData.quote.USD.price,
-                percent_change_24h: tokenData.quote.USD.percent_change_24h,
-                market_cap: tokenData.quote.USD.market_cap,
-                volume_24h: tokenData.quote.USD.volume_24h,
-              }
-            }
-          }),
-          signal: controller.signal
-        })
-        
-        console.log('API test response:', {
-          status: response.status,
-          ok: response.ok,
-          headers: Object.fromEntries(response.headers.entries())
-        })
-      } catch (error) {
-        console.error('API test failed:', error)
+    try {
+      // First try to clean the response text
+      const cleanedText = completion.trim()
+      
+      // Split by section headers
+      const strengthsMatch = cleanedText.match(/Strengths:([\s\S]*?)(?=Challenges:|$)/i)
+      const challengesMatch = cleanedText.match(/Challenges:([\s\S]*?)(?=Market outlook:|$)/i)
+      const outlookMatch = cleanedText.match(/Market outlook:([\s\S]*?)$/i)
+      
+      return {
+        strengths: strengthsMatch?.[1]?.trim() || '',
+        challenges: challengesMatch?.[1]?.trim() || '',
+        outlook: outlookMatch?.[1]?.trim() || ''
       }
+    } catch (error) {
+      console.error('Failed to parse analysis:', error)
+      return { strengths: '', challenges: '', outlook: '' }
     }
-
-    testAPI()
-    return () => controller.abort()
-  }, [tokenData])
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="space-y-4 pt-6">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-2/3" />
-        </CardContent>
-      </Card>
-    )
-  }
-
-  const sections = completion?.split('\n\n\n') ?? [];
-  const strengths = sections.find(s => s.includes('Strengths:'))?.trim();
-  const challenges = sections.find(s => s.includes('Challenges:'))?.trim();
-  const outlook = sections.find(s => s.includes('Market outlook:'))?.trim();
+  }, [completion])
 
   return (
-    <div className="space-y-6">
+    <div className="mt-4">
       <div>
-        <h2 className="text-lg font-semibold mb-4">Market Overview</h2>
-        <p className="text-muted-foreground leading-7">
-          {tokenData.name}'s total market cap is ${tokenData.quote.USD.market_cap.toLocaleString()}, 
-          with a 24h trading volume of ${tokenData.quote.USD.volume_24h.toLocaleString()}.
-        </p>
-      </div>
-
-      <Separator />
-
-      <div>
-        <h2 className="text-lg font-semibold mb-4">Analysis</h2>
-        <div className="prose prose-neutral dark:prose-invert max-w-none space-y-4">
-          {strengths && (
-            <div>
-              <h3 className="text-base font-medium">Strengths</h3>
-              <p className="text-muted-foreground">{strengths.replace('Strengths:', '').trim()}</p>
-            </div>
-          )}
-          
-          {challenges && (
-            <div>
-              <h3 className="text-base font-medium">Challenges</h3>
-              <p className="text-muted-foreground">{challenges.replace('Challenges:', '').trim()}</p>
-            </div>
-          )}
-          
-          {outlook && (
-            <div>
-              <h3 className="text-base font-medium">Market Outlook</h3>
-              <p className="text-muted-foreground">{outlook.replace('Market outlook:', '').trim()}</p>
-            </div>
+        <div className="space-y-4">
+          {isLoading ? (
+            // Show loading state
+            <>
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-2/3" />
+            </>
+          ) : (
+            // Show content when available
+            <>
+              <div>
+                <p className="text-muted-foreground">{strengths}</p>
+              </div>
+              
+              <div>
+                <p className="text-muted-foreground">{challenges}</p>
+              </div>
+              
+              <div>
+                <p className="text-muted-foreground">{outlook}</p>
+              </div>
+            </>
           )}
         </div>
       </div>

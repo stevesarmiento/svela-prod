@@ -132,29 +132,30 @@ async function fetchHistoricalData(id: string) {
     }
   }
 
-export async function GET(
+  export async function GET(
     request: Request,
-    { params }: { params: { id: string } }
-  ) {
+    { params }: { params: { id: Promise<string> } }
+) {
     if (!API_KEY) {
-      throw new Error('CoinMarketCap API key is not configured');
+        throw new Error('CoinMarketCap API key is not configured');
     }
-  
+
     try {
-      const validatedId = idSchema.parse(params.id);
-  
-      const [info, quotes, historical] = await Promise.all([
-        fetchWithErrorHandling(
-          `${BASE_URLS.v1}/cryptocurrency/info?id=${validatedId}`
-        ),
-        fetchWithErrorHandling(
-          `${BASE_URLS.v1}/cryptocurrency/quotes/latest?id=${validatedId}`
-        ),
-        fetchHistoricalData(validatedId).catch(error => {
-          console.error('Historical data fetch failed:', error);
-          return { quotes: [] };
-        })
-      ]);
+        const id = await params.id;
+        const validatedId = idSchema.parse(id);
+
+        const [info, quotes, historical] = await Promise.all([
+            fetchWithErrorHandling(
+                `${BASE_URLS.v1}/cryptocurrency/info?id=${validatedId}`
+            ),
+            fetchWithErrorHandling(
+                `${BASE_URLS.v1}/cryptocurrency/quotes/latest?id=${validatedId}`
+            ),
+            fetchHistoricalData(validatedId).catch(error => {
+                console.error('Historical data fetch failed:', error);
+                return { quotes: [] };
+            })
+        ]);
   
       if (!info?.data || !quotes?.data) {
         throw new Error('Incomplete coin data received');
