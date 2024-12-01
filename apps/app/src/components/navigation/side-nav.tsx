@@ -94,7 +94,7 @@ export function SideNav() {
                     </SidebarMenuButton>
                   </Link>
                   {isActive && (
-                    <div className="absolute left-[48.5px] top-1/2 transform -translate-y-1/2 w-[3px] h-6 bg-primary" />
+                    <div className="absolute left-[48.5px] top-1/2 transform -translate-y-1/2 rounded-l-full w-[3px] h-6 bg-primary" />
                   )}
                 </SidebarMenuItem>
               );
