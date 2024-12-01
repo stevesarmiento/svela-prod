@@ -80,7 +80,8 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
       
       coins.forEach(coin => {
         const coinId = coin.id.toString()
-        const initialPrice = priceMap[coinId]?.[sortedTimePoints[0]] || coin.quote.USD.price
+        const firstTimestamp = sortedTimePoints[0] ?? time
+        const initialPrice = priceMap[coinId]?.[firstTimestamp] || coin.quote.USD.price
         const currentPrice = priceMap[coinId]?.[time] || coin.quote.USD.price
         dataPoint[coinId] = ((currentPrice - initialPrice) / initialPrice) * 100
       })
@@ -93,7 +94,7 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Price Comparison</CardTitle>
+          <CardTitle>Percentage Change</CardTitle>
         </CardHeader>
         <CardContent>
           <Skeleton className="h-[400px] w-full" />
@@ -109,7 +110,7 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Price Comparison</CardTitle>
+        <CardTitle>Percentage Change</CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig}>
@@ -214,7 +215,7 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
                 name={coin.name}
                 dot={false}
                 strokeWidth={2}
-                stroke={chartConfig[coin.id.toString()].theme.light}
+                stroke={chartConfig[coin.id.toString()]?.theme?.light ?? getRandomColor()}
                 activeDot={{
                   r: 4,
                   strokeWidth: 2

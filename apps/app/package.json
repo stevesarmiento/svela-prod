@@ -19,6 +19,7 @@
     "@number-flow/react": "^0.3.0",
     "@supabase/auth-helpers-nextjs": "^0.10.0",
     "@supabase/supabase-js": "^2.46.1",
+    "@types/lodash.debounce": "^4.0.9",
     "@v1/analytics": "workspace:*",
     "@v1/kv": "workspace:*",
     "@v1/supabase": "workspace:*",

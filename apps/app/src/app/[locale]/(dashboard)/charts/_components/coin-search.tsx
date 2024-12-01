@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Input } from "@v1/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@v1/ui/table"
 import { Button } from "@v1/ui/button"
@@ -9,7 +9,7 @@ import { searchCoins, getTopCoins } from '@/lib/coinmarketcap'
 import type { CoinMarketData } from '@/types/coins'
 import debounce from 'lodash.debounce'
 import Image from 'next/image'
-import { IconPlusCircleFill } from 'symbols-react'
+import { IconPlusCircleFill, IconXmarkCircleFill } from 'symbols-react'
 import { useWatchlist } from "./watchlist-context"
 import { useUser } from '@/hooks/use-user'
 import {
@@ -30,12 +30,44 @@ export function CoinSearch() {
     const [searchResults, setSearchResults] = useState<CoinMarketData[]>([])
     const [topCoins, setTopCoins] = useState<CoinMarketData[]>([])
     const [loading, setLoading] = useState(false)
-  
+
+    const debouncedSearch = useCallback(
+      async (query: string) => {
+        if (query.trim() === '') {
+          setSearchResults([])
+          return
+        }
+        setLoading(true)
+        try {
+          const results = await searchCoins(query)
+          setSearchResults(results.map(coin => ({
+            ...coin,
+            circulating_supply: 0,
+            max_supply: 0,
+          })))
+        } catch (error) {
+          console.error('Error searching coins:', error)
+          toast({
+            title: "Error",
+            description: error instanceof Error ? error.message : "Failed to search coins",
+            variant: "destructive",
+          })
+        } finally {
+          setLoading(false)
+        }
+      },
+      []
+    )
+
     useEffect(() => {
         async function fetchTopCoins() {
           try {
             const coins = await getTopCoins()
-            setTopCoins(coins)
+            setTopCoins(coins.map(coin => ({
+              ...coin,
+              circulating_supply: 0,
+              max_supply: 0,
+            })))
           } catch (error) {
             console.error('Error fetching top coins:', error)
             toast({
@@ -47,37 +79,17 @@ export function CoinSearch() {
         }
         fetchTopCoins()
       }, [])
-  
-      const debouncedSearch = useCallback(
-        debounce(async (query: string) => {
-          if (query.trim() === '') {
-            setSearchResults([])
-            return
-          }
-          setLoading(true)
-          try {
-            const results = await searchCoins(query)
-            setSearchResults(results)
-          } catch (error) {
-            console.error('Error searching coins:', error)
-            toast({
-              title: "Error",
-              description: error instanceof Error ? error.message : "Failed to search coins",
-              variant: "destructive",
-            })
-          } finally {
-            setLoading(false)
-          }
-        }, 300),
-        []
-      )
 
-  useEffect(() => {
-    debouncedSearch(searchQuery)
-    return () => {
-      debouncedSearch.cancel()
-    }
-  }, [searchQuery, debouncedSearch])
+      const debouncedSearchRef = useRef(debounce(debouncedSearch, 300))
+
+      useEffect(() => {
+        const currentSearch = debouncedSearchRef.current
+        currentSearch(searchQuery)
+        return () => {
+          currentSearch.cancel()
+        }
+      }, [searchQuery, debouncedSearch])
+  
 
   const handleAddCoin = async (coin: CoinMarketData) => {
     if (!user) {
@@ -115,12 +127,12 @@ export function CoinSearch() {
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-9 w-9">
-          <IconPlusCircleFill className="h-5 w-5 fill-foreground/20 hover:fill-foreground/50" />
+          <Button variant="ghost" size="icon" className="h-9 w-9 group">
+          <IconPlusCircleFill className="h-5 w-5 fill-muted-foreground group-hover:fill-foreground" />
           <span className="sr-only">Add Token</span>
         </Button>
       </SheetTrigger>
-      <SheetContent className="p-0 bg-background !z-50">
+      <SheetContent className="p-0 bg-background !z-50 overflow-auto no-scrollbar">
         <SheetHeader className="sticky top-0 bg-background/90 backdrop-blur-xl z-50 p-4 w-full">
           <SheetTitle className="font-mono">Add Token to Watchlist</SheetTitle>
           <SheetDescription>
@@ -132,10 +144,20 @@ export function CoinSearch() {
               <Input
                 type="text"
                 placeholder="Search for a token"
-                className="pl-8 w-full"
+                className="pl-8 pr-8 w-full"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                />
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-2.5 p-0.5 rounded-full hover:bg-muted/50"
+                  type="button"
+                >
+                  <IconXmarkCircleFill className="h-4 w-4 fill-muted-foreground" />
+                  <span className="sr-only">Clear search</span>
+                </button>
+              )}
             </div>
           </div>
         </SheetHeader>
@@ -149,7 +171,6 @@ export function CoinSearch() {
                   <TableHead>Token</TableHead>
                   <TableHead>Price</TableHead>
                   <TableHead>24h</TableHead>
-                  {/* <TableHead>Market Cap</TableHead> */}
                 </TableRow>
               </TableHeader>
               <TableBody>

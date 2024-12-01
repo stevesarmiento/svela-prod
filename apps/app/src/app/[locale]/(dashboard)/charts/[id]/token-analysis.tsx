@@ -22,7 +22,7 @@ interface TokenAnalysisProps {
 export function TokenAnalysis({ tokenData }: TokenAnalysisProps) {
   const analysisRequested = useRef(false)
 
-  const { complete, completion, isLoading, error } = useCompletion({
+  const { complete, completion, isLoading } = useCompletion({
     api: '/api/analyze',
     onError: (error) => {
       console.error('Analysis error:', error)
