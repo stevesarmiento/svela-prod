@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { WatchlistProvider } from "./watchlist-context"
 import { Watchlist } from "./watchlist"
 import { MultiPriceChart } from "./multi-line-chart"
@@ -9,13 +9,15 @@ import type { CoinMarketData } from '@/types/coins'
 import { toast } from "@v1/ui/use-toast"
 
 function ChartsContent() {
-  const { watchlist } = useWatchlist()
-  const [coins, setCoins] = useState<CoinMarketData[]>([])
+  const { watchlist, isInitialized } = useWatchlist()
+  const [coins, setCoins] = useState<CoinMarketData[] | null>(null)
 
   useEffect(() => {
     let isMounted = true
 
     async function fetchCoinData() {
+      if (!isInitialized) return
+      
       if (!watchlist.length) {
         if (isMounted) {
           setCoins([])
@@ -25,8 +27,13 @@ function ChartsContent() {
 
       try {
         const [quotesResponse, historicalResponse] = await Promise.all([
-          fetch(`/api/coinmarketcap/quotes?ids=${watchlist.join(',')}`),
-          fetch(`/api/coinmarketcap/historical?ids=${watchlist.join(',')}`)
+          fetch(`/api/coinmarketcap/quotes?ids=${watchlist.join(',')}`, {
+            // Add cache: 'no-store' to prevent stale data
+            cache: 'no-store'
+          }),
+          fetch(`/api/coinmarketcap/historical?ids=${watchlist.join(',')}`, {
+            cache: 'no-store'
+          })
         ])
 
         if (!quotesResponse.ok || !historicalResponse.ok) {
@@ -40,7 +47,6 @@ function ChartsContent() {
 
         if (isMounted && quotesData.data) {
           const coinsArray = Object.values(quotesData.data) as CoinMarketData[]
-          // Attach historical data to each coin
           coinsArray.forEach(coin => {
             coin.historical = historicalData.data[coin.id]
           })
@@ -57,8 +63,16 @@ function ChartsContent() {
     }
 
     fetchCoinData()
-    return () => { isMounted = false }
-  }, [watchlist])
+    
+    const refreshInterval = setInterval(fetchCoinData, 60000)
+
+    return () => { 
+      isMounted = false
+      clearInterval(refreshInterval)
+    }
+  }, [watchlist, isInitialized])
+
+  if (!coins) return <div>Loading...</div>
   
   return (
     <div className="space-y-6 w-full z-0 p-8">
@@ -73,8 +87,10 @@ function ChartsContent() {
 
 export function ChartsClient() {
   return (
-    <WatchlistProvider>
-      <ChartsContent />
-    </WatchlistProvider>
+      <Suspense fallback={<div>Loading watchlist...</div>}>
+        <WatchlistProvider>
+          <ChartsContent />
+        </WatchlistProvider>
+      </Suspense>
   )
 }

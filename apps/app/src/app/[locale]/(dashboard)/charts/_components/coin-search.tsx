@@ -121,7 +121,7 @@ export function CoinSearch() {
         </Button>
       </SheetTrigger>
       <SheetContent className="p-0 bg-background !z-50">
-        <SheetHeader className="sticky top-0 bg-background/90 backdrop-blur-xl z-50 p-3 w-full">
+        <SheetHeader className="sticky top-0 bg-background/90 backdrop-blur-xl z-50 p-4 w-full">
           <SheetTitle className="font-mono">Add Token to Watchlist</SheetTitle>
           <SheetDescription>
             Search and add tokens to your watchlist
@@ -140,7 +140,7 @@ export function CoinSearch() {
           </div>
         </SheetHeader>
         
-        <div className="space-y-6 p-3">
+        <div className="space-y-6 p-4">
           {loading && <p className="text-center">Searching...</p>}
 
           <Table>

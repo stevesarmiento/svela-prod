@@ -83,7 +83,7 @@ export function SideNav() {
               return (
                 <SidebarMenuItem 
                   key={item.href} 
-                  className="relative h-8 w-8 rounded-md hover:bg-foreground/10"
+                  className="relative h-8 w-8 hover:bg-foreground/10"
                 >
                   <Link href={item.href} className="flex items-center justify-center h-full w-full">
                     <SidebarMenuButton
@@ -94,7 +94,7 @@ export function SideNav() {
                     </SidebarMenuButton>
                   </Link>
                   {isActive && (
-                    <div className="absolute left-[48.5px] top-1/2 transform -translate-y-1/2 w-[3px] h-6 bg-primary rounded-l-full" />
+                    <div className="absolute left-[48.5px] top-1/2 transform -translate-y-1/2 w-[3px] h-6 bg-primary" />
                   )}
                 </SidebarMenuItem>
               );

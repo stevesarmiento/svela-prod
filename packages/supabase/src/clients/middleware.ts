@@ -14,7 +14,6 @@ export const updateSession = async (
           return request.cookies.get(name)?.value;
         },
         set(name: string, value: string, options: any) {
-          // Ensure cookie options are consistent
           response.cookies.set({
             name,
             value,
@@ -37,7 +36,20 @@ export const updateSession = async (
     },
   );
 
-  const { data: { session }, error } = await supabase.auth.getSession();
-
-  return { response, user: session?.user ?? null, error };
+  try {
+    // First get the session
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    // If we have a session, verify the user
+    if (session) {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      return { response, user, error: null };
+    }
+    
+    return { response, user: null, error: null };
+  } catch (error) {
+    console.error('Auth error:', error);
+    return { response, user: null, error };
+  }
 };

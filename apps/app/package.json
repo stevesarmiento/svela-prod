@@ -11,6 +11,9 @@
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit"
   },
+  "resolutions": {
+    "import-in-the-middle": "1.11.2"
+  },
   "dependencies": {
     "@ai-sdk/openai": "^1.0.5",
     "@number-flow/react": "^0.3.0",
