@@ -67,7 +67,7 @@ export function SideNav() {
   }, [supabase.auth]);
 
   return (
-      <Sidebar className="flex flex-col items-center bg-foreground/5">
+      <Sidebar className="flex flex-col items-center bg-black/60">
         <SidebarHeader className="flex justify-center items-center p-4">
           <Image 
             src="/svela-logo.svg" 
