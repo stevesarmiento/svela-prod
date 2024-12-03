@@ -94,7 +94,7 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Percentage Change</CardTitle>
+          <CardTitle className="font-medium font-mono">Percentage Change</CardTitle>
         </CardHeader>
         <CardContent>
           <Skeleton className="h-[400px] w-full" />
@@ -110,7 +110,7 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Percentage Change</CardTitle>
+        <CardTitle className="font-medium font-mono">Percentage Change</CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig}>

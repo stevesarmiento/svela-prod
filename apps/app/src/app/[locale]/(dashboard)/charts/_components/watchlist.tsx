@@ -119,7 +119,7 @@ export function Watchlist() {
     <Card>
       <CardHeader>
         <CardTitle>
-          <div className="flex w-full justify-between items-center gap-2">
+          <div className="flex w-full justify-between items-center gap-2 font-medium font-mono">
             Watchlist
             <CoinSearch />
           </div>

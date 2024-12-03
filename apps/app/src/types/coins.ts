@@ -41,6 +41,7 @@ export interface CoinMarketData {
     }
   }
   historical?: HistoricalData;
+  fundingRate?: number | null
 }
 
 export interface HistoricalQuote {
