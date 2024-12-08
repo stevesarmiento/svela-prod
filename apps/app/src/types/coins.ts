@@ -106,3 +106,21 @@ export interface CoinDetail extends Coin {
   max_supply: number | null;
   historical?: HistoricalData;
 }
+
+export interface LiquidationData {
+  symbol: string
+  side: 'long' | 'short'
+  price: number
+  quantity: number
+  liquidation_price: number
+  time: number
+  usd_value?: number
+}
+
+export interface LiquidationResponse {
+  data: LiquidationData[]
+  status: {
+    error_code: number
+    error_message: string
+  }
+}

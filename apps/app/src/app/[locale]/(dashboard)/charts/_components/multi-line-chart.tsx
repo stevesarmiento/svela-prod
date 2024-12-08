@@ -29,6 +29,29 @@ interface ChartDataPoint {
     [key: string]: number;
   }
 
+  function ChartSkeleton() {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-medium font-mono">Percentage Change</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <Skeleton className="h-[400px] w-full" />
+            <div className="flex flex-wrap gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <Skeleton className="h-3 w-3 rounded-full" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
 export function MultiPriceChart({ coins }: MultiPriceChartProps) {
  // const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const { isLoading } = useWatchlist()
@@ -90,21 +113,8 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
     })
   }, [coins])
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="font-medium font-mono">Percentage Change</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-[400px] w-full" />
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (!coins.length) {
-    return null
+  if (isLoading || !coins.length) {
+    return <ChartSkeleton />
   }
 
   return (
@@ -168,22 +178,22 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
                       return <span className="text-muted-foreground text-xs">{date}</span>
                     }}
                     formatter={(value, name) => {
-                        const coin = coins.find(c => c.id.toString() === name)
-                        return [
-                            <span key="value" className="font-semibold text-foreground">
-                                {(value as number).toFixed(2)}%
-                            </span>,
-                            <div key="name" className="flex items-center gap-2">
-                                <div 
-                                className="w-2 h-2 rounded-full"
-                                style={{ 
-                                    backgroundColor: chartConfig[name]?.theme?.light || 'currentColor'
-                                }} 
-                                />
-                                <span>{coin?.name || name}</span>
-                          </div>
-                        ]
-                      }}
+                      const coin = coins.find(c => c.id.toString() === name)
+                      return [
+                        <span key={`value-${name}`} className="font-semibold text-foreground">
+                          {(value as number).toFixed(2)}%
+                        </span>,
+                        <div key={`name-${name}`} className="flex items-center gap-2">
+                          <div 
+                            className="w-2 h-2 rounded-full"
+                            style={{ 
+                              backgroundColor: chartConfig[name]?.theme?.light || 'currentColor'
+                            }} 
+                          />
+                          <span>{coin?.name || name}</span>
+                        </div>
+                      ]
+                    }}
                     className="text-sm font-mono border-none shadow-none bg-background/5 backdrop-blur-xl p-3"
                   />
                 )

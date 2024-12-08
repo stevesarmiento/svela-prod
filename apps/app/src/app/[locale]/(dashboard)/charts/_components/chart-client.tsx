@@ -5,11 +5,10 @@ import { WatchlistProvider } from "./watchlist-context"
 import { Watchlist } from "./watchlist"
 import { MultiPriceChart } from "./multi-line-chart"
 import { useWatchlist } from "./watchlist-context"
-import type { CoinMarketData } from '@/types/coins'
+import type { Coin, CoinMarketData } from '@/types/coins'
 import { toast } from "@v1/ui/use-toast"
 import { Button } from "@v1/ui/button"
 import { IconArrowTriangle2Circlepath } from "symbols-react"
-import { FundingRates } from './funding-rates'
 import { CoinTreemap } from './coin-treemap'
 
 function ChartsContent() {
@@ -25,17 +24,22 @@ function ChartsContent() {
       setCoins([])
       return
     }
-
+  
     try {
       setIsRefreshing(true)
-
+  
       // Fetch top coins for market overview
       const topResponse = await fetch('/api/coinmarketcap/top', {
-        cache: 'no-store'
+        cache: 'no-store',
+        headers: {
+          'Accept': 'application/json'
+        }
       })
-            
+      
       if (!topResponse.ok) {
-        throw new Error('Failed to fetch top coins')
+        const text = await topResponse.text()
+        console.error('Top response error:', text)
+        throw new Error(`Failed to fetch top coins: ${topResponse.status}`)
       }
             
       const topData = await topResponse.json()
@@ -61,36 +65,45 @@ function ChartsContent() {
       ])
     
       if (quotesData.data) {
-        // Get symbols from quotes data
-        const symbols = Object.values(quotesData.data)
-        .map((coin: any) => {
-          const symbol = coin.symbol.toUpperCase()
-          // Handle special cases and ensure proper format
-          if (symbol === 'BTC') return 'BTCUSDT_PERP.A'
-          if (symbol === 'ETH') return 'ETHUSDT_PERP.A'
-          // Add more common mappings as needed
-          return `${symbol}USDT_PERP.A`
-        })
-        .join(',')
-    
-        // Then fetch funding rates with symbols
-        const fundingResponse = await fetch(`/api/coinalyze?symbols=${symbols}`, {
-          cache: 'no-store'
-        })
-
-        console.log('Funding Response:', {
-          status: fundingResponse.status,
-          symbols,
-        })
-    
-        const fundingData = await fundingResponse.json()
-        console.log('Funding Data:', fundingData)
-        
         const coinsArray = Object.values(quotesData.data) as CoinMarketData[]
+        
+        // First set historical data
         coinsArray.forEach(coin => {
           coin.historical = historicalData.data[coin.id]
-          coin.fundingRate = fundingData[`${coin.symbol.toUpperCase()}USDT_PERP.A`]?.funding_rate || null
         })
+  
+        // Try to fetch funding rates separately
+        try {
+          const symbols = Object.values(quotesData.data)
+            .map((coin: any) => {
+              const symbol = coin.symbol.toUpperCase()
+              if (symbol === 'BTC') return 'BTCUSDT_PERP.A'
+              if (symbol === 'ETH') return 'ETHUSDT_PERP.A'
+              return `${symbol}USDT_PERP.A`
+            })
+            .join(',')
+  
+          const fundingResponse = await fetch(`/api/coinalyze?symbols=${symbols}`, {
+            cache: 'no-store'
+          })
+  
+          if (fundingResponse.ok) {
+            const fundingData = await fundingResponse.json()
+            // Only update funding rates if successful
+            coinsArray.forEach(coin => {
+              coin.fundingRate = fundingData[`${coin.symbol.toUpperCase()}USDT_PERP.A`]?.funding_rate || null
+            })
+          } else {
+            console.warn('Funding rate fetch failed:', {
+              status: fundingResponse.status,
+              symbols
+            })
+          }
+        } catch (fundingError) {
+          console.warn('Failed to fetch funding rates:', fundingError)
+          // Continue without funding rates
+        }
+  
         setCoins(coinsArray)
       }
     } catch (error) {
@@ -125,7 +138,7 @@ function ChartsContent() {
           <IconArrowTriangle2Circlepath className={`h-5 w-5 fill-muted-foreground group-hover:fill-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
         </Button>
       </div>
-      <FundingRates coins={coins} />
+      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <MultiPriceChart coins={coins} />
         <CoinTreemap coins={topCoins} />
