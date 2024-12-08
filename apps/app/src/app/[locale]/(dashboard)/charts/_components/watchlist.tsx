@@ -9,6 +9,7 @@ import { useWatchlist } from "./watchlist-context"
 import { CoinMarketData } from "@/types/coins"
 import Link from "next/link"
 import Image from "next/image"
+import { cn } from "@v1/ui/cn"
 import { useEffect, useState } from "react"
 import { Skeleton } from "@v1/ui/skeleton"
 import { CoinSearch } from "./coin-search"
@@ -119,7 +120,7 @@ export function Watchlist() {
     <Card>
       <CardHeader>
         <CardTitle>
-          <div className="flex w-full justify-between items-center gap-2">
+          <div className="flex w-full justify-between items-center gap-2 font-medium font-mono">
             Watchlist
             <CoinSearch />
           </div>
@@ -134,6 +135,7 @@ export function Watchlist() {
               <TableHead>24h Change</TableHead>
               <TableHead>Volume 24h</TableHead>
               <TableHead>Market Cap</TableHead>
+              <TableHead>Funding Rate</TableHead>
               <TableHead className="w-[50px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -166,6 +168,20 @@ export function Watchlist() {
                 </TableCell>
                 <TableCell>${formatLargeNumber(coin.quote.USD.volume_24h)}</TableCell>
                 <TableCell>${formatLargeNumber(coin.quote.USD.market_cap)}</TableCell>
+                <TableCell>
+                  <span className={cn(
+                    "text-lg font-mono",
+                    {
+                      'text-green-500': coin.fundingRate && coin.fundingRate > 0,
+                      'text-red-500': coin.fundingRate && coin.fundingRate < 0,
+                      'text-muted-foreground': !coin.fundingRate
+                    }
+                  )}>
+                    {coin.fundingRate !== null && coin.fundingRate !== undefined
+                      ? `${(coin.fundingRate * 100).toFixed(4)}%` 
+                      : 'N/A'}
+                  </span>
+                </TableCell>
                 <TableCell>
                   <Button
                     variant="ghost"

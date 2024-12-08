@@ -2,13 +2,14 @@
 
 import { createClient } from "@v1/supabase/client";
 import { Button } from "@v1/ui/button";
-import { Icons } from "@v1/ui/icons";
 
 export function SignOut() {
   const supabase = createClient();
 
   const handleSignOut = () => {
     supabase.auth.signOut();
+    window.location.href = '/login';
+    window.location.reload();
   };
 
   return (
