@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
 import { ChartContainer, ChartTooltip } from "@v1/ui/chart"
 import { Skeleton } from "@v1/ui/skeleton"
 import type { Coin } from '@/types/coins'
+import { formatLargeNumber } from "@v1/ui/format-numbers";
 import { cn } from '@v1/ui/cn'
 
 interface CoinTreemapProps {
@@ -171,11 +172,11 @@ export function CoinTreemap({ coins }: CoinTreemapProps) {
                     },
                     {
                       label: 'Market Cap',
-                      value: `$${data.value.toLocaleString()}`
+                      value: `$${formatLargeNumber(data.value)}`
                     },
                     {
                       label: 'Volume 24h',
-                      value: `$${data.volume24h.toLocaleString()}`
+                      value: `$${formatLargeNumber(data.volume24h)}`
                     },
                     {
                       label: 'Change',
