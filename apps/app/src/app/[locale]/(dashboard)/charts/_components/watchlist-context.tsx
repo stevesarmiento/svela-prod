@@ -1,8 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
-import { useSupabase } from '@/hooks/use-supabase'
-import { useUser } from '@/hooks/use-user'
+import { useUser } from '@clerk/nextjs'
+import { useWatchlist as useConvexWatchlist, useAddToWatchlist, useRemoveFromWatchlist } from '@v1/convex/hooks'
 
 interface WatchlistContextType {
   watchlist: number[]
@@ -15,151 +15,71 @@ interface WatchlistContextType {
 const WatchlistContext = createContext<WatchlistContextType | undefined>(undefined)
 
 export function WatchlistProvider({ children }: { children: React.ReactNode }) {
-  const [watchlist, setWatchlist] = useState<number[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [isInitialized, setIsInitialized] = useState(false)
-  const supabase = useSupabase()
-  const { user, isLoading: isUserLoading } = useUser()
-
-  useEffect(() => {
-    let isMounted = true
-
-    // Add the auth check here
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      console.log('Current session:', {
-        hasSession: !!session,
-        userId: session?.user?.id,
-        expiresAt: session?.expires_at
-      })
-    }
-    checkAuth()
-
-    async function loadWatchlist() {
-      console.log('loadWatchlist called', {
-        isUserLoading,
-        user: user?.id,
-        isInitialized,
-        watchlistLength: watchlist.length
-      })
-
-      if (isUserLoading) return
-
-      try {
-        if (!user) {
-          console.log('No user found in WatchlistProvider')
-          if (isMounted) {
-            setWatchlist([])
-            setIsLoading(false)
-            setIsInitialized(true)
-          }
-          return
-        }
-
-        console.log('Fetching watchlist for user:', user.id)
-        const { data, error } = await supabase
-          .from('watchlists')
-          .select('coin_id')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-
-        if (error) {
-          console.error('Supabase query error:', error)
-          throw error
-        }
-
-        console.log('Watchlist data:', data)
-        
-        if (isMounted) {
-          const coinIds = data.map(item => Number(item.coin_id))
-          console.log('Parsed coin IDs:', coinIds)
-          setWatchlist(coinIds)
-          setIsLoading(false)
-          setIsInitialized(true)
-        }
-      } catch (error) {
-        console.error('Error loading watchlist:', error)
-        if (isMounted) {
-          setIsLoading(false)
-          setIsInitialized(true)
-        }
-      }
-    }
-
-    loadWatchlist()
-
-    // Set up real-time subscription for watchlist changes
-    const channel = supabase
-      .channel('watchlist_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'watchlists',
-          filter: user ? `user_id=eq.${user.id}` : undefined,
-        },
-        () => {
-          loadWatchlist()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      isMounted = false
-      channel.unsubscribe()
-    }
-  }, [user, isUserLoading, supabase, isInitialized, watchlist.length])
+  const { user, isLoaded } = useUser()
+  const convexWatchlist = useConvexWatchlist()
+  const addToConvexWatchlist = useAddToWatchlist()
+  const removeFromConvexWatchlist = useRemoveFromWatchlist()
   
-      const addToWatchlist = async (coinId: number) => {
-        if (!user) throw new Error('Not authenticated')
-    
-        try {
-          const { error } = await supabase
-            .from('watchlists')
-            .insert([{
-              coin_id: coinId.toString(),
-              user_id: user.id
-            }])
-    
-          if (error) throw error
-          setWatchlist(prev => [...prev, coinId])
-        } catch (error) {
-          console.error('Error adding to watchlist:', error)
-          throw error
-        }
-      }
+  const [watchlist, setWatchlist] = useState<number[]>([])
+  const [isInitialized, setIsInitialized] = useState(false)
 
-      async function removeFromWatchlist(coinId: number) {
-        if (!user) return
-    
-        try {
-          const { error } = await supabase
-            .from('watchlists')
-            .delete()
-            .eq('user_id', user.id)
-            .eq('coin_id', coinId.toString())
-    
-          if (error) throw error
-    
-          setWatchlist(prev => prev.filter(id => id !== coinId))
-        } catch (error) {
-          console.error('Error removing from watchlist:', error)
-        }
-      }
-
-      return (
-        <WatchlistContext.Provider value={{ 
-          watchlist, 
-          isLoading, 
-          isInitialized,
-          addToWatchlist, 
-          removeFromWatchlist 
-        }}>
-          {children}
-        </WatchlistContext.Provider>
-      )
+  // Convert Convex watchlist data to number array
+  useEffect(() => {
+    if (convexWatchlist && isLoaded) {
+      console.log('Convex watchlist data:', convexWatchlist)
+      const coinIds = convexWatchlist.map(item => Number(item.coinId))
+      console.log('Parsed coin IDs:', coinIds)
+      setWatchlist(coinIds)
+      setIsInitialized(true)
+    } else if (isLoaded && !user) {
+      // User not logged in
+      setWatchlist([])
+      setIsInitialized(true)
     }
+  }, [convexWatchlist, isLoaded, user])
+
+  const addToWatchlist = async (coinId: number) => {
+    if (!user) throw new Error('Not authenticated')
+
+    try {
+      console.log('Adding coin to watchlist:', coinId)
+      await addToConvexWatchlist(coinId.toString())
+      // Optimistically update local state
+      setWatchlist(prev => [...prev, coinId])
+    } catch (error) {
+      console.error('Error adding to watchlist:', error)
+      throw error
+    }
+  }
+
+  const removeFromWatchlist = async (coinId: number) => {
+    if (!user) return
+
+    try {
+      console.log('Removing coin from watchlist:', coinId)
+      await removeFromConvexWatchlist(coinId.toString())
+      // Optimistically update local state
+      setWatchlist(prev => prev.filter(id => id !== coinId))
+    } catch (error) {
+      console.error('Error removing from watchlist:', error)
+      throw error
+    }
+  }
+
+  const isLoading = !isLoaded || (user && convexWatchlist === undefined && !isInitialized)
+
+  return (
+    <WatchlistContext.Provider value={{ 
+      watchlist, 
+      isLoading: isLoading || false, 
+      isInitialized,
+      addToWatchlist, 
+      removeFromWatchlist 
+    }}>
+      {children}
+    </WatchlistContext.Provider>
+  )
+}
 
 export function useWatchlist() {
   const context = useContext(WatchlistContext)

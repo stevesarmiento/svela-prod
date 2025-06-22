@@ -19,8 +19,7 @@ import {
 } from "@v1/ui/sidebar";
 import { Button } from "@v1/ui/button";
 import { SignOut } from "@/components/sign-out";
-import { createClient } from "@v1/supabase/client";
-import { useEffect, useState } from "react";
+import { useAuth } from "@v1/convex/hooks";
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -51,20 +50,12 @@ const menuItems = [
 
 export function SideNav() {
   const pathname = usePathname();
-  const [email, setEmail] = useState<string | null>(null);
-  const [name, setName] = useState<string | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const supabase = createClient();
+  const { user } = useAuth();
 
-  useEffect(() => {
-    async function getUser() {
-      const { data: { user } } = await supabase.auth.getUser();
-      setEmail(user?.email ?? null);
-      setName(user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? null);
-      setAvatarUrl(user?.user_metadata?.avatar_url ?? null);
-    }
-    getUser();
-  }, [supabase.auth]);
+  // Extract user data from Convex user object
+  const email = user?.email || null;
+  const name = user?.fullName || null;
+  const avatarUrl = user?.avatarUrl || null;
 
   return (
       <Sidebar className="flex flex-col items-center bg-black/60">
@@ -76,31 +67,28 @@ export function SideNav() {
             height={50} 
           />
         </SidebarHeader>
-        <SidebarContent className="flex flex-col justify-center items-center">
-          <SidebarMenu className="space-y-2 flex flex-col justify-center items-center">
-            {menuItems.map((item) => {
-              const isActive = pathname.startsWith(item.href);
-              return (
-                <SidebarMenuItem 
-                  key={item.href} 
-                  className="relative h-8 w-8 hover:bg-foreground/10"
+
+        <SidebarContent className="flex-1 flex flex-col justify-center items-center p-4">
+          <SidebarMenu className="flex flex-col gap-4">
+            {menuItems.map((item) => (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton
+                  asChild
+                  className={`h-12 w-12 flex items-center justify-center rounded-lg ${
+                    pathname === item.href 
+                      ? "bg-white/10 text-white" 
+                      : "text-white/60 hover:text-white hover:bg-white/5"
+                  }`}
                 >
-                  <Link href={item.href} className="flex items-center justify-center h-full w-full">
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      tooltip={item.title}
-                    >
-                      <item.icon className="h-4 w-4 fill-foreground" />
-                    </SidebarMenuButton>
+                  <Link href={item.href}>
+                    <item.icon className="size-6" />
                   </Link>
-                  {isActive && (
-                    <div className="absolute left-[48.5px] top-1/2 transform -translate-y-1/2 rounded-l-full w-[3px] h-6 bg-primary" />
-                  )}
-                </SidebarMenuItem>
-              );
-            })}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
           </SidebarMenu>
         </SidebarContent>
+
         <SidebarFooter className="flex flex-col justify-center items-center p-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

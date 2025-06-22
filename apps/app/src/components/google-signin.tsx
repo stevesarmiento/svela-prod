@@ -1,18 +1,13 @@
 "use client";
 
-import { createClient } from "@v1/supabase/client";
+import { useAuth } from "@v1/convex/hooks";
 import { Button } from "@v1/ui/button";
 
 export function GoogleSignin() {
-  const supabase = createClient();
+  const { signIn } = useAuth();
 
   const handleSignin = () => {
-    supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
-      },
-    });
+    signIn();
   };
 
   return (

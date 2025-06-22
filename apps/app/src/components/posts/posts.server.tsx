@@ -1,13 +1,8 @@
-import { getPosts } from "@v1/supabase/queries";
-
 export async function PostsServer() {
-  const { data } = await getPosts();
-
+  // TODO: Replace with Convex posts query once fully set up
   return (
     <div>
-      {data?.map((post) => (
-        <div key={post.id}>{post.title}</div>
-      ))}
+      <p>Posts will be loaded here once Convex migration is complete.</p>
     </div>
   );
 }

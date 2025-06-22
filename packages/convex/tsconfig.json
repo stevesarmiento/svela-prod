@@ -1,0 +1,10 @@
+{
+    "extends": "@v1/typescript/base.json",
+    "compilerOptions": {
+      "jsx": "react-jsx",
+      "module": "ESNext",
+      "moduleResolution": "bundler"
+    },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules"]
+  }

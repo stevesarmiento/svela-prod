@@ -1,15 +1,13 @@
 "use client";
 
-import { createClient } from "@v1/supabase/client";
+import { useAuth } from "@v1/convex/hooks";
 import { Button } from "@v1/ui/button";
 
 export function SignOut() {
-  const supabase = createClient();
+  const { signOut } = useAuth();
 
   const handleSignOut = () => {
-    supabase.auth.signOut();
-    window.location.href = '/login';
-    window.location.reload();
+    signOut();
   };
 
   return (
