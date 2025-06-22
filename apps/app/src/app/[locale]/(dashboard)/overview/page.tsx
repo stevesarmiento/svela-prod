@@ -1,3 +1,4 @@
+import { Chat } from "@/components/chat/chat";
 
 export const metadata = {
   title: "Overview",
@@ -5,8 +6,16 @@ export const metadata = {
 
 export default function OverviewPage() {
   return (
-    <div className="space-y-6 p-8">
-      <h1 className="text-3xl font-bold">Overview</h1>
+    <div className="min-h-screen w-full flex items-center justify-center p-4">
+      <div className="w-full">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-medium text-foreground mb-2">
+            What&apos;s on your mind?
+          </h1>
+        </div>
+        
+        <Chat />
+      </div>
     </div>
   );
 }
