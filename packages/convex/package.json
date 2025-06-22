@@ -1,0 +1,27 @@
+{
+    "name": "@v1/convex",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+      "clean": "rm -rf .turbo node_modules",
+      "lint": "biome check .",
+      "format": "biome format --write .",
+      "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+      "convex": "^1.14.2",
+      "@convex-dev/auth": "^0.0.55",
+      "@v1/logger": "workspace:*",
+      "react": "19"
+    },
+    "devDependencies": {
+      "typescript": "^5.5.4"
+    },
+    "exports": {
+      "./client": "./src/client.ts",
+      "./provider": "./src/provider.tsx",
+      "./hooks": "./src/hooks.ts",
+      "./types": "./src/types.ts"
+    }
+  }

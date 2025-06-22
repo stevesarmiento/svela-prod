@@ -1,6 +1,6 @@
 {
   "$schema": "https://turborepo.org/schema.json",
-  "globalDependencies": ["**/.env"],
+  "globalDependencies": ["**/.env.*local"],
   "ui": "stream",
   "tasks": {
     "topo": {
@@ -8,8 +8,6 @@
     },
     "build": {
       "env": [
-        "SUPABASE_SERVICE_KEY",
-        "SUPABASE_API_KEY",
         "RESEND_API_KEY",
         "LOOPS_ENDPOINT",
         "LOOPS_API_KEY",
@@ -28,6 +26,10 @@
       "inputs": ["$TURBO_DEFAULT$", ".env"],
       "persistent": true,
       "cache": false
+    },
+    "dev:convex": {
+      "cache": false,
+      "persistent": true
     },
     "start": {
       "cache": false

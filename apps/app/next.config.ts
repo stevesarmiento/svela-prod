@@ -8,7 +8,7 @@ const isProd = process.env.NODE_ENV === "production";
 const nextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
-  transpilePackages: ["@v1/supabase"],
+  transpilePackages: [],
   experimental: {
     optimizeCss: isProd,
     optimizePackageImports: isProd ? ["@v1/ui"] : [],

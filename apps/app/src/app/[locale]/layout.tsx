@@ -1,6 +1,8 @@
 import "@v1/ui/globals.css";
 import { cn } from "@v1/ui/cn";
 import { ThemeProvider } from "next-themes";
+import { ClerkProvider } from "@clerk/nextjs";
+import { ConvexProvider } from "@v1/convex/provider";
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
@@ -43,14 +45,25 @@ export default function RootLayout({
           "antialiased",
         )}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
+        <ClerkProvider
+          publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!}
+          appearance={{
+            variables: {
+              colorPrimary: "#000000",
+            },
+          }}
         >
-          {children}
-        </ThemeProvider>
+          <ConvexProvider>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+            >
+              {children}
+            </ThemeProvider>
+          </ConvexProvider>
+        </ClerkProvider>
       </body>
     </html>
   );

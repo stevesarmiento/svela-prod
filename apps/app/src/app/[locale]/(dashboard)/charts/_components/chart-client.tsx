@@ -8,7 +8,7 @@ import { useWatchlist } from "./watchlist-context"
 import type { Coin, CoinMarketData } from '@/types/coins'
 import { toast } from "@v1/ui/use-toast"
 import { Button } from "@v1/ui/button"
-import { IconArrowTriangle2Circlepath } from "symbols-react"
+import { IconArrowtriangleUpCircle } from "symbols-react"
 import { CoinTreemap } from './coin-treemap'
 
 function ChartsContent() {
@@ -135,7 +135,7 @@ function ChartsContent() {
           size="icon"
           className="group"
         >
-          <IconArrowTriangle2Circlepath className={`h-5 w-5 fill-muted-foreground group-hover:fill-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
+          <IconArrowtriangleUpCircle className={`h-5 w-5 fill-muted-foreground group-hover:fill-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
         </Button>
       </div>
       
