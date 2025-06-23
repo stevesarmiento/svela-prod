@@ -87,25 +87,49 @@ export function Chat() {
     setShowConversation(messages.length > 0);
   }, [messages.length]);
 
-  // Detect if user is asking for data
-  const detectDataQuery = (message: string): boolean => {
-    const dataKeywords = [
-      'price', 'bitcoin', 'ethereum','solana', 'btc', 'eth', 'market', 'crypto',
-      'coin', 'trading', 'value', 'worth', 'cost', 'analysis', 'trend'
-    ];
-    return dataKeywords.some(keyword => 
-      message.toLowerCase().includes(keyword)
-    );
+  const detectDataQuery = async (message: string): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/parse-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          message,
+          systemPrompt: `You are a cryptocurrency query parser. Determine if this user query is asking for cryptocurrency data, prices, or market information.
+
+Respond with JSON only:
+{
+  "isDataQuery": true/false,
+  "intent": "brief description"
+}
+
+Examples:
+"How is Solana doing today?" → {"isDataQuery": true, "intent": "asking for Solana price/performance"}
+"What's the weather like?" → {"isDataQuery": false, "intent": "asking about weather"}
+"Tell me about DeFi trends" → {"isDataQuery": true, "intent": "asking about cryptocurrency trends"}
+"How are you?" → {"isDataQuery": false, "intent": "general greeting"}`
+        })
+      });
+      
+      const result = await response.json();
+      return result.isDataQuery || false;
+    } catch (error) {
+      console.error('Failed to detect data query:', error);
+      // Fallback to basic keyword detection
+      const dataKeywords = ['price', 'bitcoin', 'ethereum', 'crypto', 'coin', 'market'];
+      return dataKeywords.some(keyword => message.toLowerCase().includes(keyword));
+    }
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (input.trim() && !isLoading) {
-      if (detectDataQuery(input)) {
+      const isDataQuery = await detectDataQuery(input);
+      
+      if (isDataQuery) {
         console.log('Detected data query, setting lastDataQuery');
         setIsDataLoading(true);
         const queryId = Date.now().toString();
-        lastDataQueryRef.current = queryId; // Use ref instead of state
+        lastDataQueryRef.current = queryId;
         console.log('Set lastDataQuery to:', queryId);
       } else {
         console.log('Not a data query, clearing lastDataQuery');
