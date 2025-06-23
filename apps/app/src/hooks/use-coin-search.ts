@@ -20,6 +20,10 @@ export function useCoinSearch(query: string) {
     enabled: query.trim().length > 0,
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
+    retry: (failureCount, error) => {
+      if (error?.message?.includes('rate limit')) return false;
+      return failureCount < 2;
+    },
   });
 }
 
