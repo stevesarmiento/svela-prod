@@ -74,8 +74,8 @@ function ChartsContent() {
   
         // Try to fetch funding rates separately
         try {
-          const symbols = Object.values(quotesData.data)
-            .map((coin: any) => {
+          const symbols = coinsArray
+            .map((coin: CoinMarketData) => {
               const symbol = coin.symbol.toUpperCase()
               if (symbol === 'BTC') return 'BTCUSDT_PERP.A'
               if (symbol === 'ETH') return 'ETHUSDT_PERP.A'

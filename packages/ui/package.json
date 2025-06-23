@@ -36,6 +36,7 @@
     "./collapsible": "./src/components/collapsible.tsx",
     "./combobox": "./src/components/combobox.tsx",
     "./combobox-dropdown": "./src/components/combobox-dropdown.tsx",
+    "./command-popover": "./src/components/command-popover.tsx",
     "./command": "./src/components/command.tsx",
     "./context-menu": "./src/components/context-menu.tsx",
     "./date-range-picker": "./src/components/date-range-picker.tsx",

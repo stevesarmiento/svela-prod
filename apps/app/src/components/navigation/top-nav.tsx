@@ -1,13 +1,13 @@
 "use client";
 
-import Link from "next/link";
+//import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { 
-  IconHouseFill, 
-  IconDistributeHorizontalCenterFill,  
-  IconGearshapeFill,
-} from "symbols-react";
+//`import { usePathname } from "next/navigation";
+// import { 
+//   IconHouseFill, 
+//   IconDistributeHorizontalCenterFill,  
+//   IconGearshapeFill,
+// } from "symbols-react";
 import { Button } from "@v1/ui/button";
 import { SignOut } from "@/components/sign-out";
 import { useAuth } from "@v1/convex/hooks";
@@ -21,26 +21,35 @@ import {
 } from "@v1/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 
-const menuItems = [
-  {
-    title: "Overview",
-    href: "/overview",
-    icon: IconHouseFill,
-  },
-  {
-    title: "Price Charts",
-    href: "/charts",
-    icon: IconDistributeHorizontalCenterFill,
-  },
-  {
-    title: "Settings",
-    href: "/settings",
-    icon: IconGearshapeFill,
-  },
-];
+// const menuItems = [
+//   {
+//     title: "Overview",
+//     href: "/overview",
+//     icon: IconHouseFill,
+//   },
+//   {
+//     title: "Price Charts",
+//     href: "/charts",
+//     icon: IconDistributeHorizontalCenterFill,
+//   },
+//   {
+//     title: "Settings",
+//     href: "/settings",
+//     icon: IconGearshapeFill,
+//   },
+// ];
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  if (hour < 21) return "Good evening";
+  return "Good night";
+}
 
 export function TopNav() {
-  const pathname = usePathname();
+  //const pathname = usePathname();
   const { user } = useAuth();
 
   // Extract user data from Convex user object
@@ -48,21 +57,28 @@ export function TopNav() {
   const name = user?.fullName || null;
   const avatarUrl = user?.avatarUrl || null;
 
+  // Get first name from fullName or email
+  const firstName = name?.split(' ')[0] || email?.split('@')[0] || 'there';
+
   return (
-    <div className="border-b bg-background">
+    <div className="py-12">
       <div className="flex h-16 items-center px-4 gap-4">
-        {/* Logo */}
+        {/* Logo and Greeting */}
         <div className="flex items-center gap-3">
           <Image 
             src="/svela-logo.svg" 
             alt="Svela Logo" 
-            width={32} 
-            height={32} 
+            width={22} 
+            height={22} 
+            className="opacity-30"
           />
+          <span className="text-lg font-bold text-white">
+            {getGreeting()}, {firstName}
+          </span>
         </div>
 
         {/* Navigation menu */}
-        <nav className="flex items-center gap-1">
+        {/* <nav className="flex items-center gap-1">
           {menuItems.map((item) => (
             <Link
               key={item.title}
@@ -77,7 +93,7 @@ export function TopNav() {
               <span className="hidden sm:inline">{item.title}</span>
             </Link>
           ))}
-        </nav>
+        </nav> */}
 
         {/* Spacer */}
         <div className="flex-1" />
