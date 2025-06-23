@@ -3,6 +3,7 @@ import { cn } from "@v1/ui/cn";
 import { ThemeProvider } from "next-themes";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexProvider } from "@v1/convex/provider";
+import { QueryProvider } from "@/components/providers/query-provider";
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
@@ -54,14 +55,16 @@ export default function RootLayout({
           }}
         >
           <ConvexProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              {children}
-            </ThemeProvider>
+            <QueryProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                {children}
+              </ThemeProvider>
+            </QueryProvider>
           </ConvexProvider>
         </ClerkProvider>
       </body>
