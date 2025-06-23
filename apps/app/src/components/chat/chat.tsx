@@ -5,7 +5,7 @@ import { useChat } from "ai/react";
 import { useAuth } from "@v1/convex/hooks";
 import { ChatInput } from "./chat-input";
 import { ChatMessageList } from "./chat-message-list";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 
 interface PriceCardData {
   id: number;
@@ -139,20 +139,34 @@ Examples:
   console.log('messages:', messages.map(m => ({ id: m.id, role: m.role, content: m.content.slice(0, 50) })));
 
   return (
-    <div className="h-full w-full flex flex-col relative">
+    <AnimatePresence mode="popLayout">
+    <div className={`w-full flex flex-col relative ${messages.length > 0 ? 'h-[calc(100vh-200px)]' : 'h-[calc(100vh-500px)]'}`}>
       {/* Message list area - takes up space above input */}
       <motion.div 
         className="flex-1 overflow-hidden"
-        transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+        transition={{
+          type: "spring",
+          stiffness: 280,
+          damping: 18,
+          mass: 0.3,
+        }}
       >
-        <div className="h-full max-w-4xl mx-auto">
+        <div className="h-full max-w-4xl mx-auto relative">
+                      {/* Fade overlay at top */}
+                      <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-background via-background to-transparent z-10 pointer-events-none" />
+              
           {messages.length > 0 && (
             <motion.div 
-              className="h-full pb-4" // pb-4 for some spacing from input
+              className="relative h-full pb-4 pt-12" // pb-4 for some spacing from input
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.4 }}
+              transition={{
+                type: "spring",
+                stiffness: 280,
+                damping: 18,
+                mass: 0.3,
+              }}
             >
               <ChatMessageList 
                 messages={messages}
@@ -169,12 +183,18 @@ Examples:
       
       {/* Input fixed at bottom of container */}
       <motion.div 
-        className="flex-shrink-0 p-4 bg-background/95 backdrop-blur-sm border-t"
+        className="w-full p-4 border-primary/5 border rounded-[30px] max-w-3xl mx-auto"
         initial={{ y: 100 }}
         animate={{ y: 0 }}
-        transition={{ duration: 0.4 }}
+        layout
+        transition={{
+          type: "spring",
+          stiffness: 280,
+          damping: 18,
+          mass: 0.3,
+        }}
       >
-        <div className="max-w-4xl mx-auto">
+        <div className="">
           <ChatInput
             input={input}
             isLoading={isLoading}
@@ -186,5 +206,6 @@ Examples:
         </div>
       </motion.div>
     </div>
+    </AnimatePresence>
   );
 }

@@ -2,7 +2,9 @@
 
 //import Link from "next/link";
 import Image from "next/image";
-//`import { usePathname } from "next/navigation";
+import Link from "next/link";
+import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 // import { 
 //   IconHouseFill, 
 //   IconDistributeHorizontalCenterFill,  
@@ -41,18 +43,54 @@ import { Fingerprint, LogOut } from "lucide-react";
 //   },
 // ];
 
-function getGreeting(): string {
-  const hour = new Date().getHours();
+function getRouteGreeting(pathname: string): string {
+  // Remove locale prefix if present (e.g., /en/charts -> /charts)
+  const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
   
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  if (hour < 21) return "Good evening";
-  return "Good night";
+  // Special case: Use time-based greeting for overview
+  if (cleanPath === '/overview' || cleanPath.startsWith('/overview/')) {
+    const hour = new Date().getHours();
+    
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    if (hour < 21) return "Good evening";
+    return "Welcome";
+  }
+  
+  const routeGreetings: Record<string, string> = {
+    '/charts': 'Charts & Graphs',
+    '/settings': 'Settings',
+    '/': 'Dashboard',
+  };
+
+  // Check for exact matches first
+  if (routeGreetings[cleanPath]) {
+    return routeGreetings[cleanPath];
+  }
+
+  // Check for partial matches (e.g., /charts/bitcoin -> Charts & Graphs)
+  for (const [route, greeting] of Object.entries(routeGreetings)) {
+    if (cleanPath.startsWith(route + '/')) {
+      return greeting;
+    }
+  }
+
+  // Default fallback
+  return 'Dashboard';
 }
 
 export function TopNav() {
   const { user } = useAuth();
   const { openUserProfile } = useClerk();
+  const pathname = usePathname();
+  const [greeting, setGreeting] = useState("Dashboard");
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Update greeting based on route after component mounts
+  useEffect(() => {
+    setIsMounted(true);
+    setGreeting(getRouteGreeting(pathname));
+  }, [pathname]);
 
   const handleProfileClick = () => {
     openUserProfile();
@@ -63,11 +101,16 @@ export function TopNav() {
   const email = user?.email;
   const avatarUrl = user?.avatarUrl;
 
+  // Check if current route is overview
+  const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
+  const isOverviewRoute = cleanPath === '/overview' || cleanPath.startsWith('/overview/');
+
   return (
-    <div className="py-12">
+    <div className="py-12 z-50">
       <div className="flex h-16 items-center px-4 gap-4">
         {/* Logo and Greeting */}
         <div className="flex items-center gap-3">
+          <Link href="/overview">
           <Image 
             src="/svela-logo.svg" 
             alt="Svela Logo" 
@@ -75,8 +118,16 @@ export function TopNav() {
             height={22} 
             className="opacity-30"
           />
+          </Link>
           <span className="text-lg font-bold text-white">
-            {getGreeting()}, {firstName}
+            {isMounted 
+              ? isOverviewRoute 
+                ? `${greeting}, ${firstName}` 
+                : greeting
+              : isOverviewRoute 
+                ? `Dashboard, ${firstName}` 
+                : "Dashboard"
+            }
           </span>
         </div>
 
