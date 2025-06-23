@@ -39,7 +39,9 @@ interface ComponentData {
 export function Chat() {
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [messageComponents, setMessageComponents] = useState<Record<string, ComponentData>>({});
+  const [isStopped, setIsStopped] = useState(false);
   const lastDataQueryRef = useRef<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const { user } = useAuth();
   
   const {
@@ -49,6 +51,7 @@ export function Chat() {
     handleSubmit,
     isLoading,
     error,
+    stop,
   } = useChat({
     api: '/api/chat',
     onResponse: async (response) => {
@@ -76,6 +79,8 @@ export function Chat() {
     },
     onFinish: (message) => {
       setIsDataLoading(false);
+      setIsStopped(false);
+      abortControllerRef.current = null;
       
       // Move component data from temp key to actual message ID
       if (message.role === 'assistant' && lastDataQueryRef.current) {
@@ -131,6 +136,11 @@ Examples:
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (input.trim() && !isLoading) {
+      setIsStopped(false);
+      
+      // Create new abort controller for this request
+      abortControllerRef.current = new AbortController();
+      
       const isDataQuery = await detectDataQuery(input);
       
       if (isDataQuery) {
@@ -145,6 +155,28 @@ Examples:
       }
       handleSubmit(e);
     }
+  };
+
+  const handleStop = () => {
+    console.log('Stopping request...');
+    
+    // Stop the useChat request
+    stop();
+    
+    // Abort any ongoing fetch requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    
+    // Update UI state
+    setIsDataLoading(false);
+    setIsStopped(true);
+    
+    // Clear the stopped state after 3 seconds
+    setTimeout(() => {
+      setIsStopped(false);
+    }, 3000);
   };
 
   // Add some debugging
@@ -219,16 +251,26 @@ Examples:
       {/* Input fixed at bottom of container */}
       <motion.div 
         className="w-full p-4 border-primary/5 border rounded-[30px] max-w-3xl mx-auto"
+        initial={{ y: 100 }}
+        animate={{ y: 0 }}
         layout
+        transition={{
+          type: "spring",
+          stiffness: 280,
+          damping: 18,
+          mass: 0.3,
+        }}
       >
-        <div className="">
+        <div>
           <ChatInput
             input={input}
             isLoading={isLoading}
             isDataLoading={isDataLoading}
             onInputChange={handleInputChange}
             onSubmit={handleFormSubmit}
+            onStop={handleStop}
             error={error}
+            isStopped={isStopped}
           />
         </div>
       </motion.div>

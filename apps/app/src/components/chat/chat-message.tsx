@@ -78,10 +78,10 @@ export function ChatMessage({
       
       <div className={`max-w-[80%] space-y-3 ${role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
         <div
-          className={`rounded-lg px-4 py-2 ${
+          className={`rounded-lg ${
             role === 'user'
-              ? 'bg-zinc-800/80 rounded-tr-none text-white'
-              : 'bg-zinc-800/30 rounded-tl-none text-white'
+              ? 'bg-zinc-800/80 rounded-tr-none text-white px-4 py-2'
+              : 'text-white'
           }`}
         >
           <p className="text-sm whitespace-pre-wrap">{content}</p>

@@ -84,6 +84,12 @@ const commandItems: {
         icon: IconDistributeHorizontalCenterFill,
       },
       {
+        title: "Watchlist",
+        subtitle: "Your cryptocurrency watchlist",
+        href: "/watchlist",
+        icon: IconBookmarkFill,
+      },
+      {
         title: "Settings",
         subtitle: "App preferences and configuration",
         href: "/settings",
@@ -140,32 +146,43 @@ export function BottomNav() {
   }, []);
 
   const handleCommandSelect = (value: string) => {
+    console.log('Command selected:', value);
     setIsOpen(false);
     
     const allItems = commandItems.flatMap(group => group.items);
-    const selectedItem = allItems.find(item => item.title === value);
+    const selectedItem = allItems.find(item => item.title.toLowerCase() === value.toLowerCase());
     
-    if (!selectedItem || typeof selectedItem !== 'object') return;
+    console.log('Found item:', selectedItem);
     
-    // Use router.push() just like the nav links use Link
-    if ('href' in selectedItem) {
-      router.push((selectedItem as NavigationItem).href);
+    if (!selectedItem || typeof selectedItem !== 'object') {
+      console.log('No item found for:', value);
       return;
     }
     
-    if ('action' in selectedItem) {
-      switch ((selectedItem as ActionItem).action) {
-        case 'bitcoin-price':
-          router.push('/overview?q=What is the current price of Bitcoin?');
-          break;
-        case 'ethereum-price':
-          router.push('/overview?q=What is the current price of Ethereum?');
-          break;
-        case 'market-overview':
-          router.push('/overview?q=Show me the top 10 cryptocurrencies');
-          break;
+    // Add a small delay to ensure popover closes before navigation
+    setTimeout(() => {
+      if ('href' in selectedItem) {
+        console.log('Navigating to:', (selectedItem as NavigationItem).href);
+        router.push((selectedItem as NavigationItem).href);
+      } else if ('action' in selectedItem) {
+        const action = (selectedItem as ActionItem).action;
+        console.log('Executing action:', action);
+        
+        switch (action) {
+          case 'bitcoin-price':
+            router.push('/overview?q=What is the current price of Bitcoin?');
+            break;
+          case 'ethereum-price':
+            router.push('/overview?q=What is the current price of Ethereum?');
+            break;
+          case 'market-overview':
+            router.push('/overview?q=Show me the top 10 cryptocurrencies');
+            break;
+          default:
+            console.log('Unknown action:', action);
+        }
       }
-    }
+    }, 100);
   };
 
   return (

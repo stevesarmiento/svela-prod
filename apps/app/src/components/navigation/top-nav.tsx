@@ -60,6 +60,7 @@ function getRouteGreeting(pathname: string): string {
   const routeGreetings: Record<string, string> = {
     '/charts': 'Charts & Graphs',
     '/settings': 'Settings',
+    '/watchlist': 'Watchlist',
     '/': 'Dashboard',
   };
 
