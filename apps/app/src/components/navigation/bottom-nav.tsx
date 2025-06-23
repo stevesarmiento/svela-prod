@@ -238,7 +238,7 @@ export function BottomNav() {
                           <IconMagnifyingglass className="h-4 w-4 fill-white/70 hover:fill-white" />
                         </TooltipTrigger>
                         <TooltipContent side="top" sideOffset={15} className="flex items-center text-xs p-0 border-none bg-none shadow-none">
-                          <kbd className="rounded-sm bg-border px-1.5 py-0.5 text-xs font-mono">
+                          <kbd className="rounded-xs bg-border px-1.5 py-0.5 text-xs font-mono">
                             ⌘ + K
                           </kbd>
                         </TooltipContent>

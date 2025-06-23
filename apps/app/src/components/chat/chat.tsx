@@ -169,7 +169,7 @@ Examples:
       
       {/* Input fixed at bottom of container */}
       <motion.div 
-        className="flex-shrink-0 p-4 bg-background/95 backdrop-blur-sm border-t"
+        className="shrink-0 p-4 bg-background/95 backdrop-blur-xs border-t"
         initial={{ y: 100 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.4 }}

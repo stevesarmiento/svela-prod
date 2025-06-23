@@ -106,7 +106,7 @@ export function TopNav() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8">
-                <Avatar className="h-8 w-8 rounded-md shadow-sm shadow-black/30 hover:ring-4 ring-1 ring-black/10 dark:ring-white/10 transition-all ease-in-out duration-150">
+                <Avatar className="h-8 w-8 rounded-md shadow-xs shadow-black/30 hover:ring-4 ring-1 ring-black/10 dark:ring-white/10 transition-all ease-in-out duration-150">
                   {avatarUrl && (
                     <AvatarImage 
                       src={avatarUrl} 
