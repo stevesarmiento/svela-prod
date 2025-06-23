@@ -130,7 +130,7 @@ export const Combobox = ({
 
       <div className="relative w-full">
         <CommandList
-          className="w-full outline-none animate-in fade-in-0 zoom-in-95"
+          className="w-full outline-hidden animate-in fade-in-0 zoom-in-95"
           hidden={!isOpen}
         >
           {inputValue?.length > 0 && (

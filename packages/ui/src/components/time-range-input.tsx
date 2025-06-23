@@ -44,10 +44,10 @@ export function TimeRangeInput({
             setStartTime(e.target.value);
             onChange({ ...value, start: e.target.value });
           }}
-          className="bg-transparent focus:outline-none text-sm"
+          className="bg-transparent focus:outline-hidden text-sm"
         />
       </div>
-      <div className="flex items-center justify-center flex-shrink-0 mx-4">
+      <div className="flex items-center justify-center shrink-0 mx-4">
         <Icons.ArrowRightAlt className="w-5 h-5 text-[#878787]" />
       </div>
       <div className="flex items-center space-x-2 flex-1 justify-end">
@@ -58,7 +58,7 @@ export function TimeRangeInput({
             setEndTime(e.target.value);
             onChange({ ...value, end: e.target.value });
           }}
-          className="bg-transparent focus:outline-none text-sm"
+          className="bg-transparent focus:outline-hidden text-sm"
         />
         <span className="text-[#878787] text-sm">{duration}</span>
       </div>
