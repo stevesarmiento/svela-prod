@@ -48,11 +48,11 @@ const CommandPopover = ({ children, open, onOpenChange, trigger }: CommandPopove
         </PopoverTrigger>
         <PopoverContent
           ref={contentRef}
-          className="relative rounded-[20px] bg-zinc-900 overflow-hidden p-1 w-[460px] z-[1000]
+          className="relative rounded-[20px] bg-zinc-900 overflow-hidden p-1 w-[499px] z-[1000] data-[state=open]:slide-in-from-bottom-24 data-[state=closed]:slide-out-to-bottom-24
                      shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
                      dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]"
           side="bottom"
-          sideOffset={8}
+          sideOffset={12}
         >
           {/* Background Pattern - FIRST (behind everything) */}
           <div className="absolute inset-0 opacity-5 z-0"

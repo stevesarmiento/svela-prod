@@ -162,7 +162,7 @@ export function BottomNav() {
     <>
       <div className={`fixed z-50 transition-all duration-200 ${
         isOpen 
-          ? 'bottom-8 left-[47%] transform -translate-x-1/2' 
+          ? 'bottom-8 left-[45%] transform -translate-x-1/2' 
           : 'bottom-8 left-[50%] transform -translate-x-1/2'                            
       }`}>
         <div className="flex items-center gap-2">
