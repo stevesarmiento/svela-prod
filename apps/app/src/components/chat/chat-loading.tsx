@@ -1,16 +1,12 @@
 "use client";
 
 import { Avatar, AvatarFallback } from "@v1/ui/avatar";
-import { Spinner } from "@v1/ui/spinner";
+import { SpinnerEllipsis } from "@v1/ui/spinner-ellipsis";
 import Image from "next/image";
 
-interface ChatLoadingProps {
-  isDataLoading: boolean;
-}
-
-export function ChatLoading({ isDataLoading }: ChatLoadingProps) {
+export function ChatLoading() {
   return (
-    <div className="flex gap-3 justify-start">
+    <div className="flex gap-3 justify-start items-center">
       <Avatar className="size-8">
         <AvatarFallback>
           <Image 
@@ -22,12 +18,7 @@ export function ChatLoading({ isDataLoading }: ChatLoadingProps) {
           />
         </AvatarFallback>
       </Avatar>
-      <div className="bg-muted rounded-lg px-4 py-2 flex items-center gap-2">
-        <Spinner />
-        <span className="text-sm text-muted-foreground">
-          {isDataLoading ? 'Fetching live data...' : 'Thinking...'}
-        </span>
-      </div>
+      <SpinnerEllipsis className="fill-zinc-800/50" />
     </div>
   );
 } 

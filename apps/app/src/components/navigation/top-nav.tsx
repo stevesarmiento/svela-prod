@@ -1,7 +1,6 @@
 "use client";
 
 //import Link from "next/link";
-import Image from "next/image";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
@@ -23,6 +22,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 import { SignOutButton, useClerk } from "@clerk/nextjs";
 import { Fingerprint, LogOut } from "lucide-react";
+import { SvelaLogo } from "@v1/ui/svela-logo";
 
 
 // const menuItems = [
@@ -111,13 +111,13 @@ export function TopNav() {
         {/* Logo and Greeting */}
         <div className="flex items-center gap-3">
           <Link href="/overview">
-          <Image 
-            src="/svela-logo.svg" 
-            alt="Svela Logo" 
-            width={22} 
-            height={22} 
-            className="opacity-30"
-          />
+            <SvelaLogo 
+              width={22} 
+              height={22} 
+              className="text-white/30"
+              fillColor="currentColor"
+              strokeOpacity={0.3}
+            />
           </Link>
           <span className="text-lg font-bold text-white">
             {isMounted 

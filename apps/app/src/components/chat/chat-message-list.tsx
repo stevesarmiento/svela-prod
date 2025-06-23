@@ -78,7 +78,7 @@ export function ChatMessageList({ messages, isLoading, isDataLoading, messageCom
           ))}
           
           {(isLoading || isDataLoading) && (
-            <ChatLoading isDataLoading={isDataLoading} />
+            <ChatLoading />
           )}
           
           {/* Invisible element to scroll to */}

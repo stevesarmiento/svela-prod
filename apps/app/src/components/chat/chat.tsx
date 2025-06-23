@@ -6,6 +6,7 @@ import { useAuth } from "@v1/convex/hooks";
 import { ChatInput } from "./chat-input";
 import { ChatMessageList } from "./chat-message-list";
 import { AnimatePresence, motion } from "framer-motion";
+import { SvelaLogo } from "@v1/ui/svela-logo";
 
 interface PriceCardData {
   id: number;
@@ -16,6 +17,18 @@ interface PriceCardData {
   marketCap?: number;
   volume24h?: number;
   rank?: number;
+  historical?: {
+    data?: {
+      quotes?: Array<{
+        timestamp: string;
+        quote: {
+          USD: {
+            price: number;
+          };
+        };
+      }>;
+    };
+  };
 }
 
 interface ComponentData {
@@ -152,12 +165,12 @@ Examples:
         }}
       >
         <div className="h-full max-w-4xl mx-auto relative">
-                      {/* Fade overlay at top */}
-                      <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-background via-background to-transparent z-10 pointer-events-none" />
+          {/* Fade overlay at top */}
+          <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-b from-background via-background to-transparent z-10 pointer-events-none" />
               
-          {messages.length > 0 && (
+          {messages.length > 0 ? (
             <motion.div 
-              className="relative h-full pb-4 pt-12" // pb-4 for some spacing from input
+              className="relative h-full pb-4 pt-12"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -175,6 +188,28 @@ Examples:
                 userImage={user?.avatarUrl}
                 userName={user?.fullName || user?.email?.split('@')[0]}
                 messageComponents={messageComponents}
+              />
+            </motion.div>
+          ) : (
+            // Show logo when no messages
+            <motion.div 
+              className="flex items-end justify-center h-full pb-12"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                type: "spring",
+                stiffness: 280,
+                damping: 18,
+                mass: 0.3,
+              }}
+            >
+              <SvelaLogo 
+                width={164} 
+                height={164} 
+                className="text-zinc-800/20"
+                fillColor="currentColor"
+                strokeColor="currentColor"
+                strokeOpacity={0.1}
               />
             </motion.div>
           )}

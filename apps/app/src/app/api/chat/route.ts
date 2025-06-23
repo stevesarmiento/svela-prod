@@ -46,7 +46,8 @@ export async function POST(req: Request) {
                 change24h: coin.quote.USD.percent_change_24h,
                 marketCap: coin.quote.USD.market_cap,
                 volume24h: coin.quote.USD.volume_24h,
-                rank: coin.cmc_rank
+                rank: coin.cmc_rank,
+                historical: coin.historical
               }
             };
             console.log('Component data created:', componentData);

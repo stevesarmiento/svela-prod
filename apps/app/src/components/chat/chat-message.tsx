@@ -14,6 +14,18 @@ interface PriceCardData {
   marketCap?: number;
   volume24h?: number;
   rank?: number;
+  historical?: {
+    data?: {
+      quotes?: Array<{
+        timestamp: string;
+        quote: {
+          USD: {
+            price: number;
+          };
+        };
+      }>;
+    };
+  };
 }
 
 interface ComponentData {
@@ -68,8 +80,8 @@ export function ChatMessage({
         <div
           className={`rounded-lg px-4 py-2 ${
             role === 'user'
-              ? 'bg-primary text-primary-foreground'
-              : 'bg-muted'
+              ? 'bg-zinc-800/80 rounded-tr-none text-white'
+              : 'bg-zinc-800/30 rounded-tl-none text-white'
           }`}
         >
           <p className="text-sm whitespace-pre-wrap">{content}</p>

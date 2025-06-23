@@ -1,3 +1,5 @@
+import type { HistoricalData } from '@/types/coins';
+
 interface CoinQuote {
   price: number;
   percent_change_24h: number;
@@ -13,6 +15,7 @@ interface DetailedCoin {
   quote: {
     USD: CoinQuote;
   };
+  historical?: HistoricalData;
 }
 
 interface SimpleCoin {
