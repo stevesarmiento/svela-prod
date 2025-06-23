@@ -194,8 +194,8 @@ Examples:
             // Show logo when no messages
             <motion.div 
               className="flex items-end justify-center h-full pb-12"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: 20, filter: "blur(4px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               transition={{
                 type: "spring",
                 stiffness: 280,
@@ -219,15 +219,7 @@ Examples:
       {/* Input fixed at bottom of container */}
       <motion.div 
         className="w-full p-4 border-primary/5 border rounded-[30px] max-w-3xl mx-auto"
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
         layout
-        transition={{
-          type: "spring",
-          stiffness: 280,
-          damping: 18,
-          mass: 0.3,
-        }}
       >
         <div className="">
           <ChatInput

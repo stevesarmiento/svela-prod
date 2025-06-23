@@ -11,6 +11,7 @@ import {
   IconStarFill,
   IconCircleSlash,
   IconCaptionsBubbleFill,
+  IconBookmarkFill,
 } from "symbols-react";
 import {
   CommandPopover,
@@ -33,6 +34,11 @@ const menuItems = [
     title: "Charts",
     href: "/charts", 
     icon: IconDistributeHorizontalCenterFill,
+  },
+  {
+    title: "Watchlist",
+    href: "/watchlist",
+    icon: IconBookmarkFill,
   },
   {
     title: "Settings",
