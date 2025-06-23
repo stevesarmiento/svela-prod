@@ -2,7 +2,7 @@
 
 import { Button } from "@v1/ui/button";
 import { Input } from "@v1/ui/input";
-import { Spinner } from "@v1/ui/spinner";
+//import { Spinner } from "@v1/ui/spinner";
 import { IconPaperplane } from "symbols-react";
 
 interface ChatInputProps {
@@ -18,7 +18,7 @@ interface ChatInputProps {
 export function ChatInput({
   input,
   isLoading,
-  isDataLoading,
+  //isDataLoading,
   onInputChange,
   onSubmit,
   placeholder = "Ask about crypto prices, market trends, or anything else...",
@@ -63,12 +63,12 @@ export function ChatInput({
         </div>
       </form>
       
-      {(isLoading || isDataLoading) && (
+      {/* {(isLoading || isDataLoading) && (
         <div className="absolute top-full left-4 mt-2 flex items-center gap-2 text-sm text-white/70">
           <Spinner />
           <span>{isDataLoading ? 'Fetching live data...' : 'Thinking...'}</span>
         </div>
-      )}
+      )} */}
       
       {error && (
         <p className="text-sm text-destructive mt-2">

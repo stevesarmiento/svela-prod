@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { useChat } from "ai/react";
 import { useAuth } from "@v1/convex/hooks";
 import { ChatInput } from "./chat-input";
-import { ConversationView } from "./conversation-view";
+import { ChatMessageList } from "./chat-message-list";
+import { motion } from "framer-motion";
 
 interface PriceCardData {
   id: number;
@@ -24,7 +25,6 @@ interface ComponentData {
 
 export function Chat() {
   const [isDataLoading, setIsDataLoading] = useState(false);
-  const [showConversation, setShowConversation] = useState(false);
   const [messageComponents, setMessageComponents] = useState<Record<string, ComponentData>>({});
   const lastDataQueryRef = useRef<string | null>(null);
   const { user } = useAuth();
@@ -82,11 +82,6 @@ export function Chat() {
     },
   });
 
-  // Show conversation view when there are messages
-  useEffect(() => {
-    setShowConversation(messages.length > 0);
-  }, [messages.length]);
-
   const detectDataQuery = async (message: string): Promise<boolean> => {
     try {
       const response = await fetch('/api/parse-intent', {
@@ -143,36 +138,53 @@ Examples:
   console.log('messageComponents:', messageComponents);
   console.log('messages:', messages.map(m => ({ id: m.id, role: m.role, content: m.content.slice(0, 50) })));
 
-  if (showConversation) {
-    return (
-      <ConversationView
-        messages={messages}
-        input={input}
-        isLoading={isLoading}
-        isDataLoading={isDataLoading}
-        error={error || null}
-        onInputChange={handleInputChange}
-        onSubmit={handleFormSubmit}
-        userImage={user?.avatarUrl}
-        userName={user?.fullName || user?.email?.split('@')[0]}
-        userEmail={user?.email}
-        messageComponents={messageComponents}
-      />
-    );
-  }
-
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <div className="relative border border-white/5 p-2 rounded-[30px]">
-        <ChatInput
-          input={input}
-          isLoading={isLoading}
-          isDataLoading={isDataLoading}
-          onInputChange={handleInputChange}
-          onSubmit={handleFormSubmit}
-          error={error}
-        />
-      </div>
+    <div className="h-full w-full flex flex-col relative">
+      {/* Message list area - takes up space above input */}
+      <motion.div 
+        className="flex-1 overflow-hidden"
+        transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
+      >
+        <div className="h-full max-w-4xl mx-auto">
+          {messages.length > 0 && (
+            <motion.div 
+              className="h-full pb-4" // pb-4 for some spacing from input
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <ChatMessageList 
+                messages={messages}
+                isLoading={isLoading}
+                isDataLoading={isDataLoading}
+                userImage={user?.avatarUrl}
+                userName={user?.fullName || user?.email?.split('@')[0]}
+                messageComponents={messageComponents}
+              />
+            </motion.div>
+          )}
+        </div>
+      </motion.div>
+      
+      {/* Input fixed at bottom of container */}
+      <motion.div 
+        className="flex-shrink-0 p-4 bg-background/95 backdrop-blur-sm border-t"
+        initial={{ y: 100 }}
+        animate={{ y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        <div className="max-w-4xl mx-auto">
+          <ChatInput
+            input={input}
+            isLoading={isLoading}
+            isDataLoading={isDataLoading}
+            onInputChange={handleInputChange}
+            onSubmit={handleFormSubmit}
+            error={error}
+          />
+        </div>
+      </motion.div>
     </div>
   );
 }

@@ -6,10 +6,8 @@ export const metadata = {
 
 export default function OverviewPage() {
   return (
-    <div className="w-full flex items-center justify-center p-4">
-      <div className="w-full">        
-        <Chat />
-      </div>
+    <div className="fixed inset-0 top-16 bottom-16">
+      <Chat />
     </div>
   );
 }

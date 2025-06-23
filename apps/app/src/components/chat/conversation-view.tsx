@@ -62,7 +62,7 @@ export function ConversationView({
           componentData={componentData}
         />
         
-        <div className="p-4">
+        <div className="relative border border-white/5 p-2 rounded-[30px]">
           <ChatInput
             input={input}
             isLoading={isLoading}
