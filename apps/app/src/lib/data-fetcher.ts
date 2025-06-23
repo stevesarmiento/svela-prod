@@ -1,3 +1,5 @@
+import type { HistoricalData } from '@/types/coins';
+
 interface CoinQuote {
   price: number;
   percent_change_24h: number;
@@ -6,12 +8,14 @@ interface CoinQuote {
 }
 
 interface DetailedCoin {
+  id: number;
   name: string;
   symbol: string;
   cmc_rank: number;
   quote: {
     USD: CoinQuote;
   };
+  historical?: HistoricalData;
 }
 
 interface SimpleCoin {
@@ -125,6 +129,10 @@ export async function detectAndFetchData(userMessage: string): Promise<DataConte
       if (coinIds.length === 1) {
         const response = await fetch(`${baseUrl}/api/coins/${coinIds[0]}`);
         const coinData: DetailedCoin = await response.json();
+        
+        if (!coinData.id) {
+          coinData.id = parseInt(coinIds[0] || '0');
+        }
         
         return {
           type: 'coins',

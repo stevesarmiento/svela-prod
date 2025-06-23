@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { 
-  IconHouseFill, 
   IconDistributeHorizontalCenterFill,  
-  IconGearshapeFill,
+  IconGear,
   IconMagnifyingglass,
   IconChartLineUptrendXyaxis,
   IconStarFill,
   IconCircleSlash,
+  IconCaptionsBubbleFill,
+  IconBookmarkFill,
 } from "symbols-react";
 import {
   CommandPopover,
@@ -27,7 +28,7 @@ const menuItems = [
   {
     title: "Overview",
     href: "/overview",
-    icon: IconHouseFill,
+    icon: IconCaptionsBubbleFill,
   },
   {
     title: "Charts",
@@ -35,9 +36,14 @@ const menuItems = [
     icon: IconDistributeHorizontalCenterFill,
   },
   {
+    title: "Watchlist",
+    href: "/watchlist",
+    icon: IconBookmarkFill,
+  },
+  {
     title: "Settings",
     href: "/settings",
-    icon: IconGearshapeFill,
+    icon: IconGear,
   },
 ];
 
@@ -69,7 +75,7 @@ const commandItems: {
         title: "Overview",
         subtitle: "View dashboard and chat",
         href: "/overview",
-        icon: IconHouseFill,
+        icon: IconCaptionsBubbleFill,
       },
       {
         title: "Charts",
@@ -81,7 +87,7 @@ const commandItems: {
         title: "Settings",
         subtitle: "App preferences and configuration",
         href: "/settings",
-        icon: IconGearshapeFill,
+        icon: IconGear,
       },
     ]
   },
@@ -112,7 +118,13 @@ const commandItems: {
 
 export function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+
+  // Helper function to clean pathname (same as top-nav)
+  const getCleanPath = (path: string) => {
+    return path.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
+  };
 
   // Keyboard shortcut to open command palette
   useEffect(() => {
@@ -130,29 +142,27 @@ export function BottomNav() {
   const handleCommandSelect = (value: string) => {
     setIsOpen(false);
     
-    // Find the item to get its action or href
     const allItems = commandItems.flatMap(group => group.items);
     const selectedItem = allItems.find(item => item.title === value);
     
     if (!selectedItem || typeof selectedItem !== 'object') return;
     
-    // Handle navigation
+    // Use router.push() just like the nav links use Link
     if ('href' in selectedItem) {
-      window.location.href = (selectedItem as NavigationItem).href;
+      router.push((selectedItem as NavigationItem).href);
       return;
     }
     
-    // Handle quick actions
     if ('action' in selectedItem) {
       switch ((selectedItem as ActionItem).action) {
         case 'bitcoin-price':
-          window.location.href = '/overview?q=What is the current price of Bitcoin?';
+          router.push('/overview?q=What is the current price of Bitcoin?');
           break;
         case 'ethereum-price':
-          window.location.href = '/overview?q=What is the current price of Ethereum?';
+          router.push('/overview?q=What is the current price of Ethereum?');
           break;
         case 'market-overview':
-          window.location.href = '/overview?q=Show me the top 10 cryptocurrencies';
+          router.push('/overview?q=Show me the top 10 cryptocurrencies');
           break;
       }
     }
@@ -162,7 +172,7 @@ export function BottomNav() {
     <>
       <div className={`fixed z-50 transition-all duration-200 ${
         isOpen 
-          ? 'bottom-8 left-[47%] transform -translate-x-1/2' 
+          ? 'bottom-8 left-[45%] transform -translate-x-1/2' 
           : 'bottom-8 left-[50%] transform -translate-x-1/2'                            
       }`}>
         <div className="flex items-center gap-2">
@@ -185,18 +195,18 @@ export function BottomNav() {
             
             <div className="relative z-10 flex items-center gap-1 p-1">
               {menuItems.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = getCleanPath(pathname) === item.href;
                 return (
                   <Link
                     key={item.title}
                     href={item.href}
-                    className={`p-3 rounded-xl transition-all duration-200 hover:bg-white/10 ${
-                      isActive ? "bg-white/20" : ""
+                    className={`group p-3 rounded-xl transition-colors duration-200 hover:bg-transparent ${
+                      isActive ? "bg-transparent" : ""
                     }`}
                     title={item.title}
                   >
                     <item.icon className={`size-4 ${
-                      isActive ? 'fill-white' : 'fill-white/70 hover:fill-white'
+                      isActive ? 'fill-white' : 'fill-white/40 group-hover:fill-white'
                     }`} />
                   </Link>
                 );
@@ -272,7 +282,7 @@ export function BottomNav() {
                           key={item.title}
                           value={item.title}
                           onSelect={handleCommandSelect}
-                          className="cursor-pointer"
+                          className="cursor-pointer bg-transparent"
                         >
                           <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
                             <div className="flex items-center gap-3 pr-5">

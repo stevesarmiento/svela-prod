@@ -3,6 +3,35 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 import Image from "next/image";
 import { useAuth } from "@v1/convex/hooks";
+import { PriceCard } from "./price-card";
+
+interface PriceCardData {
+  id: number;
+  name: string;
+  symbol: string;
+  price: number;
+  change24h: number;
+  marketCap?: number;
+  volume24h?: number;
+  rank?: number;
+  historical?: {
+    data?: {
+      quotes?: Array<{
+        timestamp: string;
+        quote: {
+          USD: {
+            price: number;
+          };
+        };
+      }>;
+    };
+  };
+}
+
+interface ComponentData {
+  type: 'price_card';
+  data: PriceCardData;
+}
 
 interface ChatMessageProps {
   role: 'user' | 'assistant' | 'system' | 'data';
@@ -11,11 +40,19 @@ interface ChatMessageProps {
   userImage?: string | null;
   userName?: string | null;
   userEmail?: string | null;
+  componentData?: ComponentData | null;
 }
 
-export function ChatMessage({ role, content, userName, userEmail }: ChatMessageProps) {
-const { user } = useAuth();
+export function ChatMessage({ 
+  role, 
+  content, 
+  userName, 
+  userEmail, 
+  componentData 
+}: ChatMessageProps) {
+  const { user } = useAuth();
   const avatarUrl = user?.avatarUrl || null;
+  
   // Skip rendering data messages
   if (role === 'data') return null;
 
@@ -39,14 +76,21 @@ const { user } = useAuth();
         </Avatar>
       )}
       
-      <div
-        className={`max-w-[80%] rounded-lg px-4 py-2 ${
-          role === 'user'
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-muted'
-        }`}
-      >
-        <p className="text-sm whitespace-pre-wrap">{content}</p>
+      <div className={`max-w-[80%] space-y-3 ${role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
+        <div
+          className={`rounded-lg px-4 py-2 ${
+            role === 'user'
+              ? 'bg-zinc-800/80 rounded-tr-none text-white'
+              : 'bg-zinc-800/30 rounded-tl-none text-white'
+          }`}
+        >
+          <p className="text-sm whitespace-pre-wrap">{content}</p>
+        </div>
+        
+        {/* Render component if it's an assistant message and we have component data */}
+        {role === 'assistant' && componentData?.type === 'price_card' && (
+          <PriceCard {...componentData.data} />
+        )}
       </div>
       
       {role === 'user' && (
