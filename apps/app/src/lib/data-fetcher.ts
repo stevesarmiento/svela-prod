@@ -6,6 +6,7 @@ interface CoinQuote {
 }
 
 interface DetailedCoin {
+  id: number;
   name: string;
   symbol: string;
   cmc_rank: number;
@@ -125,6 +126,10 @@ export async function detectAndFetchData(userMessage: string): Promise<DataConte
       if (coinIds.length === 1) {
         const response = await fetch(`${baseUrl}/api/coins/${coinIds[0]}`);
         const coinData: DetailedCoin = await response.json();
+        
+        if (!coinData.id) {
+          coinData.id = parseInt(coinIds[0] || '0');
+        }
         
         return {
           type: 'coins',

@@ -6,15 +6,33 @@ import { ChatMessage } from "./chat-message";
 import { ChatLoading } from "./chat-loading";
 import type { Message } from "ai";
 
+interface PriceCardData {
+  id: number;
+  name: string;
+  symbol: string;
+  price: number;
+  change24h: number;
+  marketCap?: number;
+  volume24h?: number;
+  rank?: number;
+}
+
+interface ComponentData {
+  type: 'price_card';
+  data: PriceCardData;
+}
+
 interface ChatMessageListProps {
   messages: Message[];
   isLoading: boolean;
   isDataLoading: boolean;
   userImage?: string | null;
   userName?: string | null;
+  componentData?: ComponentData | null;
+  messageComponents?: Record<string, ComponentData>;
 }
 
-export function ChatMessageList({ messages, isLoading, isDataLoading }: ChatMessageListProps) {
+export function ChatMessageList({ messages, isLoading, isDataLoading, messageComponents }: ChatMessageListProps) {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
@@ -36,6 +54,7 @@ export function ChatMessageList({ messages, isLoading, isDataLoading }: ChatMess
               key={message.id}
               role={message.role as 'user' | 'assistant' | 'system' | 'data'}
               content={message.content}
+              componentData={messageComponents?.[message.id] || null}
             />
           ))}
           

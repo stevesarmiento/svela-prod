@@ -4,6 +4,23 @@ import { ChatMessageList } from "./chat-message-list";
 import { ChatInput } from "./chat-input";
 import type { Message } from "ai";
 
+// Import the ComponentData type
+interface PriceCardData {
+  id: number;
+  name: string;
+  symbol: string;
+  price: number;
+  change24h: number;
+  marketCap?: number;
+  volume24h?: number;
+  rank?: number;
+}
+
+interface ComponentData {
+  type: 'price_card';
+  data: PriceCardData;
+}
+
 interface ConversationViewProps {
   messages: Message[];
   input: string;
@@ -15,6 +32,8 @@ interface ConversationViewProps {
   userImage?: string | null;
   userName?: string | null;
   userEmail?: string | null;
+  componentData?: ComponentData | null;
+  messageComponents?: Record<string, ComponentData>;
 }
 
 export function ConversationView({
@@ -27,6 +46,8 @@ export function ConversationView({
   onSubmit,
   userImage,
   userName,
+  componentData,
+  messageComponents,
 }: ConversationViewProps) {
   return (
     <div className="max-w-4xl mx-auto">
@@ -37,6 +58,8 @@ export function ConversationView({
           isDataLoading={isDataLoading}
           userImage={userImage}
           userName={userName}
+          messageComponents={messageComponents}
+          componentData={componentData}
         />
         
         <div className="p-4">
