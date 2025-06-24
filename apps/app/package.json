@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "biome lint",
     "format": "biome format --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "populate-coins": "tsx src/scripts/populate-coins.ts"
   },
   "resolutions": {
     "import-in-the-middle": "1.11.2"
@@ -50,6 +51,8 @@
     "@types/node": "^24.0.3",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "dotenv": "^16.5.0",
+    "tsx": "^4.20.3",
     "typescript": "^5.8.3"
   }
 }

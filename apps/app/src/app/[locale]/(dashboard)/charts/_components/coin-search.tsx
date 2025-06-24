@@ -6,7 +6,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@v1/ui/button"
 import { toast } from "@v1/ui/use-toast"
 import { useCoinSearch, useTopCoins } from '@/hooks/use-coin-search'
-import type { CoinMarketData } from '@/types/coins'
 import Image from 'next/image'
 import { IconPlusCircleFill, IconXmarkCircleFill, IconMagnifyingglass } from 'symbols-react'
 import { useWatchlist } from "./watchlist-context"
@@ -56,6 +55,22 @@ const CoinSearchSkeleton = ({ rowCount = 5 }: { rowCount?: number }) => (
   </Table>
 );
 
+// Add this interface at the top of the file
+interface CoinSearchResult {
+  id: number;
+  name: string;
+  symbol: string;
+  cmc_rank?: number;
+  quote: {
+    USD: {
+      price: number;
+      percent_change_24h: number;
+      market_cap: number;
+      volume_24h: number;
+    };
+  };
+}
+
 export function CoinSearch() {
   const { addToWatchlist } = useWatchlist()
   const { user } = useUser()
@@ -63,10 +78,10 @@ export function CoinSearch() {
   const [searchQuery, setSearchQuery] = useState('')
   const [isAdding, setIsAdding] = useState(false)
   
-  // Debounce search query to avoid too many API calls
+  // Debounce search query
   const debouncedSearchQuery = useDebounce(searchQuery, 300)
   
-  // TanStack Query hooks
+  // Use hybrid Convex + API hooks
   const { 
     data: searchResults, 
     isLoading: isSearchLoading, 
@@ -100,12 +115,13 @@ export function CoinSearch() {
   if (error) {
     toast({
       title: "Error",
-      description: error instanceof Error ? error.message : "Failed to fetch coins",
+      description: "Failed to fetch coins",
       variant: "destructive",
     });
   }
 
-  const handleAddCoin = async (coin: CoinMarketData) => {
+  // Update the function parameter
+  const handleAddCoin = async (coin: CoinSearchResult) => {
     if (!user) {
       toast({
         title: "Error",
@@ -149,7 +165,7 @@ export function CoinSearch() {
         <SheetHeader className="sticky top-0 bg-background/90 backdrop-blur-xl z-50 p-4 w-full">
           <SheetTitle className="font-mono">Add Token to Watchlist</SheetTitle>
           <SheetDescription>
-            Search and add tokens to your watchlist
+            Search from 5,000+ cryptocurrencies
             {isLoading && <span className="text-xs ml-2 text-blue-500">Loading...</span>}
           </SheetDescription>
           <div className="flex-1 flex items-center w-full">
@@ -192,7 +208,7 @@ export function CoinSearch() {
                 {coinsToDisplay.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
-                      {debouncedSearchQuery.trim() ? 'No coins found' : 'No coins available'}
+                      {debouncedSearchQuery.trim() ? 'No coins found' : 'Loading coins...'}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -218,12 +234,20 @@ export function CoinSearch() {
                         </div>
                       </TableCell>
                       <TableCell className="font-mono">
-                        ${coin.quote.USD.price.toLocaleString()}
+                        {coin.quote.USD.price > 0 ? (
+                          `$${coin.quote.USD.price.toLocaleString()}`
+                        ) : (
+                          <Skeleton className="h-4 w-16" />
+                        )}
                       </TableCell>
-                      <TableCell 
-                        className={`font-mono ${coin.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'}`}
-                      >
-                        {coin.quote.USD.percent_change_24h.toFixed(2)}%
+                      <TableCell className="font-mono">
+                        {coin.quote.USD.price > 0 ? (
+                          <span className={`${coin.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {coin.quote.USD.percent_change_24h.toFixed(2)}%
+                          </span>
+                        ) : (
+                          <Skeleton className="h-4 w-12" />
+                        )}
                       </TableCell>
                     </TableRow>
                   ))

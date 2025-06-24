@@ -31,14 +31,14 @@ const menuItems = [
     icon: IconCaptionsBubbleFill,
   },
   {
-    title: "Charts",
-    href: "/charts", 
-    icon: IconDistributeHorizontalCenterFill,
-  },
-  {
     title: "Watchlist",
     href: "/watchlist",
     icon: IconBookmarkFill,
+  },
+  {
+    title: "Charts",
+    href: "/charts", 
+    icon: IconDistributeHorizontalCenterFill,
   },
   {
     title: "Settings",
@@ -78,16 +78,16 @@ const commandItems: {
         icon: IconCaptionsBubbleFill,
       },
       {
-        title: "Charts",
-        subtitle: "Price charts and market data",
-        href: "/charts",
-        icon: IconDistributeHorizontalCenterFill,
-      },
-      {
         title: "Watchlist",
         subtitle: "Your cryptocurrency watchlist",
         href: "/watchlist",
         icon: IconBookmarkFill,
+      },
+      {
+        title: "Charts",
+        subtitle: "Price charts and market data",
+        href: "/charts",
+        icon: IconDistributeHorizontalCenterFill,
       },
       {
         title: "Settings",

@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { useWatchlist as useConvexWatchlist, useAddToWatchlist, useRemoveFromWatchlist } from '@v1/convex/hooks'
 
@@ -38,7 +38,8 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     }
   }, [convexWatchlist, isLoaded, user])
 
-  const addToWatchlist = async (coinId: number) => {
+  // Memoize the add function
+  const addToWatchlist = useCallback(async (coinId: number) => {
     if (!user) throw new Error('Not authenticated')
 
     try {
@@ -50,9 +51,10 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
       console.error('Error adding to watchlist:', error)
       throw error
     }
-  }
+  }, [user, addToConvexWatchlist])
 
-  const removeFromWatchlist = async (coinId: number) => {
+  // Memoize the remove function
+  const removeFromWatchlist = useCallback(async (coinId: number) => {
     if (!user) return
 
     try {
@@ -64,18 +66,21 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
       console.error('Error removing from watchlist:', error)
       throw error
     }
-  }
+  }, [user, removeFromConvexWatchlist])
 
   const isLoading = !isLoaded || (user && convexWatchlist === undefined && !isInitialized)
 
+  // Make sure the context value is memoized
+  const contextValue = useMemo(() => ({
+    watchlist, 
+    isLoading: isLoading || false, 
+    isInitialized,
+    addToWatchlist, 
+    removeFromWatchlist 
+  }), [watchlist, isLoading, isInitialized, addToWatchlist, removeFromWatchlist])
+
   return (
-    <WatchlistContext.Provider value={{ 
-      watchlist, 
-      isLoading: isLoading || false, 
-      isInitialized,
-      addToWatchlist, 
-      removeFromWatchlist 
-    }}>
+    <WatchlistContext.Provider value={contextValue}>
       {children}
     </WatchlistContext.Provider>
   )
