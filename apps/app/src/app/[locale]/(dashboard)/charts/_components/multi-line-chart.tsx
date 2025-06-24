@@ -17,7 +17,7 @@ import {
   ChartConfig
 } from "@v1/ui/chart"
 import type { CoinMarketData } from '@/types/coins'
-import { useWatchlist } from "./watchlist-context"
+import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import { Skeleton } from "@v1/ui/skeleton"
 
 interface MultiPriceChartProps {

@@ -72,3 +72,13 @@ export function useRemoveFromWatchlist() {
     return mutation({ clerkId: user.id, coinId });
   };
 }
+
+export function useRemoveBulkFromWatchlist() {
+  const { user } = useUser();
+  const mutation = useMutation(api.watchlists.removeBulkFromWatchlist);
+  
+  return (coinIds: string[]) => {
+    if (!user?.id) throw new Error("User not authenticated");
+    return mutation({ clerkId: user.id, coinIds });
+  };
+}

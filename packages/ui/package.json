@@ -51,6 +51,7 @@
     "./input": "./src/components/input.tsx",
     "./input-otp": "./src/components/input-otp.tsx",
     "./label": "./src/components/label.tsx",
+    "./kbd": "./src/components/kbd.tsx",
     "./navigation-menu": "./src/components/navigation-menu.tsx",
     "./sidebar": "./src/components/sidebar.tsx",
     "./popover": "./src/components/popover.tsx",

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react'
 import { useUser } from '@clerk/nextjs'
-import { useWatchlist as useConvexWatchlist, useAddToWatchlist, useRemoveFromWatchlist } from '@v1/convex/hooks'
+import { useWatchlist as useConvexWatchlist, useAddToWatchlist, useRemoveFromWatchlist, useRemoveBulkFromWatchlist } from '@v1/convex/hooks'
 
 interface WatchlistContextType {
   watchlist: number[]
@@ -10,6 +10,7 @@ interface WatchlistContextType {
   isInitialized: boolean
   addToWatchlist: (coinId: number) => Promise<void>
   removeFromWatchlist: (coinId: number) => Promise<void>
+  removeBulkFromWatchlist: (coinIds: number[]) => Promise<void>
 }
 
 const WatchlistContext = createContext<WatchlistContextType | undefined>(undefined)
@@ -19,6 +20,7 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   const convexWatchlist = useConvexWatchlist()
   const addToConvexWatchlist = useAddToWatchlist()
   const removeFromConvexWatchlist = useRemoveFromWatchlist()
+  const removeBulkFromConvexWatchlist = useRemoveBulkFromWatchlist()
   
   const [watchlist, setWatchlist] = useState<number[]>([])
   const [isInitialized, setIsInitialized] = useState(false)
@@ -57,16 +59,33 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   const removeFromWatchlist = useCallback(async (coinId: number) => {
     if (!user) return
 
+    // Optimistic update
+    setWatchlist(prev => prev.filter(id => id !== coinId));
+    
     try {
-      console.log('Removing coin from watchlist:', coinId)
       await removeFromConvexWatchlist(coinId.toString())
-      // Optimistically update local state
-      setWatchlist(prev => prev.filter(id => id !== coinId))
     } catch (error) {
-      console.error('Error removing from watchlist:', error)
-      throw error
+      // Revert on error
+      setWatchlist(prev => [...prev, coinId]);
+      throw error;
     }
   }, [user, removeFromConvexWatchlist])
+
+  // Memoize the bulk remove function
+  const removeBulkFromWatchlist = useCallback(async (coinIds: number[]) => {
+    if (!user) return
+
+    // Optimistic update
+    setWatchlist(prev => prev.filter(id => !coinIds.includes(id)));
+    
+    try {
+      await removeBulkFromConvexWatchlist(coinIds.map(id => id.toString()))
+    } catch (error) {
+      // Revert on error
+      setWatchlist(prev => [...prev, ...coinIds]);
+      throw error;
+    }
+  }, [user, removeBulkFromConvexWatchlist])
 
   const isLoading = !isLoaded || (user && convexWatchlist === undefined && !isInitialized)
 
@@ -76,8 +95,9 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     isLoading: isLoading || false, 
     isInitialized,
     addToWatchlist, 
-    removeFromWatchlist 
-  }), [watchlist, isLoading, isInitialized, addToWatchlist, removeFromWatchlist])
+    removeFromWatchlist,
+    removeBulkFromWatchlist
+  }), [watchlist, isLoading, isInitialized, addToWatchlist, removeFromWatchlist, removeBulkFromWatchlist])
 
   return (
     <WatchlistContext.Provider value={contextValue}>

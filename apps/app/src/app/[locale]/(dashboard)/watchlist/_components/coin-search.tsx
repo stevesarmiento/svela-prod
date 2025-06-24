@@ -156,7 +156,7 @@ export function CoinSearch() {
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-9 w-9 group">
+        <Button variant="ghost" size="icon" className="h-9 w-9 group rounded-xl">
           <IconPlusCircleFill className="h-5 w-5 fill-muted-foreground group-hover:fill-foreground" />
           <span className="sr-only">Add Token</span>
         </Button>

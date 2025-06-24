@@ -1,9 +1,9 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useState } from 'react'
-import { WatchlistProvider } from "./watchlist-context"
+import { WatchlistProvider } from "../../watchlist/_components/watchlist-context"
 import { MultiPriceChart } from "./multi-line-chart"
-import { useWatchlist } from "./watchlist-context"
+import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import type { Coin, CoinMarketData } from '@/types/coins'
 import { toast } from "@v1/ui/use-toast"
 import { Button } from "@v1/ui/button"
