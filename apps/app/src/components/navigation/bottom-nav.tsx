@@ -11,7 +11,7 @@ import {
   IconStarFill,
   IconCircleSlash,
   IconCaptionsBubbleFill,
-  IconBookmarkFill,
+  IconBinocularsFill,
 } from "symbols-react";
 import {
   CommandPopover,
@@ -33,7 +33,7 @@ const menuItems = [
   {
     title: "Watchlist",
     href: "/watchlist",
-    icon: IconBookmarkFill,
+    icon: IconBinocularsFill,
   },
   {
     title: "Charts",
@@ -81,7 +81,7 @@ const commandItems: {
         title: "Watchlist",
         subtitle: "Your cryptocurrency watchlist",
         href: "/watchlist",
-        icon: IconBookmarkFill,
+        icon: IconBinocularsFill,
       },
       {
         title: "Charts",
