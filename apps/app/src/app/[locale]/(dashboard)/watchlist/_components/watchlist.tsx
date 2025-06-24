@@ -24,6 +24,7 @@ import {
 } from '@tanstack/react-table'
 import { useState, useMemo, useCallback, memo } from 'react'
 import { Spinner } from "@v1/ui/spinner"
+import { motion, AnimatePresence } from "framer-motion"
 
 // Define the coin type for the table
 interface WatchlistCoin {
@@ -38,7 +39,6 @@ interface WatchlistCoin {
       volume_24h: number;
     };
   };
-  fundingRate: number | null;
   isOptimistic?: boolean;
 }
 
@@ -107,7 +107,7 @@ const WatchlistSkeleton = memo(({ rowCount = 1 }: { rowCount?: number }) => (
 WatchlistSkeleton.displayName = 'WatchlistSkeleton';
 
 const WatchlistRowSkeleton = memo(({ isLast }: { isLast: boolean }) => (
-  <div className={`grid grid-cols-8 gap-4 px-4 py-3 ${!isLast ? 'border-b' : ''}`}>
+  <div className={`grid grid-cols-6 gap-4 px-4 py-3 ${!isLast ? 'border-b' : ''}`}>
     <div className="flex items-center gap-2">
       <Skeleton className="h-4 w-4" />
       <Skeleton className="h-6 w-6 rounded-full" />
@@ -120,43 +120,177 @@ const WatchlistRowSkeleton = memo(({ isLast }: { isLast: boolean }) => (
     <div className="flex items-center"><Skeleton className="h-4 w-12" /></div>
     <div className="flex items-center"><Skeleton className="h-4 w-16" /></div>
     <div className="flex items-center"><Skeleton className="h-4 w-16" /></div>
-    <div className="flex items-center"><Skeleton className="h-4 w-14" /></div>
     <div className="flex items-center justify-end"><Skeleton className="h-8 w-8 rounded" /></div>
   </div>
 ));
 
 WatchlistRowSkeleton.displayName = 'WatchlistRowSkeleton';
 
-// Move columns outside component to prevent recreation - COMPLETE VERSION
+// Update the columns definition
 const createColumns = (
   handleRemove: (coinId: number) => void,
   selectedCoins: Set<string>,
   onCoinSelect: (coinId: string, selected: boolean) => void,
   onSelectAll: (checked: boolean) => void,
   totalCoins: number,
-  removingCoins: Set<number>
+  removingCoins: Set<number>,
+  hoveredRowId: string | null,
+  hasSelectedCoins: boolean
 ): ColumnDef<WatchlistCoin>[] => [
   {
     id: 'select',
     header: () => (
-      <Checkbox
-        checked={selectedCoins.size === totalCoins && totalCoins > 0}
-        onCheckedChange={onSelectAll}
-        aria-label="Select all"
-      />
+      <div className={cn(
+        "transition-opacity duration-200",
+        hasSelectedCoins ? "opacity-100" : "opacity-0"
+      )}>
+        <Checkbox
+          checked={selectedCoins.size === totalCoins && totalCoins > 0}
+          onCheckedChange={onSelectAll}
+          aria-label="Select all"
+        />
+      </div>
     ),
-    cell: ({ row }) => (
-      <Checkbox
-        checked={selectedCoins.has(row.original.id.toString())}
-        onCheckedChange={(value) => onCoinSelect(row.original.id.toString(), !!value)}
-        aria-label="Select row"
-      />
-    ),
+    cell: ({ row }) => {
+      const isHovered = hoveredRowId === row.id;
+      //const shouldShow = hasSelectedCoins || isHovered;
+      
+      return (
+        <div className="relative w-full h-full flex items-center justify-start overflow-hidden">
+          {/* Checkbox - animate only when no selections exist */}
+          {hasSelectedCoins ? (
+            // Static checkbox when selections exist
+            <div className="absolute left-0 z-10 px-1">
+              <Checkbox
+                checked={selectedCoins.has(row.original.id.toString())}
+                onCheckedChange={(value) => onCoinSelect(row.original.id.toString(), !!value)}
+                aria-label="Select row"
+                className="mt-[6px] data-[state=checked]:mt-[2px]"
+              />
+            </div>
+          ) : (
+            // Animated checkbox when no selections exist
+            <AnimatePresence>
+              {isHovered && (
+                <motion.div
+                  className="absolute left-0 z-10 px-1"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 400,
+                    damping: 25,
+                    mass: 0.5,
+                  }}
+                >
+                  <Checkbox
+                    checked={selectedCoins.has(row.original.id.toString())}
+                    onCheckedChange={(value) => onCoinSelect(row.original.id.toString(), !!value)}
+                    aria-label="Select row"
+                    className="mt-[6px] data-[state=checked]:mt-[2px]"
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
+          
+          {/* Token content - animate only when no selections exist */}
+          {hasSelectedCoins ? (
+            // Static position when selections exist
+            <div className="translate-x-10 opacity-90 flex items-center gap-2">
+              <Link 
+                href={`/charts/${row.original.id}`}
+                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              >
+                <div className="relative">
+                  <Image
+                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
+                    alt={row.original.name}
+                    className={cn(
+                      "w-6 h-6 rounded-full",
+                      row.original.isOptimistic && "opacity-50"
+                    )}
+                    width={24}
+                    height={24}
+                  />
+                  {row.original.isOptimistic && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Spinner size={12} />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className={cn(
+                    "font-semibold text-sm",
+                    row.original.isOptimistic && "text-muted-foreground"
+                  )}>
+                    {row.original.name}
+                  </div>
+                  <div className="text-xs text-muted-foreground font-mono">
+                    {row.original.symbol.toUpperCase()}
+                  </div>
+                </div>
+              </Link>
+            </div>
+          ) : (
+            // Animated content when no selections exist
+            <motion.div
+              className="flex items-center gap-2"
+              animate={{ 
+                x: isHovered ? 40 : 0,
+                opacity: isHovered ? 0.9 : 1 
+              }}
+              transition={{
+                type: "spring",
+                stiffness: 400,
+                damping: 25,
+                mass: 0.5,
+              }}
+            >
+              <Link 
+                href={`/charts/${row.original.id}`}
+                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              >
+                <div className="relative">
+                  <Image
+                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
+                    alt={row.original.name}
+                    className={cn(
+                      "w-6 h-6 rounded-full",
+                      row.original.isOptimistic && "opacity-50"
+                    )}
+                    width={24}
+                    height={24}
+                  />
+                  {row.original.isOptimistic && (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Spinner size={12} />
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className={cn(
+                    "font-semibold text-sm",
+                    row.original.isOptimistic && "text-muted-foreground"
+                  )}>
+                    {row.original.name}
+                  </div>
+                  <div className="text-xs text-muted-foreground font-mono">
+                    {row.original.symbol.toUpperCase()}
+                  </div>
+                </div>
+              </Link>
+            </motion.div>
+          )}
+        </div>
+      );
+    },
     enableSorting: false,
     enableHiding: false,
   },
   {
-    id: 'token',
+    id: 'token-sort',
     accessorKey: 'name',
     header: () => (
       <div className="text-left flex items-center gap-1">
@@ -164,43 +298,7 @@ const createColumns = (
         Token
       </div>
     ),
-    cell: ({ row }) => (
-      <div className="flex items-center gap-2">
-        <Link 
-          href={`/charts/${row.original.id}`}
-          className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-        >
-          <div className="relative">
-            <Image
-              src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
-              alt={row.original.name}
-              className={cn(
-                "w-6 h-6 rounded-full",
-                row.original.isOptimistic && "opacity-50"
-              )}
-              width={24}
-              height={24}
-            />
-            {row.original.isOptimistic && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Spinner size={12} />
-              </div>
-            )}
-          </div>
-          <div>
-            <div className={cn(
-              "font-semibold text-sm",
-              row.original.isOptimistic && "text-muted-foreground"
-            )}>
-              {row.original.name}
-            </div>
-            <div className="text-xs text-muted-foreground font-mono">
-              {row.original.symbol.toUpperCase()}
-            </div>
-          </div>
-        </Link>
-      </div>
-    ),
+    cell: () => null, // This column is just for sorting, content is in select cell
     enableSorting: true,
   },
   {
@@ -291,31 +389,6 @@ const createColumns = (
     enableSorting: true,
   },
   {
-    id: 'fundingRate',
-    accessorKey: 'fundingRate',
-    header: () => (
-      <div className="text-left flex items-center gap-1">
-        <Percent className="w-3 h-3" />
-        Funding Rate
-      </div>
-    ),
-    cell: ({ row }) => (
-      <span className={cn(
-        "font-mono text-sm",
-        {
-          'text-green-500': row.original.fundingRate && row.original.fundingRate > 0,
-          'text-red-500': row.original.fundingRate && row.original.fundingRate < 0,
-          'text-muted-foreground': !row.original.fundingRate
-        }
-      )}>
-        {row.original.fundingRate !== null && row.original.fundingRate !== undefined
-          ? `${(row.original.fundingRate * 100).toFixed(4)}%` 
-          : 'N/A'}
-      </span>
-    ),
-    enableSorting: true,
-  },
-  {
     id: 'actions',
     header: () => (
       <div className="text-right flex items-center justify-end gap-1">
@@ -335,7 +408,7 @@ const createColumns = (
           {removingCoins.has(row.original.id) ? (
             <Spinner size={16} />
           ) : (
-            <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
+          <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
           )}
         </Button>
       </div>
@@ -348,6 +421,7 @@ export function Watchlist() {
   const [sorting, setSorting] = useState<SortingState>([])
   const [selectedCoins, setSelectedCoins] = useState<Set<string>>(new Set())
   const [removingCoins, setRemovingCoins] = useState<Set<number>>(new Set())
+  const [hoveredRowId, setHoveredRowId] = useState<string | null>(null)
   
   // Filter state - increase market cap range to accommodate large coins
   const [filters, setFilters] = useState<FilterState>({
@@ -524,15 +598,19 @@ export function Watchlist() {
     });
   }, []);
 
-  // Memoize columns with stable reference
+  const hasSelectedCoins = selectedCoins.size > 0;
+
+  // Memoize columns with hover state
   const columns = useMemo(() => createColumns(
     handleRemove, 
     selectedCoins, 
     handleCoinSelect, 
     handleSelectAll, 
     filteredCoins.length,
-    removingCoins
-  ), [handleRemove, selectedCoins, handleCoinSelect, handleSelectAll, filteredCoins.length, removingCoins]);
+    removingCoins,
+    hoveredRowId,
+    hasSelectedCoins
+  ), [handleRemove, selectedCoins, handleCoinSelect, handleSelectAll, filteredCoins.length, removingCoins, hoveredRowId, hasSelectedCoins]);
 
   const table = useReactTable({
     data: filteredCoins,
@@ -629,7 +707,7 @@ export function Watchlist() {
       />
         <CoinSearch />
       </div>
-
+      
       {/* Show empty state if no coins after filtering */}
       {filteredCoins.length === 0 ? (
         <div className="py-6 border border-dashed border-border rounded-lg">
@@ -652,56 +730,83 @@ export function Watchlist() {
           </div>
         </div>
       ) : (
-        <div className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
-          {/* Header */}
-          <div className="px-3 py-2">
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-              {table.getHeaderGroups().map(headerGroup => (
-                <div key={headerGroup.id} className="grid grid-cols-8 gap-4">
-                  {headerGroup.headers.map(header => (
+      <div className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
+          {/* Header - adjust grid to account for merged columns */}
+        <div className="px-3 py-2">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+            {table.getHeaderGroups().map(headerGroup => (
+                <div key={headerGroup.id} className="grid grid-cols-6 gap-4"> {/* Changed from 7 to 6 */}
+                  {headerGroup.headers.slice(0, 1).map(header => ( // Show first header (select/token merged)
                     <div 
                       key={header.id}
-                      className={cn(
-                        "flex items-center gap-1",
-                        header.column.getCanSort() ? "cursor-pointer select-none hover:text-foreground" : "",
-                        header.id === 'actions' ? "justify-end" : "justify-start"
-                      )}
-                      onClick={header.column.getToggleSortingHandler()}
+                      className="flex items-center gap-1 cursor-pointer select-none hover:text-foreground"
+                      onClick={() => table.getColumn('token-sort')?.toggleSorting()} // Sort by token
                     >
-                      {flexRender(header.column.columnDef.header, header.getContext())}
+                      <Coins className="w-3 h-3" />
+                      Token
                       {{
                         asc: ' ↑',
                         desc: ' ↓',
-                      }[header.column.getIsSorted() as string] ?? null}
+                      }[table.getColumn('token-sort')?.getIsSorted() as string] ?? null}
                     </div>
                   ))}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Table Body */}
-          <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden">
-            {table.getRowModel().rows.map(row => (
-              <div 
-                key={row.id}
-                className="grid grid-cols-8 gap-4 px-4 py-3 border-b last:border-b-0 hover:bg-primary/[0.02] transition-colors"
-              >
-                {row.getVisibleCells().map(cell => (
+                  {headerGroup.headers.slice(2).map(header => ( // Skip the hidden token-sort column
                   <div 
-                    key={cell.id}
+                    key={header.id}
                     className={cn(
-                      "flex items-center",
-                      cell.column.id === 'actions' ? "justify-end" : "justify-start"
+                      "flex items-center gap-1",
+                      header.column.getCanSort() ? "cursor-pointer select-none hover:text-foreground" : "",
+                      header.id === 'actions' ? "justify-end" : "justify-start"
                     )}
+                    onClick={header.column.getToggleSortingHandler()}
                   >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    {flexRender(header.column.columnDef.header, header.getContext())}
+                    {{
+                      asc: ' ↑',
+                      desc: ' ↓',
+                    }[header.column.getIsSorted() as string] ?? null}
                   </div>
                 ))}
               </div>
             ))}
           </div>
         </div>
+
+        {/* Table Body */}
+        <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden">
+          {table.getRowModel().rows.map(row => (
+            <div 
+              key={row.id}
+                className="grid grid-cols-6 gap-4 px-4 py-3 border-b last:border-b-0 hover:bg-primary/[0.02] transition-colors"
+              >
+                {/* First cell - merged select + token with specific hover */}
+                <div 
+                  className="flex items-center"
+                  onMouseEnter={() => setHoveredRowId(row.id)}
+                  onMouseLeave={() => setHoveredRowId(null)}
+                >
+                  {(() => {
+                    const firstCell = row.getVisibleCells()[0];
+                    return firstCell && flexRender(firstCell.column.columnDef.cell, firstCell.getContext());
+                  })()}
+                </div>
+                
+                {/* Rest of the cells (skip the hidden token-sort column) */}
+                {row.getVisibleCells().slice(2).map(cell => (
+                <div 
+                  key={cell.id}
+                  className={cn(
+                    "flex items-center",
+                    cell.column.id === 'actions' ? "justify-end" : "justify-start"
+                  )}
+                >
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
       )}
     </div>
   )
