@@ -10,11 +10,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@v1/ui/popover";
 import { ListFilter, X, TrendingUp, DollarSign, BarChart3 } from "lucide-react";
 import { Separator } from "@v1/ui/separator";
 import { Kbd } from "@v1/ui/kbd";
-import { Checkbox } from "@v1/ui/checkbox";
-import { motion, AnimatePresence } from "framer-motion";
-import { Spinner } from "@v1/ui/spinner";
 import { Slider } from "@v1/ui/slider";
 import { IconCommand } from "symbols-react";
+import { useBottomNav } from "@/components/navigation/bottom-nav-context"
 
 interface FilterChip {
   key: string;
@@ -80,6 +78,7 @@ export function WatchlistFilters({
   const [inputValue, setInputValue] = useState(searchText);
   const inputRef = useRef<HTMLInputElement>(null);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
+  const { setNavigationMode, setSelectionMode } = useBottomNav()
 
   // Keyboard shortcut handler
   useEffect(() => {
@@ -122,6 +121,21 @@ export function WatchlistFilters({
       }, 100);
     }
   }, [isFilterPopoverOpen]);
+
+  // Update the selection mode when coins are selected/deselected
+  useEffect(() => {
+    if (selectedCoins.size > 0) {
+      setSelectionMode({
+        selectedCoins,
+        totalCoins,
+        onSelectAll,
+        onRemoveSelected,
+        isRemoving: isRemoving || false,
+      })
+    } else {
+      setNavigationMode()
+    }
+  }, [selectedCoins, totalCoins, onSelectAll, onRemoveSelected, isRemoving, setSelectionMode, setNavigationMode])
 
   const getActiveFilters = (): FilterChip[] => {
     const chips: FilterChip[] = [];
@@ -212,92 +226,7 @@ export function WatchlistFilters({
   const hasSelectedCoins = selectedCoins.size > 0;
 
   return (
-    <>
-      {/* Fixed Bulk Actions - Slides in from button center */}
-      <AnimatePresence>
-        {hasSelectedCoins && (
-          <motion.div
-            initial={{ 
-              position: "fixed",
-              left: "50%",
-              bottom: "0%",
-              x: "-50%",
-              y: "70%",
-              scale: 0,
-              opacity: 0,
-              filter: "blur(10px)",
-              zIndex: 50,
-            }}
-            animate={{ 
-              position: "fixed",
-              left: "50%",
-              bottom: "0%",
-              x: "-50%",
-              y: "-10%",
-              scale: 1,
-              opacity: 1,
-              filter: "blur(0px)",
-              zIndex: 50,
-            }}
-            exit={{ 
-              position: "fixed",
-              left: "50%",
-              bottom: "0%",
-              x: "-50%",
-              y: "70%",
-              scale: 0,
-              opacity: 0,
-              filter: "blur(40px)",
-              zIndex: 50,
-            }}
-            transition={{
-                type: "spring",
-                stiffness: 280,
-                damping: 25,
-                duration: 0.2
-              }}
-            style={{
-              originX: 0.5,
-              originY: 1,
-            }}
-            className="pointer-events-auto"
-          >
-            <div className="rounded-[20px] bg-red-500/5 overflow-hidden p-1 shadow-2xl backdrop-blur-sm border border-red-200 dark:border-red-800/50">
-              <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm overflow-hidden p-2 pl-3 min-w-[400px]">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Checkbox
-                      checked={selectedCoins.size === totalCoins && totalCoins > 0}
-                      onCheckedChange={onSelectAll}
-                    />
-                    <span className="text-xs font-medium font-mono">
-                      {selectedCoins.size} of {totalCoins} coins selected
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      onClick={onRemoveSelected}
-                      disabled={selectedCoins.size === 0 || isRemoving}
-                      variant="destructive"
-                      size="sm"
-                    >
-                      {isRemoving ? (
-                        <>
-                          <Spinner size={16} className="mr-2" />
-                          Removing...
-                        </>
-                      ) : (
-                        `Remove Selected (${selectedCoins.size})`
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+    <div className="flex items-center gap-2 flex-wrap">
       {/* Regular Filter UI */}
       <div className="flex items-center justify-between w-full">
         {/* Filter Button and Active Filters Row */}
@@ -472,6 +401,6 @@ export function WatchlistFilters({
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }
