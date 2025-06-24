@@ -344,7 +344,7 @@ const createColumns = (
 ];
 
 export function Watchlist() {
-  const { watchlist, removeFromWatchlist, isLoading: isWatchlistLoading, isInitialized } = useWatchlist()
+  const { watchlist, removeFromWatchlist, removeBulkFromWatchlist, isLoading: isWatchlistLoading, isInitialized } = useWatchlist()
   const [sorting, setSorting] = useState<SortingState>([])
   const [selectedCoins, setSelectedCoins] = useState<Set<string>>(new Set())
   const [removingCoins, setRemovingCoins] = useState<Set<number>>(new Set())
@@ -490,11 +490,11 @@ export function Watchlist() {
   }, [filteredCoins]);
 
   const handleRemoveSelected = useCallback(async () => {
-    setRemovingCoins(new Set(Array.from(selectedCoins).map(Number)));
+    const coinIdsToRemove = Array.from(selectedCoins).map(Number);
+    setRemovingCoins(new Set(coinIdsToRemove));
+    
     try {
-      for (const coinId of selectedCoins) {
-        await removeFromWatchlist(Number(coinId));
-      }
+      await removeBulkFromWatchlist(coinIdsToRemove);
       setSelectedCoins(new Set());
       toast({
         title: "Success",
@@ -509,7 +509,7 @@ export function Watchlist() {
     } finally {
       setRemovingCoins(new Set());
     }
-  }, [selectedCoins, removeFromWatchlist]);
+  }, [selectedCoins, removeBulkFromWatchlist]);
 
   // Filter handlers
   const handleClearAllFilters = useCallback(() => {

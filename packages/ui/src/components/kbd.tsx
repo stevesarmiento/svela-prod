@@ -9,7 +9,7 @@ export function Kbd({ children, className, ...props }: KbdProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono bg-muted/50 border border-border rounded-sm text-muted-foreground",
+        "inline-flex items-center h-5 gap-1 p-0 px-2 text-[10px] text-white/50 font-mono bg-zinc-800/50 border border-zinc-800/50 rounded-sm",
         className
       )}
       {...props}

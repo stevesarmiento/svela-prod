@@ -14,6 +14,7 @@ import { Checkbox } from "@v1/ui/checkbox";
 import { motion, AnimatePresence } from "framer-motion";
 import { Spinner } from "@v1/ui/spinner";
 import { Slider } from "@v1/ui/slider";
+import { IconCommand } from "symbols-react";
 
 interface FilterChip {
   key: string;
@@ -307,7 +308,7 @@ export function WatchlistFilters({
                 ref={filterButtonRef}
                 variant="ghost"
                 size="icon"
-                className={`h-7 px-2 w-auto gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md relative group bg-zinc-50 dark:bg-zinc-900 flex-shrink-0 ${
+                className={`h-7 px-1 pl-2 w-auto gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800/20 rounded-md relative group bg-zinc-50 dark:bg-zinc-900 flex-shrink-0 ${
                   hasActiveFilters ? "text-blue-600 dark:text-blue-400" : ""
                 } ${hasSelectedCoins ? "ring-2 ring-red-500/50" : ""}`}
               >
@@ -319,7 +320,7 @@ export function WatchlistFilters({
                   <div className="absolute -top-1 -left-1 h-2 w-2 bg-red-500 rounded-full" />
                 )}
                 <div className="flex items-center gap-1">
-                  <Kbd>⌘ + F</Kbd>
+                  <Kbd><IconCommand className="h-2 w-2 fill-white/50" /> + F</Kbd>
                 </div>
               </Button>
             </PopoverTrigger>
