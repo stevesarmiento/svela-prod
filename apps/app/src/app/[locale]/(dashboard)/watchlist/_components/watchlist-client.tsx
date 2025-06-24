@@ -6,13 +6,13 @@ import { Watchlist } from "./watchlist"
 import { useWatchlist } from "./watchlist-context"
 import type { CoinMarketData } from '@/types/coins'
 import { toast } from "@v1/ui/use-toast"
-import { Button } from "@v1/ui/button"
-import { IconArrowtriangleUpCircle } from "symbols-react"
+// import { Button } from "@v1/ui/button"
+// import { IconArrowtriangleUpCircle } from "symbols-react"
 
 function WatchlistContent() {
   const { watchlist, isInitialized } = useWatchlist()
   const [coins, setCoins] = useState<CoinMarketData[] | null>(null)
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  //const [isRefreshing, setIsRefreshing] = useState(false)
 
   const fetchCoinData = useCallback(async () => {
     if (!isInitialized) return
@@ -23,7 +23,7 @@ function WatchlistContent() {
     }
   
     try {
-      setIsRefreshing(true)
+     // setIsRefreshing(true)
       
       // First fetch quotes and historical data
       const [quotesResponse, historicalResponse] = await Promise.all([
@@ -87,7 +87,7 @@ function WatchlistContent() {
         variant: "destructive",
       })
     } finally {
-      setIsRefreshing(false)
+     // setIsRefreshing(false)
     }
   }, [isInitialized, watchlist])
 
@@ -98,20 +98,7 @@ function WatchlistContent() {
   if (!coins) return <div>Loading...</div>
   
   return (
-    <div className="space-y-6 w-full z-0 p-8">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Watchlist</h1>
-        <Button 
-          onClick={fetchCoinData} 
-          disabled={isRefreshing}
-          variant="ghost"
-          size="icon"
-          className="group"
-        >
-          <IconArrowtriangleUpCircle className={`h-5 w-5 fill-muted-foreground group-hover:fill-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
-        </Button>
-      </div>
-      
+    <div className="w-full px-4">      
       <Watchlist />
     </div>
   )

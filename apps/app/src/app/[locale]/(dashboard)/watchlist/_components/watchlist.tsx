@@ -107,7 +107,7 @@ const WatchlistSkeleton = memo(({ rowCount = 1 }: { rowCount?: number }) => (
 WatchlistSkeleton.displayName = 'WatchlistSkeleton';
 
 const WatchlistRowSkeleton = memo(({ isLast }: { isLast: boolean }) => (
-  <div className={`grid grid-cols-6 gap-4 px-4 py-3 ${!isLast ? 'border-b' : ''}`}>
+  <div className={`grid grid-cols-5 gap-4 px-4 py-3 ${!isLast ? 'border-b' : ''}`}>
     <div className="flex items-center gap-2">
       <Skeleton className="h-4 w-4" />
       <Skeleton className="h-6 w-6 rounded-full" />
@@ -118,7 +118,6 @@ const WatchlistRowSkeleton = memo(({ isLast }: { isLast: boolean }) => (
     </div>
     <div className="flex items-center"><Skeleton className="h-4 w-16" /></div>
     <div className="flex items-center"><Skeleton className="h-4 w-12" /></div>
-    <div className="flex items-center"><Skeleton className="h-4 w-16" /></div>
     <div className="flex items-center"><Skeleton className="h-4 w-16" /></div>
     <div className="flex items-center justify-end"><Skeleton className="h-8 w-8 rounded" /></div>
   </div>
@@ -153,7 +152,6 @@ const createColumns = (
     ),
     cell: ({ row }) => {
       const isHovered = hoveredRowId === row.id;
-      //const shouldShow = hasSelectedCoins || isHovered;
       
       return (
         <div className="relative w-full h-full flex items-center justify-start overflow-hidden">
@@ -195,43 +193,38 @@ const createColumns = (
             </AnimatePresence>
           )}
           
-          {/* Token content - animate only when no selections exist */}
+          {/* Token content - no link here, entire row will be linked */}
           {hasSelectedCoins ? (
             // Static position when selections exist
             <div className="translate-x-10 opacity-90 flex items-center gap-2">
-              <Link 
-                href={`/charts/${row.original.id}`}
-                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-              >
-                <div className="relative">
-                  <Image
-                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
-                    alt={row.original.name}
-                    className={cn(
-                      "w-6 h-6 rounded-full",
-                      row.original.isOptimistic && "opacity-50"
-                    )}
-                    width={24}
-                    height={24}
-                  />
-                  {row.original.isOptimistic && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Spinner size={12} />
-                    </div>
+              <div className="relative">
+                <Image
+                  src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
+                  alt={row.original.name}
+                  className={cn(
+                    "w-6 h-6 rounded-full",
+                    row.original.isOptimistic && "opacity-50"
                   )}
-                </div>
-                <div>
-                  <div className={cn(
-                    "font-semibold text-sm",
-                    row.original.isOptimistic && "text-muted-foreground"
-                  )}>
-                    {row.original.name}
+                  width={24}
+                  height={24}
+                />
+                {row.original.isOptimistic && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Spinner size={12} />
                   </div>
-                  <div className="text-xs text-muted-foreground font-mono">
-                    {row.original.symbol.toUpperCase()}
-                  </div>
+                )}
+              </div>
+              <div>
+                <div className={cn(
+                  "font-semibold text-sm",
+                  row.original.isOptimistic && "text-muted-foreground"
+                )}>
+                  {row.original.name}
                 </div>
-              </Link>
+                <div className="text-xs text-muted-foreground font-mono">
+                  {row.original.symbol.toUpperCase()}
+                </div>
+              </div>
             </div>
           ) : (
             // Animated content when no selections exist
@@ -248,39 +241,34 @@ const createColumns = (
                 mass: 0.5,
               }}
             >
-              <Link 
-                href={`/charts/${row.original.id}`}
-                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-              >
-                <div className="relative">
-                  <Image
-                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
-                    alt={row.original.name}
-                    className={cn(
-                      "w-6 h-6 rounded-full",
-                      row.original.isOptimistic && "opacity-50"
-                    )}
-                    width={24}
-                    height={24}
-                  />
-                  {row.original.isOptimistic && (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Spinner size={12} />
-                    </div>
+              <div className="relative">
+                <Image
+                  src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
+                  alt={row.original.name}
+                  className={cn(
+                    "w-6 h-6 rounded-full",
+                    row.original.isOptimistic && "opacity-50"
                   )}
-                </div>
-                <div>
-                  <div className={cn(
-                    "font-semibold text-sm",
-                    row.original.isOptimistic && "text-muted-foreground"
-                  )}>
-                    {row.original.name}
+                  width={24}
+                  height={24}
+                />
+                {row.original.isOptimistic && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Spinner size={12} />
                   </div>
-                  <div className="text-xs text-muted-foreground font-mono">
-                    {row.original.symbol.toUpperCase()}
-                  </div>
+                )}
+              </div>
+              <div>
+                <div className={cn(
+                  "font-semibold text-sm",
+                  row.original.isOptimistic && "text-muted-foreground"
+                )}>
+                  {row.original.name}
                 </div>
-              </Link>
+                <div className="text-xs text-muted-foreground font-mono">
+                  {row.original.symbol.toUpperCase()}
+                </div>
+              </div>
             </motion.div>
           )}
         </div>
@@ -298,7 +286,7 @@ const createColumns = (
         Token
       </div>
     ),
-    cell: () => null, // This column is just for sorting, content is in select cell
+    cell: () => null,
     enableSorting: true,
   },
   {
@@ -369,26 +357,6 @@ const createColumns = (
     enableSorting: true,
   },
   {
-    id: 'marketCap',
-    accessorKey: 'quote.USD.market_cap',
-    header: () => (
-      <div className="text-left flex items-center gap-1">
-        <BarChart3 className="w-3 h-3" />
-        Market Cap
-      </div>
-    ),
-    cell: ({ row }) => (
-      <span className="font-mono text-sm">
-        {row.original.quote.USD.price === 0 ? (
-          <Skeleton className="h-4 w-16" />
-        ) : (
-          `$${formatLargeNumber(row.original.quote.USD.market_cap || 0)}`
-        )}
-      </span>
-    ),
-    enableSorting: true,
-  },
-  {
     id: 'actions',
     header: () => (
       <div className="text-right flex items-center justify-end gap-1">
@@ -401,14 +369,18 @@ const createColumns = (
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => handleRemove(row.original.id)}
+          onClick={(e) => {
+            e.preventDefault(); // Prevent row link navigation
+            e.stopPropagation();
+            handleRemove(row.original.id);
+          }}
           disabled={removingCoins.has(row.original.id)}
           className="h-8 w-8 p-0 bg-transparent hover:bg-rose-500/10 transition-colors group"
         >
           {removingCoins.has(row.original.id) ? (
             <Spinner size={16} />
           ) : (
-          <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
+            <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
           )}
         </Button>
       </div>
@@ -735,7 +707,7 @@ export function Watchlist() {
         <div className="px-3 py-2">
           <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
             {table.getHeaderGroups().map(headerGroup => (
-                <div key={headerGroup.id} className="grid grid-cols-6 gap-4"> {/* Changed from 7 to 6 */}
+                <div key={headerGroup.id} className="grid grid-cols-5 gap-4">
                   {headerGroup.headers.slice(0, 1).map(header => ( // Show first header (select/token merged)
                     <div 
                       key={header.id}
@@ -774,16 +746,32 @@ export function Watchlist() {
 
         {/* Table Body */}
         <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden">
-          {table.getRowModel().rows.map(row => (
-            <div 
-              key={row.id}
-                className="grid grid-cols-6 gap-4 px-4 py-3 border-b last:border-b-0 hover:bg-primary/[0.02] transition-colors"
+          {table.getRowModel().rows.map(row => {
+            const isSelected = selectedCoins.has(row.original.id.toString());
+            const hasAnySelections = selectedCoins.size > 0;
+            
+            return (
+              <Link 
+                key={row.id}
+                href={`/charts/${row.original.id}`}
+                className={cn(
+                  "grid grid-cols-5 gap-4 px-4 py-3 border-b last:border-b-0 hover:bg-primary/[0.02] transition-opacity duration-200 cursor-pointer",
+                  hasAnySelections ? (isSelected ? "opacity-100" : "opacity-40") : "opacity-100"
+                )}
               >
                 {/* First cell - merged select + token with specific hover */}
                 <div 
                   className="flex items-center"
                   onMouseEnter={() => setHoveredRowId(row.id)}
                   onMouseLeave={() => setHoveredRowId(null)}
+                  onClick={(e) => {
+                    e.preventDefault(); // Always prevent navigation for first cell
+                    e.stopPropagation();
+                    
+                    // Toggle checkbox selection when clicking anywhere in first cell
+                    const isCurrentlySelected = selectedCoins.has(row.original.id.toString());
+                    handleCoinSelect(row.original.id.toString(), !isCurrentlySelected);
+                  }}
                 >
                   {(() => {
                     const firstCell = row.getVisibleCells()[0];
@@ -791,20 +779,32 @@ export function Watchlist() {
                   })()}
                 </div>
                 
-                {/* Rest of the cells (skip the hidden token-sort column) */}
-                {row.getVisibleCells().slice(2).map(cell => (
+                {/* Rest of the cells (skip the hidden token-sort column and removed market cap) */}
+                {row.getVisibleCells().slice(2, -1).map(cell => ( // Exclude last cell (actions)
+                  <div 
+                    key={cell.id}
+                    className="flex items-center justify-start"
+                  >
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </div>
+                ))}
+                
+                {/* Actions cell - prevent navigation */}
                 <div 
-                  key={cell.id}
-                  className={cn(
-                    "flex items-center",
-                    cell.column.id === 'actions' ? "justify-end" : "justify-start"
-                  )}
+                  className="flex items-center justify-end"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
                 >
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  {(() => {
+                    const lastCell = row.getVisibleCells()[row.getVisibleCells().length - 1];
+                    return lastCell && flexRender(lastCell.column.columnDef.cell, lastCell.getContext());
+                  })()}
                 </div>
-              ))}
-            </div>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       </div>
       )}
