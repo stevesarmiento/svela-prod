@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBottomNav } from "./bottom-nav-context";
-import { useKeyboardShortcuts, useCommandHandler } from "./bottom-nav-hooks";
+import { useKeyboardShortcuts, useCommandHandler, useSequentialShortcuts } from "./bottom-nav-hooks";
 import { NavigationDock } from "./navigation-dock";
 import { CommandSearch } from "./command-search";
 import { BackButton } from "./back-button";
@@ -11,6 +11,9 @@ import { BackButton } from "./back-button";
 export function BottomNav() {
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const { mode, selectionState, setNavigationMode } = useBottomNav();
+  
+  // Initialize sequential shortcuts (still needed for functionality)
+  useSequentialShortcuts();
   
   // Custom hooks for cleaner logic
   useKeyboardShortcuts(mode, setNavigationMode, setIsCommandOpen);
@@ -50,13 +53,13 @@ export function BottomNav() {
             <motion.div
               key="command-search"
               layoutId="action-button"
-              initial={{ opacity: 0, scale: 0.9, x: -20 }}
+              initial={{ opacity: 0, scale: 1, x: -20 }}
               animate={{ 
                 opacity: 1, 
                 scale: 1, 
                 x: isCommandOpen ? -120 : 0  // Shift left when expanded to center
               }}
-              exit={{ opacity: 0, scale: 0.9, x: -20 }}
+              exit={{ opacity: 0, scale: 1, x: -20 }}
               transition={{
                 type: "spring",
                 stiffness: 280,

@@ -39,24 +39,28 @@ import {
           subtitle: "View dashboard and chat",
           href: "/overview",
           icon: IconCaptionsBubbleFill,
+          shortcut: "g + h",
         },
         {
           title: "Watchlist",
           subtitle: "Your cryptocurrency watchlist",
           href: "/watchlist",
           icon: IconBinocularsFill,
+          shortcut: "g + w",
         },
         {
           title: "Charts",
           subtitle: "Price charts and market data",
           href: "/charts",
           icon: IconDistributeHorizontalCenterFill,
+          shortcut: "g + c",
         },
         {
           title: "Settings",
           subtitle: "App preferences and configuration",
           href: "/settings",
           icon: IconGear,
+          shortcut: "g + s",
         },
       ]
     },
@@ -90,6 +94,7 @@ import {
     subtitle: string;
     href: string;
     icon: React.ComponentType<{ className?: string }>;
+    shortcut?: string;
   };
   
   export type ActionItem = {

@@ -1,6 +1,84 @@
-import { useEffect, useCallback, Dispatch, SetStateAction } from 'react';
+import { useEffect, useCallback, useState, Dispatch, SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
 import { COMMAND_ITEMS } from './bottom-nav-constants';
+
+// Sequential keyboard shortcuts configuration
+const SEQUENTIAL_SHORTCUTS = {
+  'g': {
+    'h': '/overview',        // go to overview
+    'w': '/watchlist',       // go to watchlist  
+    'c': '/charts',          // go to charts
+    's': '/settings',        // go to settings
+  }
+} as const;
+
+export function useSequentialShortcuts() {
+  const [activeSequence, setActiveSequence] = useState<string | null>(null);
+  const [sequenceTimeout, setSequenceTimeout] = useState<NodeJS.Timeout | null>(null);
+  const router = useRouter();
+
+  const resetSequence = useCallback(() => {
+    setActiveSequence(null);
+    if (sequenceTimeout) {
+      clearTimeout(sequenceTimeout);
+      setSequenceTimeout(null);
+    }
+  }, [sequenceTimeout]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      // Ignore if modifier keys are pressed
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+
+      if (!activeSequence) {
+        // Check if this starts a sequence
+        if (key in SEQUENTIAL_SHORTCUTS) {
+          event.preventDefault();
+          setActiveSequence(key);
+          
+          // Set timeout to reset sequence
+          const timeout = setTimeout(() => {
+            resetSequence();
+          }, 2000); // 2 second timeout
+          
+          setSequenceTimeout(timeout);
+        }
+      } else {
+        // We're in a sequence, check for completion
+        event.preventDefault();
+        
+        const shortcuts = SEQUENTIAL_SHORTCUTS[activeSequence as keyof typeof SEQUENTIAL_SHORTCUTS];
+        if (shortcuts && key in shortcuts) {
+          const route = shortcuts[key as keyof typeof shortcuts];
+          router.push(route);
+          resetSequence();
+        } else {
+          // Invalid sequence, reset
+          resetSequence();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      if (sequenceTimeout) {
+        clearTimeout(sequenceTimeout);
+      }
+    };
+  }, [activeSequence, router, resetSequence, sequenceTimeout]);
+
+  return { activeSequence, resetSequence };
+}
 
 export function useKeyboardShortcuts(
   mode: 'navigation' | 'selection',
