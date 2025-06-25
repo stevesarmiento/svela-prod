@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import { MultiPriceChartLightweight } from "./multi-line-lightweight"
+import { ChartTable } from "./chart-table"
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import type { 
   CoinMarketData 
@@ -11,6 +12,7 @@ import { toast } from "@v1/ui/use-toast"
 function ChartsContent() {
   const { watchlist, isInitialized } = useWatchlist()
   const [coins, setCoins] = useState<CoinMarketData[] | null>(null)
+  const [activeTimeScale, setActiveTimeScale] = useState<string>("max")
 
   const fetchCoinData = useCallback(async () => {
     if (!isInitialized) return
@@ -42,11 +44,8 @@ function ChartsContent() {
       if (quotesData.data) {
         const coinsArray = Object.values(quotesData.data) as CoinMarketData[]
         
-        // Set historical data
         coinsArray.forEach(coin => {
-          // Try the normal structure first
           const historical = historicalData.data[coin.id] || historicalData.data[coin.id.toString()]
-          
           coin.historical = historical
         })
 
@@ -70,8 +69,16 @@ function ChartsContent() {
   
   return (
     <div className="space-y-6 w-full z-0 p-8">
-      <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
-        <MultiPriceChartLightweight coins={coins} />
+      <div className="space-y-14">
+        <MultiPriceChartLightweight 
+          coins={coins} 
+          activeTimeScale={activeTimeScale}
+          setActiveTimeScale={setActiveTimeScale}
+        />
+        <ChartTable 
+          coins={coins} 
+          activeTimeScale={activeTimeScale}
+        />
       </div>
     </div>
   )

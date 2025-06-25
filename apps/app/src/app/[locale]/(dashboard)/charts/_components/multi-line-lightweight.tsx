@@ -26,6 +26,8 @@ import { Button } from '@v1/ui/button'
 
 interface MultiPriceChartLightweightProps {
   coins: CoinMarketData[]
+  activeTimeScale: string
+  setActiveTimeScale: (scale: string) => void
 }
 
 interface PriceDataPoint {
@@ -188,10 +190,13 @@ function addOpacityToColor(color: string, opacity: number): string {
   return color
 }
 
-export function MultiPriceChartLightweight({ coins }: MultiPriceChartLightweightProps) {
+export function MultiPriceChartLightweight({ 
+  coins, 
+  activeTimeScale, 
+  setActiveTimeScale 
+}: MultiPriceChartLightweightProps) {
   const { isLoading, removeFromWatchlist } = useWatchlist()
   const chartContainerRef = useRef<HTMLDivElement>(null)
-  const [activeTimeScale, setActiveTimeScale] = useState<string>("max")
   const [hoveredCoin, setHoveredCoin] = useState<string | null>(null)
   const [hoveredRemoveId, setHoveredRemoveId] = useState<string | null>(null)
   const lineSeriesMapRef = useRef<Map<string, LineSeriesData>>(new Map())
@@ -395,7 +400,7 @@ export function MultiPriceChartLightweight({ coins }: MultiPriceChartLightweight
       text-xs
       text-foreground
       rounded-xl
-      shadow-lg 
+      shadow-xl
       pointer-events-none 
       z-30
       backdrop-blur-sm
@@ -519,9 +524,9 @@ export function MultiPriceChartLightweight({ coins }: MultiPriceChartLightweight
   }
 
   return (
-    <div className="grid grid-cols-12 gap-0 rounded-[17px] bg-zinc-900overflow-hidden p-1">
+    <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
       {/* Legend */}
-      <div className="flex flex-col col-span-3 p-6 pt-0 space-y-2">   
+      <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2">   
         <div className="flex flex-row items-center justify-between gap-2 mb-3"> 
           <IconCircleDottedAndCircle className="size-6 fill-primary/40" />
           {/* Add Coin Button - triggers bottom nav command search */}
@@ -560,14 +565,6 @@ export function MultiPriceChartLightweight({ coins }: MultiPriceChartLightweight
               <div className="flex flex-row items-center gap-2 flex-1 ml-2">
                 <span className="text-xs font-medium">{coin.symbol.toUpperCase()}</span>
                 <span className="text-xs font-mono text-muted-foreground">{coin.name}</span>
-                <span 
-                  className={cn(
-                    "text-xs font-mono",
-                    coin.latestValue >= 0 ? "text-green-600" : "text-red-600"
-                  )}
-                >
-                  {coin.latestValue > 0 ? '+' : ''}{coin.latestValue.toFixed(2)}%
-                </span>
               </div>
               
               {/* Remove Icon - appears on hover */}
