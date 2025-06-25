@@ -1,0 +1,280 @@
+'use client'
+
+import { useState, useMemo } from 'react'
+import { Input } from "@v1/ui/input"
+import { Table, TableBody, TableCell, TableRow } from "@v1/ui/table"
+import { Button } from "@v1/ui/button"
+import { toast } from "@v1/ui/use-toast"
+import { useCoinSearch, useTopCoins } from '@/hooks/use-coin-search'
+import Image from 'next/image'
+import { IconXmarkCircleFill, IconMagnifyingglass, IconBookmarkFill } from 'symbols-react'
+import { useWatchlist } from "./watchlist-context"
+import { useUser } from '@/hooks/use-user'
+import { Skeleton } from "@v1/ui/skeleton"
+import { useDebounce } from '@/hooks/use-debounce'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTrigger,
+} from "@v1/ui/sheet"
+import { Kbd } from "@v1/ui/kbd"
+
+// Skeleton Components
+const CoinSearchSkeleton = ({ rowCount = 5 }: { rowCount?: number }) => (
+  <Table>
+    <TableBody>
+      {Array.from({ length: rowCount }).map((_, index) => (
+        <TableRow key={index}>
+          <TableCell>
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-6 w-6 rounded-full" />
+              <div className="space-y-1">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+            </div>
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-4 w-16" />
+          </TableCell>
+          <TableCell>
+            <Skeleton className="h-4 w-12" />
+          </TableCell>
+        </TableRow>
+      ))}
+    </TableBody>
+  </Table>
+);
+
+// Add this interface at the top of the file
+interface CoinSearchResult {
+  id: number;
+  name: string;
+  symbol: string;
+  cmc_rank?: number;
+  quote: {
+    USD: {
+      price: number;
+      percent_change_24h: number;
+      market_cap: number;
+      volume_24h: number;
+    };
+  };
+}
+
+export function CoinSearch() {
+  const { addToWatchlist } = useWatchlist()
+  const { user } = useUser()
+  const [isOpen, setIsOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isAdding, setIsAdding] = useState(false)
+  
+  // Debounce search query
+  const debouncedSearchQuery = useDebounce(searchQuery, 300)
+  
+  // Use hybrid Convex + API hooks
+  const { 
+    data: searchResults, 
+    isLoading: isSearchLoading, 
+    error: searchError 
+  } = useCoinSearch(debouncedSearchQuery);
+  
+  const { 
+    data: topCoins, 
+    isLoading: isTopCoinsLoading, 
+    error: topCoinsError 
+  } = useTopCoins();
+
+  // Determine which coins to display
+  const coinsToDisplay = useMemo(() => {
+    if (debouncedSearchQuery.trim()) {
+      return searchResults || [];
+    }
+    return topCoins || [];
+  }, [debouncedSearchQuery, searchResults, topCoins]);
+
+  // Determine loading state
+  const isLoading = useMemo(() => {
+    if (debouncedSearchQuery.trim()) {
+      return isSearchLoading;
+    }
+    return isTopCoinsLoading;
+  }, [debouncedSearchQuery, isSearchLoading, isTopCoinsLoading]);
+
+  // Handle errors
+  const error = debouncedSearchQuery.trim() ? searchError : topCoinsError;
+  if (error) {
+    toast({
+      title: "Error",
+      description: "Failed to fetch coins",
+      variant: "destructive",
+    });
+  }
+
+  // Update the function parameter
+  const handleAddCoin = async (coin: CoinSearchResult) => {
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "Please sign in to add coins to your watchlist",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setIsAdding(true)
+      await addToWatchlist(Number(coin.id))
+      
+      toast({
+        title: "Success",
+        description: `Added ${coin.name} to your watchlist`,
+      })
+      setSearchQuery('')
+      setIsOpen(false)
+    } catch (error) {
+      console.error('Error adding coin:', error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to add coin",
+        variant: "destructive",
+      })
+    } finally {
+      setIsAdding(false)
+    }
+  }
+
+  // Add this after coinsToDisplay
+  console.log('Coin Search - Query:', debouncedSearchQuery, 'Results:', searchResults?.length, 'Display:', coinsToDisplay.length);
+
+  return (
+    <Sheet open={isOpen} onOpenChange={setIsOpen}>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8 group rounded-xl">
+          <IconBookmarkFill className="h-4 w-4 fill-muted-foreground group-hover:fill-foreground" />
+          <span className="sr-only">Add Token</span>
+        </Button>
+      </SheetTrigger>
+      <SheetContent className="p-0 !z-50 overflow-auto no-scrollbar rounded-[20px] bg-zinc-950 border-zinc-800
+                               shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
+                               dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
+        
+        {/* Background Pattern */}
+        {/* <div className="absolute inset-0 opacity-5 z-0"
+          style={{
+            backgroundImage: `
+              radial-gradient(circle at 25% 25%, white 1px, transparent 1px),
+              radial-gradient(circle at 75% 75%, white 1px, transparent 1px)
+            `,
+            backgroundSize: "24px 24px",
+          }}
+        /> */}
+
+          <SheetHeader className="p-2 sticky top-0 border-b border-zinc-800/50">
+            <div className="flex-1 flex items-center w-full">
+              <div className="relative min-w-full">
+                <div className="relative rounded-[14px] bg-zinc-950/50 focus-within:bg-zinc-950 border border-zinc-800/80 overflow-hidden p-1 transition-colors duration-200">
+                  <div className="relative z-10 flex items-center p-0 px-2">
+                    <IconMagnifyingglass className="h-4 w-4 fill-white/50 ml-1" />
+                    <Input
+                      type="text"
+                      placeholder="Search any token name or symbol..."
+                      className="flex-1 border-0 bg-transparent text-white placeholder:text-white/50 focus-visible:ring-0 focus-visible:ring-offset-0"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery('')}
+                        className="p-1 rounded-full hover:bg-white/10 transition-colors"
+                        type="button"
+                      >
+                        <IconXmarkCircleFill className="h-4 w-4 fill-white/50 hover:fill-white/70" />
+                        <span className="sr-only">Clear search</span>
+                      </button>
+                    )}
+                    <Kbd>ESC</Kbd>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </SheetHeader>
+          
+          <div className="space-y-2 p-3 px-2">
+            <div className="text-xs text-white/50 ml-3">
+              Top 25 tokens by market cap
+            </div>
+            {isLoading ? (
+              <div className="">
+                <CoinSearchSkeleton rowCount={5} />
+              </div>
+            ) : (
+              <div className="overflow-hidden">
+                <Table>
+                  <TableBody>
+                    {coinsToDisplay.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-white/50 py-8">
+                          {debouncedSearchQuery.trim() ? 'No coins found' : 'Loading coins...'}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      coinsToDisplay.map((coin) => (
+                        <TableRow 
+                          key={coin.id}
+                          className="cursor-pointer border-none hover:bg-zinc-800/50 border-zinc-700/30 font-mono transition-colors group"
+                          onClick={() => handleAddCoin(coin)}
+                        >
+                          <TableCell className="text-white rounded-l-xl">
+                            <div className="flex items-center gap-3">
+                              <Image
+                                src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`}
+                                alt={coin.name}
+                                className="w-6 h-6 rounded-full"
+                                width={24}
+                                height={24}
+                              />
+                              <div>
+                                <div className="font-semibold font-sans text-sm text-white group-hover:text-white/90 mt-1">{coin.name}</div>
+                                <div className="text-[11px] text-white/50 -mt-1">{coin.symbol.toUpperCase()}</div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-white/90">
+                            {coin.quote.USD.price > 0 ? (
+                              `$${coin.quote.USD.price.toLocaleString()}`
+                            ) : (
+                              <Skeleton className="h-4 w-16 bg-zinc-700/50" />
+                            )}
+                          </TableCell>
+                          <TableCell className="font-mono rounded-r-xl text-[11px]">
+                            {coin.quote.USD.price > 0 ? (
+                              <span className={`${coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {coin.quote.USD.percent_change_24h.toFixed(2)}%
+                              </span>
+                            ) : (
+                              <Skeleton className="h-4 w-12 bg-zinc-700/50" />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+            
+            {isAdding && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-4 shadow-lg">
+                  <p className="text-sm text-white">Adding to watchlist...</p>
+                </div>
+              </div>
+            )}
+          </div>
+      </SheetContent>
+    </Sheet>
+  )
+}
+

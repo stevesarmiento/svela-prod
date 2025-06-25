@@ -107,7 +107,7 @@ export function TopNav() {
   const isOverviewRoute = cleanPath === '/overview' || cleanPath.startsWith('/overview/');
 
   return (
-    <div className="py-12 z-50">
+    <div className="py-12 px-4 z-50">
       <div className="flex h-16 items-center px-4 gap-4">
         {/* Logo and Greeting */}
         <div className="flex items-center gap-3">

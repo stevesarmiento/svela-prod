@@ -3,9 +3,11 @@ import { cn } from "@v1/ui/cn";
 import { ThemeProvider } from "next-themes";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexProvider } from "@v1/convex/provider";
+import { QueryProvider } from "@/components/providers/query-provider";
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
+import { WatchlistProvider } from "./(dashboard)/watchlist/_components/watchlist-context";
 //import localFont from "next/font/local";
 
 // const geistSans = localFont({
@@ -39,6 +41,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          crossOrigin="anonymous"
+          src="//unpkg.com/react-scan/dist/auto.global.js"
+        />
+      </head>
       <body
         className={cn(
           `${GeistSans.variable} ${GeistMono.variable}`,
@@ -54,14 +62,19 @@ export default function RootLayout({
           }}
         >
           <ConvexProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-            >
-              {children}
-            </ThemeProvider>
+            <QueryProvider>
+              <WatchlistProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="system"
+                enableSystem
+                disableTransitionOnChange
+              >
+                {children}
+              </ThemeProvider>
+              </WatchlistProvider>
+
+            </QueryProvider>
           </ConvexProvider>
         </ClerkProvider>
       </body>

@@ -13,6 +13,7 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as coins from "../coins.js";
 import type * as users from "../users.js";
 import type * as watchlists from "../watchlists.js";
 
@@ -25,6 +26,7 @@ import type * as watchlists from "../watchlists.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  coins: typeof coins;
   users: typeof users;
   watchlists: typeof watchlists;
 }>;
