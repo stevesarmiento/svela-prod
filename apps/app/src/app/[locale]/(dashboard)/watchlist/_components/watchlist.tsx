@@ -2,7 +2,7 @@
 
 import { formatLargeNumber } from "@v1/ui/format-numbers";
 import { Button } from "@v1/ui/button"
-import { X, Coins, TrendingUp, DollarSign, BarChart3 } from "lucide-react"
+import { X } from "lucide-react"
 import { useWatchlist } from "./watchlist-context"
 import { useWatchlistCoins } from "@/hooks/use-watchlist-coins"
 import Link from "next/link"
@@ -82,7 +82,7 @@ const createColumns = (
       const isHovered = hoveredRowId === row.id;
       
       return (
-        <div className="relative w-full h-full flex items-center justify-start overflow-hidden">
+        <div className="relative w-full h-full flex items-center justify-start overflow-hidden ">
           {/* Checkbox - animate only when no selections exist */}
           {hasSelectedCoins ? (
             // Static checkbox when selections exist
@@ -130,7 +130,7 @@ const createColumns = (
                   src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
                   alt={row.original.name}
                   className={cn(
-                    "w-5 h-5 rounded-full",
+                    "w-[20px] h-[20px] rounded-full",
                     row.original.isOptimistic && "opacity-50"
                   )}
                   width={24}
@@ -147,9 +147,9 @@ const createColumns = (
                 </div>
                 <div className={cn(
                   "",
-                  row.original.isOptimistic && "text-muted-foreground font-mono text-sm"
+                  row.original.isOptimistic && "text-muted-foreground font-mono text-xs"
                 )}>
-                  <span className="text-muted-foreground font-mono text-sm">{row.original.name}</span>
+                  <span className="text-muted-foreground font-mono text-xs">{row.original.name}</span>
                 </div>
             </div>
           ) : (
@@ -172,7 +172,7 @@ const createColumns = (
                   src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
                   alt={row.original.name}
                   className={cn(
-                    "w-5 h-5 rounded-full",
+                    "w-[20px] h-[20px] rounded-full",
                     row.original.isOptimistic && "opacity-50"
                   )}
                   width={24}
@@ -190,9 +190,9 @@ const createColumns = (
                 </div>
                 <div className={cn(
                   "",
-                  row.original.isOptimistic && "text-muted-foreground font-mono text-sm"
+                  row.original.isOptimistic && "text-muted-foreground font-mono text-xs"
                 )}>
-                  <span className="text-muted-foreground font-mono text-sm">{row.original.name}</span>
+                  <span className="text-muted-foreground font-mono text-xs">{row.original.name}</span>
                 </div>
               </div>
             </motion.div>
@@ -208,7 +208,6 @@ const createColumns = (
     accessorKey: 'name',
     header: () => (
       <div className="text-left flex items-center gap-1">
-        <Coins className="w-3 h-3" />
         Token
       </div>
     ),
@@ -219,13 +218,12 @@ const createColumns = (
     id: 'price',
     accessorKey: 'quote.USD.price',
     header: () => (
-      <div className="text-left flex items-center gap-1">
-        <DollarSign className="w-3 h-3" />
+      <div className="text-left flex items-center justify-end gap-1">
         Price
       </div>
     ),
     cell: ({ row }) => (
-      <span className="font-mono text-sm">
+      <span className="font-mono text-xs">
         {row.original.isOptimistic ? (
           <Skeleton className="h-4 w-16 rounded-full" />
         ) : row.original.quote.USD.price > 0 ? (
@@ -241,8 +239,7 @@ const createColumns = (
     id: 'change24h',
     accessorKey: 'quote.USD.percent_change_24h',
     header: () => (
-      <div className="text-left flex items-center gap-1">
-        <TrendingUp className="w-3 h-3" />
+      <div className="text-left flex items-center justify-end gap-1">
         24h Change
       </div>
     ),
@@ -251,7 +248,7 @@ const createColumns = (
         <Skeleton className="h-4 w-12 rounded-full" />
       ) : row.original.quote.USD.price > 0 ? (
         <span className={cn(
-          "font-mono text-sm",
+          "font-mono text-xs",
           row.original.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'
         )}>
           {row.original.quote.USD.percent_change_24h.toFixed(2)}%
@@ -266,13 +263,12 @@ const createColumns = (
     id: 'volume',
     accessorKey: 'quote.USD.volume_24h',
     header: () => (
-      <div className="text-left flex items-center gap-1">
-        <BarChart3 className="w-3 h-3" />
+      <div className="text-left flex items-center justify-end gap-1">
         Volume 24h
       </div>
     ),
     cell: ({ row }) => (
-      <span className="font-mono text-sm">
+      <span className="font-mono text-xs">
         {row.original.quote.USD.price === 0 ? (
           <Skeleton className="h-4 w-16 rounded-full" />
         ) : (
@@ -285,9 +281,8 @@ const createColumns = (
   {
     id: 'actions',
     header: () => (
-      <div className="text-right flex items-center justify-end gap-1">
-        <X className="w-3 h-3" />
-        Remove
+      <div className="flex items-center justify-end gap-1">
+        Action
       </div>
     ),
     cell: ({ row }) => (
@@ -301,8 +296,8 @@ const createColumns = (
             handleRemove(row.original.id);
           }}
           disabled={removingCoins.has(row.original.id)}
-          className="h-8 w-8 p-0 bg-transparent hover:bg-rose-500/10 transition-colors group"
-        >
+          className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
+          >
           {removingCoins.has(row.original.id) ? (
             <Spinner size={16} />
           ) : (
@@ -541,7 +536,7 @@ export function Watchlist() {
   // No coins in watchlist at all
   if (!watchlist.length) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 px-4">
         
         <div className="flex items-center justify-between gap-2">
           <WatchlistFilters
@@ -571,7 +566,6 @@ export function Watchlist() {
         
         <div className="py-6 border border-dashed border-border rounded-lg">
           <div className="flex flex-col items-center justify-center gap-3">
-            <Coins className="h-12 w-12 text-muted-foreground" />
             <div className="text-center">
               <h3 className="font-medium">No coins in watchlist</h3>
               <p className="text-sm text-muted-foreground">Add coins to track their performance</p>
@@ -583,7 +577,7 @@ export function Watchlist() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 px-4">
       <div className="flex items-center justify-between gap-2">
       <WatchlistFilters
         searchText={filters.searchText}
@@ -614,7 +608,6 @@ export function Watchlist() {
       {filteredCoins.length === 0 ? (
         <div className="py-6 border border-dashed border-border rounded-lg">
           <div className="flex flex-col items-center justify-center gap-3">
-            <BarChart3 className="h-12 w-12 text-muted-foreground" />
             <div className="text-center">
               <h3 className="font-medium">No coins match your filters</h3>
               <p className="text-sm text-muted-foreground">
@@ -634,7 +627,7 @@ export function Watchlist() {
       ) : (
       <div className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
           {/* Header - adjust grid to account for merged columns */}
-        <div className="px-3 py-2">
+        <div className="px-3 py-1">
           <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
             {table.getHeaderGroups().map(headerGroup => (
                 <div key={headerGroup.id} className="grid grid-cols-5 gap-4">
@@ -644,7 +637,6 @@ export function Watchlist() {
                       className="flex items-center gap-1 cursor-pointer select-none hover:text-foreground"
                       onClick={() => table.getColumn('token-sort')?.toggleSorting()} // Sort by token
                     >
-                      <Coins className="w-3 h-3" />
                       Token
                       {{
                         asc: ' ↑',

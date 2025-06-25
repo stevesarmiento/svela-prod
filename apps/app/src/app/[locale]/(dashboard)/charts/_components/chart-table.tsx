@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { Button } from "@v1/ui/button"
-import { X, TrendingUp, BarChart3 } from "lucide-react"
+import { X } from "lucide-react"
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import Link from "next/link"
 import Image from "next/image"
@@ -110,12 +110,10 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
                   <span className="text-muted-foreground/70">{coin.name}</span>
                 </div>
                 <div className="flex items-center gap-1 justify-end">
-                  <TrendingUp className="w-3 h-3" />
-                  {getTimeScaleLabel(activeTimeScale)} Change
+                  Volume 24h
                 </div>
                 <div className="flex items-center gap-1 justify-end">
-                  <BarChart3 className="w-3 h-3" />
-                  Volume 24h
+                  {getTimeScaleLabel(activeTimeScale)} Change
                 </div>
                 <div className="flex items-center justify-end gap-1">
                   Action
@@ -133,9 +131,16 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
               {/* Price */}
               <div className="flex items-center gap-2">
                 <span className="font-bold text-xs">{coin.symbol.toUpperCase()}</span>
-                <span className="text-primary/40 text-xs">Price is currently</span>
+                <span className="text-primary/40 text-xs">price is currently</span>
                 <span className="font-mono text-xs font-semibold">
                   ${coin.quote.USD.price.toLocaleString()}
+                </span>
+              </div>
+
+            {/* 24h Volume */}
+            <div className="flex items-center justify-end">
+                <span className="font-mono text-xs">
+                  ${formatLargeNumber(coin.quote.USD.volume_24h || 0)}
                 </span>
               </div>
 
@@ -146,13 +151,6 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
                   coin.intervalChange > 0 ? 'text-green-600' : 'text-red-600'
                 )}>
                   {coin.intervalChange > 0 ? '+' : ''}{coin.intervalChange.toFixed(2)}%
-                </span>
-              </div>
-
-              {/* 24h Volume */}
-              <div className="flex items-center justify-end">
-                <span className="font-mono text-xs">
-                  ${formatLargeNumber(coin.quote.USD.volume_24h || 0)}
                 </span>
               </div>
 

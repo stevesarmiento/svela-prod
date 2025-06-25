@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { Button } from "@v1/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
-import { IconMagnifyingglass, IconCircleSlash, IconCommand, IconBookmarkFill } from "symbols-react";
+import { IconMagnifyingglass, IconCircleSlash, IconCommand } from "symbols-react";
 import {
   CommandPopover,
   CommandEmpty,
@@ -275,7 +275,6 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
                               {coin.quote.USD.percent_change_24h.toFixed(2)}%
                             </div>
                           </div>
-                          <IconBookmarkFill className="h-4 w-4 fill-muted-foreground" />
                         </div>
                       </div>
                     </CommandItem>
