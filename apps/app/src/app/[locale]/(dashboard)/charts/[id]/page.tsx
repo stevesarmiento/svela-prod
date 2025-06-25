@@ -1,13 +1,17 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@v1/ui/tabs"
-import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
+import { 
+  Card, 
+  CardContent, 
+  //CardHeader, 
+  //CardTitle 
+} from "@v1/ui/card"
 import { getCoinData } from "@/lib/coinmarketcap" 
 import { PriceChart } from "./price-chart"
 import { MarketMetrics } from "./market-metrics"
-import { IconBrainFilledHeadProfile, IconChevronBackward, IconNewspaperFill } from 'symbols-react'
+import { IconChevronBackward } from 'symbols-react'
 import Link from 'next/link'
 import { CoinMarketData } from '@/types/coins'
 import Image from "next/image"
-import { TokenAnalysis } from './token-analysis'
+//import { TokenAnalysis } from './token-analysis'
 
 interface PageProps {
   params: {
@@ -25,7 +29,7 @@ export default async function TokenPage({ params }: PageProps) {
     }
 
     return (
-      <Tabs defaultValue="markets" className="min-h-screen bg-background w-full">
+      <div className="min-h-screen w-full px-4">
         <header className="border-b sticky top-0 bg-background/90 backdrop-blur-xl z-50">
           <div className="container flex w-full mx-auto items-center justify-between h-16 px-4">
             <div className="flex items-center gap-4">
@@ -50,57 +54,33 @@ export default async function TokenPage({ params }: PageProps) {
                 </div>
               </div>
             </div>
-            <TabsList className="flex space-x-2">
-              <TabsTrigger value="markets" className="flex items-center gap-2">
-                <IconBrainFilledHeadProfile className="h-4 w-4 fill-primary" />
-                Analysis
-              </TabsTrigger>
-              <TabsTrigger value="news" className="flex items-center gap-2">
-                <IconNewspaperFill className="h-4 w-4 fill-primary" />
-                Headlines
-              </TabsTrigger>
-            </TabsList>
           </div>
         </header>
 
-        <main className="container mx-auto px-4 py-6">
-          <TabsContent value="markets" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Market Summary on the Left */}
-              <Card>
-                <CardHeader className="border-b border-foreground/10 pb-4 pt-6">
-                  <CardTitle className="text-lg font-medium font-mono">Market Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <TokenAnalysis tokenData={tokenData} />
-                </CardContent>
-              </Card>
-
-              {/* PriceChart over MarketMetrics (and NetworkMetrics) on the Right */}
-              <div className="flex flex-col gap-6">
-                <PriceChart 
-                  data={tokenData.quote.USD} 
-                  historical={tokenData.historical}
-                />
-                <MarketMetrics data={tokenData} />
-                {/* Uncomment and include NetworkMetrics if available */}
-                {/* <NetworkMetrics data={tokenData} /> */}
-              </div>
+        <main className="mx-auto py-6">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+            {/* PriceChart over MarketMetrics on the Right */}
+            <div className="col-span-8">
+              <PriceChart 
+                coinId={id}
+                initialData={tokenData.quote.USD} 
+              />              
             </div>
-          </TabsContent>
-
-          <TabsContent value="news">
-            <Card>
-              <CardHeader>
-                <CardTitle>Latest News</CardTitle>
+            <div className="col-span-4">
+              <MarketMetrics data={tokenData} />
+            </div>
+          </div>
+          {/* Market Summary on the Left */}
+          {/* <Card className="col-span-12">
+              <CardHeader className="border-b border-foreground/10 pb-4 pt-6">
+                <CardTitle className="text-lg font-medium font-mono">Market Summary</CardTitle>
               </CardHeader>
               <CardContent>
-                Coming soon...
+                <TokenAnalysis tokenData={tokenData} />
               </CardContent>
-            </Card>
-          </TabsContent>
+            </Card> */}
         </main>
-      </Tabs>
+      </div>
     )
   } catch (error) {
     console.error('Error loading token page:', error)
