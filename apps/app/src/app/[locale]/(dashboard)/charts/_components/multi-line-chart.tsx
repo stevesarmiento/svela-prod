@@ -74,22 +74,27 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
 
     const timePoints = new Set<number>()
     const priceMap: Record<string, Record<number, number>> = {}
+    const initialPrices: Record<string, number> = {}
 
     // Collect all timestamps and organize prices by coin
     coins.forEach(coin => {
       if (coin.historical?.data?.quotes) {
+        const quotes = coin.historical.data.quotes.sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        )
+        
         coin.historical.data.quotes.forEach(quote => {
           const timestamp = new Date(quote.timestamp).getTime()
           timePoints.add(timestamp)
           
-          if (!priceMap[coin.id]) {
-            priceMap[coin.id] = {}
+          const coinId = coin.id.toString()
+          if (!priceMap[coinId]) {
+            priceMap[coinId] = {}
+            // Set initial price from the first quote for this coin
+            initialPrices[coinId] = quotes[0]?.quote?.USD?.price || coin.quote.USD.price
           }
           
-          const initialPrice = quote.quote?.USD?.price ?? 0
-          const coinId = coin.id.toString()
-          if (!priceMap[coinId]) priceMap[coinId] = {}
-          priceMap[coinId][timestamp] = initialPrice
+          priceMap[coinId][timestamp] = quote.quote?.USD?.price || 0
         })
       }
     })
@@ -103,10 +108,14 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
       
       coins.forEach(coin => {
         const coinId = coin.id.toString()
-        const firstTimestamp = sortedTimePoints[0] ?? time
-        const initialPrice = priceMap[coinId]?.[firstTimestamp] || coin.quote.USD.price
+        const initialPrice = initialPrices[coinId] || coin.quote.USD.price
         const currentPrice = priceMap[coinId]?.[time] || coin.quote.USD.price
-        dataPoint[coinId] = ((currentPrice - initialPrice) / initialPrice) * 100
+        
+        if (initialPrice > 0) {
+          dataPoint[coinId] = ((currentPrice - initialPrice) / initialPrice) * 100
+        } else {
+          dataPoint[coinId] = 0
+        }
       })
 
       return dataPoint

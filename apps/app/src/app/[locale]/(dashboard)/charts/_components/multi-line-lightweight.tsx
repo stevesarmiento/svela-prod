@@ -18,8 +18,11 @@ import { createRoot } from "react-dom/client"
 import type { CoinMarketData } from '@/types/coins'
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import { cn } from "@v1/ui/cn";
-import { IconCircleDottedAndCircle, IconXmarkCircleFill } from 'symbols-react'
+import { IconCircleDottedAndCircle, IconXmarkCircleFill, IconPlus } from 'symbols-react'
 import { toast } from "@v1/ui/use-toast"
+import Link from 'next/link'
+import { useBottomNav } from '@/components/navigation/bottom-nav-context'
+import { Button } from '@v1/ui/button'
 
 interface MultiPriceChartLightweightProps {
   coins: CoinMarketData[]
@@ -192,23 +195,37 @@ export function MultiPriceChartLightweight({ coins }: MultiPriceChartLightweight
   const [hoveredCoin, setHoveredCoin] = useState<string | null>(null)
   const [hoveredRemoveId, setHoveredRemoveId] = useState<string | null>(null)
   const lineSeriesMapRef = useRef<Map<string, LineSeriesData>>(new Map())
+  
+  // Use the bottom nav context to trigger command search
+  const { openCommandSearch } = useBottomNav()
 
   const coinSeriesData = useMemo((): CoinSeries[] => {
     if (!coins.length) return []
 
     const colors = generateDistinctColors(coins.length)
     
+    console.log('Processing coins:', coins.length) // Add debugging
+    
     return coins.map((coin, index) => {
       const data: PriceDataPoint[] = []
       
-      if (coin.historical?.data?.quotes) {
+      console.log(`Processing ${coin.symbol}:`, {
+        hasHistorical: !!coin.historical?.data?.quotes,
+        quotesLength: coin.historical?.data?.quotes?.length || 0,
+        currentPrice: coin.quote.USD.price
+      })
+      
+      if (coin.historical?.data?.quotes && coin.historical.data.quotes.length > 0) {
         let quotes = coin.historical.data.quotes
+        
+        // Sort quotes by timestamp to ensure proper ordering
+        quotes = quotes.sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        )
         
         // Filter based on activeTimeScale
         const now = Date.now()
         const timeFilters = {
-          // '1h': 1 * 24 * 60 * 60 * 1000,      // Last 24 hours (24 data points)
-          // '4h': 1 * 24 * 60 * 60 * 1000,      // Last 24 hours (6 data points)  
           '1d': 30 * 24 * 60 * 60 * 1000,     // Last 30 days
           '7d': 90 * 24 * 60 * 60 * 1000,     // Last 90 days
           'max': Infinity                      // All data
@@ -225,30 +242,56 @@ export function MultiPriceChartLightweight({ coins }: MultiPriceChartLightweight
         
         console.log(`${coin.symbol}: Total quotes: ${coin.historical.data.quotes.length}, Filtered: ${quotes.length}, Scale: ${activeTimeScale}`)
         
-        const initialPrice = quotes[0]?.quote?.USD?.price || coin.quote.USD.price
-        
-        quotes.forEach((quote) => {
-          const currentPrice = quote.quote?.USD?.price
-          if (currentPrice && initialPrice) {
-            const percentChange = ((currentPrice - initialPrice) / initialPrice) * 100
-            data.push({
-              time: (new Date(quote.timestamp).getTime() / 1000) as Time,
-              value: percentChange,
+        if (quotes.length > 0) {
+          // Use the first quote's price as baseline
+          const initialPrice = quotes[0]?.quote?.USD?.price
+          
+          console.log(`${coin.symbol}: Initial price: ${initialPrice}`)
+          
+          if (initialPrice && initialPrice > 0) {
+            quotes.forEach((quote, idx) => {
+              const currentPrice = quote.quote?.USD?.price
+              if (currentPrice && currentPrice > 0) {
+                const percentChange = ((currentPrice - initialPrice) / initialPrice) * 100
+                data.push({
+                  time: (new Date(quote.timestamp).getTime() / 1000) as Time,
+                  value: percentChange,
+                })
+                
+                if (idx < 3) { // Log first few data points
+                  console.log(`${coin.symbol} data point ${idx}:`, {
+                    time: quote.timestamp,
+                    currentPrice,
+                    percentChange: percentChange.toFixed(2)
+                  })
+                }
+              }
             })
           }
-        })
+        } else {
+          console.log(`${coin.symbol}: No quotes after filtering`)
+        }
         
         data.sort((a, b) => (a.time as number) - (b.time as number))
+      } else {
+        console.log(`${coin.symbol}: No historical data available`)
       }
+
+      const validData = filterValidPriceData(data)
+      console.log(`${coin.symbol}: Valid data points: ${validData.length}`)
 
       return {
         id: coin.id.toString(),
         name: coin.name,
         symbol: coin.symbol,
         color: colors[index] || `hsl(${Math.random() * 360}, 70%, 50%)`,
-        data: filterValidPriceData(data),
+        data: validData,
       }
-    }).filter(series => series.data.length > 0)
+    }).filter(series => {
+      const hasData = series.data.length > 0
+      console.log(`${series.symbol}: Included in chart: ${hasData}`)
+      return hasData
+    })
   }, [coins, activeTimeScale])
 
   const latestValues = useMemo(() => {
@@ -478,85 +521,100 @@ export function MultiPriceChartLightweight({ coins }: MultiPriceChartLightweight
   return (
     <div className="grid grid-cols-12 gap-0 rounded-[17px] bg-zinc-900overflow-hidden p-1">
       {/* Legend */}
-      <div className="flex flex-col col-span-3 p-6 pt-0 space-y-2">
-        <div className="flex flex-row items-center gap-2 sr-only">
-          <IconCircleDottedAndCircle className="size-6 fill-muted-foreground" />
-          <h1 className="text-2xl font-bold">Comparison</h1>
-        </div>
+      <div className="flex flex-col col-span-3 p-6 pt-0 space-y-2">   
+        <div className="flex flex-row items-center justify-between gap-2 mb-3"> 
+          <IconCircleDottedAndCircle className="size-6 fill-primary/40" />
+          {/* Add Coin Button - triggers bottom nav command search */}
+          <Button
+            variant="outline"
+            onClick={openCommandSearch}
+            className="group w-full border-zinc-800/0 hover:border-zinc-800/80 bg-transparent hover:bg-transparent flex items-center gap-2 justify-between p-3 rounded-lg"
+          >
+            <span className="text-muted-foreground font-normal text-sm group-hover:text-white">Add to comparison</span>
+            <IconPlus className="group-hover:fill-blue-500 group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
+          </Button>
+        </div> 
+        <div className="flex flex-col gap-2 space-y-3">          
         {latestValues.map((coin) => (
-          <div 
-            key={coin.id} 
-            className={cn(
-              "flex overflow-hidden items-center gap-2 cursor-pointer transition-opacity duration-200 rounded-lg p-2 pl-0 py-0 -m-2 relative group",
-              hoveredCoin && hoveredCoin !== coin.id ? "opacity-40" : "opacity-100",
-              hoveredCoin === coin.id ? "bg-white/5" : "hover:bg-white/5"
-            )}
-            style={{ backgroundColor: addOpacityToColor(coin.color, 0.05) }}
-            onMouseEnter={() => setHoveredCoin(coin.id)}
-            onMouseLeave={() => setHoveredCoin(null)}
+          <Link 
+            key={coin.id}
+            href={`/charts/${coin.id}`}
+            className="block"
           >
             <div 
               className={cn(
-                "w-1 h-9 rounded-full transition-transform duration-200",
+                "flex overflow-hidden items-center gap-2 cursor-pointer transition-opacity duration-200 rounded-lg p-0 -m-2 relative group hover:bg-white/10",
+                hoveredCoin && hoveredCoin !== coin.id ? "opacity-40" : "opacity-100",
+                hoveredCoin === coin.id ? "bg-white/5" : ""
               )}
-              style={{ backgroundColor: coin.color }}
-            />
-            <div className="flex flex-row items-center gap-2 flex-1 ml-2">
-              <span className="text-xs font-medium">{coin.symbol.toUpperCase()}</span>
-              <span className="text-xs font-mono text-muted-foreground">{coin.name}</span>
-              <span 
-                className={cn(
-                  "text-xs font-mono",
-                  coin.latestValue >= 0 ? "text-green-600" : "text-red-600"
-                )}
-              >
-                {coin.latestValue > 0 ? '+' : ''}{coin.latestValue.toFixed(2)}%
-              </span>
-            </div>
-            
-            {/* Remove Icon - appears on hover */}
-            <div 
-              className={cn(
-                "absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded-full hover:bg-red-500/20",
-                hoveredRemoveId === coin.id ? "bg-red-500/30" : ""
-              )}
-              onMouseEnter={(e) => {
-                e.stopPropagation()
-                setHoveredRemoveId(coin.id)
-              }}
-              onMouseLeave={(e) => {
-                e.stopPropagation()
-                setHoveredRemoveId(null)
-              }}
-              onClick={async (e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                try {
-                  await removeFromWatchlist(Number(coin.id))
-                  toast({
-                    title: "Removed",
-                    description: `${coin.name} removed from watchlist`,
-                  })
-                } catch {
-                  toast({
-                    title: "Error", 
-                    description: "Failed to remove from watchlist",
-                    variant: "destructive",
-                  })
-                }
-              }}
+              style={{ backgroundColor: addOpacityToColor(coin.color, 0.05) }}
+              onMouseEnter={() => setHoveredCoin(coin.id)}
+              onMouseLeave={() => setHoveredCoin(null)}
             >
-              <IconXmarkCircleFill 
+              <div 
                 className={cn(
-                  "size-4 transition-colors duration-200",
-                  hoveredRemoveId === coin.id 
-                    ? "fill-red-400" 
-                    : "fill-muted-foreground hover:fill-red-400"
+                  "w-1 h-9 rounded-full transition-transform duration-200",
                 )}
+                style={{ backgroundColor: coin.color }}
               />
+              <div className="flex flex-row items-center gap-2 flex-1 ml-2">
+                <span className="text-xs font-medium">{coin.symbol.toUpperCase()}</span>
+                <span className="text-xs font-mono text-muted-foreground">{coin.name}</span>
+                <span 
+                  className={cn(
+                    "text-xs font-mono",
+                    coin.latestValue >= 0 ? "text-green-600" : "text-red-600"
+                  )}
+                >
+                  {coin.latestValue > 0 ? '+' : ''}{coin.latestValue.toFixed(2)}%
+                </span>
+              </div>
+              
+              {/* Remove Icon - appears on hover */}
+              <div 
+                className={cn(
+                  "absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded-full hover:bg-red-500/20",
+                  hoveredRemoveId === coin.id ? "bg-red-500/30" : ""
+                )}
+                onMouseEnter={(e) => {
+                  e.stopPropagation()
+                  setHoveredRemoveId(coin.id)
+                }}
+                onMouseLeave={(e) => {
+                  e.stopPropagation()
+                  setHoveredRemoveId(null)
+                }}
+                onClick={async (e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  try {
+                    await removeFromWatchlist(Number(coin.id))
+                    toast({
+                      title: "Removed",
+                      description: `${coin.name} removed from watchlist`,
+                    })
+                  } catch {
+                    toast({
+                      title: "Error", 
+                      description: "Failed to remove from watchlist",
+                      variant: "destructive",
+                    })
+                  }
+                }}
+              >
+                <IconXmarkCircleFill 
+                  className={cn(
+                    "size-4 transition-colors duration-200",
+                    hoveredRemoveId === coin.id 
+                      ? "fill-red-400" 
+                      : "fill-muted-foreground hover:fill-red-400"
+                  )}
+                />
+              </div>
             </div>
-          </div>
+          </Link>
         ))}
+        </div>
       </div>
       <div className="col-span-9 border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
         {/* Chart Content */}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBottomNav } from "./bottom-nav-context";
 import { useKeyboardShortcuts, useCommandHandler, useSequentialShortcuts } from "./bottom-nav-hooks";
@@ -9,8 +9,13 @@ import { CommandSearch } from "./command-search";
 import { BackButton } from "./back-button";
 
 export function BottomNav() {
-  const [isCommandOpen, setIsCommandOpen] = useState(false);
-  const { mode, selectionState, setNavigationMode } = useBottomNav();
+  const { 
+    mode, 
+    selectionState, 
+    setNavigationMode, 
+    isCommandOpen, 
+    setIsCommandOpen 
+  } = useBottomNav(); // Use context state instead of local state
   
   // Initialize sequential shortcuts (still needed for functionality)
   useSequentialShortcuts();

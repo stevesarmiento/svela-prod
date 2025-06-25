@@ -4,19 +4,13 @@ import { Suspense, useCallback, useEffect, useState } from 'react'
 import { MultiPriceChartLightweight } from "./multi-line-lightweight"
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import type { 
-  // Coin, 
   CoinMarketData 
 } from '@/types/coins'
 import { toast } from "@v1/ui/use-toast"
-// import { Button } from "@v1/ui/button"
-// import { IconArrowtriangleUpCircle } from "symbols-react"
-// import { CoinTreemap } from './coin-treemap'
 
 function ChartsContent() {
   const { watchlist, isInitialized } = useWatchlist()
   const [coins, setCoins] = useState<CoinMarketData[] | null>(null)
-  //const [topCoins, setTopCoins] = useState<Coin[]>([])
-  //const [isRefreshing, setIsRefreshing] = useState(false)
 
   const fetchCoinData = useCallback(async () => {
     if (!isInitialized) return
@@ -27,26 +21,6 @@ function ChartsContent() {
     }
   
     try {
-      //setIsRefreshing(true)
-  
-      // Fetch top coins for market overview
-      const topResponse = await fetch('/api/coinmarketcap/top', {
-        cache: 'no-store',
-        headers: {
-          'Accept': 'application/json'
-        }
-      })
-      
-      if (!topResponse.ok) {
-        const text = await topResponse.text()
-        console.error('Top response error:', text)
-        throw new Error(`Failed to fetch top coins: ${topResponse.status}`)
-      }
-            
-      //const topData = await topResponse.json()
-      //setTopCoins(topData.coins)
-      
-      // Fetch quotes and historical data for watchlist coins
       const [quotesResponse, historicalResponse] = await Promise.all([
         fetch(`/api/coinmarketcap/quotes?ids=${watchlist.join(',')}`, {
           cache: 'no-store'
@@ -70,9 +44,12 @@ function ChartsContent() {
         
         // Set historical data
         coinsArray.forEach(coin => {
-          coin.historical = historicalData.data[coin.id]
+          // Try the normal structure first
+          const historical = historicalData.data[coin.id] || historicalData.data[coin.id.toString()]
+          
+          coin.historical = historical
         })
-  
+
         setCoins(coinsArray)
       }
     } catch (error) {
@@ -82,8 +59,6 @@ function ChartsContent() {
         description: "Failed to fetch coin data",
         variant: "destructive",
       })
-    } finally {
-      //setIsRefreshing(false)
     }
   }, [isInitialized, watchlist])
 
@@ -95,22 +70,8 @@ function ChartsContent() {
   
   return (
     <div className="space-y-6 w-full z-0 p-8">
-      {/* <div className="flex justify-end items-center">
-        <Button 
-          onClick={fetchCoinData} 
-          disabled={isRefreshing}
-          variant="ghost"
-          size="icon"
-          className="group"
-        >
-          <IconArrowtriangleUpCircle className={`h-5 w-5 fill-muted-foreground group-hover:fill-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
-        </Button>
-      </div> */}
-      
       <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
         <MultiPriceChartLightweight coins={coins} />
-        {/* <MultiPriceChart coins={coins} /> */}
-        {/* <CoinTreemap coins={topCoins} /> */}
       </div>
     </div>
   )

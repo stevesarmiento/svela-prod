@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode, Dispatch, SetStateAction } from 'react'
 
 export type BottomNavMode = 'navigation' | 'selection'
 
@@ -17,6 +17,9 @@ interface BottomNavContextType {
   selectionState: SelectionState | null
   setNavigationMode: () => void
   setSelectionMode: (state: SelectionState) => void
+  isCommandOpen: boolean
+  setIsCommandOpen: Dispatch<SetStateAction<boolean>>
+  openCommandSearch: () => void
 }
 
 const BottomNavContext = createContext<BottomNavContextType | undefined>(undefined)
@@ -24,6 +27,7 @@ const BottomNavContext = createContext<BottomNavContextType | undefined>(undefin
 export function BottomNavProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<BottomNavMode>('navigation')
   const [selectionState, setSelectionState] = useState<SelectionState | null>(null)
+  const [isCommandOpen, setIsCommandOpen] = useState(false)
 
   const setNavigationMode = useCallback(() => {
     setMode('navigation')
@@ -35,12 +39,19 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
     setSelectionState(state)
   }, [])
 
+  const openCommandSearch = useCallback(() => {
+    setIsCommandOpen(true)
+  }, [])
+
   const contextValue = useMemo(() => ({
     mode,
     selectionState,
     setNavigationMode,
     setSelectionMode,
-  }), [mode, selectionState, setNavigationMode, setSelectionMode])
+    isCommandOpen,
+    setIsCommandOpen,
+    openCommandSearch,
+  }), [mode, selectionState, setNavigationMode, setSelectionMode, isCommandOpen, setIsCommandOpen, openCommandSearch])
 
   return (
     <BottomNavContext.Provider value={contextValue}>

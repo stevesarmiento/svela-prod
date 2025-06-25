@@ -12,6 +12,22 @@ const IntervalMap = {
   'max': { interval: '24h', days: 365, count: 365 }  // 1 year of daily data
 } as const
 
+interface CoinHistoricalData {
+  name: string;
+  symbol: string;
+  quotes: Array<{
+    timestamp: string;
+    quote: {
+      USD: {
+        price: number;
+        volume_24h?: number;
+        market_cap?: number;
+        timestamp: string;
+      }
+    }
+  }>;
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -50,35 +66,47 @@ export async function GET(request: Request) {
 
     const response = await fetchWithErrorHandling(url.toString());
 
-    // Transform the response to match the expected format
-    const transformedData = Object.entries(response.data as Record<string, { 
-        name: string;
-        symbol: string;
-        quotes: Array<{
-            timestamp: string;
-            quote: {
-                USD: {
-                    price: number;
-                    volume_24h?: number;
-                    market_cap?: number;
-                    timestamp: string;
-                }
-            }
-        }>
-    }>).reduce<Record<string, { data: HistoricalData['data'] }>>(
-        (acc, [id, data]) => {
+    console.log('CoinMarketCap Raw Response:', JSON.stringify(response, null, 2));
+
+    // Handle different response structures for single vs multiple coins
+    let transformedData: Record<string, { data: HistoricalData['data'] }> = {};
+
+    if (response.data) {
+      // Check if it's a single coin response (different structure)
+      if (response.data.quotes && Array.isArray(response.data.quotes)) {
+        // Single coin response - the data is directly in response.data
+        const coinId = ids; // Use the requested ID
+        transformedData[coinId] = {
+          data: {
+            id: Number(coinId),
+            name: response.data.name || '',
+            symbol: response.data.symbol || '',
+            is_active: 1,
+            is_fiat: 0,
+            quotes: response.data.quotes
+          }
+        };
+      } else {
+        // Multiple coins response - use existing logic
+        transformedData = Object.entries(response.data as Record<string, CoinHistoricalData>).reduce(
+          (acc, [id, data]) => {
             acc[id] = {
-                data: {
-                    id: Number(id),
-                    name: data.name,
-                    symbol: data.symbol,
-                    is_active: 1,
-                    is_fiat: 0,
-                    quotes: data.quotes
-                }
+              data: {
+                id: Number(id),
+                name: data.name,
+                symbol: data.symbol,
+                is_active: 1,
+                is_fiat: 0,
+                quotes: data.quotes || []
+              }
             };
             return acc;
-        }, {});
+          }, {} as Record<string, { data: HistoricalData['data'] }>
+        );
+      }
+    }
+
+    console.log('Final transformed data:', transformedData);
 
     return NextResponse.json({
       data: transformedData,

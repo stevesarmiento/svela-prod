@@ -130,7 +130,7 @@ const createColumns = (
                   src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
                   alt={row.original.name}
                   className={cn(
-                    "w-6 h-6 rounded-full",
+                    "w-5 h-5 rounded-full",
                     row.original.isOptimistic && "opacity-50"
                   )}
                   width={24}
@@ -172,7 +172,7 @@ const createColumns = (
                   src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
                   alt={row.original.name}
                   className={cn(
-                    "w-6 h-6 rounded-full",
+                    "w-5 h-5 rounded-full",
                     row.original.isOptimistic && "opacity-50"
                   )}
                   width={24}
