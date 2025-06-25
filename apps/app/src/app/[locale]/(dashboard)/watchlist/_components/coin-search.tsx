@@ -145,6 +145,9 @@ export function CoinSearch() {
     }
   }
 
+  // Add this after coinsToDisplay
+  console.log('Coin Search - Query:', debouncedSearchQuery, 'Results:', searchResults?.length, 'Display:', coinsToDisplay.length);
+
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>

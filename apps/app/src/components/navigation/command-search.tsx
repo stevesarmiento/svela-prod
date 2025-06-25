@@ -1,7 +1,7 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { Button } from "@v1/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
-import { IconMagnifyingglass, IconCircleSlash, IconCommand } from "symbols-react";
+import { IconMagnifyingglass, IconCircleSlash, IconCommand, IconBookmarkFill } from "symbols-react";
 import {
   CommandPopover,
   CommandEmpty,
@@ -11,6 +11,13 @@ import {
   CommandList,
 } from "@v1/ui/command-popover";
 import { COMMAND_ITEMS } from './bottom-nav-constants';
+import { useCoinSearch, useTopCoins } from '@/hooks/use-coin-search';
+import { useWatchlist } from "../../app/[locale]/(dashboard)/watchlist/_components/watchlist-context";
+import { useUser } from '@/hooks/use-user';
+import { toast } from "@v1/ui/use-toast";
+import Image from 'next/image';
+import { Skeleton } from "@v1/ui/skeleton";
+import { useDebounce } from '@/hooks/use-debounce';
 
 interface CommandSearchProps {
   isOpen: boolean;
@@ -18,12 +25,116 @@ interface CommandSearchProps {
   onCommandSelect: (value: string, setIsOpen: (open: boolean) => void) => void;
 }
 
+interface CoinSearchResult {
+  id: number;
+  name: string;
+  symbol: string;
+  cmc_rank?: number;
+  quote: {
+    USD: {
+      price: number;
+      percent_change_24h: number;
+      market_cap: number;
+      volume_24h: number;
+    };
+  };
+}
+
 export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }: CommandSearchProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isAddingCoin, setIsAddingCoin] = useState(false);
   
+  const { addToWatchlist } = useWatchlist();
+  const { user } = useUser();
+  
+  // Add debouncing back
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  // Use debounced version for API calls
+  const { 
+    data: searchResults, 
+    isLoading: isSearchLoading 
+  } = useCoinSearch(debouncedSearchQuery);
+  
+  const { 
+    data: topCoins, 
+    isLoading: isTopCoinsLoading 
+  } = useTopCoins();
+
+  // Update display logic to use debounced
+  const coinsToDisplay = useMemo(() => {
+    if (debouncedSearchQuery.trim()) {
+      return (searchResults || []).slice(0, 5);
+    }
+    return (topCoins || []).slice(0, 5);
+  }, [debouncedSearchQuery, searchResults, topCoins]);
+
+  // Add filtering for command items
+  const commandItemsToDisplay = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return COMMAND_ITEMS;
+    }
+    
+    // Filter command items based on search query
+    return COMMAND_ITEMS.map(group => ({
+      ...group,
+      items: group.items.filter(item => 
+        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.subtitle?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    })).filter(group => group.items.length > 0);
+  }, [searchQuery]);
+
+  // Determine if we should show coin results
+  const coinResultsLoading = searchQuery.trim() ? isSearchLoading : isTopCoinsLoading;
+  
+  const handleAddCoin = React.useCallback(async (coin: CoinSearchResult) => {
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "Please sign in to add coins to your watchlist",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsAddingCoin(true);
+      await addToWatchlist(Number(coin.id));
+      
+      toast({
+        title: "Success",
+        description: `Added ${coin.name} to your watchlist`,
+      });
+      
+      setSearchQuery('');
+      setIsOpen(false);
+    } catch (error) {
+      console.error('Error adding coin:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to add coin",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAddingCoin(false);
+    }
+  }, [user, addToWatchlist, setIsOpen]);
+
   const handleCommandSelect = React.useCallback((value: string) => {
+    // Check if this is a coin selection (starts with "coin:")
+    if (value.startsWith('coin:')) {
+      const coinId = parseInt(value.replace('coin:', ''));
+      const coin = coinsToDisplay.find(c => c.id === coinId);
+      if (coin) {
+        handleAddCoin(coin);
+      }
+      return;
+    }
+    
     onCommandSelect(value, setIsOpen);
-  }, [onCommandSelect, setIsOpen]);
+  }, [onCommandSelect, setIsOpen, coinsToDisplay, handleAddCoin]);
 
   // Focus the input when the command opens
   useEffect(() => {
@@ -33,6 +144,16 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
       }, 100);
     }
   }, [isOpen]);
+
+  // Reset search when closing
+  useEffect(() => {
+    if (!isOpen) {
+      setSearchQuery('');
+    }
+  }, [isOpen]);
+
+  // Add this after coinsToDisplay
+  console.log('Command Search - Query:', debouncedSearchQuery, 'Results:', searchResults?.length, 'Display:', coinsToDisplay.length);
 
   return (
     <div className="relative rounded-[20px] bg-zinc-900 overflow-hidden px-2 py-0 hover:bg-zinc-800/80 transition-all duration-200 cursor-pointer
@@ -54,6 +175,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
         <CommandPopover
           open={isOpen}
           onOpenChange={setIsOpen}
+          shouldFilter={false}
           trigger={
             <div className="flex items-center">
               <Button 
@@ -82,15 +204,17 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
               >
                 <CommandInput 
                   ref={inputRef}
-                  placeholder="Navigate to..." 
+                  placeholder="Navigate or search tokens..." 
                   className="bg-transparent border-none rounded-2xl h-[53px] pl-2 text-white placeholder:text-white/50" 
                   autoFocus={isOpen}
+                  value={searchQuery}
+                  onValueChange={setSearchQuery}
                 />
               </div>
             </div>
           }
         >
-          <CommandList className="z-[100] bg-transparent max-h-[300px]">
+          <CommandList className="z-[100] bg-transparent max-h-[400px]">
             <CommandEmpty>
               <div className="flex flex-col items-center justify-center py-6 gap-2">
                 <IconCircleSlash className="h-8 w-8 fill-muted-foreground rotate-90" />
@@ -99,7 +223,69 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
               </div>
             </CommandEmpty>
             
-            {COMMAND_ITEMS.map((group) => (
+            {/* Coin Results - Only show if there are coins to display */}
+            {coinsToDisplay.length > 0 && (
+              <CommandGroup heading={searchQuery.trim() ? "Tokens" : "Add to Watchlist"}>
+                {coinResultsLoading ? (
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <CommandItem key={`skeleton-${index}`} disabled>
+                      <div className="flex items-center gap-3 w-full p-2">
+                        <Skeleton className="h-6 w-6 rounded-full" />
+                        <div className="flex-1">
+                          <Skeleton className="h-4 w-20 mb-1" />
+                          <Skeleton className="h-3 w-12" />
+                        </div>
+                        <Skeleton className="h-4 w-16" />
+                      </div>
+                    </CommandItem>
+                  ))
+                ) : (
+                  coinsToDisplay.map((coin) => (
+                    <CommandItem
+                      key={coin.id}
+                      value={`coin:${coin.id}`}
+                      onSelect={handleCommandSelect}
+                      className="cursor-pointer bg-transparent focus:bg-accent focus:text-accent-foreground"
+                      disabled={isAddingCoin}
+                    >
+                      <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
+                        <div className="flex items-center gap-3 pr-5">
+                          <div className="relative">
+                            <Image
+                              src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`}
+                              alt={coin.name}
+                              className="w-6 h-6 rounded-full"
+                              width={24}
+                              height={24}
+                            />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-foreground">{coin.name}</span>
+                            <span className="text-xs text-muted-foreground">{coin.symbol.toUpperCase()}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            <div className="text-sm font-mono">
+                              ${coin.quote.USD.price.toLocaleString()}
+                            </div>
+                            <div className={`text-xs font-mono ${
+                              coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'
+                            }`}>
+                              {coin.quote.USD.percent_change_24h.toFixed(2)}%
+                            </div>
+                          </div>
+                          <IconBookmarkFill className="h-4 w-4 fill-muted-foreground" />
+                        </div>
+                      </div>
+                    </CommandItem>
+                  ))
+                )}
+              </CommandGroup>
+            )}
+            
+            {/* Command Items */}
+            {commandItemsToDisplay.map((group) => (
               <CommandGroup key={group.group} heading={group.group}>
                 {group.items.map((item) => (
                   <CommandItem

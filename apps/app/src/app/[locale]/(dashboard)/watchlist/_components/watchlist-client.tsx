@@ -1,7 +1,6 @@
 'use client'
 
 import { Suspense } from 'react'
-import { WatchlistProvider } from "./watchlist-context"
 import { Watchlist } from "./watchlist"
 
 function WatchlistContent() {
@@ -15,9 +14,7 @@ function WatchlistContent() {
 export function WatchlistClient() {
   return (
     <Suspense fallback={<div>Loading watchlist...</div>}>
-      <WatchlistProvider>
         <WatchlistContent />
-      </WatchlistProvider>
     </Suspense>
   )
 }

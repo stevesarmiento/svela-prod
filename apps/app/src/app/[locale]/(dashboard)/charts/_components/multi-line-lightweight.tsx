@@ -502,8 +502,8 @@ export function MultiPriceChartLightweight({ coins }: MultiPriceChartLightweight
               style={{ backgroundColor: coin.color }}
             />
             <div className="flex flex-row items-center gap-2 flex-1 ml-2">
-              <span className="text-sm font-medium">{coin.symbol.toUpperCase()}</span>
-              <span className="text-sm font-mono text-muted-foreground">{coin.name}</span>
+              <span className="text-xs font-medium">{coin.symbol.toUpperCase()}</span>
+              <span className="text-xs font-mono text-muted-foreground">{coin.name}</span>
               <span 
                 className={cn(
                   "text-xs font-mono",

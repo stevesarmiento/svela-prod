@@ -7,6 +7,7 @@ import { QueryProvider } from "@/components/providers/query-provider";
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
+import { WatchlistProvider } from "./(dashboard)/watchlist/_components/watchlist-context";
 //import localFont from "next/font/local";
 
 // const geistSans = localFont({
@@ -62,6 +63,7 @@ export default function RootLayout({
         >
           <ConvexProvider>
             <QueryProvider>
+              <WatchlistProvider>
               <ThemeProvider
                 attribute="class"
                 defaultTheme="system"
@@ -70,6 +72,8 @@ export default function RootLayout({
               >
                 {children}
               </ThemeProvider>
+              </WatchlistProvider>
+
             </QueryProvider>
           </ConvexProvider>
         </ClerkProvider>

@@ -27,9 +27,16 @@ interface CommandPopoverProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   trigger: React.ReactNode
+  shouldFilter?: boolean
 }
 
-const CommandPopover = ({ children, open, onOpenChange, trigger }: CommandPopoverProps) => {
+const CommandPopover = ({ 
+  children, 
+  open, 
+  onOpenChange, 
+  trigger, 
+  shouldFilter = true
+}: CommandPopoverProps) => {
   const contentRef = useRef<HTMLDivElement>(null)
 
   useClickOutside(contentRef as RefObject<HTMLElement>, (event) => {
@@ -41,7 +48,7 @@ const CommandPopover = ({ children, open, onOpenChange, trigger }: CommandPopove
   })
 
   return (
-    <Command className="relative">
+    <Command className="relative" shouldFilter={shouldFilter}>
       <Popover open={open} onOpenChange={onOpenChange}>
         <PopoverTrigger asChild>
           {trigger}
@@ -149,7 +156,7 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none aria-selected:bg-zinc-800/30 rounded-2xl aria-selected:text-white",
+      "relative flex cursor-pointer select-none items-center px-2 py-1.5 text-sm outline-none aria-selected:bg-zinc-800/30 rounded-2xl aria-selected:text-white",
       className,
     )}
     {...props}

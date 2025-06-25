@@ -1,7 +1,6 @@
 'use client'
 
 import { Suspense, useCallback, useEffect, useState } from 'react'
-import { WatchlistProvider } from "../../watchlist/_components/watchlist-context"
 import { MultiPriceChartLightweight } from "./multi-line-lightweight"
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import type { 
@@ -120,9 +119,7 @@ function ChartsContent() {
 export function ChartsClient() {
   return (
     <Suspense fallback={<div>Loading charts...</div>}>
-      <WatchlistProvider>
         <ChartsContent />
-      </WatchlistProvider>
     </Suspense>
   )
 }
