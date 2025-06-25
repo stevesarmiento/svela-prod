@@ -110,7 +110,9 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
                   >
                     <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
                       <div className="flex items-center gap-3 pr-5">
-                        <item.icon className="size-5 fill-current" />
+                        <div className="flex items-center justify-center p-2 bg-zinc-800/50 rounded-lg">
+                          <item.icon className="size-4 fill-white/30" />
+                        </div>
                         <div className="flex flex-col">
                           <span className="font-medium text-foreground">{item.title}</span>
                           <span className="text-xs text-muted-foreground">{item.subtitle}</span>

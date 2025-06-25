@@ -7,11 +7,10 @@ import { Badge } from "@v1/ui/badge";
 import { Label } from "@v1/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@v1/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@v1/ui/popover";
-import { ListFilter, X, TrendingUp, DollarSign, BarChart3 } from "lucide-react";
+import { ListFilter, X } from "lucide-react";
 import { Separator } from "@v1/ui/separator";
 import { Kbd } from "@v1/ui/kbd";
-import { Slider } from "@v1/ui/slider";
-import { IconCommand } from "symbols-react";
+import { IconCommand, IconReturn } from "symbols-react";
 import { useBottomNav } from "@/components/navigation/bottom-nav-context"
 
 interface FilterChip {
@@ -253,7 +252,7 @@ export function WatchlistFilters({
                 </div>
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="rounded-lg bg-popover p-0" align="start" side="right">
+            <PopoverContent className="rounded-xl bg-zinc-900 p-0" align="start" side="right">
               {/* Search Input - Top Level */}
               <div className="">
                 <div className="relative">
@@ -266,7 +265,7 @@ export function WatchlistFilters({
                     className="h-8 border-none"
                   />
                   <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
-                    <Kbd className="text-xs">↵</Kbd>
+                    <Kbd className="text-xs"><IconReturn className="h-2.5 w-2.5 fill-white/50" /></Kbd>
                   </div>
                 </div>
               </div>
@@ -275,14 +274,14 @@ export function WatchlistFilters({
 
               {/* Filter Options */}
               <div className="p-2.5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium text-sm">Filters</h4>
+                <div className="flex items-center gap-1">
+                  <ListFilter className="h-2.5 w-2.5 text-primary/30" />
+                  <h4 className="font-medium text-xs text-primary/50 uppercase">Filters</h4>
                 </div>
 
                 {/* 24h Change Filter */}
                 <div className="space-y-2">
                   <Label className="text-[11px] text-primary/80 uppercase flex items-center gap-1">
-                    <TrendingUp className="h-2.5 w-2.5" />
                     24h Change
                   </Label>
                   <Select value={changeFilter} onValueChange={onChangeFilterChange}>
@@ -295,50 +294,6 @@ export function WatchlistFilters({
                       <SelectItem value="negative">Negative only</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-
-                {/* Price Range Filter */}
-                <div className="space-y-2">
-                  <Label className="text-[11px] text-primary/80 uppercase flex items-center gap-1">
-                    <DollarSign className="h-2.5 w-2.5" />
-                    Price Range ($)
-                  </Label>
-                  <div className="px-2">
-                    <Slider
-                      value={priceRange}
-                      onValueChange={(value) => onPriceRangeChange(value as [number, number])}
-                      max={1000000}
-                      min={0}
-                      step={1000}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                      <span>${priceRange[0].toLocaleString()}</span>
-                      <span>${priceRange[1].toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Market Cap Range Filter */}
-                <div className="space-y-2">
-                  <Label className="text-[11px] text-primary/80 uppercase flex items-center gap-1">
-                    <BarChart3 className="h-2.5 w-2.5" />
-                    Market Cap Range (B)
-                  </Label>
-                  <div className="px-2">
-                    <Slider
-                      value={[marketCapRange[0] / 1000000000, marketCapRange[1] / 1000000000]}
-                      onValueChange={(value) => onMarketCapRangeChange([(value[0] ?? 0) * 1000000000, (value[1] ?? 1000) * 1000000000] as [number, number])}
-                      max={1000}
-                      min={0}
-                      step={1}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                      <span>${(marketCapRange[0] / 1000000000).toFixed(0)}B</span>
-                      <span>${(marketCapRange[1] / 1000000000).toFixed(0)}B</span>
-                    </div>
-                  </div>
                 </div>
 
                 {/* Sort Options */}

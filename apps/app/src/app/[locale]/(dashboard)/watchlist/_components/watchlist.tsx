@@ -2,7 +2,7 @@
 
 import { formatLargeNumber } from "@v1/ui/format-numbers";
 import { Button } from "@v1/ui/button"
-import { X, Coins, TrendingUp, DollarSign, BarChart3, Percent } from "lucide-react"
+import { X, Coins, TrendingUp, DollarSign, BarChart3 } from "lucide-react"
 import { useWatchlist } from "./watchlist-context"
 import { useWatchlistCoins } from "@/hooks/use-watchlist-coins"
 import Link from "next/link"
@@ -22,7 +22,7 @@ import {
   type SortingState,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { useState, useMemo, useCallback, memo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Spinner } from "@v1/ui/spinner"
 import { motion, AnimatePresence } from "framer-motion"
 
@@ -52,78 +52,6 @@ interface FilterState {
   sortBy: "name" | "price" | "change" | "marketCap" | "volume";
   sortOrder: "asc" | "desc";
 }
-
-// Memoize skeleton components
-const WatchlistSkeleton = memo(({ rowCount = 1 }: { rowCount?: number }) => (
-  <div className="space-y-4">
-    {/* Empty filter state for skeleton */}
-    
-    <div className="flex items-center justify-between gap-2">
-      <WatchlistFilters
-        searchText=""
-        priceRange={[0, 1000000]}
-        marketCapRange={[0, 10000000000000]}
-        volumeRange={[0, 1000000000]}
-        changeFilter="all"
-        sortBy="name"
-        sortOrder="asc"
-        selectedCoins={new Set()}
-        totalCoins={0}
-        onSearchTextChange={() => {}}
-        onPriceRangeChange={() => {}}
-        onMarketCapRangeChange={() => {}}
-        onVolumeRangeChange={() => {}}
-        onChangeFilterChange={() => {}}
-        onSortByChange={() => {}}
-        onSortOrderChange={() => {}}
-        onClearAllFilters={() => {}}
-        onSelectAll={() => {}}
-        onRemoveSelected={() => {}}
-      />
-      <CoinSearch />
-    </div>
-    
-    <div className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
-      <div className="px-3 py-2">
-        <div className="grid grid-cols-8 gap-4 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-          <div className="text-left flex items-center gap-1"><Checkbox disabled /><Coins className="w-3 h-3" />Token</div>
-          <div className="text-left flex items-center gap-1"><DollarSign className="w-3 h-3" />Price</div>
-          <div className="text-left flex items-center gap-1"><TrendingUp className="w-3 h-3" />24h Change</div>
-          <div className="text-left flex items-center gap-1"><BarChart3 className="w-3 h-3" />Volume 24h</div>
-          <div className="text-left flex items-center gap-1"><BarChart3 className="w-3 h-3" />Market Cap</div>
-          <div className="text-left flex items-center gap-1"><Percent className="w-3 h-3" />Funding Rate</div>
-          <div className="text-right flex items-center justify-end gap-1"><X className="w-3 h-3" />Remove</div>
-        </div>
-      </div>
-      <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden">
-        {Array.from({ length: rowCount }).map((_, index) => (
-          <WatchlistRowSkeleton key={index} isLast={index === rowCount - 1} />
-        ))}
-      </div>
-    </div>
-  </div>
-));
-
-WatchlistSkeleton.displayName = 'WatchlistSkeleton';
-
-const WatchlistRowSkeleton = memo(({ isLast }: { isLast: boolean }) => (
-  <div className={`grid grid-cols-5 gap-4 px-4 py-3 ${!isLast ? 'border-b' : ''}`}>
-    <div className="flex items-center gap-2">
-      <Skeleton className="h-4 w-4" />
-      <Skeleton className="h-6 w-6 rounded-full" />
-      <div className="space-y-1">
-        <Skeleton className="h-4 w-20" />
-        <Skeleton className="h-3 w-12" />
-      </div>
-    </div>
-    <div className="flex items-center"><Skeleton className="h-4 w-16" /></div>
-    <div className="flex items-center"><Skeleton className="h-4 w-12" /></div>
-    <div className="flex items-center"><Skeleton className="h-4 w-16" /></div>
-    <div className="flex items-center justify-end"><Skeleton className="h-8 w-8 rounded" /></div>
-  </div>
-));
-
-WatchlistRowSkeleton.displayName = 'WatchlistRowSkeleton';
 
 // Update the columns definition
 const createColumns = (
@@ -214,17 +142,15 @@ const createColumns = (
                   </div>
                 )}
               </div>
-              <div>
-                <div className={cn(
-                  "font-semibold text-sm",
-                  row.original.isOptimistic && "text-muted-foreground"
-                )}>
-                  {row.original.name}
-                </div>
-                <div className="text-xs text-muted-foreground font-mono">
+              <div className="text-white font-bold text-sm">
                   {row.original.symbol.toUpperCase()}
                 </div>
-              </div>
+                <div className={cn(
+                  "",
+                  row.original.isOptimistic && "text-muted-foreground font-mono text-sm"
+                )}>
+                  <span className="text-muted-foreground font-mono text-sm">{row.original.name}</span>
+                </div>
             </div>
           ) : (
             // Animated content when no selections exist
@@ -258,15 +184,15 @@ const createColumns = (
                   </div>
                 )}
               </div>
-              <div>
-                <div className={cn(
-                  "font-semibold text-sm",
-                  row.original.isOptimistic && "text-muted-foreground"
-                )}>
-                  {row.original.name}
-                </div>
-                <div className="text-xs text-muted-foreground font-mono">
+              <div className="flex flex-row items-center gap-2">
+                <div className="text-white font-bold text-sm">
                   {row.original.symbol.toUpperCase()}
+                </div>
+                <div className={cn(
+                  "",
+                  row.original.isOptimistic && "text-muted-foreground font-mono text-sm"
+                )}>
+                  <span className="text-muted-foreground font-mono text-sm">{row.original.name}</span>
                 </div>
               </div>
             </motion.div>
@@ -301,11 +227,11 @@ const createColumns = (
     cell: ({ row }) => (
       <span className="font-mono text-sm">
         {row.original.isOptimistic ? (
-          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-16 rounded-full" />
         ) : row.original.quote.USD.price > 0 ? (
           `$${row.original.quote.USD.price.toLocaleString()}`
         ) : (
-          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-16 rounded-full" />
         )}
       </span>
     ),
@@ -322,7 +248,7 @@ const createColumns = (
     ),
     cell: ({ row }) => (
       row.original.isOptimistic ? (
-        <Skeleton className="h-4 w-12" />
+        <Skeleton className="h-4 w-12 rounded-full" />
       ) : row.original.quote.USD.price > 0 ? (
         <span className={cn(
           "font-mono text-sm",
@@ -331,7 +257,7 @@ const createColumns = (
           {row.original.quote.USD.percent_change_24h.toFixed(2)}%
         </span>
       ) : (
-        <Skeleton className="h-4 w-12" />
+        <Skeleton className="h-4 w-12 rounded-full" />
       )
     ),
     enableSorting: true,
@@ -348,7 +274,7 @@ const createColumns = (
     cell: ({ row }) => (
       <span className="font-mono text-sm">
         {row.original.quote.USD.price === 0 ? (
-          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-16 rounded-full" />
         ) : (
           `$${formatLargeNumber(row.original.quote.USD.volume_24h || 0)}`
         )}
@@ -389,7 +315,7 @@ const createColumns = (
 ];
 
 export function Watchlist() {
-  const { watchlist, removeFromWatchlist, removeBulkFromWatchlist, isLoading: isWatchlistLoading, isInitialized } = useWatchlist()
+  const { watchlist, removeFromWatchlist, removeBulkFromWatchlist, isInitialized } = useWatchlist()
   const [sorting, setSorting] = useState<SortingState>([])
   const [selectedCoins, setSelectedCoins] = useState<Set<string>>(new Set())
   const [removingCoins, setRemovingCoins] = useState<Set<number>>(new Set())
@@ -410,7 +336,7 @@ export function Watchlist() {
   
   const { 
     data: coins, 
-    isLoading: isCoinsLoading, 
+    //isLoading: isCoinsLoading, 
     error,
   } = useWatchlistCoins(stableWatchlist);
 
@@ -604,8 +530,12 @@ export function Watchlist() {
   }
 
   // Show loading skeleton while initializing or loading data
-  if (!isInitialized || isWatchlistLoading || isCoinsLoading) {
-    return <WatchlistSkeleton rowCount={3} />
+  if (!isInitialized) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Spinner size={24} />
+      </div>
+    )
   }
 
   // No coins in watchlist at all
@@ -755,7 +685,7 @@ export function Watchlist() {
                 key={row.id}
                 href={`/charts/${row.original.id}`}
                 className={cn(
-                  "grid grid-cols-5 gap-4 px-4 py-3 border-b last:border-b-0 hover:bg-primary/[0.02] transition-opacity duration-200 cursor-pointer",
+                  "grid grid-cols-5 gap-4 px-4 py-2.5 border-b last:border-b-0 hover:bg-primary/[0.02] transition-opacity duration-200 cursor-pointer",
                   hasAnySelections ? (isSelected ? "opacity-100" : "opacity-40") : "opacity-100"
                 )}
               >
