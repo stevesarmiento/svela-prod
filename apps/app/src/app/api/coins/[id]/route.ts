@@ -51,11 +51,13 @@ async function fetchWithErrorHandling(url: string) {
 async function fetchHistoricalData(id: string, timeScale: string = '7d') {
   const now = new Date();
   
-  // Define time ranges based on scale
+  // Define time ranges based on scale - fetch maximum data
   const timeRanges = {
-    '1d': 30 * 24 * 60 * 60 * 1000,      // 30 days for daily view
-    '7d': 90 * 24 * 60 * 60 * 1000,      // 90 days for weekly view  
+    '1d': 7 * 24 * 60 * 60 * 1000,       // 7 days for hourly view
+    '30d': 30 * 24 * 60 * 60 * 1000,     // 30 days for daily view
+    '7d': 90 * 24 * 60 * 60 * 1000,      // 90 days for daily view  
     'max': 365 * 24 * 60 * 60 * 1000,    // 365 days for yearly view
+    '2y': 730 * 24 * 60 * 60 * 1000,     // 730 days for 2-year view
   };
   
   const timeRange = timeRanges[timeScale as keyof typeof timeRanges] || timeRanges['7d'];
@@ -76,15 +78,15 @@ async function fetchHistoricalData(id: string, timeScale: string = '7d') {
     id,
     time_start: timeStart,
     time_end: timeEnd,
-    interval: '24h',
-    count: '30',
+    interval: timeScale === '1d' ? '1h' : '24h',
+    count: timeScale === '1d' ? '168' : timeScale === '30d' ? '30' : timeScale === '7d' ? '90' : timeScale === '2y' ? '730' : '365',
     convert: 'USD',
     aux: 'price,volume,market_cap',
     skip_invalid: 'true'
   };
 
   Object.entries(params).forEach(([key, value]) => {
-    url.searchParams.set(key, value);
+    if (value) url.searchParams.set(key, value);
   });
 
   try {
@@ -150,6 +152,94 @@ async function fetchHistoricalData(id: string, timeScale: string = '7d') {
   }
 }
 
+async function fetchOHLCVData(id: string, timeScale: string = '7d') {
+  const now = new Date();
+  
+  // Define time ranges and intervals based on scale - fetch maximum data
+  const timeConfigs = {
+    '1d': { 
+      days: 7, 
+      timePeriod: 'hourly',
+      interval: '1h',
+      count: '168' // 7 days * 24 hours
+    },
+    '30d': { 
+      days: 90, 
+      timePeriod: 'daily',
+      interval: '1d',
+      count: '90' // 30 days
+    },
+    '7d': { 
+      days: 90, 
+      timePeriod: 'daily',
+      interval: '1d',
+      count: '90' // 90 days
+    },
+    'max': { 
+      days: 365, 
+      timePeriod: 'daily',
+      interval: '1d',
+      count: '365' // 1 year
+    },
+    '2y': { 
+      days: 730, 
+      timePeriod: 'daily',
+      interval: '1d',
+      count: '730' // 2 years
+    },
+  };
+  
+  const config = timeConfigs[timeScale as keyof typeof timeConfigs] || timeConfigs['7d'];
+  const timeStart = new Date(now.getTime() - (config.days * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+  const timeEnd = new Date().toISOString().split('T')[0];
+
+  const url = new URL(`${BASE_URLS.v2}/cryptocurrency/ohlcv/historical`);
+  const params = {
+    id,
+    time_start: timeStart,
+    time_end: timeEnd,
+    time_period: config.timePeriod,
+    interval: config.interval,
+    count: config.count,
+    convert: 'USD',
+    skip_invalid: 'true'
+  };
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value) url.searchParams.set(key, value);
+  });
+
+  try {
+    const response = await fetchWithErrorHandling(url.toString());
+
+    console.log('OHLCV Data Response:', {
+      url: url.toString(),
+      hasData: !!response.data,
+      dataStructure: JSON.stringify(response.data, null, 2)
+    });
+
+    return {
+      data: response.data,
+      status: response.status || {
+        error_code: 0,
+        error_message: ''
+      }
+    };
+  } catch (error) {
+    console.error('OHLCV data fetch error:', error);
+    return {
+      data: {
+        id: Number(id),
+        quotes: []
+      },
+      status: {
+        error_code: 500,
+        error_message: error instanceof Error ? error.message : 'Unknown error'
+      }
+    };
+  }
+}
+
 export async function GET(
   request: Request,
   { params }: { params: { id: Promise<string> } }
@@ -165,7 +255,7 @@ export async function GET(
     const id = await params.id;
     const validatedId = idSchema.parse(id);
 
-    const [info, quotes, historical] = await Promise.all([
+    const [info, quotes, historical, ohlcv] = await Promise.all([
       fetchWithErrorHandling(
         `${BASE_URLS.v1}/cryptocurrency/info?id=${validatedId}`
       ),
@@ -175,6 +265,10 @@ export async function GET(
       fetchHistoricalData(validatedId, timeScale).catch(error => {
         console.error('Historical data fetch failed:', error);
         return { quotes: [] };
+      }),
+      fetchOHLCVData(validatedId, timeScale).catch(error => {
+        console.error('OHLCV data fetch failed:', error);
+        return { data: { quotes: [] } };
       })
     ]);
 
@@ -202,7 +296,8 @@ export async function GET(
       cmc_rank: quotes.data[validatedId].cmc_rank,
       circulating_supply: quotes.data[validatedId].circulating_supply,
       max_supply: quotes.data[validatedId].max_supply || null,
-      historical
+      historical,
+      ohlcv
     };
 
     return NextResponse.json(coinData);

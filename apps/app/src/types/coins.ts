@@ -41,6 +41,7 @@ export interface CoinMarketData {
     }
   }
   historical?: HistoricalData;
+  ohlcv?: OHLCVData;
   fundingRate?: number | null
 }
 
@@ -123,4 +124,40 @@ export interface LiquidationResponse {
     error_code: number
     error_message: string
   }
+}
+
+// Add OHLCV types after the existing interfaces
+export interface OHLCVQuote {
+  time_open: string;
+  time_close: string;
+  time_high: string;
+  time_low: string;
+  quote: {
+    USD: {
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+      market_cap: number;
+      timestamp: string;
+    };
+  };
+}
+
+export interface OHLCVData {
+  data: {
+    id: number;
+    name: string;
+    symbol: string;
+    quotes: OHLCVQuote[];
+  };
+  status: {
+    timestamp: string;
+    error_code: number;
+    error_message: string;
+    elapsed: number;
+    credit_count: number;
+    notice: string;
+  };
 }

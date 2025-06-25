@@ -7,15 +7,17 @@ import {
   CrosshairMode,
   LineStyle,
   LineData,
+  HistogramData,
   Time,
   LastPriceAnimationMode,
   LineSeries,
+  HistogramSeries,
 } from 'lightweight-charts'
 import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
 import { Skeleton } from "@v1/ui/skeleton"
 import { createRoot } from "react-dom/client"
 import NumberFlow from '@number-flow/react'
-import type { CoinMarketData } from '@/types/coins'
+import type { CoinMarketData, OHLCVQuote } from '@/types/coins'
 import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
 
@@ -29,11 +31,19 @@ interface PriceDataPoint {
   value: number
 }
 
+interface VolumeDataPoint {
+  time: Time
+  value: number
+  color?: string
+}
+
 const TooltipContent = ({
   price,
+  volume,
   timestamp,
 }: {
   price: number
+  volume?: number
   timestamp: number
 }) => {
   return (
@@ -53,6 +63,17 @@ const TooltipContent = ({
             })}
           </span>
         </div>
+        {volume !== undefined && (
+          <div className="flex items-center gap-2 py-0.5">
+            <span className="text-xs text-muted-foreground">Volume:</span>
+            <span className="font-mono text-xs text-foreground">
+              ${volume.toLocaleString(undefined, {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+              })}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -66,9 +87,11 @@ const TimeScaleSelector = ({
   setActiveTimeScale: (scale: string) => void 
 }) => {
   const scales = [
-    { value: "1d", label: "1D" },
-    { value: "7d", label: "7D" },
+    { value: "1d", label: "1H" },
+    { value: "30d", label: "1D" },
+    { value: "7d", label: "1W" },
     { value: "max", label: "1Y" },
+    { value: "2y", label: "2Y" },
   ]
 
   return (
@@ -104,10 +127,24 @@ function filterValidPriceData(data: PriceDataPoint[]): PriceDataPoint[] {
   )
 }
 
+function filterValidVolumeData(data: VolumeDataPoint[]): VolumeDataPoint[] {
+  return (
+    data?.filter(
+      (item) =>
+        item &&
+        typeof item.time === "number" &&
+        typeof item.value === "number" &&
+        !isNaN(item.value) &&
+        isFinite(item.value) &&
+        item.value > 0,
+    ) || []
+  )
+}
+
 export function PriceChart({ coinId, initialData }: PriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const [activePrice, setActivePrice] = useState<number | null>(null)
-  const [activeTimeScale, setActiveTimeScale] = useState<string>("7d")
+  const [activeTimeScale, setActiveTimeScale] = useState<string>("max")
   const [tokenData, setTokenData] = useState<CoinMarketData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
@@ -130,39 +167,69 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
     fetchData()
   }, [coinId, activeTimeScale])
 
-  const chartData = useMemo((): PriceDataPoint[] => {
-    if (!tokenData?.historical?.data?.quotes?.length) {
-      // Fallback data using initialData
-      const fallbackData = Array.from({ length: 30 }, (_, i) => ({
-        time: ((Date.now() - (30 - i) * 24 * 60 * 60 * 1000) / 1000) as Time,
-        value: initialData.price * (0.95 + Math.random() * 0.1)
-      }));
+  const { chartData, volumeData } = useMemo(() => {
+    // Try to use OHLCV data first, then fall back to historical data
+    if (tokenData?.ohlcv?.data?.quotes?.length) {
+      const ohlcvQuotes = tokenData.ohlcv.data.quotes as OHLCVQuote[];
       
-      fallbackData.push({
-        time: (Date.now() / 1000) as Time,
-        value: initialData.price
-      });
-  
-      return filterValidPriceData(fallbackData);
+      const pricePoints = ohlcvQuotes.map(quote => ({
+        time: (new Date(quote.time_close).getTime() / 1000) as Time,
+        value: quote.quote.USD.close
+      }));
+
+      const volumePoints = ohlcvQuotes.map(quote => ({
+        time: (new Date(quote.time_close).getTime() / 1000) as Time,
+        value: quote.quote.USD.volume,
+        color: '#ffffff40'
+      }));
+
+      return {
+        chartData: filterValidPriceData(pricePoints),
+        volumeData: filterValidVolumeData(volumePoints)
+      };
     }
     
-    const historicalPoints = tokenData.historical.data.quotes.map(quote => ({
-      time: (new Date(quote.timestamp).getTime() / 1000) as Time,
-      value: quote.quote.USD.price
-    }));
-  
-    const currentTime = Date.now() / 1000;
-    const lastHistoricalTime = historicalPoints[historicalPoints.length - 1]?.time;
-    
-    if (!lastHistoricalTime || (currentTime as number) > (lastHistoricalTime as number)) {
-      historicalPoints.push({
-        time: currentTime as Time,
-        value: tokenData.quote.USD.price
-      });
+    // Fallback to historical data or generate sample data
+    if (tokenData?.historical?.data?.quotes?.length) {
+      const pricePoints = tokenData.historical.data.quotes.map(quote => ({
+        time: (new Date(quote.timestamp).getTime() / 1000) as Time,
+        value: quote.quote.USD.price
+      }));
+
+      const volumePoints = tokenData.historical.data.quotes.map(quote => ({
+        time: (new Date(quote.timestamp).getTime() / 1000) as Time,
+        value: quote.quote.USD.volume_24h || 0,
+        color: '#ffffff40'
+      }));
+
+      return {
+        chartData: filterValidPriceData(pricePoints),
+        volumeData: filterValidVolumeData(volumePoints)
+      };
     }
-  
-    return filterValidPriceData(historicalPoints.sort((a, b) => (a.time as number) - (b.time as number)));
-  }, [tokenData, initialData.price]);
+
+    // Generate fallback data
+    const fallbackData = Array.from({ length: 30 }, (_, i) => {
+      const time = ((Date.now() - (30 - i) * 24 * 60 * 60 * 1000) / 1000) as Time;
+      const price = initialData.price * (0.95 + Math.random() * 0.1);
+      const volume = initialData.volume_24h * (0.5 + Math.random() * 1.5);
+      
+      return {
+        price: { time, value: price },
+        volume: { time, value: volume, color: '#ffffff40' }
+      };
+    });
+    
+    fallbackData.push({
+      price: { time: (Date.now() / 1000) as Time, value: initialData.price },
+      volume: { time: (Date.now() / 1000) as Time, value: initialData.volume_24h, color: '#ffffff40' }
+    });
+
+    return {
+      chartData: filterValidPriceData(fallbackData.map(d => d.price)),
+      volumeData: filterValidVolumeData(fallbackData.map(d => d.volume))
+    };
+  }, [tokenData, initialData]);
 
   const displayPrice = activePrice ?? (tokenData?.quote.USD.price || initialData.price)
   
@@ -222,7 +289,7 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
       },
     })
 
-    // Create line series
+    // Create price line series
     const lineSeries = chart.addSeries(LineSeries, {
       lineWidth: 1,
       lastValueVisible: true,
@@ -236,15 +303,33 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
         minMove: 0.01,
       },
     })
+
+    // Create volume histogram series
+    const volumeSeries = chart.addSeries(HistogramSeries, {
+      color: '#ffffff40',
+      priceFormat: {
+        type: 'volume',
+      },
+      priceScaleId: 'volume',
+    })
+
+    // Set separate price scale for volume
+    chart.priceScale('volume').applyOptions({
+      scaleMargins: {
+        top: 0.8,
+        bottom: 0,
+      },
+    })
     
     lineSeries.setData(chartData)
+    volumeSeries.setData(volumeData)
     chart.timeScale().fitContent()
 
     const handleResize = () => {
       if (chartContainerRef.current) {
         chart.applyOptions({
           width: chartContainerRef.current.clientWidth,
-          height: 300,
+          height: 400, // Increased height to accommodate volume bars
         })
       }
     }
@@ -286,14 +371,17 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
       if (!chartContainerRef.current) return
       const chartRect = chartContainerRef.current.getBoundingClientRect()
 
-      const seriesData = param.seriesData.get(lineSeries) as LineData<Time>
-      if (seriesData) {
-        setActivePrice(seriesData.value)
+      const priceData = param.seriesData.get(lineSeries) as LineData<Time>
+      const volumeData = param.seriesData.get(volumeSeries) as HistogramData<Time>
+      
+      if (priceData) {
+        setActivePrice(priceData.value)
         
         tooltipEl.style.display = "block"
         tooltipRoot.render(
           <TooltipContent
-            price={seriesData.value}
+            price={priceData.value}
+            volume={volumeData?.value}
             timestamp={Number(param.time) * 1000}
           />
         )
@@ -336,10 +424,10 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
       })
       chart.remove()
     }
-  }, [chartData])
+  }, [chartData, volumeData])
 
   if (isLoading) {
-    return <Skeleton className="h-[400px] w-full rounded-[13px]" />
+    return <Skeleton className="h-[500px] w-full rounded-[13px]" />
   }
 
   return (
@@ -355,7 +443,7 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
           <Card className="border-none bg-transparent">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex flex-col items-left">
-                <span className="text-2xl font-semibold font-mono">
+                <span className="text-xl font-mono">
                   <NumberFlow
                     value={displayPrice}
                     format={{
@@ -368,7 +456,7 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
                     continuous={true}
                   />
                 </span>
-                <div className={`text-lg ${calculatePercentageChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                <div className={`text-sm ${calculatePercentageChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                   <motion.span
                     initial={{ rotate: calculatePercentageChange >= 0 ? 0 : 180 }}
                     animate={{ rotate: calculatePercentageChange >= 0 ? 0 : 180 }}
