@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   createChart,
   ColorType,
@@ -14,12 +15,13 @@ import {
   HistogramSeries,
 } from 'lightweight-charts'
 import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
-import { Skeleton } from "@v1/ui/skeleton"
 import { createRoot } from "react-dom/client"
 import NumberFlow from '@number-flow/react'
 import type { CoinMarketData, OHLCVQuote } from '@/types/coins'
 import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
+import { useTokenData } from '@/hooks/use-token-data'
+import { Skeleton } from "@v1/ui/skeleton"
 
 interface PriceChartProps {
   coinId: string;
@@ -35,6 +37,17 @@ interface VolumeDataPoint {
   time: Time
   value: number
   color?: string
+}
+
+// Add type for historical quote
+interface HistoricalQuote {
+  timestamp: string;
+  quote: {
+    USD: {
+      price: number;
+      volume_24h: number;
+    };
+  };
 }
 
 const TooltipContent = ({
@@ -87,11 +100,11 @@ const TimeScaleSelector = ({
   setActiveTimeScale: (scale: string) => void 
 }) => {
   const scales = [
-    { value: "1d", label: "1H" },
-    { value: "30d", label: "1D" },
-    { value: "7d", label: "1W" },
-    { value: "max", label: "1Y" },
-    { value: "2y", label: "2Y" },
+    { value: "1d", label: "1H" },    // Hourly view
+    { value: "7d", label: "1D" },    // Daily view  
+    { value: "30d", label: "1W" },   // Weekly view (could aggregate daily data)
+    { value: "max", label: "1Y" },   // Yearly view
+    { value: "2y", label: "2Y" },    // 2-year view
   ]
 
   return (
@@ -145,32 +158,36 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const [activePrice, setActivePrice] = useState<number | null>(null)
   const [activeTimeScale, setActiveTimeScale] = useState<string>("max")
-  const [tokenData, setTokenData] = useState<CoinMarketData | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isHydrated, setIsHydrated] = useState(false)
+  
+  // Use unified token data hook
+  const { data: tokenData } = useTokenData(coinId)
 
-  // Fetch data when time scale changes
+  // Fetch detailed chart data when time scale changes
+  const { data: chartDataResponse, isLoading } = useQuery({
+    queryKey: ['coin-chart-data', coinId, activeTimeScale],
+    queryFn: async () => {
+      const response = await fetch(`/api/coins/${coinId}?timeScale=${activeTimeScale}`)
+      if (!response.ok) throw new Error('Failed to fetch chart data')
+      return response.json()
+    },
+    staleTime: 30 * 1000, // 30 seconds
+    refetchInterval: 2 * 60 * 1000, // 2 minutes
+    placeholderData: (previousData) => previousData, // Keep previous data while loading
+  })
+
+  // Ensure hydration consistency
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true)
-      try {
-        const response = await fetch(`/api/coins/${coinId}?timeScale=${activeTimeScale}`)
-        if (!response.ok) throw new Error('Failed to fetch data')
-        const data = await response.json()
-        setTokenData(data)
-      } catch (error) {
-        console.error('Failed to fetch token data:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchData()
-  }, [coinId, activeTimeScale])
+    setIsHydrated(true)
+  }, [])
 
   const { chartData, volumeData } = useMemo(() => {
+    // Use the fetched chart data instead of tokenData
+    const dataSource = chartDataResponse || tokenData?.fullData
+
     // Try to use OHLCV data first, then fall back to historical data
-    if (tokenData?.ohlcv?.data?.quotes?.length) {
-      const ohlcvQuotes = tokenData.ohlcv.data.quotes as OHLCVQuote[];
+    if (dataSource?.ohlcv?.data?.quotes?.length) {
+      const ohlcvQuotes = dataSource.ohlcv.data.quotes as OHLCVQuote[];
       
       const pricePoints = ohlcvQuotes.map(quote => ({
         time: (new Date(quote.time_close).getTime() / 1000) as Time,
@@ -190,13 +207,13 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
     }
     
     // Fallback to historical data or generate sample data
-    if (tokenData?.historical?.data?.quotes?.length) {
-      const pricePoints = tokenData.historical.data.quotes.map(quote => ({
+    if (dataSource?.historical?.data?.quotes?.length) {
+      const pricePoints = dataSource.historical.data.quotes.map((quote: HistoricalQuote) => ({
         time: (new Date(quote.timestamp).getTime() / 1000) as Time,
         value: quote.quote.USD.price
       }));
 
-      const volumePoints = tokenData.historical.data.quotes.map(quote => ({
+      const volumePoints = dataSource.historical.data.quotes.map((quote: HistoricalQuote) => ({
         time: (new Date(quote.timestamp).getTime() / 1000) as Time,
         value: quote.quote.USD.volume_24h || 0,
         color: '#ffffff40'
@@ -229,17 +246,22 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
       chartData: filterValidPriceData(fallbackData.map(d => d.price)),
       volumeData: filterValidVolumeData(fallbackData.map(d => d.volume))
     };
-  }, [tokenData, initialData]);
+  }, [chartDataResponse, tokenData?.fullData, initialData]);
 
-  const displayPrice = activePrice ?? (tokenData?.quote.USD.price || initialData.price)
+  const displayPrice = activePrice ?? (tokenData?.marketData?.price || initialData.price)
   
   const calculatePercentageChange = useMemo(() => {
+    // Use consistent initial data for SSR/hydration
+    if (!isHydrated) {
+      return initialData.percent_change_24h || 0
+    }
+    
     const currentPrice = displayPrice;
     const oldestPrice = chartData[0]?.value;
-    if (!oldestPrice) return 0;
+    if (!oldestPrice) return initialData.percent_change_24h || 0;
     
     return ((currentPrice - oldestPrice) / oldestPrice) * 100;
-  }, [displayPrice, chartData]);
+  }, [displayPrice, chartData, isHydrated, initialData.percent_change_24h]);
 
   useEffect(() => {
     if (!chartContainerRef.current || !chartData.length) return
@@ -431,18 +453,19 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
   }
 
   return (
-      <div className="border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
-        <div className="p-0 relative">
-          <div
-            className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
-            style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
-                backgroundRepeat: "repeat",
-            }}
-          />
-          <Card className="border-none bg-transparent">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex flex-col items-left">
+    <div className="border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+      <div className="p-0 relative">
+        <div
+          className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
+          style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
+              backgroundRepeat: "repeat",
+          }}
+        />
+        <Card className="border-none bg-transparent">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex flex-col items-left">
+              <div className="flex items-center gap-2">
                 <span className="text-xl font-mono">
                   <NumberFlow
                     value={displayPrice}
@@ -456,40 +479,44 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
                     continuous={true}
                   />
                 </span>
-                <div className={`text-sm ${calculatePercentageChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                  <motion.span
-                    initial={{ rotate: calculatePercentageChange >= 0 ? 0 : 180 }}
-                    animate={{ rotate: calculatePercentageChange >= 0 ? 0 : 180 }}
-                    transition={{ type: "spring", bounce: 0.3, duration: 0.3 }}
-                    className="inline-block mr-2"
-                    style={{ transformOrigin: 'center' }}
-                  >
-                    ▲
-                  </motion.span>
-                  <NumberFlow
-                    value={Math.abs(calculatePercentageChange)}
-                    format={{ 
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2
-                    }}
-                    suffix="%"
-                    transformTiming={{ duration: 400, easing: 'ease-out' }}
-                    continuous={true}
-                  />
-                </div>
-              </CardTitle>
-              <TimeScaleSelector
-                activeTimeScale={activeTimeScale}
-                setActiveTimeScale={setActiveTimeScale}
-              />
-            </CardHeader>
-            <CardContent className="pl-8">
-              <div className="p-0 relative">
-                <div ref={chartContainerRef} />
+                {isLoading && (
+                  <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" />
+                )}
               </div>
-            </CardContent>
-          </Card>
-        </div>
+              <div className={`text-sm ${calculatePercentageChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                <motion.span
+                  initial={{ rotate: calculatePercentageChange >= 0 ? 0 : 180 }}
+                  animate={{ rotate: calculatePercentageChange >= 0 ? 0 : 180 }}
+                  transition={{ type: "spring", bounce: 0.3, duration: 0.3 }}
+                  className="inline-block mr-2"
+                  style={{ transformOrigin: 'center' }}
+                >
+                  ▲
+                </motion.span>
+                <NumberFlow
+                  value={Math.abs(calculatePercentageChange)}
+                  format={{ 
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  }}
+                  suffix="%"
+                  transformTiming={{ duration: 400, easing: 'ease-out' }}
+                  continuous={true}
+                />
+              </div>
+            </CardTitle>
+            <TimeScaleSelector
+              activeTimeScale={activeTimeScale}
+              setActiveTimeScale={setActiveTimeScale}
+            />
+          </CardHeader>
+          <CardContent className="pl-8">
+            <div className="p-0 relative">
+              <div ref={chartContainerRef} />
+            </div>
+          </CardContent>
+        </Card>
       </div>
+    </div>
   )
 }

@@ -51,11 +51,11 @@ async function fetchWithErrorHandling(url: string) {
 async function fetchHistoricalData(id: string, timeScale: string = '7d') {
   const now = new Date();
   
-  // Define time ranges based on scale - fetch maximum data
+  // Define time ranges - show 60-90 days of context for all timeframes
   const timeRanges = {
-    '1d': 7 * 24 * 60 * 60 * 1000,       // 7 days for hourly view
-    '30d': 30 * 24 * 60 * 60 * 1000,     // 30 days for daily view
-    '7d': 90 * 24 * 60 * 60 * 1000,      // 90 days for daily view  
+    '1d': 90 * 24 * 60 * 60 * 1000,      // 90 days for hourly view
+    '7d': 90 * 24 * 60 * 60 * 1000,      // 90 days for weekly view  
+    '30d': 90 * 24 * 60 * 60 * 1000,     // 90 days for monthly view
     'max': 365 * 24 * 60 * 60 * 1000,    // 365 days for yearly view
     '2y': 730 * 24 * 60 * 60 * 1000,     // 730 days for 2-year view
   };
@@ -78,8 +78,8 @@ async function fetchHistoricalData(id: string, timeScale: string = '7d') {
     id,
     time_start: timeStart,
     time_end: timeEnd,
-    interval: timeScale === '1d' ? '1h' : '24h',
-    count: timeScale === '1d' ? '168' : timeScale === '30d' ? '30' : timeScale === '7d' ? '90' : timeScale === '2y' ? '730' : '365',
+    interval: timeScale === '1d' ? '1h' : '24h', // Hourly for 1d, daily for others
+    count: timeScale === '1d' ? '2160' : '90', // 90 days * 24 hours = 2160 for hourly, 90 for daily
     convert: 'USD',
     aux: 'price,volume,market_cap',
     skip_invalid: 'true'
@@ -155,7 +155,7 @@ async function fetchHistoricalData(id: string, timeScale: string = '7d') {
 async function fetchOHLCVData(id: string, timeScale: string = '7d') {
   const now = new Date();
   
-  // Define time ranges and intervals based on scale - fetch maximum data
+  // Define time ranges - 60-90 days context with different granularities
   const timeConfigs = {
     '1d': { 
       days: 7, 
@@ -163,17 +163,17 @@ async function fetchOHLCVData(id: string, timeScale: string = '7d') {
       interval: '1h',
       count: '168' // 7 days * 24 hours
     },
+    '7d': { 
+      days: 180, 
+      timePeriod: 'daily',
+      interval: '1d',
+      count: '180' // 180 days of daily data
+    },
     '30d': { 
       days: 90, 
       timePeriod: 'daily',
       interval: '1d',
-      count: '90' // 30 days
-    },
-    '7d': { 
-      days: 90, 
-      timePeriod: 'daily',
-      interval: '1d',
-      count: '90' // 90 days
+      count: '90' // 90 days of daily data
     },
     'max': { 
       days: 365, 

@@ -24,7 +24,7 @@ import { SignOutButton, useClerk } from "@clerk/nextjs";
 import { Fingerprint, LogOut } from "lucide-react";
 import { IconChevronBackward } from 'symbols-react';
 import { SvelaLogo } from "@v1/ui/svela-logo";
-import { useTokenHeader } from "@/hooks/use-token-header";
+import { useTokenHeader } from "@/hooks/use-token-data";
 import Image from "next/image";
 
 
@@ -118,22 +118,22 @@ export function TopNav() {
           {isChartDetailPage ? (
             // Token Header
             <div className="flex items-center gap-4">
-              <Link href="/charts" className="flex items-center gap-2 text-white/70 hover:text-white">
-                <IconChevronBackward className="h-4 w-4 fill-current" />
+              <Link href="/charts" className="flex items-center text-white/70 hover:text-white hover:bg-zinc-900/50 rounded-xl p-2 transition-all duration-300">
+                <IconChevronBackward className="h-5 w-5 fill-current" />
               </Link>
               <div className="flex items-center gap-2">
                 {tokenData && !isLoading && (
                   <Image
-                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${tokenData.id}.png`}
+                    src={tokenData.logoUrl}
                     alt={tokenData.name}
                     className="w-8 h-8 rounded-full ring-1 ring-white/10"
                     width={32}
                     height={32}
                   />
                 )}
-                <div>
-                  <h1 className="text-lg font-semibold text-white">
-                    {isLoading ? 'Loading...' : tokenData?.name || 'Token Details'}
+                <div className="flex flex-col gap-0">
+                  <h1 className="text-sm font-semibold text-white">
+                    {isLoading ? 'Loading...' : tokenData?.symbol || 'Token Details'}
                   </h1>
                   <p className="text-xs text-white/60">
                     {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}

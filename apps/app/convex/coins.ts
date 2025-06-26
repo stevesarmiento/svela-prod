@@ -121,3 +121,22 @@ export const getCoinsByIds = query({
     return orderedCoins;
   },
 });
+
+export const getCoinById = query({
+  args: { coinId: v.number() },
+  handler: async (ctx, args) => {
+    const coins = await ctx.db.query("coins").collect();
+    return coins.find(coin => coin.coinId === args.coinId) || null;
+  },
+});
+
+export const getCoinByIdString = query({
+  args: { coinId: v.string() },
+  handler: async (ctx, args) => {
+    const id = parseInt(args.coinId);
+    if (isNaN(id)) return null;
+    
+    const coins = await ctx.db.query("coins").collect();
+    return coins.find(coin => coin.coinId === id) || null;
+  },
+});
