@@ -51,13 +51,13 @@ export default async function TokenPage({ params }: PageProps) {
         <main className="mx-auto py-6 relative z-10">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             {/* PriceChart over MarketMetrics on the Right */}
-            <div className="col-span-8">
+            <div className="col-span-12">
               <PriceChart 
                 coinId={id}
                 initialData={tokenData.quote.USD} 
               />              
             </div>
-            <div className="col-span-4">
+            <div className="col-span-12">
               <MarketMetrics data={tokenData} />
             </div>
           </div>
