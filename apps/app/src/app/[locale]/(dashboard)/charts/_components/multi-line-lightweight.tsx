@@ -12,8 +12,7 @@ import {
   LineSeries,
   ISeriesApi,
 } from 'lightweight-charts'
-import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
-import { Skeleton } from "@v1/ui/skeleton"
+import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { createRoot } from "react-dom/client"
 import type { CoinMarketData } from '@/types/coins'
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
@@ -23,9 +22,14 @@ import { toast } from "@v1/ui/use-toast"
 import Link from 'next/link'
 import { useBottomNav } from '@/components/navigation/bottom-nav-context'
 import { Button } from '@v1/ui/button'
+import { Spinner } from "@v1/ui/spinner"
+
+interface OptimisticCoinMarketData extends CoinMarketData {
+  isOptimistic?: boolean;
+}
 
 interface MultiPriceChartLightweightProps {
-  coins: CoinMarketData[]
+  coins: OptimisticCoinMarketData[]
   activeTimeScale: string
   setActiveTimeScale: (scale: string) => void
 }
@@ -53,29 +57,6 @@ interface CoinSeries {
 interface LineSeriesData {
   series: ISeriesApi<"Line">
   coinData: CoinSeries
-}
-
-function ChartSkeleton() {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="font-medium font-mono">Percentage Change</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <Skeleton className="h-[400px] w-full" />
-          <div className="flex flex-wrap gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Skeleton className="h-3 w-3 rounded-full" />
-                <Skeleton className="h-4 w-24" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
 }
 
 const TooltipContent = ({
@@ -195,7 +176,7 @@ export function MultiPriceChartLightweight({
   activeTimeScale, 
   setActiveTimeScale 
 }: MultiPriceChartLightweightProps) {
-  const { isLoading, removeFromWatchlist } = useWatchlist()
+  const { removeFromWatchlist } = useWatchlist()
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const [hoveredCoin, setHoveredCoin] = useState<string | null>(null)
   const [hoveredRemoveId, setHoveredRemoveId] = useState<string | null>(null)
@@ -204,14 +185,19 @@ export function MultiPriceChartLightweight({
   // Use the bottom nav context to trigger command search
   const { openCommandSearch } = useBottomNav()
 
-  const coinSeriesData = useMemo((): CoinSeries[] => {
-    if (!coins.length) return []
+  // Filter out optimistic coins for chart rendering (they don't have data yet)
+  const coinsWithData = useMemo(() => {
+    return coins.filter(coin => !coin.isOptimistic);
+  }, [coins]);
 
-    const colors = generateDistinctColors(coins.length)
+  const coinSeriesData = useMemo((): CoinSeries[] => {
+    if (!coinsWithData.length) return []
+
+    const colors = generateDistinctColors(coinsWithData.length)
     
-    console.log('Processing coins:', coins.length) // Add debugging
+    console.log('Processing coins:', coinsWithData.length) // Add debugging
     
-    return coins.map((coin, index) => {
+    return coinsWithData.map((coin, index) => {
       const data: PriceDataPoint[] = []
       
       console.log(`Processing ${coin.symbol}:`, {
@@ -297,7 +283,7 @@ export function MultiPriceChartLightweight({
       console.log(`${series.symbol}: Included in chart: ${hasData}`)
       return hasData
     })
-  }, [coins, activeTimeScale])
+  }, [coinsWithData, activeTimeScale])
 
   const latestValues = useMemo(() => {
     return coinSeriesData.map(series => ({
@@ -519,10 +505,7 @@ export function MultiPriceChartLightweight({
     })
   }, [hoveredCoin])
 
-  if (isLoading || !coins.length) {
-    return <ChartSkeleton />
-  }
-
+  // Always show the main UI structure
   return (
     <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
       {/* Legend */}
@@ -539,104 +522,137 @@ export function MultiPriceChartLightweight({
             <IconPlus className="group-hover:fill-blue-500 group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
           </Button>
         </div> 
-        <div className="flex flex-col gap-2 space-y-3">          
-        {latestValues.map((coin) => (
-          <Link 
-            key={coin.id}
-            href={`/charts/${coin.id}`}
-            className="block"
-          >
-            <div 
-              className={cn(
-                "flex overflow-hidden items-center gap-2 cursor-pointer transition-opacity duration-200 rounded-lg p-0 -m-2 relative group hover:bg-white/10",
-                hoveredCoin && hoveredCoin !== coin.id ? "opacity-40" : "opacity-100",
-                hoveredCoin === coin.id ? "bg-white/5" : ""
-              )}
-              style={{ backgroundColor: addOpacityToColor(coin.color, 0.05) }}
-              onMouseEnter={() => setHoveredCoin(coin.id)}
-              onMouseLeave={() => setHoveredCoin(null)}
-            >
-              <div 
-                className={cn(
-                  "w-1 h-9 rounded-full transition-transform duration-200",
-                )}
-                style={{ backgroundColor: coin.color }}
-              />
-              <div className="flex flex-row items-center gap-2 flex-1 ml-2">
-                <span className="text-xs font-medium">{coin.symbol.toUpperCase()}</span>
-                <span className="text-xs font-mono text-muted-foreground">{coin.name}</span>
+        
+        <div className="flex flex-col gap-2 space-y-3">
+          {/* Show loading coins in legend */}
+          {coins.map((coin) => {
+            const realCoin = latestValues.find(c => c.id === coin.id.toString());
+            
+            return (
+              <div key={coin.id}>
+                {coin.isOptimistic ? (
+                  // Loading state in legend
+                  <div className="flex items-center gap-2 opacity-50 rounded-lg p-0 -m-2">
+                    <div className="w-1 h-9 rounded-full bg-muted animate-pulse" />
+                    <div className="flex flex-row items-center gap-2 flex-1 ml-2">
+                      <span className="text-xs font-medium">...</span>
+                      <span className="text-xs font-mono text-muted-foreground">Loading...</span>
+                    </div>
+                  </div>
+                ) : realCoin ? (
+                  // Real coin in legend
+                  <Link 
+                    href={`/charts/${coin.id}`}
+                    className="block"
+                  >
+                    <div 
+                      className={cn(
+                        "flex overflow-hidden items-center gap-2 cursor-pointer transition-opacity duration-200 rounded-lg p-0 -m-2 relative group hover:bg-white/10",
+                        hoveredCoin && hoveredCoin !== coin.id.toString() ? "opacity-40" : "opacity-100",
+                        hoveredCoin === coin.id.toString() ? "bg-white/5" : ""
+                      )}
+                      style={{ backgroundColor: addOpacityToColor(realCoin.color, 0.05) }}
+                      onMouseEnter={() => setHoveredCoin(coin.id.toString())}
+                      onMouseLeave={() => setHoveredCoin(null)}
+                    >
+                      <div 
+                        className="w-1 h-9 rounded-full transition-transform duration-200"
+                        style={{ backgroundColor: realCoin.color }}
+                      />
+                      <div className="flex flex-row items-center gap-2 flex-1 ml-2">
+                        <span className="text-xs font-medium">{realCoin.symbol.toUpperCase()}</span>
+                        <span className="text-xs font-mono text-muted-foreground">{realCoin.name}</span>
+                      </div>
+                      
+                      {/* Remove Icon - appears on hover */}
+                      <div 
+                        className={cn(
+                          "absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded-full hover:bg-red-500/20",
+                          hoveredRemoveId === coin.id.toString() ? "bg-red-500/30" : ""
+                        )}
+                        onMouseEnter={(e) => {
+                          e.stopPropagation()
+                          setHoveredRemoveId(coin.id.toString())
+                        }}
+                        onMouseLeave={(e) => {
+                          e.stopPropagation()
+                          setHoveredRemoveId(null)
+                        }}
+                        onClick={async (e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          try {
+                            await removeFromWatchlist(Number(coin.id))
+                            toast({
+                              title: "Removed",
+                              description: `${coin.name} removed from watchlist`,
+                            })
+                          } catch {
+                            toast({
+                              title: "Error", 
+                              description: "Failed to remove from watchlist",
+                              variant: "destructive",
+                            })
+                          }
+                        }}
+                      >
+                        <IconXmarkCircleFill 
+                          className={cn(
+                            "size-4 transition-colors duration-200",
+                            hoveredRemoveId === coin.id.toString()
+                              ? "fill-red-400" 
+                              : "fill-muted-foreground hover:fill-red-400"
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </Link>
+                ) : null}
               </div>
-              
-              {/* Remove Icon - appears on hover */}
-              <div 
-                className={cn(
-                  "absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 rounded-full hover:bg-red-500/20",
-                  hoveredRemoveId === coin.id ? "bg-red-500/30" : ""
-                )}
-                onMouseEnter={(e) => {
-                  e.stopPropagation()
-                  setHoveredRemoveId(coin.id)
-                }}
-                onMouseLeave={(e) => {
-                  e.stopPropagation()
-                  setHoveredRemoveId(null)
-                }}
-                onClick={async (e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  try {
-                    await removeFromWatchlist(Number(coin.id))
-                    toast({
-                      title: "Removed",
-                      description: `${coin.name} removed from watchlist`,
-                    })
-                  } catch {
-                    toast({
-                      title: "Error", 
-                      description: "Failed to remove from watchlist",
-                      variant: "destructive",
-                    })
-                  }
-                }}
-              >
-                <IconXmarkCircleFill 
-                  className={cn(
-                    "size-4 transition-colors duration-200",
-                    hoveredRemoveId === coin.id 
-                      ? "fill-red-400" 
-                      : "fill-muted-foreground hover:fill-red-400"
-                  )}
-                />
-              </div>
-            </div>
-          </Link>
-        ))}
+            );
+          })}
         </div>
       </div>
+      
       <div className="col-span-9 border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
         {/* Chart Content */}
         <div className="p-0 relative">
-          
-        <div
-          className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
-          style={{
-              backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
-              backgroundRepeat: "repeat",
-          }}
+          <div
+            className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
+            style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
+                backgroundRepeat: "repeat",
+            }}
           />
-        <Card className="border-none bg-transparent">
-          <CardHeader className="flex flex-row items-center justify-end">
-            <TimeScaleSelector
-              activeTimeScale={activeTimeScale}
-              setActiveTimeScale={setActiveTimeScale}
-            />
-          </CardHeader>
-          <CardContent className="pl-8">
-            <div className="p-0 relative">
-              <div ref={chartContainerRef} />
-            </div>
-          </CardContent>
-        </Card>
+          <Card className="border-none bg-transparent">
+            <CardHeader className="flex flex-row items-center justify-end">
+              <TimeScaleSelector
+                activeTimeScale={activeTimeScale}
+                setActiveTimeScale={setActiveTimeScale}
+              />
+            </CardHeader>
+            <CardContent className="pl-8">
+              <div className="p-0 relative">
+                {/* Show loading message if no chart data yet */}
+                {coinsWithData.length === 0 && coins.length > 0 ? (
+                  <div className="flex items-center justify-center h-[400px]">
+                    <div className="text-center">
+                      <Spinner size={24} className="mb-2" />
+                      <p className="text-sm text-muted-foreground">Loading chart data...</p>
+                    </div>
+                  </div>
+                ) : coinsWithData.length === 0 ? (
+                  <div className="flex items-center justify-center h-[400px]">
+                    <div className="text-center">
+                      <p className="text-sm text-muted-foreground">No coins to display</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div ref={chartContainerRef} />
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
