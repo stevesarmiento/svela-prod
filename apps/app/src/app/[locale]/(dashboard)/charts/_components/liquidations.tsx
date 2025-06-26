@@ -79,14 +79,14 @@ export function Liquidations({ symbols }: LiquidationsProps) {
                 
                 <div className="p-4 rounded-lg border bg-card">
                   <div className="text-sm text-muted-foreground">Longs</div>
-                  <div className="text-2xl font-mono font-semibold text-red-500">
+                  <div className="text-2xl font-mono font-semibold text-rose-500">
                     ${formatLargeNumber(longLiquidations.reduce((sum, liq) => sum + (liq.usd_value || 0), 0))}
                   </div>
                 </div>
                 
                 <div className="p-4 rounded-lg border bg-card">
                   <div className="text-sm text-muted-foreground">Shorts</div>
-                  <div className="text-2xl font-mono font-semibold text-green-500">
+                  <div className="text-2xl font-mono font-semibold text-emerald-500">
                     ${formatLargeNumber(shortLiquidations.reduce((sum, liq) => sum + (liq.usd_value || 0), 0))}
                   </div>
                 </div>
@@ -102,7 +102,7 @@ export function Liquidations({ symbols }: LiquidationsProps) {
                       <span className="font-mono">{liq.symbol}</span>
                       <span className={cn(
                         "text-xs px-2 py-0.5 rounded-full font-medium",
-                        liq.side === 'long' ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'
+                        liq.side === 'long' ? 'bg-red-500/10 text-rose-500' : 'bg-green-500/10 text-emerald-500'
                       )}>
                         {liq.side.toUpperCase()}
                       </span>

@@ -456,7 +456,7 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
                     continuous={true}
                   />
                 </span>
-                <div className={`text-sm ${calculatePercentageChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                <div className={`text-sm ${calculatePercentageChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                   <motion.span
                     initial={{ rotate: calculatePercentageChange >= 0 ? 0 : 180 }}
                     animate={{ rotate: calculatePercentageChange >= 0 ? 0 : 180 }}

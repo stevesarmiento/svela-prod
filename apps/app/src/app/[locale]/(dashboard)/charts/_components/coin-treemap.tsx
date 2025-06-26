@@ -181,7 +181,7 @@ export function CoinTreemap({ coins }: CoinTreemapProps) {
                     {
                       label: 'Change',
                       value: `${data.percentChange > 0 ? '+' : ''}${data.percentChange.toFixed(2)}%`,
-                      className: data.percentChange > 0 ? 'text-green-500' : 'text-red-500'
+                      className: data.percentChange > 0 ? 'text-emerald-500' : 'text-rose-500'
                     }
                   ]
 
