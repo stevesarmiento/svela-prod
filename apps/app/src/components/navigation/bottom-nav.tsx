@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBottomNav } from "./bottom-nav-context";
 import { useKeyboardShortcuts, useCommandHandler, useSequentialShortcuts } from "./bottom-nav-hooks";
@@ -16,10 +16,10 @@ export function BottomNav() {
     selectionState, 
     setNavigationMode, 
     isCommandOpen, 
-    setIsCommandOpen 
+    setIsCommandOpen,
+    commandContext,
+    setCommandContext
   } = useBottomNav();
-  
-  const [commandContext, setCommandContext] = useState<CommandContext>(null);
   
   // Initialize sequential shortcuts (still needed for functionality)
   useSequentialShortcuts();
@@ -32,7 +32,7 @@ export function BottomNav() {
   const handleOpenCommandSearch = useCallback((context: CommandContext) => {
     setCommandContext(context);
     setIsCommandOpen(true);
-  }, [setIsCommandOpen]);
+  }, [setIsCommandOpen, setCommandContext]);
 
   // Reset context when closing
   const handleCloseCommand = useCallback((open: boolean) => {
@@ -40,7 +40,7 @@ export function BottomNav() {
     if (!open) {
       setCommandContext(null);
     }
-  }, [setIsCommandOpen]);
+  }, [setIsCommandOpen, setCommandContext]);
 
   return (
     <div className={`fixed z-50 bottom-8 transition-all duration-200 ${

@@ -18,6 +18,7 @@ import { useRouter } from 'next/navigation';
 import { useCommandInput } from '@/hooks/use-command-input';
 import { useCommandSearch } from '@/hooks/use-command-search';
 import { useContextualCommands } from '@/hooks/use-contextual-commands';
+import { useAddCoinToWatchlist } from '@/hooks/use-add-coin-to-watchlist';
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
 
@@ -47,6 +48,8 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
     globalCommands, 
     hasContextualCommands
   } = useContextualCommands(searchQuery, context);
+
+  const { handleAddCoin, isAddingCoin } = useAddCoinToWatchlist();
 
   // Handle token navigation
   const handleTokenNavigation = useCallback((coinId: number) => {
@@ -99,7 +102,21 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   }, [clearSearch, setIsOpen, router]);
 
   // Handle command selection
-  const handleCommandSelect = useCallback((value: string) => {
+  const handleCommandSelect = useCallback(async (value: string) => {
+    // Check if this is a watchlist add action (starts with "watchlist-add:")
+    if (value.startsWith('watchlist-add:')) {
+      const coinId = parseInt(value.replace('watchlist-add:', ''));
+      const coin = coinsToDisplay.find(c => c.id === coinId);
+      if (coin) {
+        const success = await handleAddCoin(coin);
+        if (success) {
+          clearSearch();
+          setIsOpen(false);
+        }
+      }
+      return;
+    }
+
     // Check if this is a coin selection (starts with "coin:")
     if (value.startsWith('coin:')) {
       const coinId = parseInt(value.replace('coin:', ''));
@@ -116,7 +133,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
     
     // Handle regular command selection
     onCommandSelect(value, setIsOpen);
-  }, [onCommandSelect, setIsOpen, handleTokenNavigation, handleContextualAction]);
+  }, [onCommandSelect, setIsOpen, handleTokenNavigation, handleContextualAction, coinsToDisplay, clearSearch, handleAddCoin]);
 
   // Reset search when closing
   useEffect(() => {
@@ -128,7 +145,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   // Get page-specific placeholder text
   const getPlaceholder = () => {
     if (context === 'watchlist') return "Search tokens or manage watchlist...";
-    if (context === 'charts') return "Search charts or change settings...";
+    if (context === 'charts') return "Search charts or add tokens...";
     if (context === 'settings') return "Search settings...";
     if (context === 'overview') return "Search market data and insights...";
     return "Navigate or search tokens...";
@@ -239,7 +256,67 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
               </CommandGroup>
             ))}
 
-            {/* Coin Results - Only show when there's no context */}
+            {/* Charts Token Results - Only show when context is 'charts' */}
+            {context === 'charts' && coinsToDisplay.length > 0 && (
+              <CommandGroup heading={hasSearch ? "Add Tokens" : "Add to Comparison"}>
+                {coinResultsLoading ? (
+                  Array.from({ length: 3 }).map((_, index) => (
+                    <CommandItem key={`skeleton-${index}`} disabled>
+                      <div className="flex items-center gap-3 w-full p-2">
+                        <Skeleton className="h-6 w-6 rounded-full" />
+                        <div className="flex-1">
+                          <Skeleton className="h-4 w-20 mb-1" />
+                          <Skeleton className="h-3 w-12" />
+                        </div>
+                        <Skeleton className="h-4 w-16" />
+                      </div>
+                    </CommandItem>
+                  ))
+                ) : (
+                  coinsToDisplay.map((coin) => (
+                    <CommandItem
+                      key={coin.id}
+                      value={`watchlist-add:${coin.id}`}
+                      onSelect={handleCommandSelect}
+                      className="cursor-pointer bg-transparent focus:bg-accent focus:text-accent-foreground"
+                      disabled={isAddingCoin}
+                    >
+                      <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
+                        <div className="flex items-center gap-3 pr-5">
+                          <div className="relative">
+                            <Image
+                              src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`}
+                              alt={coin.name}
+                              className="w-6 h-6 rounded-full"
+                              width={24}
+                              height={24}
+                            />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-foreground">{coin.name}</span>
+                            <span className="text-xs text-muted-foreground">{coin.symbol.toUpperCase()}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            <div className="text-sm font-mono">
+                              ${coin.quote.USD.price.toLocaleString()}
+                            </div>
+                            <div className={`text-xs font-mono ${
+                              coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'
+                            }`}>
+                              {coin.quote.USD.percent_change_24h.toFixed(2)}%
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CommandItem>
+                  ))
+                )}
+              </CommandGroup>
+            )}
+
+            {/* Regular Coin Results - Only show when there's no context */}
             {!context && coinsToDisplay.length > 0 && (
               <CommandGroup heading={hasSearch ? "Tokens" : "Popular Tokens"}>
                 {coinResultsLoading ? (

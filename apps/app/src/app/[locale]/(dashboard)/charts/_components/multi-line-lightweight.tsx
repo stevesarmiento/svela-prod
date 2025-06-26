@@ -182,8 +182,8 @@ export function MultiPriceChartLightweight({
   const [hoveredRemoveId, setHoveredRemoveId] = useState<string | null>(null)
   const lineSeriesMapRef = useRef<Map<string, LineSeriesData>>(new Map())
   
-  // Use the bottom nav context to trigger command search
-  const { openCommandSearch } = useBottomNav()
+  // Use the bottom nav context to trigger contextual command search
+  const { openContextualCommandSearch } = useBottomNav()
 
   // Filter out optimistic coins for chart rendering (they don't have data yet)
   const coinsWithData = useMemo(() => {
@@ -512,10 +512,10 @@ export function MultiPriceChartLightweight({
       <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2">   
         <div className="flex flex-row items-center justify-between gap-2 mb-3"> 
           <IconCircleDottedAndCircle className="size-6 fill-primary/40" />
-          {/* Add Coin Button - triggers bottom nav command search */}
+          {/* Add Coin Button - triggers chart contextual command search */}
           <Button
             variant="outline"
-            onClick={openCommandSearch}
+            onClick={() => openContextualCommandSearch('charts')}
             className="group w-full border-zinc-800/0 hover:border-zinc-800/80 bg-transparent hover:bg-transparent flex items-center gap-2 justify-between p-3 rounded-lg"
           >
             <span className="text-muted-foreground font-normal text-sm group-hover:text-white">Add to comparison</span>
