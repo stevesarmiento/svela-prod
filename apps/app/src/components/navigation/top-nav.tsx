@@ -22,7 +22,10 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 import { SignOutButton, useClerk } from "@clerk/nextjs";
 import { Fingerprint, LogOut } from "lucide-react";
+import { IconChevronBackward } from 'symbols-react';
 import { SvelaLogo } from "@v1/ui/svela-logo";
+import { useTokenHeader } from "@/hooks/use-token-header";
+import Image from "next/image";
 
 
 // const menuItems = [
@@ -86,6 +89,7 @@ export function TopNav() {
   const pathname = usePathname();
   const [greeting, setGreeting] = useState("Dashboard");
   const [isMounted, setIsMounted] = useState(false);
+  const { isChartDetailPage, tokenData, isLoading } = useTokenHeader();
 
   // Update greeting based on route after component mounts
   useEffect(() => {
@@ -109,27 +113,58 @@ export function TopNav() {
   return (
     <div className="py-12 px-4 z-50">
       <div className="flex h-16 items-center px-4 gap-4">
-        {/* Logo and Greeting */}
+        {/* Conditional Logo/Token Header */}
         <div className="flex items-center gap-3">
-          <Link href="/overview">
-            <SvelaLogo 
-              width={22} 
-              height={22} 
-              className="text-white/30"
-              fillColor="currentColor"
-              strokeOpacity={0.3}
-            />
-          </Link>
-          <span className="text-lg font-bold text-white">
-            {isMounted 
-              ? isOverviewRoute 
-                ? `${greeting}, ${firstName}` 
-                : greeting
-              : isOverviewRoute 
-                ? `Dashboard, ${firstName}` 
-                : "Dashboard"
-            }
-          </span>
+          {isChartDetailPage ? (
+            // Token Header
+            <div className="flex items-center gap-4">
+              <Link href="/charts" className="flex items-center gap-2 text-white/70 hover:text-white">
+                <IconChevronBackward className="h-4 w-4 fill-current" />
+              </Link>
+              <div className="flex items-center gap-2">
+                {tokenData && !isLoading && (
+                  <Image
+                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${tokenData.id}.png`}
+                    alt={tokenData.name}
+                    className="w-8 h-8 rounded-full ring-1 ring-white/10"
+                    width={32}
+                    height={32}
+                  />
+                )}
+                <div>
+                  <h1 className="text-lg font-semibold text-white">
+                    {isLoading ? 'Loading...' : tokenData?.name || 'Token Details'}
+                  </h1>
+                  <p className="text-xs text-white/60">
+                    {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            // Default Logo and Greeting
+            <>
+              <Link href="/overview">
+                <SvelaLogo 
+                  width={22} 
+                  height={22} 
+                  className="text-white/30"
+                  fillColor="currentColor"
+                  strokeOpacity={0.3}
+                />
+              </Link>
+              <span className="text-lg font-bold text-white">
+                {isMounted 
+                  ? isOverviewRoute 
+                    ? `${greeting}, ${firstName}` 
+                    : greeting
+                  : isOverviewRoute 
+                    ? `Dashboard, ${firstName}` 
+                    : "Dashboard"
+                }
+              </span>
+            </>
+          )}
         </div>
 
         {/* Navigation menu */}

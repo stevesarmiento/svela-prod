@@ -434,7 +434,7 @@ export function PriceChart({ coinId, initialData }: PriceChartProps) {
       <div className="border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
         <div className="p-0 relative">
           <div
-            className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-40"
+            className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
             style={{
                 backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
                 backgroundRepeat: "repeat",
