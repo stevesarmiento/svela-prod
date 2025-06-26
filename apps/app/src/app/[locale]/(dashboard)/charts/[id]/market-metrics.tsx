@@ -32,7 +32,7 @@ export function MarketMetrics({ data }: MarketMetricsProps) {
     { 
       label: '24h Change', 
       value: `${data.quote.USD.percent_change_24h.toFixed(2)}%`,
-      className: data.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600',
+      className: data.quote.USD.percent_change_24h > 0 ? 'text-emerald-500' : 'text-rose-500',
     },
     { 
       label: 'Global Rank', 

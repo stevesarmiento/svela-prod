@@ -5,8 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useBottomNav } from "./bottom-nav-context";
 import { useKeyboardShortcuts, useCommandHandler, useSequentialShortcuts } from "./bottom-nav-hooks";
 import { NavigationDock } from "./navigation-dock";
-import { CommandSearch } from "./command-search";
 import { BackButton } from "./back-button";
+import { CommandSearch } from "./command-search";
 
 export function BottomNav() {
   const { 

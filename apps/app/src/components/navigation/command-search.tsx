@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Button } from "@v1/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { IconMagnifyingglass, IconCircleSlash, IconCommand } from "symbols-react";
@@ -10,14 +10,14 @@ import {
   CommandItem,
   CommandList,
 } from "@v1/ui/command-popover";
-import { COMMAND_ITEMS } from './bottom-nav-constants';
-import { useCoinSearch, useTopCoins } from '@/hooks/use-coin-search';
-import { useWatchlist } from "../../app/[locale]/(dashboard)/watchlist/_components/watchlist-context";
-import { useUser } from '@/hooks/use-user';
-import { toast } from "@v1/ui/use-toast";
 import Image from 'next/image';
 import { Skeleton } from "@v1/ui/skeleton";
-import { useDebounce } from '@/hooks/use-debounce';
+
+// Custom hooks
+import { useCommandInput } from '@/hooks/use-command-input';
+import { useCommandItems } from '@/hooks/use-command-items';
+import { useCommandSearch } from '@/hooks/use-command-search';
+import { useAddCoinToWatchlist } from '@/hooks/use-add-coin-to-watchlist';
 
 interface CommandSearchProps {
   isOpen: boolean;
@@ -25,135 +25,46 @@ interface CommandSearchProps {
   onCommandSelect: (value: string, setIsOpen: (open: boolean) => void) => void;
 }
 
-interface CoinSearchResult {
-  id: number;
-  name: string;
-  symbol: string;
-  cmc_rank?: number;
-  quote: {
-    USD: {
-      price: number;
-      percent_change_24h: number;
-      market_cap: number;
-      volume_24h: number;
-    };
-  };
-}
-
 export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }: CommandSearchProps) => {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isAddingCoin, setIsAddingCoin] = useState(false);
-  
-  const { addToWatchlist } = useWatchlist();
-  const { user } = useUser();
-  
-  // Add debouncing back
-  const debouncedSearchQuery = useDebounce(searchQuery, 300);
-
-  // Use debounced version for API calls
+  // Custom hooks
+  const { inputRef } = useCommandInput(isOpen);
   const { 
-    data: searchResults, 
-    isLoading: isSearchLoading 
-  } = useCoinSearch(debouncedSearchQuery);
-  
-  const { 
-    data: topCoins, 
-    isLoading: isTopCoinsLoading 
-  } = useTopCoins();
+    searchQuery, 
+    setSearchQuery, 
+    coinsToDisplay, 
+    isLoading: coinResultsLoading, 
+    clearSearch,
+    hasSearch 
+  } = useCommandSearch();
+  const commandItemsToDisplay = useCommandItems(searchQuery);
+  const { handleAddCoin, isAddingCoin } = useAddCoinToWatchlist();
 
-  // Update display logic to use debounced
-  const coinsToDisplay = useMemo(() => {
-    if (debouncedSearchQuery.trim()) {
-      return (searchResults || []).slice(0, 5);
-    }
-    return (topCoins || []).slice(0, 5);
-  }, [debouncedSearchQuery, searchResults, topCoins]);
-
-  // Add filtering for command items
-  const commandItemsToDisplay = useMemo(() => {
-    if (!searchQuery.trim()) {
-      return COMMAND_ITEMS;
-    }
-    
-    // Filter command items based on search query
-    return COMMAND_ITEMS.map(group => ({
-      ...group,
-      items: group.items.filter(item => 
-        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.subtitle?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    })).filter(group => group.items.length > 0);
-  }, [searchQuery]);
-
-  // Determine if we should show coin results
-  const coinResultsLoading = searchQuery.trim() ? isSearchLoading : isTopCoinsLoading;
-  
-  const handleAddCoin = React.useCallback(async (coin: CoinSearchResult) => {
-    if (!user) {
-      toast({
-        title: "Error",
-        description: "Please sign in to add coins to your watchlist",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      setIsAddingCoin(true);
-      await addToWatchlist(Number(coin.id));
-      
-      toast({
-        title: "Success",
-        description: `Added ${coin.name} to your watchlist`,
-      });
-      
-      setSearchQuery('');
-      setIsOpen(false);
-    } catch (error) {
-      console.error('Error adding coin:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to add coin",
-        variant: "destructive",
-      });
-    } finally {
-      setIsAddingCoin(false);
-    }
-  }, [user, addToWatchlist, setIsOpen]);
-
-  const handleCommandSelect = React.useCallback((value: string) => {
+  // Handle command selection
+  const handleCommandSelect = useCallback((value: string) => {
     // Check if this is a coin selection (starts with "coin:")
     if (value.startsWith('coin:')) {
       const coinId = parseInt(value.replace('coin:', ''));
       const coin = coinsToDisplay.find(c => c.id === coinId);
       if (coin) {
-        handleAddCoin(coin);
+        handleAddCoin(coin).then((success) => {
+          if (success) {
+            clearSearch();
+            setIsOpen(false);
+          }
+        });
       }
       return;
     }
     
     onCommandSelect(value, setIsOpen);
-  }, [onCommandSelect, setIsOpen, coinsToDisplay, handleAddCoin]);
-
-  // Focus the input when the command opens
-  useEffect(() => {
-    if (isOpen && inputRef.current) {
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
-    }
-  }, [isOpen]);
+  }, [onCommandSelect, setIsOpen, coinsToDisplay, handleAddCoin, clearSearch]);
 
   // Reset search when closing
   useEffect(() => {
     if (!isOpen) {
-      setSearchQuery('');
+      clearSearch();
     }
-  }, [isOpen]);
-
-  // Add this after coinsToDisplay
-  console.log('Command Search - Query:', debouncedSearchQuery, 'Results:', searchResults?.length, 'Display:', coinsToDisplay.length);
+  }, [isOpen, clearSearch]);
 
   return (
     <div className="relative rounded-[20px] bg-zinc-900 overflow-hidden px-2 py-0 hover:bg-zinc-800/80 transition-all duration-200 cursor-pointer
@@ -225,7 +136,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
             
             {/* Coin Results - Only show if there are coins to display */}
             {coinsToDisplay.length > 0 && (
-              <CommandGroup heading={searchQuery.trim() ? "Tokens" : "Add to Watchlist"}>
+              <CommandGroup heading={hasSearch ? "Tokens" : "Add to Watchlist"}>
                 {coinResultsLoading ? (
                   Array.from({ length: 3 }).map((_, index) => (
                     <CommandItem key={`skeleton-${index}`} disabled>
