@@ -12,20 +12,25 @@ import {
 } from "@v1/ui/command-popover";
 import Image from 'next/image';
 import { Skeleton } from "@v1/ui/skeleton";
+import { useRouter } from 'next/navigation';
 
 // Custom hooks
 import { useCommandInput } from '@/hooks/use-command-input';
-import { useCommandItems } from '@/hooks/use-command-items';
 import { useCommandSearch } from '@/hooks/use-command-search';
-import { useAddCoinToWatchlist } from '@/hooks/use-add-coin-to-watchlist';
+import { useContextualCommands } from '@/hooks/use-contextual-commands';
+
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
 
 interface CommandSearchProps {
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
   onCommandSelect: (value: string, setIsOpen: (open: boolean) => void) => void;
+  context?: CommandContext;
 }
 
-export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }: CommandSearchProps) => {
+export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, context = null }: CommandSearchProps) => {
+  const router = useRouter();
+  
   // Custom hooks
   const { inputRef } = useCommandInput(isOpen);
   const { 
@@ -36,28 +41,82 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
     clearSearch,
     hasSearch 
   } = useCommandSearch();
-  const commandItemsToDisplay = useCommandItems(searchQuery);
-  const { handleAddCoin, isAddingCoin } = useAddCoinToWatchlist();
+  
+  const { 
+    contextualCommands, 
+    globalCommands, 
+    hasContextualCommands
+  } = useContextualCommands(searchQuery, context);
+
+  // Handle token navigation
+  const handleTokenNavigation = useCallback((coinId: number) => {
+    clearSearch();
+    setIsOpen(false);
+    router.push(`/charts/${coinId}`);
+  }, [clearSearch, setIsOpen, router]);
+
+  // Handle contextual command actions
+  const handleContextualAction = useCallback((action: string) => {
+    clearSearch();
+    setIsOpen(false);
+    
+    // Handle different contextual actions
+    switch (action) {
+      case 'top-gainers':
+        router.push('/overview?filter=gainers');
+        break;
+      case 'market-overview':
+        router.push('/overview?view=market');
+        break;
+      case 'trending-tokens':
+        router.push('/overview?filter=trending');
+        break;
+      case 'add-token':
+        // Could open a modal or focus search
+        console.log('Open add token modal');
+        break;
+      case 'sort-price':
+        // Could trigger sort functionality
+        console.log('Sort by price');
+        break;
+      case 'export-watchlist':
+        // Could trigger export
+        console.log('Export watchlist');
+        break;
+      case 'timeframe-1h':
+      case 'timeframe-1d':
+      case 'timeframe-1w':
+        // Could change chart timeframe
+        console.log('Change timeframe:', action);
+        break;
+      case 'share-chart':
+        // Could copy current chart URL
+        navigator.clipboard?.writeText(window.location.href);
+        break;
+      default:
+        console.log('Unknown action:', action);
+    }
+  }, [clearSearch, setIsOpen, router]);
 
   // Handle command selection
   const handleCommandSelect = useCallback((value: string) => {
     // Check if this is a coin selection (starts with "coin:")
     if (value.startsWith('coin:')) {
       const coinId = parseInt(value.replace('coin:', ''));
-      const coin = coinsToDisplay.find(c => c.id === coinId);
-      if (coin) {
-        handleAddCoin(coin).then((success) => {
-          if (success) {
-            clearSearch();
-            setIsOpen(false);
-          }
-        });
-      }
+      handleTokenNavigation(coinId);
+      return;
+    }
+
+    // Check if this is a contextual action (starts with "action:")
+    if (value.startsWith('action:')) {
+      const action = value.replace('action:', '');
+      handleContextualAction(action);
       return;
     }
     
+    // Handle regular command selection
     onCommandSelect(value, setIsOpen);
-  }, [onCommandSelect, setIsOpen, coinsToDisplay, handleAddCoin, clearSearch]);
+  }, [onCommandSelect, setIsOpen, handleTokenNavigation, handleContextualAction]);
 
   // Reset search when closing
   useEffect(() => {
@@ -65,6 +124,15 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
       clearSearch();
     }
   }, [isOpen, clearSearch]);
+
+  // Get page-specific placeholder text
+  const getPlaceholder = () => {
+    if (context === 'watchlist') return "Search tokens or manage watchlist...";
+    if (context === 'charts') return "Search charts or change settings...";
+    if (context === 'settings') return "Search settings...";
+    if (context === 'overview') return "Search market data and insights...";
+    return "Navigate or search tokens...";
+  };
 
   return (
     <div className="relative rounded-[20px] bg-zinc-900 overflow-hidden px-2 py-0 hover:bg-zinc-800/80 transition-all duration-200 cursor-pointer
@@ -115,7 +183,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
               >
                 <CommandInput 
                   ref={inputRef}
-                  placeholder="Navigate or search tokens..." 
+                  placeholder={getPlaceholder()}
                   className="bg-transparent border-none rounded-2xl h-[53px] pl-2 text-white placeholder:text-white/50" 
                   autoFocus={isOpen}
                   value={searchQuery}
@@ -134,9 +202,46 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
               </div>
             </CommandEmpty>
             
-            {/* Coin Results - Only show if there are coins to display */}
-            {coinsToDisplay.length > 0 && (
-              <CommandGroup heading={hasSearch ? "Tokens" : "Add to Watchlist"}>
+            {/* Contextual Commands - Show when context is provided */}
+            {hasContextualCommands && contextualCommands.map((group) => (
+              <CommandGroup key={group.group} heading={group.group}>
+                {group.items.map((item) => (
+                  <CommandItem
+                    key={item.title}
+                    value={item.action ? `action:${item.action}` : item.title}
+                    onSelect={handleCommandSelect}
+                    className="cursor-pointer bg-transparent focus:bg-accent focus:text-accent-foreground"
+                  >
+                    <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
+                      <div className="flex items-center gap-3 pr-5">
+                        <div className="flex items-center justify-center p-2 bg-primary/10 rounded-lg">
+                          <item.icon className="size-4 fill-primary" />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-medium text-foreground">{item.title}</span>
+                          <span className="text-xs text-muted-foreground">{item.subtitle}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {item.shortcut ? (
+                          <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-zinc-300 uppercase">
+                            {item.shortcut}
+                          </kbd>
+                        ) : item.href ? (
+                          <span className="text-xs px-2 py-1 bg-accent rounded">Page</span>
+                        ) : (
+                          <span className="text-xs px-2 py-1 bg-primary/10 text-primary rounded">Action</span>
+                        )}
+                      </div>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+
+            {/* Coin Results - Only show when there's no context */}
+            {!context && coinsToDisplay.length > 0 && (
+              <CommandGroup heading={hasSearch ? "Tokens" : "Popular Tokens"}>
                 {coinResultsLoading ? (
                   Array.from({ length: 3 }).map((_, index) => (
                     <CommandItem key={`skeleton-${index}`} disabled>
@@ -157,7 +262,6 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
                       value={`coin:${coin.id}`}
                       onSelect={handleCommandSelect}
                       className="cursor-pointer bg-transparent focus:bg-accent focus:text-accent-foreground"
-                      disabled={isAddingCoin}
                     >
                       <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
                         <div className="flex items-center gap-3 pr-5">
@@ -194,8 +298,8 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect }:
               </CommandGroup>
             )}
             
-            {/* Command Items */}
-            {commandItemsToDisplay.map((group) => (
+            {/* Global Command Items - Only show when there's no context */}
+            {!context && globalCommands.map((group) => (
               <CommandGroup key={group.group} heading={group.group}>
                 {group.items.map((item) => (
                   <CommandItem

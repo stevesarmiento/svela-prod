@@ -1,12 +1,14 @@
 "use client";
 
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBottomNav } from "./bottom-nav-context";
 import { useKeyboardShortcuts, useCommandHandler, useSequentialShortcuts } from "./bottom-nav-hooks";
 import { NavigationDock } from "./navigation-dock";
 import { BackButton } from "./back-button";
 import { CommandSearch } from "./command-search";
+
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
 
 export function BottomNav() {
   const { 
@@ -15,7 +17,9 @@ export function BottomNav() {
     setNavigationMode, 
     isCommandOpen, 
     setIsCommandOpen 
-  } = useBottomNav(); // Use context state instead of local state
+  } = useBottomNav();
+  
+  const [commandContext, setCommandContext] = useState<CommandContext>(null);
   
   // Initialize sequential shortcuts (still needed for functionality)
   useSequentialShortcuts();
@@ -23,6 +27,20 @@ export function BottomNav() {
   // Custom hooks for cleaner logic
   useKeyboardShortcuts(mode, setNavigationMode, setIsCommandOpen);
   const handleCommandSelect = useCommandHandler();
+
+  // Handle opening command search from navigation items
+  const handleOpenCommandSearch = useCallback((context: CommandContext) => {
+    setCommandContext(context);
+    setIsCommandOpen(true);
+  }, [setIsCommandOpen]);
+
+  // Reset context when closing
+  const handleCloseCommand = useCallback((open: boolean) => {
+    setIsCommandOpen(open);
+    if (!open) {
+      setCommandContext(null);
+    }
+  }, [setIsCommandOpen]);
 
   return (
     <div className={`fixed z-50 bottom-8 transition-all duration-200 ${
@@ -49,6 +67,7 @@ export function BottomNav() {
             mode={mode}
             selectionState={selectionState}
             isCommandOpen={isCommandOpen}
+            onOpenCommandSearch={handleOpenCommandSearch}
           />
         </motion.div>
 
@@ -73,8 +92,9 @@ export function BottomNav() {
               }}            >
               <CommandSearch
                 isOpen={isCommandOpen}
-                setIsOpen={setIsCommandOpen}
+                setIsOpen={handleCloseCommand}
                 onCommandSelect={handleCommandSelect}
+                context={commandContext}
               />
             </motion.div>
           )}
