@@ -135,8 +135,8 @@ export function TopNav() {
                   <h1 className="text-sm font-semibold text-white">
                     {isLoading ? 'Loading...' : tokenData?.symbol || 'Token Details'}
                   </h1>
-                  <p className="text-xs text-white/60">
-                    {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                  <p className="text-xs text-white">
+                    <span className="text-xs text-white/60">Today is </span> {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                   </p>
                 </div>
               </div>
