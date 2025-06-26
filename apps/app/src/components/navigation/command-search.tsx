@@ -219,8 +219,8 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
               </div>
             </CommandEmpty>
             
-            {/* Contextual Commands - Show when context is provided */}
-            {hasContextualCommands && contextualCommands.map((group) => (
+            {/* Contextual Commands - Show when context is provided but not charts */}
+            {hasContextualCommands && context !== 'charts' && contextualCommands.map((group) => (
               <CommandGroup key={group.group} heading={group.group}>
                 {group.items.map((item) => (
                   <CommandItem
