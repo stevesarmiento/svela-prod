@@ -6,6 +6,7 @@ import { getCoinData } from "@/lib/coinmarketcap"
 import { PriceChart } from "./price-chart"
 import { MarketMetrics } from "./market-metrics"
 import { CoinMarketData } from '@/types/coins'
+import Image from "next/image"
 
 interface PageProps {
   params: {
@@ -23,8 +24,31 @@ export default async function TokenPage({ params }: PageProps) {
     }
 
     return (
-      <div className="min-h-screen w-full px-4">
-        <main className="mx-auto py-6">
+      <div className="min-h-screen w-full px-4 relative">
+        {/* Blurred background token image with custom styles */}
+        <div 
+          className="absolute z-0 pointer-events-none"
+          style={{
+            width: '700px',
+            height: '700px',
+            filter: 'blur(360px)',
+            willChange: 'filter',
+            opacity: 1,
+            left: '-10vw',
+            top: '-350px',
+            mixBlendMode: 'overlay'
+          }}
+        >
+          <Image
+            src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${id}.png`}
+            alt={`${tokenData.name} background`}
+            className="w-full h-full object-cover"
+            width={700}
+            height={700}
+          />
+        </div>
+
+        <main className="mx-auto py-6 relative z-10">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             {/* PriceChart over MarketMetrics on the Right */}
             <div className="col-span-8">
