@@ -10,6 +10,9 @@ import { MarketMetrics } from "./market-metrics"
 import { CoinMarketData } from '@/types/coins'
 import Image from "next/image"
 import { LiquidationHistoryChart } from "./liquidation-history-chart"
+import { SectionHeader } from "../_components/section-header"
+import { IconBinocularsFill } from "symbols-react"
+import { OpenInterestChart } from './open-interest-chart'
 
 interface PageProps {
   params: {
@@ -51,6 +54,30 @@ export default async function TokenPage({ params }: PageProps) {
           />
         </div>
 
+        <div 
+          className="absolute z-0 pointer-events-none"
+          style={{
+            width: '479px',
+            height: '479px',
+            filter: 'blur(360px)',
+            willChange: 'filter',
+            opacity: 0.5,
+            right: '-5vw',
+            top: '236px',
+            mixBlendMode: 'overlay'
+
+            
+          }}
+        >
+          <Image
+            src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${id}.png`}
+            alt={`${tokenData.name} background`}
+            className="w-full h-full object-cover"
+            width={700}
+            height={700}
+          />
+        </div>
+
         <main className="mx-auto py-6 relative z-10">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             <div className="col-span-12">
@@ -60,21 +87,29 @@ export default async function TokenPage({ params }: PageProps) {
               />              
             </div>
             
-            <div className="col-span-12 py-12 pt-6">
+            <div className="col-span-12 py-6 pt-6">
               <MarketMetrics data={tokenData} />
             </div>
-            
-            
-            {/* Liquidation History */}
+
+            <SectionHeader title="Derivative, Liquidation and Open Interest Overview" icon={IconBinocularsFill} className="col-span-12 mt-24" />
+
             <div className="col-span-6">
               <LiquidationHistoryChart
                 coinId={params.id}
                 interval="1d"
                 exchangeList="Binance, Bybit, OKX, Gate, HTX, Hyperliquid, CoinEx, Bitmex, Bitfinex"
-                limit={180}
+                limit={200}
               />              
             </div>
 
+            <div className="col-span-6">
+            <OpenInterestChart
+              coinId={params.id}
+              interval="1d"
+              limit={30}
+              unit="usd"
+            />              
+            </div>
           </div>
         </main>
       </div>

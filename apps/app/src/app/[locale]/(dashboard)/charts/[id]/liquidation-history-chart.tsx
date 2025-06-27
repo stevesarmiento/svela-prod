@@ -1,11 +1,10 @@
 'use client'
 
-import React, { useEffect, useRef, useMemo } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
+import React, { useEffect, useRef, useMemo, useState } from 'react'
+import { Card, CardContent } from "@v1/ui/card"
 import { Skeleton } from "@v1/ui/skeleton"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { useLiquidationHistory } from '@/hooks/use-liquidation-history'
-import { TrendingDown, TrendingUp } from 'lucide-react'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import {
   createChart,
@@ -31,6 +30,16 @@ interface LiquidationDataPoint {
   color?: string
 }
 
+interface TooltipData {
+  time: string
+  longValue: number
+  shortValue: number
+  total: number
+  x: number
+  y: number
+  visible: boolean
+}
+
 export function LiquidationHistoryChart({
   coinId,
   interval = '1d',
@@ -39,6 +48,15 @@ export function LiquidationHistoryChart({
 }: LiquidationHistoryChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi>(null)
+  const [tooltip, setTooltip] = useState<TooltipData>({
+    time: '',
+    longValue: 0,
+    shortValue: 0,
+    total: 0,
+    x: 0,
+    y: 0,
+    visible: false
+  })
 
   const { data, isLoading, error } = useLiquidationHistory({
     symbol: coinId,
@@ -51,12 +69,12 @@ export function LiquidationHistoryChart({
   const colors = useMemo(() => {
     const pastelColors = generatePastelColors(2)
     return {
-      long: addOpacityToColor(pastelColors[0] || '', 0.8), // First pastel color for longs
-      short: addOpacityToColor(pastelColors[1] || '', 0.8), // Second pastel color for shorts
+      long: addOpacityToColor(pastelColors[0] || '', 0.8),
+      short: addOpacityToColor(pastelColors[1] || '', 0.8),
     }
   }, [])
 
-  const { longData, shortData, totalStats } = useMemo(() => {
+  const { longData, shortData } = useMemo(() => {
     if (!data?.data?.length) {
       return {
         longData: [],
@@ -142,18 +160,52 @@ export function LiquidationHistoryChart({
 
     // Configure the long liquidations scale (top half)
     chart.priceScale('longs').applyOptions({
-      scaleMargins: { top: 0, bottom: 0.5 }, // Top half of chart
+      scaleMargins: { top: 0, bottom: 0.5 },
     })
 
     // Configure the short liquidations scale (bottom half, inverted)
     chart.priceScale('shorts').applyOptions({
-      scaleMargins: { top: 0.5, bottom: 0 }, // Bottom half of chart
-      invertScale: true, // Makes shorts appear to go "down"
+      scaleMargins: { top: 0.5, bottom: 0 },
+      invertScale: true,
     })
 
     // Set data
     longSeries.setData(longData)
     shortSeries.setData(shortData)
+
+    // Subscribe to crosshair move for tooltip
+    chart.subscribeCrosshairMove((param) => {
+      if (!param.time || !chartContainerRef.current) {
+        setTooltip(prev => ({ ...prev, visible: false }))
+        return
+      }
+
+      // Find the data points for this time
+      const longPoint = longData.find(d => d.time === param.time)
+      const shortPoint = shortData.find(d => d.time === param.time)
+
+      if (!longPoint || !shortPoint) {
+        setTooltip(prev => ({ ...prev, visible: false }))
+        return
+      }
+
+      // Get mouse position relative to chart container
+      const x = param.point?.x || 0
+      const y = param.point?.y || 0
+
+      // Format time
+      const timeStr = new Date((param.time as number) * 1000).toLocaleDateString()
+
+      setTooltip({
+        time: timeStr,
+        longValue: longPoint.value,
+        shortValue: shortPoint.value,
+        total: longPoint.value + shortPoint.value,
+        x: x + 10, // Offset slightly from cursor
+        y: y - 10,
+        visible: true
+      })
+    })
 
     // Fit content
     chart.timeScale().fitContent()
@@ -182,11 +234,6 @@ export function LiquidationHistoryChart({
       <div className="border border-zinc-800/30 rounded-[13px] overflow-hidden">
         <div className="p-0 relative">
           <Card className="border-none bg-transparent">
-            <CardHeader className="p-6 pt-4 pr-5">
-              <CardTitle>
-                <Skeleton className="h-5 w-48" />
-              </CardTitle>
-            </CardHeader>
             <CardContent className="pl-8">
               <Skeleton className="h-[200px] w-full" />
             </CardContent>
@@ -198,68 +245,60 @@ export function LiquidationHistoryChart({
 
   if (error || !data?.success) {
     return (
-      <div className="border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+      <div className="">
         <Card className="border-none bg-transparent">
-          <CardHeader>
-            <CardTitle className="text-destructive">Failed to load liquidation data</CardTitle>
-          </CardHeader>
+          <CardContent>
+            <div className="text-destructive">Failed to load liquidation data</div>
+          </CardContent>
         </Card>
       </div>
     )
   }
 
   return (
-    <div className="border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
-    <div className="p-0 relative">
-      <div
-        className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
-        style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
-            backgroundRepeat: "repeat",
-        }}
-        />
-        <Card className="border-none bg-transparent">
-          <CardHeader className="p-6 pt-4 pr-5">
-            <CardTitle className="flex flex-col items-left">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg font-mono">
-                  Liquidation Volume - {data.coinInfo?.name || data.symbol}
-                </span>
-              </div>
-              
-              {/* Stats */}
-              <div className="flex gap-6 text-sm">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="h-3 w-3 text-green-500" />
-                  <span className="text-green-500 font-medium">
-                    ${formatLargeNumber(totalStats.totalLong)}
-                  </span>
-                  <span className="text-muted-foreground">Long</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <TrendingDown className="h-3 w-3 text-red-500" />
-                  <span className="text-red-500 font-medium">
-                    ${formatLargeNumber(totalStats.totalShort)}
-                  </span>
-                  <span className="text-muted-foreground">Short</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">
-                    ${formatLargeNumber(totalStats.total)}
-                  </span>
-                  <span className="text-muted-foreground">Total</span>
+    <div className="relative">
+      <Card className="border-none bg-transparent">          
+        <CardContent className="pl-8">
+          <div className="p-0 relative">
+            <div ref={chartContainerRef} />
+            
+            {/* Custom Tooltip */}
+            {tooltip.visible && (
+              <div 
+                className="absolute z-10 bg-zinc-900 border border-zinc-800/50 rounded-lg shadow-lg pointer-events-none"
+                style={{ 
+                  left: `${tooltip.x}px`, 
+                  top: `${tooltip.y}px`,
+                  transform: 'translate(-50%, -100%)'
+                }}
+              >
+                <div className="text-xs text-muted-foreground mb-1 p-1.5">{tooltip.time}</div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-sm p-1.5 py-0">
+                    <span className="font-medium" style={{ color: colors.long }}>
+                      ${formatLargeNumber(tooltip.longValue)}
+                    </span>
+                    <span className="text-muted-foreground">Long</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm p-1.5 py-0">
+                    <span className="font-medium" style={{ color: colors.short }}>
+                      ${formatLargeNumber(tooltip.shortValue)}
+                    </span>
+                    <span className="text-muted-foreground">Short</span>
+                  </div>
+                  <div className="h-[1px] bg-zinc-800 w-full scale-120" />
+                  <div className="flex flex-col items-left text-sm p-1.5 pt-0">
+                    <span className="text-muted-foreground text-xs">Total</span>
+                    <span className="font-medium" style={{ color: colors.long }}>
+                      ${formatLargeNumber(tooltip.total)}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </CardTitle>
-          </CardHeader>
-          
-          <CardContent className="pl-8">
-            <div className="p-0 relative">
-              <div ref={chartContainerRef} />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

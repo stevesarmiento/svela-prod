@@ -1,22 +1,78 @@
 import { useQuery } from '@tanstack/react-query';
 
-interface OpenInterestData {
-  currentOpenInterest: number | null;
-  symbol: string | null;
-  lastUpdate: number | null;
+interface OpenInterestOHLC {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
 }
 
-export function useOpenInterest(cmcId: string) {
-  return useQuery<OpenInterestData>({
-    queryKey: ['open-interest', cmcId],
-    queryFn: async () => {
-      const response = await fetch(`/api/coinalyze/open-interest?cmcId=${cmcId}`);
+interface OpenInterestResponse {
+  success: boolean;
+  data: OpenInterestOHLC[];
+  count: number;
+  symbol: string;
+  interval: string;
+  unit: string;
+  originalInput: string;
+  coinInfo?: {
+    symbol: string;
+    name: string;
+    coinId: number;
+    isSupported: boolean;
+  };
+  lastUpdated: string;
+}
+
+interface UseOpenInterestProps {
+  symbol: string;
+  interval?: string;
+  limit?: number;
+  unit?: 'usd' | 'coin';
+  startTime?: number;
+  endTime?: number;
+}
+
+export function useOpenInterest({
+  symbol,
+  interval = '4h',
+  limit = 100,
+  unit = 'usd',
+  startTime,
+  endTime,
+}: UseOpenInterestProps) {
+  return useQuery({
+    queryKey: ['openInterest', symbol, interval, limit, unit, startTime, endTime],
+    queryFn: async (): Promise<OpenInterestResponse> => {
+      const params = new URLSearchParams({
+        symbol,
+        interval,
+        limit: limit.toString(),
+        unit,
+      });
+
+      if (startTime) params.append('start_time', startTime.toString());
+      if (endTime) params.append('end_time', endTime.toString());
+
+      const response = await fetch(
+        `/api/coinglass/open-interest/aggregated-history?${params.toString()}`
+      );
+
       if (!response.ok) {
-        throw new Error('Failed to fetch open interest');
+        throw new Error(`Failed to fetch open interest data: ${response.statusText}`);
       }
-      return response.json();
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch open interest data');
+      }
+
+      return data;
     },
-    refetchInterval: 60000, // Refetch every minute
-    staleTime: 30000, // Consider data stale after 30 seconds
+    enabled: !!symbol,
+    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
+    staleTime: 2 * 60 * 1000, // Consider data stale after 2 minutes
   });
 }
