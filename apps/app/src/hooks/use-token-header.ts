@@ -1,21 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
+import { useQuery } from 'convex/react'
+import { api } from '../../convex/_generated/api'
 
 interface TokenHeaderData {
   id: string
   name: string
-  symbol?: string
+  symbol: string
+  logoUrl: string
 }
 
 export function useTokenHeader() {
   const pathname = usePathname()
-  const [tokenData, setTokenData] = useState<TokenHeaderData | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-
+  
   // Check if we're on a chart detail page and extract coin ID
-  // Handle both /charts/1 and /en/charts/1 patterns
   const pathSegments = pathname.split('/').filter(segment => segment !== '')
   
   let isChartDetailPage = false
@@ -24,52 +23,36 @@ export function useTokenHeader() {
   // Check for pattern: charts/[id] or [locale]/charts/[id]
   if (pathSegments.length >= 2 && pathSegments.includes('charts')) {
     const chartsIndex = pathSegments.indexOf('charts')
-    // Check if there's an ID after 'charts'
     if (chartsIndex + 1 < pathSegments.length && pathSegments[chartsIndex + 1]) {
       isChartDetailPage = true
       coinId = pathSegments[chartsIndex + 1] || null
     }
   }
 
-  console.log('useTokenHeader Debug:', { pathname, pathSegments, isChartDetailPage, coinId })
+  // Use Convex query to get coin data
+  const coinData = useQuery(
+    api.coins.getCoinByIdString,
+    coinId ? { coinId } : "skip"
+  )
 
-  useEffect(() => {
-    if (!coinId || !isChartDetailPage) {
-      setTokenData(null)
-      return
-    }
+  // Transform Convex data to match expected interface
+  const tokenData: TokenHeaderData | null = coinData ? {
+    id: coinData.coinId.toString(),
+    name: coinData.name,
+    symbol: coinData.symbol,
+    logoUrl: coinData.logoUrl
+  } : null
 
-    const fetchTokenData = async () => {
-      setIsLoading(true)
-      try {
-        console.log('Fetching token data for ID:', coinId)
-        const response = await fetch(`/api/coins/${coinId}`)
-        const data = await response.json()
-        
-        console.log('API Response:', data)
-        
-        if (data && data.name) {
-          const tokenInfo = {
-            id: coinId,
-            name: data.name,
-            symbol: data.symbol
-          }
-          console.log('Setting token data:', tokenInfo)
-          setTokenData(tokenInfo)
-        } else {
-          console.log('No data found for coin ID:', coinId)
-          setTokenData({ id: coinId, name: 'Unknown Token' })
-        }
-      } catch (error) {
-        console.error('Failed to fetch token data for header:', error)
-        setTokenData({ id: coinId, name: 'Unknown Token' })
-      } finally {
-        setIsLoading(false)
-      }
-    }
+  const isLoading = coinId ? coinData === undefined : false
 
-    fetchTokenData()
-  }, [coinId, isChartDetailPage])
+  console.log('useTokenHeader Debug:', { 
+    pathname, 
+    pathSegments, 
+    isChartDetailPage, 
+    coinId,
+    tokenData,
+    isLoading
+  })
 
   return {
     isChartDetailPage,

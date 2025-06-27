@@ -5,7 +5,7 @@ import {
 import { getCoinData } from "@/lib/coinmarketcap" 
 // import { PriceChart } from "./price-chart"
 // import { MarketMetrics } from "./market-metrics"
-import { DerivativesMetrics } from "./derivatives-metrics"
+//import { DerivativesMetrics } from "./derivatives-metrics"
 import { CoinMarketData } from '@/types/coins'
 import Image from "next/image"
 
@@ -65,9 +65,9 @@ export default async function TokenPage({ params }: PageProps) {
             </div> */}
             
             {/* Derivatives Metrics */}
-            <div className="col-span-12">
+            {/* <div className="col-span-12">
               <DerivativesMetrics data={tokenData} />
-            </div>
+            </div> */}
           </div>
         </main>
       </div>

@@ -218,3 +218,81 @@ export const getMetadataBySlug = query({
     return metadata;
   },
 });
+
+// CoinGlass supported coins mutations and queries
+export const bulkUpsertCoinglassSupportedCoins = mutation({
+  args: { symbols: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const existingSupportedCoins = await ctx.db.query("coinglassSupportedCoins").collect();
+    const existingSymbols = new Set(existingSupportedCoins.map(coin => coin.symbol));
+    
+    // Mark all existing coins as inactive first
+    for (const existing of existingSupportedCoins) {
+      await ctx.db.patch(existing._id, {
+        isActive: false,
+        lastUpdated: Date.now(),
+      });
+    }
+    
+    // Process new/updated symbols
+    for (const symbol of args.symbols) {
+      if (existingSymbols.has(symbol)) {
+        // Reactivate existing symbol
+        const existing = existingSupportedCoins.find(c => c.symbol === symbol);
+        if (existing) {
+          await ctx.db.patch(existing._id, {
+            isActive: true,
+            lastUpdated: Date.now(),
+          });
+        }
+      } else {
+        // Insert new supported coin
+        await ctx.db.insert("coinglassSupportedCoins", {
+          symbol,
+          isActive: true,
+          lastUpdated: Date.now(),
+        });
+      }
+    }
+  },
+});
+
+export const getCoinglassSupportedCoins = query({
+  args: { onlyActive: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const onlyActive = args.onlyActive ?? true;
+    
+    if (onlyActive) {
+      return await ctx.db
+        .query("coinglassSupportedCoins")
+        .withIndex("by_active", (q) => q.eq("isActive", true))
+        .collect();
+    }
+    
+    return await ctx.db.query("coinglassSupportedCoins").collect();
+  },
+});
+
+export const isCoinglassSupported = query({
+  args: { symbol: v.string() },
+  handler: async (ctx, args) => {
+    const supportedCoin = await ctx.db
+      .query("coinglassSupportedCoins")
+      .withIndex("by_symbol", (q) => q.eq("symbol", args.symbol.toUpperCase()))
+      .first();
+    
+    return supportedCoin?.isActive ?? false;
+  },
+});
+
+export const getCoinglassSupportedSymbols = query({
+  args: {},
+  handler: async (ctx) => {
+    const supportedCoins = await ctx.db
+      .query("coinglassSupportedCoins")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+    
+    return supportedCoins.map(coin => coin.symbol);
+  },
+});

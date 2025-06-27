@@ -24,7 +24,7 @@ import { SignOutButton, useClerk } from "@clerk/nextjs";
 import { Fingerprint, LogOut } from "lucide-react";
 import { IconChevronBackward } from 'symbols-react';
 import { SvelaLogo } from "@v1/ui/svela-logo";
-import { useTokenHeader } from "@/hooks/use-token-data";
+import { useTokenHeader } from "@/hooks/use-token-header";
 import Image from "next/image";
 
 
@@ -116,7 +116,7 @@ export function TopNav() {
         {/* Conditional Logo/Token Header */}
         <div className="flex items-center gap-3">
           {isChartDetailPage ? (
-            // Token Header
+            // Token Header with cached data
             <div className="flex items-center gap-4">
               <Link href="/charts" className="flex items-center text-white/70 hover:text-white hover:bg-zinc-900/50 rounded-xl p-2 transition-all duration-300">
                 <IconChevronBackward className="h-5 w-5 fill-current" />
@@ -129,14 +129,31 @@ export function TopNav() {
                     className="w-8 h-8 rounded-full ring-1 ring-white/10"
                     width={32}
                     height={32}
+                    priority={true} // Load token logos with priority
+                    placeholder="blur"
+                    blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGBkbHB0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
+                    onError={(e) => {
+                      // Fallback to a default image if the token logo fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.src = '/favicon.ico';
+                    }}
                   />
                 )}
                 <div className="flex flex-col gap-0">
                   <h1 className="text-sm font-semibold text-white">
-                    {isLoading ? 'Loading...' : tokenData?.symbol || 'Token Details'}
+                    {isLoading ? (
+                      <div className="h-4 w-16 bg-white/10 rounded animate-pulse" />
+                    ) : (
+                      tokenData?.symbol || 'Token Details'
+                    )}
                   </h1>
                   <p className="text-xs text-white">
-                    <span className="text-xs text-white/60">Today is </span> {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                    <span className="text-xs text-white/60">Today is </span> 
+                    {new Date().toLocaleDateString('en-US', { 
+                      weekday: 'long', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
                   </p>
                 </div>
               </div>
@@ -188,7 +205,7 @@ export function TopNav() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* User dropdown */}
+        {/* User dropdown with optimized avatar loading */}
         {user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -197,7 +214,8 @@ export function TopNav() {
                   {avatarUrl && (
                     <AvatarImage 
                       src={avatarUrl} 
-                      alt={name || email?.split('@')[0] || 'User'} 
+                      alt={name || email?.split('@')[0] || 'User'}
+                      loading="lazy" // Lazy load user avatars
                     />
                   )}
                   <AvatarFallback>

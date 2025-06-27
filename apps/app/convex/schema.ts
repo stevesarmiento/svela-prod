@@ -75,4 +75,12 @@ export default defineSchema({
     .index("by_coin_id", ["coinId"])
     .index("by_slug", ["slug"])
     .index("by_symbol", ["symbol"]),
+
+  coinglassSupportedCoins: defineTable({
+    symbol: v.string(),
+    isActive: v.boolean(),
+    lastUpdated: v.number(),
+  })
+    .index("by_symbol", ["symbol"])
+    .index("by_active", ["isActive"]),
 });
