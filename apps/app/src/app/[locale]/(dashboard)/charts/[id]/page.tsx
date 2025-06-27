@@ -4,7 +4,8 @@ import {
 } from "@v1/ui/card"
 import { getCoinData } from "@/lib/coinmarketcap" 
 import { PriceChart } from "./price-chart"
-// import { MarketMetrics } from "./market-metrics"
+import { MarketMetrics } from "./market-metrics"
+//import { FundingRateExchanges } from "./funding-rate-exchanges"
 //import { DerivativesMetrics } from "./derivatives-metrics"
 import { CoinMarketData } from '@/types/coins'
 import Image from "next/image"
@@ -52,7 +53,6 @@ export default async function TokenPage({ params }: PageProps) {
 
         <main className="mx-auto py-6 relative z-10">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            {/* PriceChart */}
             <div className="col-span-12">
               <PriceChart 
                 coinId={id}
@@ -60,21 +60,18 @@ export default async function TokenPage({ params }: PageProps) {
               />              
             </div>
             
-            {/* Market Metrics */}
-            {/* <div className="col-span-12">
+            <div className="col-span-12 py-12 pt-6">
               <MarketMetrics data={tokenData} />
-            </div> */}
+            </div>
             
-            {/* Derivatives Metrics */}
-            {/* <div className="col-span-12">
-              <DerivativesMetrics data={tokenData} />
-            </div> */}
-            <div className="col-span-12">
+            
+            {/* Liquidation History */}
+            <div className="col-span-6">
               <LiquidationHistoryChart
                 coinId={params.id}
                 interval="1d"
                 exchangeList="Binance, Bybit, OKX, Gate, HTX, Hyperliquid, CoinEx, Bitmex, Bitfinex"
-                limit={360}
+                limit={180}
               />              
             </div>
 
