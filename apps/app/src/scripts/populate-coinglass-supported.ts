@@ -1,44 +1,54 @@
 import { config } from 'dotenv';
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
+import path from 'path';
 
 // Load environment variables from multiple possible locations
-config({ path: '.env.local' });
-config({ path: '.env' });
+config({ path: path.join(process.cwd(), '.env.local') });
+config({ path: path.join(process.cwd(), '.env') });
 
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+console.log('=== Environment Debug ===');
+console.log('Current working directory:', process.cwd());
+console.log('NEXT_PUBLIC_CONVEX_URL:', process.env.NEXT_PUBLIC_CONVEX_URL ? 'SET' : 'NOT SET');
+console.log('CG_API_KEY:', process.env.CG_API_KEY ? 'SET' : 'NOT SET');
+console.log('CG-API-KEY:', process.env['CG-API-KEY'] ? 'SET' : 'NOT SET');
+
+// Check required environment variables
+if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
+  console.error('❌ NEXT_PUBLIC_CONVEX_URL is not set');
+  console.log('Please add NEXT_PUBLIC_CONVEX_URL to your .env.local file');
+  process.exit(1);
+}
+
+const apiKey = process.env.CG_API_KEY || process.env['CG-API-KEY'];
+if (!apiKey) {
+  console.error('❌ Neither CG_API_KEY nor CG-API-KEY is set');
+  console.log('Please add CG_API_KEY to your .env.local file');
+  process.exit(1);
+}
+
+// Add this assertion after the check
+const apiKeyConfirmed = apiKey as string;
+
+const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL);
 
 async function populateCoinglassSupportedCoins() {
   try {
-    console.log('=== Environment Debug ===');
-    console.log('CG_API_KEY:', process.env.CG_API_KEY ? 'SET' : 'NOT SET');
-    console.log('CG-API-KEY:', process.env['CG-API-KEY'] ? 'SET' : 'NOT SET');
-    console.log('Available env vars starting with CG:', Object.keys(process.env).filter(key => key.startsWith('CG')));
-    
-    // Try both possible environment variable names
-    const apiKey = process.env.CG_API_KEY || process.env['CG-API-KEY'];
-    
-    if (!apiKey) {
-      console.error('❌ API key not found in environment variables');
-      console.log('Make sure you have either CG_API_KEY or CG-API-KEY in your .env or .env.local file');
-      return;
-    }
-    
-    console.log('✅ API key found, length:', apiKey.length);
+    console.log('✅ Environment variables loaded successfully');
+    console.log('✅ API key found, length:', apiKeyConfirmed.length);
     console.log('Fetching supported coins from CoinGlass...');
     
     const response = await fetch(
       `https://open-api-v4.coinglass.com/api/futures/supported-coins`,
       {
         headers: {
-          'CG_API_KEY': apiKey,
+          'CG-API-KEY': apiKeyConfirmed,
           'Content-Type': 'application/json',
         },
       }
     );
 
     console.log('Response status:', response.status);
-    console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
     if (!response.ok) {
       const errorText = await response.text();

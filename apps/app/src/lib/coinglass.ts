@@ -3,7 +3,7 @@
  */
 
 const BASE_URL = "https://open-api-v4.coinglass.com/api";
-const API_KEY = process.env.CG_API_KEY;
+const API_KEY = process.env.CG_API_KEY || process.env['CG-API-KEY'];
 
 interface CoinglassResponse<T> {
   code: string;
@@ -18,11 +18,11 @@ export async function fetchCoinglassData<T>(endpoint: string): Promise<T> {
 
   const response = await fetch(`${BASE_URL}${endpoint}`, {
     headers: {
-      'CG_API_KEY': API_KEY,
+      'CG-API-KEY': API_KEY,
       'Content-Type': 'application/json',
     },
     next: {
-      revalidate: 60, // 1 minute cache as per CoinGlass docs
+      revalidate: 300, // 5 minutes cache
     },
   });
 
@@ -53,7 +53,8 @@ export function normalizeCoinglassSymbol(symbol: string): string {
   const symbolMap: Record<string, string> = {
     'WBTC': 'BTC',
     'WETH': 'ETH',
-    // Add more mappings as needed
+    'USDT': 'USDT',
+    'USDC': 'USDC',
   };
   
   const normalized = symbol.toUpperCase();

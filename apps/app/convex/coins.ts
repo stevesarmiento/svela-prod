@@ -296,3 +296,115 @@ export const getCoinglassSupportedSymbols = query({
     return supportedCoins.map(coin => coin.symbol);
   },
 });
+
+// Enhanced CoinGlass symbol lookup with fallback strategies
+export const getCoinglassSymbolByCoinId = query({
+  args: { coinId: v.number() },
+  handler: async (ctx, args) => {
+    // First get the coin data
+    const coin = await ctx.db
+      .query("coins")
+      .filter((q) => q.eq(q.field("coinId"), args.coinId))
+      .first();
+    
+    if (!coin) {
+      return null;
+    }
+    
+    // Get metadata for additional info
+    const metadata = await ctx.db
+      .query("coinMetadata")
+      .withIndex("by_coin_id", (q) => q.eq("coinId", args.coinId))
+      .first();
+    
+    // Try multiple symbol variations to find a supported one
+    const symbolsToTry = [
+      coin.symbol.toUpperCase(),
+      metadata?.symbol?.toUpperCase(),
+      // Common variations
+      coin.symbol.replace(/USD$/, '').toUpperCase(),
+      metadata?.symbol?.replace(/USD$/, '').toUpperCase(),
+    ].filter(Boolean) as string[];
+    
+    // Remove duplicates
+    const uniqueSymbols = [...new Set(symbolsToTry)];
+    
+    // Check each symbol variation for CoinGlass support
+    for (const symbolToCheck of uniqueSymbols) {
+      const isSupported = await ctx.db
+        .query("coinglassSupportedCoins")
+        .withIndex("by_symbol", (q) => q.eq("symbol", symbolToCheck))
+        .first();
+      
+      if (isSupported?.isActive) {
+        return {
+          symbol: symbolToCheck,
+          name: metadata?.name || coin.name,
+          coinId: args.coinId,
+          isSupported: true,
+          originalSymbol: coin.symbol,
+          metadataSymbol: metadata?.symbol
+        };
+      }
+    }
+    
+    return null;
+  },
+});
+
+// Get coin info by symbol for reverse lookup
+export const getCoinBySymbol = query({
+  args: { symbol: v.string() },
+  handler: async (ctx, args) => {
+    const symbolUpper = args.symbol.toUpperCase();
+    
+    // Try to find in coins table first
+    const coin = await ctx.db
+      .query("coins")
+      .filter((q) => q.eq(q.field("symbol"), symbolUpper))
+      .first();
+    
+    if (coin) {
+      return coin;
+    }
+    
+    // Try metadata table as fallback
+    const metadata = await ctx.db
+      .query("coinMetadata")
+      .withIndex("by_symbol", (q) => q.eq("symbol", symbolUpper))
+      .first();
+    
+    if (metadata) {
+      // Get the corresponding coin
+      const coinFromMetadata = await ctx.db
+        .query("coins")
+        .filter((q) => q.eq(q.field("coinId"), metadata.coinId))
+        .first();
+      
+      return coinFromMetadata;
+    }
+    
+    return null;
+  },
+});
+
+// Get all coins that are supported by CoinGlass
+export const getCoinglassSupportedCoinsList = query({
+  args: {},
+  handler: async (ctx) => {
+    const supportedSymbols = await ctx.db
+      .query("coinglassSupportedCoins")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+    
+    const symbolSet = new Set(supportedSymbols.map(s => s.symbol));
+    
+    // Get coins that match these symbols
+    const allCoins = await ctx.db.query("coins").collect();
+    const supportedCoins = allCoins.filter(coin => 
+      symbolSet.has(coin.symbol.toUpperCase())
+    );
+    
+    return supportedCoins;
+  },
+});
