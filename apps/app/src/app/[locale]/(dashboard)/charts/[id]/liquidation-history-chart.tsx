@@ -113,8 +113,8 @@ export function LiquidationHistoryChart({
 
     // Create chart with same styling as price chart
     const chart = createChart(chartContainerRef.current, {
-      handleScale: true,
-      handleScroll: true,
+      handleScale: false,
+      handleScroll: false,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: "#ffffff50",

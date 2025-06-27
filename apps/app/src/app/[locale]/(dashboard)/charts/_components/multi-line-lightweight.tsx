@@ -271,8 +271,8 @@ export function MultiPriceChartLightweight({
     if (!chartContainerRef.current || !coinSeriesData.length) return
 
     const chart = createChart(chartContainerRef.current, {
-      handleScale: true,
-      handleScroll: true,
+      handleScale: false,
+      handleScroll: false,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: "#ffffff50",

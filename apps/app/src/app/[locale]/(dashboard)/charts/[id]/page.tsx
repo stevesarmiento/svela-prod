@@ -11,8 +11,9 @@ import { CoinMarketData } from '@/types/coins'
 import Image from "next/image"
 import { LiquidationHistoryChart } from "./liquidation-history-chart"
 import { SectionHeader } from "../_components/section-header"
-import { IconBinocularsFill } from "symbols-react"
+import { IconBinocularsFill, IconDropFill } from "symbols-react"
 import { OpenInterestChart } from './open-interest-chart'
+import { TakerBuySell } from './taker-buy-sell'
 
 interface PageProps {
   params: {
@@ -55,18 +56,16 @@ export default async function TokenPage({ params }: PageProps) {
         </div>
 
         <div 
-          className="absolute z-0 pointer-events-none"
+          className="absolute z-0 pointer-events-none saturate-200"
           style={{
             width: '479px',
             height: '479px',
             filter: 'blur(360px)',
             willChange: 'filter',
-            opacity: 0.5,
+            opacity: 1,
             right: '-5vw',
-            top: '236px',
+            top: '236px',     
             mixBlendMode: 'overlay'
-
-            
           }}
         >
           <Image
@@ -91,7 +90,7 @@ export default async function TokenPage({ params }: PageProps) {
               <MarketMetrics data={tokenData} />
             </div>
 
-            <SectionHeader title="Derivative, Liquidation and Open Interest Overview" icon={IconBinocularsFill} className="col-span-12 mt-24" />
+            <SectionHeader title="Liquidation and Open Interest Overview" icon={IconDropFill} className="col-span-12 mt-24" />
 
             <div className="col-span-6">
               <LiquidationHistoryChart
@@ -109,6 +108,14 @@ export default async function TokenPage({ params }: PageProps) {
               limit={30}
               unit="usd"
             />              
+            </div>
+            <SectionHeader title="Buy/Sell Pressure by Exchange" icon={IconBinocularsFill} className="col-span-12 mt-24" />
+
+            <div className="col-span-12">
+              <TakerBuySell
+                coinId={params.id}
+                range="24h"
+              />
             </div>
           </div>
         </main>
