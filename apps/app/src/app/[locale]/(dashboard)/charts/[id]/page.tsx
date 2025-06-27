@@ -3,8 +3,9 @@ import {
   CardContent, 
 } from "@v1/ui/card"
 import { getCoinData } from "@/lib/coinmarketcap" 
-import { PriceChart } from "./price-chart"
-import { MarketMetrics } from "./market-metrics"
+// import { PriceChart } from "./price-chart"
+// import { MarketMetrics } from "./market-metrics"
+import { DerivativesMetrics } from "./derivatives-metrics"
 import { CoinMarketData } from '@/types/coins'
 import Image from "next/image"
 
@@ -50,15 +51,22 @@ export default async function TokenPage({ params }: PageProps) {
 
         <main className="mx-auto py-6 relative z-10">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            {/* PriceChart over MarketMetrics on the Right */}
-            <div className="col-span-12">
+            {/* PriceChart */}
+            {/* <div className="col-span-12">
               <PriceChart 
                 coinId={id}
                 initialData={tokenData.quote.USD} 
               />              
-            </div>
-            <div className="col-span-12">
+            </div> */}
+            
+            {/* Market Metrics */}
+            {/* <div className="col-span-12">
               <MarketMetrics data={tokenData} />
+            </div> */}
+            
+            {/* Derivatives Metrics */}
+            <div className="col-span-12">
+              <DerivativesMetrics data={tokenData} />
             </div>
           </div>
         </main>

@@ -53,7 +53,6 @@ async function fetchHistoricalData(id: string, timeScale: string = '7d') {
   
   // Define time ranges - show 60-90 days of context for all timeframes
   const timeRanges = {
-    '1d': 90 * 24 * 60 * 60 * 1000,      // 90 days for hourly view
     '7d': 90 * 24 * 60 * 60 * 1000,      // 90 days for weekly view  
     '30d': 90 * 24 * 60 * 60 * 1000,     // 90 days for monthly view
     'max': 365 * 24 * 60 * 60 * 1000,    // 365 days for yearly view
@@ -78,8 +77,8 @@ async function fetchHistoricalData(id: string, timeScale: string = '7d') {
     id,
     time_start: timeStart,
     time_end: timeEnd,
-    interval: timeScale === '1d' ? '1h' : '24h', // Hourly for 1d, daily for others
-    count: timeScale === '1d' ? '2160' : '90', // 90 days * 24 hours = 2160 for hourly, 90 for daily
+    interval: timeScale === '7d' ? '1h' : '24h', // Hourly for 7d, daily for others
+    count: timeScale === '7d' ? '2160' : '90', // 90 days * 24 hours = 2160 for hourly, 90 for daily
     convert: 'USD',
     aux: 'price,volume,market_cap',
     skip_invalid: 'true'
@@ -157,23 +156,17 @@ async function fetchOHLCVData(id: string, timeScale: string = '7d') {
   
   // Define time ranges - 60-90 days context with different granularities
   const timeConfigs = {
-    '1d': { 
-      days: 7, 
+    '7d': { 
+      days: 30, 
       timePeriod: 'hourly',
       interval: '1h',
-      count: '168' // 7 days * 24 hours
+      count: '720' // 30 days * 24 hours
     },
-    '7d': { 
+    '30d': { 
       days: 180, 
       timePeriod: 'daily',
       interval: '1d',
-      count: '180' // 180 days of daily data
-    },
-    '30d': { 
-      days: 90, 
-      timePeriod: 'daily',
-      interval: '1d',
-      count: '90' // 90 days of daily data
+      count: '180' // 90 days of daily data
     },
     'max': { 
       days: 365, 

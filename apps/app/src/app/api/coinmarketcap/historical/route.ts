@@ -5,11 +5,10 @@ import type { HistoricalData } from '@/types/coins';
 const BASE_URL = 'https://pro-api.coinmarketcap.com/v2'
 
 const IntervalMap = {
-  // '1h': { interval: '1h', days: 30, count: 48 },      // 30 days of hourly data
-  // '4h': { interval: '4h', days: 30, count: 42 },      // 30 days of 4h data  
-  '1d': { interval: '24h', days: 30, count: 30 },    // 30 days of daily data
-  '7d': { interval: '24h', days: 90, count: 90 },    // 90 days of daily data
-  'max': { interval: '24h', days: 365, count: 365 }  // 1 year of daily data
+  '7d': { interval: '1h', days: 30, count: 720 },      // 30 days of hourly data (1D view)
+  '30d': { interval: '24h', days: 180, count: 180 },     // 90 days of daily data (1W view)
+  'max': { interval: '24h', days: 365, count: 365 },   // 1 year of daily data (1Y view)
+  '2y': { interval: '24h', days: 730, count: 730 }     // 2 years of daily data (2Y view)
 } as const
 
 interface CoinHistoricalData {
@@ -32,7 +31,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const ids = searchParams.get('ids');
-    const timeframe = searchParams.get('timeframe') || 'max';
+    const timeScale = searchParams.get('timeScale') || '7d'; // Changed from 'timeframe' to 'timeScale' and default to '7d'
 
     if (!ids) {
       return NextResponse.json(
@@ -41,8 +40,8 @@ export async function GET(request: Request) {
       );
     }
 
-    // Get interval config based on timeframe
-    const config = IntervalMap[timeframe as keyof typeof IntervalMap] || IntervalMap.max;
+    // Get interval config based on timeScale
+    const config = IntervalMap[timeScale as keyof typeof IntervalMap] || IntervalMap['7d'];
 
     const now = new Date();
     const timeEnd = new Date(Math.min(now.getTime(), Date.now())).toISOString();

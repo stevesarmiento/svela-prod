@@ -20,7 +20,6 @@ const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: {
   setActiveTimeScale: (scale: string) => void 
 }) => {
   const scales = [
-    { value: "1d", label: "1H" },
     { value: "7d", label: "1D" },
     { value: "30d", label: "1W" },
     { value: "max", label: "1Y" },
@@ -48,7 +47,7 @@ const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: {
 }
 
 export function PriceChart({ coinId, initialData }: PriceChartProps) {
-  const [activeTimeScale, setActiveTimeScale] = useState<string>("max")
+  const [activeTimeScale, setActiveTimeScale] = useState<string>("7d")
   
   const { chartData, volumeData, isLoading, tokenData } = useChartData(coinId, activeTimeScale, initialData)
   const { displayPrice, calculatePercentageChange, setActivePrice } = usePriceCalculations(chartData, tokenData, initialData)

@@ -26,7 +26,7 @@ interface HistoricalQuote {
 export function useChartsData() {
   const { watchlist, isInitialized } = useWatchlist()
   const [coinsData, setCoinsData] = useState<Map<number, OptimisticCoinMarketData>>(new Map())
-  const [activeTimeScale, setActiveTimeScale] = useState<string>("max")
+  const [activeTimeScale, setActiveTimeScale] = useState<string>("7d")
 
   const fetchCoinData = useCallback(async (coinIds: number[]) => {
     if (!coinIds.length) return;
@@ -36,7 +36,7 @@ export function useChartsData() {
         fetch(`/api/coinmarketcap/quotes?ids=${coinIds.join(',')}`, {
           cache: 'no-store'
         }),
-        fetch(`/api/coinmarketcap/historical?ids=${coinIds.join(',')}`, {
+        fetch(`/api/coinmarketcap/historical?ids=${coinIds.join(',')}&timeScale=${activeTimeScale}`, {
           cache: 'no-store'
         })
       ])
@@ -77,7 +77,7 @@ export function useChartsData() {
         variant: "destructive",
       })
     }
-  }, [])
+  }, [activeTimeScale])
 
   // Create optimistic coins when watchlist changes
   const optimisticCoins = useMemo(() => {

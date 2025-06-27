@@ -140,3 +140,81 @@ export const getCoinByIdString = query({
     return coins.find(coin => coin.coinId === id) || null;
   },
 });
+
+export const bulkUpsertMetadata = mutation({
+  args: { 
+    metadata: v.array(v.object({
+      coinId: v.number(),
+      slug: v.string(),
+      name: v.string(),
+      symbol: v.string(),
+      description: v.optional(v.string()),
+      logo: v.string(),
+      dateAdded: v.optional(v.string()),
+      dateLaunched: v.optional(v.string()),
+      tags: v.optional(v.array(v.string())),
+      category: v.optional(v.string()),
+      platform: v.optional(v.object({
+        id: v.number(),
+        name: v.string(),
+        symbol: v.string(),
+        slug: v.string(),
+        token_address: v.string(),
+      })),
+      urls: v.optional(v.object({
+        website: v.optional(v.array(v.string())),
+        technical_doc: v.optional(v.array(v.string())),
+        twitter: v.optional(v.array(v.string())),
+        reddit: v.optional(v.array(v.string())),
+        message_board: v.optional(v.array(v.string())),
+        announcement: v.optional(v.array(v.string())),
+        chat: v.optional(v.array(v.string())),
+        explorer: v.optional(v.array(v.string())),
+        source_code: v.optional(v.array(v.string())),
+      })),
+    }))
+  },
+  handler: async (ctx, args) => {
+    const existingMetadata = await ctx.db.query("coinMetadata").collect();
+    const existingIds = new Set(existingMetadata.map(m => m.coinId));
+    
+    for (const meta of args.metadata) {
+      if (existingIds.has(meta.coinId)) {
+        const existing = existingMetadata.find(m => m.coinId === meta.coinId);
+        if (existing) {
+          await ctx.db.patch(existing._id, {
+            ...meta,
+            lastUpdated: Date.now(),
+          });
+        }
+      } else {
+        await ctx.db.insert("coinMetadata", {
+          ...meta,
+          lastUpdated: Date.now(),
+        });
+      }
+    }
+  },
+});
+
+export const getMetadataByCoinId = query({
+  args: { coinId: v.number() },
+  handler: async (ctx, args) => {
+    const metadata = await ctx.db
+      .query("coinMetadata")
+      .withIndex("by_coin_id", (q) => q.eq("coinId", args.coinId))
+      .first();
+    return metadata;
+  },
+});
+
+export const getMetadataBySlug = query({
+  args: { slug: v.string() },
+  handler: async (ctx, args) => {
+    const metadata = await ctx.db
+      .query("coinMetadata")
+      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .first();
+    return metadata;
+  },
+});

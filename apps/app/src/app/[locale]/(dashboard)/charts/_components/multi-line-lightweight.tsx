@@ -23,6 +23,7 @@ import Link from 'next/link'
 import { useBottomNav } from '@/components/navigation/bottom-nav-context'
 import { Button } from '@v1/ui/button'
 import { Spinner } from "@v1/ui/spinner"
+import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -97,20 +98,6 @@ const TooltipContent = ({
   )
 }
 
-function generateDistinctColors(count: number): string[] {
-  const colors: string[] = []
-  const hueStep = 360 / count
-  
-  for (let i = 0; i < count; i++) {
-    const hue = (i * hueStep) % 360
-    const saturation = 70 + (i % 3) * 10 // Vary saturation slightly
-    const lightness = 50 + (i % 2) * 10 // Vary lightness slightly
-    colors.push(`hsl(${hue}, ${saturation}%, ${lightness}%)`)
-  }
-  
-  return colors
-}
-
 function filterValidPriceData(data: PriceDataPoint[]): PriceDataPoint[] {
   return (
     data?.filter(
@@ -132,11 +119,10 @@ const TimeScaleSelector = ({
   setActiveTimeScale: (scale: string) => void 
 }) => {
   const scales = [
-    // { value: "1h", label: "1H" },
-    // { value: "4h", label: "4H" },
-    { value: "1d", label: "1D" },
-    { value: "7d", label: "7D" },
+    { value: "7d", label: "1D" },
+    { value: "30d", label: "1W" },
     { value: "max", label: "1Y" },
+    { value: "2y", label: "2Y" },
   ]
 
   return (
@@ -157,18 +143,6 @@ const TimeScaleSelector = ({
       ))}
     </div>
   )
-}
-
-function addOpacityToColor(color: string, opacity: number): string {
-  // Convert HSL to rgba with opacity
-  if (color.startsWith('hsl(')) {
-    const hslMatch = color.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/)
-    if (hslMatch) {
-      const [, h, s, l] = hslMatch
-      return `hsla(${h}, ${s}%, ${l}%, ${opacity})`
-    }
-  }
-  return color
 }
 
 export function MultiPriceChartLightweight({ 
@@ -193,7 +167,7 @@ export function MultiPriceChartLightweight({
   const coinSeriesData = useMemo((): CoinSeries[] => {
     if (!coinsWithData.length) return []
 
-    const colors = generateDistinctColors(coinsWithData.length)
+    const colors = generatePastelColors(coinsWithData.length)
     
     console.log('Processing coins:', coinsWithData.length) // Add debugging
     
@@ -214,12 +188,13 @@ export function MultiPriceChartLightweight({
           new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         )
         
-        // Filter based on activeTimeScale
+        // Filter based on activeTimeScale - updated to match API timeframes
         const now = Date.now()
         const timeFilters = {
-          '1d': 30 * 24 * 60 * 60 * 1000,     // Last 30 days
-          '7d': 90 * 24 * 60 * 60 * 1000,     // Last 90 days
-          'max': Infinity                      // All data
+          '7d': 30 * 24 * 60 * 60 * 1000,     // Last 30 days (1D view with hourly data)
+          '30d': 90 * 24 * 60 * 60 * 1000,    // Last 90 days (1W view)
+          'max': 365 * 24 * 60 * 60 * 1000,   // Last 365 days (1Y view)
+          '2y': 730 * 24 * 60 * 60 * 1000,    // Last 730 days (2Y view)
         }
         
         const timeLimit = timeFilters[activeTimeScale as keyof typeof timeFilters] || Infinity
@@ -275,7 +250,7 @@ export function MultiPriceChartLightweight({
         id: coin.id.toString(),
         name: coin.name,
         symbol: coin.symbol,
-        color: colors[index] || `hsl(${Math.random() * 360}, 70%, 50%)`,
+        color: colors[index] || `hsl(${Math.random() * 360}, 40%, 75%)`,
         data: validData,
       }
     }).filter(series => {

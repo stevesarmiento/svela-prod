@@ -57,10 +57,9 @@ export async function GET(request: Request) {
 
     if (!metadata) {
       return NextResponse.json({
-        currentFundingRate: null,
+        longShortRatio: null,
         symbol: null,
-        lastUpdate: null,
-        historical: []
+        lastUpdate: null
       });
     }
 
@@ -75,46 +74,58 @@ export async function GET(request: Request) {
     const now = Math.floor(Date.now() / 1000);
     const yesterday = now - (24 * 60 * 60);
 
-    console.log('Funding Rate History - CMC ID:', cmcId, 'Slug:', metadata.slug, 'Symbol:', coinalyzeSymbol);
+    console.log('Long/Short Ratio - CMC ID:', cmcId, 'Slug:', metadata.slug, 'Symbol:', coinalyzeSymbol);
 
     const data = await fetchWithErrorHandling(
-      `${BASE_URL}/v1/funding-rate-history?symbols=${encodeURIComponent(coinalyzeSymbol)}&interval=1hour&from=${yesterday}&to=${now}`
+      `${BASE_URL}/v1/long-short-ratio-history?symbols=${encodeURIComponent(coinalyzeSymbol)}&interval=1hour&from=${yesterday}&to=${now}`
     );
 
-    console.log('=== FUNDING RATE HISTORY RAW API RESPONSE ===');
+    console.log('=== LONG/SHORT RATIO RAW API RESPONSE ===');
+    console.log('URL:', `${BASE_URL}/v1/long-short-ratio-history?symbols=${encodeURIComponent(coinalyzeSymbol)}&interval=1hour&from=${yesterday}&to=${now}`);
     console.log('Raw response:', JSON.stringify(data, null, 2));
-    console.log('====================================');
+    console.log('Data type:', typeof data);
+    console.log('Is array:', Array.isArray(data));
+    console.log('Data length:', Array.isArray(data) ? data.length : 'N/A');
+    if (Array.isArray(data) && data.length > 0) {
+      console.log('First item:', JSON.stringify(data[0], null, 2));
+      if (data[0].history) {
+        console.log('History length:', data[0].history.length);
+        console.log('Latest history item:', JSON.stringify(data[0].history[data[0].history.length - 1], null, 2));
+      }
+    }
+    console.log('========================================');
 
     // API returns an array with symbol and history
     if (Array.isArray(data) && data.length > 0) {
       const symbolData = data[0];
       
       if (symbolData.history && symbolData.history.length > 0) {
+        // Get the latest data point from history
         const latestData = symbolData.history[symbolData.history.length - 1];
         
         return NextResponse.json({
-          currentFundingRate: latestData.c, // Use close as current rate
+          longShortRatio: latestData.r, // 'r' is the ratio
           symbol: symbolData.symbol,
-          lastUpdate: latestData.t,
-          historical: symbolData.history
+          lastUpdate: latestData.t, // 't' is the timestamp
+          historical: symbolData.history // Include full history
         });
       }
     }
 
     // No data found
     return NextResponse.json({
-      currentFundingRate: null,
+      longShortRatio: null,
       symbol: coinalyzeSymbol,
       lastUpdate: null,
       historical: []
     });
 
   } catch (error) {
-    console.error('Coinalyze funding rate history route error:', error);
+    console.error('Coinalyze long/short ratio route error:', error);
     
     // Return no data state instead of error
     return NextResponse.json({
-      currentFundingRate: null,
+      longShortRatio: null,
       symbol: null,
       lastUpdate: null,
       historical: []

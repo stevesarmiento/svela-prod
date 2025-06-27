@@ -57,7 +57,7 @@ export async function GET(request: Request) {
 
     if (!metadata) {
       return NextResponse.json({
-        currentFundingRate: null,
+        currentPredictedFundingRate: null,
         symbol: null,
         lastUpdate: null,
         historical: []
@@ -75,13 +75,13 @@ export async function GET(request: Request) {
     const now = Math.floor(Date.now() / 1000);
     const yesterday = now - (24 * 60 * 60);
 
-    console.log('Funding Rate History - CMC ID:', cmcId, 'Slug:', metadata.slug, 'Symbol:', coinalyzeSymbol);
+    console.log('Predicted Funding Rate History - CMC ID:', cmcId, 'Symbol:', coinalyzeSymbol);
 
     const data = await fetchWithErrorHandling(
-      `${BASE_URL}/v1/funding-rate-history?symbols=${encodeURIComponent(coinalyzeSymbol)}&interval=1hour&from=${yesterday}&to=${now}`
+      `${BASE_URL}/v1/predicted-funding-rate-history?symbols=${encodeURIComponent(coinalyzeSymbol)}&interval=1hour&from=${yesterday}&to=${now}`
     );
 
-    console.log('=== FUNDING RATE HISTORY RAW API RESPONSE ===');
+    console.log('=== PREDICTED FUNDING RATE RAW API RESPONSE ===');
     console.log('Raw response:', JSON.stringify(data, null, 2));
     console.log('====================================');
 
@@ -93,7 +93,7 @@ export async function GET(request: Request) {
         const latestData = symbolData.history[symbolData.history.length - 1];
         
         return NextResponse.json({
-          currentFundingRate: latestData.c, // Use close as current rate
+          currentPredictedFundingRate: latestData.c, // Use close as current predicted rate
           symbol: symbolData.symbol,
           lastUpdate: latestData.t,
           historical: symbolData.history
@@ -103,18 +103,18 @@ export async function GET(request: Request) {
 
     // No data found
     return NextResponse.json({
-      currentFundingRate: null,
+      currentPredictedFundingRate: null,
       symbol: coinalyzeSymbol,
       lastUpdate: null,
       historical: []
     });
 
   } catch (error) {
-    console.error('Coinalyze funding rate history route error:', error);
+    console.error('Coinalyze predicted funding rate route error:', error);
     
     // Return no data state instead of error
     return NextResponse.json({
-      currentFundingRate: null,
+      currentPredictedFundingRate: null,
       symbol: null,
       lastUpdate: null,
       historical: []
