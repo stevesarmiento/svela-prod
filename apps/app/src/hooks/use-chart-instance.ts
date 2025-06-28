@@ -36,7 +36,7 @@ interface IndicatorSettings {
 interface HullSuiteData {
   mhull: Array<{ time: Time; value: number }>
   shull: Array<{ time: Time; value: number }>
-  trend: Array<{ time: Time; isUp: boolean }>
+  trend: Array<{ time: Time; isUp: boolean; color?: string }>
 }
 
 export function useChartInstance(
@@ -106,6 +106,9 @@ export function useChartInstance(
 
     // Add Hull Suite overlay if enabled
     if (displaySettings?.showHullSuite && hullSuiteData) {
+      // Direct RGBA color with opacity for Hull Suite lines
+      const directOpacityColor = 'rgba(107, 142, 173, 0.3)' // Direct opacity control
+      
       // Main Hull line (MHULL)
       if (hullSuiteData.mhull.length > 0) {
         // Filter out any remaining NaN values and validate data
@@ -117,8 +120,9 @@ export function useChartInstance(
 
         if (validMhullData.length > 0) {
           const mhullSeries = chart.addSeries(LineSeries, {
-            lineWidth: 2,
-            color: '#ff9800',
+            lineWidth: 1,
+            color: directOpacityColor, // Test direct RGBA
+            lineStyle: LineStyle.Dotted,
             lastValueVisible: true,
             priceLineVisible: false,
           })
@@ -139,7 +143,8 @@ export function useChartInstance(
         if (validShullData.length > 0) {
           const shullSeries = chart.addSeries(LineSeries, {
             lineWidth: 1,
-            color: '#ff980060',
+            color: directOpacityColor, // Test direct RGBA
+            lineStyle: LineStyle.Dotted,
             lastValueVisible: false,
             priceLineVisible: false,
           })

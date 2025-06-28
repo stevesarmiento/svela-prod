@@ -1,16 +1,17 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { PriceChart } from "./price-chart"
 import { MarketMetrics } from "./market-metrics"
 import { CoinMarketData } from '@/types/coins'
 import { LiquidationHistoryChart } from "./liquidation-history-chart"
 import { SectionHeader } from "../_components/section-header"
-import { IconBinocularsFill, IconDropFill, IconEyeglasses } from "symbols-react"
+import { IconBinocularsFill, IconDropFill, IconCircleDottedAndCircle } from "symbols-react"
 import { OpenInterestChart } from './open-interest-chart'
 import { TakerBuySell } from './taker-buy-sell'
 import { MarketVisionChart } from './marketvision-chart'
-//import { StochasticChart } from './stochastic-chart'
+// import { StochasticChart } from './stochastic-chart'
+import { BollingerBandsChart } from './bollinger-bands-chart'
 import { useChartData } from '@/hooks/use-chart-data'
 import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
 import type { Time } from 'lightweight-charts'
@@ -22,8 +23,21 @@ interface TokenPageClientProps {
 
 export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
   const [activeTimeScale, setActiveTimeScale] = useState<string>("30d")
+  const [isSticky, setIsSticky] = useState(false)
 
-  // Get chart data for indicators
+  useEffect(() => {
+    const handleScroll = () => {
+      // Check if we've scrolled past the initial position where sticky would trigger
+      // Adjust this threshold based on your header height and layout
+      const scrollThreshold = 100 // Adjust this value as needed
+      setIsSticky(window.scrollY > scrollThreshold)
+    }
+
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  // Get chart data for indicators - use the same timeScale as the main chart
   const { chartData, volumeData } = useChartData(id, activeTimeScale, tokenData.quote.USD)
 
   // Convert price/volume data to OHLCV format for indicators
@@ -61,7 +75,7 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
   return (
     <main className="mx-auto py-6 relative z-10">
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-        <div className="col-span-12">
+        <div className={`col-span-12 sm:space-y-0 sticky top-0 z-[100] transition-all duration-300 ${isSticky ? 'pt-12' : 'pt-0'}`}>
           <PriceChart 
             coinId={id}
             initialData={tokenData.quote.USD}
@@ -74,7 +88,7 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
           <MarketMetrics data={tokenData} />
         </div>
 
-        <SectionHeader title="Indicators" icon={IconEyeglasses} className="col-span-12 mt-24" />
+        <SectionHeader title="Market Vision" icon={IconCircleDottedAndCircle} className="col-span-12 mt-24" />
 
         <div className="col-span-12">
           <MarketVisionChart
@@ -113,6 +127,25 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
             showTimeAxis={false}
           />
         </div> */}
+
+        <div className="col-span-12">
+          <BollingerBandsChart
+            data={ohlcvData}
+            config={{
+              drawRSI: true,
+              drawMFI: false,
+              highlightBreaches: true,
+              length: 14,
+              source: 'hlc3',
+              bbLength: 20, // Reduced from 50 to 20 for testing
+              multiplier: 2.0,
+              lineWidth: 2,
+              fillOpacity: 0.1
+            }}
+            height={250}
+            showTimeAxis={false}
+          />
+        </div>
 
         <SectionHeader title="Liquidation & Open Interest" icon={IconDropFill} className="col-span-12 mt-24" />
 

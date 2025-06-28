@@ -241,3 +241,11 @@ export {
   type StochasticConfig,
   type StochasticResult
 } from './stochastic'
+
+// Export Bollinger Bands functionality
+export {
+  calculateBollingerBands,
+  type BollingerBandsConfig,
+  type BollingerBandsResult,
+  DEFAULT_BB_COLORS
+} from './bollinger-bands'

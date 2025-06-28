@@ -155,8 +155,8 @@ export function MarketVisionChart({
     const currentSeriesRefs = seriesRefs.current
 
     const chart = createChart(chartContainerRef.current, {
-      handleScale: false,
-      handleScroll: false,
+      handleScale: true,
+      handleScroll: true,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: "#ffffff50",
@@ -329,7 +329,7 @@ export function MarketVisionChart({
       chartRef.current = null
       currentSeriesRefs.clear()
     }
-  }, [height, showTimeAxis, displaySettings])
+  }, [height, showTimeAxis, displaySettings, config])
 
   // Update series based on calculations and display settings
   useEffect(() => {
@@ -493,7 +493,7 @@ export function MarketVisionChart({
       if ((config?.moneyFlow?.showFast ?? true) && calculations.moneyFlow.fast && calculations.moneyFlow.fast.length) {
         console.log('✅ Adding Money Flow series:', calculations.moneyFlow.fast.length, 'points')
         const fastMFSeries = chart.addSeries(LineSeries, {
-          lineWidth: hoveredIndicator === 'showMoneyFlow' ? 2 : 1,
+          lineWidth: hoveredIndicator === 'showMoneyFlow' ? 1 : 1,
           lineStyle: LineStyle.Dashed,
           color: hoveredIndicator && hoveredIndicator !== 'showMoneyFlow'
             ? addOpacityToColor(COLORS.moneyFlow, 0.3)
@@ -575,7 +575,7 @@ export function MarketVisionChart({
                   "flex overflow-hidden items-center gap-2 cursor-pointer transition-all duration-200 rounded-lg p-2 -m-1 relative group",
                   isHovered ? "bg-white/10" : "hover:bg-white/5",
                   !isActive && "opacity-50",
-                  isOtherHovered && "opacity-30"
+                  isOtherHovered && "opacity-40"
                 )}
                 style={{ 
                   backgroundColor: isHovered ? addOpacityToColor(item.color, 0.1) : undefined 

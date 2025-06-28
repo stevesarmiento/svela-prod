@@ -2,11 +2,6 @@
 
 import React, { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
-import { Button } from "@v1/ui/button"
-import { Switch } from "@v1/ui/switch"
-import { Label } from "@v1/ui/label"
-import { Popover, PopoverContent, PopoverTrigger } from "@v1/ui/popover"
-import { Badge } from "@v1/ui/badge"
 import NumberFlow from '@number-flow/react'
 import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
@@ -14,9 +9,9 @@ import { useChartData } from '@/hooks/use-chart-data'
 import { useChartInstance } from '@/hooks/use-chart-instance'
 import { usePriceCalculations } from '@/hooks/use-price-calculations'
 import type { CoinMarketData } from '@/types/coins'
-import { IconGear } from 'symbols-react'
 import type { Time } from 'lightweight-charts'
 import { useHullSuite } from '@/hooks/use-hull-suite'
+import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 
 interface PriceChartProps {
   coinId: string;
@@ -34,11 +29,7 @@ interface IndicatorSettings {
   showHullSuite: boolean
 }
 
-interface HullSuiteSettings {
-  modeSwitch: 'Hma' | 'Ehma' | 'Thma'
-  length: number
-  visualSwitch: boolean
-}
+
 
 const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: { 
   activeTimeScale: string
@@ -71,115 +62,39 @@ const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: {
   )
 }
 
-const IndicatorControls = ({ 
-  indicators, 
-  toggleIndicator,
-  hullSettings,
-  setHullSettings
-}: {
-  indicators: IndicatorSettings
-  toggleIndicator: (key: keyof IndicatorSettings) => void
-  hullSettings: HullSuiteSettings
-  setHullSettings: (settings: HullSuiteSettings) => void
-}) => {
-  const activeCount = Object.values(indicators).filter(Boolean).length
 
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <IconGear className="w-4 h-4" />
-          Indicators
-          {activeCount > 0 && (
-            <Badge variant="secondary" className="ml-1">
-              {activeCount}
-            </Badge>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 bg-zinc-900" align="end">
-        <div className="space-y-4">
-          <div>
-            <h4 className="font-medium text-sm mb-3">Hull Suite</h4>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm">Hull Suite</Label>
-                <Switch
-                  checked={indicators.showHullSuite}
-                  onCheckedChange={() => toggleIndicator('showHullSuite')}
-                />
-              </div>
-              {indicators.showHullSuite && (
-                <div className="space-y-2 pl-4 border-l-2 border-zinc-800">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm">Type</Label>
-                    <select 
-                      value={hullSettings.modeSwitch} 
-                      onChange={(e) => setHullSettings({...hullSettings, modeSwitch: e.target.value as 'Hma' | 'Ehma' | 'Thma'})}
-                      className="text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1"
-                    >
-                      <option value="Hma">HMA</option>
-                      <option value="Ehma">EHMA</option>
-                      <option value="Thma">THMA</option>
-                    </select>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm">Length</Label>
-                    <input
-                      type="number"
-                      value={hullSettings.length}
-                      onChange={(e) => setHullSettings({...hullSettings, length: parseInt(e.target.value)})}
-                      className="text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1 w-16"
-                      min="1"
-                      max="200"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm">Show Band</Label>
-                    <Switch
-                      checked={hullSettings.visualSwitch}
-                      onCheckedChange={(checked) => setHullSettings({...hullSettings, visualSwitch: checked})}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
 
 export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTimeScale }: PriceChartProps) {
   const { chartData, volumeData, isLoading, tokenData } = useChartData(coinId, activeTimeScale, initialData)
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData)
   
+  // Generate Hull Suite colors - same as hook to ensure consistency
+  const hullColors = generatePastelColors(1)
+  const primaryHullColor = addOpacityToColor(hullColors[0] || 'hsl(210, 40%, 75%)', 0.7)
+  
   // State for chart scrub price display
   const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null)
   
-  // Hull Suite settings - default to OFF
-  const [indicators, setIndicators] = useState<IndicatorSettings>({
+  const indicators: IndicatorSettings = {
     showWaveTrend: false,
     showFastMoneyFlow: false,
     showSlowMoneyFlow: false,
     showRSI: false,
     showStochRSI: false,
-    showHullSuite: false,
-  })
+    showHullSuite: true,
+  }
 
-  const [hullSettings, setHullSettings] = useState<HullSuiteSettings>({
-    modeSwitch: 'Ehma',
+  // Hardcoded Hull Suite settings (EHMA-55)
+  const hullSettings = {
+    modeSwitch: 'Ehma' as const,
     length: 55,
     visualSwitch: true,
-  })
+  }
 
-  // Convert price/volume data to OHLCV format for indicators
+  // Convert price/volume data to OHLCV format for Hull Suite
   const ohlcvData = React.useMemo(() => {
     if (!chartData.length) return []
 
-    // Always use the current chartData/volumeData that matches the active time scale
-    // Don't rely on tokenData.fullData which might be stale or not time-scale specific
     return chartData.map((point: { time: Time; value: number }, index: number) => {
       const price = point.value
       const volume = volumeData[index]?.value || 0
@@ -210,13 +125,14 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
     transpSwitch: 40,
   })
 
-  // Convert new Hull Suite data to legacy format for chart instance
+  // Convert Hull Suite data for chart instance
   const legacyHullSuiteData = {
     mhull: hullSuiteData.MHULL,
     shull: hullSuiteData.SHULL,
     trend: hullSuiteData.hullColor.map(item => ({ 
       time: item.time, 
-      isUp: item.color === '#00ff00' 
+      isUp: true, // Always use same color as requested
+      color: primaryHullColor // Use consistent pastel color with 70% opacity
     }))
   }
 
@@ -230,14 +146,12 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
     setCrosshairPrice // Callback for chart scrub price updates
   )
 
-  const toggleIndicator = (key: keyof IndicatorSettings) => {
-    setIndicators(prev => ({ ...prev, [key]: !prev[key] }))
-  }
+
 
   return (
     <div>
       {/* Main Price Chart */}
-      <div className="border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+      <div className="bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
         <div className="p-0 relative">
           <div
             className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
@@ -285,12 +199,6 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                 </div>
               </CardTitle>
               <div className="flex items-center gap-2">
-                <IndicatorControls
-                  indicators={indicators}
-                  toggleIndicator={toggleIndicator}
-                  hullSettings={hullSettings}
-                  setHullSettings={setHullSettings}
-                />
                 <TimeScaleSelector
                   activeTimeScale={activeTimeScale}
                   setActiveTimeScale={setActiveTimeScale}

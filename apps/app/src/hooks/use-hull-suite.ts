@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import type { Time } from 'lightweight-charts'
+import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 
 interface HullSuiteConfig {
   src: 'close' | 'high' | 'low' | 'open'
@@ -170,6 +171,9 @@ function Mode(modeSwitch: string, src: number[], len: number): number[] {
 
 export function useHullSuite(data: OHLCVDataPoint[], config: HullSuiteConfig): HullSuiteData {
   const calculations = useMemo(() => {
+    // Generate Hull Suite colors - using single pastel color for both lines
+    const hullColors = generatePastelColors(1)
+    const primaryHullColor = addOpacityToColor(hullColors[0] || 'hsl(210, 40%, 75%)', 0.2)
     // Default configuration matching Pine Script inputs
     const defaultConfig: HullSuiteConfig = {
       src: 'close',
@@ -259,10 +263,8 @@ export function useHullSuite(data: OHLCVDataPoint[], config: HullSuiteConfig): H
             value: SHULL
           })
           
-          // Pine Script: hullColor = switchColor ? (HULL > HULL[2] ? #00ff00 : #ff0000) : #ff9800
-          const color = finalConfig.switchColor 
-            ? (MHULL > SHULL ? '#00ff00' : '#ff0000')  // Green if trending up, red if down
-            : '#ff9800'  // Orange if color switching is disabled
+          // Use same pastel color for both trend directions with 70% opacity
+          const color = primaryHullColor
             
           hullColorData.push({
             time: times[i] as Time,

@@ -261,10 +261,11 @@ export function zeroLagEma(data: number[], period: number): number[] {
 
 // RSI Calculation
 export function rsi(data: number[], period: number): number[] {
-  const result: number[] = []
+  const result: number[] = new Array(data.length).fill(0) // Initialize with proper length
   const gains: number[] = []
   const losses: number[] = []
   
+  // Calculate price changes
   for (let i = 1; i < data.length; i++) {
     const current = data[i]
     const previous = data[i - 1]
@@ -273,18 +274,22 @@ export function rsi(data: number[], period: number): number[] {
       const change = current - previous
       gains.push(change > 0 ? change : 0)
       losses.push(change < 0 ? Math.abs(change) : 0)
+    } else {
+      gains.push(0)
+      losses.push(0)
     }
   }
   
   const avgGains = rma(gains, period)
   const avgLosses = rma(losses, period)
   
+  // Map the RMA results back to the correct indices
   for (let i = 0; i < avgGains.length; i++) {
     const gain = avgGains[i] || 0
     const loss = avgLosses[i] || 0
     
     if (loss === 0) {
-      result[i + 1] = 100
+      result[i + 1] = 100 // +1 because gains/losses start from index 1
     } else {
       const rs = gain / loss
       result[i + 1] = 100 - (100 / (1 + rs))
@@ -460,7 +465,7 @@ export function linearRegression(data: number[], period: number): number[] {
 
 // Standard Deviation
 export function stdev(data: number[], period: number): number[] {
-  const result: number[] = []
+  const result: number[] = new Array(data.length).fill(0) // Initialize with proper length
   
   for (let i = period - 1; i < data.length; i++) {
     const slice = data.slice(i - period + 1, i + 1).filter(val => val != null && !isNaN(val) && isFinite(val))

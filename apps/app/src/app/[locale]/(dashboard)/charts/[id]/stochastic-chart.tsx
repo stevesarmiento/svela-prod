@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useMemo } from 'react'
 import { createChart, ColorType, CrosshairMode, LineStyle, LineSeries, ISeriesApi, IChartApi, Time } from 'lightweight-charts'
 import { calculateStochasticIndicator, getAllRSIDivergences, type StochasticConfig, type DivergencePoint } from '@/hooks/market-vision/stochastic'
 import { rsi } from '@/hooks/market-vision/technical-indicators'
@@ -81,23 +81,23 @@ export function StochasticChart({
   const stochasticResult = calculateStochasticIndicator(data, finalConfig)
   
   // Calculate RSI divergences if enabled
-  const rsiDivergences: DivergencePoint[] = displaySettings.showRSIDivergences && data.length > 0 
-    ? (() => {
-        const closeValues = data.map(d => d.close)
-        const rsiValues = rsi(closeValues, 14) // Default RSI period of 14
-        
-        console.log('🔍 RSI Divergence Debug:')
-        console.log('Data length:', data.length)
-        console.log('RSI values sample:', rsiValues.slice(-10))
-        console.log('Price data sample:', closeValues.slice(-10))
-        
-        // Use getAllRSIDivergences to scan entire dataset
-        const allDivs = getAllRSIDivergences(data, rsiValues)
-        console.log('Found divergences:', allDivs.length, allDivs)
-        
-        return allDivs
-      })()
-    : []
+  const rsiDivergences: DivergencePoint[] = useMemo(() => {
+    if (!displaySettings.showRSIDivergences || data.length === 0) return []
+    
+    const closeValues = data.map(d => d.close)
+    const rsiValues = rsi(closeValues, 14) // Default RSI period of 14
+    
+    console.log('🔍 RSI Divergence Debug:')
+    console.log('Data length:', data.length)
+    console.log('RSI values sample:', rsiValues.slice(-10))
+    console.log('Price data sample:', closeValues.slice(-10))
+    
+    // Use getAllRSIDivergences to scan entire dataset
+    const allDivs = getAllRSIDivergences(data, rsiValues)
+    console.log('Found divergences:', allDivs.length, allDivs)
+    
+    return allDivs
+  }, [displaySettings.showRSIDivergences, data])
 
   useEffect(() => {
     if (!chartContainerRef.current) return
