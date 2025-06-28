@@ -4,19 +4,27 @@ import { useMemo } from 'react'
 import type { Time } from 'lightweight-charts'
 
 interface HullSuiteConfig {
-  source: 'close' | 'high' | 'low' | 'open'
-  mode: 'Hma' | 'Ehma' | 'Thma'
+  src: 'close' | 'high' | 'low' | 'open'
+  modeSwitch: 'Hma' | 'Ehma' | 'Thma'
   length: number
   lengthMult: number
-  showBand: boolean
-  thickness: number
-  transparency: number
+  useHtf: boolean
+  htf: string
+  switchColor: boolean
+  candleCol: boolean
+  visualSwitch: boolean
+  thicknesSwitch: number
+  transpSwitch: number
 }
 
 interface HullSuiteData {
-  mhull: Array<{ time: Time; value: number }>
-  shull: Array<{ time: Time; value: number }>
-  trend: Array<{ time: Time; isUp: boolean }>
+  MHULL: Array<{ time: Time; value: number }>
+  SHULL: Array<{ time: Time; value: number }>
+  hullColor: Array<{ time: Time; color: string }>
+  alerts: {
+    trendingUp: Array<{ time: Time; message: string }>
+    trendingDown: Array<{ time: Time; message: string }>
+  }
 }
 
 interface OHLCVDataPoint {
@@ -122,14 +130,15 @@ function EHMA(data: number[], length: number): number[] {
   return ema(diff, sqrtLength)
 }
 
-// Triangular Hull Moving Average
+// Triangular Hull Moving Average - Exact Pine Script implementation
+// THMA(_src, _length) => wma(wma(_src,_length / 3) * 3 - wma(_src, _length / 2) - wma(_src, _length), _length)
 function THMA(data: number[], length: number): number[] {
   const thirdLength = Math.floor(length / 3)
   const halfLength = Math.floor(length / 2)
   
-  const wma1 = wma(data, thirdLength)
-  const wma2 = wma(data, halfLength)
-  const wma3 = wma(data, length)
+  const wma1 = wma(data, thirdLength)  // wma(_src, _length / 3)
+  const wma2 = wma(data, halfLength)   // wma(_src, _length / 2)
+  const wma3 = wma(data, length)       // wma(_src, _length)
   
   // Calculate wma1 * 3 - wma2 - wma3
   const diff: number[] = []
@@ -145,120 +154,154 @@ function THMA(data: number[], length: number): number[] {
   return wma(diff, length)
 }
 
+// Mode Switch - Exact Pine Script implementation
+function Mode(modeSwitch: string, src: number[], len: number): number[] {
+  switch (modeSwitch) {
+    case "Hma":
+      return HMA(src, len)
+    case "Ehma":
+      return EHMA(src, len)
+    case "Thma":
+      return THMA(src, Math.floor(len / 2))  // THMA(src, len/2)
+    default:
+      return []
+  }
+}
+
 export function useHullSuite(data: OHLCVDataPoint[], config: HullSuiteConfig): HullSuiteData {
   const calculations = useMemo(() => {
+    // Default configuration matching Pine Script inputs
     const defaultConfig: HullSuiteConfig = {
-      source: 'close',
-      mode: 'Hma',
+      src: 'close',
+      modeSwitch: 'Hma',
       length: 55,
       lengthMult: 1.0,
-      showBand: true,
-      thickness: 1,
-      transparency: 40,
+      useHtf: false,
+      htf: '240',
+      switchColor: true,
+      candleCol: false,
+      visualSwitch: true,
+      thicknesSwitch: 1,
+      transpSwitch: 40
     }
     
     const finalConfig = { ...defaultConfig, ...config }
     
     if (!data || data.length === 0) {
       return {
-        mhull: [],
-        shull: [],
-        trend: []
+        MHULL: [],
+        SHULL: [],
+        hullColor: [],
+        alerts: {
+          trendingUp: [],
+          trendingDown: []
+        }
       }
     }
 
-    // Extract source data and filter out invalid values
+    // Extract source data - Pine Script: src = input(close, title="Source")
     const sourceData = data.map(d => {
-      switch (finalConfig.source) {
+      switch (finalConfig.src) {
         case 'high': return d.high
         case 'low': return d.low
         case 'open': return d.open
         case 'close':
         default: return d.close
       }
-    }).filter(value => !isNaN(value) && isFinite(value))
-
-    if (sourceData.length === 0) {
-      return {
-        mhull: [],
-        shull: [],
-        trend: []
-      }
-    }
+    })
 
     const times = data.map(d => d.time)
+    
+    // Pine Script: int(length * lengthMult)
     const adjustedLength = Math.floor(finalConfig.length * finalConfig.lengthMult)
 
-    // Ensure minimum length
-    if (adjustedLength < 1 || adjustedLength > sourceData.length) {
+    if (adjustedLength < 1) {
       return {
-        mhull: [],
-        shull: [],
-        trend: []
-      }
-    }
-
-    // Calculate Hull based on mode
-    let hull: number[]
-    try {
-      switch (finalConfig.mode) {
-        case 'Ehma':
-          hull = EHMA(sourceData, adjustedLength)
-          break
-        case 'Thma':
-          hull = THMA(sourceData, Math.floor(adjustedLength / 2))
-          break
-        case 'Hma':
-        default:
-          hull = HMA(sourceData, adjustedLength)
-          break
-      }
-    } catch (error) {
-      console.error('Hull calculation error:', error)
-      return {
-        mhull: [],
-        shull: [],
-        trend: []
-      }
-    }
-
-    // MHULL is current hull value, SHULL is hull value 2 periods ago
-    const mhullData: Array<{ time: Time; value: number }> = []
-    const shullData: Array<{ time: Time; value: number }> = []
-    const trendData: Array<{ time: Time; isUp: boolean }> = []
-
-    for (let i = 0; i < times.length; i++) {
-      const hullValue = hull[i]
-      // Only add valid hull values (not NaN or infinite)
-      if (hullValue !== undefined && !isNaN(hullValue) && isFinite(hullValue)) {
-        mhullData.push({
-          time: times[i] as Time,
-          value: hullValue
-        })
-
-        // SHULL is hull value 2 periods ago
-        const hullValue2 = hull[i - 2]
-        if (hullValue2 !== undefined && !isNaN(hullValue2) && isFinite(hullValue2)) {
-          shullData.push({
-            time: times[i] as Time,
-            value: hullValue2
-          })
+        MHULL: [],
+        SHULL: [],
+        hullColor: [],
+        alerts: {
+          trendingUp: [],
+          trendingDown: []
         }
+      }
+    }
 
-        // Trend determination: current hull > hull 2 periods ago
-        if (hullValue2 !== undefined && !isNaN(hullValue2) && isFinite(hullValue2)) {
-          trendData.push({
+    // Pine Script: _hull = Mode(modeSwitch, src, int(length * lengthMult))
+    const _hull = Mode(finalConfig.modeSwitch, sourceData, adjustedLength)
+    
+    // Pine Script: HULL = useHtf ? security(syminfo.ticker, htf, _hull) : _hull
+    // Note: Higher timeframe functionality would require additional implementation
+    const HULL = finalConfig.useHtf ? _hull : _hull  // Simplified for now
+    
+    // Pine Script: MHULL = HULL[0], SHULL = HULL[2]
+    const MHULLData: Array<{ time: Time; value: number }> = []
+    const SHULLData: Array<{ time: Time; value: number }> = []
+    const hullColorData: Array<{ time: Time; color: string }> = []
+    const alertsData = {
+      trendingUp: [] as Array<{ time: Time; message: string }>,
+      trendingDown: [] as Array<{ time: Time; message: string }>
+    }
+
+    for (let i = 2; i < times.length; i++) {  // Start from index 2 to have HULL[2] available
+      const MHULL = HULL[i]      // Current value: HULL[0]
+      const SHULL = HULL[i - 2]  // Value 2 periods ago: HULL[2]
+      
+      if (MHULL !== undefined && !isNaN(MHULL) && isFinite(MHULL)) {
+        MHULLData.push({
+          time: times[i] as Time,
+          value: MHULL
+        })
+        
+        if (SHULL !== undefined && !isNaN(SHULL) && isFinite(SHULL)) {
+          SHULLData.push({
             time: times[i] as Time,
-            isUp: hullValue > hullValue2
+            value: SHULL
           })
+          
+          // Pine Script: hullColor = switchColor ? (HULL > HULL[2] ? #00ff00 : #ff0000) : #ff9800
+          const color = finalConfig.switchColor 
+            ? (MHULL > SHULL ? '#00ff00' : '#ff0000')  // Green if trending up, red if down
+            : '#ff9800'  // Orange if color switching is disabled
+            
+          hullColorData.push({
+            time: times[i] as Time,
+            color: color
+          })
+          
+          // Alert conditions
+          // Pine Script: alertcondition(crossover(MHULL, SHULL), title="Hull trending up.", message="Hull trending up.")
+          if (i > 2) {
+            const prevMHULL = HULL[i - 1]
+            const prevSHULL = HULL[i - 3]  // Previous SHULL (2 periods ago from previous)
+            
+            if (prevMHULL !== undefined && prevSHULL !== undefined) {
+              // Crossover: MHULL crosses above SHULL
+              if (prevMHULL <= prevSHULL && MHULL > SHULL) {
+                alertsData.trendingUp.push({
+                  time: times[i] as Time,
+                  message: "Hull trending up."
+                })
+              }
+              
+              // Crossunder: MHULL crosses below SHULL  
+              if (prevMHULL >= prevSHULL && MHULL < SHULL) {
+                alertsData.trendingDown.push({
+                  time: times[i] as Time,
+                  message: "Hull trending down."
+                })
+              }
+            }
+          }
         }
       }
     }
 
     return {
-      mhull: mhullData,
-      shull: shullData,
-      trend: trendData
+      MHULL: MHULLData,
+      SHULL: SHULLData,
+      hullColor: hullColorData,
+      alerts: alertsData
     }
   }, [data, config])
 

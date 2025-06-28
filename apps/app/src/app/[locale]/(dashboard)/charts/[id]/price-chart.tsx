@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
 import { Button } from "@v1/ui/button"
 import { Switch } from "@v1/ui/switch"
@@ -12,12 +12,10 @@ import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
 import { useChartData } from '@/hooks/use-chart-data'
 import { useChartInstance } from '@/hooks/use-chart-instance'
-import { useMarketCipherB } from '@/hooks/use-market-cipher-b'
 import { usePriceCalculations } from '@/hooks/use-price-calculations'
 import type { CoinMarketData } from '@/types/coins'
 import { IconGear } from 'symbols-react'
 import type { Time } from 'lightweight-charts'
-import { IndicatorChart } from './indicator-chart'
 import { useHullSuite } from '@/hooks/use-hull-suite'
 
 interface PriceChartProps {
@@ -37,9 +35,9 @@ interface IndicatorSettings {
 }
 
 interface HullSuiteSettings {
-  mode: 'Hma' | 'Ehma' | 'Thma'
+  modeSwitch: 'Hma' | 'Ehma' | 'Thma'
   length: number
-  showBand: boolean
+  visualSwitch: boolean
 }
 
 const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: { 
@@ -99,7 +97,7 @@ const IndicatorControls = ({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80" align="end">
+      <PopoverContent className="w-80 bg-zinc-900" align="end">
         <div className="space-y-4">
           <div>
             <h4 className="font-medium text-sm mb-3">Hull Suite</h4>
@@ -116,8 +114,8 @@ const IndicatorControls = ({
                   <div className="flex items-center justify-between">
                     <Label className="text-sm">Type</Label>
                     <select 
-                      value={hullSettings.mode} 
-                      onChange={(e) => setHullSettings({...hullSettings, mode: e.target.value as any})}
+                      value={hullSettings.modeSwitch} 
+                      onChange={(e) => setHullSettings({...hullSettings, modeSwitch: e.target.value as 'Hma' | 'Ehma' | 'Thma'})}
                       className="text-xs bg-zinc-800 border border-zinc-700 rounded px-2 py-1"
                     >
                       <option value="Hma">HMA</option>
@@ -139,29 +137,12 @@ const IndicatorControls = ({
                   <div className="flex items-center justify-between">
                     <Label className="text-sm">Show Band</Label>
                     <Switch
-                      checked={hullSettings.showBand}
-                      onCheckedChange={(checked) => setHullSettings({...hullSettings, showBand: checked})}
+                      checked={hullSettings.visualSwitch}
+                      onCheckedChange={(checked) => setHullSettings({...hullSettings, visualSwitch: checked})}
                     />
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-medium text-sm mb-3">Market Cipher B Indicators</h4>
-            <div className="space-y-3">
-              {Object.entries(indicators).filter(([key]) => key !== 'showHullSuite').map(([key, value]) => (
-                <div key={key} className="flex items-center justify-between">
-                  <Label className="text-sm">
-                    {key.replace(/([A-Z])/g, ' $1').replace(/^show/, '').trim()}
-                  </Label>
-                  <Switch
-                    checked={value}
-                    onCheckedChange={() => toggleIndicator(key as keyof IndicatorSettings)}
-                  />
-                </div>
-              ))}
             </div>
           </div>
         </div>
@@ -174,7 +155,10 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
   const { chartData, volumeData, isLoading, tokenData } = useChartData(coinId, activeTimeScale, initialData)
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData)
   
-  // Indicator settings - all default to OFF
+  // State for chart scrub price display
+  const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null)
+  
+  // Hull Suite settings - default to OFF
   const [indicators, setIndicators] = useState<IndicatorSettings>({
     showWaveTrend: false,
     showFastMoneyFlow: false,
@@ -185,19 +169,12 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
   })
 
   const [hullSettings, setHullSettings] = useState<HullSuiteSettings>({
-    mode: 'Hma',
+    modeSwitch: 'Ehma',
     length: 55,
-    showBand: true,
+    visualSwitch: true,
   })
 
-  // Memoize the config object to prevent unnecessary recalculations
-  const marketCipherConfig = useMemo(() => ({
-    wtChannelLength: 9,
-    wtChannelAverageLength: 21,
-    rsiLength: 14,
-  }), [])
-
-  // Convert price/volume data to OHLCV format for Market Cipher B
+  // Convert price/volume data to OHLCV format for indicators
   const ohlcvData = React.useMemo(() => {
     if (!chartData.length) return []
 
@@ -216,30 +193,41 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
         volume
       }
     })
-  }, [chartData, volumeData]) // Remove activeTimeScale and tokenData from deps
-
-  // Calculate indicators - only when data actually changes
-  const calculatedIndicators = useMarketCipherB(ohlcvData, marketCipherConfig)
+  }, [chartData, volumeData])
 
   // Calculate Hull Suite
   const hullSuiteData = useHullSuite(ohlcvData, {
-    source: 'close',
-    mode: hullSettings.mode,
+    src: 'close',
+    modeSwitch: hullSettings.modeSwitch,
     length: hullSettings.length,
     lengthMult: 1.0,
-    showBand: hullSettings.showBand,
-    thickness: 1,
-    transparency: 40,
+    useHtf: false,
+    htf: '240',
+    switchColor: true,
+    candleCol: false,
+    visualSwitch: hullSettings.visualSwitch,
+    thicknesSwitch: 1,
+    transpSwitch: 40,
   })
 
-  // Use chart instance with Hull Suite data
+  // Convert new Hull Suite data to legacy format for chart instance
+  const legacyHullSuiteData = {
+    mhull: hullSuiteData.MHULL,
+    shull: hullSuiteData.SHULL,
+    trend: hullSuiteData.hullColor.map(item => ({ 
+      time: item.time, 
+      isUp: item.color === '#00ff00' 
+    }))
+  }
+
+  // Use chart instance with Hull Suite data and crosshair callback
   const chartContainerRef = useChartInstance(
     chartData, 
     volumeData, 
-    calculatedIndicators, 
-    indicators, 
-    hullSuiteData,
-    undefined
+    undefined, // No Market Cipher indicators
+    indicators, // Hull Suite indicator settings
+    legacyHullSuiteData,
+    setCrosshairPrice // Callback for chart scrub price updates
   )
 
   const toggleIndicator = (key: keyof IndicatorSettings) => {
@@ -264,7 +252,7 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                 <div className="flex items-center gap-2">
                   <span className="text-xl font-mono">
                     <NumberFlow
-                      value={displayPrice}
+                      value={crosshairPrice || displayPrice}
                       format={{
                         style: 'currency',
                         currency: 'USD',
@@ -317,12 +305,6 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
           </Card>
         </div>
       </div>
-
-      {/* Separate Indicator Chart */}
-      <IndicatorChart
-        indicators={calculatedIndicators}
-        displaySettings={indicators}
-      />
     </div>
   )
 }

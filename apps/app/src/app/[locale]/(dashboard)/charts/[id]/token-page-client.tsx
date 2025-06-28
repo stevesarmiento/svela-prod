@@ -1,14 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { PriceChart } from "./price-chart"
 import { MarketMetrics } from "./market-metrics"
 import { CoinMarketData } from '@/types/coins'
 import { LiquidationHistoryChart } from "./liquidation-history-chart"
 import { SectionHeader } from "../_components/section-header"
-import { IconBinocularsFill, IconDropFill } from "symbols-react"
+import { IconBinocularsFill, IconDropFill, IconEyeglasses } from "symbols-react"
 import { OpenInterestChart } from './open-interest-chart'
 import { TakerBuySell } from './taker-buy-sell'
+import { MarketVisionChart } from './marketvision-chart'
+//import { StochasticChart } from './stochastic-chart'
+import { useChartData } from '@/hooks/use-chart-data'
+import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
+import type { Time } from 'lightweight-charts'
 
 interface TokenPageClientProps {
   id: string
@@ -16,7 +21,42 @@ interface TokenPageClientProps {
 }
 
 export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
-  const [activeTimeScale, setActiveTimeScale] = useState<string>("7d")
+  const [activeTimeScale, setActiveTimeScale] = useState<string>("30d")
+
+  // Get chart data for indicators
+  const { chartData, volumeData } = useChartData(id, activeTimeScale, tokenData.quote.USD)
+
+  // Convert price/volume data to OHLCV format for indicators
+  const ohlcvData = React.useMemo(() => {
+    if (!chartData.length) return []
+
+    // Always use the current chartData/volumeData that matches the active time scale
+    // Don't rely on tokenData.fullData which might be stale or not time-scale specific
+    return chartData.map((point: { time: Time; value: number }, index: number) => {
+      const price = point.value
+      const volume = volumeData[index]?.value || 0
+      const prevPrice = index > 0 ? chartData[index - 1]?.value || price : price
+      
+      // Create realistic OHLC with price movement patterns
+      const priceChange = price - prevPrice
+      const volatility = Math.abs(priceChange) * 0.5 + price * 0.001 // Add some base volatility
+      
+      // Simulate realistic open/close based on price direction
+      const open = prevPrice
+      const close = price
+      const high = Math.max(open, close) + volatility * Math.random()
+      const low = Math.min(open, close) - volatility * Math.random()
+      
+      return {
+        time: point.time,
+        open,
+        high,
+        low,
+        close,
+        volume
+      }
+    })
+  }, [chartData, volumeData])
 
   return (
     <main className="mx-auto py-6 relative z-10">
@@ -34,9 +74,49 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
           <MarketMetrics data={tokenData} />
         </div>
 
-        <SectionHeader title="Liquidation and Open Interest Overview" icon={IconDropFill} className="col-span-12 mt-24" />
+        <SectionHeader title="Indicators" icon={IconEyeglasses} className="col-span-12 mt-24" />
 
-        <div className="col-span-6">
+        <div className="col-span-12">
+          <MarketVisionChart
+            data={ohlcvData}
+            // displaySettings={{
+            //   showWaveTrend: true,
+            //   showMoneyFlow: true,
+            //   showOscillator1: true,
+            //   showOscillator2: false,
+            //   showLevels: true,
+            // }}
+            config={marketVisionConfig}
+            height={250}
+            showTimeAxis={false}
+          />
+        </div>
+
+        {/* <div className="col-span-12">
+          <StochasticChart
+            data={ohlcvData}
+            displaySettings={{
+              showK: true,
+              showD: true,
+              showDoubleStochastic: false,
+              showLevels: true,
+              showRSIDivergences: true,
+            }}
+            config={{
+              type: 'Stochastic - Standard',
+              source: 'Price',
+              kPeriod: 14,
+              dPeriod: 3,
+              smoothing: 3,
+            }}
+            height={250}
+            showTimeAxis={false}
+          />
+        </div> */}
+
+        <SectionHeader title="Liquidation & Open Interest" icon={IconDropFill} className="col-span-12 mt-24" />
+
+        <div className="col-span-12">
           <LiquidationHistoryChart
             coinId={id}
             interval="1d"
@@ -45,7 +125,7 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
           />              
         </div>
 
-        <div className="col-span-6">
+        <div className="col-span-12">
         <OpenInterestChart
           coinId={id}
           interval="1d"
