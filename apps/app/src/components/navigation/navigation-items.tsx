@@ -3,19 +3,12 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { MENU_ITEMS } from './bottom-nav-constants';
 import { usePathHelper } from './bottom-nav-hooks';
-
-// Map routes to keyboard shortcuts
-const KEYBOARD_SHORTCUTS: Record<string, string> = {
-  '/overview': 'g + h',
-  '/watchlist': 'g + w', 
-  '/charts': 'g + c',
-  '/settings': 'g + s',
-};
+import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings';
 
 interface NavigationItemsProps {
-  onOpenCommandSearch?: (context: CommandContext) => void;
+  onOpenCommandSearch: (context: CommandContext | null) => void;
 }
 
 export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationItemsProps) => {
@@ -23,26 +16,21 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
   const router = useRouter();
   const getCleanPath = usePathHelper();
 
-  const handleItemClick = useCallback((item: (typeof MENU_ITEMS)[number], isActive: boolean) => {
-    return (e: React.MouseEvent) => {
-      e.preventDefault();
-      
-      if (isActive && onOpenCommandSearch) {
-        // If clicking on current route, open command search with context
-        const context = item.href.replace('/', '') as CommandContext;
-        onOpenCommandSearch(context);
+  const handleItemClick = useCallback((item: typeof MENU_ITEMS[number], isActive: boolean) => {
+    return () => {
+      if (isActive) {
+        onOpenCommandSearch(item.title.toLowerCase() as CommandContext);
       } else {
-        // Otherwise, navigate to the route
         router.push(item.href);
       }
     };
   }, [router, onOpenCommandSearch]);
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-2">
       {MENU_ITEMS.map((item) => {
         const isActive = getCleanPath(pathname) === item.href;
-        const shortcut = KEYBOARD_SHORTCUTS[item.href];
+        const shortcut = getShortcutForRoute(item.href);
         
         return (
           <Tooltip delayDuration={500} key={item.title}>

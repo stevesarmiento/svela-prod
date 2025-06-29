@@ -6,6 +6,7 @@ import {
     IconCaptionsBubbleFill,
     IconBinocularsFill,
   } from "symbols-react";
+import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
   
   export const MENU_ITEMS = [
     {
@@ -39,28 +40,28 @@ import {
           subtitle: "View dashboard and chat",
           href: "/overview",
           icon: IconCaptionsBubbleFill,
-          shortcut: "g + h",
+          shortcut: getShortcutForRoute("/overview"),
         },
         {
           title: "Watchlist",
           subtitle: "Your cryptocurrency watchlist",
           href: "/watchlist",
           icon: IconBinocularsFill,
-          shortcut: "g + w",
+          shortcut: getShortcutForRoute("/watchlist"),
         },
         {
           title: "Charts",
           subtitle: "Price charts and market data",
           href: "/charts",
           icon: IconDistributeHorizontalCenterFill,
-          shortcut: "g + c",
+          shortcut: getShortcutForRoute("/charts"),
         },
         {
           title: "Settings",
           subtitle: "App preferences and configuration",
           href: "/settings",
           icon: IconGear,
-          shortcut: "g + s",
+          shortcut: getShortcutForRoute("/settings"),
         },
       ]
     },

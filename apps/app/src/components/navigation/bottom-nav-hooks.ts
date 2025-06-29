@@ -1,16 +1,7 @@
 import { useEffect, useCallback, useState, Dispatch, SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
 import { COMMAND_ITEMS } from './bottom-nav-constants';
-
-// Sequential keyboard shortcuts configuration
-const SEQUENTIAL_SHORTCUTS = {
-  'g': {
-    'h': '/overview',        // go to overview
-    'w': '/watchlist',       // go to watchlist  
-    'c': '/charts',          // go to charts
-    's': '/settings',        // go to settings
-  }
-} as const;
+import { SEQUENTIAL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
 
 export function useSequentialShortcuts() {
   const [activeSequence, setActiveSequence] = useState<string | null>(null);

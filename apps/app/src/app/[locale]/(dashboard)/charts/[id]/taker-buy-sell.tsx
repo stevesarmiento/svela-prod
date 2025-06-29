@@ -3,9 +3,10 @@
 import React, { useMemo, useRef, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
 import { Skeleton } from "@v1/ui/skeleton"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@v1/ui/tooltip"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { useTakerBuySell } from '@/hooks/use-taker-buy-sell'
-import { TrendingUp, TrendingDown } from 'lucide-react'
+import { TrendingUp, TrendingDown, Info } from 'lucide-react'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 
 interface TakerBuySellProps {
@@ -91,14 +92,6 @@ export function TakerBuySell({
         },
         background: 'transparent'
       },
-      title: {
-        text: `${range.toUpperCase()} Buy/Sell Pressure by Exchange`,
-        align: 'left' as const,
-        style: {
-          color: '#ffffff50',
-          fontSize: '16px'
-        }
-      },
       plotOptions: {
         bar: {
           horizontal: true,
@@ -157,8 +150,8 @@ export function TakerBuySell({
         }
       },
       grid: {
-        borderColor: '#f5f5f510',
-        strokeDashArray: 3,
+        borderColor: '#ffffff10',
+        strokeDashArray: 10,
         xaxis: {
           lines: {
             show: false
@@ -191,7 +184,7 @@ export function TakerBuySell({
     }
 
     return { series, options, overall, weightedAverage, topExchanges }
-  }, [data, range, colors])
+  }, [data, colors])
 
   // Initialize and update chart
   useEffect(() => {
@@ -265,10 +258,50 @@ export function TakerBuySell({
               <TrendingDown className="w-5 h-5" style={{ color: colors.sell }} />
             )}
             <div>
-              <div className="text-sm font-medium">
+              <div className="text-sm font-medium flex items-center gap-2">
                 Market Sentiment: <span style={{ color: isBuyPressure ? colors.buy : colors.sell }}>
                   {isBuyPressure ? 'Bullish' : 'Bearish'}
                 </span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Info className="w-3 h-3 text-muted-foreground" />
+                    </TooltipTrigger>
+                    <TooltipContent className="space-y-2">
+                      <div className="text-xs font-medium">Buy/Sell Pressure Zones:</div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <div 
+                          className="w-2 h-2 border rounded" 
+                          style={{ 
+                            backgroundColor: addOpacityToColor(colors.sell, 0.2), 
+                            borderColor: colors.sell 
+                          }}
+                        ></div>
+                        <span>Sell Pressure (&lt;48%)</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <div 
+                          className="w-2 h-2 border rounded" 
+                          style={{ 
+                            backgroundColor: addOpacityToColor(colors.neutral, 0.2), 
+                            borderColor: colors.neutral 
+                          }}
+                        ></div>
+                        <span>Neutral (48-52%)</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <div 
+                          className="w-2 h-2 border rounded" 
+                          style={{ 
+                            backgroundColor: addOpacityToColor(colors.buy, 0.2), 
+                            borderColor: colors.buy 
+                          }}
+                        ></div>
+                        <span>Buy Pressure (&gt;52%)</span>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
               <div className="text-xs text-muted-foreground">
                 Volume-weighted average: {weightedAverage.toFixed(1)}% buy ratio
@@ -288,40 +321,6 @@ export function TakerBuySell({
         {/* ApexCharts Box Plot */}
         <div className="w-full">
           <div ref={chartRef} />
-        </div>
-
-        {/* Legend */}
-        <div className="flex items-center justify-center gap-6 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <div 
-              className="w-3 h-3 border rounded" 
-              style={{ 
-                backgroundColor: addOpacityToColor(colors.sell, 0.2), 
-                borderColor: colors.sell 
-              }}
-            ></div>
-            <span>Sell Pressure (&lt;48%)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div 
-              className="w-3 h-3 border rounded" 
-              style={{ 
-                backgroundColor: addOpacityToColor(colors.neutral, 0.2), 
-                borderColor: colors.neutral 
-              }}
-            ></div>
-            <span>Neutral (48-52%)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div 
-              className="w-3 h-3 border rounded" 
-              style={{ 
-                backgroundColor: addOpacityToColor(colors.buy, 0.2), 
-                borderColor: colors.buy 
-              }}
-            ></div>
-            <span>Buy Pressure (&gt;52%)</span>
-          </div>
         </div>
       </CardContent>
     </Card>

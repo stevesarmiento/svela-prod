@@ -23,6 +23,15 @@ interface HistoricalQuote {
   };
 }
 
+interface OHLCVDataPoint {
+  time: Time
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
 export function useChartsData() {
   const { watchlist, isInitialized } = useWatchlist()
   const [coinsData, setCoinsData] = useState<Map<number, OptimisticCoinMarketData>>(new Map())
@@ -178,10 +187,10 @@ export function useChartData(coinId: string, activeTimeScale: string, initialDat
     placeholderData: (previousData) => previousData,
   })
 
-  const { chartData, volumeData } = useMemo(() => {
+  const { chartData, volumeData, ohlcvData } = useMemo(() => {
     const dataSource = chartDataResponse || tokenData?.fullData
 
-    // Try OHLCV first
+    // Try OHLCV first - return both line chart data AND proper OHLCV data
     if (dataSource?.ohlcv?.data?.quotes?.length) {
       const ohlcvQuotes = dataSource.ohlcv.data.quotes as OHLCVQuote[];
       
@@ -196,7 +205,21 @@ export function useChartData(coinId: string, activeTimeScale: string, initialDat
         color: '#ffffff40'
       }));
 
-      return { chartData: pricePoints, volumeData: volumePoints };
+      // Proper OHLCV data for candlestick charts
+      const ohlcvPoints: OHLCVDataPoint[] = ohlcvQuotes.map(quote => ({
+        time: (new Date(quote.time_close).getTime() / 1000) as Time,
+        open: quote.quote.USD.open,
+        high: quote.quote.USD.high,
+        low: quote.quote.USD.low,
+        close: quote.quote.USD.close,
+        volume: quote.quote.USD.volume
+      }));
+
+      return { 
+        chartData: pricePoints, 
+        volumeData: volumePoints, 
+        ohlcvData: ohlcvPoints 
+      };
     }
     
     // Fallback to historical data
@@ -212,7 +235,24 @@ export function useChartData(coinId: string, activeTimeScale: string, initialDat
         color: '#ffffff40'
       }));
 
-      return { chartData: pricePoints, volumeData: volumePoints };
+      // Create approximate OHLCV from historical data
+      const ohlcvPoints: OHLCVDataPoint[] = dataSource.historical.data.quotes.map((quote: HistoricalQuote) => {
+        const price = quote.quote.USD.price;
+        return {
+          time: (new Date(quote.timestamp).getTime() / 1000) as Time,
+          open: price,
+          high: price * 1.005, // Small approximation
+          low: price * 0.995,
+          close: price,
+          volume: quote.quote.USD.volume_24h || 0
+        };
+      });
+
+      return { 
+        chartData: pricePoints, 
+        volumeData: volumePoints, 
+        ohlcvData: ohlcvPoints 
+      };
     }
 
     // Generate fallback data
@@ -223,20 +263,37 @@ export function useChartData(coinId: string, activeTimeScale: string, initialDat
       
       return {
         price: { time, value: price },
-        volume: { time, value: volume, color: '#ffffff40' }
+        volume: { time, value: volume, color: '#ffffff40' },
+        ohlcv: {
+          time,
+          open: price,
+          high: price * 1.01,
+          low: price * 0.99,
+          close: price,
+          volume
+        }
       };
     });
     
     fallbackData.push({
       price: { time: (Date.now() / 1000) as Time, value: initialData.price },
-      volume: { time: (Date.now() / 1000) as Time, value: initialData.volume_24h, color: '#ffffff40' }
+      volume: { time: (Date.now() / 1000) as Time, value: initialData.volume_24h, color: '#ffffff40' },
+      ohlcv: {
+        time: (Date.now() / 1000) as Time,
+        open: initialData.price,
+        high: initialData.price * 1.01,
+        low: initialData.price * 0.99,
+        close: initialData.price,
+        volume: initialData.volume_24h
+      }
     });
 
     return {
       chartData: fallbackData.map(d => d.price),
-      volumeData: fallbackData.map(d => d.volume)
+      volumeData: fallbackData.map(d => d.volume),
+      ohlcvData: fallbackData.map(d => d.ohlcv)
     };
   }, [chartDataResponse, tokenData?.fullData, initialData]);
 
-  return { chartData, volumeData, isLoading, tokenData }
+  return { chartData, volumeData, ohlcvData, isLoading, tokenData }
 }

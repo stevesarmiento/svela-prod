@@ -80,8 +80,8 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
 
   const getTimeScaleLabel = (scale: string) => {
     switch (scale) {
-      case '1d': return '30D'
-      case '7d': return '90D' 
+      case '1d': return '1M'
+      case '7d': return '1D' 
       case 'max': return '1Y'
       default: return scale.toUpperCase()
     }

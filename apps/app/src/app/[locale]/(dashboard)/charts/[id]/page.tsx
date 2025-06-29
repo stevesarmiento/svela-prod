@@ -3,17 +3,9 @@ import {
   CardContent, 
 } from "@v1/ui/card"
 import { getCoinData } from "@/lib/coinmarketcap" 
-import { PriceChart } from "./price-chart"
-import { MarketMetrics } from "./market-metrics"
-//import { FundingRateExchanges } from "./funding-rate-exchanges"
-//import { DerivativesMetrics } from "./derivatives-metrics"
 import { CoinMarketData } from '@/types/coins'
 import Image from "next/image"
-import { LiquidationHistoryChart } from "./liquidation-history-chart"
-import { SectionHeader } from "../_components/section-header"
-import { IconBinocularsFill, IconDropFill } from "symbols-react"
-import { OpenInterestChart } from './open-interest-chart'
-import { TakerBuySell } from './taker-buy-sell'
+import { TokenPageClient } from './token-page-client'
 
 interface PageProps {
   params: {
@@ -40,10 +32,10 @@ export default async function TokenPage({ params }: PageProps) {
             height: '700px',
             filter: 'blur(360px)',
             willChange: 'filter',
-            opacity: 1,
+            opacity: 0.7,
             left: '-10vw',
             top: '-350px',
-            mixBlendMode: 'overlay'
+            mixBlendMode: 'soft-light'
           }}
         >
           <Image
@@ -62,10 +54,10 @@ export default async function TokenPage({ params }: PageProps) {
             height: '479px',
             filter: 'blur(360px)',
             willChange: 'filter',
-            opacity: 1,
+            opacity: 0.7,
             right: '-5vw',
             top: '236px',     
-            mixBlendMode: 'overlay'
+            mixBlendMode: 'soft-light'
           }}
         >
           <Image
@@ -77,48 +69,10 @@ export default async function TokenPage({ params }: PageProps) {
           />
         </div>
 
-        <main className="mx-auto py-6 relative z-10">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            <div className="col-span-12">
-              <PriceChart 
-                coinId={id}
-                initialData={tokenData.quote.USD} 
-              />              
-            </div>
-            
-            <div className="col-span-12 py-6 pt-6">
-              <MarketMetrics data={tokenData} />
-            </div>
-
-            <SectionHeader title="Liquidation and Open Interest Overview" icon={IconDropFill} className="col-span-12 mt-24" />
-
-            <div className="col-span-6">
-              <LiquidationHistoryChart
-                coinId={params.id}
-                interval="1d"
-                exchangeList="Binance, Bybit, OKX, Gate, HTX, Hyperliquid, CoinEx, Bitmex, Bitfinex"
-                limit={200}
-              />              
-            </div>
-
-            <div className="col-span-6">
-            <OpenInterestChart
-              coinId={params.id}
-              interval="1d"
-              limit={30}
-              unit="usd"
-            />              
-            </div>
-            <SectionHeader title="Buy/Sell Pressure by Exchange" icon={IconBinocularsFill} className="col-span-12 mt-24" />
-
-            <div className="col-span-12">
-              <TakerBuySell
-                coinId={params.id}
-                range="24h"
-              />
-            </div>
-          </div>
-        </main>
+        <TokenPageClient 
+          id={id}
+          tokenData={tokenData}
+        />
       </div>
     )
   } catch (error) {

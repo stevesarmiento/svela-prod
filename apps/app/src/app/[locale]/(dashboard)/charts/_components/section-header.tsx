@@ -17,8 +17,8 @@ export function SectionHeader({ title, icon: Icon, className }: SectionHeaderPro
       
       {/* Header content */}
       <div className="relative flex items-center gap-3 bg-background px-2 rounded-full">        
-        <span className="text-sm text-white font-mono flex items-center gap-2">
-          {Icon && <Icon className="w-4 h-4 fill-foreground/30" />}
+        <span className="text-xs text-white font-mono flex items-center gap-2">
+          {Icon && <Icon className="w-5 h-5 fill-foreground/30" />}
           {title}
         </span>
       </div>
