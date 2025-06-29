@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SEQUENTIAL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
 
 interface KeyboardIndicatorProps {
   activeSequence: string | null;
@@ -7,18 +8,14 @@ interface KeyboardIndicatorProps {
 
 export const KeyboardIndicator = React.memo(({ activeSequence }: KeyboardIndicatorProps) => {
   const getNextKeys = (sequence: string) => {
-    switch (sequence) {
-      case 'g':
-        return [
-          { key: 'h', action: 'Overview' },
-          { key: 'w', action: 'Watchlist' },
-          { key: 'c', action: 'Charts' },
-          { key: 's', action: 'Settings' },
-          { key: 'n', action: 'News' },
-        ];
-      default:
-        return [];
-    }
+    const shortcuts = SEQUENTIAL_SHORTCUTS[sequence as keyof typeof SEQUENTIAL_SHORTCUTS];
+    if (!shortcuts) return [];
+    
+    return Object.entries(shortcuts).map(([key, route]) => {
+      // Convert route to readable action name
+      const action = route.replace('/', '').replace(/^\w/, c => c.toUpperCase());
+      return { key, action };
+    });
   };
 
   return (

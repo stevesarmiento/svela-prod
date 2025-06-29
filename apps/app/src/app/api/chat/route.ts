@@ -1,6 +1,6 @@
 import { streamText } from 'ai';
 import { z } from 'zod';
-import { openai } from '@/lib/openai';
+import { openai, isOpenAIAvailable } from '@/lib/openai';
 import { detectAndFetchData, formatDataForLLM } from '@/lib/data-fetcher';
 
 const ChatRequestSchema = z.object({
@@ -12,6 +12,19 @@ const ChatRequestSchema = z.object({
 
 export async function POST(req: Request) {
   try {
+    // Check if OpenAI is available
+    if (!isOpenAIAvailable || !openai) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'OpenAI service is not available. Please configure OPENAI_API_KEY.' 
+        }), 
+        { 
+          status: 503,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
     const body = await req.json();
     const { messages } = ChatRequestSchema.parse(body);
     

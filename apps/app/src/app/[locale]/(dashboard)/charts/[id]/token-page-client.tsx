@@ -10,7 +10,6 @@ import { IconBinocularsFill, IconDropFill, IconCircleDottedAndCircle } from "sym
 import { OpenInterestChart } from './open-interest-chart'
 import { TakerBuySell } from './taker-buy-sell'
 import { MarketVisionChart } from './marketvision-chart'
-// import { StochasticChart } from './stochastic-chart'
 import { BollingerBandsChart } from './bollinger-bands-chart'
 import { useChartData } from '@/hooks/use-chart-data'
 import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
@@ -73,9 +72,9 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
   }, [chartData, volumeData])
 
   return (
-    <main className="mx-auto py-6 relative z-10">
+    <main className="mx-auto py-6 px-4 relative z-10">
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-        <div className={`col-span-12 sm:space-y-0 sticky top-0 z-[100] transition-all duration-300 ${isSticky ? 'pt-12' : 'pt-0'}`}>
+        <div className={`col-span-12 sm:space-y-0 sticky top-0 z-[100] transition-all duration-300 ${isSticky ? 'pt-4' : 'pt-0'}`}>
           <PriceChart 
             coinId={id}
             initialData={tokenData.quote.USD}
@@ -84,7 +83,7 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
           />              
         </div>
         
-        <div className="col-span-12 py-6 pt-6">
+        <div className="col-span-12">
           <MarketMetrics data={tokenData} />
         </div>
 
@@ -93,40 +92,11 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
         <div className="col-span-12">
           <MarketVisionChart
             data={ohlcvData}
-            // displaySettings={{
-            //   showWaveTrend: true,
-            //   showMoneyFlow: true,
-            //   showOscillator1: true,
-            //   showOscillator2: false,
-            //   showLevels: true,
-            // }}
             config={marketVisionConfig}
             height={250}
             showTimeAxis={false}
           />
         </div>
-
-        {/* <div className="col-span-12">
-          <StochasticChart
-            data={ohlcvData}
-            displaySettings={{
-              showK: true,
-              showD: true,
-              showDoubleStochastic: false,
-              showLevels: true,
-              showRSIDivergences: true,
-            }}
-            config={{
-              type: 'Stochastic - Standard',
-              source: 'Price',
-              kPeriod: 14,
-              dPeriod: 3,
-              smoothing: 3,
-            }}
-            height={250}
-            showTimeAxis={false}
-          />
-        </div> */}
 
         <div className="col-span-12">
           <BollingerBandsChart
