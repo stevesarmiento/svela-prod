@@ -26,6 +26,7 @@ import { IconChevronBackward } from 'symbols-react';
 import { SvelaLogo } from "@v1/ui/svela-logo";
 import { useTokenHeader } from "@/hooks/use-token-header";
 import { WatchlistButton } from "./watchlist-button";
+import { AnalysisDialog } from "./analysis-dialog";
 import Image from "next/image";
 
 
@@ -213,13 +214,19 @@ export function TopNav() {
         {user && (
           <div className="flex items-center gap-2">
             {isChartDetailPage && coinId && (
-              <WatchlistButton 
-                coinId={coinId} 
-                coinName={tokenData?.name || tokenData?.symbol}
-              />
+              <>
+                <AnalysisDialog 
+                  coinId={coinId} 
+                  tokenData={tokenData}
+                />
+                <WatchlistButton 
+                  coinId={coinId} 
+                  coinName={tokenData?.name || tokenData?.symbol}
+                />
+              </>
             )}
             
-            {!isChartDetailPage && coinId && (
+            {!isChartDetailPage && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8">

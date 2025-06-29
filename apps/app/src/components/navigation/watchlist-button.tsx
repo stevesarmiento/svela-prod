@@ -139,7 +139,7 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0.8 }}
               >
-                <IconStar className="h-4 w-4 stroke-zinc-400" />
+                <IconStar className="h-4 w-4 fill-zinc-400" />
               </motion.div>
             ) : showSlash ? (
               <motion.div
