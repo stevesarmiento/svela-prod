@@ -5,13 +5,15 @@ import { Button } from "@v1/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@v1/ui/dialog"
 import { ScrollArea } from "@v1/ui/scroll-area"
 import { Spinner } from "@v1/ui/spinner"
-import { IconSparkles } from 'symbols-react'
+import { Badge } from "@v1/ui/badge"
+import { IconArrowDownRight, IconArrowRight, IconArrowUpRight, IconCircleDottedAndCircle, IconMagnifyingglass, IconSparkles } from 'symbols-react'
 import { useQuery } from '@tanstack/react-query'
 import { useChartData } from '@/hooks/use-chart-data'
 import { useMarketVisionB } from '@/hooks/market-vision'
 import { calculateBollingerBands } from '@/hooks/market-vision/bollinger-bands'
 import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
 import type { Time } from 'lightweight-charts'
+import Image from "next/image"
 
 interface AnalysisDialogProps {
   coinId: string
@@ -231,6 +233,17 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
     }
   }
 
+  // Helper function to format large numbers
+  const formatNumber = (num: number) => {
+    if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`
+    if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`
+    if (num >= 1e3) return `${(num / 1e3).toFixed(2)}K`
+    return num.toFixed(2)
+  }
+
+  // Get latest RSI value for display
+  const latestRSI = marketVisionData.oscillator1[marketVisionData.oscillator1.length - 1]
+
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DialogTrigger asChild>
@@ -244,29 +257,161 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
           <span className="text-white">Analyze</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-4xl max-h-[80vh] bg-zinc-950/95 backdrop-blur-xl border border-zinc-800/30">
-        <DialogHeader>
-          <DialogTitle className="text-white flex items-center gap-2">
-            <IconSparkles className="w-5 h-5" />
-            AI Technical Analysis - {marketData?.name || tokenData?.name || 'Token'}
+      <DialogContent className="max-w-7xl max-h-[90vh]">
+        {/* Header */}
+        <DialogHeader className="border-b border-gray-800 pb-4">
+          <DialogTitle className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="flex items-center gap-4">
+                <Image
+                  src={tokenData?.logoUrl || `https://s2.coinmarketcap.com/static/img/coins/64x64/${coinId}.png`}
+                  alt={tokenData?.name || marketData?.name || 'Token'}
+                  className="w-8 h-8 rounded-full ring-1 ring-white/10"
+                  width={24}
+                  height={24}
+                  priority={true}
+                  placeholder="blur"
+                  blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGBkbHB0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = '/favicon.ico';
+                  }}
+                />
+                <span className="font-semibold text-white text-3xl">
+                  {marketData?.name || tokenData?.name || 'Token'}
+                </span>
+                <Badge variant={marketData?.quote?.USD?.percent_change_24h >= 0 ? "default" : "destructive"}>
+                  {marketData?.quote?.USD?.percent_change_24h >= 0 ? '+' : ''}
+                  {marketData?.quote?.USD?.percent_change_24h?.toFixed(2)}%
+                </Badge>
+              </div>
+            </div>
           </DialogTitle>
         </DialogHeader>
-        <ScrollArea className="h-[60vh] w-full">
-          <div className="p-4">
-            {isAnalysisLoading ? (
-              <div className="flex items-center justify-center p-8">
-                <Spinner className="w-6 h-6 mr-2" />
-                <span className="text-muted-foreground">Analyzing technical indicators...</span>
-              </div>
-            ) : (
-              <div className="prose prose-invert max-w-none">
-                <pre className="whitespace-pre-wrap text-sm text-gray-300 font-mono">
-                  {analysisResult || 'Click the analysis button to generate insights'}
-                </pre>
-              </div>
-            )}
-          </div>
-        </ScrollArea>
+         <div>
+            <ScrollArea className="h-[75vh] w-full">
+            <div className="grid grid-cols-1 lg:grid-cols-4 divide-x divide-gray-800">
+                {/* Left Sidebar - Key Metrics */}
+                <div className="lg:col-span-1 space-y-6 p-6 pl-0 pt-0">
+                <div className="space-y-3 sticky top-0 pt-6">
+                    <div className="flex items-center gap-2">
+                        <IconMagnifyingglass className="w-4 h-4 fill-white/50" />
+                        <h3 className="text-sm font-medium text-white">Market Metrics</h3>
+                    </div>
+                    <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-400">Current Price</span>
+                        <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm text-white">
+                            ${marketData?.quote?.USD?.price?.toLocaleString() || '0.00'}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-400">Market Cap</span>
+                    <span className="font-mono text-sm text-white">
+                        ${formatNumber(marketData?.quote?.USD?.market_cap || 0)}
+                    </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-400">24h Volume</span>
+                    <span className="font-mono text-sm text-white">
+                        ${formatNumber(marketData?.quote?.USD?.volume_24h || 0)}
+                    </span>
+                    </div>
+
+                    <div className="flex flex-col space-y-3 border-t border-gray-800 pt-3 mt-3">
+                    <div className="flex items-center gap-2">
+                        <IconCircleDottedAndCircle className="w-4 h-4 fill-white/50" />
+                        <h3 className="text-sm font-medium text-white">Technical Indicators</h3>
+                    </div>
+                    {latestRSI && (
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-400 flex items-center gap-1">
+                        Relative Strength
+                        </span>
+                        <div className="flex items-center gap-2">
+                        <span className="font-mono text-white">{latestRSI.value.toFixed(1)}</span>
+                        <Badge variant={
+                            latestRSI.value > 70 ? "destructive" : 
+                            latestRSI.value < 30 ? "default" : "secondary"
+                        }>
+                            {latestRSI.value > 70 ? 'Overbought' : 
+                            latestRSI.value < 30 ? 'Oversold' : 'Neutral'}
+                        </Badge>
+                        </div>
+                    </div>
+                    )}
+                    
+                    {marketVisionData.moneyFlow.fast.length > 0 && (
+                        <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-400">Money Flow</span>
+                        <Badge variant={
+                            (marketVisionData.moneyFlow.fast[marketVisionData.moneyFlow.fast.length - 1]?.value || 0) > 0 
+                            ? "default" : "destructive"
+                        }>
+                            {(marketVisionData.moneyFlow.fast[marketVisionData.moneyFlow.fast.length - 1]?.value || 0) > 0 
+                            ? 'Inflow' : 'Outflow'}
+                        </Badge>
+                        </div>
+                    )}
+
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-gray-400">Trend</span>
+                        <div className="flex items-center gap-1">
+                        {(marketData?.quote?.USD?.percent_change_24h || 0) > 2 ? (
+                            <IconArrowUpRight className="w-3 h-3 fill-green-400" />
+                        ) : (marketData?.quote?.USD?.percent_change_24h || 0) < -2 ? (
+                            <IconArrowDownRight className="w-3 h-3 fill-red-400" />
+                        ) : (
+                            <IconArrowRight className="w-3 h-3 fill-gray-400" />
+                        )}
+                        <span className="text-sm text-gray-300">
+                            {(marketData?.quote?.USD?.percent_change_24h || 0) > 2 ? 'Uptrend' :
+                            (marketData?.quote?.USD?.percent_change_24h || 0) < -2 ? 'Downtrend' : 'Sideways'}
+                        </span>
+                        </div>
+                    </div>
+                    </div>
+                </div>
+                </div>
+
+                {/* Main Content */}
+                <div className="lg:col-span-3 space-y-6 p-12">
+                <div>
+                    <h1 className="text-xl font-semibold mb-6 text-white">
+                    {marketData?.name || tokenData?.name || 'Token'} Market Overview
+                    </h1>
+
+                    {isAnalysisLoading ? (
+                    <div className="flex items-center justify-center p-12">
+                        <Spinner className="w-8 h-8 mr-3" />
+                        <span className="text-gray-400 text-lg">Analyzing technical indicators...</span>
+                    </div>
+                    ) : analysisResult ? (
+                    <div className="space-y-8">
+                        <div className="prose prose-invert max-w-none">
+                        <pre className="whitespace-pre-wrap text-sm text-gray-300 leading-relaxed">
+                            {analysisResult}
+                        </pre>
+                        </div>
+                    </div>
+                    ) : (
+                    <div className="text-center py-12">
+                        <IconSparkles className="w-12 h-12 mx-auto mb-4 fill-gray-600" />
+                        <p className="text-gray-400 text-lg">Click the analyze button to generate AI insights</p>
+                        <p className="text-gray-500 text-sm mt-2">
+                        Our AI will analyze technical indicators, market trends, and provide actionable insights
+                        </p>
+                    </div>
+                    )}
+                </div>
+                </div>
+            </div>
+            </ScrollArea>            
+        </div>         
+
       </DialogContent>
     </Dialog>
   )
