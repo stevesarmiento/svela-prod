@@ -66,7 +66,7 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
           <span className="text-white">Analyze</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-7xl max-h-[90vh]">
+      <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden">
         {/* Header */}
         <DialogHeader className="border-b border-zinc-800/50 pb-4">
           <DialogTitle className="flex items-center justify-between">
