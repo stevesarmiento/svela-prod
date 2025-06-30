@@ -1,9 +1,9 @@
 'use client'
 
 import React from 'react'
-import { Spinner } from '@v1/ui/spinner'
 import { IconSparkles } from 'symbols-react'
 import ReactMarkdown from 'react-markdown'
+import { TextShimmerWave } from '@v1/ui/text-shimmer'
 
 interface AnalysisResultProps {
   isLoading: boolean
@@ -13,9 +13,8 @@ interface AnalysisResultProps {
 export function AnalysisResult({ isLoading, result }: AnalysisResultProps) {
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-12">
-        <Spinner className="w-8 h-8 mr-3" />
-        <span className="text-gray-400 text-lg">Analyzing technical indicators...</span>
+      <div className="flex items-center justify-center p-12 w-full h-[51vh]">
+        <TextShimmerWave className="text-gray-400 text-lg">Analyzing technical indicators...</TextShimmerWave>
       </div>
     )
   }

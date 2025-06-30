@@ -99,9 +99,9 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
         </DialogHeader>
         
         <div>
-          <ScrollArea className="h-[75vh] w-full">
+          <div className="h-[75vh] w-full">
             <div className="grid grid-cols-1 lg:grid-cols-4 divide-x divide-zinc-800/50">
-              <div className="sticky top-0">
+              <div className="sticky top-0 lg:col-span-1">
                   {/* Market Metrics Sidebar */}
                   <MarketMetricsSidebar
                     coinId={coinId}
@@ -119,20 +119,23 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
 
 
               {/* Main Content */}
-              <div className="lg:col-span-3 space-y-6 p-12">
-                <div>
-                  <h1 className="text-xl font-semibold mb-6 text-white">
-                    {marketData?.name || tokenData?.name || 'Token'} Market Overview
-                  </h1>
+              <ScrollArea hideScrollbar={true} className="h-[75vh] w-full col-span-3 bg-zinc-950/50">
+                <div className="relative lg:col-span-3 space-y-6 p-12 h-full">
+                  <div className="relative h-full">
+                    <h1 className="text-xl font-semibold mb-6 text-white">
+                      {marketData?.name || tokenData?.name || 'Token'} Market Overview
+                    </h1>
 
-                  <AnalysisResult
-                    isLoading={isAnalysisLoading}
-                    result={analysisResult}
-                  />
-                </div>
-              </div>
+                    <AnalysisResult
+                      isLoading={isAnalysisLoading}
+                      result={analysisResult}
+                    />
+                  </div>
+                </div>  
+                <div className="sticky bottom-[-2px] h-[100px] inset-0 z-[1002] pointer-events-none bg-gradient-to-t from-white via-white/50 dark:via-zinc-950/50 to-transparent dark:from-zinc-950" />
+              </ScrollArea>
             </div>
-          </ScrollArea>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
