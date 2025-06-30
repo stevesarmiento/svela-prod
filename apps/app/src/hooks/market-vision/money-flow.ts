@@ -295,7 +295,8 @@ export function calculateMoneyFlow(
   data: OHLCVDataPoint[],
   config: MoneyFlowConfig
 ): MoneyFlowResult {
-  console.log('🔄 Money Flow calculation:', config.type, 'period:', config.oscLength)
+  // Remove debug logging to prevent console spam
+  // console.log('🔄 Money Flow calculation:', config.type, 'period:', config.oscLength)
   
   if (!data.length) {
     return {
@@ -436,7 +437,8 @@ export function calculateMoneyFlow(
   
   const resultValues = createSeriesData(finalMoneyFlow)
   
-  console.log('✅ Money Flow result:', config.type, '→', resultValues.length, 'points')
+  // Remove debug logging to prevent console spam
+  // console.log('✅ Money Flow result:', config.type, '→', resultValues.length, 'points')
   
   return {
     values: resultValues,

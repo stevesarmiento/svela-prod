@@ -1,6 +1,6 @@
 import { streamText } from 'ai'
 import { z } from 'zod'
-import { openai } from '@/lib/openai'
+import { gemini } from '@/lib/gemini'
 import { formatLargeNumber } from '@v1/ui/format-numbers'
 
 // Enhanced schema to include all indicator data
@@ -19,6 +19,25 @@ const IndicatorDataSchema = z.object({
     }),
   }),
   
+  // ENHANCED: Historical price context
+  priceContext: z.object({
+    currentPrice: z.number(),
+    priceHistory: z.array(z.number()),
+    momentum: z.enum(['bullish', 'bearish']),
+    volatility: z.enum(['high', 'moderate', 'low']),
+    support: z.number(),
+    resistance: z.number(),
+  }).optional(),
+  
+  // ENHANCED: Volume analysis
+  volumeAnalysis: z.object({
+    currentVolume: z.number(),
+    volumeHistory: z.array(z.number()),
+    volumeTrend: z.enum(['increasing', 'decreasing', 'stable']),
+    averageVolume: z.number(),
+    volumeSpike: z.boolean(),
+  }).optional(),
+  
   // Hull Suite indicators
   hullSuite: z.object({
     trendDirection: z.enum(['bullish', 'bearish', 'neutral']),
@@ -28,7 +47,7 @@ const IndicatorDataSchema = z.object({
     strength: z.enum(['strong', 'moderate', 'weak']).optional(),
   }).optional(),
   
-  // Bollinger Bands analysis
+  // ENHANCED: Bollinger Bands analysis with historical context
   bollingerBands: z.object({
     indicator: z.enum(['RSI', 'MFI']),
     currentValue: z.number(),
@@ -38,14 +57,19 @@ const IndicatorDataSchema = z.object({
     position: z.enum(['overbought', 'oversold', 'normal']),
     breachType: z.enum(['upper_breach', 'lower_breach', 'none']).optional(),
     divergence: z.enum(['bullish', 'bearish', 'none']).optional(),
+    trend: z.string().optional(),
+    history: z.array(z.number()).optional(),
   }).optional(),
   
-  // Market Vision indicators
+  // ENHANCED: Market Vision indicators with trends
   marketVision: z.object({
-    // Oscillators
+    // Enhanced RSI with historical context
     rsi: z.object({
       value: z.number(),
       signal: z.enum(['overbought', 'oversold', 'neutral']),
+      trend: z.string().optional(),
+      history: z.array(z.number()).optional(),
+      divergence: z.enum(['bullish', 'bearish', 'none']).optional(),
     }).optional(),
     
     mfi: z.object({
@@ -53,7 +77,7 @@ const IndicatorDataSchema = z.object({
       signal: z.enum(['overbought', 'oversold', 'neutral']),
     }).optional(),
     
-    // Wave Trend
+    // Enhanced Wave Trend
     waveTrend: z.object({
       wt1: z.number(),
       wt2: z.number(),
@@ -61,7 +85,7 @@ const IndicatorDataSchema = z.object({
       momentum: z.enum(['strong', 'moderate', 'weak']).optional(),
     }).optional(),
     
-    // Money Flow
+    // Enhanced Money Flow
     moneyFlow: z.object({
       direction: z.enum(['inflow', 'outflow', 'neutral']),
       strength: z.enum(['strong', 'moderate', 'weak']),
@@ -86,20 +110,24 @@ const IndicatorDataSchema = z.object({
     openInterestChange: z.number().optional(),
   }).optional(),
   
-  // Buy/Sell pressure
+  // Enhanced Order flow
   orderFlow: z.object({
     takerBuyRatio: z.number().optional(), // 0-1 ratio
+    buyVolumeUsd: z.number().optional(), // Actual buy volume in USD
+    sellVolumeUsd: z.number().optional(), // Actual sell volume in USD
     buyPressure: z.enum(['high', 'moderate', 'low']).optional(),
     sellPressure: z.enum(['high', 'moderate', 'low']).optional(),
     netFlow: z.enum(['bullish', 'bearish', 'neutral']).optional(),
   }).optional(),
   
-  // Price action context
+  // Enhanced Price action context
   priceAction: z.object({
     trend: z.enum(['uptrend', 'downtrend', 'sideways']),
     volatility: z.enum(['high', 'moderate', 'low']),
     volume_profile: z.enum(['increasing', 'decreasing', 'stable']),
     priceLevel: z.enum(['support', 'resistance', 'breakout', 'breakdown', 'neutral']).optional(),
+    momentum: z.enum(['bullish', 'bearish']).optional(),
+    divergenceSignal: z.boolean().optional(),
   }).optional(),
   
   timeframe: z.string().optional(), // e.g., "30d", "7d", "1y"
@@ -110,7 +138,7 @@ type IndicatorData = z.infer<typeof IndicatorDataSchema>
 function formatIndicatorAnalysis(data: IndicatorData): string {
   const sections: string[] = []
   
-  // Basic market data
+  // Enhanced market data with historical context
   sections.push(`
 **Market Overview:**
 ${data.name} (${data.symbol})
@@ -119,7 +147,28 @@ Price: $${data.quote.USD.price.toLocaleString()}
 Market Cap: $${formatLargeNumber(data.quote.USD.market_cap)}
 24h Volume: $${formatLargeNumber(data.quote.USD.volume_24h)}`)
 
-  // Technical Analysis Section
+  // Enhanced price context
+  if (data.priceContext) {
+    const { momentum, volatility, support, resistance, priceHistory } = data.priceContext
+    const priceRange = `$${support.toLocaleString()} - $${resistance.toLocaleString()}`
+    const historicalCount = priceHistory.length
+    sections.push(`
+**Price Context (${historicalCount} periods):**
+Momentum: ${momentum}, Volatility: ${volatility}
+Support/Resistance Range: ${priceRange}`)
+  }
+
+  // Enhanced volume analysis
+  if (data.volumeAnalysis) {
+    const { volumeTrend, volumeSpike, averageVolume, currentVolume } = data.volumeAnalysis
+    const volumeChange = ((currentVolume - averageVolume) / averageVolume * 100).toFixed(1)
+    sections.push(`
+**Volume Analysis:**
+Trend: ${volumeTrend}, Volume vs Average: ${volumeChange > '0' ? '+' : ''}${volumeChange}%
+${volumeSpike ? 'VOLUME SPIKE DETECTED' : 'Normal volume activity'}`)
+  }
+
+  // Enhanced Technical Analysis Section
   const technicalSignals: string[] = []
   
   if (data.hullSuite) {
@@ -130,19 +179,27 @@ Market Cap: $${formatLargeNumber(data.quote.USD.market_cap)}
   }
   
   if (data.bollingerBands) {
-    const { indicator, position, currentValue, breachType } = data.bollingerBands
+    const { indicator, position, currentValue, breachType, trend, divergence, history } = data.bollingerBands
     const breachText = breachType && breachType !== 'none' ? ` with ${breachType.replace('_', ' ')}` : ''
-    technicalSignals.push(`${indicator} Bollinger Bands: ${currentValue.toFixed(1)} - ${position}${breachText}`)
+    const trendText = trend ? `, ${trend} trend` : ''
+    const divergenceText = divergence && divergence !== 'none' ? `, ${divergence} divergence` : ''
+    const historyText = history && history.length > 0 ? ` (${history.length} period history)` : ''
+    technicalSignals.push(`${indicator} Bollinger Bands: ${currentValue.toFixed(1)} - ${position}${breachText}${trendText}${divergenceText}${historyText}`)
   }
   
   if (data.marketVision?.rsi) {
-    technicalSignals.push(`RSI: ${data.marketVision.rsi.value.toFixed(1)} (${data.marketVision.rsi.signal})`)
+    const { value, signal, trend, divergence, history } = data.marketVision.rsi
+    const trendText = trend ? `, ${trend} trend` : ''
+    const divergenceText = divergence && divergence !== 'none' ? `, ${divergence} divergence` : ''
+    const historyText = history && history.length > 0 ? ` (${history.length} periods)` : ''
+    technicalSignals.push(`RSI: ${value.toFixed(1)} (${signal})${trendText}${divergenceText}${historyText}`)
   }
   
   if (data.marketVision?.waveTrend) {
-    const { signal, momentum } = data.marketVision.waveTrend
+    const { signal, momentum, wt1, wt2 } = data.marketVision.waveTrend
     const momentumText = momentum ? ` with ${momentum} momentum` : ''
-    technicalSignals.push(`Wave Trend: ${signal.replace('_', ' ')}${momentumText}`)
+    const values = `WT1: ${wt1.toFixed(1)}, WT2: ${wt2.toFixed(1)}`
+    technicalSignals.push(`Wave Trend: ${signal.replace('_', ' ')}${momentumText} (${values})`)
   }
   
   if (data.marketVision?.moneyFlow) {
@@ -172,9 +229,11 @@ Market Cap: $${formatLargeNumber(data.quote.USD.market_cap)}
     }
     
     if (data.orderFlow) {
-      const { takerBuyRatio, netFlow } = data.orderFlow
+      const { takerBuyRatio, buyVolumeUsd, sellVolumeUsd, netFlow } = data.orderFlow
       if (takerBuyRatio !== undefined) {
-        marketStructure.push(`Taker Buy Ratio: ${(takerBuyRatio * 100).toFixed(1)}% (${netFlow || 'neutral'})`)
+        const volumeText = buyVolumeUsd && sellVolumeUsd ? 
+          ` ($${formatLargeNumber(buyVolumeUsd)} buy / $${formatLargeNumber(sellVolumeUsd)} sell)` : ''
+        marketStructure.push(`Taker Buy Ratio: ${(takerBuyRatio * 100).toFixed(1)}% (${netFlow || 'neutral'})${volumeText}`)
       }
     }
     
@@ -213,47 +272,137 @@ export async function POST(req: Request) {
     }
 
     const validatedData = IndicatorDataSchema.parse(data)
+    
+    // Console logging for API debugging
+    console.log('=== API ROUTE ANALYSIS DEBUG (Gemini) ===')
+    console.log('Received data for:', validatedData.name, validatedData.symbol)
+    console.log('Current Price:', validatedData.quote.USD.price)
+    console.log('Current RSI:', validatedData.marketVision?.rsi?.value)
+    console.log('Support/Resistance:', validatedData.priceContext?.support, '/', validatedData.priceContext?.resistance)
+    console.log('REAL Open Interest:', validatedData.liquidationData?.openInterest)
+    console.log('REAL Liquidations 24h:', validatedData.liquidationData?.totalLiquidations24h)
+    console.log('REAL Buy/Sell:', validatedData.orderFlow?.takerBuyRatio, 'ratio')
+    console.log('REAL Buy Volume:', validatedData.orderFlow?.buyVolumeUsd)
+    console.log('Volume Analysis:', validatedData.volumeAnalysis?.volumeTrend, validatedData.volumeAnalysis?.volumeSpike)
+    console.log('Price History Length:', validatedData.priceContext?.priceHistory?.length)
+    console.log('RSI History Length:', validatedData.marketVision?.rsi?.history?.length)
+    console.log('===========================================')
+    
     const indicatorSummary = formatIndicatorAnalysis(validatedData)
 
     const prompt = `
-You are a professional cryptocurrency technical analyst. Analyze the following comprehensive market data and provide expert insights.
-
-${indicatorSummary}
-
-Based on this comprehensive technical analysis data, provide a detailed assessment in the following format:
-
-**Technical Analysis Summary:**
-[Synthesize all the technical indicators into a cohesive 2-3 sentence technical outlook]
-
-**Key Signals:**
-[List the 3-4 most important signals from the indicators and what they suggest]
-
-**Market Structure:**
-[Analyze the liquidation data, order flow, and market dynamics in 2-3 sentences]
-
-**Risk Assessment:**
-[Identify key risks and support/resistance levels based on the technical data]
-
-**Outlook:**
-[Provide a balanced short-term outlook based on all the technical evidence]
-
-Focus on actionable insights and avoid speculation. Base your analysis strictly on the provided technical indicators and market data.
+    You are an expert quantitative analyst specializing in technical analysis across traditional and digital asset markets. You understand that while technical principles are universal, cryptocurrency markets exhibit unique characteristics including 24/7 trading, higher volatility, and distinct market microstructure dynamics. You speak in a concise, professional manner, and are not too verbose.
+    
+    **DATA SPECIFICATION:**
+    - **TIME INTERVAL**: Each data point = 1 DAY (24-hour periods)
+    - **LOOKBACK PERIODS**: 30 days of historical data for trend analysis
+    - **MOMENTUM ANALYSIS**: 7-day current vs 7-day previous averages
+    - **SUPPORT/RESISTANCE**: 21-day (3-week) price extremes
+    - **DIVERGENCE DETECTION**: 7-day moving averages for price vs RSI
+    
+    **CURRENT MARKET STATE with ${validatedData.timeframe || 'Multi-Period'} Historical Context:**
+    ${indicatorSummary}
+    
+    **CRITICAL ANALYSIS FRAMEWORK**: 
+    - **CURRENT VALUES** = Real market data NOW (RSI: ${validatedData.marketVision?.rsi?.value?.toFixed(1) || 'N/A'}, Price: $${validatedData.quote.USD.price.toLocaleString()})
+    - **BOLLINGER BANDS** = RSI vs Upper/Lower bands (${validatedData.bollingerBands?.upperBand?.toFixed(1) || 'N/A'}/${validatedData.bollingerBands?.lowerBand?.toFixed(1) || 'N/A'}), Band position: ${validatedData.bollingerBands?.position || 'N/A'}
+    - **HULL SUITE TREND** = Direction: ${validatedData.hullSuite?.trendDirection || 'N/A'}, Strength: ${validatedData.hullSuite?.strength || 'N/A'}
+    - **REAL MARKET DATA** = Open Interest: $${(validatedData.liquidationData?.openInterest || 0).toLocaleString()}, **LIQUIDATIONS COMPLETED**: $${(validatedData.liquidationData?.totalLiquidations24h || 0).toLocaleString()} (already squeezed)
+    - **REAL ORDER FLOW** = Buy Ratio: ${((validatedData.orderFlow?.takerBuyRatio || 0) * 100).toFixed(1)}%, Buy/Sell Volumes provided
+    - **HISTORICAL CONTEXT** = 30 days of daily data for trend assessment (each point = 24 hours)
+    - **NEVER HALLUCINATE** numbers beyond what's provided in current values
+    
+    **TIME-BASED ANALYSIS SCOPE:**
+    - **Short-term signals**: Last 7 days vs previous 7 days (weekly momentum)
+    - **Medium-term trend**: 30-day historical context (monthly trend)
+    - **Support/Resistance**: 21-day extremes (3-week key levels)
+    - **Divergence patterns**: 7-day moving averages (weekly trend comparison)
+    
+    Use historical context to assess:
+    - Whether current indicators are improving/deteriorating over weekly periods
+    - If real volume and order flow supports current price action
+    - Divergence patterns between 7-day price and RSI trends
+    - Whether current price is near 3-week support/resistance levels
+    - How real liquidation data impacts market structure
+    
+    **DO NOT** invent new numbers. **ONLY** analyze the provided REAL market data using the specified time intervals.
+    
+    Provide a comprehensive technical assessment following this structured format:
+    
+    **TECHNICAL CONFLUENCE:**
+    Synthesize the indicator signals into a unified technical thesis using BOTH current values AND 30-day historical trends. Identify confluences where multiple indicators align and note any divergences that warrant attention. Pay special attention to:
+    - **RSI vs Bollinger Bands**: Analyze RSI position relative to upper band (${validatedData.bollingerBands?.upperBand?.toFixed(1) || 'N/A'}) and lower band (${validatedData.bollingerBands?.lowerBand?.toFixed(1) || 'N/A'}). Current RSI: ${validatedData.marketVision?.rsi?.value?.toFixed(1) || 'N/A'} - determine if approaching overbought/oversold levels or in normal range
+    - **Hull Suite Trend Analysis**: Current trend direction (${validatedData.hullSuite?.trendDirection || 'N/A'}) with ${validatedData.hullSuite?.strength || 'N/A'} strength - assess trend continuation vs reversal signals
+    - **RSI trend direction vs price momentum** (7-day comparisons) - check for bullish/bearish divergences
+    - **Volume profile** supporting or contradicting price moves (weekly analysis)
+    - **Historical support/resistance levels** (3-week extremes: $${validatedData.priceContext?.support?.toLocaleString() || 'N/A'} support, $${validatedData.priceContext?.resistance?.toLocaleString() || 'N/A'} resistance)
+    - **Bollinger Band dynamics**: Band squeeze/expansion patterns and RSI position relative to bands over time
+    
+    **SIGNAL HIERARCHY:**
+    Rank the 3-4 most significant signals by reliability and market impact, considering 30-day historical context:
+    • [Primary Signal]: [Indicator with Weekly Trend] - [30-Day Context] - [Confidence Level]
+    • [Secondary Signal]: [Indicator with Weekly Trend] - [Volume Confirmation] - [Market Implication]
+    • [Tertiary Signal]: [Divergence/Confluence] - [3-Week Pattern] - [Risk Level]
+    Include any cross-timeframe confirmations or contradictions from the daily data.
+    
+    **MARKET MICROSTRUCTURE:**
+    Analyze order flow dynamics, liquidation patterns, and institutional positioning using 30-day volume trends:
+    - **Volume trend analysis** (7-day vs 7-day) and spike detection 
+    - **Liquidation aftermath**: $${(validatedData.liquidationData?.totalLiquidations24h || 0).toLocaleString()} in positions were liquidated (${((validatedData.liquidationData?.longLiquidations || 0) / ((validatedData.liquidationData?.totalLiquidations24h || 1))).toFixed(1)}% long, ${((validatedData.liquidationData?.shortLiquidations || 0) / ((validatedData.liquidationData?.totalLiquidations24h || 1))).toFixed(1)}% short) - assess what this squeeze means for current positioning
+    - **Open Interest dynamics**: Current OI at $${(validatedData.liquidationData?.openInterest || 0).toLocaleString()} with ${((validatedData.liquidationData?.openInterestChange || 0) > 0 ? '+' : '')}${(validatedData.liquidationData?.openInterestChange || 0).toFixed(2)}% change - growing or declining leverage
+    - **Price action relative to 3-week support/resistance levels** and liquidation zones
+    - **Volume profile quality** and participation patterns from real buy/sell flow
+    
+    **HISTORICAL PATTERN ANALYSIS:**
+    Based on 30 days of daily price data and RSI readings:
+    - Identify any recurring patterns or cycles in the daily data
+    - Assess momentum consistency or deterioration (weekly trends)
+    - Evaluate indicator reliability in current market context
+    - Note any unusual deviations from normal daily patterns
+    
+    **RISK FRAMEWORK:**
+    Define the technical risk landscape using 21-day levels:
+    - Key invalidation levels: 3-week support ($${validatedData.priceContext?.support?.toLocaleString() || 'N/A'}) and resistance ($${validatedData.priceContext?.resistance?.toLocaleString() || 'N/A'})
+    - Probability-weighted scenarios based on 7-day momentum trends
+    - Volatility expectations from recent daily price action
+    - Volume-based confirmation requirements (weekly comparisons)
+    
+    **TACTICAL OUTLOOK:**
+    Provide a probability-based assessment for the next 3-7 days using 30-day context:
+    - Most likely scenario based on weekly momentum and volume trends
+    - Alternative scenarios and their historical precedents in the daily data
+    - Key levels to monitor for trend continuation/reversal (3-week levels)
+    - Volume thresholds required for signal confirmation (weekly averages)
+    
+    **ENHANCED ANALYSIS PRINCIPLES:**
+    - Use 30-day daily indicator trends to assess signal reliability
+    - Weight volume confirmation heavily against 7-day averages
+    - Consider indicator divergences as primary reversal signals (weekly trends)
+    - Factor in 3-week support/resistance levels from price history
+    - Distinguish between noise and meaningful technical developments using daily context
+    - Account for momentum consistency across weekly periods
+    
+    Base all conclusions on the provided 30-day daily technical evidence. Use the temporal data to provide more nuanced and reliable analysis than point-in-time snapshots.
     `.trim()
 
-    if (!openai) {
-      throw new Error('OpenAI client not configured')
+    if (!gemini) {
+      throw new Error('Gemini client not configured')
     }
 
     const result = await streamText({
-      model: openai.chat('gpt-4o-mini'), // Using a more capable model for complex analysis
+      model: gemini('gemini-2.5-flash'), // Using Gemini Pro for complex technical analysis
       messages: [{ 
         role: 'user', 
         content: prompt 
       }],
       temperature: 0.3, // Lower temperature for more focused technical analysis
-      maxTokens: 800, // Increased for more detailed analysis
-      onFinish: ({ text }) => {
-        console.log('Final technical analysis:', text)
+      maxTokens: 5000, // Increased for more detailed analysis
+      onFinish: ({ text, finishReason }) => {
+        console.log('Finish reason:', finishReason) // This will tell you why it stopped
+        console.log('Response length:', text.length)
+        if (finishReason === 'length') {
+          console.warn('Response was truncated due to token limit!')
+        }
       }
     })
 
@@ -262,11 +411,14 @@ Focus on actionable insights and avoid speculation. Base your analysis strictly 
     const readable = new ReadableStream({
       async start(controller) {
         try {
+          let totalChunks = 0
           for await (const chunk of result.textStream) {
-            // Send plain text chunks without metadata
+            totalChunks++
             controller.enqueue(encoder.encode(chunk))
           }
+          console.log(`Streamed ${totalChunks} chunks successfully`)
         } catch (error) {
+          console.error('Streaming error:', error)
           controller.error(error)
         } finally {
           controller.close()

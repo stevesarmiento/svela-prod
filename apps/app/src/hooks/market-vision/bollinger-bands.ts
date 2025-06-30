@@ -149,6 +149,7 @@ export function calculateBollingerBands(
   }
   
   if (!data || data.length === 0) {
+    console.warn('⚠️ BB: No data provided')
     return {
       indicator: [],
       basis: [],
@@ -190,6 +191,7 @@ export function calculateBollingerBands(
   
   // Check for invalid values
   const validIndicatorValues = indicatorValues.filter(v => v != null && !isNaN(v) && isFinite(v))
+  
   if (validIndicatorValues.length === 0) {
     console.warn('⚠️ Bollinger Bands: No valid indicator values calculated')
   }

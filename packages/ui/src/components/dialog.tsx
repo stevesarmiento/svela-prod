@@ -81,7 +81,7 @@ const DialogContent = React.forwardRef<
       <DialogPortal>
         <DialogOverlay />
         {/* Fade overlay from bottom to top */}
-        <div className="fixed inset-0 z-[1002] pointer-events-none bg-gradient-to-t from-white via-transparent to-transparent dark:from-zinc-950" />
+        {/* <div className="fixed bottom-0 inset-0 z-[1002] h-[300px] pointer-events-none bg-gradient-to-t from-white via-transparent to-transparent dark:from-zinc-950" /> */}
         <DialogPrimitive.Content
           onPointerDownOutside={handleOnPointerDownOutside}
           onEscapeKeyDown={handleOnEscapeKeyDown}
