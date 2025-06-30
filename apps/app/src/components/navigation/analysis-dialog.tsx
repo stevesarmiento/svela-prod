@@ -14,7 +14,7 @@ import { Badge } from '@v1/ui/badge'
 import { ScrollArea } from '@v1/ui/scroll-area'
 import { Spinner } from '@v1/ui/spinner'
 import Image from 'next/image'
-import { IconSparkles, IconMagnifyingglass, IconCircleDottedAndCircle, IconArrowUpRight, IconArrowDownRight, IconArrowRight } from 'symbols-react'
+import { IconSparkles, IconMagnifyingglass, IconCircleDottedAndCircle, IconArrowUpRight, IconArrowDownRight, IconArrowRight, IconChartLineUptrendXyaxis } from 'symbols-react'
 import { useChartData } from '@/hooks/use-chart-data'
 import { useMarketVisionB, calculateBollingerBands } from '@/hooks/market-vision'
 import { useOpenInterest } from '@/hooks/use-open-interest'
@@ -556,7 +556,7 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
                 <span className="font-semibold text-white text-3xl">
                   {marketData?.name || tokenData?.name || 'Token'}
                 </span>
-                <Badge variant={marketData?.quote?.USD?.percent_change_24h >= 0 ? "default" : "destructive"}>
+                <Badge variant={marketData?.quote?.USD?.percent_change_24h >= 0 ? "success" : "destructive"}>
                   {marketData?.quote?.USD?.percent_change_24h >= 0 ? '+' : ''}
                   {marketData?.quote?.USD?.percent_change_24h?.toFixed(2)}%
                 </Badge>
@@ -592,9 +592,53 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
 
                     <div className="flex items-center justify-between">
                     <span className="text-sm text-gray-400">24h Volume</span>
-                    <span className="font-mono text-sm text-white">
-                        ${formatNumber(marketData?.quote?.USD?.volume_24h || 0)}
-                    </span>
+                    <div className="flex items-center gap-1">
+                        <span className="font-mono text-sm text-white">
+                            ${formatNumber(marketData?.quote?.USD?.volume_24h || 0)}
+                        </span>
+                        {/* Volume trend indicator */}
+                        {(() => {
+                            const recentVolume = volumeData.slice(-7).reduce((a: number, b: number) => a + b, 0) / 7
+                            const previousVolume = volumeData.slice(-14, -7).reduce((a: number, b: number) => a + b, 0) / 7
+                            const trend = recentVolume > previousVolume * 1.2 ? 'up' : 
+                                         recentVolume < previousVolume * 0.8 ? 'down' : 'stable'
+                            return (
+                                <Badge variant={trend === 'up' ? "success" : trend === 'down' ? "destructive" : "secondary"} className="text-xs px-1">
+                                    {trend === 'up' ? '↗' : trend === 'down' ? '↘' : '→'}
+                                </Badge>
+                            )
+                        })()}
+                    </div>
+                    </div>
+
+                    {/* Support/Resistance Levels */}
+                    <div className="flex flex-col space-y-2 border-t border-gray-800 pt-3 mt-3">
+                        <div className="flex items-center gap-2">
+                            <IconChartLineUptrendXyaxis className="w-4 h-4 fill-white/50" />
+                            <h3 className="text-sm font-medium text-white">Price Levels</h3>
+                        </div>
+                        {(() => {
+                            const priceHistory = chartData?.map((d: { value: number }) => d.value) || []
+                            const recentPriceData = priceHistory.slice(-21)
+                            const support = recentPriceData.length > 0 ? Math.min(...recentPriceData) : 0
+                            const resistance = recentPriceData.length > 0 ? Math.max(...recentPriceData) : 0
+                            return (
+                                <>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm text-gray-400">Support (21d)</span>
+                                        <span className="font-mono text-xs text-green-400">
+                                            ${support.toLocaleString()}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm text-gray-400">Resistance (21d)</span>
+                                        <span className="font-mono text-xs text-red-400">
+                                            ${resistance.toLocaleString()}
+                                        </span>
+                                    </div>
+                                </>
+                            )
+                        })()}
                     </div>
 
                     <div className="flex flex-col space-y-3 border-t border-gray-800 pt-3 mt-3">
@@ -602,129 +646,209 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
                         <IconCircleDottedAndCircle className="w-4 h-4 fill-white/50" />
                         <h3 className="text-sm font-medium text-white">Technical Indicators</h3>
                     </div>
-                    {latestBBIndicator && (
+                    
+                    {/* Hull Suite Trend */}
                     <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-400 flex items-center gap-1">
-                        Relative Strength
-                        </span>
-                        <div className="flex items-center gap-2">
-                        <Badge variant={
-                            (latestBBIndicator?.value || 50) > 70 ? "destructive" : 
-                            (latestBBIndicator?.value || 50) < 30 ? "default" : "secondary"
-                        }>
-                            {(latestBBIndicator?.value || 50) > 70 ? 'Overbought' : 
-                            (latestBBIndicator?.value || 50) < 30 ? 'Oversold' : 'Neutral'}
-                        </Badge>
+                        <span className="text-sm text-gray-400">Hull Suite</span>
+                        <div className="flex items-center gap-1">
+                            <Badge variant={
+                                (marketData?.quote?.USD?.percent_change_24h || 0) > 0 ? "success" : "destructive"
+                            } className="text-xs px-1">
+                                {(marketData?.quote?.USD?.percent_change_24h || 0) > 0 ? 'Bullish' : 'Bearish'}
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs px-1">
+                                {Math.abs(marketData?.quote?.USD?.percent_change_24h || 0) > 3 ? 'Strong' : 'Moderate'}
+                            </Badge>
                         </div>
                     </div>
+
+                    {/* Enhanced RSI with Bollinger Bands */}
+                    {latestBBIndicator && (
+                    <div className="flex flex-col space-y-1">
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-400">RSI (Bollinger)</span>
+                            <div className="flex items-center gap-1">
+                                <span className="font-mono text-xs text-white">
+                                    {latestBBIndicator.value.toFixed(1)}
+                                </span>
+                                <Badge variant={
+                                    (latestBBIndicator?.value || 50) > 70 ? "destructive" : 
+                                    (latestBBIndicator?.value || 50) < 30 ? "success" : "secondary"
+                                }>
+                                    {(latestBBIndicator?.value || 50) > 70 ? 'Overbought' : 
+                                    (latestBBIndicator?.value || 50) < 30 ? 'Oversold' : 'Neutral'}
+                                </Badge>
+                            </div>
+                        </div>
+                        {/* BB Bands */}
+                        {bbData.upper && bbData.lower && (
+                            <div className="flex items-center justify-between text-xs">
+                                <span className="text-gray-500">Bands:</span>
+                                <span className="font-mono text-gray-400">
+                                    {bbData.lower[bbData.lower.length - 1]?.value.toFixed(1)} - {bbData.upper[bbData.upper.length - 1]?.value.toFixed(1)}
+                                </span>
+                            </div>
+                        )}
+                    </div>
                     )}
+
+                    {/* Divergence Detection */}
+                    {(() => {
+                        if (!latestBBIndicator || !chartData || chartData.length < 14) return null
+                        const priceHistory = chartData.map((d: { value: number }) => d.value)
+                        const rsiHistory = bbData.indicator?.map((d: { value: number }) => d.value) || []
+                        
+                        if (rsiHistory.length < 14) return null
+                        
+                        const currentPrice = priceHistory[priceHistory.length - 1] || 0
+                        const previousAvg = priceHistory.slice(-14, -7).reduce((a: number, b: number) => a + b, 0) / 7
+                        const currentRSIAvg = rsiHistory.slice(-7).reduce((a: number, b: number) => a + b, 0) / 7
+                        const previousRSIAvg = rsiHistory.slice(-14, -7).reduce((a: number, b: number) => a + b, 0) / 7
+                        
+                        const priceDirection = currentPrice > previousAvg ? 'up' : 'down'
+                        const rsiDirection = currentRSIAvg > previousRSIAvg ? 'up' : 'down'
+                        const divergence = priceDirection !== rsiDirection ? 
+                            (priceDirection === 'up' ? 'bearish' : 'bullish') : 'none'
+                        
+                        if (divergence === 'none') return null
+                        
+                        return (
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm text-gray-400">Divergence</span>
+                                <Badge variant={divergence === 'bullish' ? "success" : "destructive"} className="text-xs px-1">
+                                    {divergence === 'bullish' ? 'Bullish' : 'Bearish'} Signal
+                                </Badge>
+                            </div>
+                        )
+                    })()}
                     
                     {marketVisionData.moneyFlow.fast.length > 0 && (
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-400">Money Flow</span>
-                        <Badge variant={
-                            (marketVisionData.moneyFlow.fast[marketVisionData.moneyFlow.fast.length - 1]?.value || 0) > 0 
-                            ? "default" : "destructive"
-                        }>
-                            {(marketVisionData.moneyFlow.fast[marketVisionData.moneyFlow.fast.length - 1]?.value || 0) > 0 
-                            ? 'Inflow' : 'Outflow'}
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                            <Badge variant={
+                                (marketVisionData.moneyFlow.fast[marketVisionData.moneyFlow.fast.length - 1]?.value || 0) > 0 
+                                ? "success" : "destructive"
+                            } className="text-xs px-1">
+                                {(marketVisionData.moneyFlow.fast[marketVisionData.moneyFlow.fast.length - 1]?.value || 0) > 0 
+                                ? 'Inflow' : 'Outflow'}
+                            </Badge>
+                            <span className="font-mono text-xs text-gray-400">
+                                {Math.abs(marketVisionData.moneyFlow.fast[marketVisionData.moneyFlow.fast.length - 1]?.value || 0).toFixed(1)}
+                            </span>
+                        </div>
                         </div>
                     )}
 
                     {marketVisionData.waveTrend.wt1.length > 0 && (
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center justify-between">
                         <span className="text-sm text-gray-400">Wave Trend</span>
-                        <Badge variant={
-                            (marketVisionData.waveTrend.wt1[marketVisionData.waveTrend.wt1.length - 1]?.value || 0) > 
-                            (marketVisionData.waveTrend.wt2[marketVisionData.waveTrend.wt2.length - 1]?.value || 0)
-                            ? "default" : "destructive"
-                        }>
-                            {(marketVisionData.waveTrend.wt1[marketVisionData.waveTrend.wt1.length - 1]?.value || 0) > 
-                            (marketVisionData.waveTrend.wt2[marketVisionData.waveTrend.wt2.length - 1]?.value || 0)
-                            ? 'Bullish Cross' : 'Bearish Cross'}
-                        </Badge>
-                        </div>
-                    )}
-
-                    {openInterestData?.data && openInterestData.data.length > 0 && (
-                        <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-400">Open Interest</span>
                         <div className="flex items-center gap-1">
-                            <span className="font-mono text-xs text-white">
-                            ${formatNumber(openInterestData.data[openInterestData.data.length - 1]?.close || 0)}
+                            <Badge variant={
+                                (marketVisionData.waveTrend.wt1[marketVisionData.waveTrend.wt1.length - 1]?.value || 0) > 
+                                (marketVisionData.waveTrend.wt2[marketVisionData.waveTrend.wt2.length - 1]?.value || 0)
+                                ? "success" : "destructive"
+                            } className="text-xs px-1">
+                                {(marketVisionData.waveTrend.wt1[marketVisionData.waveTrend.wt1.length - 1]?.value || 0) > 
+                                (marketVisionData.waveTrend.wt2[marketVisionData.waveTrend.wt2.length - 1]?.value || 0)
+                                ? 'Bullish' : 'Bearish'}
+                            </Badge>
+                            <span className="font-mono text-xs text-gray-400">
+                                {(marketVisionData.waveTrend.wt1[marketVisionData.waveTrend.wt1.length - 1]?.value || 0).toFixed(1)}
                             </span>
-                            {openInterestData.data.length >= 2 && (
-                            <Badge variant={
-                                (openInterestData.data[openInterestData.data.length - 1]?.close || 0) > 
-                                (openInterestData.data[openInterestData.data.length - 2]?.close || 0)
-                                ? "default" : "destructive"
-                            } className="text-xs px-1">
-                                {(((openInterestData.data[openInterestData.data.length - 1]?.close || 0) - 
-                                (openInterestData.data[openInterestData.data.length - 2]?.close || 0)) / 
-                                (openInterestData.data[openInterestData.data.length - 2]?.close || 1) * 100).toFixed(1)}%
-                            </Badge>
-                            )}
                         </div>
                         </div>
                     )}
 
-                    {takerBuySellData?.data?.overall && (
-                        <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-400">Buy/Sell Pressure</span>
-                        <div className="flex items-center gap-1">
-                            <Badge variant={
-                                (takerBuySellData.data.overall.buyRatio || 50) > 52 ? "default" : 
-                                (takerBuySellData.data.overall.buyRatio || 50) < 48 ? "destructive" : "secondary"
-                            } className="text-xs px-1">
-                            {(takerBuySellData.data.overall.buyRatio || 50).toFixed(1)}% Buy
-                            </Badge>
-                            <span className="text-xs text-gray-500">/</span>
-                            <Badge variant={
-                                (takerBuySellData.data.overall.sellRatio || 50) > 52 ? "destructive" : 
-                                (takerBuySellData.data.overall.sellRatio || 50) < 48 ? "default" : "secondary"
-                            } className="text-xs px-1">
-                            {(takerBuySellData.data.overall.sellRatio || 50).toFixed(1)}% Sell
-                            </Badge>
-                        </div>
-                        </div>
-                    )}
+                    {/* Market Structure Section */}
+                    <div className="flex flex-col space-y-3 border-t border-gray-800 pt-3 mt-3">
+                                                 <div className="flex items-center gap-2">
+                             <IconCircleDottedAndCircle className="w-4 h-4 fill-white/50" />
+                             <h3 className="text-sm font-medium text-white">Market Structure</h3>
+                         </div>
 
-                    {liquidationData?.data && liquidationData.data.length > 0 && (
-                        <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-400">24h Liquidations</span>
-                        <div className="flex items-center gap-1">
-                            <span className="font-mono text-xs text-white">
-                            ${formatNumber((liquidationData.data[liquidationData.data.length - 1]?.longLiquidations || 0) + 
-                                        (liquidationData.data[liquidationData.data.length - 1]?.shortLiquidations || 0))}
-                            </span>
-                            <Badge variant={
-                                (liquidationData.data[liquidationData.data.length - 1]?.longLiquidations || 0) > 
-                                (liquidationData.data[liquidationData.data.length - 1]?.shortLiquidations || 0)
-                                ? "destructive" : "default"
-                            } className="text-xs px-1">
-                            {(liquidationData.data[liquidationData.data.length - 1]?.longLiquidations || 0) > 
-                            (liquidationData.data[liquidationData.data.length - 1]?.shortLiquidations || 0)
-                            ? 'Long Heavy' : 'Short Heavy'}
-                            </Badge>
-                        </div>
-                        </div>
-                    )}
-
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-gray-400">Trend</span>
-                        <div className="flex items-center gap-1">
-                        {(marketData?.quote?.USD?.percent_change_24h || 0) > 2 ? (
-                            <IconArrowUpRight className="w-3 h-3 fill-green-400" />
-                        ) : (marketData?.quote?.USD?.percent_change_24h || 0) < -2 ? (
-                            <IconArrowDownRight className="w-3 h-3 fill-red-400" />
-                        ) : (
-                            <IconArrowRight className="w-3 h-3 fill-gray-400" />
+                        {openInterestData?.data && openInterestData.data.length > 0 && (
+                            <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-400">Open Interest</span>
+                            <div className="flex items-center gap-1">
+                                <span className="font-mono text-xs text-white">
+                                ${formatNumber(openInterestData.data[openInterestData.data.length - 1]?.close || 0)}
+                                </span>
+                                {openInterestData.data.length >= 2 && (
+                                <Badge variant={
+                                    (openInterestData.data[openInterestData.data.length - 1]?.close || 0) > 
+                                    (openInterestData.data[openInterestData.data.length - 2]?.close || 0)
+                                    ? "success" : "destructive"
+                                } className="text-xs px-1">
+                                    {(((openInterestData.data[openInterestData.data.length - 1]?.close || 0) - 
+                                    (openInterestData.data[openInterestData.data.length - 2]?.close || 0)) / 
+                                    (openInterestData.data[openInterestData.data.length - 2]?.close || 1) * 100).toFixed(1)}%
+                                </Badge>
+                                )}
+                            </div>
+                            </div>
                         )}
-                        <span className="text-sm text-gray-300">
-                            {(marketData?.quote?.USD?.percent_change_24h || 0) > 2 ? 'Uptrend' :
-                            (marketData?.quote?.USD?.percent_change_24h || 0) < -2 ? 'Downtrend' : 'Sideways'}
-                        </span>
+
+                        {takerBuySellData?.data?.overall && (
+                            <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-400">Order Flow</span>
+                            <div className="flex items-center gap-1">
+                                <Badge variant={
+                                    (takerBuySellData.data.overall.buyRatio || 50) > 52 ? "success" : 
+                                    (takerBuySellData.data.overall.buyRatio || 50) < 48 ? "destructive" : "secondary"
+                                } className="text-xs px-1">
+                                {(takerBuySellData.data.overall.buyRatio || 50).toFixed(1)}% Buy
+                                </Badge>
+                                <span className="text-xs text-gray-500">/</span>
+                                <Badge variant={
+                                    (takerBuySellData.data.overall.sellRatio || 50) > 52 ? "destructive" : 
+                                    (takerBuySellData.data.overall.sellRatio || 50) < 48 ? "success" : "secondary"
+                                } className="text-xs px-1">
+                                {(takerBuySellData.data.overall.sellRatio || 50).toFixed(1)}% Sell
+                                </Badge>
+                            </div>
+                            </div>
+                        )}
+
+                        {liquidationData?.data && liquidationData.data.length > 0 && (
+                            <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-400">24h Liquidations</span>
+                            <div className="flex items-center gap-1">
+                                <span className="font-mono text-xs text-white">
+                                ${formatNumber((liquidationData.data[liquidationData.data.length - 1]?.longLiquidations || 0) + 
+                                            (liquidationData.data[liquidationData.data.length - 1]?.shortLiquidations || 0))}
+                                </span>
+                                <Badge variant={
+                                    (liquidationData.data[liquidationData.data.length - 1]?.longLiquidations || 0) > 
+                                    (liquidationData.data[liquidationData.data.length - 1]?.shortLiquidations || 0)
+                                    ? "destructive" : "success"
+                                } className="text-xs px-1">
+                                {(liquidationData.data[liquidationData.data.length - 1]?.longLiquidations || 0) > 
+                                (liquidationData.data[liquidationData.data.length - 1]?.shortLiquidations || 0)
+                                ? 'Long Heavy' : 'Short Heavy'}
+                                </Badge>
+                            </div>
+                            </div>
+                        )}
+
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-400">Trend</span>
+                            <div className="flex items-center gap-1">
+                            {(marketData?.quote?.USD?.percent_change_24h || 0) > 2 ? (
+                                <IconArrowUpRight className="w-3 h-3 fill-green-400" />
+                            ) : (marketData?.quote?.USD?.percent_change_24h || 0) < -2 ? (
+                                <IconArrowDownRight className="w-3 h-3 fill-red-400" />
+                            ) : (
+                                <IconArrowRight className="w-3 h-3 fill-gray-400" />
+                            )}
+                            <span className="text-sm text-gray-300">
+                                {(marketData?.quote?.USD?.percent_change_24h || 0) > 2 ? 'Uptrend' :
+                                (marketData?.quote?.USD?.percent_change_24h || 0) < -2 ? 'Downtrend' : 'Sideways'}
+                            </span>
+                            <span className="font-mono text-xs text-gray-400">
+                                {Math.abs(marketData?.quote?.USD?.percent_change_24h || 0).toFixed(1)}%
+                            </span>
+                            </div>
                         </div>
                     </div>
                     </div>

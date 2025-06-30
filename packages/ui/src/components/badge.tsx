@@ -11,6 +11,8 @@ const badgeVariants = cva(
           "border-transparent bg-amber-500/20 border-amber-500 text-white hover:bg-amber-500/30",
         secondary:
           "border-transparent bg-blue-500/20 border-blue-500 text-white hover:bg-blue-500/30",
+        success:
+          "border-transparent bg-emerald-500/20 border-emerald-500 text-white hover:bg-emerald-500/30",
         destructive:
           "border-transparent bg-rose-500/20 border-rose-500 text-white hover:bg-rose-500/30",
         outline: "text-foreground",
