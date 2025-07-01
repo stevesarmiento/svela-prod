@@ -265,33 +265,31 @@ export function LiquidationHistoryChart({
             {/* Custom Tooltip */}
             {tooltip.visible && (
               <div 
-                className="absolute z-10 bg-zinc-900 border border-zinc-800/50 rounded-lg shadow-lg pointer-events-none"
+                className="absolute z-10 overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
                 style={{ 
                   left: `${tooltip.x}px`, 
                   top: `${tooltip.y}px`,
                   transform: 'translate(-50%, -100%)'
                 }}
               >
-                <div className="text-xs text-muted-foreground mb-1 p-1.5">{tooltip.time}</div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-sm p-1.5 py-0">
-                    <span className="font-medium" style={{ color: colors.long }}>
-                      ${formatLargeNumber(tooltip.longValue)}
-                    </span>
-                    <span className="text-muted-foreground">Long</span>
+                <div className="px-4 py-3">
+                  <div className="mb-3 text-[11px] text-zinc-400 font-medium">
+                    {tooltip.time ? new Date(tooltip.time).toLocaleDateString(undefined, { month: 'long', day: 'numeric' }) : ''}
                   </div>
-                  <div className="flex items-center gap-2 text-sm p-1.5 py-0">
-                    <span className="font-medium" style={{ color: colors.short }}>
-                      ${formatLargeNumber(tooltip.shortValue)}
-                    </span>
-                    <span className="text-muted-foreground">Short</span>
-                  </div>
-                  <div className="h-[1px] bg-zinc-800 w-full scale-120" />
-                  <div className="flex flex-col items-left text-sm p-1.5 pt-0">
-                    <span className="text-muted-foreground text-xs">Total</span>
-                    <span className="font-medium" style={{ color: colors.long }}>
-                      ${formatLargeNumber(tooltip.total)}
-                    </span>
+                  <div className="w-full h-[1px] mb-3 bg-zinc-700/50 scale-125" />
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-green-400">Long</span>
+                      <span className="text-[11px] font-mono text-green-400 font-bold">${formatLargeNumber(tooltip.longValue)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-red-400">Short</span>
+                      <span className="text-[11px] font-mono text-red-400 font-bold">${formatLargeNumber(tooltip.shortValue)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-zinc-400">Total</span>
+                      <span className="text-[11px] font-mono text-white font-bold">${formatLargeNumber(tooltip.total)}</span>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -168,12 +168,27 @@ export function TakerBuySell({
         custom: function({ dataPointIndex }: { dataPointIndex: number }) {
           const exchange = topExchanges[dataPointIndex]
           if (!exchange) return ''
+          // No date available, so just show exchange name at top
           return `
-            <div style="padding: 10px; background: #1f2937; border: 1px solid #374151; border-radius: 6px;">
-              <div style="font-weight: bold; color: #fff; margin-bottom: 5px;">${exchange.exchange}</div>
-              <div style="color: ${colors.buy};">Buy: ${exchange.buyRatio.toFixed(1)}% ($${formatLargeNumber(exchange.buyVolumeUsd)})</div>
-              <div style="color: ${colors.sell};">Sell: ${exchange.sellRatio.toFixed(1)}% ($${formatLargeNumber(exchange.sellVolumeUsd)})</div>
-              <div style="color: #ffffff50; margin-top: 5px;">Total Volume: $${formatLargeNumber(exchange.totalVolumeUsd)}</div>
+            <div class="overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out">
+              <div class="px-4 py-3">
+                <div class="mb-3 text-[11px] text-zinc-400 font-medium">${exchange.exchange}</div>
+                <div class="w-full h-[1px] mb-3 bg-zinc-700/50 scale-125"></div>
+                <div class="flex flex-col gap-2">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[11px] text-emerald-400">Buy</span>
+                    <span class="text-[11px] font-mono text-emerald-400 font-bold">${exchange.buyRatio.toFixed(1)}% ($${formatLargeNumber(exchange.buyVolumeUsd)})</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-[11px] text-rose-400">Sell</span>
+                    <span class="text-[11px] font-mono text-rose-400 font-bold">${exchange.sellRatio.toFixed(1)}% ($${formatLargeNumber(exchange.sellVolumeUsd)})</span>
+                  </div>
+                  <div class="flex items-center justify-between">
+                    <span class="text-[11px] text-zinc-400">Total Volume</span>
+                    <span class="text-[11px] font-mono text-white font-bold">$${formatLargeNumber(exchange.totalVolumeUsd)}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           `
         }

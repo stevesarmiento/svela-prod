@@ -329,7 +329,7 @@ export async function POST(req: Request) {
     
     Provide a comprehensive technical assessment following this structured format:
     
-    **TECHNICAL CONFLUENCE:**
+    **Technical Confluence**
     Synthesize the indicator signals into a unified technical thesis using BOTH current values AND 30-day historical trends. Identify confluences where multiple indicators align and note any divergences that warrant attention. Pay special attention to:
     - **RSI vs Bollinger Bands**: Analyze RSI position relative to upper band (${validatedData.bollingerBands?.upperBand?.toFixed(1) || 'N/A'}) and lower band (${validatedData.bollingerBands?.lowerBand?.toFixed(1) || 'N/A'}). Current RSI: ${validatedData.marketVision?.rsi?.value?.toFixed(1) || 'N/A'} - determine if approaching overbought/oversold levels or in normal range
     - **Hull Suite Trend Analysis**: Current trend direction (${validatedData.hullSuite?.trendDirection || 'N/A'}) with ${validatedData.hullSuite?.strength || 'N/A'} strength - assess trend continuation vs reversal signals
@@ -338,14 +338,14 @@ export async function POST(req: Request) {
     - **Historical support/resistance levels** (3-week extremes: $${validatedData.priceContext?.support?.toLocaleString() || 'N/A'} support, $${validatedData.priceContext?.resistance?.toLocaleString() || 'N/A'} resistance)
     - **Bollinger Band dynamics**: Band squeeze/expansion patterns and RSI position relative to bands over time
     
-    **SIGNAL HIERARCHY:**
+    **Signal Hierarchy**
     Rank the 3-4 most significant signals by reliability and market impact, considering 30-day historical context:
     • [Primary Signal]: [Indicator with Weekly Trend] - [30-Day Context] - [Confidence Level]
     • [Secondary Signal]: [Indicator with Weekly Trend] - [Volume Confirmation] - [Market Implication]
     • [Tertiary Signal]: [Divergence/Confluence] - [3-Week Pattern] - [Risk Level]
     Include any cross-timeframe confirmations or contradictions from the daily data.
     
-    **MARKET MICROSTRUCTURE:**
+    **Market Microstructure**
     Analyze order flow dynamics, liquidation patterns, and institutional positioning using 30-day volume trends:
     - **Volume trend analysis** (7-day vs 7-day) and spike detection 
     - **Liquidation aftermath**: $${(validatedData.liquidationData?.totalLiquidations24h || 0).toLocaleString()} in positions were liquidated (${((validatedData.liquidationData?.longLiquidations || 0) / ((validatedData.liquidationData?.totalLiquidations24h || 1))).toFixed(1)}% long, ${((validatedData.liquidationData?.shortLiquidations || 0) / ((validatedData.liquidationData?.totalLiquidations24h || 1))).toFixed(1)}% short) - assess what this squeeze means for current positioning
@@ -353,28 +353,28 @@ export async function POST(req: Request) {
     - **Price action relative to 3-week support/resistance levels** and liquidation zones
     - **Volume profile quality** and participation patterns from real buy/sell flow
     
-    **HISTORICAL PATTERN ANALYSIS:**
+    **Historical Pattern Analysis**
     Based on 30 days of daily price data and RSI readings:
     - Identify any recurring patterns or cycles in the daily data
     - Assess momentum consistency or deterioration (weekly trends)
     - Evaluate indicator reliability in current market context
     - Note any unusual deviations from normal daily patterns
     
-    **RISK FRAMEWORK:**
+    **Risk Framework**
     Define the technical risk landscape using 21-day levels:
     - Key invalidation levels: 3-week support ($${validatedData.priceContext?.support?.toLocaleString() || 'N/A'}) and resistance ($${validatedData.priceContext?.resistance?.toLocaleString() || 'N/A'})
     - Probability-weighted scenarios based on 7-day momentum trends
     - Volatility expectations from recent daily price action
     - Volume-based confirmation requirements (weekly comparisons)
     
-    **TACTICAL OUTLOOK:**
+    **Tactical Outlook**
     Provide a probability-based assessment for the next 3-7 days using 30-day context:
     - Most likely scenario based on weekly momentum and volume trends
     - Alternative scenarios and their historical precedents in the daily data
     - Key levels to monitor for trend continuation/reversal (3-week levels)
     - Volume thresholds required for signal confirmation (weekly averages)
     
-    **ENHANCED ANALYSIS PRINCIPLES:**
+    **Enhanced Analysis Principles**
     - Use 30-day daily indicator trends to assess signal reliability
     - Weight volume confirmation heavily against 7-day averages
     - Consider indicator divergences as primary reversal signals (weekly trends)

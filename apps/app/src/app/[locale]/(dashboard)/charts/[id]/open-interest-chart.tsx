@@ -5,7 +5,6 @@ import { Card, CardContent } from "@v1/ui/card"
 import { Skeleton } from "@v1/ui/skeleton"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { useOpenInterest } from '@/hooks/use-open-interest'
-import { TrendingUp, TrendingDown } from 'lucide-react'
 import { generatePastelColors } from '@/lib/chart-colors'
 import {
   createChart,
@@ -296,44 +295,40 @@ export function OpenInterestChart({
             {/* Custom Tooltip */}
             {tooltip.visible && (
               <div 
-                className="absolute z-10 bg-background border border-border rounded-lg shadow-lg p-3 pointer-events-none"
+                className="absolute z-10 overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
                 style={{ 
                   left: `${tooltip.x}px`, 
                   top: `${tooltip.y}px`,
                   transform: 'translate(-50%, -100%)'
                 }}
               >
-                <div className="text-xs text-muted-foreground mb-2">{tooltip.time}</div>
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between gap-4">
-                    <span className="text-muted-foreground">Open Interest:</span>
-                    <span className="font-mono">
-                      {unit === 'usd' ? '$' : ''}{formatLargeNumber(tooltip.value)}{unit === 'coin' ? ' BTC' : ''}
-                    </span>
+                <div className="px-4 py-3">
+                  <div className="mb-3 text-[11px] text-zinc-400 font-medium">
+                    {tooltip.time ? new Date(tooltip.time).toLocaleDateString(undefined, { month: 'long', day: 'numeric' }) : ''}
                   </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="text-green-500">High:</span>
-                    <span className="font-mono text-green-500">
-                      {unit === 'usd' ? '$' : ''}{formatLargeNumber(tooltip.high)}{unit === 'coin' ? ' BTC' : ''}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="text-red-500">Low:</span>
-                    <span className="font-mono text-red-500">
-                      {unit === 'usd' ? '$' : ''}{formatLargeNumber(tooltip.low)}{unit === 'coin' ? ' BTC' : ''}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-4 pt-1 border-t border-border">
-                    <span className="text-muted-foreground">Change:</span>
-                    <div className="flex items-center gap-1">
-                      {tooltip.changePercent >= 0 ? (
-                        <TrendingUp className="h-3 w-3 text-green-500" />
-                      ) : (
-                        <TrendingDown className="h-3 w-3 text-red-500" />
-                      )}
-                      <span className={`font-mono ${tooltip.changePercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                        {tooltip.changePercent >= 0 ? '+' : ''}{tooltip.changePercent.toFixed(2)}%
+                  <div className="w-full h-[1px] mb-3 bg-zinc-700/50 scale-125" />
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-zinc-400">Open Interest</span>
+                      <span className="text-[11px] font-mono text-white font-bold">
+                        {unit === 'usd' ? '$' : ''}{formatLargeNumber(tooltip.value)}{unit === 'coin' ? ' BTC' : ''}
                       </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-green-400">High</span>
+                      <span className="text-[11px] font-mono text-green-400">
+                        {unit === 'usd' ? '$' : ''}{formatLargeNumber(tooltip.high)}{unit === 'coin' ? ' BTC' : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-red-400">Low</span>
+                      <span className="text-[11px] font-mono text-red-400">
+                        {unit === 'usd' ? '$' : ''}{formatLargeNumber(tooltip.low)}{unit === 'coin' ? ' BTC' : ''}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-zinc-400">Change</span>
+                      <span className={`text-[10px] font-mono px-1.5 h-4 rounded ${tooltip.changePercent >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{tooltip.changePercent >= 0 ? '+' : ''}{tooltip.changePercent.toFixed(2)}%</span>
                     </div>
                   </div>
                 </div>

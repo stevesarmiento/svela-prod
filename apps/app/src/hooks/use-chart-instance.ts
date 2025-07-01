@@ -53,47 +53,87 @@ interface HullSuiteData {
 
 type ChartType = 'line' | 'candlestick'
 
-function createTooltipContent(price: number, percentageChange: number, timestamp: number) {
+function createTooltipContent(price: number, percentageChange: number, timestamp: number, volume?: number, hullData?: { mhull?: number; shull?: number }) {
+  const formatVolume = (vol: number) => {
+    if (vol >= 1e9) return `$${(vol / 1e9).toFixed(2)}B`
+    if (vol >= 1e6) return `$${(vol / 1e6).toFixed(2)}M`
+    if (vol >= 1e3) return `$${(vol / 1e3).toFixed(2)}K`
+    return `$${vol.toFixed(2)}`
+  }
+
+  const formatPrice = (price: number) => {
+    return '$' + price.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    })
+  }
+
+  // Date header
+  const dateHeader = React.createElement(
+    'div',
+    { className: 'mb-3 text-[11px] text-zinc-400 font-medium' },
+    new Date(timestamp).toLocaleDateString(undefined, {
+      month: 'long',
+      day: 'numeric'
+    })
+  )
+
+  // Divider
+  const divider = React.createElement(
+    'div',
+    { className: 'w-full h-[1px] mb-3 bg-zinc-700/50 scale-125' }
+  )
+
+  // Price row
+  const priceRow = React.createElement(
+    'div',
+    { className: 'flex items-center justify-between' },
+    React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'Price'),
+    React.createElement(
+      'div',
+      { className: 'flex items-center gap-2' },
+      React.createElement(
+        'span',
+        { 
+          className: `text-[10px] font-mono px-1.5 h-4 rounded ${percentageChange >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`
+        },
+        (percentageChange > 0 ? '+' : '') + percentageChange.toFixed(2) + '%'
+      ),
+      React.createElement('span', { className: 'text-[11px] font-mono font-bold' }, formatPrice(price))
+    )
+  )
+
+  // Hull MA row (conditional)
+  const hullRow = hullData?.mhull !== undefined ? React.createElement(
+    'div',
+    { className: 'flex items-center justify-between' },
+    React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'Hull MA'),
+    React.createElement('span', { className: 'text-[11px] font-mono text-blue-300' }, formatPrice(hullData.mhull))
+  ) : null
+
+  // Volume row (conditional)
+  const volumeRow = volume !== undefined ? React.createElement(
+    'div',
+    { className: 'flex items-center justify-between' },
+    React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'Volume'),
+    React.createElement('span', { className: 'text-[11px] font-mono text-zinc-300' }, formatVolume(volume))
+  ) : null
+
+  // Combine all rows
+  const dataRows = [priceRow, hullRow, volumeRow].filter(Boolean)
+
   return React.createElement(
     'div',
     { className: 'flex flex-col gap-1 overflow-hidden' },
     React.createElement(
       'div',
-      { className: 'px-3 pb-1 pt-2' },
+      { className: 'px-4 py-3' },
+      dateHeader,
+      divider,
       React.createElement(
         'div',
-        { className: 'mb-2 text-xs text-muted-foreground' },
-        new Date(timestamp).toLocaleString(undefined, {
-          dateStyle: 'medium',
-          timeStyle: 'short'
-        })
-      ),
-      React.createElement(
-        'div',
-        { className: 'flex flex-col gap-1' },
-        React.createElement(
-          'div',
-          { className: 'flex items-center gap-2' },
-          React.createElement(
-            'span',
-            { className: 'text-sm font-mono font-bold' },
-            '$' + price.toLocaleString('en-US', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            })
-          )
-        ),
-        React.createElement(
-          'div',
-          { className: 'flex items-center gap-2' },
-          React.createElement(
-            'span',
-            { 
-              className: `text-sm font-mono ${percentageChange >= 0 ? 'text-emerald-400' : 'text-rose-400'}`
-            },
-            (percentageChange > 0 ? '+' : '') + percentageChange.toFixed(2) + '%'
-          )
-        )
+        { className: 'flex flex-col gap-2' },
+        ...dataRows
       )
     )
   )
@@ -257,7 +297,7 @@ export function useChartInstance(
     // Add tooltip
     const tooltipEl = document.createElement("div")
     const tooltipRoot = createRoot(tooltipEl)
-    tooltipEl.className = "fixed hidden text-xs text-foreground rounded-xl shadow-xl pointer-events-none z-30 backdrop-blur-sm bg-background/90 border border-border transition-all duration-100 ease-in-out"
+    tooltipEl.className = "fixed hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
     document.body.appendChild(tooltipEl)
 
     // Crosshair handling with tooltip
@@ -271,13 +311,36 @@ export function useChartInstance(
       }
 
       const priceData = param.seriesData.get(priceSeries)
+      const volumeData = param.seriesData.get(volumeSeries)
       let currentPrice: number | null = null
+      let currentVolume: number | undefined = undefined
       
       if (priceData) {
         if (chartType === 'candlestick' && 'close' in priceData) {
           currentPrice = priceData.close
         } else if ('value' in priceData) {
           currentPrice = priceData.value
+        }
+      }
+
+      if (volumeData && 'value' in volumeData) {
+        currentVolume = volumeData.value
+      }
+
+      // Get Hull Suite data for current time
+      let currentHullData: { mhull?: number; shull?: number } | undefined = undefined
+      if (hullSuiteData && displaySettings?.showHullSuite) {
+        const currentTime = param.time
+        
+        // Find matching Hull MA data
+        const mhullPoint = hullSuiteData.mhull.find(point => point.time === currentTime)
+        const shullPoint = hullSuiteData.shull.find(point => point.time === currentTime)
+        
+        if (mhullPoint || shullPoint) {
+          currentHullData = {
+            mhull: mhullPoint?.value,
+            shull: shullPoint?.value
+          }
         }
       }
 
@@ -293,7 +356,7 @@ export function useChartInstance(
         const percentageChange = startPrice ? ((currentPrice - startPrice) / startPrice) * 100 : 0
 
         tooltipEl.style.display = "block"
-        tooltipRoot.render(createTooltipContent(currentPrice, percentageChange, Number(param.time) * 1000))
+        tooltipRoot.render(createTooltipContent(currentPrice, percentageChange, Number(param.time) * 1000, currentVolume, currentHullData))
 
         const tooltipWidth = tooltipEl.offsetWidth
         const tooltipHeight = tooltipEl.offsetHeight

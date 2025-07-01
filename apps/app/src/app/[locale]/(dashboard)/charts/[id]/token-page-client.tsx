@@ -21,7 +21,7 @@ interface TokenPageClientProps {
 }
 
 export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
-  const [activeTimeScale, setActiveTimeScale] = useState<string>("30d")
+  const [activeTimeScale, setActiveTimeScale] = useState<string>("7d")
   const [isSticky, setIsSticky] = useState(false)
 
   useEffect(() => {

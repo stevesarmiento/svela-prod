@@ -51,12 +51,12 @@ async function fetchWithErrorHandling(url: string) {
 async function fetchHistoricalData(id: string, timeScale: string = '7d') {
   const now = new Date();
   
-  // Define time ranges - show 60-90 days of context for all timeframes
+  // Define time ranges - use daily data access (24 months) for longer periods
   const timeRanges = {
-    '7d': 90 * 24 * 60 * 60 * 1000,      // 90 days for weekly view  
-    '30d': 90 * 24 * 60 * 60 * 1000,     // 90 days for monthly view
-    'max': 365 * 24 * 60 * 60 * 1000,    // 365 days for yearly view
-    '2y': 730 * 24 * 60 * 60 * 1000,     // 730 days for 2-year view
+    '7d': 30 * 24 * 60 * 60 * 1000,      // 30 days (granular data limit)  
+    '30d': 90 * 24 * 60 * 60 * 1000,     // 90 days (daily data access)
+    'max': 365 * 24 * 60 * 60 * 1000,    // 365 days (daily data access)
+    '2y': 730 * 24 * 60 * 60 * 1000,     // 730 days (daily data access)
   };
   
   const timeRange = timeRanges[timeScale as keyof typeof timeRanges] || timeRanges['7d'];
@@ -77,8 +77,8 @@ async function fetchHistoricalData(id: string, timeScale: string = '7d') {
     id,
     time_start: timeStart,
     time_end: timeEnd,
-    interval: timeScale === '7d' ? '1h' : '24h', // Hourly for 7d, daily for others
-    count: timeScale === '7d' ? '2160' : '90', // 90 days * 24 hours = 2160 for hourly, 90 for daily
+    interval: timeScale === '7d' ? '1h' : '1d', // Hourly for 7d (granular), daily for others
+    count: timeScale === '7d' ? '720' : timeScale === '30d' ? '90' : timeScale === 'max' ? '365' : '730',
     convert: 'USD',
     aux: 'price,volume,market_cap',
     skip_invalid: 'true'
@@ -154,31 +154,31 @@ async function fetchHistoricalData(id: string, timeScale: string = '7d') {
 async function fetchOHLCVData(id: string, timeScale: string = '7d') {
   const now = new Date();
   
-  // Define time ranges - 60-90 days context with different granularities
+  // Define time ranges - use daily data access (24 months) for longer periods
   const timeConfigs = {
     '7d': { 
       days: 30, 
       timePeriod: 'hourly',
       interval: '1h',
-      count: '720' // 30 days * 24 hours
+      count: '720' // 30 days * 24 hours (granular data limit)
     },
     '30d': { 
-      days: 180, 
+      days: 90, 
       timePeriod: 'daily',
       interval: '1d',
-      count: '180' // 90 days of daily data
+      count: '90' // 90 days (daily data access)
     },
     'max': { 
       days: 365, 
       timePeriod: 'daily',
       interval: '1d',
-      count: '365' // 1 year
+      count: '365' // 1 year (daily data access)
     },
     '2y': { 
       days: 730, 
       timePeriod: 'daily',
       interval: '1d',
-      count: '730' // 2 years
+      count: '730' // 2 years (daily data access)
     },
   };
   
@@ -243,7 +243,7 @@ export async function GET(
 
   try {
     const { searchParams } = new URL(request.url);
-    const timeScale = searchParams.get('timeScale') || '7d';
+    const timeScale = searchParams.get('timeScale') || '7d'; // Default to 1D view
     
     const id = await params.id;
     const validatedId = idSchema.parse(id);

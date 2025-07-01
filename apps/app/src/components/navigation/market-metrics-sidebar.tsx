@@ -2,7 +2,24 @@
 
 import React from 'react'
 import { Badge } from '@v1/ui/badge'
-import { IconArrowUpRight, IconArrowDownRight, IconArrowRight } from 'symbols-react'
+import { 
+  IconDollarsign,
+  IconDollarsignBankBuilding,
+  IconChartBarXaxis,
+  IconTengesign,
+  IconShadow,
+  IconWaveformPathEcgRectangle,
+  IconFibrechannel,
+  IconTrapezoidAndLineHorizontal,
+  IconGaugeWithDotsNeedle67percent,
+  IconCharacterDuployan,
+  IconGlobe,
+  IconCalendarDayTimelineRight,
+  IconDropHalffull,
+  IconChartLineDowntrendXyaxis,
+  IconChartLineUptrendXyaxis,
+  IconChartLineFlattrendXyaxis
+} from 'symbols-react'
 import { formatNumber, getTrendBadgeVariant, getBuySellPressure, calculateDivergence, calculateSupportResistance } from '@/lib/analysis-utils'
 import { MiniPriceChart } from './mini-price-chart'
 import type { Time } from 'lightweight-charts'
@@ -82,6 +99,54 @@ interface MarketMetricsSidebarProps {
   takerBuySellData: TakerBuySellData
 }
 
+// Reusable Components
+interface MetricRowProps {
+  icon?: React.ReactNode
+  label: string
+  value: string | React.ReactNode
+  badge?: React.ReactNode
+  className?: string
+}
+
+function MetricRow({ icon = <IconChartBarXaxis className="w-3 h-3 fill-zinc-100" />, label, value, badge, className = "" }: MetricRowProps) {
+  return (
+    <div className={`flex items-center justify-between ${className}`}>
+      <div className="flex items-center gap-1">
+        <div className="flex items-center justify-center p-1 rounded-md bg-zinc-800/40 gap-2">
+          {icon}
+        </div>
+        <span className="text-xs text-zinc-400">{label}</span>
+      </div>
+      <div className="flex items-center gap-1">
+        {typeof value === 'string' ? (
+          <span className="font-mono text-xs text-white">{value}</span>
+        ) : value}
+        {badge}
+      </div>
+    </div>
+  )
+}
+
+interface SectionProps {
+  title: string
+  children: React.ReactNode
+}
+
+function Section({ title, children }: SectionProps) {
+  return (
+    <div className="px-3 space-y-3">
+      <div className="flex items-center gap-2">
+        <h3 className="text-[10px] uppercase font-medium text-white">{title}</h3>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function Divider() {
+  return <div className="w-full h-[1px] my-3 bg-zinc-800/50 scale-125" />
+}
+
 export function MarketMetricsSidebar({
   coinId,
   tokenSymbol,
@@ -94,253 +159,274 @@ export function MarketMetricsSidebar({
   liquidationData,
   takerBuySellData,
 }: MarketMetricsSidebarProps) {
-  // Get latest BB values for UI display
-  const latestBBIndicator = bbData.indicator && bbData.indicator.length > 0 
-    ? bbData.indicator[bbData.indicator.length - 1] 
-    : null
-
-  // Calculate volume trend
-  const recentVolume = volumeData.slice(-7).reduce((a: number, b: VolumeDataPoint) => a + (b?.value || 0), 0) / 7
-  const previousVolume = volumeData.slice(-14, -7).reduce((a: number, b: VolumeDataPoint) => a + (b?.value || 0), 0) / 7
-  const volumeTrend = recentVolume > previousVolume * 1.2 ? 'up' : 
-                     recentVolume < previousVolume * 0.8 ? 'down' : 'stable'
-
-  // Calculate support/resistance
-  const priceHistory = chartData?.map((d: ChartDataPoint) => d.value) || []
-  const recentPriceData = priceHistory.slice(-21)
-  const { support, resistance } = calculateSupportResistance(recentPriceData, marketData?.quote?.USD?.price || 0)
-
-  // Calculate divergence if we have enough data
-  const divergence = React.useMemo(() => {
-    if (!latestBBIndicator || !chartData || chartData.length < 14) return null
+  
+  // Data calculations
+  const calculations = React.useMemo(() => {
+    // Volume trend calculation
+    const recentVolume = volumeData.slice(-7).reduce((a, b) => a + (b?.value || 0), 0) / 7
+    const previousVolume = volumeData.slice(-14, -7).reduce((a, b) => a + (b?.value || 0), 0) / 7
+    const volumeTrend = recentVolume > previousVolume * 1.2 ? 'up' : 
+                       recentVolume < previousVolume * 0.8 ? 'down' : 'stable'
     
-    const rsiHistory = bbData.indicator?.map((d: IndicatorPoint) => d.value) || []
+    // Support/resistance calculation
+    const priceHistory = chartData?.map(d => d.value) || []
+    const recentPriceData = priceHistory.slice(-21)
+    const { support, resistance } = calculateSupportResistance(recentPriceData, marketData?.quote?.USD?.price || 0)
+    
+    // Latest indicators
+    const latestBBIndicator = bbData.indicator?.length > 0 ? bbData.indicator[bbData.indicator.length - 1] : null
+    const latestBBUpper = bbData.upper?.length > 0 ? bbData.upper[bbData.upper.length - 1] : null
+    const latestBBLower = bbData.lower?.length > 0 ? bbData.lower[bbData.lower.length - 1] : null
+    
+    // Money flow and wave trend
+    const latestMoneyFlow = marketVisionData.moneyFlow.fast?.length > 0 ? 
+      marketVisionData.moneyFlow.fast[marketVisionData.moneyFlow.fast.length - 1] : null
+    const latestWT1 = marketVisionData.waveTrend.wt1?.length > 0 ? 
+      marketVisionData.waveTrend.wt1[marketVisionData.waveTrend.wt1.length - 1] : null
+    const latestWT2 = marketVisionData.waveTrend.wt2?.length > 0 ? 
+      marketVisionData.waveTrend.wt2[marketVisionData.waveTrend.wt2.length - 1] : null
+    
+    // Open Interest trend
+    const latestOI = openInterestData?.data && openInterestData.data.length > 0 ? 
+      openInterestData.data[openInterestData.data.length - 1] : null
+    const previousOI = openInterestData?.data && openInterestData.data.length >= 2 ? 
+      openInterestData.data[openInterestData.data.length - 2] : null
+    
+    // Liquidations
+    const latestLiquidations = liquidationData?.data && liquidationData.data.length > 0 ? 
+      liquidationData.data[liquidationData.data.length - 1] : null
+    
+    return {
+      volumeTrend,
+      support,
+      resistance,
+      latestBBIndicator,
+      latestBBUpper,
+      latestBBLower,
+      latestMoneyFlow,
+      latestWT1,
+      latestWT2,
+      latestOI,
+      previousOI,
+      latestLiquidations,
+      priceHistory,
+    }
+  }, [marketData, chartData, volumeData, bbData, marketVisionData, openInterestData, liquidationData])
+
+  // Divergence calculation (separate to avoid nested useMemo)
+  const divergence = React.useMemo(() => {
+    if (!calculations.latestBBIndicator || !chartData || chartData.length < 14) return null
+    
+    const rsiHistory = bbData.indicator?.map(d => d.value) || []
     if (rsiHistory.length < 14) return null
     
-    const currentPrice = priceHistory[priceHistory.length - 1] || 0
-    const previousAvg = priceHistory.slice(-14, -7).reduce((a: number, b: number) => a + b, 0) / 7
-    const currentRSIAvg = rsiHistory.slice(-7).reduce((a: number, b: number) => a + b, 0) / 7
-    const previousRSIAvg = rsiHistory.slice(-14, -7).reduce((a: number, b: number) => a + b, 0) / 7
+    const currentPrice = calculations.priceHistory[calculations.priceHistory.length - 1] || 0
+    const previousAvg = calculations.priceHistory.slice(-14, -7).reduce((a, b) => a + b, 0) / 7
+    const currentRSIAvg = rsiHistory.slice(-7).reduce((a, b) => a + b, 0) / 7
+    const previousRSIAvg = rsiHistory.slice(-14, -7).reduce((a, b) => a + b, 0) / 7
     
     return calculateDivergence(currentPrice, previousAvg, currentRSIAvg, previousRSIAvg)
-  }, [latestBBIndicator, chartData, bbData.indicator, priceHistory])
+  }, [calculations.latestBBIndicator, chartData, bbData.indicator, calculations.priceHistory])
+
+  // Helper functions for common badge patterns
+  const getVolumeTrendBadge = (trend: string) => (
+    <Badge variant={getTrendBadgeVariant(
+      trend === 'up' ? 'bullish' : trend === 'down' ? 'bearish' : 'neutral'
+    )} className="text-xs px-1">
+      {trend === 'up' ? '↗' : trend === 'down' ? '↘' : '→'}
+    </Badge>
+  )
+
+  const getTrendIcon = (change: number) => {
+    if (change > 2) return <IconChartLineUptrendXyaxis className="w-3 h-3 fill-green-400" />
+    if (change < -2) return <IconChartLineDowntrendXyaxis className="w-3 h-3 fill-red-400" />
+    return <IconChartLineFlattrendXyaxis className="w-3 h-3 fill-zinc-100" />
+  }
+
+  const getTrendLabel = (change: number) => {
+    if (change > 2) return 'Uptrend'
+    if (change < -2) return 'Downtrend'
+    return 'Sideways'
+  }
 
   return (
     <div className="lg:col-span-1 space-y-6 overflow-hidden">
       <div className="">
         {/* Mini Price Chart */}
-        <div className="">
-          <MiniPriceChart 
-            coinId={coinId}
-            tokenSymbol={tokenSymbol}
-            currentPrice={marketData?.quote?.USD?.price}
-          />
-        </div>
+        <MiniPriceChart 
+          coinId={coinId}
+          tokenSymbol={tokenSymbol}
+          currentPrice={marketData?.quote?.USD?.price}
+        />
+        
         <div className="w-full h-[1px] mb-3 bg-zinc-800/50 scale-125" />
 
         {/* Market Metrics */}
-        <div className="px-3 space-y-3">
-            <div className="flex items-center gap-2">
-                <h3 className="text-[10px] uppercase font-medium text-white">Market Metrics</h3>
-            </div>
-            
-            <div className="flex items-center justify-between">
-            <span className="text-xs text-zinc-500">Current Price</span>
-            <div className="flex items-center gap-2">
-                <span className="font-mono text-xs text-white">
-                ${marketData?.quote?.USD?.price?.toLocaleString() || '0.00'}
-                </span>
-            </div>
-            </div>
+        <Section title="Market Metrics">
+          <MetricRow
+            icon={<IconDollarsign className="w-3 h-3 fill-zinc-100" />}
+            label="Current Price"
+            value={`$${marketData?.quote?.USD?.price?.toLocaleString() || '0.00'}`}
+          />
+          
+          <MetricRow
+            icon={<IconDollarsignBankBuilding className="w-3 h-3 fill-zinc-100" />}
+            label="Market Cap"
+            value={`$${formatNumber(marketData?.quote?.USD?.market_cap || 0)}`}
+          />
+          
+          <MetricRow
+            icon={<IconChartBarXaxis className="w-3 h-3 fill-zinc-100" />}
+            label="24h Volume"
+            value={`$${formatNumber(marketData?.quote?.USD?.volume_24h || 0)}`}
+            badge={getVolumeTrendBadge(calculations.volumeTrend)}
+          />
+        </Section>
 
-            <div className="flex items-center justify-between">
-            <span className="text-xs text-zinc-500">Market Cap</span>
-            <span className="font-mono text-xs text-white">
-                ${formatNumber(marketData?.quote?.USD?.market_cap || 0)}
-            </span>
-            </div>
-
-            <div className="flex items-center justify-between">
-            <span className="text-xs text-zinc-500">24h Volume</span>
-            <div className="flex items-center gap-1">
-                <span className="font-mono text-xs text-white">
-                ${formatNumber(marketData?.quote?.USD?.volume_24h || 0)}
-                </span>
-                <Badge variant={getTrendBadgeVariant(
-                volumeTrend === 'up' ? 'bullish' : 
-                volumeTrend === 'down' ? 'bearish' : 'neutral'
-                )} className="text-xs px-1">
-                {volumeTrend === 'up' ? '↗' : volumeTrend === 'down' ? '↘' : '→'}
-                </Badge>
-            </div>
-            </div>            
-        </div>
-
-        <div className="w-full h-[1px] my-3 bg-zinc-800/50 scale-125" />
+        <Divider />
 
         {/* Price Levels */}
-        <div className="px-3 space-y-3">
-            <div className="flex flex-col space-y-2">
-            <div className="flex items-center gap-2">
-                <h3 className="text-[10px] uppercase font-medium text-white">Price Levels</h3>
-            </div>
-            
-            <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Support (21d)</span>
-                <span className="font-mono text-xs text-green-400">
-                ${support.toLocaleString()}
-                </span>
-            </div>
-            
-            <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Resistance (21d)</span>
-                <span className="font-mono text-xs text-red-400">
-                ${resistance.toLocaleString()}
-                </span>
-            </div>
-            </div>
-        </div>
+        <Section title="Price Levels">
+          <MetricRow
+            icon={<IconTengesign className="w-3 h-3 fill-red-500" />}
+            label="Resistance (21d)"
+            value={<span className="font-mono text-xs text-red-400">${calculations.resistance.toLocaleString()}</span>}
+          />
+          <MetricRow
+            icon={<IconTengesign className="w-3 h-3 fill-green-500 rotate-180" />}
+            label="Support (21d)"
+            value={<span className="font-mono text-xs text-green-400">${calculations.support.toLocaleString()}</span>}
+          />
+        </Section>
 
-        <div className="w-full h-[1px] my-3 bg-zinc-800/50 scale-125" />
+        <Divider />
 
         {/* Technical Indicators */}
-        <div className="px-3 space-y-3">
-
-        <div className="flex flex-col space-y-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-[10px] uppercase font-medium text-white">Technical Indicators</h3>
-          </div>
-          
+        <Section title="Technical Indicators">
           {/* Hull Suite Trend */}
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-zinc-500">Hull Suite</span>
-            <div className="flex items-center gap-1">
-              <Badge variant={getTrendBadgeVariant(
-                (marketData?.quote?.USD?.percent_change_24h || 0) > 0 ? 'bullish' : 'bearish'
-              )} className="text-xs px-1">
-                {(marketData?.quote?.USD?.percent_change_24h || 0) > 0 ? 'Bullish' : 'Bearish'}
-              </Badge>
-              <Badge variant="secondary" className="text-xs px-1">
-                {Math.abs(marketData?.quote?.USD?.percent_change_24h || 0) > 3 ? 'Strong' : 'Moderate'}
-              </Badge>
-            </div>
-          </div>
+          <MetricRow
+            icon={<IconShadow className="w-3 h-3 fill-zinc-100" />}
+            label="Hull Suite"
+            value=""
+            badge={
+              <div className="flex items-center gap-1">
+                <Badge variant={getTrendBadgeVariant(
+                  (marketData?.quote?.USD?.percent_change_24h || 0) > 0 ? 'bullish' : 'bearish'
+                )} className="text-xs px-1">
+                  {(marketData?.quote?.USD?.percent_change_24h || 0) > 0 ? 'Bullish' : 'Bearish'}
+                </Badge>
+                <Badge variant="secondary" className="text-xs px-1">
+                  {Math.abs(marketData?.quote?.USD?.percent_change_24h || 0) > 3 ? 'Strong' : 'Moderate'}
+                </Badge>
+              </div>
+            }
+          />
 
           {/* Enhanced RSI with Bollinger Bands */}
-          {latestBBIndicator && (
-            <div className="flex flex-col space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">RSI (Bollinger)</span>
-                <div className="flex items-center gap-1">
-                  <span className="font-mono text-xs text-white">
-                    {latestBBIndicator.value.toFixed(1)}
-                  </span>
+          {calculations.latestBBIndicator && (
+            <>
+              <MetricRow
+                icon={<IconWaveformPathEcgRectangle className="w-3 h-3 fill-zinc-100" />}
+                label="Relative Strength"
+                value={calculations.latestBBIndicator.value.toFixed(1)}
+                badge={
                   <Badge variant={getTrendBadgeVariant(
-                    (latestBBIndicator?.value || 50) > 70 ? 'bearish' : 
-                    (latestBBIndicator?.value || 50) < 30 ? 'bullish' : 'neutral'
+                    calculations.latestBBIndicator.value > 70 ? 'bearish' : 
+                    calculations.latestBBIndicator.value < 30 ? 'bullish' : 'neutral'
                   )}>
-                    {(latestBBIndicator?.value || 50) > 70 ? 'Overbought' : 
-                     (latestBBIndicator?.value || 50) < 30 ? 'Oversold' : 'Neutral'}
+                    {calculations.latestBBIndicator.value > 70 ? 'Overbought' : 
+                     calculations.latestBBIndicator.value < 30 ? 'Oversold' : 'Neutral'}
                   </Badge>
-                </div>
-              </div>
+                }
+              />
               
-              {/* BB Bands */}
-              {bbData.upper && bbData.lower && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-gray-500">Bands:</span>
-                  <span className="font-mono text-zinc-500">
-                    {bbData.lower[bbData.lower.length - 1]?.value.toFixed(1)} - {bbData.upper[bbData.upper.length - 1]?.value.toFixed(1)}
-                  </span>
-                </div>
+              {calculations.latestBBUpper && calculations.latestBBLower && (
+                <MetricRow
+                  icon={<IconFibrechannel className="w-3 h-3 fill-zinc-100" />}
+                  label="Bands"
+                  value={<span className="font-mono text-white">
+                    {calculations.latestBBLower.value.toFixed(1)} - {calculations.latestBBUpper.value.toFixed(1)}
+                  </span>}
+                  className="text-xs"
+                />
               )}
-            </div>
+            </>
           )}
 
           {/* Divergence Detection */}
           {divergence && divergence !== 'none' && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-500">Divergence</span>
-              <Badge variant={getTrendBadgeVariant(divergence === 'bullish' ? 'bullish' : 'bearish')} className="text-xs px-1">
-                {divergence === 'bullish' ? 'Bullish' : 'Bearish'} Signal
-              </Badge>
-            </div>
+            <MetricRow
+              icon={<IconTrapezoidAndLineHorizontal className="w-3 h-3 fill-zinc-100" />}
+              label="Divergence"
+              value=""
+              badge={
+                <Badge variant={getTrendBadgeVariant(divergence === 'bullish' ? 'bullish' : 'bearish')} className="text-xs px-1">
+                  {divergence === 'bullish' ? 'Bullish' : 'Bearish'} Signal
+                </Badge>
+              }
+            />
           )}
           
           {/* Money Flow */}
-          {marketVisionData.moneyFlow.fast.length > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-500">Money Flow</span>
-              <div className="flex items-center gap-1">
+          {calculations.latestMoneyFlow && (
+            <MetricRow
+              icon={<IconGaugeWithDotsNeedle67percent className="w-3 h-3 fill-zinc-100" />}
+              label="Money Flow"
+              value={Math.abs(calculations.latestMoneyFlow.value).toFixed(1)}
+              badge={
                 <Badge variant={getTrendBadgeVariant(
-                  (marketVisionData.moneyFlow.fast[marketVisionData.moneyFlow.fast.length - 1]?.value || 0) > 0 
-                    ? 'bullish' : 'bearish'
+                  calculations.latestMoneyFlow.value > 0 ? 'bullish' : 'bearish'
                 )} className="text-xs px-1">
-                  {(marketVisionData.moneyFlow.fast[marketVisionData.moneyFlow.fast.length - 1]?.value || 0) > 0 
-                    ? 'Inflow' : 'Outflow'}
+                  {calculations.latestMoneyFlow.value > 0 ? 'Inflow' : 'Outflow'}
                 </Badge>
-                <span className="font-mono text-xs text-zinc-500">
-                  {Math.abs(marketVisionData.moneyFlow.fast[marketVisionData.moneyFlow.fast.length - 1]?.value || 0).toFixed(1)}
-                </span>
-              </div>
-            </div>
+              }
+            />
           )}
 
           {/* Wave Trend */}
-          {marketVisionData.waveTrend.wt1.length > 0 && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-500">Wave Trend</span>
-              <div className="flex items-center gap-1">
+          {calculations.latestWT1 && calculations.latestWT2 && (
+            <MetricRow
+              icon={<IconCharacterDuployan className="w-3 h-3 fill-zinc-100" />}
+              label="Wave Trend"
+              value={calculations.latestWT1.value.toFixed(1)}
+              badge={
                 <Badge variant={getTrendBadgeVariant(
-                  (marketVisionData.waveTrend.wt1[marketVisionData.waveTrend.wt1.length - 1]?.value || 0) > 
-                  (marketVisionData.waveTrend.wt2[marketVisionData.waveTrend.wt2.length - 1]?.value || 0)
-                    ? 'bullish' : 'bearish'
+                  calculations.latestWT1.value > calculations.latestWT2.value ? 'bullish' : 'bearish'
                 )} className="text-xs px-1">
-                  {(marketVisionData.waveTrend.wt1[marketVisionData.waveTrend.wt1.length - 1]?.value || 0) > 
-                   (marketVisionData.waveTrend.wt2[marketVisionData.waveTrend.wt2.length - 1]?.value || 0)
-                    ? 'Bullish' : 'Bearish'}
+                  {calculations.latestWT1.value > calculations.latestWT2.value ? 'Bullish' : 'Bearish'}
                 </Badge>
-                <span className="font-mono text-xs text-zinc-500">
-                  {(marketVisionData.waveTrend.wt1[marketVisionData.waveTrend.wt1.length - 1]?.value || 0).toFixed(1)}
-                </span>
-              </div>
-            </div>
+              }
+            />
+          )}
+        </Section>
+
+        <Divider />
+
+        {/* Market Structure */}
+        <Section title="Market Structure">
+          {/* Open Interest */}
+          {calculations.latestOI && (
+            <MetricRow
+              icon={<IconGlobe className="w-3 h-3 fill-zinc-100" />}
+              label="Open Interest"
+              value={`$${formatNumber(calculations.latestOI.close)}`}
+              badge={calculations.previousOI && (
+                <Badge variant={getTrendBadgeVariant(
+                  calculations.latestOI.close > calculations.previousOI.close ? 'bullish' : 'bearish'
+                )} className="text-xs px-1">
+                  {(((calculations.latestOI.close - calculations.previousOI.close) / calculations.previousOI.close) * 100).toFixed(1)}%
+                </Badge>
+              )}
+            />
           )}
 
-        <div className="w-full h-[1px] my-3 bg-zinc-800/50 scale-125" />
-          {/* Market Structure Section */}
-          <div className="flex flex-col space-y-3">
-            <div className="flex items-center gap-2">
-              <h3 className="text-[10px] uppercase font-medium text-white">Market Structure</h3>
-            </div>
-
-            {/* Open Interest */}
-            {openInterestData?.data && openInterestData.data.length > 0 && (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Open Interest</span>
-                <div className="flex items-center gap-1">
-                  <span className="font-mono text-xs text-white">
-                    ${formatNumber(openInterestData.data[openInterestData.data.length - 1]?.close || 0)}
-                  </span>
-                  {openInterestData.data.length >= 2 && (
-                    <Badge variant={getTrendBadgeVariant(
-                      (openInterestData.data[openInterestData.data.length - 1]?.close || 0) > 
-                      (openInterestData.data[openInterestData.data.length - 2]?.close || 0)
-                        ? 'bullish' : 'bearish'
-                    )} className="text-xs px-1">
-                      {(((openInterestData.data[openInterestData.data.length - 1]?.close || 0) - 
-                        (openInterestData.data[openInterestData.data.length - 2]?.close || 0)) / 
-                        (openInterestData.data[openInterestData.data.length - 2]?.close || 1) * 100).toFixed(1)}%
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Order Flow */}
-            {takerBuySellData?.data?.overall && (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">Order Flow</span>
+          {/* Order Flow */}
+          {takerBuySellData?.data?.overall && (
+            <MetricRow
+              icon={<IconCalendarDayTimelineRight className="w-3 h-3 fill-zinc-100" />}
+              label="Order Flow"
+              value=""
+              badge={
                 <div className="flex items-center gap-1">
                   <Badge variant={getTrendBadgeVariant(
                     getBuySellPressure(takerBuySellData.data.overall.buyRatio || 50) === 'high' ? 'bullish' :
@@ -356,54 +442,42 @@ export function MarketMetricsSidebar({
                     {(takerBuySellData.data.overall.sellRatio || 50).toFixed(1)}% Sell
                   </Badge>
                 </div>
-              </div>
-            )}
+              }
+            />
+          )}
 
-            {/* Liquidations */}
-            {liquidationData?.data && liquidationData.data.length > 0 && (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500">24h Liquidations</span>
-                <div className="flex items-center gap-1">
-                  <span className="font-mono text-xs text-white">
-                    ${formatNumber((liquidationData.data[liquidationData.data.length - 1]?.longLiquidations || 0) + 
-                                  (liquidationData.data[liquidationData.data.length - 1]?.shortLiquidations || 0))}
-                  </span>
-                  <Badge variant={getTrendBadgeVariant(
-                    (liquidationData.data[liquidationData.data.length - 1]?.longLiquidations || 0) > 
-                    (liquidationData.data[liquidationData.data.length - 1]?.shortLiquidations || 0)
-                      ? 'bearish' : 'bullish'
-                  )} className="text-xs px-1">
-                    {(liquidationData.data[liquidationData.data.length - 1]?.longLiquidations || 0) > 
-                     (liquidationData.data[liquidationData.data.length - 1]?.shortLiquidations || 0)
-                      ? 'Long Heavy' : 'Short Heavy'}
-                  </Badge>
-                </div>
-              </div>
-            )}
+          {/* Liquidations */}
+          {calculations.latestLiquidations && (
+            <MetricRow
+              icon={<IconDropHalffull className="w-3 h-3 fill-zinc-100" />}
+              label="24h Liquidations"
+              value={`$${formatNumber(calculations.latestLiquidations.longLiquidations + calculations.latestLiquidations.shortLiquidations)}`}
+              badge={
+                <Badge variant={getTrendBadgeVariant(
+                  calculations.latestLiquidations.longLiquidations > calculations.latestLiquidations.shortLiquidations ? 'bearish' : 'bullish'
+                )} className="text-xs px-1">
+                  {calculations.latestLiquidations.longLiquidations > calculations.latestLiquidations.shortLiquidations ? 'Long Heavy' : 'Short Heavy'}
+                </Badge>
+              }
+            />
+          )}
 
-            {/* Trend Summary */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-500">Trend</span>
+          {/* Trend Summary */}
+          <MetricRow
+            icon={getTrendIcon(marketData?.quote?.USD?.percent_change_24h || 0)}
+            label="Trend"
+            value={
               <div className="flex items-center gap-1">
-                {(marketData?.quote?.USD?.percent_change_24h || 0) > 2 ? (
-                  <IconArrowUpRight className="w-3 h-3 fill-green-400" />
-                ) : (marketData?.quote?.USD?.percent_change_24h || 0) < -2 ? (
-                  <IconArrowDownRight className="w-3 h-3 fill-red-400" />
-                ) : (
-                  <IconArrowRight className="w-3 h-3 fill-gray-400" />
-                )}
                 <span className="text-xs text-gray-300">
-                  {(marketData?.quote?.USD?.percent_change_24h || 0) > 2 ? 'Uptrend' :
-                   (marketData?.quote?.USD?.percent_change_24h || 0) < -2 ? 'Downtrend' : 'Sideways'}
+                  {getTrendLabel(marketData?.quote?.USD?.percent_change_24h || 0)}
                 </span>
                 <span className="font-mono text-xs text-zinc-500">
                   {Math.abs(marketData?.quote?.USD?.percent_change_24h || 0).toFixed(1)}%
                 </span>
               </div>
-            </div>
-            </div>
-          </div>
-        </div>
+            }
+          />
+        </Section>
       </div>
     </div>
   )

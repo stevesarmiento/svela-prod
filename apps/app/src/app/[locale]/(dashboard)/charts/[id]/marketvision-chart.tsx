@@ -38,27 +38,32 @@ const TooltipContent = ({
 }) => {
   return (
     <div className="flex flex-col gap-1 overflow-hidden">
-      <div className="px-3 pb-1 pt-2">
-        <div className="mb-2 text-xs text-muted-foreground">
-          {new Date(timestamp).toLocaleString(undefined, {
-            dateStyle: 'medium',
-            timeStyle: 'short'
+      <div className="px-4 py-3">
+        <div className="mb-3 text-[11px] text-zinc-400 font-medium">
+          {new Date(timestamp).toLocaleDateString(undefined, {
+            month: 'long',
+            day: 'numeric'
           })}
         </div>
-        {indicatorData.map((indicator) => (
-          <div key={indicator.name} className="flex items-center gap-2 py-0.5">
-            <div
-              className="h-4 w-1 rounded-full"
-              style={{ backgroundColor: indicator.color }}
-            />
-            <span className="font-mono text-sm">
-              {indicator.value.toFixed(2)}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {indicator.name}
-            </span>
-          </div>
-        ))}
+        <div className="w-full h-[1px] mb-3 bg-zinc-700/50 scale-125" />
+        <div className="flex flex-col gap-2">
+          {indicatorData.map((indicator) => (
+            <div key={indicator.name} className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div
+                  className="h-3 w-1 rounded-full"
+                  style={{ backgroundColor: indicator.color }}
+                />
+                <span className="text-[11px] text-zinc-400">
+                  {indicator.name}
+                </span>
+              </div>
+              <span className="text-[11px] font-mono text-white font-bold">
+                {indicator.value.toFixed(2)}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -201,19 +206,7 @@ export function MarketVisionChart({
     // Add tooltip
     const tooltipEl = document.createElement("div")
     const tooltipRoot = createRoot(tooltipEl)
-    tooltipEl.className = `
-      fixed hidden 
-      text-xs
-      text-foreground
-      rounded-xl
-      shadow-xl
-      pointer-events-none 
-      z-30
-      backdrop-blur-sm
-      bg-background/90
-      border border-border
-      transition-all duration-100 ease-in-out
-    `
+    tooltipEl.className = "fixed hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
     document.body.appendChild(tooltipEl)
 
     // Subscribe to crosshair move

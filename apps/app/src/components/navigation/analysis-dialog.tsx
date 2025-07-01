@@ -9,7 +9,7 @@ import {
   DialogTrigger,
 } from '@v1/ui/dialog'
 import { Button } from '@v1/ui/button'
-import { Badge } from '@v1/ui/badge'
+
 import { ScrollArea } from '@v1/ui/scroll-area'
 import Image from 'next/image'
 import { IconSparkles } from 'symbols-react'
@@ -66,7 +66,7 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
           <span className="text-white">Analyze</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden">
+      <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
         {/* Header */}
         <DialogHeader className="border-b border-zinc-800/50 pb-4">
           <DialogTitle className="flex items-center justify-between">
@@ -76,8 +76,8 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
                   src={tokenData?.logoUrl || `https://s2.coinmarketcap.com/static/img/coins/64x64/${coinId}.png`}
                   alt={tokenData?.name || marketData?.name || 'Token'}
                   className="w-8 h-8 rounded-full ring-1 ring-white/10"
-                  width={24}
-                  height={24}
+                  width={32}
+                  height={32}
                   priority={true}
                   placeholder="blur"
                   blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGBkbHB0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
@@ -86,13 +86,29 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
                     target.src = '/favicon.ico';
                   }}
                 />
-                <span className="font-semibold text-white text-3xl">
-                  {marketData?.name || tokenData?.name || 'Token'}
-                </span>
-                <Badge variant={marketData?.quote?.USD?.percent_change_24h >= 0 ? "success" : "destructive"}>
-                  {marketData?.quote?.USD?.percent_change_24h >= 0 ? '+' : ''}
-                  {marketData?.quote?.USD?.percent_change_24h?.toFixed(2)}%
-                </Badge>
+                <div className="flex flex-col gap-0">
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-sm font-semibold text-white">
+                      {marketData?.name || tokenData?.name || 'Token Details'}
+                    </h1>   
+                    <span className={`text-[11px] font-mono font-thin ${
+                      (marketData?.quote?.USD?.percent_change_24h ?? 0) >= 0 
+                        ? 'text-green-400' 
+                        : 'text-red-400'
+                    }`}>
+                      {(marketData?.quote?.USD?.percent_change_24h ?? 0) >= 0 ? '+' : ''}
+                      {marketData?.quote?.USD?.percent_change_24h?.toFixed(2)}%
+                    </span>                 
+                  </div>
+                  <p className="text-xs text-white">
+                    <span className="text-xs text-white/60">Today is </span> 
+                    {new Date().toLocaleDateString('en-US', { 
+                      weekday: 'long', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                  </p>
+                </div>
               </div>
             </div>
           </DialogTitle>
@@ -122,13 +138,11 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
               <ScrollArea hideScrollbar={true} className="h-[75vh] w-full col-span-3 bg-zinc-950/50">
                 <div className="relative lg:col-span-3 space-y-6 p-12 h-full">
                   <div className="relative h-full">
-                    <h1 className="text-xl font-semibold mb-6 text-white">
-                      {marketData?.name || tokenData?.name || 'Token'} Market Overview
-                    </h1>
-
                     <AnalysisResult
                       isLoading={isAnalysisLoading}
                       result={analysisResult}
+                      marketData={marketData}
+                      tokenData={tokenData}
                     />
                   </div>
                 </div>  

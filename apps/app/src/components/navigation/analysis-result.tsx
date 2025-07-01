@@ -5,16 +5,32 @@ import { IconSparkles } from 'symbols-react'
 import ReactMarkdown from 'react-markdown'
 import { TextShimmerWave } from '@v1/ui/text-shimmer'
 
+interface MarketData {
+  name?: string
+  quote?: {
+    USD?: {
+      percent_change_24h?: number
+    }
+  }
+}
+
+interface TokenData {
+  name?: string
+  symbol?: string
+}
+
 interface AnalysisResultProps {
   isLoading: boolean
   result: string
+  marketData?: MarketData
+  tokenData?: TokenData | null
 }
 
-export function AnalysisResult({ isLoading, result }: AnalysisResultProps) {
+export function AnalysisResult({ isLoading, result, marketData, tokenData }: AnalysisResultProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-12 w-full h-[51vh]">
-        <TextShimmerWave className="text-gray-400 text-lg">Analyzing technical indicators...</TextShimmerWave>
+        <TextShimmerWave className="text-zinc-400 text-lg">Analyzing technical indicators...</TextShimmerWave>
       </div>
     )
   }
@@ -23,10 +39,13 @@ export function AnalysisResult({ isLoading, result }: AnalysisResultProps) {
     return (
       <div className="space-y-8">
         <div className="prose prose-invert max-w-none">
+            <h1 className="text-xl font-semibold mb-6 text-white">
+              {marketData?.name || tokenData?.name || 'Token'} Market Overview
+            </h1>
           <ReactMarkdown 
             components={{
               h1: ({ children }) => (
-                <h1 className="text-xl font-bold text-white mb-4 border-b border-gray-700 pb-2">
+                <h1 className="text-xl font-bold text-white mb-4 border-b border-zinc-700 pb-2">
                   {children}
                 </h1>
               ),
@@ -36,12 +55,12 @@ export function AnalysisResult({ isLoading, result }: AnalysisResultProps) {
                 </h2>
               ),
               h3: ({ children }) => (
-                <h3 className="text-base font-medium text-gray-200 mb-2 mt-4">
+                <h3 className="text-base font-medium text-zinc-200 mb-2 mt-4">
                   {children}
                 </h3>
               ),
               p: ({ children }) => (
-                <p className="text-gray-300 mb-3 leading-relaxed">
+                <p className="text-zinc-400 mb-3 leading-relaxed">
                   {children}
                 </p>
               ),
@@ -56,12 +75,12 @@ export function AnalysisResult({ isLoading, result }: AnalysisResultProps) {
                 </ul>
               ),
               li: ({ children }) => (
-                <li className="text-gray-300">
+                <li className="text-zinc-400">
                   {children}
                 </li>
               ),
               em: ({ children }) => (
-                <em className="text-gray-400 italic">
+                <em className="text-zinc-400 italic">
                   {children}
                 </em>
               ),
@@ -76,11 +95,11 @@ export function AnalysisResult({ isLoading, result }: AnalysisResultProps) {
 
   return (
     <div className="text-center py-12">
-      <IconSparkles className="w-12 h-12 mx-auto mb-4 fill-gray-600" />
-      <p className="text-gray-400 text-lg">
+      <IconSparkles className="w-12 h-12 mx-auto mb-4 fill-zinc-600" />
+      <p className="text-zinc-400 text-lg">
         Click the analyze button to generate AI insights
       </p>
-      <p className="text-gray-500 text-sm mt-2">
+      <p className="text-zinc-500 text-sm mt-2">
         Our AI will analyze technical indicators, market trends, and provide actionable insights
       </p>
     </div>
