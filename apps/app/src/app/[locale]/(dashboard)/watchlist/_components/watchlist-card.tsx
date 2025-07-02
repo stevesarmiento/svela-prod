@@ -3,7 +3,6 @@
 import { Card, CardContent } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
 import NumberFlow from '@number-flow/react'
-import { LineChart, Line, YAxis } from 'recharts'
 import { useMemo } from 'react'
 import { Button } from "@v1/ui/button"
 import { 
@@ -22,6 +21,9 @@ import {
   MoreHorizontal 
 } from "lucide-react"
 import { AvatarCircles } from "@v1/ui/token-stacks"
+import { useWatchlistAggregateChart } from "@/hooks/use-watchlist-aggregate-chart"
+import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
+import { Spinner } from "@v1/ui/spinner"
 
 interface WatchlistGroup {
   _id: string
@@ -94,24 +96,6 @@ export function WatchlistCard({
     }
   }, [coins])
 
-  // Generate chart data for the sparkline
-  const chartData = useMemo(() => {
-    if (!coins.length) {
-      return Array.from({ length: 20 }, (_, i) => ({
-        time: Date.now() - (20 - i) * 60 * 60 * 1000,
-        value: 0
-      }));
-    }
-    
-    // Use average price change as a simple trend indicator
-    // In a real implementation, you'd want historical data
-    const baseValue = 100;
-    return Array.from({ length: 20 }, (_, i) => ({
-      time: Date.now() - (20 - i) * 60 * 60 * 1000,
-      value: baseValue + (stats.averageChange * (i / 20))
-    }));
-  }, [coins, stats.averageChange])
-
   const isPositive = stats.averageChange >= 0
 
   // Create avatar data for coin logos
@@ -122,8 +106,23 @@ export function WatchlistCard({
     }))
   }, [coins])
 
+  // Get aggregate chart data
+  const { aggregateData, isLoading: isChartLoading } = useWatchlistAggregateChart({
+    coins,
+    timeScale: '30d'
+  })
+
+  console.log('WatchlistCard chart data:', {
+    groupName: group.name,
+    coinsCount: coins.length,
+    aggregateDataLength: aggregateData.length,
+    isChartLoading,
+    isPositive,
+    sampleAggregateData: aggregateData.slice(0, 3)
+  })
+
   return (
-    <Card className="relative w-[320px] bg-gradient-to-b from-zinc-800/50 hover:from-zinc-800/80 to-zinc-800/20 hover:to-zinc-800/50 h-auto mx-auto hover:shadow-lg shadow-md transition-colors duration-200 ease-in-out cursor-pointer overflow-hidden rounded-[20px] border-zinc-800/50 group">
+    <Card className="relative w-full bg-gradient-to-b from-zinc-800/50 hover:from-zinc-800/80 to-zinc-800/20 hover:to-zinc-800/50 h-auto mx-auto hover:shadow-lg shadow-md transition-colors duration-200 ease-in-out cursor-pointer overflow-hidden rounded-[20px] border-zinc-800/50 group">
       <div
         className="absolute inset-0 z-0 size-full opacity-40 dark:opacity-30"
         style={{
@@ -136,14 +135,12 @@ export function WatchlistCard({
       />
       
       <CardContent className="p-4 relative">
-        {/* Blurred background with watchlist icon */}
         <div className="absolute top-0 left-0 w-24 h-24 -translate-x-2 -translate-y-2 z-0">
           <div className="w-full h-full flex items-center justify-center">
             <List className="w-16 h-16 text-zinc-600 blur-[60px] opacity-20" />
           </div>
         </div>
         
-        {/* Main content */}
         <div className="relative z-10">
           {/* Header with watchlist info and actions */}
           <div className="flex items-start justify-between mb-3">
@@ -189,8 +186,7 @@ export function WatchlistCard({
               </div>
           </div>
 
-          {/* Stats */}
-          <div className="flex items-center justify-between mb-4">
+          {/* <div className="flex items-center justify-between mb-4">
             <div>
               <div className="text-sm text-muted-foreground">Coins</div>
               <div className="text-2xl font-mono font-semibold">
@@ -199,7 +195,6 @@ export function WatchlistCard({
             </div>
             
             <div className="text-right">
-              <div className="text-sm text-muted-foreground">Avg Change 24h</div>
               <div className={cn(
                 "flex items-center gap-1 text-lg font-medium",
                 isPositive ? "text-emerald-500" : "text-rose-500"
@@ -220,36 +215,57 @@ export function WatchlistCard({
                 />
               </div>
             </div>
-          </div>
+          </div> */}
 
           {/* Chart */}
-          <div className="w-full h-12 mb-4">
-            <LineChart data={chartData} width={288} height={48}>
-              <YAxis domain={['dataMin', 'dataMax']} hide={true} />
-              <Line
-                type="monotone"
-                dataKey="value"
-                dot={false}
-                strokeWidth={2}
-                stroke={isPositive ? "hsl(var(--success, 22 163 74))" : "hsl(var(--destructive, 239 68 68))"}
+          <div className="w-full">
+            {isChartLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <Spinner className="w-4 h-4" />
+              </div>
+            ) : (
+              <WatchlistAggregateChart
+                data={aggregateData}
+                isPositive={isPositive}
+                width={288}
+                height={48}
               />
-            </LineChart>
+            )}
           </div>
           
           {/* Performance indicators */}
           <div className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1">
+            <div className={cn(
+                "flex items-center gap-1 text-lg font-medium",
+                isPositive ? "text-emerald-500" : "text-rose-500"
+              )}>
+                {isPositive ? (
+                  <TrendingUp className="w-4 h-4" />
+                ) : (
+                  <TrendingDown className="w-4 h-4" />
+                )}
+                <NumberFlow
+                  value={Math.abs(stats.averageChange)}
+                  format={{ 
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                  }}
+                  suffix="%"
+                  transformTiming={{ duration: 400, easing: 'ease-out' }}
+                />
+              </div>
+              {/* <div className="flex items-center gap-1">
                 <div className="w-2 h-2 bg-green-500 rounded-full" />
                 <span className="text-muted-foreground">{stats.positiveCount} up</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 bg-red-500 rounded-full" />
                 <span className="text-muted-foreground">{stats.negativeCount} down</span>
-              </div>
+              </div> */}
             </div>
             
-            {/* Replace the single coin logo with avatar circles */}
+            {/* Avatar circles */}
             {avatarData.length > 0 && (
               <div className="flex items-center gap-2">
                 <AvatarCircles
