@@ -52,22 +52,7 @@ function ChartsContent() {
   }
 
   return (
-    <div className="space-y-6 w-full z-0 p-8">
-      {/* Selected Group Header */}
-      {selectedGroup && (
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-semibold">Charts: {selectedGroup.name}</h2>
-            {selectedGroup.description && (
-              <p className="text-sm text-muted-foreground">{selectedGroup.description}</p>
-            )}
-          </div>
-          <div className="text-sm text-muted-foreground">
-            {optimisticCoins.length} coin{optimisticCoins.length !== 1 ? 's' : ''}
-          </div>
-        </div>
-      )}
-      
+    <div className="space-y-6 w-full z-0 p-8">      
       <div className="space-y-14">
         <MultiPriceChartLightweight 
           coins={optimisticCoins} 

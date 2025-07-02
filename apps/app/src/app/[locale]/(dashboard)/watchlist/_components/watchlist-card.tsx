@@ -2,7 +2,6 @@
 
 import { Card, CardContent } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
-import Image from "next/image"
 import NumberFlow from '@number-flow/react'
 import { LineChart, Line, YAxis } from 'recharts'
 import { useMemo } from 'react'
@@ -22,6 +21,7 @@ import {
   TrendingDown, 
   MoreHorizontal 
 } from "lucide-react"
+import { AvatarCircles } from "@v1/ui/token-stacks"
 
 interface WatchlistGroup {
   _id: string
@@ -114,6 +114,14 @@ export function WatchlistCard({
 
   const isPositive = stats.averageChange >= 0
 
+  // Create avatar data for coin logos
+  const avatarData = useMemo(() => {
+    return coins.slice(0, 4).map((coin) => ({
+      imageUrl: `https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`,
+      profileUrl: `/charts/${coin.id}`,
+    }))
+  }, [coins])
+
   return (
     <Card className="relative w-[320px] bg-gradient-to-b from-zinc-800/50 hover:from-zinc-800/80 to-zinc-800/20 hover:to-zinc-800/50 h-auto mx-auto hover:shadow-lg shadow-md transition-colors duration-200 ease-in-out cursor-pointer overflow-hidden rounded-[20px] border-zinc-800/50 group">
       <div
@@ -148,16 +156,10 @@ export function WatchlistCard({
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-lg truncate">{group.name}</h3>
-                {group.description && (
-                  <p className="text-sm text-muted-foreground truncate mt-[-2px]">
-                    {group.description}
-                  </p>
-                )}
               </div>
             </div>
 
             {/* Actions menu */}
-            {!group.isDefault && (
               <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -185,7 +187,6 @@ export function WatchlistCard({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-            )}
           </div>
 
           {/* Stats */}
@@ -248,18 +249,14 @@ export function WatchlistCard({
               </div>
             </div>
             
-            {stats.topPerformer && (
-              <div className="flex items-center gap-1">
-                <Image
-                  src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${stats.topPerformer.id}.png`}
-                  alt={stats.topPerformer.name}
-                  className="w-4 h-4 rounded-full"
-                  width={16}
-                  height={16}
+            {/* Replace the single coin logo with avatar circles */}
+            {avatarData.length > 0 && (
+              <div className="flex items-center gap-2">
+                <AvatarCircles
+                  avatarUrls={avatarData}
+                  numPeople={coins.length > 4 ? coins.length - 4 : 0}
+                  className="scale-75 -mr-2"
                 />
-                <span className="text-green-500 font-mono">
-                  +{stats.topPerformer.quote.USD.percent_change_24h.toFixed(1)}%
-                </span>
               </div>
             )}
           </div>

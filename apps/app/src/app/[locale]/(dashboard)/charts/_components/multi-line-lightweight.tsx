@@ -24,6 +24,7 @@ import { useBottomNav } from '@/components/navigation/bottom-nav-context'
 import { Button } from '@v1/ui/button'
 import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
+import { AvatarCircles } from "@v1/ui/token-stacks"
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -128,7 +129,7 @@ const TimeScaleSelector = ({
   ]
 
   return (
-    <div className="flex gap-1 bg-zinc-900 rounded-[12px] p-1">
+    <div className="flex gap-1 bg-zinc-950/10 backdrop-blur-xl border border-zinc-800/30 rounded-[12px] p-1">
       {scales.map((scale) => (
         <button
           key={scale.value}
@@ -136,7 +137,7 @@ const TimeScaleSelector = ({
           className={cn(
             "px-2 py-1 text-xs rounded-lg",
             activeTimeScale === scale.value
-              ? "bg-zinc-800/50 border border-zinc-800/50 text-white"
+              ? "bg-zinc-800/50 border border-zinc-800/50  shadow-md shadow-zinc-950/50 text-white"
               : "bg-transparent text-muted-foreground hover:bg-muted/80"
           )}
         >
@@ -268,6 +269,14 @@ export function MultiPriceChartLightweight({
       latestValue: series.data[series.data.length - 1]?.value || 0
     }))
   }, [coinSeriesData])
+
+  // Create avatar data for coin logos
+  const avatarData = useMemo(() => {
+    return coinsWithData.map((coin) => ({
+      imageUrl: `https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`,
+      profileUrl: `/charts/${coin.id}`,
+    }))
+  }, [coinsWithData])
 
   useEffect(() => {
     if (!chartContainerRef.current || !coinSeriesData.length) return
@@ -591,7 +600,16 @@ export function MultiPriceChartLightweight({
             }}
           />
           <Card className="border-none bg-transparent">
-            <CardHeader className="flex flex-row items-center justify-end">
+            <CardHeader className="flex flex-row items-center justify-between">
+              {/* Coin Avatar Stacks */}
+              {avatarData.length > 0 && (
+                <AvatarCircles
+                  avatarUrls={avatarData}
+                  className="scale-75 -ml-2"
+                />
+              )}
+              
+              {/* Time Scale Selector */}
               <TimeScaleSelector
                 activeTimeScale={activeTimeScale}
                 setActiveTimeScale={setActiveTimeScale}

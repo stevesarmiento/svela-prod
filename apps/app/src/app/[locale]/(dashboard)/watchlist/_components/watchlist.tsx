@@ -566,22 +566,7 @@ export function Watchlist() {
         {/* Watchlists Grid */}
         <WatchlistsGrid onSelectWatchlist={selectWatchlistGroup} />
         
-        <div className="space-y-4">
-          {/* Selected Group Header */}
-          {selectedGroup && (
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-semibold">{selectedGroup.name}</h3>
-                {selectedGroup.description && (
-                  <p className="text-sm text-muted-foreground">{selectedGroup.description}</p>
-                )}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {selectedGroupCoins.length} coin{selectedGroupCoins.length !== 1 ? 's' : ''}
-              </div>
-            </div>
-          )}
-          
+        <div className="space-y-4">          
           <div className="flex items-center justify-between gap-2">
           <WatchlistFilters
             searchText={filters.searchText}
@@ -627,20 +612,6 @@ export function Watchlist() {
       <WatchlistsGrid onSelectWatchlist={selectWatchlistGroup} />
       
       <div className="space-y-4">
-        {/* Selected Group Header */}
-        {selectedGroup && (
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold">{selectedGroup.name}</h3>
-              {selectedGroup.description && (
-                <p className="text-sm text-muted-foreground">{selectedGroup.description}</p>
-              )}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {selectedGroupCoins.length} coin{selectedGroupCoins.length !== 1 ? 's' : ''}
-            </div>
-          </div>
-        )}
         
         <div className="flex items-center justify-between gap-2">
       <WatchlistFilters
