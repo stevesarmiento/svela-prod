@@ -33,9 +33,22 @@ interface OHLCVDataPoint {
 }
 
 export function useChartsData() {
-  const { watchlist, isInitialized } = useWatchlist()
+  const { 
+    watchlist, 
+    isInitialized,
+    selectedGroup,
+    selectedGroupCoins
+  } = useWatchlist()
   const [coinsData, setCoinsData] = useState<Map<number, OptimisticCoinMarketData>>(new Map())
   const [activeTimeScale, setActiveTimeScale] = useState<string>("7d")
+  
+  // Use selected group coins if available, otherwise fall back to legacy watchlist
+  const currentWatchlist = selectedGroup ? selectedGroupCoins : watchlist
+  
+  // Debug logging
+  console.log('useChartsData - selectedGroup:', selectedGroup?.name, 'coins:', selectedGroupCoins.length)
+  console.log('useChartsData - legacy watchlist coins:', watchlist.length)
+  console.log('useChartsData - currentWatchlist coins:', currentWatchlist.length)
 
   const fetchCoinData = useCallback(async (coinIds: number[]) => {
     if (!coinIds.length) return;
@@ -92,7 +105,7 @@ export function useChartsData() {
   const optimisticCoins = useMemo(() => {
     if (!isInitialized) return [];
     
-    const coins = watchlist.map(coinId => {
+    const coins = currentWatchlist.map(coinId => {
       const existingCoin = coinsData.get(coinId);
       
       if (existingCoin && !existingCoin.isOptimistic) {
@@ -136,13 +149,13 @@ export function useChartsData() {
       if (b.isOptimistic) return -1;
       return (a.cmc_rank || 999999) - (b.cmc_rank || 999999);
     });
-  }, [watchlist, coinsData, isInitialized]);
+  }, [currentWatchlist, coinsData, isInitialized]);
 
   // Fetch data when watchlist or time scale changes
   useEffect(() => {
-    if (!isInitialized || !watchlist.length) return;
-    fetchCoinData(watchlist);
-  }, [watchlist, isInitialized, fetchCoinData, activeTimeScale])
+    if (!isInitialized || !currentWatchlist.length) return;
+    fetchCoinData(currentWatchlist);
+  }, [currentWatchlist, isInitialized, fetchCoinData, activeTimeScale])
 
   // Clean up removed coins
   useEffect(() => {
@@ -150,7 +163,7 @@ export function useChartsData() {
     
     setCoinsData(prev => {
       const newMap = new Map();
-      const currentIds = new Set(watchlist);
+      const currentIds = new Set(currentWatchlist);
       
       prev.forEach((coin, id) => {
         if (currentIds.has(id)) {
@@ -160,15 +173,16 @@ export function useChartsData() {
       
       return newMap;
     });
-  }, [watchlist, isInitialized]);
+  }, [currentWatchlist, isInitialized]);
 
   return {
     optimisticCoins,
     activeTimeScale,
     setActiveTimeScale,
     isInitialized,
-    hasWatchlistItems: watchlist.length > 0,
-    isLoading: !isInitialized
+    hasWatchlistItems: currentWatchlist.length > 0,
+    isLoading: !isInitialized,
+    selectedGroup // Also return selected group info for display
   }
 }
 

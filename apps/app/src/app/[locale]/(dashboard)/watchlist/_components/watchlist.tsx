@@ -25,6 +25,7 @@ import {
 import { useState, useMemo, useCallback } from 'react'
 import { Spinner } from "@v1/ui/spinner"
 import { motion, AnimatePresence } from "framer-motion"
+import { WatchlistsGrid } from "./watchlists-grid"
 
 // Define the coin type for the table
 interface WatchlistCoin {
@@ -310,7 +311,20 @@ const createColumns = (
 ];
 
 export function Watchlist() {
-  const { watchlist, removeFromWatchlist, removeBulkFromWatchlist, isInitialized } = useWatchlist()
+  const { 
+    // Legacy for backward compatibility
+    watchlist, 
+    removeFromWatchlist, 
+    removeBulkFromWatchlist, 
+    isInitialized,
+    // New group functionality
+    selectedGroup,
+    selectedGroupCoins,
+    selectWatchlistGroup,
+    removeFromSelectedGroup,
+    removeBulkFromSelectedGroup
+  } = useWatchlist()
+  
   const [sorting, setSorting] = useState<SortingState>([])
   const [selectedCoins, setSelectedCoins] = useState<Set<string>>(new Set())
   const [removingCoins, setRemovingCoins] = useState<Set<number>>(new Set())
@@ -327,7 +341,9 @@ export function Watchlist() {
     sortOrder: "asc",
   })
   
-  const stableWatchlist = useMemo(() => watchlist, [watchlist]);
+  // Use selected group coins if available, otherwise fall back to legacy watchlist
+  const currentWatchlist = selectedGroup ? selectedGroupCoins : watchlist;
+  const stableWatchlist = useMemo(() => currentWatchlist, [currentWatchlist]);
   
   const { 
     data: coins, 
@@ -420,7 +436,12 @@ export function Watchlist() {
     setRemovingCoins(prev => new Set([...prev, coinId]));
     
     try {
-      await removeFromWatchlist(coinId);
+      // Use group-specific remove function if a group is selected
+      if (selectedGroup) {
+        await removeFromSelectedGroup(coinId);
+      } else {
+        await removeFromWatchlist(coinId);
+      }
       
       toast({
         title: "Removed",
@@ -433,7 +454,7 @@ export function Watchlist() {
         return newSet;
       });
     }
-  }, [removeFromWatchlist]);
+  }, [selectedGroup, removeFromSelectedGroup, removeFromWatchlist]);
 
   // Selection handlers
   const handleCoinSelect = useCallback((coinId: string, selected: boolean) => {
@@ -461,7 +482,12 @@ export function Watchlist() {
     setRemovingCoins(new Set(coinIdsToRemove));
     
     try {
-      await removeBulkFromWatchlist(coinIdsToRemove);
+      // Use group-specific bulk remove function if a group is selected
+      if (selectedGroup) {
+        await removeBulkFromSelectedGroup(coinIdsToRemove);
+      } else {
+        await removeBulkFromWatchlist(coinIdsToRemove);
+      }
       setSelectedCoins(new Set());
       toast({
         title: "Success",
@@ -476,7 +502,7 @@ export function Watchlist() {
     } finally {
       setRemovingCoins(new Set());
     }
-  }, [selectedCoins, removeBulkFromWatchlist]);
+  }, [selectedCoins, selectedGroup, removeBulkFromSelectedGroup, removeBulkFromWatchlist]);
 
   // Filter handlers
   const handleClearAllFilters = useCallback(() => {
@@ -536,9 +562,27 @@ export function Watchlist() {
   // No coins in watchlist at all
   if (!watchlist.length) {
     return (
-      <div className="space-y-4 px-4">
+      <div className="space-y-6 px-4">
+        {/* Watchlists Grid */}
+        <WatchlistsGrid onSelectWatchlist={selectWatchlistGroup} />
         
-        <div className="flex items-center justify-between gap-2">
+        <div className="space-y-4">
+          {/* Selected Group Header */}
+          {selectedGroup && (
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold">{selectedGroup.name}</h3>
+                {selectedGroup.description && (
+                  <p className="text-sm text-muted-foreground">{selectedGroup.description}</p>
+                )}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {selectedGroupCoins.length} coin{selectedGroupCoins.length !== 1 ? 's' : ''}
+              </div>
+            </div>
+          )}
+          
+          <div className="flex items-center justify-between gap-2">
           <WatchlistFilters
             searchText={filters.searchText}
             priceRange={filters.priceRange}
@@ -572,13 +616,33 @@ export function Watchlist() {
             </div>
           </div>
         </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-4 px-4">
-      <div className="flex items-center justify-between gap-2">
+    <div className="space-y-6 px-4">
+      {/* Watchlists Grid */}
+      <WatchlistsGrid onSelectWatchlist={selectWatchlistGroup} />
+      
+      <div className="space-y-4">
+        {/* Selected Group Header */}
+        {selectedGroup && (
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold">{selectedGroup.name}</h3>
+              {selectedGroup.description && (
+                <p className="text-sm text-muted-foreground">{selectedGroup.description}</p>
+              )}
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {selectedGroupCoins.length} coin{selectedGroupCoins.length !== 1 ? 's' : ''}
+            </div>
+          </div>
+        )}
+        
+        <div className="flex items-center justify-between gap-2">
       <WatchlistFilters
         searchText={filters.searchText}
         priceRange={filters.priceRange}
@@ -728,8 +792,9 @@ export function Watchlist() {
             );
           })}
         </div>
-      </div>
+              </div>
       )}
+      </div>
     </div>
   )
 }

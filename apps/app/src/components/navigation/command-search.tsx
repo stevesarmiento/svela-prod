@@ -13,6 +13,7 @@ import {
 import Image from 'next/image';
 import { Skeleton } from "@v1/ui/skeleton";
 import { useRouter } from 'next/navigation';
+import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
 
 // Custom hooks
 import { useCommandInput } from '@/hooks/use-command-input';
@@ -31,6 +32,7 @@ interface CommandSearchProps {
 
 export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, context = null }: CommandSearchProps) => {
   const router = useRouter();
+  const navigation = useWatchlistPreservingNavigation();
   
   // Custom hooks
   const { inputRef } = useCommandInput(isOpen);
@@ -55,8 +57,8 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   const handleTokenNavigation = useCallback((coinId: number) => {
     clearSearch();
     setIsOpen(false);
-    router.push(`/charts/${coinId}`);
-  }, [clearSearch, setIsOpen, router]);
+    router.push(navigation.buildUrl(`/charts/${coinId}`));
+  }, [clearSearch, setIsOpen, router, navigation]);
 
   // Handle contextual command actions
   const handleContextualAction = useCallback((action: string) => {
@@ -66,13 +68,13 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
     // Handle different contextual actions
     switch (action) {
       case 'top-gainers':
-        router.push('/overview?filter=gainers');
+        router.push(navigation.buildUrl('/overview?filter=gainers'));
         break;
       case 'market-overview':
-        router.push('/overview?view=market');
+        router.push(navigation.buildUrl('/overview?view=market'));
         break;
       case 'trending-tokens':
-        router.push('/overview?filter=trending');
+        router.push(navigation.buildUrl('/overview?filter=trending'));
         break;
       case 'add-token':
         // Could open a modal or focus search
@@ -99,7 +101,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
       default:
         console.log('Unknown action:', action);
     }
-  }, [clearSearch, setIsOpen, router]);
+  }, [clearSearch, setIsOpen, router, navigation]);
 
   // Handle command selection
   const handleCommandSelect = useCallback(async (value: string) => {

@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { MENU_ITEMS } from './bottom-nav-constants';
 import { usePathHelper } from './bottom-nav-hooks';
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
+import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings';
 
@@ -15,16 +16,33 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
   const pathname = usePathname();
   const router = useRouter();
   const getCleanPath = usePathHelper();
+  const navigation = useWatchlistPreservingNavigation();
+
+  // Map menu items to their preserved URLs
+  const getItemUrl = useCallback((item: { href: string; title: string; icon: React.ComponentType<{ className?: string }> }) => {
+    switch (item.href) {
+      case "/charts":
+        return navigation.charts;
+      case "/watchlist":
+        return navigation.watchlist;
+      case "/overview":
+        return navigation.overview;
+      case "/settings":
+        return navigation.settings;
+      default:
+        return item.href;
+    }
+  }, [navigation]);
 
   const handleItemClick = useCallback((item: typeof MENU_ITEMS[number], isActive: boolean) => {
     return () => {
       if (isActive) {
         onOpenCommandSearch(item.title.toLowerCase() as CommandContext);
       } else {
-        router.push(item.href);
+        router.push(getItemUrl(item));
       }
     };
-  }, [router, onOpenCommandSearch]);
+  }, [router, onOpenCommandSearch, getItemUrl]);
 
   return (
     <div className="flex items-center gap-2">

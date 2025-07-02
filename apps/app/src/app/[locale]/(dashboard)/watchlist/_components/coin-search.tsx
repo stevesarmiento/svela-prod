@@ -64,7 +64,7 @@ interface CoinSearchResult {
 }
 
 export function CoinSearch() {
-  const { addToWatchlist } = useWatchlist()
+  const { addToWatchlist, addToSelectedGroup, selectedGroup } = useWatchlist()
   const { user } = useUser()
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -125,11 +125,18 @@ export function CoinSearch() {
 
     try {
       setIsAdding(true)
-      await addToWatchlist(Number(coin.id))
       
+      // Use group-specific add function if a group is selected
+      if (selectedGroup) {
+        await addToSelectedGroup(Number(coin.id))
+      } else {
+        await addToWatchlist(Number(coin.id))
+      }
+      
+      const targetName = selectedGroup ? selectedGroup.name : "your watchlist"
       toast({
         title: "Success",
-        description: `Added ${coin.name} to your watchlist`,
+        description: `Added ${coin.name} to ${targetName}`,
       })
       setSearchQuery('')
       setIsOpen(false)

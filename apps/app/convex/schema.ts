@@ -21,12 +21,28 @@ export default defineSchema({
   })
     .index("by_user", ["userId"]),
 
+  watchlistGroups: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    slug: v.string(), // URL-friendly identifier
+    description: v.optional(v.string()),
+    isDefault: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_default", ["userId", "isDefault"])
+    .index("by_user_slug", ["userId", "slug"]),
+
   watchlists: defineTable({
     userId: v.id("users"),
+    watchlistGroupId: v.id("watchlistGroups"),
     coinId: v.string(),
   })
     .index("by_user", ["userId"])
-    .index("by_user_coin", ["userId", "coinId"]),
+    .index("by_user_coin", ["userId", "coinId"])
+    .index("by_group", ["watchlistGroupId"])
+    .index("by_group_coin", ["watchlistGroupId", "coinId"]),
 
   coins: defineTable({
     coinId: v.number(),

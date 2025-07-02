@@ -311,6 +311,7 @@ export function MultiPriceChartLightweight({
         },
       },
       timeScale: {
+        visible: false,
         timeVisible: true,
         secondsVisible: false,
         borderVisible: false,
