@@ -127,7 +127,7 @@ export function PriceCard({
               </span>
               <div className={cn(
                 "flex items-center gap-1 text-sm font-medium",
-                isPositive ? "text-green-500" : "text-red-500"
+                isPositive ? "text-emerald-500" : "text-rose-500"
               )}>
                 <span>{isPositive ? "↗" : "↘"}</span>
                 <NumberFlow

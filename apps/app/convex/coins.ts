@@ -121,3 +121,290 @@ export const getCoinsByIds = query({
     return orderedCoins;
   },
 });
+
+export const getCoinById = query({
+  args: { coinId: v.number() },
+  handler: async (ctx, args) => {
+    const coins = await ctx.db.query("coins").collect();
+    return coins.find(coin => coin.coinId === args.coinId) || null;
+  },
+});
+
+export const getCoinByIdString = query({
+  args: { coinId: v.string() },
+  handler: async (ctx, args) => {
+    const id = parseInt(args.coinId);
+    if (isNaN(id)) return null;
+    
+    const coins = await ctx.db.query("coins").collect();
+    return coins.find(coin => coin.coinId === id) || null;
+  },
+});
+
+export const bulkUpsertMetadata = mutation({
+  args: { 
+    metadata: v.array(v.object({
+      coinId: v.number(),
+      slug: v.string(),
+      name: v.string(),
+      symbol: v.string(),
+      description: v.optional(v.string()),
+      logo: v.string(),
+      dateAdded: v.optional(v.string()),
+      dateLaunched: v.optional(v.string()),
+      tags: v.optional(v.array(v.string())),
+      category: v.optional(v.string()),
+      platform: v.optional(v.object({
+        id: v.number(),
+        name: v.string(),
+        symbol: v.string(),
+        slug: v.string(),
+        token_address: v.string(),
+      })),
+      urls: v.optional(v.object({
+        website: v.optional(v.array(v.string())),
+        technical_doc: v.optional(v.array(v.string())),
+        twitter: v.optional(v.array(v.string())),
+        reddit: v.optional(v.array(v.string())),
+        message_board: v.optional(v.array(v.string())),
+        announcement: v.optional(v.array(v.string())),
+        chat: v.optional(v.array(v.string())),
+        explorer: v.optional(v.array(v.string())),
+        source_code: v.optional(v.array(v.string())),
+      })),
+    }))
+  },
+  handler: async (ctx, args) => {
+    const existingMetadata = await ctx.db.query("coinMetadata").collect();
+    const existingIds = new Set(existingMetadata.map(m => m.coinId));
+    
+    for (const meta of args.metadata) {
+      if (existingIds.has(meta.coinId)) {
+        const existing = existingMetadata.find(m => m.coinId === meta.coinId);
+        if (existing) {
+          await ctx.db.patch(existing._id, {
+            ...meta,
+            lastUpdated: Date.now(),
+          });
+        }
+      } else {
+        await ctx.db.insert("coinMetadata", {
+          ...meta,
+          lastUpdated: Date.now(),
+        });
+      }
+    }
+  },
+});
+
+export const getMetadataByCoinId = query({
+  args: { coinId: v.number() },
+  handler: async (ctx, args) => {
+    const metadata = await ctx.db
+      .query("coinMetadata")
+      .withIndex("by_coin_id", (q) => q.eq("coinId", args.coinId))
+      .first();
+    return metadata;
+  },
+});
+
+export const getMetadataBySlug = query({
+  args: { slug: v.string() },
+  handler: async (ctx, args) => {
+    const metadata = await ctx.db
+      .query("coinMetadata")
+      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
+      .first();
+    return metadata;
+  },
+});
+
+// CoinGlass supported coins mutations and queries
+export const bulkUpsertCoinglassSupportedCoins = mutation({
+  args: { symbols: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    const existingSupportedCoins = await ctx.db.query("coinglassSupportedCoins").collect();
+    const existingSymbols = new Set(existingSupportedCoins.map(coin => coin.symbol));
+    
+    // Mark all existing coins as inactive first
+    for (const existing of existingSupportedCoins) {
+      await ctx.db.patch(existing._id, {
+        isActive: false,
+        lastUpdated: Date.now(),
+      });
+    }
+    
+    // Process new/updated symbols
+    for (const symbol of args.symbols) {
+      if (existingSymbols.has(symbol)) {
+        // Reactivate existing symbol
+        const existing = existingSupportedCoins.find(c => c.symbol === symbol);
+        if (existing) {
+          await ctx.db.patch(existing._id, {
+            isActive: true,
+            lastUpdated: Date.now(),
+          });
+        }
+      } else {
+        // Insert new supported coin
+        await ctx.db.insert("coinglassSupportedCoins", {
+          symbol,
+          isActive: true,
+          lastUpdated: Date.now(),
+        });
+      }
+    }
+  },
+});
+
+export const getCoinglassSupportedCoins = query({
+  args: { onlyActive: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const onlyActive = args.onlyActive ?? true;
+    
+    if (onlyActive) {
+      return await ctx.db
+        .query("coinglassSupportedCoins")
+        .withIndex("by_active", (q) => q.eq("isActive", true))
+        .collect();
+    }
+    
+    return await ctx.db.query("coinglassSupportedCoins").collect();
+  },
+});
+
+export const isCoinglassSupported = query({
+  args: { symbol: v.string() },
+  handler: async (ctx, args) => {
+    const supportedCoin = await ctx.db
+      .query("coinglassSupportedCoins")
+      .withIndex("by_symbol", (q) => q.eq("symbol", args.symbol.toUpperCase()))
+      .first();
+    
+    return supportedCoin?.isActive ?? false;
+  },
+});
+
+export const getCoinglassSupportedSymbols = query({
+  args: {},
+  handler: async (ctx) => {
+    const supportedCoins = await ctx.db
+      .query("coinglassSupportedCoins")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+    
+    return supportedCoins.map(coin => coin.symbol);
+  },
+});
+
+// Enhanced CoinGlass symbol lookup with fallback strategies
+export const getCoinglassSymbolByCoinId = query({
+  args: { coinId: v.number() },
+  handler: async (ctx, args) => {
+    // First get the coin data
+    const coin = await ctx.db
+      .query("coins")
+      .filter((q) => q.eq(q.field("coinId"), args.coinId))
+      .first();
+    
+    if (!coin) {
+      return null;
+    }
+    
+    // Get metadata for additional info
+    const metadata = await ctx.db
+      .query("coinMetadata")
+      .withIndex("by_coin_id", (q) => q.eq("coinId", args.coinId))
+      .first();
+    
+    // Try multiple symbol variations to find a supported one
+    const symbolsToTry = [
+      coin.symbol.toUpperCase(),
+      metadata?.symbol?.toUpperCase(),
+      // Common variations
+      coin.symbol.replace(/USD$/, '').toUpperCase(),
+      metadata?.symbol?.replace(/USD$/, '').toUpperCase(),
+    ].filter(Boolean) as string[];
+    
+    // Remove duplicates
+    const uniqueSymbols = [...new Set(symbolsToTry)];
+    
+    // Check each symbol variation for CoinGlass support
+    for (const symbolToCheck of uniqueSymbols) {
+      const isSupported = await ctx.db
+        .query("coinglassSupportedCoins")
+        .withIndex("by_symbol", (q) => q.eq("symbol", symbolToCheck))
+        .first();
+      
+      if (isSupported?.isActive) {
+        return {
+          symbol: symbolToCheck,
+          name: metadata?.name || coin.name,
+          coinId: args.coinId,
+          isSupported: true,
+          originalSymbol: coin.symbol,
+          metadataSymbol: metadata?.symbol
+        };
+      }
+    }
+    
+    return null;
+  },
+});
+
+// Get coin info by symbol for reverse lookup
+export const getCoinBySymbol = query({
+  args: { symbol: v.string() },
+  handler: async (ctx, args) => {
+    const symbolUpper = args.symbol.toUpperCase();
+    
+    // Try to find in coins table first
+    const coin = await ctx.db
+      .query("coins")
+      .filter((q) => q.eq(q.field("symbol"), symbolUpper))
+      .first();
+    
+    if (coin) {
+      return coin;
+    }
+    
+    // Try metadata table as fallback
+    const metadata = await ctx.db
+      .query("coinMetadata")
+      .withIndex("by_symbol", (q) => q.eq("symbol", symbolUpper))
+      .first();
+    
+    if (metadata) {
+      // Get the corresponding coin
+      const coinFromMetadata = await ctx.db
+        .query("coins")
+        .filter((q) => q.eq(q.field("coinId"), metadata.coinId))
+        .first();
+      
+      return coinFromMetadata;
+    }
+    
+    return null;
+  },
+});
+
+// Get all coins that are supported by CoinGlass
+export const getCoinglassSupportedCoinsList = query({
+  args: {},
+  handler: async (ctx) => {
+    const supportedSymbols = await ctx.db
+      .query("coinglassSupportedCoins")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .collect();
+    
+    const symbolSet = new Set(supportedSymbols.map(s => s.symbol));
+    
+    // Get coins that match these symbols
+    const allCoins = await ctx.db.query("coins").collect();
+    const supportedCoins = allCoins.filter(coin => 
+      symbolSet.has(coin.symbol.toUpperCase())
+    );
+    
+    return supportedCoins;
+  },
+});

@@ -1,15 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
-import { Table, TableBody, TableCell, TableRow } from "@v1/ui/table"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
-import { 
-  IconDollarsign, 
-  IconChartBarXaxis, 
-  IconTrophyFill, 
-  IconTarget, 
-  IconInfinity, 
-  IconChartLineUptrendXyaxis 
-} from "symbols-react"
+import { Fragment } from "react"
+import { IconLaurelLeading, IconLaurelTrailing } from "symbols-react"
 
 interface MarketMetricsProps {
   data: {
@@ -29,70 +21,86 @@ interface MarketMetricsProps {
 }
 
 export function MarketMetrics({ data }: MarketMetricsProps) {
-  const metrics: { label: string; value: string; className?: string; icon: React.ReactNode }[] = [
+  const metrics: { label: string; value: string; className?: string; }[] = [
     { 
       label: 'Market Cap', 
       value: `$${formatLargeNumber(data.quote.USD.market_cap)}`,
-      icon: <IconDollarsign className="h-4 w-4 fill-muted-foreground" />
     },
     { 
       label: '24h Volume', 
       value: `$${formatLargeNumber(data.quote.USD.volume_24h)}`,
-      icon: <IconChartBarXaxis className="h-4 w-4 fill-muted-foreground" />
-    },
-    { 
-      label: 'CMC Rank', 
-      value: `#${data.cmc_rank}`,
-      icon: <IconTrophyFill className="h-4 w-4 fill-muted-foreground" />
-    },
-    { 
-      label: 'Circulating Supply', 
-      value: `${data.circulating_supply.toLocaleString()} ${data.symbol}`,
-      icon: <IconTarget className="h-4 w-4 fill-muted-foreground" />
-    },
-    { 
-      label: 'Max Supply', 
-      value: data.max_supply ? `${data.max_supply.toLocaleString()} ${data.symbol}` : 'Unlimited',
-      icon: <IconInfinity className="h-4 w-4 fill-muted-foreground" />
     },
     { 
       label: '24h Change', 
       value: `${data.quote.USD.percent_change_24h.toFixed(2)}%`,
-      className: data.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600',
-      icon: <IconChartLineUptrendXyaxis className="h-4 w-4 fill-muted-foreground" />
+      className: data.quote.USD.percent_change_24h > 0 ? 'text-emerald-500' : 'text-rose-500',
+    },
+    { 
+      label: 'Circulating Supply', 
+      value: `${(data.circulating_supply.toLocaleString())}`,
+    },
+    { 
+      label: 'Max Supply', 
+      value: data.max_supply ? `${data.max_supply.toLocaleString()}` : 'Unlimited',
     },
   ]
 
   return (
-    <Card>
-      <CardHeader className="border-b border-foreground/10 pb-4 pt-6">
-        <CardTitle className="font-mono">Market Metrics</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table className="[&_tr:last-child]:border-0 font-mono border-0 mt-4">
-          <TableBody className="border-0">
-            {metrics.map((metric, index) => (
-              <TableRow 
-                key={metric.label}
-                className={cn(
-                  "border-0",
-                  index % 2 === 0 ? "bg-transparent" : "bg-white/5"
-                )}
-              >
-                <TableCell className="font-medium border-0">
-                  <div className="flex flex-row items-center gap-2">
-                    {metric.icon}
-                    <span className="opacity-60">{metric.label}</span>
-                  </div>
-                </TableCell>
-                <TableCell className={cn("text-right border-0", metric.className)}>
-                  {metric.value}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+    <div className="space-y-6">
+      {/* Global Rank Section */}
+      <div className="relative flex items-center justify-center py-4">
+        {/* Background separator line */}
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-foreground/10 to-transparent" />
+        </div>
+        
+        {/* Rank content */}
+        <div className="relative flex items-center gap-3 bg-background px-0 rounded-full">
+          <IconLaurelLeading className="w-10 h-10 fill-foreground/20" />
+          
+          <div className="flex flex-col items-center">
+            <span className="text-[11px] uppercase text-muted-foreground font-medium">Rank</span>
+            <span className="text-2xl font-mono text-white">{data.cmc_rank}</span>
+          </div>
+          
+          <IconLaurelTrailing className="w-10 h-10 fill-foreground/20" />
+        </div>
+      </div>
+
+      {/* Metrics Grid */}
+      <div className="grid grid-cols-9 items-center">
+        {metrics.map((metric, index) => (
+          <Fragment key={metric.label}>
+            <div 
+              className={cn(
+                "flex flex-col items-center py-4 col-span-1",
+              )}
+            >
+              {/* Icon and Label */}
+              <div className="flex items-center gap-2 text-center">
+                <span className="text-[11px] text-muted-foreground font-medium">
+                  {metric.label}
+                </span>
+              </div>
+              
+              {/* Value - Centered */}
+              <div className={cn(
+                "text-md font-mono text-center",
+                metric.className || "text-foreground"
+              )}>
+                {metric.value}
+              </div>
+            </div>
+            
+            {/* Separator - only between items, not after the last one */}
+            {index < metrics.length - 1 && (
+              <div className="flex justify-center col-span-1">
+                <div className="h-[77px] w-[1px] bg-gradient-to-b from-transparent via-foreground/20 to-transparent" />
+              </div>
+            )}
+          </Fragment>
+        ))}
+      </div>
+    </div>
   )
 }

@@ -191,7 +191,7 @@ export function ComparisonCard({
                       
                       <div className={cn(
                         "flex items-center gap-1 text-xs font-medium min-w-0",
-                        isPositive ? "text-green-500" : "text-red-500"
+                        isPositive ? "text-emerald-500" : "text-rose-500"
                       )}>
                         <span>{isPositive ? "↗" : "↘"}</span>
                         <NumberFlow

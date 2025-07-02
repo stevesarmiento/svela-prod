@@ -1,8 +1,18 @@
 import { streamText } from 'ai';
-import { openai } from '@/lib/openai';
+import { openai, isOpenAIAvailable } from '@/lib/openai';
 
 export async function POST(req: Request) {
   try {
+    // Check if OpenAI is available
+    if (!isOpenAIAvailable || !openai) {
+      console.warn('OpenAI not available, returning default response');
+      return Response.json({ 
+        type: 'none', 
+        coins: [], 
+        intent: 'openai_unavailable' 
+      });
+    }
+
     const { message, systemPrompt } = await req.json();
     
     const result = await streamText({

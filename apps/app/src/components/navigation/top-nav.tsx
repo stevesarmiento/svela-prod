@@ -22,7 +22,12 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 import { SignOutButton, useClerk } from "@clerk/nextjs";
 import { Fingerprint, LogOut } from "lucide-react";
+import { IconChevronBackward } from 'symbols-react';
 import { SvelaLogo } from "@v1/ui/svela-logo";
+import { useTokenHeader } from "@/hooks/use-token-header";
+import { WatchlistButton } from "./watchlist-button";
+import { AnalysisDialog } from "./analysis-dialog";
+import Image from "next/image";
 
 
 // const menuItems = [
@@ -86,6 +91,10 @@ export function TopNav() {
   const pathname = usePathname();
   const [greeting, setGreeting] = useState("Dashboard");
   const [isMounted, setIsMounted] = useState(false);
+  const { isChartDetailPage, tokenData, isLoading } = useTokenHeader();
+
+  // Extract coin ID from pathname for watchlist button
+  const coinId = isChartDetailPage ? pathname.split('/').pop() : null;
 
   // Update greeting based on route after component mounts
   useEffect(() => {
@@ -109,27 +118,75 @@ export function TopNav() {
   return (
     <div className="py-12 px-4 z-50">
       <div className="flex h-16 items-center px-4 gap-4">
-        {/* Logo and Greeting */}
+        {/* Conditional Logo/Token Header */}
         <div className="flex items-center gap-3">
-          <Link href="/overview">
-            <SvelaLogo 
-              width={22} 
-              height={22} 
-              className="text-white/30"
-              fillColor="currentColor"
-              strokeOpacity={0.3}
-            />
-          </Link>
-          <span className="text-lg font-bold text-white">
-            {isMounted 
-              ? isOverviewRoute 
-                ? `${greeting}, ${firstName}` 
-                : greeting
-              : isOverviewRoute 
-                ? `Dashboard, ${firstName}` 
-                : "Dashboard"
-            }
-          </span>
+          {isChartDetailPage ? (
+            // Token Header with cached data
+            <div className="flex items-center gap-4">
+              <Link href="/charts" className="flex text-white/70 hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150">
+                <IconChevronBackward className="h-3 w-3 fill-current" />
+              </Link>
+              <div className="flex items-center gap-2">
+                {tokenData && !isLoading && (
+                  <Image
+                    src={tokenData.logoUrl}
+                    alt={tokenData.name}
+                    className="w-8 h-8 rounded-full ring-1 ring-white/10"
+                    width={32}
+                    height={32}
+                    priority={true} // Load token logos with priority
+                    placeholder="blur"
+                    blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGBkbHB0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
+                    onError={(e) => {
+                      // Fallback to a default image if the token logo fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.src = '/favicon.ico';
+                    }}
+                  />
+                )}
+                <div className="flex flex-col gap-0">
+                  <h1 className="text-sm font-semibold text-white">
+                    {isLoading ? (
+                      <div className="h-4 w-16 bg-white/10 rounded animate-pulse" />
+                    ) : (
+                      tokenData?.symbol || 'Token Details'
+                    )}
+                  </h1>
+                  <p className="text-xs text-white">
+                    <span className="text-xs text-white/60">Today is </span> 
+                    {new Date().toLocaleDateString('en-US', { 
+                      weekday: 'long', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            // Default Logo and Greeting
+            <>
+              <Link href="/overview">
+                <SvelaLogo 
+                  width={22} 
+                  height={22} 
+                  className="text-white/30"
+                  fillColor="currentColor"
+                  strokeOpacity={0.3}
+                />
+              </Link>
+              <span className="text-lg font-bold text-white">
+                {isMounted 
+                  ? isOverviewRoute 
+                    ? `${greeting}, ${firstName}` 
+                    : greeting
+                  : isOverviewRoute 
+                    ? `Dashboard, ${firstName}` 
+                    : "Dashboard"
+                }
+              </span>
+            </>
+          )}
         </div>
 
         {/* Navigation menu */}
@@ -153,55 +210,73 @@ export function TopNav() {
         {/* Spacer */}
         <div className="flex-1" />
 
-        {/* User dropdown */}
+        {/* Right side - Conditional based on page type */}
         {user && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-8 w-8">
-                <Avatar className="h-8 w-8 rounded-md shadow-sm shadow-black/30 hover:ring-4 ring-1 ring-black/10 dark:ring-white/10 transition-all ease-in-out duration-150">
-                  {avatarUrl && (
-                    <AvatarImage 
-                      src={avatarUrl} 
-                      alt={name || email?.split('@')[0] || 'User'} 
-                    />
-                  )}
-                  <AvatarFallback>
-                    {email ? email.substring(0, 2).toUpperCase() : "UN"}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56 bg-zinc-900 rounded-xl z-[101]" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">
-                    {name || email?.split('@')[0] || 'User'}
-                  </p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {email}
-                  </p>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleProfileClick} className="cursor-pointer rounded-xl">
-                <Fingerprint className="mr-2 h-4 w-4 text-primary/50" />
-                Authentication
-              </DropdownMenuItem>
-              {/* <DropdownMenuItem>
-                <IconGear className="mr-2 h-4 w-4 fill-primary/50" />
-                Settings
-              </DropdownMenuItem> */}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="cursor-pointer w-full rounded-xl" asChild>
-                <SignOutButton>
-                  <button className="w-full text-left flex items-center">
-                    <LogOut className="mr-2 h-4 w-4 text-primary/50" />
-                    Sign out
-                  </button>
-                </SignOutButton>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-2">
+            {isChartDetailPage && coinId && (
+              <>
+                <AnalysisDialog 
+                  coinId={coinId} 
+                  tokenData={tokenData}
+                />
+                <WatchlistButton 
+                  coinId={coinId} 
+                  coinName={tokenData?.name || tokenData?.symbol}
+                />
+              </>
+            )}
+            
+            {!isChartDetailPage && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-8 w-8">
+                  <Avatar className="h-8 w-8 rounded-md shadow-sm shadow-black/30 hover:ring-4 ring-1 ring-black/10 dark:ring-white/10 transition-all ease-in-out duration-150">
+                    {avatarUrl && (
+                      <AvatarImage 
+                        src={avatarUrl} 
+                        alt={name || email?.split('@')[0] || 'User'}
+                        loading="lazy" // Lazy load user avatars
+                      />
+                    )}
+                    <AvatarFallback>
+                      {email ? email.substring(0, 2).toUpperCase() : "UN"}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56 bg-zinc-900 rounded-xl z-[101]" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {name || email?.split('@')[0] || 'User'}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {email}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleProfileClick} className="cursor-pointer rounded-xl">
+                  <Fingerprint className="mr-2 h-4 w-4 text-primary/50" />
+                  Authentication
+                </DropdownMenuItem>
+                {/* <DropdownMenuItem>
+                  <IconGear className="mr-2 h-4 w-4 fill-primary/50" />
+                  Settings
+                </DropdownMenuItem> */}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="cursor-pointer w-full rounded-xl" asChild>
+                  <SignOutButton>
+                    <button className="w-full text-left flex items-center">
+                      <LogOut className="mr-2 h-4 w-4 text-primary/50" />
+                      Sign out
+                    </button>
+                  </SignOutButton>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            )}
+          </div>
         )}
       </div>
     </div>

@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "../../../../../convex/_generated/api";
+import { slugToCoinalyzeSymbol, generateCoinalyzeSymbol } from '@/lib/coinalyze-mapper';
 
 const API_KEY = process.env.COINALYZE_API_KEY;
 const BASE_URL = 'https://api.coinalyze.net';
-
-const SymbolsSchema = z.object({
-  symbols: z.string().min(1)
-});
+const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 async function fetchWithErrorHandling(url: string) {
   if (!API_KEY) {
@@ -19,7 +18,7 @@ async function fetchWithErrorHandling(url: string) {
         'api_key': API_KEY,
       },
       next: {
-        revalidate: 60, // Cache for 1 minute
+        revalidate: 300, // Cache for 5 minutes
       },
     });
 
@@ -40,52 +39,85 @@ async function fetchWithErrorHandling(url: string) {
 }
 
 export async function GET(request: Request) {
-    try {
-      const { searchParams } = new URL(request.url);
-      const symbols = searchParams.get('symbols');
-  
-      if (!symbols) {
-        return NextResponse.json(
-          { error: 'Missing symbols parameter' },
-          { status: 400 }
-        );
-      }
-  
-      console.log('Requesting funding rates for symbols:', symbols);
-  
-      const validatedParams = SymbolsSchema.parse({ symbols });
-      
-      const data = await fetchWithErrorHandling(
-        `${BASE_URL}/funding_rate/v1/current?symbols=${encodeURIComponent(validatedParams.symbols)}`
-      );
-  
-      // If we get here, we have data
-      console.log('Coinalyze response:', data);
-  
-      // Return empty funding rates for unknown symbols instead of error
+  try {
+    const { searchParams } = new URL(request.url);
+    const cmcId = searchParams.get('cmcId');
+
+    if (!cmcId) {
       return NextResponse.json(
-        Object.fromEntries(
-          symbols.split(',').map(symbol => [
-            symbol,
-            data[symbol] || { funding_rate: null }
-          ])
-        )
-      );
-  
-    } catch (error) {
-      console.error('Coinalyze route error:', error);
-      
-      if (error instanceof z.ZodError) {
-        return NextResponse.json(
-          { error: 'Invalid parameters', details: error.errors },
-          { status: 400 }
-        );
-      }
-  
-      // Return partial data if possible instead of error
-      return NextResponse.json(
-        {},  // Return empty object instead of error
-        { status: 200 } // Change to 200 to prevent client error
+        { error: 'Missing cmcId parameter' },
+        { status: 400 }
       );
     }
+
+    // Get metadata from database
+    const metadata = await convex.query(api.coins.getMetadataByCoinId, { 
+      coinId: parseInt(cmcId) 
+    });
+
+    if (!metadata) {
+      return NextResponse.json({
+        currentFundingRate: null,
+        symbol: null,
+        lastUpdate: null,
+        historical: []
+      });
+    }
+
+    // Try hardcoded mapping first, then fallback to pattern
+    let coinalyzeSymbol = slugToCoinalyzeSymbol(metadata.slug);
+    
+    if (!coinalyzeSymbol) {
+      coinalyzeSymbol = generateCoinalyzeSymbol(metadata.symbol);
+    }
+
+    // Get data for the last 24 hours
+    const now = Math.floor(Date.now() / 1000);
+    const yesterday = now - (24 * 60 * 60);
+
+    console.log('Funding Rate History - CMC ID:', cmcId, 'Slug:', metadata.slug, 'Symbol:', coinalyzeSymbol);
+
+    const data = await fetchWithErrorHandling(
+      `${BASE_URL}/v1/funding-rate-history?symbols=${encodeURIComponent(coinalyzeSymbol)}&interval=1hour&from=${yesterday}&to=${now}`
+    );
+
+    console.log('=== FUNDING RATE HISTORY RAW API RESPONSE ===');
+    console.log('Raw response:', JSON.stringify(data, null, 2));
+    console.log('====================================');
+
+    // API returns an array with symbol and history
+    if (Array.isArray(data) && data.length > 0) {
+      const symbolData = data[0];
+      
+      if (symbolData.history && symbolData.history.length > 0) {
+        const latestData = symbolData.history[symbolData.history.length - 1];
+        
+        return NextResponse.json({
+          currentFundingRate: latestData.c, // Use close as current rate
+          symbol: symbolData.symbol,
+          lastUpdate: latestData.t,
+          historical: symbolData.history
+        });
+      }
+    }
+
+    // No data found
+    return NextResponse.json({
+      currentFundingRate: null,
+      symbol: coinalyzeSymbol,
+      lastUpdate: null,
+      historical: []
+    });
+
+  } catch (error) {
+    console.error('Coinalyze funding rate history route error:', error);
+    
+    // Return no data state instead of error
+    return NextResponse.json({
+      currentFundingRate: null,
+      symbol: null,
+      lastUpdate: null,
+      historical: []
+    });
   }
+}

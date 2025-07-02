@@ -1,264 +1,252 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis,
-  CartesianGrid
-} from 'recharts'
-import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
-import { 
-  ChartContainer, 
-  ChartTooltip, 
-  ChartTooltipContent 
-} from "@v1/ui/chart"
-import NumberFlow from '@number-flow/react'
-import type { CoinMarketData } from '@/types/coins'
+import React, { useState } from 'react'
+import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { motion } from 'framer-motion'
+import { cn } from "@v1/ui/cn"
+import { useChartData } from '@/hooks/use-chart-data'
+import { useChartInstance } from '@/hooks/use-chart-instance'
+import { usePriceCalculations } from '@/hooks/use-price-calculations'
+import type { CoinMarketData } from '@/types/coins'
+import { useHullSuite } from '@/hooks/use-hull-suite'
+import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
+import { IconDistributeHorizontalCenter, IconChartLineUptrendXyaxis, IconArrowUpRight } from 'symbols-react'
+import Image from 'next/image'
 
 interface PriceChartProps {
-  data: CoinMarketData['quote']['USD'];
-  historical: CoinMarketData['historical'];
+  coinId: string;
+  initialData: CoinMarketData['quote']['USD'];
+  activeTimeScale: string;
+  setActiveTimeScale: (scale: string) => void;
 }
 
-export function PriceChart({ data, historical }: PriceChartProps) {
-  const [activePrice, setActivePrice] = useState<number | null>(null)
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+interface IndicatorSettings {
+  showWaveTrend: boolean
+  showFastMoneyFlow: boolean
+  showSlowMoneyFlow: boolean
+  showRSI: boolean
+  showStochRSI: boolean
+  showHullSuite: boolean
+}
 
-  // console.log('PriceChart Raw Props:', {
-  //   data: JSON.stringify(data, null, 2),
-  //   historical: JSON.stringify(historical, null, 2),
-  //   hasHistorical: !!historical,
-  //   hasQuotes: historical?.data?.quotes?.length,
-  //   quotesStructure: historical?.data?.quotes ? typeof historical.data.quotes : 'undefined'
-  // });
+type ChartType = 'line' | 'candlestick'
 
-  const chartConfig = {
-    price: {
-      theme: {
-        light: 'hsl(var(--primary))',
-        dark: 'hsl(var(--primary))'
-      },
-      label: 'Price'
-    }
-  }
-
-  const chartData = useMemo(() => {
-    if (!historical?.data?.quotes?.length) {
-      console.warn('No historical data available, using fallback data');
-      const fallbackData = Array.from({ length: 30 }, (_, i) => ({
-        time: Date.now() - (30 - i) * 24 * 60 * 60 * 1000,
-        price: data.price * (0.95 + Math.random() * 0.1)
-      }));
-      
-      fallbackData.push({
-        time: Date.now(),
-        price: data.price
-      });
-  
-      return fallbackData;
-    }
-    
-    const historicalPoints = historical.data.quotes.map(quote => ({
-      time: new Date(quote.timestamp).getTime(),
-      price: quote.quote.USD.price
-    }));
-  
-    const currentTime = Date.now();
-    const lastHistoricalTime = historicalPoints[historicalPoints.length - 1]?.time;
-    
-    if (!lastHistoricalTime || currentTime > lastHistoricalTime) {
-      historicalPoints.push({
-        time: currentTime,
-        price: data.price
-      });
-    }
-  
-    return historicalPoints.sort((a, b) => a.time - b.time);
-  }, [historical, data.price]);
-
-  const displayPrice = activePrice ?? data.price
-  
-  const calculatePercentageChange = useMemo(() => {
-    const currentPrice = displayPrice;
-    const oldestPrice = chartData[0]?.price;
-    if (!oldestPrice) return 0;
-    
-    return ((currentPrice - oldestPrice) / oldestPrice) * 100;
-  }, [displayPrice, chartData]);
+const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: { 
+  activeTimeScale: string
+  setActiveTimeScale: (scale: string) => void 
+}) => {
+  const scales = [
+    { value: "7d", label: "1D" },
+    { value: "30d", label: "1W" },
+    { value: "max", label: "1Y" },
+    { value: "2y", label: "2Y" },
+  ]
 
   return (
-    <Card>
-      <CardHeader>
-      <CardTitle className="flex flex-col items-left">
-        <span className="text-2xl font-semibold font-mono">
-          <NumberFlow
-            value={displayPrice}
-            format={{
-              style: 'currency',
-              currency: 'USD',
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
-            }}
-            transformTiming={{ duration: 400, easing: 'ease-out' }}
-            continuous={true}
-          />
-        </span>
-        <div className={`text-lg ${calculatePercentageChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-          <motion.span
-            initial={{ rotate: calculatePercentageChange >= 0 ? 0 : 180 }}
-            animate={{ rotate: calculatePercentageChange >= 0 ? 0 : 180 }}
-            transition={{ type: "spring", bounce: 0.3, duration: 0.3 }}
-            className="inline-block mr-2"
-            style={{ transformOrigin: 'center' }}
+    <div className="flex gap-1 bg-zinc-950/10 backdrop-blur-xl border border-zinc-800/30 rounded-[12px] p-1">
+      {scales.map((scale) => (
+        <button
+          key={scale.value}
+          onClick={() => setActiveTimeScale(scale.value)}
+          className={cn(
+            "px-2 py-1 text-xs rounded-lg",
+            activeTimeScale === scale.value
+              ? "bg-zinc-800/50 border border-zinc-800/50  shadow-md shadow-zinc-950/50 text-white"
+              : "bg-transparent text-muted-foreground hover:bg-muted/80"
+          )}
+        >
+          {scale.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+const ChartTypeSelector = ({ chartType, setChartType }: { 
+  chartType: ChartType
+  setChartType: (type: ChartType) => void 
+}) => {
+  const types = [
+    { 
+      value: "candlestick" as const, 
+      label: "Candles", 
+      icon: IconDistributeHorizontalCenter 
+    },
+    { 
+      value: "line" as const, 
+      label: "Line", 
+      icon: IconChartLineUptrendXyaxis 
+    },
+  ]
+
+  return (
+    <div className="flex gap-1 bg-zinc-900/10 border border-zinc-800/30 rounded-[12px] p-1">
+      {types.map((type) => {
+        const IconComponent = type.icon
+        return (
+          <button
+            key={type.value}
+            onClick={() => setChartType(type.value)}
+            className={cn(
+              "px-3 py-1 text-xs rounded-lg flex items-center gap-1.5",
+              chartType === type.value
+                ? "bg-zinc-800/50 border border-zinc-800/50 text-white shadow-md shadow-zinc-950/50"
+                : "bg-transparent text-muted-foreground hover:bg-muted/80"
+            )}
           >
-            ▲
-          </motion.span>
-          <NumberFlow
-            value={Math.abs(calculatePercentageChange)}
-            format={{ 
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2
+            <IconComponent size={14} className="w-3 h-3 fill-white/50" />
+            {type.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTimeScale }: PriceChartProps) {
+  // Now we get proper OHLCV data from the hook
+  const { chartData, volumeData, ohlcvData, isLoading, tokenData } = useChartData(coinId, activeTimeScale, initialData)
+  const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData)
+  
+  // Generate Hull Suite colors - same as hook to ensure consistency
+  const hullColors = generatePastelColors(1)
+  const primaryHullColor = addOpacityToColor(hullColors[0] || 'hsl(210, 40%, 75%)', 0.7)
+  
+  // State for chart type only - crosshair updates handled by tooltip
+  const [chartType, setChartType] = useState<ChartType>('line')
+
+  const indicators: IndicatorSettings = {
+    showWaveTrend: false,
+    showFastMoneyFlow: false,
+    showSlowMoneyFlow: false,
+    showRSI: false,
+    showStochRSI: false,
+    showHullSuite: true,
+  }
+
+  // Hardcoded Hull Suite settings (EHMA-55)
+  const hullSettings = {
+    modeSwitch: 'Ehma' as const,
+    length: 55,
+    visualSwitch: true,
+  }
+
+  // Use proper OHLCV data for Hull Suite (no need to create fake data anymore)
+  const hullSuiteData = useHullSuite(ohlcvData || [], {
+    src: 'close',
+    modeSwitch: hullSettings.modeSwitch,
+    length: hullSettings.length,
+    lengthMult: 1.0,
+    useHtf: false,
+    htf: '240',
+    switchColor: true,
+    candleCol: false,
+    visualSwitch: hullSettings.visualSwitch,
+    thicknesSwitch: 1,
+    transpSwitch: 40,
+  })
+
+  // Convert Hull Suite data for chart instance
+  const legacyHullSuiteData = {
+    mhull: hullSuiteData.MHULL,
+    shull: hullSuiteData.SHULL,
+    trend: hullSuiteData.hullColor.map(item => ({ 
+      time: item.time, 
+      isUp: true, // Always use same color as requested
+      color: primaryHullColor // Use consistent pastel color with 70% opacity
+    }))
+  }
+
+  // Use chart instance with tooltip (no callback needed for header updates)
+  const chartContainerRef = useChartInstance(
+    chartData, 
+    volumeData, 
+    undefined, // No Market Cipher indicators
+    indicators, // Hull Suite indicator settings
+    legacyHullSuiteData,
+    undefined, // No callback - tooltip handles dynamic updates
+    chartType, // Chart type (line or candlestick)
+    ohlcvData // Real OHLCV data for candlestick chart
+  )
+
+  // Get coin info from tokenData or use fallbacks
+  const coinName = tokenData?.fullData?.name || '...'
+
+  return (
+    <div>
+      {/* Main Price Chart */}
+      <div className="bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+        <div className="p-0 relative">
+          <div
+            className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-20"
+            style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
+                backgroundRepeat: "repeat",
             }}
-            suffix="%"
-            transformTiming={{ duration: 400, easing: 'ease-out' }}
-            continuous={true}
           />
-        </div>
-      </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div>
-          <ChartContainer 
-            config={chartConfig}
-          >
-            <LineChart 
-              data={chartData}
-              onMouseMove={(e) => {
-                if (e.activePayload?.[0]) {
-                  setActivePrice(e.activePayload[0].value as number);
-                  setActiveIndex(e.activeTooltipIndex ?? null);
-                }
-              }}
-              onMouseLeave={() => {
-                setActivePrice(null);
-                setActiveIndex(null);
-              }}
-            >
-              <CartesianGrid 
-                strokeDasharray="3 3" 
-                stroke="hsl(var(--border))"
-                vertical={false}
-                opacity={0.5}
-              />
-              <XAxis 
-                dataKey="time"
-                type="number"
-                domain={['dataMin', 'dataMax']}
-                tickFormatter={(time) => {
-                  const date = new Date(time)
-                  return date.toLocaleDateString(undefined, { 
-                    month: 'short', 
-                    day: 'numeric' 
-                  })
-                }}
-                scale="time"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-                width={80}
-                dx={-20}
-                minTickGap={30}
-              />
-              <ChartTooltip
-                content={({ active, payload }) => {
-                  if (!active || !payload?.length) return null
-                  return (
-                    <ChartTooltipContent
-                      active={active}
-                      payload={payload}
-                      labelFormatter={() => {
-                        if (!payload?.[0]) return '';
-                        const date = new Date(payload[0].payload.time).toLocaleString(undefined, {
-                          dateStyle: 'medium'
-                        });
-                        return <span className="text-muted-foreground text-xs">{date}</span>;
-                      }}
-                      formatter={(value) => [
-                        <span key="value" className="font-semibold text-foreground">
-                          ${Number(value).toLocaleString()}
-                        </span>,
-                      ]}
-                      className="text-sm font-mono border-none shadow-none bg-background/5 backdrop-blur-xl p-3"
+          <Card className="border-none bg-transparent">
+            <CardHeader className="flex flex-row items-start justify-between p-6 pl-6">
+              {/* Left side - Coin info */}
+              <div className="flex gap-3 justify-between items-start w-full">
+                <div className="flex flex-col space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Image 
+                      src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coinId}.png`} 
+                      alt={coinName} 
+                      width={20} 
+                      height={20}
+                      className="rounded-full w-3 h-3"
                     />
-                  )
-                }}
-              />
-              <YAxis 
-                domain={[(dataMin: number) => dataMin * 0.90, (dataMax: number) => dataMax * 1.01]}
-                axisLine={false}
-                tickLine={false}
-                hide={true}
-                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-                tickFormatter={(value) => `$${value.toLocaleString()}`}
-                width={80}
-              />
-                <defs>
-                  <linearGradient id="priceGradient" x1="0" y1="0" x2="1" y2="0">
-                    {chartData.map((_, index) => {
-                      const offset = (index / (chartData.length - 1)) * 100;
-                      const isActive = activeIndex !== null;
-                      const isBeforeActive = index <= (activeIndex ?? chartData.length);
-                      
-                      if (isActive && index === activeIndex) {
-                        return [
-                          <stop 
-                            key={`gradient-${index}-before`}
-                            offset={`${offset - 0.1}%`}
-                            stopColor="hsl(var(--primary))"
-                            stopOpacity={1}
-                          />,
-                          <stop 
-                            key={`gradient-${index}-after`}
-                            offset={`${offset + 0.1}%`}
-                            stopColor="hsl(var(--primary))"
-                            stopOpacity={0.05}
-                          />
-                        ];
-                      }
-                      
-                      return (
-                        <stop 
-                          key={`gradient-${index}`}
-                          offset={`${offset}%`}
-                          stopColor="hsl(var(--primary))"
-                          stopOpacity={!isActive || isBeforeActive ? 1 : 0.05}
-                        />
-                      );
-                    }).flat()}
-                  </linearGradient>
-                </defs>
-              <Line 
-                type="monotone" 
-                dataKey="price"
-                name="price"
-                dot={false}
-                strokeWidth={3}
-                stroke="url(#priceGradient)"
-                activeDot={{
-                  r: 6,
-                  fill: 'hsl(var(--primary))',
-                  stroke: 'hsl(var(--background))',
-                  strokeWidth: 4,
-                  className: 'drop-shadow-md'
-                }}
-              />
-            </LineChart>
-          </ChartContainer>
+                    <span className="text-white font-bold text-xs">{coinName}</span>
+                    <span className="text-muted-foreground text-xs">is currently</span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="text-3xl font-bold font-sans">
+                      ${displayPrice.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                      })}
+                    </span>
+                    {isLoading && <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" />}
+                  </div>
+                  <div className={`text-xs font-bold font-mono ${calculatePercentageChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    <motion.span
+                      key={calculatePercentageChange >= 0 ? 'up' : 'down'}
+                      initial={{ rotate: calculatePercentageChange >= 0 ? 0 : 90 }}
+                      animate={{ rotate: calculatePercentageChange >= 0 ? 0 : 90 }}
+                      transition={{ type: "spring", bounce: 0.3, duration: 0.3 }}
+                      className="inline-block mr-2"
+                      style={{ transformOrigin: 'center' }}
+                    >
+                      <IconArrowUpRight className={`w-2 h-2 ${calculatePercentageChange >= 0 ? 'fill-emerald-500' : 'fill-rose-500'}`} />
+                    </motion.span>
+                    <span>
+                      {Math.abs(calculatePercentageChange).toFixed(2)}%
+                    </span>
+                  </div>
+                </div>
+                <ChartTypeSelector
+                  chartType={chartType}
+                  setChartType={setChartType}
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="pl-8">
+              <div className="p-0 relative">
+                <div ref={chartContainerRef} />
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      {/* Chart Controls - Outside the chart box */}
+      <div className="flex items-center justify-between mt-4">
+        <TimeScaleSelector
+          activeTimeScale={activeTimeScale}
+          setActiveTimeScale={setActiveTimeScale}
+        />
+      </div>
+    </div>
   )
 }

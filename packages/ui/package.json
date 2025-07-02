@@ -73,6 +73,7 @@
     "./tabs": "./src/components/tabs.tsx",
     "./tailwind.config": "./tailwind.config.ts",
     "./textarea": "./src/components/textarea.tsx",
+    "./text-shimmer": "./src/components/text-shimmer.tsx",
     "./toast": "./src/components/toast.tsx",
     "./toaster": "./src/components/toaster.tsx",
     "./tooltip": "./src/components/tooltip.tsx",

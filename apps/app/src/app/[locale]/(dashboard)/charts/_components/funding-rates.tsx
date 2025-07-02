@@ -27,8 +27,8 @@ export function FundingRates({ coins }: FundingRatesProps) {
                 <span className={cn(
                   "text-lg font-mono",
                   {
-                    'text-green-500': coin.fundingRate && coin.fundingRate > 0,
-                    'text-red-500': coin.fundingRate && coin.fundingRate < 0,
+                    'text-emerald-500': coin.fundingRate && coin.fundingRate > 0,
+                    'text-rose-500': coin.fundingRate && coin.fundingRate < 0,
                     'text-muted-foreground': !coin.fundingRate
                   }
                 )}>

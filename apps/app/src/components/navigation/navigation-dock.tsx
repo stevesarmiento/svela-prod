@@ -4,16 +4,20 @@ import { NavigationItems } from './navigation-items';
 import { SelectionContent } from './selection-content';
 import type { SelectionState } from './bottom-nav-context';
 
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings';
+
 interface NavigationDockProps {
   mode: 'navigation' | 'selection';
   selectionState: SelectionState | null;
   isCommandOpen: boolean;
+  onOpenCommandSearch?: (context: CommandContext) => void;
 }
 
 export const NavigationDock = React.memo(({ 
   mode, 
   selectionState, 
-  isCommandOpen 
+  isCommandOpen,
+  onOpenCommandSearch
 }: NavigationDockProps) => {
   const dockClassName = React.useMemo(() => {
     return `relative rounded-[20px] overflow-hidden p-1 h-[56px] w-auto flex items-center justify-center
@@ -64,7 +68,7 @@ export const NavigationDock = React.memo(({
                 mass: 0.3,
               }}
             >
-              <NavigationItems />
+              <NavigationItems onOpenCommandSearch={onOpenCommandSearch} />
             </motion.div>
           )}
           

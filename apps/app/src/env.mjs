@@ -15,6 +15,9 @@ export const env = createEnv({
     UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
     UPSTASH_REDIS_REST_URL: z.string().optional(),
     CLERK_SECRET_KEY: z.string().optional(),
+    OPENAI_API_KEY: z.string().optional(),
+    CG_API_KEY: z.string().optional(),
+    GEMINI_API_KEY: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_OPENPANEL_CLIENT_ID: z.string().optional(),
@@ -34,6 +37,10 @@ export const env = createEnv({
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
     VERCEL_URL: process.env.VERCEL_URL,
+    CG_API_KEY: process.env.CG_API_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    'CG-API-KEY': process.env['CG-API-KEY'],
   },
   skipValidation: !!process.env.CI || !!process.env.SKIP_ENV_VALIDATION,
 });
