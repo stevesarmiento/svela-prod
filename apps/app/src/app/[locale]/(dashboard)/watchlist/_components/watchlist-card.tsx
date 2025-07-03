@@ -16,8 +16,6 @@ import {
   Edit, 
   Trash2, 
   List, 
-  TrendingUp, 
-  TrendingDown, 
   MoreHorizontal 
 } from "lucide-react"
 import { AvatarCircles } from "@v1/ui/token-stacks"
@@ -134,7 +132,7 @@ export function WatchlistCard({
         className={`absolute bottom-0 left-0 h-[100%] w-screen bg-gradient-to-t from-zinc-900 via-zinc-900/0 to-zinc-900 dark:from-primary-950/0 dark:via-primary-950 dark:to-primary-950`}
       />
       
-      <CardContent className="p-4 relative">
+      <CardContent className="p-3 relative">
         <div className="absolute top-0 left-0 w-24 h-24 -translate-x-2 -translate-y-2 z-0">
           <div className="w-full h-full flex items-center justify-center">
             <List className="w-16 h-16 text-zinc-600 blur-[60px] opacity-20" />
@@ -151,8 +149,24 @@ export function WatchlistCard({
               <div className="w-10 h-10 rounded-full bg-zinc-700/50 flex items-center justify-center">
                 <List className="w-5 h-5 text-zinc-300" />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex flex-col min-w-0">
                 <h3 className="font-semibold text-lg truncate">{group.name}</h3>
+                <div className="flex text-[10px] flex-row items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                      <span className="text-white font-mono">
+                        {stats.positiveCount} 
+                      </span>
+                      <span className="text-muted-foreground">up</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
+                      <span className="text-white font-mono">
+                        {stats.negativeCount} 
+                      </span>
+                      <span className="text-muted-foreground">down</span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -234,17 +248,23 @@ export function WatchlistCard({
           </div>
           
           {/* Performance indicators */}
-          <div className="flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between text-xs">            
+            {/* Avatar circles */}
+            {avatarData.length > 0 && (
+              <div className="flex items-center gap-2">
+                <AvatarCircles
+                  avatarUrls={avatarData}
+                  numPeople={coins.length > 4 ? coins.length - 4 : 0}
+                  className="scale-75 -ml-3"
+                />
+              </div>
+            )}
+            
+            <div className="flex items-center gap-2 mr-2">
             <div className={cn(
-                "flex items-center gap-1 text-lg font-medium",
+                "flex items-center gap-1 text-sm font-mono font-medium",
                 isPositive ? "text-emerald-500" : "text-rose-500"
               )}>
-                {isPositive ? (
-                  <TrendingUp className="w-4 h-4" />
-                ) : (
-                  <TrendingDown className="w-4 h-4" />
-                )}
                 <NumberFlow
                   value={Math.abs(stats.averageChange)}
                   format={{ 
@@ -255,26 +275,7 @@ export function WatchlistCard({
                   transformTiming={{ duration: 400, easing: 'ease-out' }}
                 />
               </div>
-              {/* <div className="flex items-center gap-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full" />
-                <span className="text-muted-foreground">{stats.positiveCount} up</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 bg-red-500 rounded-full" />
-                <span className="text-muted-foreground">{stats.negativeCount} down</span>
-              </div> */}
             </div>
-            
-            {/* Avatar circles */}
-            {avatarData.length > 0 && (
-              <div className="flex items-center gap-2">
-                <AvatarCircles
-                  avatarUrls={avatarData}
-                  numPeople={coins.length > 4 ? coins.length - 4 : 0}
-                  className="scale-75 -mr-2"
-                />
-              </div>
-            )}
           </div>
         </div>
       </CardContent>
