@@ -1,28 +1,27 @@
 'use client'
 
 import { 
-  List,
-  Heart,
-  Star,
-  Trophy,
-  Target,
-  Zap,
-  Flame,
-  Rocket,
-  TrendingUp,
-  Eye,
-  Shield,
-  Diamond,
-  Crown,
-  Activity
-} from 'lucide-react'
-import { 
   IconCircleDottedAndCircle,
   IconSparkles,
   IconBookmarkFill,
   IconChartLineUptrendXyaxis,
-  IconArrowUpRight,
-  IconGear
+  IconGraduationcapFill,
+  IconStarFill,
+  IconFlameFill,
+  IconBoltFill,
+  IconSketchLogo,
+  IconCrownFill,
+  IconTarget,
+  IconMoonStars,
+  IconAmericanFootballFill,
+  IconVolleyballFill,
+  IconEyeFill,
+  IconTimelapse,
+  IconBellFill,
+  IconHeartFill,
+  IconDiamondFill,
+  IconChartBar,
+  IconSealFill
 } from 'symbols-react'
 import { cn } from '@v1/ui/cn'
 
@@ -56,34 +55,33 @@ const ICON_MAP = {
   '🎲': '🎲',
   '🎨': '🎨',
   
-  // Lucide icons
-  'list': List,
-  'heart': Heart,
-  'star': Star,
-  'trophy': Trophy,
-  'target': Target,
-  'zap': Zap,
-  'flame': Flame,
-  'rocket': Rocket,
-  'trending-up': TrendingUp,
-  'eye': Eye,
-  'shield': Shield,
-  'diamond': Diamond,
-  'crown': Crown,
-  'activity': Activity,
-  
   // Symbols React icons
-  'circle-dotted': IconCircleDottedAndCircle,
   'sparkles': IconSparkles,
+  'graduation-cap': IconGraduationcapFill,
+  'star': IconStarFill,
+  'fire': IconFlameFill,
+  'lightning': IconBoltFill,
+  'diamond': IconDiamondFill,
+  'crown': IconCrownFill,
+  'target': IconTarget,
+  'moon': IconMoonStars,
+  'american-football': IconAmericanFootballFill,
+  'volleyball': IconVolleyballFill,
+  'chart': IconChartLineUptrendXyaxis,
+  'bars': IconChartBar,
+  'eye': IconEyeFill,
+  'time': IconTimelapse,
+  'bell': IconBellFill,
+  'heart': IconHeartFill,
   'bookmark': IconBookmarkFill,
-  'chart-trend': IconChartLineUptrendXyaxis,
-  'arrow-up': IconArrowUpRight,
-  'gear': IconGear,
+  'sketch': IconSketchLogo,
+  'seal': IconSealFill,
+  'dots': IconCircleDottedAndCircle,
 }
 
 export function WatchlistGroupIcon({ icon, className, size = 20 }: WatchlistGroupIconProps) {
-  // Default to list icon if no icon specified
-  const iconKey = icon || 'list'
+  // Default to sparkles icon if no icon specified
+  const iconKey = icon || 'sparkles'
   const IconComponent = ICON_MAP[iconKey as keyof typeof ICON_MAP]
   
   // If it's an emoji (string that's not in our icon map but exists in the emoji section)
@@ -102,15 +100,15 @@ export function WatchlistGroupIcon({ icon, className, size = 20 }: WatchlistGrou
   if (IconComponent) {
     return (
       <IconComponent 
-        className={cn("flex-shrink-0", className)} 
+        className={cn("flex-shrink-0 fill-current", className)} 
         style={{ width: size, height: size }}
       />
     )
   }
   
-  // Fallback to default list icon
+  // Fallback to sparkles icon
   return (
-    <List 
+    <IconSparkles 
       className={cn("flex-shrink-0", className)} 
       style={{ width: size, height: size }}
     />
@@ -142,25 +140,25 @@ export const AVAILABLE_ICONS = {
     { key: '🎨', label: 'Art', emoji: '🎨' },
   ],
   icons: [
-    { key: 'list', label: 'List' },
-    { key: 'heart', label: 'Heart' },
-    { key: 'star', label: 'Star' },
-    { key: 'trophy', label: 'Trophy' },
-    { key: 'target', label: 'Target' },
-    { key: 'zap', label: 'Zap' },
-    { key: 'flame', label: 'Flame' },
-    { key: 'rocket', label: 'Rocket' },
-    { key: 'trending-up', label: 'Trending Up' },
-    { key: 'eye', label: 'Eye' },
-    { key: 'shield', label: 'Shield' },
-    { key: 'diamond', label: 'Diamond' },
-    { key: 'crown', label: 'Crown' },
-    { key: 'activity', label: 'Activity' },
-    { key: 'circle-dotted', label: 'Circle Dotted' },
     { key: 'sparkles', label: 'Sparkles' },
+    { key: 'graduation-cap', label: 'Graduation Cap' },
+    { key: 'star', label: 'Star' },
+    { key: 'fire', label: 'Flame' },
+    { key: 'lightning', label: 'Lightning' },
+    { key: 'crown', label: 'Crown' },
+    { key: 'target', label: 'Target' },
+    { key: 'moon', label: 'Moon' },
+    { key: 'chart', label: 'Chart' },
+    { key: 'bars', label: 'Bars' },
+    { key: 'eye', label: 'Eye' },
+    { key: 'time', label: 'Time' },
+    { key: 'bell', label: 'Bell' },
+    { key: 'heart', label: 'Heart' },
     { key: 'bookmark', label: 'Bookmark' },
-    { key: 'chart-trend', label: 'Chart Trend' },
-    { key: 'arrow-up', label: 'Arrow Up' },
-    { key: 'gear', label: 'Gear' },
+    { key: 'seal', label: 'Seal' },
+    { key: 'dots', label: 'Dots' },
+    { key: 'american-football', label: 'American Football' },
+    { key: 'volleyball', label: 'Volleyball' },
+    { key: 'sketch', label: 'Sketch' },
   ]
 } 

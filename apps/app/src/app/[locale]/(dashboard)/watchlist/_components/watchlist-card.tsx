@@ -13,10 +13,9 @@ import {
   DropdownMenuSeparator
 } from "@v1/ui/dropdown-menu"
 import { 
-  Edit, 
-  Trash2, 
   MoreHorizontal 
 } from "lucide-react"
+import { IconPencilTipCropCircle, IconTrashFill } from "symbols-react"
 import { AvatarCircles } from "@v1/ui/token-stacks"
 import { useWatchlistAggregateChart } from "@/hooks/use-watchlist-aggregate-chart"
 import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
@@ -57,6 +56,9 @@ interface WatchlistCardProps {
   onDelete?: (group: WatchlistGroup) => void
   onSelect?: (group: WatchlistGroup) => void
   selected?: boolean
+  nameOverride?: string
+  iconOverride?: string
+  colorOverride?: string
 }
 
 export function WatchlistCard({ 
@@ -65,8 +67,16 @@ export function WatchlistCard({
   onEdit,
   onDelete,
   onSelect,
-  selected = false
+  selected = false,
+  nameOverride,
+  iconOverride,
+  colorOverride
 }: WatchlistCardProps) {
+  // Use override values if provided, otherwise use group values
+  const displayName = nameOverride ?? group.name
+  const displayIcon = iconOverride ?? group.icon
+  const displayColor = colorOverride ?? group.color
+
   // Calculate aggregate stats
   const stats = useMemo(() => {
     if (!coins.length) {
@@ -116,7 +126,7 @@ export function WatchlistCard({
   })
 
   // Get color theme for this group
-  const colorTheme = COLOR_THEMES[group.color as keyof typeof COLOR_THEMES] || COLOR_THEMES.default
+  const colorTheme = COLOR_THEMES[displayColor as keyof typeof COLOR_THEMES] || COLOR_THEMES.default
 
   console.log('WatchlistCard chart data:', {
     groupName: group.name,
@@ -150,7 +160,7 @@ export function WatchlistCard({
         <div className="absolute top-0 left-0 w-24 h-24 -translate-x-2 -translate-y-2 z-0">
           <div className="w-full h-full flex items-center justify-center">
             <WatchlistGroupIcon 
-              icon={group.icon} 
+              icon={displayIcon} 
               className="w-16 h-16 text-zinc-600 blur-[60px] opacity-20"
               size={64}
             />
@@ -166,13 +176,13 @@ export function WatchlistCard({
             >
               <div className="w-10 h-10 rounded-full bg-zinc-50/5 flex items-center justify-center">
                 <WatchlistGroupIcon 
-                  icon={group.icon} 
+                  icon={displayIcon} 
                   className="text-zinc-300"
                   size={20}
                 />
               </div>
               <div className="flex flex-col min-w-0">
-                <h3 className="font-semibold text-lg truncate">{group.name}</h3>
+                <h3 className="font-semibold text-lg truncate">{displayName}</h3>
                 <div className="flex text-[10px] flex-row items-center gap-2">
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
@@ -198,24 +208,31 @@ export function WatchlistCard({
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-zinc-700/20"
+                      size="icon"
+                      className="h-7 w-7 p-0 rounded-lg bg-transparent hover:bg-white/5"
                     >
-                      <MoreHorizontal className="h-4 w-4 text-zinc-400" />
+                      <MoreHorizontal className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => onEdit?.(group)}>
-                      <Edit className="w-4 h-4 mr-2" />
-                      Edit
+                  <DropdownMenuContent 
+                    align="end" 
+                    sideOffset={-15}
+                    className="w-[130px] p-2 rounded-xl bg-zinc-900 border-zinc-800"
+                  >
+                    <DropdownMenuItem 
+                      onClick={() => onEdit?.(group)}
+                      className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-zinc-800 focus:bg-zinc-800"
+                    >
+                      <IconPencilTipCropCircle className="h-3.5 w-3.5 fill-muted-foreground group-hover:fill-foreground" />
+                      <span>Edit</span>
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
+                    <DropdownMenuSeparator className="my-2 bg-zinc-800" />
                     <DropdownMenuItem 
                       onClick={() => onDelete?.(group)}
-                      className="text-red-600 focus:text-red-600"
+                      className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-red-500/10 focus:bg-red-500/10"
                     >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Delete
+                      <IconTrashFill className="h-3.5 w-3.5 fill-red-400 group-hover:fill-red-400" />
+                      <span className="text-red-400 hover:text-red-400">Delete</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -239,7 +256,7 @@ export function WatchlistCard({
           </div>
           
           {/* Performance indicators */}
-          <div className="flex items-center justify-between text-xs">            
+          <div className="flex items-end justify-between text-xs">            
             {/* Avatar circles */}
             {avatarData.length > 0 && (
               <div className="flex items-center gap-2">
@@ -253,9 +270,10 @@ export function WatchlistCard({
             
             <div className="flex items-center gap-2 mr-2">
             <div className={cn(
-                "flex items-center gap-1 text-sm font-mono font-medium",
-                isPositive ? "text-emerald-500" : "text-rose-500"
+                "flex items-center gap-1 text-sm font-bold",
+                isPositive ? "text-white" : "text-white"
               )}>
+                {isPositive ? "+" : "-"}
                 <NumberFlow
                   value={Math.abs(stats.averageChange)}
                   format={{ 
