@@ -22,29 +22,28 @@ export const AvatarCircles = ({
   return (
     <div className={cn("z-10 flex -space-x-4 rtl:space-x-reverse", className)}>
       {avatarUrls.map((url, index) => (
-        <a
-          key={index}
-          href={url.profileUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        // <a
+        //   key={index}
+        //   href={url.profileUrl}
+        //   target="_blank"
+        //   rel="noopener noreferrer"
+        // >
           <Image
             key={index}
-            className="h-10 w-10 rounded-full border-2 border-white dark:border-gray-800 bg-background"
+            className="h-10 w-10 rounded-full border border-white/10 bg-background shadow-sm shadow-black/10"
             src={url.imageUrl}
             width={40}
             height={40}
             alt={`Avatar ${index + 1}`}
           />
-        </a>
+        // </a>
       ))}
       {(numPeople ?? 0) > 0 && (
-        <a
-          className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-white bg-black text-center text-xs font-medium text-white hover:bg-gray-600 dark:border-gray-800 dark:bg-white dark:text-black"
-          href=""
+        <div
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-background text-center text-sm font-bold text-white font-mono"
         >
           +{numPeople}
-        </a>
+        </div>
       )}
     </div>
   );
