@@ -51,6 +51,14 @@ export const GLOBAL_SHORTCUTS: KeyboardShortcut[] = [
     component: 'WatchlistFilters'
   },
   {
+    key: 'a',
+    combination: ['shift'],
+    description: 'Add token to watchlist',
+    category: 'actions',
+    handler: 'focusAddToken',
+    component: 'CoinSearch'
+  },
+  {
     key: 'Escape',
     description: 'Close modal, clear filters, exit selection',
     category: 'global',

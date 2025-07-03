@@ -15,19 +15,22 @@ import {
 import { 
   Edit, 
   Trash2, 
-  List, 
   MoreHorizontal 
 } from "lucide-react"
 import { AvatarCircles } from "@v1/ui/token-stacks"
 import { useWatchlistAggregateChart } from "@/hooks/use-watchlist-aggregate-chart"
 import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
 import { Spinner } from "@v1/ui/spinner"
+import { WatchlistGroupIcon } from "@/components/watchlist-group-icon"
+import { COLOR_THEMES } from "@/components/color-picker"
 
 interface WatchlistGroup {
   _id: string
   name: string
   slug: string
   description?: string
+  icon?: string
+  color?: string
   isDefault: boolean
   createdAt: number
   updatedAt: number
@@ -53,6 +56,7 @@ interface WatchlistCardProps {
   onEdit?: (group: WatchlistGroup) => void
   onDelete?: (group: WatchlistGroup) => void
   onSelect?: (group: WatchlistGroup) => void
+  selected?: boolean
 }
 
 export function WatchlistCard({ 
@@ -60,7 +64,8 @@ export function WatchlistCard({
   coins = [],
   onEdit,
   onDelete,
-  onSelect
+  onSelect,
+  selected = false
 }: WatchlistCardProps) {
   // Calculate aggregate stats
   const stats = useMemo(() => {
@@ -110,6 +115,9 @@ export function WatchlistCard({
     timeScale: '30d'
   })
 
+  // Get color theme for this group
+  const colorTheme = COLOR_THEMES[group.color as keyof typeof COLOR_THEMES] || COLOR_THEMES.default
+
   console.log('WatchlistCard chart data:', {
     groupName: group.name,
     coinsCount: coins.length,
@@ -120,7 +128,16 @@ export function WatchlistCard({
   })
 
   return (
-    <Card className="relative w-full bg-gradient-to-b from-zinc-800/50 hover:from-zinc-800/80 to-zinc-800/20 hover:to-zinc-800/50 h-auto mx-auto hover:shadow-lg shadow-md transition-colors duration-200 ease-in-out cursor-pointer overflow-hidden rounded-[20px] border-zinc-800/50 group">
+    <Card 
+      className={cn(
+        "relative w-full h-auto min-h-[200px] mx-auto hover:shadow-lg shadow-md transition-all duration-150 ease-in-out cursor-pointer overflow-hidden rounded-[20px] group",
+        "hover:ring-4 hover:ring-white/20 hover:ring-offset-4 hover:ring-offset-background",
+        colorTheme.bg,
+        colorTheme.border,
+        selected && "ring-4 ring-white/10 ring-offset-4 ring-offset-background"
+      )}
+      onClick={() => onSelect?.(group)}
+    >
       <div
         className="absolute inset-0 z-0 size-full opacity-40 dark:opacity-30"
         style={{
@@ -128,14 +145,15 @@ export function WatchlistCard({
           backgroundRepeat: "repeat",
         }}
       />
-      <div
-        className={`absolute bottom-0 left-0 h-[100%] w-screen bg-gradient-to-t from-zinc-900 via-zinc-900/0 to-zinc-900 dark:from-primary-950/0 dark:via-primary-950 dark:to-primary-950`}
-      />
       
       <CardContent className="p-3 relative">
         <div className="absolute top-0 left-0 w-24 h-24 -translate-x-2 -translate-y-2 z-0">
           <div className="w-full h-full flex items-center justify-center">
-            <List className="w-16 h-16 text-zinc-600 blur-[60px] opacity-20" />
+            <WatchlistGroupIcon 
+              icon={group.icon} 
+              className="w-16 h-16 text-zinc-600 blur-[60px] opacity-20"
+              size={64}
+            />
           </div>
         </div>
         
@@ -146,8 +164,12 @@ export function WatchlistCard({
               className="flex items-center gap-3 flex-1 cursor-pointer"
               onClick={() => onSelect?.(group)}
             >
-              <div className="w-10 h-10 rounded-full bg-zinc-700/50 flex items-center justify-center">
-                <List className="w-5 h-5 text-zinc-300" />
+              <div className="w-10 h-10 rounded-full bg-zinc-50/5 flex items-center justify-center">
+                <WatchlistGroupIcon 
+                  icon={group.icon} 
+                  className="text-zinc-300"
+                  size={20}
+                />
               </div>
               <div className="flex flex-col min-w-0">
                 <h3 className="font-semibold text-lg truncate">{group.name}</h3>
@@ -157,14 +179,14 @@ export function WatchlistCard({
                       <span className="text-white font-mono">
                         {stats.positiveCount} 
                       </span>
-                      <span className="text-muted-foreground">up</span>
+                      <span className="text-white/50">up</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
                       <span className="text-white font-mono">
                         {stats.negativeCount} 
                       </span>
-                      <span className="text-muted-foreground">down</span>
+                      <span className="text-white/50">down</span>
                   </div>
                 </div>
               </div>
@@ -200,37 +222,6 @@ export function WatchlistCard({
               </div>
           </div>
 
-          {/* <div className="flex items-center justify-between mb-4">
-            <div>
-              <div className="text-sm text-muted-foreground">Coins</div>
-              <div className="text-2xl font-mono font-semibold">
-                {coins.length}
-              </div>
-            </div>
-            
-            <div className="text-right">
-              <div className={cn(
-                "flex items-center gap-1 text-lg font-medium",
-                isPositive ? "text-emerald-500" : "text-rose-500"
-              )}>
-                {isPositive ? (
-                  <TrendingUp className="w-4 h-4" />
-                ) : (
-                  <TrendingDown className="w-4 h-4" />
-                )}
-                <NumberFlow
-                  value={Math.abs(stats.averageChange)}
-                  format={{ 
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  }}
-                  suffix="%"
-                  transformTiming={{ duration: 400, easing: 'ease-out' }}
-                />
-              </div>
-            </div>
-          </div> */}
-
           {/* Chart */}
           <div className="w-full">
             {isChartLoading ? (
@@ -241,8 +232,8 @@ export function WatchlistCard({
               <WatchlistAggregateChart
                 data={aggregateData}
                 isPositive={isPositive}
-                width={288}
-                height={48}
+                width={0}
+                height={70}
               />
             )}
           </div>

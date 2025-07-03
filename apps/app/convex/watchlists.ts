@@ -36,6 +36,8 @@ export const createWatchlistGroup = mutation({
     clerkId: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db
@@ -72,6 +74,8 @@ export const createWatchlistGroup = mutation({
       name: args.name,
       slug: slug,
       description: args.description,
+      icon: args.icon,
+      color: args.color,
       isDefault: false,
       createdAt: now,
       updatedAt: now,
@@ -85,6 +89,8 @@ export const updateWatchlistGroup = mutation({
     groupId: v.id("watchlistGroups"),
     name: v.optional(v.string()),
     description: v.optional(v.string()),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const user = await ctx.db
@@ -104,6 +110,8 @@ export const updateWatchlistGroup = mutation({
       name?: string;
       slug?: string;
       description?: string;
+      icon?: string;
+      color?: string;
     } = { updatedAt: Date.now() };
     
     if (args.name !== undefined) {
@@ -135,6 +143,8 @@ export const updateWatchlistGroup = mutation({
     }
     
     if (args.description !== undefined) updates.description = args.description;
+    if (args.icon !== undefined) updates.icon = args.icon;
+    if (args.color !== undefined) updates.color = args.color;
 
     await ctx.db.patch(args.groupId, updates);
   },

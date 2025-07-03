@@ -94,7 +94,7 @@ export function WatchlistAggregateChart({
     const lineSeries = chart.addSeries(LineSeries, {
       // color: isPositive ? '#10B981' : '#EF4444', // Green for positive, red for negative
       color: '#ffffff50',
-      lineWidth: 1,
+      lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: false,
       lineStyle: LineStyle.Solid,

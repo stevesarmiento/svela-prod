@@ -116,9 +116,9 @@ export function useCreateWatchlistGroup() {
   const { user } = useUser();
   const mutation = useMutation(api.watchlists.createWatchlistGroup);
   
-  return (name: string, description?: string) => {
+  return (name: string, description?: string, icon?: string, color?: string) => {
     if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, name, description });
+    return mutation({ clerkId: user.id, name, description, icon, color });
   };
 }
 
@@ -126,9 +126,9 @@ export function useUpdateWatchlistGroup() {
   const { user } = useUser();
   const mutation = useMutation(api.watchlists.updateWatchlistGroup);
   
-  return (groupId: string, name?: string, description?: string) => {
+  return (groupId: string, name?: string, description?: string, icon?: string, color?: string) => {
     if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, groupId: groupId as any, name, description });
+    return mutation({ clerkId: user.id, groupId: groupId as any, name, description, icon, color });
   };
 }
 

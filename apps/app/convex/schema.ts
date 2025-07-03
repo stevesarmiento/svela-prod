@@ -26,6 +26,8 @@ export default defineSchema({
     name: v.string(),
     slug: v.string(), // URL-friendly identifier
     description: v.optional(v.string()),
+    icon: v.optional(v.string()), // Emoji or icon name from symbols-react
+    color: v.optional(v.string()), // Background color for the card
     isDefault: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),

@@ -9,7 +9,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { cn } from "@v1/ui/cn"
 import { Skeleton } from "@v1/ui/skeleton"
-import { CoinSearch } from "./coin-search"
+import { CoinSearch, type CoinSearchRef } from "./coin-search"
 import { WatchlistFilters } from "./watchlist-filters"
 import { toast } from "@v1/ui/use-toast"
 import { Checkbox } from "@v1/ui/checkbox"
@@ -22,10 +22,11 @@ import {
   type SortingState,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { Spinner } from "@v1/ui/spinner"
 import { motion, AnimatePresence } from "framer-motion"
 import { WatchlistsGrid } from "./watchlists-grid"
+import { matchesShortcut, GLOBAL_SHORTCUTS } from "@/lib/keyboard-shortcuts"
 
 // Define the coin type for the table
 interface WatchlistCoin {
@@ -329,6 +330,7 @@ export function Watchlist() {
   const [selectedCoins, setSelectedCoins] = useState<Set<string>>(new Set())
   const [removingCoins, setRemovingCoins] = useState<Set<number>>(new Set())
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null)
+  const coinSearchRef = useRef<CoinSearchRef>(null)
   
   // Filter state - increase market cap range to accommodate large coins
   const [filters, setFilters] = useState<FilterState>({
@@ -350,6 +352,22 @@ export function Watchlist() {
     //isLoading: isCoinsLoading, 
     error,
   } = useWatchlistCoins(stableWatchlist);
+
+  // Keyboard shortcuts handler
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Get the add token shortcut
+      const addTokenShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'focusAddToken')
+      
+      if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
+        event.preventDefault()
+        coinSearchRef.current?.open()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // Filter and sort coins based on filter state
   const filteredCoins = useMemo(() => {
@@ -568,6 +586,7 @@ export function Watchlist() {
         
         <div className="space-y-4">          
           <div className="flex items-center justify-between gap-2">
+          <CoinSearch ref={coinSearchRef} />
           <WatchlistFilters
             searchText={filters.searchText}
             priceRange={filters.priceRange}
@@ -590,7 +609,6 @@ export function Watchlist() {
             onRemoveSelected={handleRemoveSelected}
             isRemoving={removingCoins.size > 0}
           />
-          <CoinSearch />
         </div>
         
         <div className="py-6 border border-dashed border-border rounded-lg">
@@ -614,29 +632,29 @@ export function Watchlist() {
       <div className="space-y-4">
         
         <div className="flex items-center justify-between gap-2">
-      <WatchlistFilters
-        searchText={filters.searchText}
-        priceRange={filters.priceRange}
-        marketCapRange={filters.marketCapRange}
-        volumeRange={filters.volumeRange}
-        changeFilter={filters.changeFilter}
-        sortBy={filters.sortBy}
-        sortOrder={filters.sortOrder}
-        selectedCoins={selectedCoins}
-        totalCoins={filteredCoins.length}
-        onSearchTextChange={(value) => setFilters(prev => ({ ...prev, searchText: value }))}
-        onPriceRangeChange={(range) => setFilters(prev => ({ ...prev, priceRange: range }))}
-        onMarketCapRangeChange={(range) => setFilters(prev => ({ ...prev, marketCapRange: range }))}
-        onVolumeRangeChange={(range) => setFilters(prev => ({ ...prev, volumeRange: range }))}
-        onChangeFilterChange={(value) => setFilters(prev => ({ ...prev, changeFilter: value }))}
-        onSortByChange={(value) => setFilters(prev => ({ ...prev, sortBy: value }))}
-        onSortOrderChange={(value) => setFilters(prev => ({ ...prev, sortOrder: value }))}
-        onClearAllFilters={handleClearAllFilters}
-        onSelectAll={handleSelectAll}
-        onRemoveSelected={handleRemoveSelected}
-        isRemoving={removingCoins.size > 0}
-      />
-        <CoinSearch />
+        <CoinSearch ref={coinSearchRef} />
+        <WatchlistFilters
+          searchText={filters.searchText}
+          priceRange={filters.priceRange}
+          marketCapRange={filters.marketCapRange}
+          volumeRange={filters.volumeRange}
+          changeFilter={filters.changeFilter}
+          sortBy={filters.sortBy}
+          sortOrder={filters.sortOrder}
+          selectedCoins={selectedCoins}
+          totalCoins={filteredCoins.length}
+          onSearchTextChange={(value) => setFilters(prev => ({ ...prev, searchText: value }))}
+          onPriceRangeChange={(range) => setFilters(prev => ({ ...prev, priceRange: range }))}
+          onMarketCapRangeChange={(range) => setFilters(prev => ({ ...prev, marketCapRange: range }))}
+          onVolumeRangeChange={(range) => setFilters(prev => ({ ...prev, volumeRange: range }))}
+          onChangeFilterChange={(value) => setFilters(prev => ({ ...prev, changeFilter: value }))}
+          onSortByChange={(value) => setFilters(prev => ({ ...prev, sortBy: value }))}
+          onSortOrderChange={(value) => setFilters(prev => ({ ...prev, sortOrder: value }))}
+          onClearAllFilters={handleClearAllFilters}
+          onSelectAll={handleSelectAll}
+          onRemoveSelected={handleRemoveSelected}
+          isRemoving={removingCoins.size > 0}
+        />
       </div>
       
       {/* Show empty state if no coins after filtering */}
@@ -660,7 +678,7 @@ export function Watchlist() {
           </div>
         </div>
       ) : (
-      <div className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
+      <div className="rounded-[10px] bg-primary/5 overflow-hidden p-0.5">
           {/* Header - adjust grid to account for merged columns */}
         <div className="px-3 py-1">
           <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">

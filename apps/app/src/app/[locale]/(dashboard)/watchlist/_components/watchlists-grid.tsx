@@ -24,12 +24,17 @@ import {
   useWatchlistByGroup
 } from '@v1/convex/hooks'
 import { useWatchlistCoins } from '@/hooks/use-watchlist-coins'
+import { IconPicker } from '@/components/icon-picker'
+import { ColorPicker } from '@/components/color-picker'
+import { useWatchlist } from './watchlist-context'
 
 interface WatchlistGroup {
   _id: string
   name: string
   slug: string
   description?: string
+  icon?: string
+  color?: string
   isDefault: boolean
   createdAt: number
   updatedAt: number
@@ -46,12 +51,14 @@ function WatchlistGroupWithCoins({
   group, 
   onEdit, 
   onDelete, 
-  onSelect 
+  onSelect,
+  selected
 }: {
   group: WatchlistGroup
   onEdit: (group: WatchlistGroup) => void
   onDelete: (group: WatchlistGroup) => void
   onSelect?: (group: WatchlistGroup) => void
+  selected?: boolean
 }) {
   const groupWatchlist = useWatchlistByGroup(group._id)
   const coinIds = useMemo(() => {
@@ -67,6 +74,7 @@ function WatchlistGroupWithCoins({
       onEdit={onEdit}
       onDelete={onDelete}
       onSelect={onSelect}
+      selected={selected}
     />
   )
 }
@@ -77,12 +85,15 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
   const [editingGroup, setEditingGroup] = useState<WatchlistGroup | null>(null)
   const [newName, setNewName] = useState('')
   const [newDescription, setNewDescription] = useState('')
+  const [newIcon, setNewIcon] = useState<string>('list')
+  const [newColor, setNewColor] = useState<string>('default')
 
   // Hooks
   const watchlistGroups = useWatchlistGroups()
   const createWatchlistGroup = useCreateWatchlistGroup()
   const updateWatchlistGroup = useUpdateWatchlistGroup()
   const deleteWatchlistGroup = useDeleteWatchlistGroup()
+  const { selectedGroup } = useWatchlist()
 
   const handleCreateWatchlist = useCallback(async () => {
     if (!newName.trim()) {
@@ -95,7 +106,12 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
     }
 
     try {
-      await createWatchlistGroup(newName.trim(), newDescription.trim() || undefined)
+      await createWatchlistGroup(
+        newName.trim(), 
+        newDescription.trim() || undefined,
+        newIcon,
+        newColor
+      )
       toast({
         title: "Success",
         description: "Watchlist created successfully",
@@ -103,6 +119,8 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
       setIsCreateDialogOpen(false)
       setNewName('')
       setNewDescription('')
+      setNewIcon('list')
+      setNewColor('default')
     } catch (error) {
       console.error('Failed to create watchlist:', error)
       toast({
@@ -111,7 +129,7 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
         variant: "destructive",
       })
     }
-  }, [newName, newDescription, createWatchlistGroup])
+  }, [newName, newDescription, newIcon, newColor, createWatchlistGroup])
 
   const handleEditWatchlist = useCallback(async () => {
     if (!editingGroup || !newName.trim()) {
@@ -127,7 +145,9 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
       await updateWatchlistGroup(
         editingGroup._id, 
         newName.trim(), 
-        newDescription.trim() || undefined
+        newDescription.trim() || undefined,
+        newIcon,
+        newColor
       )
       toast({
         title: "Success",
@@ -137,6 +157,8 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
       setEditingGroup(null)
       setNewName('')
       setNewDescription('')
+      setNewIcon('list')
+      setNewColor('default')
     } catch (error) {
       console.error('Failed to update watchlist:', error)
       toast({
@@ -145,7 +167,7 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
         variant: "destructive",
       })
     }
-  }, [editingGroup, newName, newDescription, updateWatchlistGroup])
+  }, [editingGroup, newName, newDescription, newIcon, newColor, updateWatchlistGroup])
 
   const handleDeleteWatchlist = useCallback(async (group: WatchlistGroup) => {
     if (group.isDefault) {
@@ -176,6 +198,8 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
   const openCreateDialog = useCallback(() => {
     setNewName('')
     setNewDescription('')
+    setNewIcon('list')
+    setNewColor('default')
     setIsCreateDialogOpen(true)
   }, [])
 
@@ -183,6 +207,8 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
     setEditingGroup(group)
     setNewName(group.name)
     setNewDescription(group.description || '')
+    setNewIcon(group.icon || 'list')
+    setNewColor(group.color || 'default')
     setIsEditDialogOpen(true)
   }, [])
 
@@ -233,6 +259,7 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
               onEdit={openEditDialog}
               onDelete={handleDeleteWatchlist}
               onSelect={onSelectWatchlist}
+              selected={selectedGroup?._id === group._id}
             />
           ))}
         </div>
@@ -248,6 +275,26 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="flex gap-4">
+              <div>
+                <Label htmlFor="icon">Icon</Label>
+                <div className="mt-2">
+                  <IconPicker 
+                    value={newIcon} 
+                    onSelect={setNewIcon}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="color">Color</Label>
+                <div className="mt-2">
+                  <ColorPicker 
+                    value={newColor} 
+                    onSelect={setNewColor}
+                  />
+                </div>
+              </div>
+            </div>
             <div>
               <Label htmlFor="name">Name</Label>
               <Input
@@ -291,10 +338,30 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="flex gap-4">
+              <div>
+                <Label htmlFor="icon">Icon</Label>
+                <div className="mt-2">
+                  <IconPicker 
+                    value={newIcon} 
+                    onSelect={setNewIcon}
+                  />
+                </div>
+              </div>
+              <div>
+                <Label htmlFor="color">Color</Label>
+                <div className="mt-2">
+                  <ColorPicker 
+                    value={newColor} 
+                    onSelect={setNewColor}
+                  />
+                </div>
+              </div>
+            </div>
             <div>
-              <Label htmlFor="edit-name">Name</Label>
+              <Label htmlFor="name">Name</Label>
               <Input
-                id="edit-name"
+                id="name"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="Watchlist name"
@@ -302,9 +369,9 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
               />
             </div>
             <div>
-              <Label htmlFor="edit-description">Description (optional)</Label>
+              <Label htmlFor="description">Description (optional)</Label>
               <Textarea
-                id="edit-description"
+                id="description"
                 value={newDescription}
                 onChange={(e) => setNewDescription(e.target.value)}
                 placeholder="Brief description of this watchlist"

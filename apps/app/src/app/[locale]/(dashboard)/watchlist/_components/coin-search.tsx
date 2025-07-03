@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, forwardRef, useImperativeHandle, useRef } from 'react'
 import { Input } from "@v1/ui/input"
 import { Table, TableBody, TableCell, TableRow } from "@v1/ui/table"
 import { Button } from "@v1/ui/button"
@@ -18,6 +18,7 @@ import {
   SheetHeader,
   SheetTrigger,
 } from "@v1/ui/sheet"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@v1/ui/tooltip"
 import { Kbd } from "@v1/ui/kbd"
 
 // Skeleton Components
@@ -63,12 +64,28 @@ interface CoinSearchResult {
   };
 }
 
-export function CoinSearch() {
+export interface CoinSearchRef {
+  open: () => void
+}
+
+export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
   const { addToWatchlist, addToSelectedGroup, selectedGroup } = useWatchlist()
   const { user } = useUser()
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [isAdding, setIsAdding] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  
+  // Expose open function to parent component
+  useImperativeHandle(ref, () => ({
+    open: () => {
+      setIsOpen(true)
+      // Focus the input after a short delay to ensure the sheet is open
+      setTimeout(() => {
+        inputRef.current?.focus()
+      }, 100)
+    }
+  }))
   
   // Debounce search query
   const debouncedSearchQuery = useDebounce(searchQuery, 300)
@@ -157,13 +174,25 @@ export function CoinSearch() {
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 group rounded-xl">
-          <IconBookmarkFill className="h-4 w-4 fill-muted-foreground group-hover:fill-foreground" />
-          <span className="sr-only">Add Token</span>
-        </Button>
-      </SheetTrigger>
-      <SheetContent className="p-0 !z-50 overflow-auto no-scrollbar rounded-[20px] bg-zinc-950 border-zinc-800
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 pl-2 w-auto gap-2 group rounded-md">
+                <IconBookmarkFill className="h-3.5 w-3.5 fill-muted-foreground group-hover:fill-foreground" />
+                <span className="text-sm">Add Token</span>
+              </Button>
+            </SheetTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+            <span>Add Token</span>
+            <Kbd>Shift</Kbd>
+            <span>+</span>
+            <Kbd>A</Kbd>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <SheetContent side="left" className="p-0 !z-50 overflow-auto no-scrollbar rounded-[20px] bg-zinc-950 border-zinc-800
                                shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
                                dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
         
@@ -185,6 +214,7 @@ export function CoinSearch() {
                   <div className="relative z-10 flex items-center p-0 px-2">
                     <IconMagnifyingglass className="h-4 w-4 fill-white/50 ml-1" />
                     <Input
+                      ref={inputRef}
                       type="text"
                       placeholder="Search any token name or symbol..."
                       className="flex-1 border-0 bg-transparent text-white placeholder:text-white/50 focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -283,5 +313,7 @@ export function CoinSearch() {
       </SheetContent>
     </Sheet>
   )
-}
+})
+
+CoinSearch.displayName = 'CoinSearch'
 
