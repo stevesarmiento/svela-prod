@@ -12,6 +12,8 @@ import {
   IconLaurelLeading, 
   IconLaurelTrailing 
 } from "symbols-react"
+import { buildWatchlistUrl } from '@/lib/navigation-utils'
+import { useQueryState } from 'nuqs'
 
 interface PriceCardProps {
   id: number
@@ -47,6 +49,7 @@ export function PriceCard({
   rank,
   historical 
 }: PriceCardProps) {
+  const [selectedGroupSlug] = useQueryState('wg', { defaultValue: '' })
   const isPositive = change24h >= 0
 
   const chartData = useMemo(() => {
@@ -67,7 +70,7 @@ export function PriceCard({
   }, [historical, price]);
 
   return (
-    <Link href={`/charts/${id}`} className="block">
+    <Link href={buildWatchlistUrl(`/charts/${id}`, selectedGroupSlug)} className="block">
       <Card className="relative w-[320px] bg-gradient-to-b from-zinc-800/50 hover:from-zinc-800/80 to-zinc-800/20 hover:to-zinc-800/50 h-auto mx-auto hover:shadow-lg shadow-md transition-colors duration-200 ease-in-out cursor-pointer overflow-hidden rounded-[20px] border-zinc-800/50">
           <div
             className="absolute inset-0 z-0 size-full opacity-40 dark:opacity-30"

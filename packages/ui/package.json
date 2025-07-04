@@ -83,7 +83,8 @@
     "./truncate": "./src/utils/truncate.ts",
     "./format-numbers": "./src/utils/format-numbers.ts",
     "./hooks": "./src/hooks/index.ts",
-    "./quantity-input": "./src/components/quantity-input.tsx"
+    "./quantity-input": "./src/components/quantity-input.tsx",
+    "./token-stacks": "./src/components/token-stacks.tsx"
   },
   "dependencies": {
     "@mui/icons-material": "^6.1.6",

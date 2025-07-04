@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { useWatchlistPreservingNavigation } from "@/lib/navigation-utils";
 import { 
   IconHouseFill, 
   IconDistributeHorizontalCenterFill,  
@@ -51,6 +52,21 @@ const menuItems = [
 export function SideNav() {
   const pathname = usePathname();
   const { user } = useAuth();
+  const navigation = useWatchlistPreservingNavigation();
+
+  // Get correct URL for menu items with watchlist preservation
+  const getMenuItemUrl = (href: string) => {
+    switch (href) {
+      case "/charts":
+        return navigation.charts;
+      case "/overview":
+        return navigation.overview;
+      case "/settings":
+        return navigation.settings;
+      default:
+        return href;
+    }
+  };
 
   // Extract user data from Convex user object
   const email = user?.email || null;
@@ -80,7 +96,7 @@ export function SideNav() {
                       : "text-white/60 hover:text-white hover:bg-white/5"
                   }`}
                 >
-                  <Link href={item.href}>
+                  <Link href={getMenuItemUrl(item.href)}>
                     <item.icon className="size-6" />
                   </Link>
                 </SidebarMenuButton>

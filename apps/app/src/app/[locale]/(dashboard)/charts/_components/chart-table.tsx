@@ -12,6 +12,8 @@ import { toast } from "@v1/ui/use-toast"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Spinner } from "@v1/ui/spinner"
 import type { CoinMarketData } from '@/types/coins'
+import { buildWatchlistUrl } from '@/lib/navigation-utils'
+import { useQueryState } from 'nuqs'
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -24,6 +26,7 @@ interface ChartTableProps {
 
 export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
   const { removeFromWatchlist } = useWatchlist()
+  const [selectedGroupSlug] = useQueryState('wg', { defaultValue: '' })
 
   // Calculate interval-based price changes
   const coinsWithIntervalChange = useMemo(() => {
@@ -185,7 +188,7 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
             ) : (
               // Show clickable link for real coins
               <Link 
-                href={`/charts/${coin.id}`}
+                href={buildWatchlistUrl(`/charts/${coin.id}`, selectedGroupSlug)}
                 className="grid grid-cols-4 gap-4 px-4 py-2 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer"
               >
                 {/* Price */}

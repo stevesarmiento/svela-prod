@@ -7,10 +7,11 @@ import { Badge } from "@v1/ui/badge";
 import { Label } from "@v1/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@v1/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@v1/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@v1/ui/tooltip";
 import { ListFilter, X } from "lucide-react";
 import { Separator } from "@v1/ui/separator";
 import { Kbd } from "@v1/ui/kbd";
-import { IconCommand, IconReturn } from "symbols-react";
+import { IconReturn } from "symbols-react";
 import { useBottomNav } from "@/components/navigation/bottom-nav-context"
 
 interface FilterChip {
@@ -231,27 +232,36 @@ export function WatchlistFilters({
         {/* Filter Button and Active Filters Row */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <Popover open={isFilterPopoverOpen} onOpenChange={setIsFilterPopoverOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                ref={filterButtonRef}
-                variant="ghost"
-                size="icon"
-                className={`h-7 px-1 pl-2 w-auto gap-2 hover:bg-zinc-100 dark:hover:bg-zinc-800/20 rounded-md relative group bg-zinc-50 dark:bg-zinc-900 flex-shrink-0 ${
-                  hasActiveFilters ? "text-blue-600 dark:text-blue-400" : ""
-                } ${hasSelectedCoins ? "ring-2 ring-red-500/50" : ""}`}
-              >
-                <ListFilter className="h-4 w-4" />
-                {hasActiveFilters && (
-                  <div className="absolute -top-1 -right-1 h-2 w-2 bg-blue-500 rounded-full" />
-                )}
-                {hasSelectedCoins && (
-                  <div className="absolute -top-1 -left-1 h-2 w-2 bg-red-500 rounded-full" />
-                )}
-                <div className="flex items-center gap-1">
-                  <Kbd><IconCommand className="h-2 w-2 fill-white/50" /> + F</Kbd>
-                </div>
-              </Button>
-            </PopoverTrigger>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <Button
+                      ref={filterButtonRef}
+                      variant="ghost"
+                      size="icon"
+                      className={`h-7 w-7 rounded-md relative group bg-zinc-50 dark:bg-zinc-900 flex-shrink-0 ${
+                        hasActiveFilters ? "text-blue-600 dark:text-blue-400" : ""
+                      } ${hasSelectedCoins ? "ring-2 ring-red-500/50" : ""}`}
+                    >
+                      <ListFilter className="h-4 w-4" />
+                      {hasActiveFilters && (
+                        <div className="absolute -top-1 -right-1 h-2 w-2 bg-blue-500 rounded-full" />
+                      )}
+                      {hasSelectedCoins && (
+                        <div className="absolute -top-1 -left-1 h-2 w-2 bg-red-500 rounded-full" />
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+                  <span>Filters</span>
+                  <Kbd>Cmd</Kbd>
+                  <span>+</span>
+                  <Kbd>F</Kbd>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <PopoverContent className="rounded-xl bg-zinc-900 p-0" align="start" side="right">
               {/* Search Input - Top Level */}
               <div className="">

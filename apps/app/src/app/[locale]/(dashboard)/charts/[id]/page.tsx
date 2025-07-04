@@ -32,7 +32,7 @@ export default async function TokenPage({ params }: PageProps) {
             height: '700px',
             filter: 'blur(360px)',
             willChange: 'filter',
-            opacity: 0.7,
+            opacity: 1,
             left: '-10vw',
             top: '-350px',
             mixBlendMode: 'soft-light'
@@ -54,7 +54,7 @@ export default async function TokenPage({ params }: PageProps) {
             height: '479px',
             filter: 'blur(360px)',
             willChange: 'filter',
-            opacity: 0.7,
+            opacity: 1,
             right: '-5vw',
             top: '236px',     
             mixBlendMode: 'soft-light'

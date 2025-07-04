@@ -5,14 +5,23 @@ import {
     IconStarFill,
     IconCaptionsBubbleFill,
     IconBinocularsFill,
+    IconCompassDrawing,
   } from "symbols-react";
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
+
+// Base routes (will be enhanced with watchlist params by components)
+export const BASE_ROUTES = {
+  overview: "/overview",
+  watchlist: "/watchlist", 
+  charts: "/charts",
+  settings: "/settings"
+} as const;
   
   export const MENU_ITEMS = [
     {
       title: "Overview",
       href: "/overview",
-      icon: IconCaptionsBubbleFill,
+      icon: IconCompassDrawing,
     },
     {
       title: "Watchlist",

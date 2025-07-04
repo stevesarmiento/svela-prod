@@ -12,17 +12,38 @@ function ChartsContent() {
     activeTimeScale, 
     setActiveTimeScale, 
     isInitialized, 
-    hasWatchlistItems 
+    hasWatchlistItems,
+    selectedGroup
   } = useChartsData()
 
   if (isInitialized && !hasWatchlistItems) {
     return (
       <div className="space-y-6 w-full z-0 p-8">
+        {/* Selected Group Header */}
+        {selectedGroup && (
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-semibold">Charts: {selectedGroup.name}</h2>
+              {selectedGroup.description && (
+                <p className="text-sm text-muted-foreground">{selectedGroup.description}</p>
+              )}
+            </div>
+            <div className="text-sm text-muted-foreground">
+              0 coins
+            </div>
+          </div>
+        )}
+        
         <div className="flex flex-col items-center justify-center py-12">
           <div className="text-center">
-            <h3 className="text-lg font-medium mb-2">No coins in watchlist</h3>
+            <h3 className="text-lg font-medium mb-2">
+              {selectedGroup ? `No coins in ${selectedGroup.name}` : 'No coins in watchlist'}
+            </h3>
             <p className="text-muted-foreground mb-4">
-              Add some coins to your watchlist to see charts
+              {selectedGroup 
+                ? `Add some coins to ${selectedGroup.name} to see charts`
+                : 'Add some coins to your watchlist to see charts'
+              }
             </p>
           </div>
         </div>
@@ -31,7 +52,7 @@ function ChartsContent() {
   }
 
   return (
-    <div className="space-y-6 w-full z-0 p-8">
+    <div className="space-y-6 w-full z-0 p-8">      
       <div className="space-y-14">
         <MultiPriceChartLightweight 
           coins={optimisticCoins} 
