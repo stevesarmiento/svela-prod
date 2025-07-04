@@ -27,6 +27,7 @@ import { SvelaLogo } from "@v1/ui/svela-logo";
 import { useTokenHeader } from "@/hooks/use-token-header";
 import { WatchlistButton } from "./watchlist-button";
 import { AnalysisDialog } from "./analysis-dialog";
+import { NewsAnalysisSheet } from "./news-analysis-sheet";
 import Image from "next/image";
 
 
@@ -213,8 +214,9 @@ export function TopNav() {
         {/* Right side - Conditional based on page type */}
         {user && (
           <div className="flex items-center gap-2">
-            {isChartDetailPage && coinId && (
+            {isChartDetailPage && coinId && tokenData && (
               <>
+                <NewsAnalysisSheet tokenData={tokenData} />
                 <AnalysisDialog 
                   coinId={coinId} 
                   tokenData={tokenData}
