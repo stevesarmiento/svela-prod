@@ -37,7 +37,7 @@ export function IconPicker({ value, onSelect, className }: IconPickerProps) {
           <WatchlistGroupIcon icon={value} size={20} />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 rounded-xl bg-zinc-900" align="start">
+      <PopoverContent className="w-auto p-0 rounded-xl bg-zinc-900 z-[9999]" align="start">
         <Tabs defaultValue="emojis" className="w-full">
           <TabsList className="w-full grid grid-cols-2 bg-zinc-950/40 rounded-t-xl p-1.5 border-b border-zinc-800 h-12">
             <TabsTrigger 

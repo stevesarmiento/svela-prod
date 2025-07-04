@@ -5,6 +5,7 @@ import {
     IconStarFill,
     IconCaptionsBubbleFill,
     IconBinocularsFill,
+    IconCompassDrawing,
   } from "symbols-react";
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
 
@@ -20,7 +21,7 @@ export const BASE_ROUTES = {
     {
       title: "Overview",
       href: "/overview",
-      icon: IconCaptionsBubbleFill,
+      icon: IconCompassDrawing,
     },
     {
       title: "Watchlist",

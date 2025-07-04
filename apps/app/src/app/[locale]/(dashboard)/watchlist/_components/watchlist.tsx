@@ -586,7 +586,6 @@ export function Watchlist() {
         
         <div className="space-y-4">          
           <div className="flex items-center justify-between gap-2">
-          <CoinSearch ref={coinSearchRef} />
           <WatchlistFilters
             searchText={filters.searchText}
             priceRange={filters.priceRange}
@@ -609,6 +608,7 @@ export function Watchlist() {
             onRemoveSelected={handleRemoveSelected}
             isRemoving={removingCoins.size > 0}
           />
+          <CoinSearch ref={coinSearchRef} />
         </div>
         
         <div className="py-6 border border-dashed border-border rounded-lg">
@@ -632,7 +632,6 @@ export function Watchlist() {
       <div className="space-y-4">
         
         <div className="flex items-center justify-between gap-2">
-        <CoinSearch ref={coinSearchRef} />
         <WatchlistFilters
           searchText={filters.searchText}
           priceRange={filters.priceRange}
@@ -655,6 +654,7 @@ export function Watchlist() {
           onRemoveSelected={handleRemoveSelected}
           isRemoving={removingCoins.size > 0}
         />
+        <CoinSearch ref={coinSearchRef} />
       </div>
       
       {/* Show empty state if no coins after filtering */}

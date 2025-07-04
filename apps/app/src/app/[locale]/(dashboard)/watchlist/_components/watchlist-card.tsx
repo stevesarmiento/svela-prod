@@ -22,6 +22,7 @@ import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate
 import { Spinner } from "@v1/ui/spinner"
 import { WatchlistGroupIcon } from "@/components/watchlist-group-icon"
 import { COLOR_THEMES } from "@/components/color-picker"
+import { Kbd } from "@v1/ui/kbd"
 
 interface WatchlistGroup {
   _id: string
@@ -140,7 +141,7 @@ export function WatchlistCard({
   return (
     <Card 
       className={cn(
-        "relative w-full h-auto min-h-[200px] mx-auto hover:shadow-lg shadow-md transition-all duration-150 ease-in-out cursor-pointer overflow-hidden rounded-[20px] group",
+        "relative w-full h-auto min-h-[200px] mx-auto hover:shadow-lg shadow-md transition-all duration-150 ease-in-out cursor-pointer overflow-hidden rounded-[20px] group active:scale-[0.98]",
         "hover:ring-4 hover:ring-white/20 hover:ring-offset-4 hover:ring-offset-background",
         colorTheme.bg,
         colorTheme.border,
@@ -239,9 +240,15 @@ export function WatchlistCard({
               </div>
           </div>
 
-          {/* Chart */}
+          {/* Chart or Empty State */}
           <div className="w-full">
-            {isChartLoading ? (
+            {coins.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <p className="text-md text-white/60 max-w-[180px] mx-auto">
+                  To add tokens, press <Kbd className=" bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md text-white/80">Shift</Kbd> + <Kbd className=" bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md text-white/80">A</Kbd>
+                </p>
+              </div>
+            ) : isChartLoading ? (
               <div className="flex items-center justify-center h-full">
                 <Spinner className="w-4 h-4" />
               </div>
@@ -255,37 +262,58 @@ export function WatchlistCard({
             )}
           </div>
           
-          {/* Performance indicators */}
-          <div className="flex items-end justify-between text-xs">            
-            {/* Avatar circles */}
-            {avatarData.length > 0 && (
-              <div className="flex items-center gap-2">
-                <AvatarCircles
-                  avatarUrls={avatarData}
-                  numPeople={coins.length > 4 ? coins.length - 4 : 0}
-                  className="scale-75 -ml-3"
-                />
-              </div>
-            )}
-            
-            <div className="flex items-center gap-2 mr-2">
-            <div className={cn(
-                "flex items-center gap-1 text-sm font-bold",
-                isPositive ? "text-white" : "text-white"
-              )}>
-                {isPositive ? "+" : "-"}
-                <NumberFlow
-                  value={Math.abs(stats.averageChange)}
-                  format={{ 
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  }}
-                  suffix="%"
-                  transformTiming={{ duration: 400, easing: 'ease-out' }}
-                />
+          {/* Performance indicators - Only show if there are coins */}
+          {coins.length > 0 && (
+            <div className="flex items-end justify-between text-xs">            
+              {/* Avatar circles */}
+              {avatarData.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <AvatarCircles
+                    avatarUrls={avatarData}
+                    numPeople={coins.length > 4 ? coins.length - 4 : 0}
+                    className="scale-75 -ml-3"
+                  />
+                </div>
+              )}
+              
+              <div className="flex items-center gap-2 mr-2">
+                <div className={cn(
+                  "flex items-center gap-1 text-sm font-bold font-mono",
+                  // Use darker version of the theme color
+                  displayColor === 'blue' ? "text-blue-300" :
+                  displayColor === 'sky' ? "text-sky-300" :
+                  displayColor === 'cyan' ? "text-cyan-300" :
+                  displayColor === 'teal' ? "text-teal-300" :
+                  displayColor === 'indigo' ? "text-indigo-300" :
+                  displayColor === 'purple' ? "text-purple-300" :
+                  displayColor === 'violet' ? "text-violet-300" :
+                  displayColor === 'pink' ? "text-pink-300" :
+                  displayColor === 'rose' ? "text-rose-300" :
+                  displayColor === 'red' ? "text-red-300" :
+                  displayColor === 'emerald' ? "text-emerald-300" :
+                  displayColor === 'green' ? "text-green-300" :
+                  displayColor === 'lime' ? "text-lime-300" :
+                  displayColor === 'yellow' ? "text-yellow-300" :
+                  displayColor === 'amber' ? "text-amber-300" :
+                  displayColor === 'orange' ? "text-orange-300" :
+                  displayColor === 'slate' ? "text-slate-300" :
+                  "text-zinc-300", // default
+                  isPositive ? "opacity-100" : "opacity-100"
+                )}>
+                  {isPositive ? "+" : "-"}
+                  <NumberFlow
+                    value={Math.abs(stats.averageChange)}
+                    format={{ 
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2
+                    }}
+                    suffix="%"
+                    transformTiming={{ duration: 400, easing: 'ease-out' }}
+                  />
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </CardContent>
     </Card>

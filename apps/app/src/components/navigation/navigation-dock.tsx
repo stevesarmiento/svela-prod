@@ -4,7 +4,7 @@ import { NavigationItems } from './navigation-items';
 import { SelectionContent } from './selection-content';
 import type { SelectionState } from './bottom-nav-context';
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings';
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
 
 interface NavigationDockProps {
   mode: 'navigation' | 'selection';
@@ -68,7 +68,7 @@ export const NavigationDock = React.memo(({
                 mass: 0.3,
               }}
             >
-              <NavigationItems onOpenCommandSearch={onOpenCommandSearch} />
+              <NavigationItems onOpenCommandSearch={onOpenCommandSearch || (() => {})} />
             </motion.div>
           )}
           

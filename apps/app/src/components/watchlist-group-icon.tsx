@@ -109,7 +109,7 @@ export function WatchlistGroupIcon({ icon, className, size = 20 }: WatchlistGrou
   // Fallback to sparkles icon
   return (
     <IconSparkles 
-      className={cn("flex-shrink-0", className)} 
+      className={cn("flex-shrink-0 fill-current", className)} 
       style={{ width: size, height: size }}
     />
   )

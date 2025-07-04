@@ -184,7 +184,7 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
               </Button>
             </SheetTrigger>
           </TooltipTrigger>
-          <TooltipContent side="right" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+          <TooltipContent side="left" className="flex items-center gap-2 p-1 pl-2 rounded-md">
             <span>Add Token</span>
             <Kbd>Shift</Kbd>
             <span>+</span>
