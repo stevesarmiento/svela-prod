@@ -24,6 +24,9 @@ interface BottomNavContextType {
   setCommandContext: Dispatch<SetStateAction<CommandContext | null>>
   openCommandSearch: () => void
   openContextualCommandSearch: (context: CommandContext) => void
+  isChatOpen: boolean
+  setIsChatOpen: Dispatch<SetStateAction<boolean>>
+  openChat: () => void
 }
 
 const BottomNavContext = createContext<BottomNavContextType | undefined>(undefined)
@@ -33,6 +36,7 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
   const [selectionState, setSelectionState] = useState<SelectionState | null>(null)
   const [isCommandOpen, setIsCommandOpen] = useState(false)
   const [commandContext, setCommandContext] = useState<CommandContext | null>(null)
+  const [isChatOpen, setIsChatOpen] = useState(false)
 
   const setNavigationMode = useCallback(() => {
     setMode('navigation')
@@ -47,11 +51,19 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
   const openCommandSearch = useCallback(() => {
     setCommandContext(null)
     setIsCommandOpen(true)
+    setIsChatOpen(false) // Close chat when opening command search
   }, [])
 
   const openContextualCommandSearch = useCallback((context: CommandContext) => {
     setCommandContext(context)
     setIsCommandOpen(true)
+    setIsChatOpen(false) // Close chat when opening contextual search
+  }, [])
+
+  const openChat = useCallback(() => {
+    setIsChatOpen(true)
+    setIsCommandOpen(false) // Close command search when opening chat
+    setCommandContext(null)
   }, [])
 
   const contextValue = useMemo(() => ({
@@ -65,7 +77,10 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
     setCommandContext,
     openCommandSearch,
     openContextualCommandSearch,
-  }), [mode, selectionState, setNavigationMode, setSelectionMode, isCommandOpen, commandContext, openCommandSearch, openContextualCommandSearch])
+    isChatOpen,
+    setIsChatOpen,
+    openChat,
+  }), [mode, selectionState, setNavigationMode, setSelectionMode, isCommandOpen, commandContext, openCommandSearch, openContextualCommandSearch, isChatOpen, openChat])
 
   return (
     <BottomNavContext.Provider value={contextValue}>

@@ -7,6 +7,8 @@ import { useKeyboardShortcuts, useCommandHandler, useSequentialShortcuts } from 
 import { NavigationDock } from "./navigation-dock";
 import { BackButton } from "./back-button";
 import { CommandSearch } from "./command-search";
+import { ChatButton } from "./chat-button";
+import { ChatInput } from "./chat-input";
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
 
@@ -15,7 +17,8 @@ export function BottomNav() {
     mode, 
     selectionState, 
     setNavigationMode, 
-    isCommandOpen, 
+    isCommandOpen,
+    isChatOpen,
     setIsCommandOpen,
     commandContext,
     setCommandContext
@@ -42,19 +45,47 @@ export function BottomNav() {
     }
   }, [setIsCommandOpen, setCommandContext]);
 
+  // Chat handlers
+  const handleChatSubmit = useCallback((message: string) => {
+    console.log('Chat message:', message);
+    // TODO: Implement chat message handling
+  }, []);
+
   return (
-    <div className={`fixed z-50 bottom-8 transition-all duration-200 ${
-      isCommandOpen && mode === 'navigation'
-        ? 'left-[50%] transform -translate-x-1/2'
-        : 'left-[50%] transform -translate-x-1/2'
-    }`}>
-      <div className="flex items-center gap-2">
-        {/* Hide navigation dock when command is open */}
+    <div className="fixed z-50 bottom-8 left-0 right-0 transition-all duration-200">
+      <div className="max-w-fit mx-auto flex items-center gap-2 relative">
+        {/* Chat Button - Only show in navigation mode and when command search is closed */}
+        <AnimatePresence mode="popLayout">
+          {mode === 'navigation' && !isCommandOpen && (
+            <motion.div
+              key="chat-button"
+              layoutId="action-button-left"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ 
+                opacity: isChatOpen ? 0 : 1,
+                scale: 1,
+                pointerEvents: isChatOpen ? 'none' : 'auto'
+              }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{
+                type: "spring",
+                stiffness: 280,
+                damping: 18,
+                mass: 0.3,
+              }}
+            >
+              <ChatButton />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Hide navigation dock when command or chat is open */}
         <motion.div
+
           animate={{ 
-            opacity: isCommandOpen && mode === 'navigation' ? 0 : 1,
-            scale: isCommandOpen && mode === 'navigation' ? 0.8 : 1,
-            pointerEvents: isCommandOpen && mode === 'navigation' ? 'none' : 'auto'
+            opacity: (isCommandOpen || isChatOpen) && mode === 'navigation' ? 0 : 1,
+            scale: (isCommandOpen || isChatOpen) && mode === 'navigation' ? 0.8 : 1,
+            pointerEvents: (isCommandOpen || isChatOpen) && mode === 'navigation' ? 'none' : 'auto'
           }}
           transition={{
             type: "spring",
@@ -62,6 +93,7 @@ export function BottomNav() {
             damping: 18,
             mass: 0.3,
           }}
+         className={`${isCommandOpen || isChatOpen ? 'sr-only' : ''}`}
         >
           <NavigationDock
             mode={mode}
@@ -71,25 +103,26 @@ export function BottomNav() {
           />
         </motion.div>
 
-        {/* Command Search or Back Button */}
+        {/* Command Search - Only show in navigation mode and when chat is closed */}
         <AnimatePresence mode="popLayout">
-          {mode === 'navigation' && (
+          {mode === 'navigation' && !isChatOpen && (
             <motion.div
               key="command-search"
-              layoutId="action-button"
-              initial={{ opacity: 0, scale: 1, x: -20 }}
+              layoutId="action-button-right"
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ 
                 opacity: 1, 
-                scale: 1, 
-                x: isCommandOpen ? -120 : 0  // Shift left when expanded to center
+                scale: 1,
+                pointerEvents: isCommandOpen ? 'auto' : 'none'
               }}
-              exit={{ opacity: 0, scale: 1, x: -20 }}
+              exit={{ opacity: 0, scale: 0.95 }}
               transition={{
                 type: "spring",
                 stiffness: 280,
                 damping: 18,
                 mass: 0.3,
-              }}            >
+              }}
+            >
               <CommandSearch
                 isOpen={isCommandOpen}
                 setIsOpen={handleCloseCommand}
@@ -98,20 +131,46 @@ export function BottomNav() {
               />
             </motion.div>
           )}
-          
-          {mode === 'selection' && selectionState && (
+        </AnimatePresence>
+
+        {/* Chat Input */}
+        <AnimatePresence mode="popLayout">
+          {mode === 'navigation' && isChatOpen && (
             <motion.div
-              key="back-button"
-              layoutId="action-button"
-              initial={{ opacity: 0, scale: 0.9, x: -20 }}
-              animate={{ opacity: 1, scale: 1, x: 0 }}
-              exit={{ opacity: 0, scale: 0.9, x: -20 }}
+              key="chat-input"
+              layoutId="action-button-right"
+              initial={{ opacity: 0, scale: 0.95, y: 0 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 0 }}
               transition={{
                 type: "spring",
                 stiffness: 280,
                 damping: 18,
                 mass: 0.3,
-              }}            >
+              }}
+              className="absolute bottom-0 w-[460px] mx-auto"
+            >
+              <ChatInput onSubmit={handleChatSubmit} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Back Button - Only show in selection mode */}
+        <AnimatePresence mode="popLayout">
+          {mode === 'selection' && selectionState && (
+            <motion.div
+              key="back-button"
+              layoutId="action-button"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{
+                type: "spring",
+                stiffness: 280,
+                damping: 18,
+                mass: 0.3,
+              }}
+            >
               <BackButton 
                 onExitSelection={setNavigationMode} 
                 selectionState={selectionState}

@@ -1,7 +1,13 @@
 import { useEffect, useCallback, useState, Dispatch, SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
-import { COMMAND_ITEMS } from './bottom-nav-constants';
+import { COMMAND_ITEMS, type NavigationItem, type ActionItem } from './bottom-nav-constants';
 import { SEQUENTIAL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
+import { useBottomNav } from './bottom-nav-context';
+
+type CommandGroup = {
+  group: string;
+  items: (NavigationItem | ActionItem)[];
+};
 
 export function useSequentialShortcuts() {
   const [activeSequence, setActiveSequence] = useState<string | null>(null);
@@ -76,21 +82,34 @@ export function useKeyboardShortcuts(
   setNavigationMode: () => void,
   setIsOpen: Dispatch<SetStateAction<boolean>>
 ) {
+  const { setIsChatOpen, openChat } = useBottomNav();
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Command + K for command search
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setIsOpen(prev => !prev);
+        setIsChatOpen(false); // Close chat when opening command search
       }
       
-      if (event.key === 'Escape' && mode === 'selection') {
-        setNavigationMode();
+      // Command + J for chat
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
+        event.preventDefault();
+        openChat();
+      }
+      
+      // Escape to exit selection mode or close overlays
+      if (event.key === 'Escape') {
+        if (mode === 'selection') {
+          setNavigationMode();
+        }
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [mode, setNavigationMode, setIsOpen]);
+  }, [mode, setNavigationMode, setIsOpen, setIsChatOpen, openChat]);
 }
 
 export function useCommandHandler() {
@@ -99,20 +118,18 @@ export function useCommandHandler() {
   return useCallback((value: string, setIsOpen: (open: boolean) => void) => {
     setIsOpen(false);
     
-    const allItems = COMMAND_ITEMS.flatMap(group => [...group.items]);
+    // Find the selected item from all command groups
+    const allItems = (COMMAND_ITEMS as CommandGroup[]).flatMap(group => group.items);
     const selectedItem = allItems.find(item => item.title.toLowerCase() === value.toLowerCase());
     
-    if (!selectedItem) {
-      return;
-    }
+    if (!selectedItem) return;
     
     setTimeout(() => {
       if ('href' in selectedItem) {
         router.push(selectedItem.href);
       } else if ('action' in selectedItem) {
-        const action = selectedItem.action;
-        
-        switch (action) {
+        // Handle action items
+        switch (selectedItem.action) {
           case 'bitcoin-price':
             router.push('/overview?q=What is the current price of Bitcoin?');
             break;
