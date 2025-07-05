@@ -1,36 +1,41 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@v1/ui/button'
 import { Input } from '@v1/ui/input'
 import { IconPaperplaneFill, IconXmarkCircleFill } from 'symbols-react'
 import { useBottomNav } from './bottom-nav-context'
 import { useClickOutside } from '@v1/ui/hooks'
+import { useChatToast, useChatState } from '../chat/chat-toast'
 
-interface ChatInputProps {
-  onSubmit: (message: string) => void
-  onStop?: () => void
-  isLoading?: boolean
-  isDataLoading?: boolean
-  isStopped?: boolean
-}
-
-export function ChatInput({
-  onSubmit,
-  onStop,
-  isLoading = false,
-  isDataLoading = false,
-  isStopped = false,
-}: ChatInputProps) {
-  const [input, setInput] = useState('')
+export function ChatInput() {
   const { isChatOpen, setIsChatOpen } = useBottomNav()
+  const { showChatToast } = useChatToast()
+  const {
+    input,
+    handleInputChange,
+    handleSubmit,
+    isLoading,
+    isDataLoading,
+    isStopped,
+    stop
+  } = useChatState()
+  
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isRequestActive = isLoading || isDataLoading
 
-  useClickOutside(containerRef as React.RefObject<HTMLElement>, () => {
-    if (isChatOpen) {
+  // Only close on click outside if not actively typing or processing, and not clicking on toast
+  useClickOutside(containerRef as React.RefObject<HTMLElement>, (event) => {
+    // Check if the click is on a toast element
+    const target = event.target as Element
+    const isToastClick = target.closest('[data-sonner-toast]') || 
+                        target.closest('[data-toast]') ||
+                        target.closest('.toaster') ||
+                        target.closest('[class*="toast"]')
+    
+    if (isChatOpen && !isRequestActive && !input.trim() && !isToastClick) {
       setIsChatOpen(false)
     }
   })
@@ -41,13 +46,19 @@ export function ChatInput({
     }
   }, [isChatOpen])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (isRequestActive && onStop) {
-      onStop()
+    if (isRequestActive && stop) {
+      stop()
     } else if (!isRequestActive && input.trim()) {
-      onSubmit(input.trim())
-      setInput('')
+      // Show the chat toast first
+      showChatToast()
+      
+      // Then submit the message
+      handleSubmit(e)
+      
+      // Keep the input open for continued conversation
+      // Input will only close via click-outside or manual close
     }
   }
 
@@ -86,7 +97,7 @@ export function ChatInput({
         mass: 0.3,
       }}
     >
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleFormSubmit}>
         <div className="relative backdrop-blur-md rounded-[20px] bg-zinc-900 focus-within:bg-zinc-950/50 overflow-hidden p-1 transition-colors duration-200
                        shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
                        dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
@@ -106,7 +117,7 @@ export function ChatInput({
             <Input
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={handleInputChange}
               placeholder="Ask about crypto prices, market trends, or anything else..."
               disabled={isRequestActive}
               className="flex-1 border-0 bg-transparent text-lg text-white placeholder:text-white/50 focus-visible:ring-0 focus-visible:ring-offset-0"

@@ -45,12 +45,6 @@ export function BottomNav() {
     }
   }, [setIsCommandOpen, setCommandContext]);
 
-  // Chat handlers
-  const handleChatSubmit = useCallback((message: string) => {
-    console.log('Chat message:', message);
-    // TODO: Implement chat message handling
-  }, []);
-
   return (
     <div className="fixed z-50 bottom-8 left-0 right-0 transition-all duration-200">
       <div className="max-w-fit mx-auto flex items-center gap-2 relative">
@@ -150,7 +144,7 @@ export function BottomNav() {
               }}
               className="absolute bottom-0 w-[460px] mx-auto"
             >
-              <ChatInput onSubmit={handleChatSubmit} />
+              <ChatInput />
             </motion.div>
           )}
         </AnimatePresence>

@@ -12,7 +12,7 @@ import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
 
 // Base routes (will be enhanced with watchlist params by components)
 export const BASE_ROUTES = {
-  overview: "/overview",
+  overview: "/watchlist",
   watchlist: "/watchlist", 
   charts: "/charts",
   settings: "/settings"
@@ -47,10 +47,10 @@ export const BASE_ROUTES = {
       items: [
         {
           title: "Overview",
-          subtitle: "View dashboard and chat",
-          href: "/overview",
+          subtitle: "View dashboard and watchlist",
+          href: "/watchlist",
           icon: IconCaptionsBubbleFill,
-          shortcut: getShortcutForRoute("/overview"),
+          shortcut: getShortcutForRoute("/watchlist"),
         },
         {
           title: "Watchlist",

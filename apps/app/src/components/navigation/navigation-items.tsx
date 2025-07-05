@@ -24,7 +24,6 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
       case "/charts":
         return navigation.charts;
       case "/watchlist":
-        return navigation.watchlist;
       case "/overview":
         return navigation.overview;
       case "/settings":
