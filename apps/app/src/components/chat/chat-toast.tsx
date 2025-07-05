@@ -51,6 +51,7 @@ class ChatStateManager {
   private static instance: ChatStateManager;
   private chatState: ChatState | null = null;
   private listeners: Set<(state: ChatState | null) => void> = new Set();
+  private inputCloseCallback: (() => void) | null = null;
 
   static getInstance(): ChatStateManager {
     if (!ChatStateManager.instance) {
@@ -74,7 +75,20 @@ class ChatStateManager {
       this.listeners.delete(listener);
     };
   }
+
+  setInputCloseCallback(callback: () => void) {
+    this.inputCloseCallback = callback;
+  }
+
+  closeInput() {
+    if (this.inputCloseCallback) {
+      this.inputCloseCallback();
+    }
+  }
 }
+
+// Export the ChatStateManager for use in other components
+export { ChatStateManager };
 
 // Custom chat toast component - only shows conversation output
 function ChatToastContent({ toastId, onClose }: { toastId: string | number; onClose?: () => void }) {
@@ -95,6 +109,10 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
   }, [chatManager]);
 
   const handleClose = () => {
+    // Close the input when toast is dismissed
+    const chatManager = ChatStateManager.getInstance();
+    chatManager.closeInput();
+    
     if (onClose) {
       onClose();
     } else {
@@ -202,6 +220,10 @@ export function useChatToast() {
 
   const closeChatToast = () => {
     if (toastIdRef.current) {
+      // Close the input when toast is dismissed programmatically
+      const chatManager = ChatStateManager.getInstance();
+      chatManager.closeInput();
+      
       toast.dismiss(toastIdRef.current);
       toastIdRef.current = null;
     }

@@ -27,6 +27,7 @@ interface BottomNavContextType {
   isChatOpen: boolean
   setIsChatOpen: Dispatch<SetStateAction<boolean>>
   openChat: () => void
+  closeChat: () => void
 }
 
 const BottomNavContext = createContext<BottomNavContextType | undefined>(undefined)
@@ -66,6 +67,10 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
     setCommandContext(null)
   }, [])
 
+  const closeChat = useCallback(() => {
+    setIsChatOpen(false)
+  }, [])
+
   const contextValue = useMemo(() => ({
     mode,
     selectionState,
@@ -80,7 +85,8 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
     isChatOpen,
     setIsChatOpen,
     openChat,
-  }), [mode, selectionState, setNavigationMode, setSelectionMode, isCommandOpen, commandContext, openCommandSearch, openContextualCommandSearch, isChatOpen, openChat])
+    closeChat,
+  }), [mode, selectionState, setNavigationMode, setSelectionMode, isCommandOpen, commandContext, openCommandSearch, openContextualCommandSearch, isChatOpen, openChat, closeChat])
 
   return (
     <BottomNavContext.Provider value={contextValue}>

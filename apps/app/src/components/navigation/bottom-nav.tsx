@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBottomNav } from "./bottom-nav-context";
 import { useKeyboardShortcuts, useCommandHandler, useSequentialShortcuts } from "./bottom-nav-hooks";
@@ -9,6 +9,7 @@ import { BackButton } from "./back-button";
 import { CommandSearch } from "./command-search";
 import { ChatButton } from "./chat-button";
 import { ChatInput } from "./chat-input";
+import { ChatStateManager } from "../chat/chat-toast";
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
 
@@ -21,8 +22,15 @@ export function BottomNav() {
     isChatOpen,
     setIsCommandOpen,
     commandContext,
-    setCommandContext
+    setCommandContext,
+    closeChat
   } = useBottomNav();
+  
+  // Register closeChat callback with ChatStateManager
+  useEffect(() => {
+    const manager = ChatStateManager.getInstance();
+    manager.setInputCloseCallback(closeChat);
+  }, [closeChat]);
   
   // Initialize sequential shortcuts (still needed for functionality)
   useSequentialShortcuts();
