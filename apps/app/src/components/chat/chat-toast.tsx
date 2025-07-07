@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useChat } from 'ai/react'
 import { useAuth } from '@v1/convex/hooks'
 import { toast } from 'sonner'
@@ -91,13 +91,23 @@ class ChatStateManager {
 // Export the ChatStateManager for use in other components
 export { ChatStateManager };
 
+// Enhanced indicator component (always enhanced now)
+function EnhancedIndicator() {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-blue-400">Enhanced</span>
+      <span className="text-xs text-blue-400">🚀</span>
+    </div>
+  );
+}
+
 // Custom chat toast component - only shows conversation output
 function ChatToastContent({ toastId, onClose }: { toastId: string | number; onClose?: () => void }) {
   const [chatState, setChatState] = useState<ChatState | null>(null);
   const { user } = useAuth();
   const chatManager = ChatStateManager.getInstance();
 
-  React.useEffect(() => {
+  useEffect(() => {
     // Get initial state
     setChatState(chatManager.getChatState());
     
@@ -122,7 +132,7 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
   }, [onClose, toastId]);
 
   // Handle escape key to close toast
-  React.useEffect(() => {
+  useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         handleClose();
@@ -161,7 +171,10 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
       <div className="flex flex-col h-[500px]">
         {/* Chat Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-800/50">
-          <h3 className="text-sm font-medium text-white">Chat</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-medium text-white">Chat</h3>
+            <EnhancedIndicator />
+          </div>
           <Button
             variant="ghost"
             size="icon"
@@ -268,6 +281,8 @@ export function useChatState() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const chatManager = ChatStateManager.getInstance();
 
+  console.log('🚀 Always using enhanced chat mode');
+
   const {
     messages,
     input,
@@ -279,35 +294,84 @@ export function useChatState() {
   } = useChat({
     api: '/api/chat',
     onResponse: async (response) => {
-      const componentDataHeader = response.headers.get('X-Component-Data');
+      // Check if this is an enhanced response
+      const isEnhancedResponse = response.headers.get('X-Enhanced-Chat') === 'true';
       
-      if (componentDataHeader && lastDataQueryRef.current) {
-        try {
-          const parsedComponentData = JSON.parse(componentDataHeader);
-          setMessageComponents(prev => {
-            const newComponents = {
-              ...prev,
-              [`temp_${lastDataQueryRef.current}`]: parsedComponentData
-            };
+      if (isEnhancedResponse) {
+        console.log('📊 Enhanced response received');
+        
+        // Handle enhanced response from headers
+        const componentDataHeader = response.headers.get('X-Component-Data');
+        const enhancedMetadataHeader = response.headers.get('X-Enhanced-Metadata');
+        
+        if (componentDataHeader && lastDataQueryRef.current) {
+          try {
+            const componentData = JSON.parse(componentDataHeader);
+            console.log('Enhanced component data:', componentData);
             
-            // Defer state update to avoid render cycle conflicts
-            setTimeout(() => {
-              chatManager.setChatState({
-                messages,
-                isLoading,
-                isDataLoading,
-                messageComponents: newComponents,
-              });
-            }, 0);
-            
-            return newComponents;
-          });
-        } catch (err) {
-          console.error('Failed to parse component data:', err);
+            setMessageComponents(prev => {
+              const newComponents = {
+                ...prev,
+                [`temp_${lastDataQueryRef.current}`]: componentData
+              };
+              
+              setTimeout(() => {
+                chatManager.setChatState({
+                  messages,
+                  isLoading,
+                  isDataLoading,
+                  messageComponents: newComponents,
+                });
+              }, 0);
+              
+              return newComponents;
+            });
+          } catch (err) {
+            console.error('Failed to parse enhanced component data:', err);
+          }
+        }
+        
+        // Log enhanced metadata for debugging
+        if (enhancedMetadataHeader) {
+          try {
+            const enhancedMetadata = JSON.parse(enhancedMetadataHeader);
+            console.log('Enhanced metadata:', enhancedMetadata);
+          } catch (err) {
+            console.error('Failed to parse enhanced metadata:', err);
+          }
+        }
+      } else {
+        // Handle basic response format (legacy)
+        const componentDataHeader = response.headers.get('X-Component-Data');
+        
+        if (componentDataHeader && lastDataQueryRef.current) {
+          try {
+            const parsedComponentData = JSON.parse(componentDataHeader);
+            setMessageComponents(prev => {
+              const newComponents = {
+                ...prev,
+                [`temp_${lastDataQueryRef.current}`]: parsedComponentData
+              };
+              
+              setTimeout(() => {
+                chatManager.setChatState({
+                  messages,
+                  isLoading,
+                  isDataLoading,
+                  messageComponents: newComponents,
+                });
+              }, 0);
+              
+              return newComponents;
+            });
+          } catch (err) {
+            console.error('Failed to parse component data:', err);
+          }
         }
       }
     },
     onFinish: (message) => {
+      console.log('🏁 Chat message finished:', message.role, message.id);
       setIsDataLoading(false);
       setIsStopped(false);
       abortControllerRef.current = null;
@@ -315,34 +379,31 @@ export function useChatState() {
       // Move component data from temp key to actual message ID
       if (message.role === 'assistant' && lastDataQueryRef.current) {
         const tempKey = `temp_${lastDataQueryRef.current}`;
+        console.log('🔄 Moving component data from temp key to message ID:', tempKey, '->', message.id);
+        
         setMessageComponents(prev => {
           const componentData = prev[tempKey];
           if (componentData) {
             const newComponents = { ...prev };
             delete newComponents[tempKey];
             newComponents[message.id] = componentData;
-            
-            // Defer state update to avoid render cycle conflicts
-            setTimeout(() => {
-              chatManager.setChatState({
-                messages: [...messages, message],
-                isLoading: false,
-                isDataLoading: false,
-                messageComponents: newComponents,
-              });
-            }, 0);
-            
+            console.log('✅ Component data moved successfully');
             return newComponents;
+          } else {
+            console.log('⚠️ No component data found for temp key:', tempKey);
+            return prev;
           }
-          return prev;
         });
         lastDataQueryRef.current = null;
       }
+      
+      // Let the useEffect handle state updates - don't manually manage messages
+      console.log('🎯 onFinish completed, letting useEffect handle state sync');
     },
   });
 
   // Update shared state whenever local state changes (deferred)
-  React.useEffect(() => {
+  useEffect(() => {
     const timer = setTimeout(() => {
       chatManager.setChatState({
         messages,
@@ -390,19 +451,27 @@ Examples:
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (input.trim() && !isLoading) {
+      console.log('🚀 Form submit with enhanced mode: ON');
+      console.log('📝 Input message:', input);
+      console.log('🔗 API endpoint:', '/api/chat', 'Enhanced: true');
+      
       setIsStopped(false);
       
       abortControllerRef.current = new AbortController();
       
       const isDataQuery = await detectDataQuery(input);
+      console.log('🤖 Detected as data query:', isDataQuery);
       
       if (isDataQuery) {
         setIsDataLoading(true);
         const queryId = Date.now().toString();
         lastDataQueryRef.current = queryId;
+        console.log('📊 Set data loading with query ID:', queryId);
       } else {
         lastDataQueryRef.current = null;
       }
+      
+      console.log('📤 Submitting to API...');
       handleSubmit(e);
     }
   };

@@ -2,6 +2,7 @@ import { streamText } from 'ai';
 import { z } from 'zod';
 import { openai, isOpenAIAvailable } from '@/lib/openai';
 import { detectAndFetchData, formatDataForLLM } from '@/lib/data-fetcher';
+import { enhancedChatHandler } from '@/lib/enhanced-chat-handler';
 
 const ChatRequestSchema = z.object({
   messages: z.array(z.object({
@@ -28,11 +29,95 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { messages } = ChatRequestSchema.parse(body);
     
+    // Always use enhanced mode now
+    const useEnhanced = true;
+    
+    console.log('🚀 Enhanced Chat Processing - Always Enhanced Mode');
+    
     const latestUserMessage = messages
       .filter(m => m.role === 'user')
       .pop();
     
     console.log('Latest user message:', latestUserMessage?.content);
+    
+    // Enhanced processing path
+    if (useEnhanced && latestUserMessage?.content) {
+      console.log('🚀 Using enhanced chat processing');
+      
+      try {
+        console.log('💫 Starting enhanced chat handler...');
+        const enhancedResponse = await enhancedChatHandler.processChat(latestUserMessage.content);
+        console.log('✅ Enhanced response generated:', {
+          hasTextResponse: !!enhancedResponse.textResponse,
+          componentsCount: enhancedResponse.components?.length || 0,
+          processingTime: enhancedResponse.processingTime
+        });
+        
+        // Store enhanced data for use in the normal streaming path
+        const componentData = enhancedResponse.components[0] ? {
+          type: enhancedResponse.components[0].type,
+          data: enhancedResponse.components[0].data
+        } : null;
+
+        console.log('📦 Component data to send:', componentData);
+        console.log('🔄 Falling through to normal streaming with enhanced content');
+
+        // Set up enhanced system prompt and continue with normal streaming
+        const enhancedSystemPrompt = `You are a sophisticated cryptocurrency analyst with access to real-time market data. 
+
+Based on the comprehensive analysis already performed, provide this exact response to the user:
+
+${enhancedResponse.textResponse}
+
+Provide this response exactly as written above, maintaining the insights and analysis.`;
+
+        const result = await streamText({
+          model: openai.chat('gpt-4o-mini'),
+          messages: [
+            {
+              role: 'system',
+              content: enhancedSystemPrompt,
+            },
+            ...messages,
+          ],
+          temperature: 0.1,
+          maxTokens: 1000,
+        });
+
+        const response = result.toDataStreamResponse({
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            'X-Content-Type-Options': 'nosniff',
+            'X-Enhanced-Chat': 'true',
+            // Include component data in header for compatibility
+            ...(componentData && {
+              'X-Component-Data': JSON.stringify(componentData)
+            }),
+            // Include additional enhanced metadata
+            'X-Enhanced-Metadata': JSON.stringify({
+              components: enhancedResponse.components,
+              followUpSuggestions: enhancedResponse.followUpSuggestions,
+              processingTime: enhancedResponse.processingTime,
+              intent: enhancedResponse.dataContext.intent
+            })
+          }
+        });
+
+        console.log('🎯 Enhanced response sent via normal streaming');
+        return response;
+      } catch (error) {
+        console.error('❌ Enhanced chat processing failed, falling back to basic mode:', error);
+        console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace available');
+        // Fall through to basic processing
+      }
+    } else {
+      console.log('⏭️ Skipping enhanced processing:', {
+        useEnhanced,
+        hasUserMessage: !!latestUserMessage?.content,
+        reason: !useEnhanced ? 'Enhanced mode disabled' : 'No user message'
+      });
+    }
     
     let dataContext = '';
     let enhancedSystemPrompt = 'You are a helpful AI assistant with access to live cryptocurrency market data. Provide clear, concise, and helpful responses.';
