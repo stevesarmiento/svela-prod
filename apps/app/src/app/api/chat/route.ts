@@ -120,7 +120,19 @@ Provide this response exactly as written above, maintaining the insights and ana
     }
     
     let dataContext = '';
-    let enhancedSystemPrompt = 'You are a helpful AI assistant with access to live cryptocurrency market data. Provide clear, concise, and helpful responses.';
+    let enhancedSystemPrompt = `You are a helpful AI assistant with access to live cryptocurrency market data. 
+
+**FORMATTING REQUIREMENTS:**
+- Format your response using **Markdown** for better readability
+- Use **## headers** for main sections
+- Use **### subheaders** for subsections
+- Use **bold** for important numbers and key insights
+- Use *italics* for emphasis and trends
+- Use bullet points (-) for lists
+- Use \`inline code\` for technical terms and indicators
+- Keep responses well-structured and scannable
+
+Provide clear, concise, and helpful responses.`;
     let componentData = null;
     
     if (latestUserMessage) {
@@ -153,10 +165,20 @@ Provide this response exactly as written above, maintaining the insights and ana
         }
         
         enhancedSystemPrompt = `You are a cryptocurrency and market data assistant with access to real-time information. 
-        
+
+**FORMATTING REQUIREMENTS:**
+- Format your response using **Markdown** for better readability
+- Use **## headers** for main sections
+- Use **### subheaders** for subsections
+- Use **bold** for important numbers and key insights
+- Use *italics* for emphasis and trends
+- Use bullet points (-) for lists
+- Use \`inline code\` for technical terms and indicators
+- Keep responses well-structured and scannable
+
 When users ask about cryptocurrency prices, market data, or specific coins, use the provided live data to give accurate, current information. 
 
-Key guidelines:
+**Key guidelines:**
 - Always use the most recent data provided in the context
 - Format prices and numbers clearly (use commas for thousands)
 - Highlight significant changes or trends
@@ -178,7 +200,7 @@ ${dataContext}`;
         ...messages,
       ],
       temperature: 0.3, // Lower temperature for more consistent data responses
-      maxTokens: 1000,
+      maxTokens: 3000,
     });
 
     // Create a custom response that includes both text and component data
