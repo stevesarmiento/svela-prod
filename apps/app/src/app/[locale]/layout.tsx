@@ -78,11 +78,6 @@ export default function RootLayout({
                 <Toaster 
                   position="top-center" 
                   offset={-10}
-                  toastOptions={{
-                    style: {
-                      marginTop: '20px',
-                    },
-                  }}
                 />
               </ThemeProvider>
               </WatchlistProvider>

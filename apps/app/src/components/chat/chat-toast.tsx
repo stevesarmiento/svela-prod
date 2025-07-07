@@ -201,13 +201,13 @@ export function useChatToast() {
       toastIdRef.current = t;
       
       return (
-        <div className="relative w-screen h-screen flex pt-16">
+        <div className="relative w-screen h-[90%] flex pt-24">
           {/* Progressive Blur Background - Full viewport */}
           <ProgressiveBlur 
             direction="top"
             blurLayers={12}
             blurIntensity={1.3}
-            className="absolute inset-0 -z-10 translate-x-[-40%] h-[100%]"
+            className="absolute inset-0 -z-10 translate-x-[-40%] h-[90%]"
           />
           
           {/* Toast Content */}
