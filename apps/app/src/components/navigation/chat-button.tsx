@@ -3,7 +3,7 @@
 import React from 'react'
 import { Button } from '@v1/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@v1/ui/tooltip'
-import { IconBubbleLeftFill, IconCommand } from 'symbols-react'
+import { IconCaptionsBubbleFill, IconCommand } from 'symbols-react'
 import { useBottomNav } from './bottom-nav-context'
 
 export function ChatButton() {
@@ -35,10 +35,10 @@ export function ChatButton() {
                 onClick={openChat}
                 aria-label="Open chat"
               >
-                <IconBubbleLeftFill className="h-4 w-4 fill-white/70 hover:fill-white" />
+                <IconCaptionsBubbleFill className="h-4 w-4 fill-white/70 hover:fill-white" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={5} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-zinc=-800/20 border bg-none shadow-none">
+            <TooltipContent side="top" sideOffset={5} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-zinc-800 border bg-none shadow-none">
             <span className="text-xs text-zinc-400">Quick Chat</span>
               <kbd className="flex items-center gap-1 rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-zinc-300 uppercase">
                 <IconCommand className="h-2.5 w-2.5 fill-zinc-300" />

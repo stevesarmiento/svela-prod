@@ -49,46 +49,56 @@ interface QueryIntent {
   intent: string;
 }
 
-// Common cryptocurrency names and symbols mapping
-const COIN_MAP: Record<string, string> = {
-  'bitcoin': '1',
-  'btc': '1',
-  'ethereum': '1027',
-  'eth': '1027',
-  'bnb': '1839',
-  'binance': '1839',
-  'solana': '5426',
-  'sol': '5426',
-  'cardano': '2010',
-  'ada': '2010',
-  'xrp': '52',
-  'ripple': '52',
-  'avalanche': '5805',
-  'avax': '5805',
-  'dogecoin': '74',
-  'doge': '74',
-  'polkadot': '6636',
-  'dot': '6636',
-  'chainlink': '1975',
-  'link': '1975',
-};
+interface CoinSearchResult {
+  coinId: number;
+  name: string;
+  symbol: string;
+}
+
+// Dynamic coin lookup using Convex database
+async function searchCoinInDatabase(query: string): Promise<{id: number, name: string, symbol: string}[]> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const response = await fetch(`${baseUrl}/api/convex/search-coins`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, limit: 5 })
+    });
+    
+    if (!response.ok) {
+      console.error('Failed to search coins in database');
+      return [];
+    }
+    
+    const coins: CoinSearchResult[] = await response.json();
+    return coins.map((coin) => ({
+      id: coin.coinId,
+      name: coin.name.toLowerCase(),
+      symbol: coin.symbol.toLowerCase()
+    }));
+  } catch (error) {
+    console.error('Error searching coins in database:', error);
+    return [];
+  }
+}
 
 async function parseUserIntent(userMessage: string): Promise<QueryIntent> {
   const systemPrompt = `You are a cryptocurrency query parser. Extract structured information from user queries.
 
-Available coins: bitcoin (btc), ethereum (eth), binance coin (bnb), solana (sol), cardano (ada), xrp (ripple), avalanche (avax), dogecoin (doge), polkadot (dot), chainlink (link)
+You have access to a comprehensive database of cryptocurrencies. Extract coin names or symbols from the user's message.
 
 Respond with JSON only:
 {
   "type": "coin" | "market" | "comparison" | "none",
-  "coins": ["coin_name"],
+  "coins": ["coin_name_or_symbol"],
   "timeframe": "24h" | "7d" | "30d" | null,
   "intent": "brief description of what user wants"
 }
 
 Examples:
 "What's Bitcoin doing?" → {"type": "coin", "coins": ["bitcoin"], "timeframe": null, "intent": "current price and performance"}
-"Compare BTC and ETH performance" → {"type": "comparison", "coins": ["bitcoin", "ethereum"], "timeframe": null, "intent": "compare two cryptocurrencies"}
+"Compare BTC and ETH performance" → {"type": "comparison", "coins": ["BTC", "ETH"], "timeframe": null, "intent": "compare two cryptocurrencies"}
+"Show me DOGE price" → {"type": "coin", "coins": ["DOGE"], "timeframe": null, "intent": "current price and performance"}
 "Show me the crypto market leaders" → {"type": "market", "coins": [], "timeframe": null, "intent": "top cryptocurrencies by market cap"}`;
 
   try {
@@ -121,10 +131,10 @@ export async function detectAndFetchData(userMessage: string): Promise<DataConte
   
   try {
     if (intent.type === 'coin' && intent.coins.length > 0) {
-      // Map coin names to IDs
-      const coinIds = intent.coins
-        .map(coin => COIN_MAP[coin.toLowerCase()] || COIN_MAP[coin.toLowerCase().replace(/\s+/g, '')])
-        .filter(Boolean);
+      // Search for coins in database
+      const coinSearchPromises = intent.coins.map(coin => searchCoinInDatabase(coin));
+      const coinSearchResults = await Promise.all(coinSearchPromises);
+      const coinIds = coinSearchResults.flat().map(coin => coin.id.toString());
       
       if (coinIds.length === 1) {
         const response = await fetch(`${baseUrl}/api/coins/${coinIds[0]}`);

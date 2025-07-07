@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import { Button } from '@v1/ui/button'
 import { ScrollArea } from '@v1/ui/scroll-area'
+import { ProgressiveBlur } from '@v1/ui/progressive-blur'
 import { IconXmarkCircleFill } from 'symbols-react'
 import { ChatMessageList } from './chat-message-list'
 import type { Message } from 'ai'
@@ -108,7 +109,7 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
     return unsubscribe;
   }, [chatManager]);
 
-  const handleClose = () => {
+  const handleClose = React.useCallback(() => {
     // Close the input when toast is dismissed
     const chatManager = ChatStateManager.getInstance();
     chatManager.closeInput();
@@ -118,11 +119,23 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
     } else {
       toast.dismiss(toastId);
     }
-  };
+  }, [onClose, toastId]);
+
+  // Handle escape key to close toast
+  React.useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        handleClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [handleClose]);
 
   if (!chatState) {
     return (
-      <div className="w-full bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+      <div className="w-[540px] mx-auto bg-zinc-900/90 backdrop-blur-[100px] border border-zinc-800/50 rounded-[20px] overflow-hidden shadow-xl shadow-black/50 active:cursor-grabbing cursor-grab">
         <div className="flex flex-col h-[400px]">
           <div className="flex items-center justify-between p-4 border-b border-zinc-800">
             <h3 className="text-sm font-medium text-white">Chat</h3>
@@ -130,9 +143,9 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
               variant="ghost"
               size="icon"
               onClick={handleClose}
-              className="h-6 w-6 text-zinc-400 hover:text-white"
+              className="h-6 w-6 rounded-xl text-zinc-400 hover:text-white"
             >
-              <IconXmarkCircleFill className="h-4 w-4" />
+              <IconXmarkCircleFill className="h-4 w-4 fill-white/50" />
             </Button>
           </div>
           <div className="flex-1 flex items-center justify-center text-zinc-400 text-sm">
@@ -144,18 +157,18 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
   }
 
   return (
-    <div className="w-full translate-x-[-60px] bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden mx-auto">
+    <div className="w-full translate-x-[-80px] bg-zinc-900/90 backdrop-blur-[100px] border border-zinc-800/50 rounded-[20px] overflow-hidden mx-auto shadow-xl shadow-black/50 active:cursor-grabbing cursor-grab">
       <div className="flex flex-col h-[500px]">
         {/* Chat Header */}
-        <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+        <div className="flex items-center justify-between p-4 border-b border-zinc-800/50">
           <h3 className="text-sm font-medium text-white">Chat</h3>
           <Button
             variant="ghost"
             size="icon"
             onClick={handleClose}
-            className="h-6 w-6 text-zinc-400 hover:text-white"
+            className="h-6 w-6 rounded-xl text-zinc-400 hover:text-white"
           >
-            <IconXmarkCircleFill className="h-4 w-4" />
+            <IconXmarkCircleFill className="h-4 w-4 fill-white/50" />
           </Button>
         </div>
 
@@ -180,41 +193,55 @@ export function useChatToast() {
   const toastIdRef = useRef<string | number | null>(null);
 
   const showChatToast = () => {
-    // If a chat toast is already open, don't create a new one
     if (toastIdRef.current) {
       return;
     }
 
     toast.custom((t) => {
-      // Store the toast ID when created
       toastIdRef.current = t;
       
       return (
-        <motion.div
-          initial={{ opacity: 0, y: -20, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -20, scale: 0.95 }}
-          transition={{
-            type: "spring",
-            stiffness: 280,
-            damping: 18,
-            mass: 0.3,
-          }}
-          className="w-[460px] mx-auto"
-        >
-          <ChatToastContent 
-            toastId={t} 
-            onClose={() => {
-              // Clear the ref when toast is closed
-              toastIdRef.current = null;
-              toast.dismiss(t);
-            }} 
+        <div className="relative w-screen h-screen flex pt-16">
+          {/* Progressive Blur Background - Full viewport */}
+          <ProgressiveBlur 
+            direction="top"
+            blurLayers={12}
+            blurIntensity={1.3}
+            className="absolute inset-0 -z-10 translate-x-[-40%] h-[100%]"
           />
-        </motion.div>
+          
+          {/* Toast Content */}
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{
+              type: "spring",
+              stiffness: 280,
+              damping: 18,
+              mass: 0.3,
+            }}
+            className="w-[540px] relative z-10"
+          >
+            <ChatToastContent 
+              toastId={t} 
+              onClose={() => {
+                toastIdRef.current = null;
+                toast.dismiss(t);
+              }} 
+            />
+          </motion.div>
+        </div>
       );
     }, {
       duration: Infinity,
       position: 'top-center',
+      onDismiss: () => {
+        // Clear ref and close input when toast is dismissed by any means (swipe, etc.)
+        const chatManager = ChatStateManager.getInstance();
+        chatManager.closeInput();
+        toastIdRef.current = null;
+      }
     });
   };
 

@@ -7,8 +7,7 @@ import { useKeyboardShortcuts, useCommandHandler, useSequentialShortcuts } from 
 import { NavigationDock } from "./navigation-dock";
 import { BackButton } from "./back-button";
 import { CommandSearch } from "./command-search";
-import { ChatButton } from "./chat-button";
-import { ChatInput } from "./chat-input";
+import { ChatContainer } from "./chat-container";
 import { ChatStateManager } from "../chat/chat-toast";
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
@@ -54,63 +53,58 @@ export function BottomNav() {
   }, [setIsCommandOpen, setCommandContext]);
 
   return (
-    <div className="fixed z-50 bottom-8 left-0 right-0 transition-all duration-200">
+    <div className="fixed z-50 bottom-8 left-0 right-0">
       <div className="max-w-fit mx-auto flex items-center gap-2 relative">
-        {/* Chat Button - Only show in navigation mode and when command search is closed */}
+        {/* Chat Container - Single expandable container */}
         <AnimatePresence mode="popLayout">
           {mode === 'navigation' && !isCommandOpen && (
             <motion.div
-              key="chat-button"
-              layoutId="action-button-left"
+              key="chat-container"
+              layoutId="chat-container"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ 
-                opacity: isChatOpen ? 0 : 1,
+                opacity: 1,
                 scale: 1,
-                pointerEvents: isChatOpen ? 'none' : 'auto'
               }}
               exit={{ opacity: 0, scale: 0.95 }}
-              transition={{
-                type: "spring",
-                stiffness: 280,
-                damping: 18,
-                mass: 0.3,
-              }}
             >
-              <ChatButton />
+              <ChatContainer />
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Hide navigation dock when command or chat is open */}
-        <motion.div
+        {/* Navigation Dock */}
+        <AnimatePresence mode="popLayout">
+          <motion.div
+            animate={{ 
+              filter: (isCommandOpen || isChatOpen) && mode === 'navigation' ? 'blur(20px)' : 'blur(0px)',
+              opacity: (isCommandOpen || isChatOpen) && mode === 'navigation' ? 0 : 1,
+              scale: (isCommandOpen || isChatOpen) && mode === 'navigation' ? 0.8 : 1,
+              pointerEvents: (isCommandOpen || isChatOpen) && mode === 'navigation' ? 'none' : 'auto'
+            }}
+            transition={{
+              type: "spring",
+              stiffness: 280,
+              damping: 18,
+              mass: 0.3,
+            }}
+           className={`${isCommandOpen || isChatOpen ? 'sr-only' : ''}`}
+          >
+            <NavigationDock
+              mode={mode}
+              selectionState={selectionState}
+              isCommandOpen={isCommandOpen}
+              onOpenCommandSearch={handleOpenCommandSearch}
+            />
+          </motion.div>
+        </AnimatePresence>
 
-          animate={{ 
-            opacity: (isCommandOpen || isChatOpen) && mode === 'navigation' ? 0 : 1,
-            scale: (isCommandOpen || isChatOpen) && mode === 'navigation' ? 0.8 : 1,
-            pointerEvents: (isCommandOpen || isChatOpen) && mode === 'navigation' ? 'none' : 'auto'
-          }}
-          transition={{
-            type: "spring",
-            stiffness: 280,
-            damping: 18,
-            mass: 0.3,
-          }}
-         className={`${isCommandOpen || isChatOpen ? 'sr-only' : ''}`}
-        >
-          <NavigationDock
-            mode={mode}
-            selectionState={selectionState}
-            isCommandOpen={isCommandOpen}
-            onOpenCommandSearch={handleOpenCommandSearch}
-          />
-        </motion.div>
-
-        {/* Command Search - Only show in navigation mode and when chat is closed */}
+        {/* Command Search */}
         <AnimatePresence mode="popLayout">
           {mode === 'navigation' && !isChatOpen && (
             <motion.div
               key="command-search"
-              layoutId="action-button-right"
+              layoutId="action-button"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ 
                 opacity: 1, 
@@ -131,28 +125,6 @@ export function BottomNav() {
                 onCommandSelect={handleCommandSelect}
                 context={commandContext}
               />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Chat Input */}
-        <AnimatePresence mode="popLayout">
-          {mode === 'navigation' && isChatOpen && (
-            <motion.div
-              key="chat-input"
-              layoutId="action-button-right"
-              initial={{ opacity: 0, scale: 0.95, y: 0 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 0 }}
-              transition={{
-                type: "spring",
-                stiffness: 280,
-                damping: 18,
-                mass: 0.3,
-              }}
-              className="absolute bottom-0 w-[460px] mx-auto"
-            >
-              <ChatInput />
             </motion.div>
           )}
         </AnimatePresence>

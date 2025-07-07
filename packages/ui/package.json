@@ -78,6 +78,7 @@
     "./sonner": "./src/components/sonner.tsx",
     "./toaster": "./src/components/toaster.tsx",
     "./tooltip": "./src/components/tooltip.tsx",
+    "./progressive-blur": "./src/components/progressive-blur.tsx",
     "./time-range-input": "./src/components/time-range-input.tsx",
     "./use-toast": "./src/components/use-toast.tsx",
     "./cn": "./src/utils/cn.ts",

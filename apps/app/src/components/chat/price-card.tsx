@@ -71,7 +71,7 @@ export function PriceCard({
 
   return (
     <Link href={buildWatchlistUrl(`/charts/${id}`, selectedGroupSlug)} className="block">
-      <Card className="relative w-[320px] bg-gradient-to-b from-zinc-800/50 hover:from-zinc-800/80 to-zinc-800/20 hover:to-zinc-800/50 h-auto mx-auto hover:shadow-lg shadow-md transition-colors duration-200 ease-in-out cursor-pointer overflow-hidden rounded-[20px] border-zinc-800/50">
+      <Card className="relative w-[320px] bg-gradient-to-b from-zinc-800/80 to-zinc-800/20 h-auto mx-auto hover:shadow-lg shadow-md transition-all duration-200 ease-in-out cursor-pointer overflow-hidden rounded-[20px] border-zinc-800/50 hover:ring-4 hover:ring-zinc-800/30">
           <div
             className="absolute inset-0 z-0 size-full opacity-40 dark:opacity-30"
             style={{

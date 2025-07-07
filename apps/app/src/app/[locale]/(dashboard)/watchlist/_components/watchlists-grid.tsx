@@ -18,6 +18,7 @@ import { useWatchlist } from './watchlist-context'
 import { cn } from '@v1/ui/cn'
 import { CreateWatchlist, CreateWatchlistTrigger } from './create-watchlist'
 import { Input } from '@v1/ui/input'
+import { IconStarFill } from 'symbols-react'
 
 interface WatchlistGroup {
   _id: string
@@ -171,6 +172,11 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
   // Add keyboard shortcut handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if typing in an input or textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
       if (e.shiftKey && e.key === 'W') {
         e.preventDefault()
         setIsCreating(true)
@@ -193,8 +199,9 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
     <div className="space-y-6 mb-24">
       {/* Header with create button */}
       <div className="flex items-center justify-between">
-        <div>
-          <span className="text-sm text-muted-foreground">Watchlists</span>
+        <div className="flex items-center gap-2">
+          <IconStarFill className="w-4 h-4 fill-muted-foreground" />
+          <span className="text-md font-medium text-white">Watchlists</span>
         </div>
         <CreateWatchlistTrigger onClick={() => setIsCreating(true)} />
       </div>

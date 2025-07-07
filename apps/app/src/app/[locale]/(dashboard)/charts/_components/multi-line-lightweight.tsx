@@ -494,7 +494,7 @@ export function MultiPriceChartLightweight({
             className="group w-full border-zinc-800/0 hover:border-zinc-800/80 bg-transparent hover:bg-transparent flex items-center gap-2 justify-between p-3 rounded-lg"
           >
             <span className="text-muted-foreground font-normal text-sm group-hover:text-white">Add to comparison</span>
-            <IconPlus className="group-hover:fill-blue-500 group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
+            <IconPlus className="group-hover:fill-white group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
           </Button>
         </div> 
         

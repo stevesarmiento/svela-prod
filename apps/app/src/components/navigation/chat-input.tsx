@@ -4,7 +4,7 @@ import React, { useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@v1/ui/button'
 import { Input } from '@v1/ui/input'
-import { IconPaperplaneFill, IconXmarkCircleFill } from 'symbols-react'
+import { IconPaperplaneFill, IconSquareFill } from 'symbols-react'
 import { useBottomNav } from './bottom-nav-context'
 import { useClickOutside } from '@v1/ui/hooks'
 import { useChatToast, useChatState } from '../chat/chat-toast'
@@ -64,7 +64,7 @@ export function ChatInput() {
 
   const getButtonContent = () => {
     if (isRequestActive) {
-      return <IconXmarkCircleFill className="w-6 h-6 fill-red-400 group-hover:fill-red-300" />
+      return <IconSquareFill className="w-6 h-6 fill-red-400 group-hover:fill-red-300" />
     }
     return <IconPaperplaneFill className="w-6 h-6 fill-white/50 group-hover:fill-white" />
   }
@@ -118,7 +118,7 @@ export function ChatInput() {
               ref={inputRef}
               value={input}
               onChange={handleInputChange}
-              placeholder="Ask about crypto prices, market trends, or anything else..."
+              placeholder="Ask about token prices, market trends, or anything else..."
               disabled={isRequestActive}
               className="flex-1 border-0 bg-transparent text-lg text-white placeholder:text-white/50 focus-visible:ring-0 focus-visible:ring-offset-0"
             />

@@ -63,13 +63,13 @@ export function ChatMessage({
       }`}
     >
       {role === 'assistant' && (
-        <Avatar className="size-8">
+        <Avatar className="size-8 bg-transparent">
           <AvatarFallback>
             <Image 
               src="/svela-logo.svg" 
               alt="Svela" 
-              width={16} 
-              height={16}
+              width={23} 
+              height={23}
               className="opacity-70"
             />
           </AvatarFallback>
@@ -80,7 +80,7 @@ export function ChatMessage({
         <div
           className={`rounded-lg ${
             role === 'user'
-              ? 'bg-zinc-800/80 rounded-tr-none text-white px-4 py-2'
+              ? 'bg-gradient-to-br from-zinc-800/80 to-zinc-800/40 rounded-tr-none text-white px-4 py-2'
               : 'text-white'
           }`}
         >
