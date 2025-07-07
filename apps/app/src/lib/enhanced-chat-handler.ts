@@ -1,5 +1,5 @@
 import { streamText } from 'ai';
-import { openai, isOpenAIAvailable } from '@/lib/openai';
+import { gemini } from '@/lib/gemini';
 import { enhancedIntentDetector } from '@/lib/enhanced-intent-detector';
 import { enhancedDataOrchestrator } from '@/lib/enhanced-data-orchestrator';
 import type { 
@@ -231,7 +231,7 @@ export class EnhancedChatHandler {
     dataContext: EnhancedDataContext
   ): Promise<string> {
     
-    if (!isOpenAIAvailable || !openai) {
+    if (!gemini) {
       return this.generateFallbackResponse(dataContext);
     }
 
@@ -240,7 +240,7 @@ export class EnhancedChatHandler {
 
     try {
       const result = await streamText({
-        model: openai.chat('gpt-4o-mini'),
+        model: gemini('gemini-2.5-flash'),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: contextualMessage }

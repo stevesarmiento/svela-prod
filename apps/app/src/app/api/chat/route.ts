@@ -1,6 +1,6 @@
 import { streamText } from 'ai';
 import { z } from 'zod';
-import { openai, isOpenAIAvailable } from '@/lib/openai';
+import { gemini } from '@/lib/gemini';
 import { detectAndFetchData, formatDataForLLM } from '@/lib/data-fetcher';
 import { enhancedChatHandler } from '@/lib/enhanced-chat-handler';
 
@@ -13,11 +13,11 @@ const ChatRequestSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    // Check if OpenAI is available
-    if (!isOpenAIAvailable || !openai) {
+    // Check if Gemini is available
+    if (!gemini) {
       return new Response(
         JSON.stringify({ 
-          error: 'OpenAI service is not available. Please configure OPENAI_API_KEY.' 
+          error: 'Gemini service is not available. Please configure GOOGLE_GENERATIVE_AI_API_KEY.' 
         }), 
         { 
           status: 503,
@@ -72,7 +72,7 @@ ${enhancedResponse.textResponse}
 Provide this response exactly as written above, maintaining the insights and analysis.`;
 
         const result = await streamText({
-          model: openai.chat('gpt-4o-mini'),
+          model: gemini('gemini-2.5-flash'),
           messages: [
             {
               role: 'system',
@@ -169,7 +169,7 @@ ${dataContext}`;
     }
 
     const result = await streamText({
-      model: openai.chat('gpt-4o-mini'),
+      model: gemini('gemini-2.5-flash'),
       messages: [
         {
           role: 'system',
