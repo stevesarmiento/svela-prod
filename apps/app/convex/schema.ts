@@ -101,4 +101,31 @@ export default defineSchema({
   })
     .index("by_symbol", ["symbol"])
     .index("by_active", ["isActive"]),
+
+  userSettings: defineTable({
+    userId: v.id("users"),
+    // Memory & AI Settings
+    memoryEnabled: v.boolean(),
+    autoCleanupEnabled: v.boolean(),
+    retentionDays: v.string(), // '7', '30', '90', '365', 'never'
+    
+    // UI/UX Settings (for future use)
+    theme: v.optional(v.string()), // 'light', 'dark', 'system'
+    currency: v.optional(v.string()), // 'USD', 'EUR', 'BTC', etc.
+    dateFormat: v.optional(v.string()), // 'MM/DD/YYYY', 'DD/MM/YYYY', etc.
+    
+    // Notification Settings (for future use)
+    emailNotifications: v.optional(v.boolean()),
+    pushNotifications: v.optional(v.boolean()),
+    priceAlerts: v.optional(v.boolean()),
+    
+    // Analytics & Privacy Settings (for future use)
+    analyticsEnabled: v.optional(v.boolean()),
+    shareUsageData: v.optional(v.boolean()),
+    
+    // Timestamps
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
 });

@@ -3,6 +3,12 @@
 export async function autoCleanupSessionMemories(userId: string): Promise<void> {
   if (!userId) return;
   
+  // Check if we're on the client side before accessing localStorage
+  if (typeof window === 'undefined') {
+    console.log('🔕 Auto-cleanup skipped during SSR');
+    return;
+  }
+  
   const autoCleanupEnabled = localStorage.getItem('autoCleanupEnabled') === 'true';
   if (!autoCleanupEnabled) {
     console.log('🔕 Auto-cleanup disabled, skipping session cleanup');
@@ -58,6 +64,10 @@ export async function autoCleanupSessionMemories(userId: string): Promise<void> 
 }
 
 export function isAutoCleanupEnabled(): boolean {
+  // Check if we're on the client side before accessing localStorage
+  if (typeof window === 'undefined') {
+    return false; // Default to false during SSR
+  }
   return localStorage.getItem('autoCleanupEnabled') === 'true';
 }
 

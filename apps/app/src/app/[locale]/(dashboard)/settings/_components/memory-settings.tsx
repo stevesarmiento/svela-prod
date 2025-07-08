@@ -11,55 +11,48 @@ import { IconTrash, IconGlobe, IconBrain } from 'symbols-react';
 import { useAuth } from '@v1/convex/hooks';
 import { toast } from 'sonner';
 import { bulkCleanupMemories } from '@/lib/client-memory-utils';
+import { useUserSettings } from '@/hooks/use-user-settings';
 
 
 
 export function MemorySettings() {
   const { user } = useAuth();
+  const { updateMemory, getMemorySettings } = useUserSettings();
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Use local state to avoid hydration mismatches
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [autoCleanupEnabled, setAutoCleanupEnabled] = useState(false);
   const [retentionDays, setRetentionDays] = useState('30');
-  const [isLoading, setIsLoading] = useState(false);
+
+  // Load settings after hydration
+  useEffect(() => {
+    const settings = getMemorySettings();
+    setMemoryEnabled(settings.memoryEnabled);
+    setAutoCleanupEnabled(settings.autoCleanupEnabled);
+    setRetentionDays(settings.retentionDays);
+  }, [getMemorySettings]);
 
 
 
   // Handle memory toggle and retention changes
   const handleMemoryToggle = async (enabled: boolean) => {
-    setMemoryEnabled(enabled);
-    // Save to localStorage for now (could be saved to database later)
-    localStorage.setItem('memoryEnabled', enabled.toString());
+    setMemoryEnabled(enabled); // Update local state immediately
+    await updateMemory({ memoryEnabled: enabled });
     toast.success(`Memory ${enabled ? 'enabled' : 'disabled'}`);
   };
 
   const handleAutoCleanupToggle = async (enabled: boolean) => {
-    setAutoCleanupEnabled(enabled);
-    localStorage.setItem('autoCleanupEnabled', enabled.toString());
+    setAutoCleanupEnabled(enabled); // Update local state immediately
+    await updateMemory({ autoCleanupEnabled: enabled });
     toast.success(`Auto-cleanup ${enabled ? 'enabled' : 'disabled'}`);
   };
 
   const handleRetentionChange = async (days: string) => {
-    setRetentionDays(days);
-    // Save to localStorage for now
-    localStorage.setItem('retentionDays', days);
+    setRetentionDays(days); // Update local state immediately
+    await updateMemory({ retentionDays: days });
     toast.success(`Retention period updated to ${days === 'never' ? 'never delete' : `${days} days`}`);
   };
-
-  // Load saved preferences
-  useEffect(() => {
-    const savedMemoryEnabled = localStorage.getItem('memoryEnabled');
-    const savedAutoCleanupEnabled = localStorage.getItem('autoCleanupEnabled');
-    const savedRetentionDays = localStorage.getItem('retentionDays');
-    
-    if (savedMemoryEnabled !== null) {
-      setMemoryEnabled(savedMemoryEnabled === 'true');
-    }
-    if (savedAutoCleanupEnabled !== null) {
-      setAutoCleanupEnabled(savedAutoCleanupEnabled === 'true');
-    }
-    if (savedRetentionDays) {
-      setRetentionDays(savedRetentionDays);
-    }
-  }, []);
 
   const handleClearOldMemories = async (days: number) => {
     if (!user?.id) {
