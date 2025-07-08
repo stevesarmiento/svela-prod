@@ -5,6 +5,7 @@ import { useChat } from 'ai/react'
 import { useAuth } from '@v1/convex/hooks'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
+import { autoCleanupSessionMemories } from '@/lib/client-memory-utils'
 import { Button } from '@v1/ui/button'
 import { ScrollArea } from '@v1/ui/scroll-area'
 import { ProgressiveBlur } from '@v1/ui/progressive-blur'
@@ -145,7 +146,16 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
     return unsubscribe;
   }, [chatManager]);
 
-  const handleClose = React.useCallback(() => {
+  // Auto-cleanup session memories if enabled
+  const autoCleanupSession = React.useCallback(async () => {
+    if (!user?.id) return;
+    await autoCleanupSessionMemories(user.id);
+  }, [user?.id]);
+
+  const handleClose = React.useCallback(async () => {
+    // Auto-cleanup session if enabled
+    await autoCleanupSession();
+    
     // Close the input when toast is dismissed
     const chatManager = ChatStateManager.getInstance();
     chatManager.closeInput();
@@ -155,7 +165,7 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
     } else {
       toast.dismiss(toastId);
     }
-  }, [onClose, toastId]);
+  }, [autoCleanupSession, onClose, toastId]);
 
   // Handle escape key to close toast
   useEffect(() => {
@@ -230,6 +240,7 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
 // Hook to manage chat toast with shared state
 export function useChatToast() {
   const toastIdRef = useRef<string | number | null>(null);
+  const { user } = useAuth();
 
   const showChatToast = () => {
     if (toastIdRef.current) {
@@ -275,7 +286,12 @@ export function useChatToast() {
     }, {
       duration: Infinity,
       position: 'top-center',
-      onDismiss: () => {
+      onDismiss: async () => {
+        // Auto-cleanup session if enabled
+        if (user?.id) {
+          await autoCleanupSessionMemories(user.id);
+        }
+        
         // Clear ref and close input when toast is dismissed by any means (swipe, etc.)
         const chatManager = ChatStateManager.getInstance();
         chatManager.closeInput();
@@ -284,8 +300,13 @@ export function useChatToast() {
     });
   };
 
-  const closeChatToast = () => {
+  const closeChatToast = async () => {
     if (toastIdRef.current) {
+      // Auto-cleanup session if enabled
+      if (user?.id) {
+        await autoCleanupSessionMemories(user.id);
+      }
+      
       // Close the input when toast is dismissed programmatically
       const chatManager = ChatStateManager.getInstance();
       chatManager.closeInput();
