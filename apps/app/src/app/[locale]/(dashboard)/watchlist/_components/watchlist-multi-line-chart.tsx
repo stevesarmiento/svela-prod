@@ -15,7 +15,6 @@ import {
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { createRoot } from "react-dom/client"
 import { cn } from "@v1/ui/cn"
-import { IconCircleDottedAndCircle } from 'symbols-react'
 import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
@@ -453,7 +452,7 @@ export function WatchlistMultiLineChart({
   }, [hoveredWatchlist])
 
   return (
-    <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
+    <div className="grid grid-cols-12 gap-0 rounded-[16px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
       {/* Data fetchers - render components that fetch data for each watchlist */}
       {activeWatchlists.map(group => (
         <WatchlistDataFetcher
@@ -465,12 +464,7 @@ export function WatchlistMultiLineChart({
       ))}
       
       {/* Legend */}
-      <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2">   
-        <div className="flex flex-row items-center justify-between gap-2 mb-3"> 
-          <IconCircleDottedAndCircle className="size-6 fill-primary/40" />
-          <span className="text-muted-foreground font-normal text-sm">Watchlist Comparison</span>
-        </div> 
-        
+      <div className="flex flex-col col-span-3 p-6 pt-6 space-y-2">           
         <div className="flex flex-col gap-2 space-y-3">
           {latestValues.map((watchlist) => (
             <div key={watchlist.id}>

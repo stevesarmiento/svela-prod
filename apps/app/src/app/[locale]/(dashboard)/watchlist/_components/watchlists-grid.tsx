@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { WatchlistCard } from './watchlist-card'
 import { Button } from '@v1/ui/button'
-import { Plus, Grid3X3, TrendingUp } from 'lucide-react'
+import { Plus, Grid3X3 } from 'lucide-react'
 import { toast } from '@v1/ui/use-toast'
 import { 
   useWatchlistGroups,
@@ -18,7 +18,7 @@ import { useWatchlist } from './watchlist-context'
 import { cn } from '@v1/ui/cn'
 import { CreateWatchlist, CreateWatchlistTrigger } from './create-watchlist'
 import { Input } from '@v1/ui/input'
-import { IconStarFill } from 'symbols-react'
+import { IconCircleDottedAndCircle, IconStarFill } from 'symbols-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@v1/ui/tabs'
 import { WatchlistMultiLineChart } from './watchlist-multi-line-chart'
 
@@ -207,23 +207,19 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
 
   return (
     <div className="space-y-6 mb-24">
+
       {/* Header with tabs and create button */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <IconStarFill className="w-4 h-4 fill-muted-foreground" />
-            <span className="text-md font-medium text-white">Watchlists</span>
-          </div>
-          
+        <div className="flex items-center gap-4">          
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'grid' | 'chart')}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="grid" className="flex items-center gap-2">
-                <Grid3X3 className="h-4 w-4" />
-                Grid
+                <IconStarFill className="h-4 w-4 fill-muted-foreground" />
+                Watchlists
               </TabsTrigger>
               <TabsTrigger value="chart" className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Chart
+                <IconCircleDottedAndCircle className="h-4 w-4 fill-muted-foreground" />
+                Comparison
               </TabsTrigger>
             </TabsList>
           </Tabs>
