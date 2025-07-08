@@ -27,6 +27,7 @@ interface WatchlistMultiLineChartProps {
   activeTimeScale: string
   setActiveTimeScale: (scale: string) => void
   selectedWatchlists: Set<string>
+  onSelectWatchlist?: (watchlistId: string) => void
 }
 
 interface PriceDataPoint {
@@ -194,7 +195,8 @@ const TimeScaleSelector = ({
 export function WatchlistMultiLineChart({ 
   activeTimeScale, 
   setActiveTimeScale,
-  selectedWatchlists
+  selectedWatchlists,
+  onSelectWatchlist
 }: WatchlistMultiLineChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const [hoveredWatchlist, setHoveredWatchlist] = useState<string | null>(null)
@@ -477,6 +479,7 @@ export function WatchlistMultiLineChart({
                 style={{ backgroundColor: addOpacityToColor(watchlist.color, 0.05) }}
                 onMouseEnter={() => setHoveredWatchlist(watchlist.id)}
                 onMouseLeave={() => setHoveredWatchlist(null)}
+                onClick={() => onSelectWatchlist?.(watchlist.id)}
               >
                 <div 
                   className="w-1 h-9 rounded-full transition-transform duration-200"

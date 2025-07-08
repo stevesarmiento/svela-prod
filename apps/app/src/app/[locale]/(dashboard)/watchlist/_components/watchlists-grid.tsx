@@ -370,6 +370,10 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
                 activeTimeScale={activeTimeScale}
                 setActiveTimeScale={setActiveTimeScale}
                 selectedWatchlists={allWatchlistIds}
+                onSelectWatchlist={(watchlistId) => {
+                  const group = watchlistGroups?.find(g => g._id === watchlistId)
+                  if (group) onSelectWatchlist?.(group)
+                }}
               />
             ) : (
               <div className="flex items-center justify-center h-[500px] border border-dashed border-border rounded-lg">

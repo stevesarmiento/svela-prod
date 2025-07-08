@@ -98,29 +98,37 @@ const createColumns = (
               />
             </div>
           ) : (
-            // Animated checkbox when no selections exist
-            <AnimatePresence>
-              {isHovered && (
-                <motion.div
-                  className="absolute left-0 z-10 px-1"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{
-                    type: "spring",
-                    stiffness: 400,
-                    damping: 25,
-                    mass: 0.5,
-                  }}
-                >
+            // Animated checkbox when no selections exist - restructured to allow exit animations
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={isHovered ? 'hovered' : 'normal'}
+                className="absolute left-0 z-10 px-1"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ 
+                  opacity: isHovered ? 1 : 0, 
+                  x: isHovered ? 0 : -20 
+                }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 25,
+                  mass: 0.5,
+                  duration: 0.2,
+                }}
+                style={{ 
+                  pointerEvents: isHovered ? 'auto' : 'none'
+                }}
+              >
+                {isHovered && (
                   <Checkbox
                     checked={selectedCoins.has(row.original.id.toString())}
                     onCheckedChange={(value) => onCoinSelect(row.original.id.toString(), !!value)}
                     aria-label="Select row"
                     className="mt-[6px] data-[state=checked]:mt-[2px]"
                   />
-                </motion.div>
-              )}
+                )}
+              </motion.div>
             </AnimatePresence>
           )}
           
@@ -168,6 +176,7 @@ const createColumns = (
                 stiffness: 400,
                 damping: 25,
                 mass: 0.5,
+                duration: 0.2,
               }}
             >
               <div className="relative">
@@ -333,7 +342,35 @@ export function Watchlist() {
   const [removingCoins, setRemovingCoins] = useState<Set<number>>(new Set())
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null)
   const coinSearchRef = useRef<CoinSearchRef>(null)
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
+  // Add debounced hover clear mechanism to prevent stuck states
+  const clearHoverWithDelay = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current)
+    }
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoveredRowId(null)
+    }, 150) // Small delay to prevent flickering but clear stuck states
+  }, [])
+
+  const setHoverState = useCallback((rowId: string | null) => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current)
+      hoverTimeoutRef.current = null
+    }
+    setHoveredRowId(rowId)
+  }, [])
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current)
+      }
+    }
+  }, [])
+
   // Get current watchlist group parameter to preserve it in navigation (same as chart-table and top-nav)
   const watchlistGroup = searchParams.get('wg')
   
@@ -730,7 +767,10 @@ export function Watchlist() {
         </div>
 
         {/* Table Body */}
-        <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden">
+        <div 
+          className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden"
+          onMouseLeave={() => clearHoverWithDelay()}
+        >
           {table.getRowModel().rows.map(row => {
             const isSelected = selectedCoins.has(row.original.id.toString());
             const hasAnySelections = selectedCoins.size > 0;
@@ -747,8 +787,8 @@ export function Watchlist() {
                 {/* First cell - merged select + token with specific hover */}
                 <div 
                   className="flex items-center"
-                  onMouseEnter={() => setHoveredRowId(row.id)}
-                  onMouseLeave={() => setHoveredRowId(null)}
+                  onMouseEnter={() => setHoverState(row.id)}
+                  onMouseLeave={() => clearHoverWithDelay()}
                   onClick={(e) => {
                     e.preventDefault(); // Always prevent navigation for first cell
                     e.stopPropagation();
