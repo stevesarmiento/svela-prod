@@ -35,9 +35,35 @@ interface PriceCardData {
   };
 }
 
+interface ComparisonChartData {
+  coins: Array<{
+    id: number;
+    name: string;
+    symbol: string;
+    price: number;
+    change24h: number;
+    marketCap: number;
+    volume24h: number;
+    rank: number;
+    historical?: {
+      timeframe: string;
+      prices: Array<{
+        timestamp: number;
+        price: number;
+      }>;
+      volumes?: Array<{
+        timestamp: number;
+        volume: number;
+      }>;
+    };
+  }>;
+  timeframe: string;
+  chartType?: string;
+}
+
 interface ComponentData {
-  type: 'price_card';
-  data: PriceCardData;
+  type: 'price_card' | 'comparison_chart';
+  data: PriceCardData | ComparisonChartData;
 }
 
 interface ChatState {

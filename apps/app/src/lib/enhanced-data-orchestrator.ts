@@ -616,6 +616,32 @@ export class EnhancedDataOrchestrator {
     const quality = results.errors.length === 0 ? 'high' : 
                    results.errors.length < 3 ? 'medium' : 'low';
     
+    // For comparison queries, return multi-coin data
+    if (intent.type === 'comparison' && (results.priceData.length > 1 || results.historicalData.length > 1)) {
+      console.log('📊 Assembling multi-coin comparison data:', {
+        priceDataCount: results.priceData.length,
+        historicalDataCount: results.historicalData.length,
+        marketStructureDataCount: results.marketStructureData.length
+      });
+      
+      return {
+        intent,
+        multiCoinData: {
+          priceData: results.priceData,
+          historicalData: results.historicalData,
+          marketStructureData: results.marketStructureData
+        },
+        comparisonData: results.comparisonData || undefined,
+        metadata: {
+          sources: this.getDataSources(intent.dataTypes),
+          fetchTime: Date.now() - startTime,
+          quality,
+          coverage
+        }
+      };
+    }
+    
+    // For single coin queries, return single coin data (existing behavior)
     return {
       intent,
       priceData: results.priceData[0], // For single coin queries

@@ -5,6 +5,7 @@ import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@v1/convex/hooks";
 import { PriceCard } from "./price-card";
+import { ComparisonChart } from "./comparison-chart";
 
 interface PriceCardData {
   id: number;
@@ -29,9 +30,35 @@ interface PriceCardData {
   };
 }
 
+interface ComparisonChartData {
+  coins: Array<{
+    id: number;
+    name: string;
+    symbol: string;
+    price: number;
+    change24h: number;
+    marketCap: number;
+    volume24h: number;
+    rank: number;
+    historical?: {
+      timeframe: string;
+      prices: Array<{
+        timestamp: number;
+        price: number;
+      }>;
+      volumes?: Array<{
+        timestamp: number;
+        volume: number;
+      }>;
+    };
+  }>;
+  timeframe: string;
+  chartType?: string;
+}
+
 interface ComponentData {
-  type: 'price_card';
-  data: PriceCardData;
+  type: 'price_card' | 'comparison_chart';
+  data: PriceCardData | ComparisonChartData;
 }
 
 interface ChatMessageProps {
@@ -171,7 +198,10 @@ export function ChatMessage({
         
         {/* Render component if it's an assistant message and we have component data */}
         {role === 'assistant' && componentData?.type === 'price_card' && (
-          <PriceCard {...componentData.data} />
+          <PriceCard {...(componentData.data as PriceCardData)} />
+        )}
+        {role === 'assistant' && componentData?.type === 'comparison_chart' && (
+          <ComparisonChart {...(componentData.data as ComparisonChartData)} />
         )}
       </div>
       

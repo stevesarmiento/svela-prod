@@ -6,7 +6,8 @@ import type {
   EnhancedChatResponse, 
   EnhancedDataContext, 
   ChatComponent,
-  VisualizationType
+  VisualizationType,
+  MarketStructureData
 } from '@/types/enhanced-chat';
 import { formatLargeNumber } from '@v1/ui/format-numbers';
 
@@ -115,8 +116,36 @@ export class EnhancedChatHandler {
    */
   private generateComponents(dataContext: EnhancedDataContext): ChatComponent[] {
     const components: ChatComponent[] = [];
-    const { intent, priceData, historicalData, marketStructureData } = dataContext;
+    const { intent, priceData, historicalData, marketStructureData, multiCoinData } = dataContext;
     
+    // Handle multi-coin comparison data
+    if (multiCoinData && intent.type === 'comparison') {
+      console.log('🎨 Generating comparison components for multi-coin data');
+      
+      // Priority 1: Comparison chart with historical data
+      if (multiCoinData.historicalData.length > 1) {
+        const chartType = this.determineChartType(intent.visualizationType);
+        components.push(this.createComparisonChart(multiCoinData, chartType));
+      }
+      
+      // Priority 2: Price cards for each coin
+      multiCoinData.priceData.forEach((coinPrice, index) => {
+        const priceCard = this.createPriceCard(coinPrice);
+        priceCard.priority = 2 + index; // Ensure price cards come after comparison chart
+        priceCard.size = 'small'; // Make them smaller in comparison view
+        components.push(priceCard);
+      });
+      
+      // Priority 3: Market structure comparison (if available)
+      if (multiCoinData.marketStructureData.length > 1) {
+        components.push(this.createMarketStructureComparison(multiCoinData.marketStructureData));
+      }
+      
+      // Sort by priority and return
+      return components.sort((a, b) => a.priority - b.priority);
+    }
+    
+    // Handle single coin data (existing logic)
     // Priority 1: Price card for coin queries
     if (priceData && (intent.type === 'coin' || intent.dataTypes.includes('price'))) {
       components.push(this.createPriceCard(priceData));
@@ -245,6 +274,85 @@ export class EnhancedChatHandler {
         dataSource: 'Multiple Sources',
         lastUpdated: Date.now(),
         reliability: 'medium'
+      }
+    };
+  }
+
+  /**
+   * Create comparison chart component for multi-coin data
+   */
+  private createComparisonChart(
+    multiCoinData: NonNullable<EnhancedDataContext['multiCoinData']>,
+    chartType: VisualizationType
+  ): ChatComponent {
+    const coinNames = multiCoinData.priceData.map(coin => coin.symbol).join(' vs ');
+    const timeframe = multiCoinData.historicalData[0]?.timeframe || '7d';
+    
+    return {
+      id: `comparison-chart-${Date.now()}`,
+      type: 'comparison_chart',
+      priority: 1,
+      size: 'large',
+      title: `${coinNames} Comparison`,
+      subtitle: `Performance over ${timeframe}`,
+      data: {
+        coins: multiCoinData.priceData.map((priceData, index) => ({
+          id: priceData.id,
+          name: priceData.name,
+          symbol: priceData.symbol,
+          price: priceData.price,
+          change24h: priceData.priceChange24h,
+          marketCap: priceData.marketCap,
+          volume24h: priceData.volume24h,
+          rank: priceData.rank,
+          historical: multiCoinData.historicalData[index] ? {
+            timeframe: multiCoinData.historicalData[index].timeframe,
+            prices: multiCoinData.historicalData[index].prices,
+            volumes: multiCoinData.historicalData[index].volumes
+          } : undefined
+        })),
+        timeframe,
+        chartType
+      },
+      metadata: {
+        dataSource: 'CoinMarketCap',
+        lastUpdated: Date.now(),
+        reliability: 'high'
+      }
+    };
+  }
+
+  /**
+   * Create market structure comparison component
+   */
+  private createMarketStructureComparison(
+    marketStructureData: MarketStructureData[]
+  ): ChatComponent {
+    const coinNames = marketStructureData.map(data => 
+      // We don't have symbol in MarketStructureData, so we'll use coinId
+      `Coin ${data.coinId}`
+    ).join(' vs ');
+    
+    return {
+      id: `market-structure-comparison-${Date.now()}`,
+      type: 'market_structure',
+      priority: 10,
+      size: 'medium',
+      title: `Market Structure Comparison`,
+      subtitle: coinNames,
+      data: {
+        comparison: marketStructureData.map(data => ({
+          coinId: data.coinId,
+          fundingRate: data.fundingRate,
+          openInterest: data.openInterest,
+          liquidations: data.liquidations,
+          orderFlow: data.orderFlow
+        }))
+      },
+      metadata: {
+        dataSource: 'CoinGlass',
+        lastUpdated: Date.now(),
+        reliability: 'high'
       }
     };
   }
@@ -400,7 +508,13 @@ Since visual components will also be shown, focus your text response on insights
   private formatDataContextForAI(userMessage: string, dataContext: EnhancedDataContext): string {
     console.log('🔄 Formatting data context for AI...');
     
-    // Try to get comprehensive analysis data if available
+    // Handle multi-coin comparison data
+    if (dataContext.multiCoinData && dataContext.intent.type === 'comparison') {
+      console.log('✅ Using multi-coin comparison data format');
+      return this.formatMultiCoinDataForAI(userMessage, dataContext.multiCoinData);
+    }
+    
+    // Try to get comprehensive analysis data if available (single coin)
     const comprehensiveData = this.prepareComprehensiveAnalysisData(dataContext);
     
     if (comprehensiveData) {
@@ -485,6 +599,72 @@ Since visual components will also be shown, focus your text response on insights
     context += '\nProvide insights and analysis based on this real-time data.';
     
     console.log('📝 Basic formatted data length for AI:', context.length, 'characters');
+    return context;
+  }
+
+  /**
+   * Format multi-coin data for AI consumption
+   */
+  private formatMultiCoinDataForAI(
+    userMessage: string,
+    multiCoinData: NonNullable<EnhancedDataContext['multiCoinData']>
+  ): string {
+    const { priceData, historicalData } = multiCoinData;
+    
+    let context = `User Query: "${userMessage}"\n\n**MULTI-COIN COMPARISON ANALYSIS:**\n`;
+    
+    // Price comparison
+    if (priceData.length > 0) {
+      context += `\n**Price Comparison:**\n`;
+      priceData.forEach((coin, index) => {
+        context += `\n**${coin.name} (${coin.symbol})**\n`;
+        context += `- Current Price: $${coin.price.toLocaleString()}\n`;
+        context += `- 24h Change: ${coin.priceChange24h.toFixed(2)}%\n`;
+        context += `- Market Cap: $${formatLargeNumber(coin.marketCap)}\n`;
+        context += `- 24h Volume: $${formatLargeNumber(coin.volume24h)}\n`;
+        context += `- Rank: #${coin.rank}\n`;
+        
+        // Add historical performance if available
+        if (historicalData[index] && historicalData[index].prices.length > 0) {
+          const prices = historicalData[index].prices;
+          const oldestPrice = prices[0]?.price || 0;
+          const newestPrice = prices[prices.length - 1]?.price || 0;
+          const periodChange = oldestPrice > 0 ? ((newestPrice - oldestPrice) / oldestPrice) * 100 : 0;
+          
+          context += `- ${historicalData[index].timeframe} Performance: ${periodChange.toFixed(2)}%\n`;
+        }
+      });
+    }
+    
+    // Performance comparison
+    if (historicalData.length > 1) {
+      context += `\n**Performance Comparison (${historicalData[0]?.timeframe || '7d'}):**\n`;
+      const performances = historicalData.map((data, index) => {
+        if (data.prices.length === 0) return null;
+        
+        const oldestPrice = data.prices[0]?.price || 0;
+        const newestPrice = data.prices[data.prices.length - 1]?.price || 0;
+        const change = oldestPrice > 0 ? ((newestPrice - oldestPrice) / oldestPrice) * 100 : 0;
+        
+        return {
+          symbol: priceData[index]?.symbol || 'Unknown',
+          name: priceData[index]?.name || 'Unknown',
+          change: change
+        };
+      }).filter(p => p !== null);
+      
+      // Sort by performance
+      performances.sort((a, b) => b!.change - a!.change);
+      
+      performances.forEach((perf, index) => {
+        const position = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`;
+        context += `${position} ${perf!.symbol}: ${perf!.change > 0 ? '+' : ''}${perf!.change.toFixed(2)}%\n`;
+      });
+    }
+    
+    context += '\nProvide comparative analysis highlighting relative performance, strengths, and market dynamics.';
+    
+    console.log('📝 Multi-coin formatted data length for AI:', context.length, 'characters');
     return context;
   }
 

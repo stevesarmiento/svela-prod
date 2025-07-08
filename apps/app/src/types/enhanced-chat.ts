@@ -31,39 +31,46 @@ export type VisualizationType =
   | 'technical_analysis' 
   | 'market_structure' 
   | 'comparison_table'
+  | 'comparison_chart'  // Add this new type
   | 'heatmap'
   | 'comprehensive_analysis'
 
 // Enhanced Data Context
 export interface EnhancedDataContext {
-  intent: EnhancedChatIntent
-  priceData?: CoinPriceData
-  historicalData?: CoinHistoricalData
-  technicalData?: TechnicalAnalysisData
-  marketStructureData?: MarketStructureData
-  comparisonData?: ComparisonData
+  intent: EnhancedChatIntent;
+  priceData?: CoinPriceData;
+  historicalData?: CoinHistoricalData;
+  technicalData?: TechnicalAnalysisData;
+  marketStructureData?: MarketStructureData;
+  comparisonData?: ComparisonData;
+  // Add multi-coin data for comparison queries
+  multiCoinData?: {
+    priceData: CoinPriceData[];
+    historicalData: CoinHistoricalData[];
+    marketStructureData: MarketStructureData[];
+  };
   metadata: {
-    sources: string[]
-    fetchTime: number
-    quality: 'high' | 'medium' | 'low'
-    coverage: number // 0-1, how much of requested data was found
-  }
+    sources: string[];
+    fetchTime: number;
+    quality: 'high' | 'medium' | 'low';
+    coverage: number;
+  };
 }
 
 // Enhanced Component System
 export interface ChatComponent {
-  id: string
-  type: VisualizationType
-  data: Record<string, unknown>
-  priority: number // Lower number = higher priority
-  size: 'small' | 'medium' | 'large' | 'full'
-  title?: string
-  subtitle?: string
-  metadata?: {
-    dataSource: string
-    lastUpdated: number
-    reliability: 'high' | 'medium' | 'low'
-  }
+  id: string;
+  type: VisualizationType;
+  priority: number;
+  size: 'small' | 'medium' | 'large';
+  title: string;
+  subtitle?: string;
+  data: Record<string, unknown>;
+  metadata: {
+    dataSource: string;
+    lastUpdated: number;
+    reliability: 'high' | 'medium' | 'low';
+  };
 }
 
 export interface EnhancedChatResponse {
