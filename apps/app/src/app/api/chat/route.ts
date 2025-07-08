@@ -1,7 +1,8 @@
 import { streamText } from 'ai';
 import { z } from 'zod';
-import { openai, isOpenAIAvailable } from '@/lib/openai';
+import { gemini } from '@/lib/gemini';
 import { detectAndFetchData, formatDataForLLM } from '@/lib/data-fetcher';
+import { enhancedChatHandler } from '@/lib/enhanced-chat-handler';
 
 const ChatRequestSchema = z.object({
   messages: z.array(z.object({
@@ -12,11 +13,11 @@ const ChatRequestSchema = z.object({
 
 export async function POST(req: Request) {
   try {
-    // Check if OpenAI is available
-    if (!isOpenAIAvailable || !openai) {
+    // Check if Gemini is available
+    if (!gemini) {
       return new Response(
         JSON.stringify({ 
-          error: 'OpenAI service is not available. Please configure OPENAI_API_KEY.' 
+          error: 'Gemini service is not available. Please configure GOOGLE_GENERATIVE_AI_API_KEY.' 
         }), 
         { 
           status: 503,
@@ -28,14 +29,110 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { messages } = ChatRequestSchema.parse(body);
     
+    // Always use enhanced mode now
+    const useEnhanced = true;
+    
+    console.log('🚀 Enhanced Chat Processing - Always Enhanced Mode');
+    
     const latestUserMessage = messages
       .filter(m => m.role === 'user')
       .pop();
     
     console.log('Latest user message:', latestUserMessage?.content);
     
+    // Enhanced processing path
+    if (useEnhanced && latestUserMessage?.content) {
+      console.log('🚀 Using enhanced chat processing');
+      
+      try {
+        console.log('💫 Starting enhanced chat handler...');
+        const enhancedResponse = await enhancedChatHandler.processChat(latestUserMessage.content);
+        console.log('✅ Enhanced response generated:', {
+          hasTextResponse: !!enhancedResponse.textResponse,
+          componentsCount: enhancedResponse.components?.length || 0,
+          processingTime: enhancedResponse.processingTime
+        });
+        
+        // Store enhanced data for use in the normal streaming path
+        const componentData = enhancedResponse.components[0] ? {
+          type: enhancedResponse.components[0].type,
+          data: enhancedResponse.components[0].data
+        } : null;
+
+        console.log('📦 Component data to send:', componentData);
+        console.log('🔄 Falling through to normal streaming with enhanced content');
+
+        // Set up enhanced system prompt and continue with normal streaming
+        const enhancedSystemPrompt = `You are a sophisticated cryptocurrency analyst with access to real-time market data. 
+
+Based on the comprehensive analysis already performed, provide this exact response to the user:
+
+${enhancedResponse.textResponse}
+
+Provide this response exactly as written above, maintaining the insights and analysis.`;
+
+        const result = await streamText({
+          model: gemini('gemini-2.5-flash'),
+          messages: [
+            {
+              role: 'system',
+              content: enhancedSystemPrompt,
+            },
+            ...messages,
+          ],
+          temperature: 0.1,
+          maxTokens: 1000,
+        });
+
+        const response = result.toDataStreamResponse({
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            'X-Content-Type-Options': 'nosniff',
+            'X-Enhanced-Chat': 'true',
+            // Include component data in header for compatibility
+            ...(componentData && {
+              'X-Component-Data': JSON.stringify(componentData)
+            }),
+            // Include additional enhanced metadata
+            'X-Enhanced-Metadata': JSON.stringify({
+              components: enhancedResponse.components,
+              followUpSuggestions: enhancedResponse.followUpSuggestions,
+              processingTime: enhancedResponse.processingTime,
+              intent: enhancedResponse.dataContext.intent
+            })
+          }
+        });
+
+        console.log('🎯 Enhanced response sent via normal streaming');
+        return response;
+      } catch (error) {
+        console.error('❌ Enhanced chat processing failed, falling back to basic mode:', error);
+        console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace available');
+        // Fall through to basic processing
+      }
+    } else {
+      console.log('⏭️ Skipping enhanced processing:', {
+        useEnhanced,
+        hasUserMessage: !!latestUserMessage?.content,
+        reason: !useEnhanced ? 'Enhanced mode disabled' : 'No user message'
+      });
+    }
+    
     let dataContext = '';
-    let enhancedSystemPrompt = 'You are a helpful AI assistant with access to live cryptocurrency market data. Provide clear, concise, and helpful responses.';
+    let enhancedSystemPrompt = `You are a helpful AI assistant with access to live cryptocurrency market data. 
+
+**FORMATTING REQUIREMENTS:**
+- Format your response using **Markdown** for better readability
+- Use **## headers** for main sections
+- Use **### subheaders** for subsections
+- Use **bold** for important numbers and key insights
+- Use *italics* for emphasis and trends
+- Use bullet points (-) for lists
+- Use \`inline code\` for technical terms and indicators
+- Keep responses well-structured and scannable
+
+Provide clear, concise, and helpful responses.`;
     let componentData = null;
     
     if (latestUserMessage) {
@@ -68,10 +165,20 @@ export async function POST(req: Request) {
         }
         
         enhancedSystemPrompt = `You are a cryptocurrency and market data assistant with access to real-time information. 
-        
+
+**FORMATTING REQUIREMENTS:**
+- Format your response using **Markdown** for better readability
+- Use **## headers** for main sections
+- Use **### subheaders** for subsections
+- Use **bold** for important numbers and key insights
+- Use *italics* for emphasis and trends
+- Use bullet points (-) for lists
+- Use \`inline code\` for technical terms and indicators
+- Keep responses well-structured and scannable
+
 When users ask about cryptocurrency prices, market data, or specific coins, use the provided live data to give accurate, current information. 
 
-Key guidelines:
+**Key guidelines:**
 - Always use the most recent data provided in the context
 - Format prices and numbers clearly (use commas for thousands)
 - Highlight significant changes or trends
@@ -84,7 +191,7 @@ ${dataContext}`;
     }
 
     const result = await streamText({
-      model: openai.chat('gpt-4o-mini'),
+      model: gemini('gemini-2.5-flash'),
       messages: [
         {
           role: 'system',
@@ -93,7 +200,7 @@ ${dataContext}`;
         ...messages,
       ],
       temperature: 0.3, // Lower temperature for more consistent data responses
-      maxTokens: 1000,
+      maxTokens: 3000,
     });
 
     // Create a custom response that includes both text and component data
