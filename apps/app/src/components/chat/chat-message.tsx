@@ -96,15 +96,15 @@ export function ChatMessage({
             <Image 
               src="/svela-logo.svg" 
               alt="Svela" 
-              width={23} 
-              height={23}
+              width={15} 
+              height={15}
               className="opacity-70"
             />
           </AvatarFallback>
         </Avatar>
       )}
       
-      <div className={`max-w-[80%] space-y-3 ${role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
+      <div className={`max-w-[66%] space-y-3 ${role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
         <div
           className={`rounded-lg ${
             role === 'user'

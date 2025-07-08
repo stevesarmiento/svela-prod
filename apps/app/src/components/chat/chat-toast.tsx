@@ -172,7 +172,7 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
   if (!chatState) {
     return (
       <div className="w-[540px] mx-auto bg-zinc-900/90 backdrop-blur-[100px] border border-zinc-800/50 rounded-[20px] overflow-hidden shadow-xl shadow-black/50 active:cursor-grabbing cursor-grab">
-        <div className="flex flex-col h-[400px]">
+        <div className="flex flex-col h-[calc(100vh-200px)]">
           <div className="flex items-center justify-between p-4 border-b border-zinc-800">
             <h3 className="text-sm font-medium text-white">Chat</h3>
             <Button
@@ -193,8 +193,8 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
   }
 
   return (
-    <div className="w-full translate-x-[-80px] bg-zinc-900/90 backdrop-blur-[100px] border border-zinc-800/50 rounded-[20px] overflow-hidden mx-auto shadow-xl shadow-black/50 active:cursor-grabbing cursor-grab">
-      <div className="flex flex-col h-[500px]">
+    <div className="w-full -translate-x-1/3 bg-zinc-900/90 backdrop-blur-[100px] border border-zinc-800/50 rounded-[20px] overflow-hidden mx-auto shadow-xl shadow-black/50 active:cursor-grabbing cursor-grab">
+      <div className="flex flex-col h-[calc(100vh-300px)]">
         {/* Chat Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-800/50">
           <div className="flex items-center gap-3">
@@ -246,7 +246,7 @@ export function useChatToast() {
             direction="top"
             blurLayers={12}
             blurIntensity={1.3}
-            className="absolute inset-0 -z-10 translate-x-[-40%] h-[90%]"
+            className="absolute inset-0 -z-10 translate-x-[-50%] h-[90%]"
           />
           
           {/* Toast Content */}
@@ -260,7 +260,7 @@ export function useChatToast() {
               damping: 18,
               mass: 0.3,
             }}
-            className="w-[540px] relative z-10"
+            className="w-[60%] relative z-10"
           >
             <ChatToastContent 
               toastId={t} 
@@ -306,6 +306,7 @@ export function useChatState() {
   const lastDataQueryRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const chatManager = ChatStateManager.getInstance();
+  const { user } = useAuth();
 
   console.log('🚀 Always using enhanced chat mode');
 
@@ -319,6 +320,9 @@ export function useChatState() {
     stop,
   } = useChat({
     api: '/api/chat',
+    body: {
+      userId: user?.id || null, // 🚀 Add userId for memory functionality
+    },
     onResponse: async (response) => {
       // Check if this is an enhanced response
       const isEnhancedResponse = response.headers.get('X-Enhanced-Chat') === 'true';
@@ -480,6 +484,7 @@ Examples:
       console.log('🚀 Form submit with enhanced mode: ON');
       console.log('📝 Input message:', input);
       console.log('🔗 API endpoint:', '/api/chat', 'Enhanced: true');
+      console.log('🧠 Memory enabled:', !!user?.id, 'UserID:', user?.id);
       
       setIsStopped(false);
       
