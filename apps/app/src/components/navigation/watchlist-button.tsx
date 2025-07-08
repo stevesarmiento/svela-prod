@@ -15,9 +15,15 @@ interface WatchlistButtonProps {
 }
 
 export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
-  const { watchlist, addToWatchlist, removeFromWatchlist, isInitialized } = useWatchlist();
+  const { 
+    selectedGroupCoins, 
+    addToSelectedGroup, 
+    removeFromSelectedGroup, 
+    isInitialized,
+    selectedGroup 
+  } = useWatchlist();
   const coinIdNumber = typeof coinId === 'string' ? parseInt(coinId) : coinId;
-  const isInWatchlist = isInitialized && watchlist.includes(coinIdNumber);
+  const isInWatchlist = isInitialized && selectedGroupCoins.includes(coinIdNumber);
   const [showSlash, setShowSlash] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
 
@@ -35,23 +41,23 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
   // Keyboard shortcut handler
   useEffect(() => {
     const handleClick = async () => {
-      if (isToggling) return;
+      if (isToggling || !selectedGroup) return;
       
       setIsToggling(true);
       
       try {
         if (isInWatchlist) {
           setShowSlash(true);
-          await removeFromWatchlist(coinIdNumber);
+          await removeFromSelectedGroup(coinIdNumber);
           toast({
             title: "Removed",
-            description: `${coinName || 'Coin'} removed from watchlist`,
+            description: `${coinName || 'Coin'} removed from ${selectedGroup.name}`,
           });
         } else {
-          await addToWatchlist(coinIdNumber);
+          await addToSelectedGroup(coinIdNumber);
           toast({
             title: "Added",
-            description: `${coinName || 'Coin'} added to watchlist`,
+            description: `${coinName || 'Coin'} added to ${selectedGroup.name}`,
           });
         }
       } catch (error) {
@@ -81,29 +87,29 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [toggleShortcut, isInWatchlist, isToggling, coinIdNumber, coinName, addToWatchlist, removeFromWatchlist, setShowSlash]);
+  }, [toggleShortcut, isInWatchlist, isToggling, coinIdNumber, coinName, addToSelectedGroup, removeFromSelectedGroup, setShowSlash, selectedGroup]);
 
   const handleButtonClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
-    if (isToggling) return;
+    if (isToggling || !selectedGroup) return;
     
     setIsToggling(true);
     
     try {
       if (isInWatchlist) {
         setShowSlash(true);
-        await removeFromWatchlist(coinIdNumber);
+        await removeFromSelectedGroup(coinIdNumber);
         toast({
           title: "Removed",
-          description: `${coinName || 'Coin'} removed from watchlist`,
+          description: `${coinName || 'Coin'} removed from ${selectedGroup.name}`,
         });
       } else {
-        await addToWatchlist(coinIdNumber);
+        await addToSelectedGroup(coinIdNumber);
         toast({
           title: "Added",
-          description: `${coinName || 'Coin'} added to watchlist`,
+          description: `${coinName || 'Coin'} added to ${selectedGroup.name}`,
         });
       }
     } catch (error) {
@@ -117,6 +123,11 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
       setIsToggling(false);
     }
   };
+
+  // Don't show button if no group is selected
+  if (!selectedGroup) {
+    return null;
+  }
 
   return (
     <Tooltip delayDuration={0}>
@@ -185,7 +196,7 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
       </TooltipTrigger>
       <TooltipContent side="bottom" sideOffset={10} className="bg-zinc-900 p-2 py-1 rounded-lg flex items-center gap-2 opacity-100">
         <p className="text-white text-xs">
-          {isInWatchlist ? "Remove from watchlist" : "Add to watchlist"}
+          {isInWatchlist ? `Remove from ${selectedGroup.name}` : `Add to ${selectedGroup.name}`}
         </p>
         {toggleShortcut && (
           <>

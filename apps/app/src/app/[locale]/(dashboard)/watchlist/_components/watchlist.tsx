@@ -23,6 +23,7 @@ import {
   type ColumnDef,
 } from '@tanstack/react-table'
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { useSearchParams } from "next/navigation"
 import { Spinner } from "@v1/ui/spinner"
 import { motion, AnimatePresence } from "framer-motion"
 import { WatchlistsGrid } from "./watchlists-grid"
@@ -326,11 +327,15 @@ export function Watchlist() {
     removeBulkFromSelectedGroup
   } = useWatchlist()
   
+  const searchParams = useSearchParams()
   const [sorting, setSorting] = useState<SortingState>([])
   const [selectedCoins, setSelectedCoins] = useState<Set<string>>(new Set())
   const [removingCoins, setRemovingCoins] = useState<Set<number>>(new Set())
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null)
   const coinSearchRef = useRef<CoinSearchRef>(null)
+  
+  // Get current watchlist group parameter to preserve it in navigation (same as chart-table and top-nav)
+  const watchlistGroup = searchParams.get('wg')
   
   // Filter state - increase market cap range to accommodate large coins
   const [filters, setFilters] = useState<FilterState>({
@@ -733,7 +738,7 @@ export function Watchlist() {
             return (
               <Link 
                 key={row.id}
-                href={`/charts/${row.original.id}`}
+                href={watchlistGroup ? `/charts/${row.original.id}?wg=${watchlistGroup}` : `/charts/${row.original.id}`}
                 className={cn(
                   "grid grid-cols-5 gap-4 px-4 py-2.5 border-b last:border-b-0 hover:bg-primary/[0.02] transition-opacity duration-200 cursor-pointer",
                   hasAnySelections ? (isSelected ? "opacity-100" : "opacity-40") : "opacity-100"

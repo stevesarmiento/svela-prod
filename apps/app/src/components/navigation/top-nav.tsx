@@ -3,7 +3,7 @@
 //import Link from "next/link";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 // import { 
 //   IconHouseFill, 
 //   IconDistributeHorizontalCenterFill,  
@@ -93,12 +93,17 @@ export function TopNav() {
   const { user: clerkUser, isLoaded } = useUser();
   const { openUserProfile } = useClerk();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [greeting, setGreeting] = useState("Dashboard");
   const [isMounted, setIsMounted] = useState(false);
   const { isChartDetailPage, tokenData, isLoading } = useTokenHeader();
 
   // Extract coin ID from pathname for watchlist button
   const coinId = isChartDetailPage ? pathname.split('/').pop() : null;
+
+  // Get current watchlist group parameter to preserve it in back navigation
+  const watchlistGroup = searchParams.get('wg');
+  const backToChartsUrl = watchlistGroup ? `/charts?wg=${watchlistGroup}` : '/charts';
 
   // Update greeting based on route after component mounts
   useEffect(() => {
@@ -132,7 +137,7 @@ export function TopNav() {
           {isChartDetailPage ? (
             // Token Header with cached data
             <div className="flex items-center gap-4">
-              <Link href="/charts" className="flex text-white/70 hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150">
+              <Link href={backToChartsUrl} className="flex text-white/70 hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150">
                 <IconChevronBackward className="h-3 w-3 fill-current" />
               </Link>
               <div className="flex items-center gap-2">
