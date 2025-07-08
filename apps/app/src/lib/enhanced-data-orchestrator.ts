@@ -363,13 +363,13 @@ export class EnhancedDataOrchestrator {
           let apiPath = '';
           switch (endpoint) {
             case 'funding-rate':
-              apiPath = `/api/coinalyze/fundingrate?cmcId=${target.coinId}`;
+              apiPath = `/api/coinglass/funding-rate/exchange-list?coinId=${target.coinId}`;
               break;
             case 'liquidations':
-              apiPath = `/api/coinalyze/liquidations?cmcId=${target.coinId}`;
+              apiPath = `/api/coinglass/liquidation/aggregated-history?coinId=${target.coinId}`;
               break;
             case 'open-interest':
-              apiPath = `/api/coinalyze/open-interest?cmcId=${target.coinId}`;
+              apiPath = `/api/coinglass/open-interest/aggregated-history?coinId=${target.coinId}`;
               break;
             case 'taker-buy-sell':
               apiPath = `/api/coinglass/taker-buy-sell/exchange-list?coinId=${target.coinId}`;
@@ -378,10 +378,12 @@ export class EnhancedDataOrchestrator {
               return;
           }
           
+          console.log(`🔗 Fetching ${endpoint} from CoinGlass:`, apiPath);
           const response = await fetch(`${this.baseUrl}${apiPath}`);
           if (!response.ok) throw new Error(`Failed to fetch ${endpoint}`);
           
           const data = await response.json();
+          console.log(`📊 ${endpoint} data received:`, data);
           this.integrateMarketStructureData(marketData, endpoint, data);
           
         } catch (error) {
@@ -488,55 +490,105 @@ export class EnhancedDataOrchestrator {
   }
 
   /**
-   * Integrate market structure data from various endpoints
+   * Integrate market structure data from various endpoints (CoinGlass format)
    */
   private integrateMarketStructureData(
     marketData: Partial<MarketStructureData>,
     endpoint: string,
     data: Record<string, unknown>
   ): void {
+    console.log(`🔧 Integrating ${endpoint} data:`, data);
+    
+    // Check if it's a successful CoinGlass response
+    if (data.success !== true) {
+      console.warn(`⚠️ ${endpoint}: API response indicates failure`, data);
+      return;
+    }
+
     switch (endpoint) {
       case 'funding-rate':
-        if (data.currentFundingRate) {
-          marketData.fundingRate = {
-            current: Number(data.currentFundingRate),
-            average24h: Number(data.average24h) || 0,
-            trend: 'stable' // Would need to calculate trend
-          };
+        // CoinGlass funding rate format: { success: true, data: [{ symbol, stablecoinMarginList, tokenMarginList }] }
+        const fundingData = data.data as Array<Record<string, unknown>>;
+        if (fundingData && fundingData.length > 0) {
+          const coinData = fundingData[0];
+          if (coinData) {
+            const stablecoinList = coinData.stablecoinMarginList as Array<Record<string, unknown>>;
+            
+            if (stablecoinList && stablecoinList.length > 0) {
+              // Get average funding rate from all exchanges
+              const fundingRates = stablecoinList
+                .map(item => Number(item.fundingRate))
+                .filter(rate => !isNaN(rate));
+              
+              if (fundingRates.length > 0) {
+                const avgFundingRate = fundingRates.reduce((a, b) => a + b, 0) / fundingRates.length;
+                marketData.fundingRate = {
+                  current: avgFundingRate,
+                  average24h: avgFundingRate, // Would need historical data for actual 24h average
+                  trend: 'stable' // Would need to calculate trend
+                };
+                console.log(`✅ Funding rate integrated:`, marketData.fundingRate);
+              }
+            }
+          }
         }
         break;
         
       case 'liquidations':
-        if (data.longLiquidations && data.shortLiquidations) {
-          const longs = Number(data.longLiquidations);
-          const shorts = Number(data.shortLiquidations);
+        // CoinGlass liquidation format: { success: true, data: [{ timestamp, longLiquidations, shortLiquidations, totalLiquidations }] }
+        const liquidationData = data.data as Array<Record<string, unknown>>;
+        if (liquidationData && liquidationData.length > 0) {
+          // Get the most recent liquidation data (last 24h sum)
+          const recent24h = liquidationData.slice(-24); // Assuming hourly data
+          const longs24h = recent24h.reduce((sum, item) => sum + Number(item.longLiquidations || 0), 0);
+          const shorts24h = recent24h.reduce((sum, item) => sum + Number(item.shortLiquidations || 0), 0);
+          
           marketData.liquidations = {
-            longs24h: longs,
-            shorts24h: shorts,
-            total24h: longs + shorts,
-            ratio: shorts > 0 ? longs / shorts : 0
+            longs24h,
+            shorts24h,
+            total24h: longs24h + shorts24h,
+            ratio: shorts24h > 0 ? longs24h / shorts24h : 0
           };
+          console.log(`✅ Liquidations integrated:`, marketData.liquidations);
         }
         break;
         
       case 'open-interest':
-        if (data.currentOpenInterest) {
-          marketData.openInterest = {
-            current: Number(data.currentOpenInterest),
-            change24h: Number(data.change24h) || 0,
-            trend: 'stable' // Would need to calculate trend
-          };
+        // CoinGlass open interest format: { success: true, data: [{ timestamp, open, high, low, close }] }
+        const oiData = data.data as Array<Record<string, unknown>>;
+        if (oiData && oiData.length > 0) {
+          const latest = oiData[oiData.length - 1];
+          if (latest) {
+            const previous = oiData.length > 1 ? oiData[oiData.length - 2] : null;
+            
+            const currentOI = Number(latest.close);
+            const previousOI = previous ? Number(previous.close) : currentOI;
+            const change24h = previousOI > 0 ? ((currentOI - previousOI) / previousOI) * 100 : 0;
+            
+            marketData.openInterest = {
+              current: currentOI,
+              change24h,
+              trend: change24h > 1 ? 'increasing' : change24h < -1 ? 'decreasing' : 'stable'
+            };
+            console.log(`✅ Open Interest integrated:`, marketData.openInterest);
+          }
         }
         break;
         
       case 'taker-buy-sell':
-        if (data.data && typeof data.data === 'object') {
-          const orderData = data.data as Record<string, unknown>;
+        // CoinGlass taker buy/sell format: { success: true, data: { overall: { buyRatio, sellRatio, buyVolumeUsd, sellVolumeUsd } } }
+        const orderData = data.data as Record<string, unknown>;
+        if (orderData && orderData.overall) {
+          const overall = orderData.overall as Record<string, unknown>;
+          const buyRatio = Number(overall.buyRatio) || 0;
+          const sellRatio = Number(overall.sellRatio) || 0;
+          
           marketData.orderFlow = {
-            buyPressure: Number(orderData.buy_ratio) || 0,
-            sellPressure: Number(orderData.sell_ratio) || 0,
-            netFlow: Number(orderData.buy_ratio) > Number(orderData.sell_ratio) ? 'bullish' : 'bearish'
+            buyPressure: buyRatio,
+            sellPressure: sellRatio,
+            netFlow: buyRatio > sellRatio ? 'bullish' : 'bearish'
           };
+          console.log(`✅ Order Flow integrated:`, marketData.orderFlow);
         }
         break;
     }
@@ -603,11 +655,10 @@ export class EnhancedDataOrchestrator {
     
     if (dataTypes.includes('price')) sources.add('CoinMarketCap');
     if (dataTypes.includes('historical')) sources.add('CoinMarketCap');
-    if (dataTypes.includes('funding')) sources.add('Coinalyze');
-    if (dataTypes.includes('liquidations')) sources.add('Coinalyze');
-    if (dataTypes.includes('open_interest')) sources.add('Coinalyze');
+    if (dataTypes.includes('funding')) sources.add('CoinGlass');
+    if (dataTypes.includes('liquidations')) sources.add('CoinGlass');
+    if (dataTypes.includes('open_interest')) sources.add('CoinGlass');
     if (dataTypes.includes('market_structure')) {
-      sources.add('Coinalyze');
       sources.add('CoinGlass');
     }
     

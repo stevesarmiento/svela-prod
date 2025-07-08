@@ -23,19 +23,64 @@ export class EnhancedChatHandler {
       
       // Stage 1: Enhanced Intent Detection
       const intent = await enhancedIntentDetector.detectIntent(userMessage);
-      console.log('📊 Intent detected:', intent);
+      console.log('📊 Intent detected:', {
+        type: intent.type,
+        coins: intent.coins,
+        timeframe: intent.timeframe,
+        dataTypes: intent.dataTypes,
+        analysisDepth: intent.analysisDepth,
+        confidence: intent.confidence
+      });
       
       // Stage 2: Data Orchestration
       const dataContext = await enhancedDataOrchestrator.orchestrateDataFetch(intent);
       console.log('💾 Data orchestration completed:', {
         sources: dataContext.metadata.sources,
         quality: dataContext.metadata.quality,
-        coverage: dataContext.metadata.coverage
+        coverage: dataContext.metadata.coverage,
+        fetchTime: dataContext.metadata.fetchTime
       });
+      
+      // Log detailed data received
+      console.log('📈 Raw data received:');
+      if (dataContext.priceData) {
+        console.log('  • Price Data:', {
+          name: dataContext.priceData.name,
+          symbol: dataContext.priceData.symbol,
+          price: dataContext.priceData.price,
+          change24h: dataContext.priceData.priceChange24h,
+          marketCap: dataContext.priceData.marketCap,
+          volume24h: dataContext.priceData.volume24h
+        });
+      }
+      if (dataContext.historicalData) {
+        console.log('  • Historical Data:', {
+          timeframe: dataContext.historicalData.timeframe,
+          pricePoints: dataContext.historicalData.prices?.length || 0,
+          volumePoints: dataContext.historicalData.volumes?.length || 0,
+          dateRange: dataContext.historicalData.prices?.length > 0 ? {
+            start: new Date(dataContext.historicalData.prices[0]?.timestamp || 0).toLocaleDateString(),
+            end: new Date(dataContext.historicalData.prices[dataContext.historicalData.prices.length - 1]?.timestamp || 0).toLocaleDateString()
+          } : 'No data'
+        });
+      }
+      if (dataContext.marketStructureData) {
+        console.log('  • Market Structure Data:', {
+          fundingRate: dataContext.marketStructureData.fundingRate?.current,
+          liquidations: dataContext.marketStructureData.liquidations?.total24h,
+          openInterest: dataContext.marketStructureData.openInterest?.current,
+          orderFlow: dataContext.marketStructureData.orderFlow?.netFlow
+        });
+      }
       
       // Stage 3: Component Generation
       const components = this.generateComponents(dataContext);
-      console.log('🎨 Generated components:', components.map(c => c.type));
+      console.log('🎨 Generated components:', components.map(c => ({
+        type: c.type,
+        title: c.title,
+        priority: c.priority,
+        size: c.size
+      })));
       
       // Stage 4: AI Response Generation
       const textResponse = await this.generateAIResponse(userMessage, dataContext);
@@ -52,6 +97,11 @@ export class EnhancedChatHandler {
       };
       
       console.log(`✅ Enhanced chat processing completed in ${response.processingTime}ms`);
+      console.log(`📝 Response summary:`, {
+        textLength: textResponse.length,
+        componentCount: components.length,
+        suggestionCount: followUpSuggestions.length
+      });
       return response;
       
     } catch (error) {
@@ -230,13 +280,23 @@ export class EnhancedChatHandler {
     userMessage: string, 
     dataContext: EnhancedDataContext
   ): Promise<string> {
+    console.log('🤖 Starting AI response generation...');
     
     if (!gemini) {
+      console.log('❌ Gemini not available, using fallback response');
       return this.generateFallbackResponse(dataContext);
     }
 
     const systemPrompt = this.createEnhancedSystemPrompt(dataContext);
     const contextualMessage = this.formatDataContextForAI(userMessage, dataContext);
+
+    console.log('📤 Sending to Gemini:', {
+      systemPromptLength: systemPrompt.length,
+      contextMessageLength: contextualMessage.length,
+      model: 'gemini-2.5-flash',
+      temperature: 0.3,
+      maxTokens: 1000
+    });
 
     try {
       const result = await streamText({
@@ -249,16 +309,27 @@ export class EnhancedChatHandler {
         maxTokens: 1000,
       });
 
+      console.log('📡 Streaming response from Gemini...');
+      
       // Get complete response
       let fullResponse = '';
+      let chunkCount = 0;
       for await (const chunk of result.textStream) {
         fullResponse += chunk;
+        chunkCount++;
       }
+      
+      console.log('✅ AI response received:', {
+        responseLength: fullResponse.length,
+        chunksReceived: chunkCount,
+        hasMarkdown: fullResponse.includes('**') || fullResponse.includes('##'),
+        responsePreview: fullResponse.substring(0, 100) + '...'
+      });
       
       return fullResponse;
       
     } catch (error) {
-      console.error('AI response generation failed:', error);
+      console.error('❌ AI response generation failed:', error);
       return this.generateFallbackResponse(dataContext);
     }
   }
@@ -324,15 +395,43 @@ Since visual components will also be shown, focus your text response on insights
   }
 
   /**
-   * Format data context for AI consumption
+   * Format data context for AI consumption using comprehensive analysis format
    */
   private formatDataContextForAI(userMessage: string, dataContext: EnhancedDataContext): string {
+    console.log('🔄 Formatting data context for AI...');
+    
+    // Try to get comprehensive analysis data if available
+    const comprehensiveData = this.prepareComprehensiveAnalysisData(dataContext);
+    
+    if (comprehensiveData) {
+      console.log('✅ Using comprehensive data format with enhanced analysis');
+      console.log('📊 Comprehensive data prepared:', {
+        name: comprehensiveData['name'],
+        symbol: comprehensiveData['symbol'],
+        timeframe: comprehensiveData['timeframe'],
+        hasPriceContext: !!comprehensiveData['priceContext'],
+        hasVolumeAnalysis: !!comprehensiveData['volumeAnalysis'],
+        hasLiquidationData: !!comprehensiveData['liquidationData'],
+        hasOrderFlow: !!comprehensiveData['orderFlow'],
+        hasPriceAction: !!comprehensiveData['priceAction']
+      });
+      
+      // Use the same formatting logic as the analyze route
+      const formattedData = this.formatComprehensiveDataForAI(userMessage, comprehensiveData);
+      console.log('📝 Formatted data length for AI:', formattedData.length, 'characters');
+      return formattedData;
+    }
+    
+    console.log('⚠️ Falling back to basic data formatting (no comprehensive data available)');
+    
+    // Fallback to basic formatting
     const { priceData, historicalData, marketStructureData } = dataContext;
     
     let context = `User Query: "${userMessage}"\n\nLIVE DATA CONTEXT:\n`;
     
     // Price data context
     if (priceData) {
+      console.log('📊 Adding basic price data to context');
       context += `\n**${priceData.name} (${priceData.symbol})**\n`;
       context += `- Current Price: $${priceData.price.toLocaleString()}\n`;
       context += `- 24h Change: ${priceData.priceChange24h.toFixed(2)}%\n`;
@@ -348,6 +447,12 @@ Since visual components will also be shown, focus your text response on insights
       const newestPrice = prices[prices.length - 1]?.price || 0;
       const change = oldestPrice > 0 ? ((newestPrice - oldestPrice) / oldestPrice) * 100 : 0;
       
+      console.log('📈 Adding basic historical data to context:', {
+        timeframe: historicalData.timeframe,
+        dataPoints: prices.length,
+        periodChange: change.toFixed(2) + '%'
+      });
+      
       context += `\n**Historical Performance (${historicalData.timeframe})**\n`;
       context += `- Period Change: ${change.toFixed(2)}%\n`;
       context += `- Data Points: ${prices.length} price points\n`;
@@ -355,6 +460,7 @@ Since visual components will also be shown, focus your text response on insights
     
     // Market structure context
     if (marketStructureData) {
+      console.log('🏗️ Adding market structure data to context');
       context += `\n**Market Structure Analysis**\n`;
       
       if (marketStructureData.fundingRate) {
@@ -378,21 +484,233 @@ Since visual components will also be shown, focus your text response on insights
     
     context += '\nProvide insights and analysis based on this real-time data.';
     
+    console.log('📝 Basic formatted data length for AI:', context.length, 'characters');
     return context;
+  }
+
+  /**
+   * Prepare comprehensive analysis data matching the analyze route format
+   */
+  private prepareComprehensiveAnalysisData(dataContext: EnhancedDataContext): Record<string, unknown> | null {
+    const { priceData, historicalData, marketStructureData } = dataContext;
+    
+    if (!priceData) return null;
+
+    // Basic market data (required)
+    const comprehensiveData: Record<string, unknown> = {
+      name: priceData.name,
+      symbol: priceData.symbol,
+      quote: {
+        USD: {
+          price: priceData.price,
+          percent_change_24h: priceData.priceChange24h,
+          market_cap: priceData.marketCap,
+          volume_24h: priceData.volume24h,
+          volume_change_24h: 0, // Would need to calculate
+          market_cap_dominance: 0, // Would need to calculate
+        }
+      },
+      timeframe: historicalData?.timeframe || '7d'
+    };
+
+    // Add enhanced data if available
+    if (historicalData && historicalData.prices.length > 0) {
+      const prices = historicalData.prices.map(p => p.price);
+      const currentPrice = priceData.price;
+      const recentPrices = prices.slice(-21);
+      const recentAvg = prices.slice(-7).reduce((a, b) => a + b, 0) / 7;
+      const previousAvg = prices.slice(-14, -7).reduce((a, b) => a + b, 0) / 7;
+      
+      // Price context
+      comprehensiveData.priceContext = {
+        currentPrice: currentPrice,
+        priceHistory: prices,
+        momentum: recentAvg > previousAvg ? 'bullish' : 'bearish',
+        volatility: Math.abs(priceData.priceChange24h) > 5 ? 'high' : 
+                   Math.abs(priceData.priceChange24h) > 2 ? 'moderate' : 'low',
+        support: Math.min(...recentPrices),
+        resistance: Math.max(...recentPrices)
+      };
+
+      // Volume analysis (basic)
+      if (historicalData.volumes && historicalData.volumes.length > 0) {
+        const volumes = historicalData.volumes.map(v => v.volume);
+        const recentVolume = volumes.slice(-7).reduce((a, b) => a + b, 0) / 7;
+        const previousVolume = volumes.slice(-14, -7).reduce((a, b) => a + b, 0) / 7;
+        
+        comprehensiveData.volumeAnalysis = {
+          currentVolume: priceData.volume24h,
+          volumeHistory: volumes,
+          volumeTrend: recentVolume > previousVolume * 1.2 ? 'increasing' : 
+                      recentVolume < previousVolume * 0.8 ? 'decreasing' : 'stable',
+          averageVolume: volumes.reduce((a, b) => a + b, 0) / volumes.length,
+          volumeSpike: recentVolume > previousVolume * 1.5
+        };
+      }
+    }
+
+    // Market structure data
+    if (marketStructureData) {
+      if (marketStructureData.liquidations) {
+        comprehensiveData.liquidationData = {
+          totalLiquidations24h: marketStructureData.liquidations.total24h,
+          longLiquidations: marketStructureData.liquidations.longs24h,
+          shortLiquidations: marketStructureData.liquidations.shorts24h,
+          liquidationRatio: marketStructureData.liquidations.ratio,
+          openInterest: marketStructureData.openInterest?.current,
+          openInterestChange: marketStructureData.openInterest?.change24h
+        };
+      }
+
+      if (marketStructureData.orderFlow) {
+        comprehensiveData.orderFlow = {
+          takerBuyRatio: marketStructureData.orderFlow.buyPressure / 100,
+          buyVolumeUsd: 0, // Would need actual volume data
+          sellVolumeUsd: 0, // Would need actual volume data
+          buyPressure: marketStructureData.orderFlow.buyPressure > 52 ? 'high' : 
+                      marketStructureData.orderFlow.buyPressure > 48 ? 'moderate' : 'low',
+          sellPressure: marketStructureData.orderFlow.sellPressure > 52 ? 'high' : 
+                       marketStructureData.orderFlow.sellPressure > 48 ? 'moderate' : 'low',
+          netFlow: marketStructureData.orderFlow.netFlow
+        };
+      }
+    }
+
+    // Basic technical indicators (placeholder - would need actual calculation)
+    comprehensiveData.hullSuite = {
+      trendDirection: priceData.priceChange24h > 0 ? 'bullish' : 'bearish',
+      crossoverSignal: 'none',
+      strength: Math.abs(priceData.priceChange24h) > 3 ? 'strong' : 'moderate'
+    };
+
+    // Price action
+    comprehensiveData.priceAction = {
+      trend: priceData.priceChange24h > 2 ? 'uptrend' : 
+             priceData.priceChange24h < -2 ? 'downtrend' : 'sideways',
+      volatility: Math.abs(priceData.priceChange24h) > 5 ? 'high' : 
+                 Math.abs(priceData.priceChange24h) > 2 ? 'moderate' : 'low',
+      volume_profile: 'stable', // Would need calculation
+      priceLevel: 'neutral',
+      momentum: priceData.priceChange24h > 0 ? 'bullish' : 'bearish'
+    };
+
+    return comprehensiveData;
+  }
+
+  /**
+   * Format comprehensive data for AI using the same logic as analyze route
+   */
+  private formatComprehensiveDataForAI(userMessage: string, data: Record<string, unknown>): string {
+    const sections: string[] = [];
+
+    // Enhanced market data with historical context
+    const quote = data['quote'] as Record<string, Record<string, number>> | undefined;
+    sections.push(`
+**Market Overview:**
+${data.name} (${data.symbol})
+Price: $${quote?.USD?.price?.toLocaleString() || 'N/A'}
+24h Change: ${quote?.USD?.percent_change_24h?.toFixed(2) || 'N/A'}%
+Market Cap: $${formatLargeNumber(quote?.USD?.market_cap || 0)}
+24h Volume: $${formatLargeNumber(quote?.USD?.volume_24h || 0)}`);
+
+    // Enhanced price context
+    if (data['priceContext']) {
+      const priceContext = data['priceContext'] as Record<string, unknown>;
+      const priceRange = `$${Number(priceContext['support'])?.toLocaleString() || 'N/A'} - $${Number(priceContext['resistance'])?.toLocaleString() || 'N/A'}`;
+      const historicalCount = (priceContext['priceHistory'] as number[])?.length || 0;
+      sections.push(`
+**Price Context (${historicalCount} periods):**
+Momentum: ${priceContext['momentum'] || 'N/A'}, Volatility: ${priceContext['volatility'] || 'N/A'}
+Support/Resistance Range: ${priceRange}`);
+    }
+
+    // Enhanced volume analysis
+    if (data['volumeAnalysis']) {
+      const volumeAnalysis = data['volumeAnalysis'] as Record<string, unknown>;
+      const currentVolume = Number(volumeAnalysis['currentVolume']) || 0;
+      const averageVolume = Number(volumeAnalysis['averageVolume']) || 0;
+      const volumeChange = averageVolume > 0 ? ((currentVolume - averageVolume) / averageVolume * 100).toFixed(1) : '0';
+      sections.push(`
+**Volume Analysis:**
+Trend: ${volumeAnalysis['volumeTrend'] || 'N/A'}, Volume vs Average: ${volumeChange > '0' ? '+' : ''}${volumeChange}%
+${volumeAnalysis['volumeSpike'] ? 'VOLUME SPIKE DETECTED' : 'Normal volume activity'}`);
+    }
+
+    // Market Structure Section
+    if (data['liquidationData'] || data['orderFlow']) {
+      const marketStructure: string[] = [];
+      
+      if (data['liquidationData']) {
+        const liquidationData = data['liquidationData'] as Record<string, unknown>;
+        const longLiquidations = Number(liquidationData['longLiquidations']);
+        const shortLiquidations = Number(liquidationData['shortLiquidations']);
+        if (!isNaN(longLiquidations) && !isNaN(shortLiquidations)) {
+          const total = longLiquidations + shortLiquidations;
+          const longRatio = total > 0 ? (longLiquidations / total * 100).toFixed(1) : '0';
+          marketStructure.push(`Liquidations: ${longRatio}% long, ${(100 - parseFloat(longRatio)).toFixed(1)}% short`);
+        }
+        const openInterest = Number(liquidationData['openInterest']);
+        if (!isNaN(openInterest)) {
+          const openInterestChange = Number(liquidationData['openInterestChange']);
+          const changeText = !isNaN(openInterestChange) ? ` (${openInterestChange > 0 ? '+' : ''}${openInterestChange.toFixed(1)}%)` : '';
+          marketStructure.push(`Open Interest: $${formatLargeNumber(openInterest)}${changeText}`);
+        }
+      }
+      
+      if (data['orderFlow']) {
+        const orderFlow = data['orderFlow'] as Record<string, unknown>;
+        const takerBuyRatio = Number(orderFlow['takerBuyRatio']);
+        if (!isNaN(takerBuyRatio)) {
+          marketStructure.push(`Taker Buy Ratio: ${(takerBuyRatio * 100).toFixed(1)}% (${orderFlow['netFlow'] || 'neutral'})`);
+        }
+      }
+      
+      if (marketStructure.length > 0) {
+        sections.push(`\n**Market Structure:**\n${marketStructure.map(s => `• ${s}`).join('\n')}`);
+      }
+    }
+
+    // Price Action Context
+    if (data['priceAction']) {
+      const priceAction = data['priceAction'] as Record<string, unknown>;
+      const priceLevel = priceAction['priceLevel'];
+      const priceLevelText = priceLevel && priceLevel !== 'neutral' ? `, Price Level: ${priceLevel}` : '';
+      sections.push(`\n**Price Action:**\nTrend: ${priceAction['trend'] || 'N/A'}, Volatility: ${priceAction['volatility'] || 'N/A'}, Volume: ${priceAction['volume_profile'] || 'N/A'}${priceLevelText}`);
+    }
+
+    return `User Query: "${userMessage}"\n\n**COMPREHENSIVE MARKET ANALYSIS:**\n${sections.join('\n')}`;
   }
 
   /**
    * Generate fallback response when AI is not available
    */
   private generateFallbackResponse(dataContext: EnhancedDataContext): string {
+    console.log('🔄 Generating fallback response (AI unavailable)');
+    
     const { intent, priceData } = dataContext;
     
     if (priceData) {
       const changeEmoji = priceData.priceChange24h >= 0 ? '📈' : '📉';
-      return `${changeEmoji} ${priceData.name} is currently trading at $${priceData.price.toLocaleString()} with a 24h change of ${priceData.priceChange24h.toFixed(2)}%. Market cap: $${formatLargeNumber(priceData.marketCap)}.`;
+      const fallbackResponse = `${changeEmoji} ${priceData.name} is currently trading at $${priceData.price.toLocaleString()} with a 24h change of ${priceData.priceChange24h.toFixed(2)}%. Market cap: $${formatLargeNumber(priceData.marketCap)}.`;
+      
+      console.log('📊 Fallback response with price data:', {
+        coin: priceData.name,
+        price: priceData.price,
+        change: priceData.priceChange24h,
+        responseLength: fallbackResponse.length
+      });
+      
+      return fallbackResponse;
     }
     
-    return `I've gathered the requested data for your ${intent.type} query. Please check the visual components for detailed information.`;
+    const fallbackResponse = `I've gathered the requested data for your ${intent.type} query. Please check the visual components for detailed information.`;
+    
+    console.log('📋 Basic fallback response:', {
+      intentType: intent.type,
+      responseLength: fallbackResponse.length
+    });
+    
+    return fallbackResponse;
   }
 
   /**

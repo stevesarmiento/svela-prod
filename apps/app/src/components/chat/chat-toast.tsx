@@ -172,7 +172,7 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
         {/* Chat Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-800/50">
           <div className="flex items-center gap-3">
-            <h3 className="text-sm font-medium text-white">Chat</h3>
+          <h3 className="text-sm font-medium text-white">Chat</h3>
             <EnhancedIndicator />
           </div>
           <Button
@@ -342,30 +342,30 @@ export function useChatState() {
         }
       } else {
         // Handle basic response format (legacy)
-        const componentDataHeader = response.headers.get('X-Component-Data');
-        
-        if (componentDataHeader && lastDataQueryRef.current) {
-          try {
-            const parsedComponentData = JSON.parse(componentDataHeader);
-            setMessageComponents(prev => {
-              const newComponents = {
-                ...prev,
-                [`temp_${lastDataQueryRef.current}`]: parsedComponentData
-              };
-              
-              setTimeout(() => {
-                chatManager.setChatState({
-                  messages,
-                  isLoading,
-                  isDataLoading,
-                  messageComponents: newComponents,
-                });
-              }, 0);
-              
-              return newComponents;
-            });
-          } catch (err) {
-            console.error('Failed to parse component data:', err);
+      const componentDataHeader = response.headers.get('X-Component-Data');
+      
+      if (componentDataHeader && lastDataQueryRef.current) {
+        try {
+          const parsedComponentData = JSON.parse(componentDataHeader);
+          setMessageComponents(prev => {
+            const newComponents = {
+              ...prev,
+              [`temp_${lastDataQueryRef.current}`]: parsedComponentData
+            };
+            
+            setTimeout(() => {
+              chatManager.setChatState({
+                messages,
+                isLoading,
+                isDataLoading,
+                messageComponents: newComponents,
+              });
+            }, 0);
+            
+            return newComponents;
+          });
+        } catch (err) {
+          console.error('Failed to parse component data:', err);
           }
         }
       }
