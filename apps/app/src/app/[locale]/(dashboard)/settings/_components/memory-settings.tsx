@@ -2,16 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@v1/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@v1/ui/card';
 import { Switch } from '@v1/ui/switch';
-import { Label } from '@v1/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@v1/ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@v1/ui/dropdown-menu';
 import { Separator } from '@v1/ui/separator';
-import { IconTrash, IconGlobe, IconBrain } from 'symbols-react';
+import { IconTrash, IconGlobe, IconCursorarrowRays, IconEraserLineDashedFill, IconPoint3FilledConnectedTrianglepathDotted } from 'symbols-react';
 import { useAuth } from '@v1/convex/hooks';
 import { toast } from 'sonner';
 import { bulkCleanupMemories } from '@/lib/client-memory-utils';
 import { useUserSettings } from '@/hooks/use-user-settings';
+
 
 
 
@@ -185,124 +185,140 @@ export function MemorySettings() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <IconBrain className="h-5 w-5 text-blue-500" />
-          <CardTitle>Memory & AI</CardTitle>
-        </div>
-        <CardDescription>
-          Control how the AI remembers your conversations for personalized responses
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Memory Toggle */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <Label htmlFor="memory-enabled">Enable Memory</Label>
-            <p className="text-sm text-muted-foreground">
-              Allow AI to remember your conversations for better context
-            </p>
+    <div className="space-y-4">
+      {/* Memory System Card */}
+      <div className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
+        {/* Header */}
+        <div className="px-3 py-2">
+          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+            <div className="flex items-center gap-2">
+              <span>Chat Memory & Configuration</span>
+            </div>
           </div>
-          <Switch
-            id="memory-enabled"
-            checked={memoryEnabled}
-            onCheckedChange={handleMemoryToggle}
-          />
         </div>
 
-        <Separator />
+        {/* Content */}
+        <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden">
+          <div className="p-4 space-y-4">
+            {/* Memory Toggle */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1">
+                  <IconPoint3FilledConnectedTrianglepathDotted className="h-5 w-5 fill-white/50" />
+                </div>
+                <div className="">
+                  <div className="font-bold text-xs">Enable Memory</div>
+                  <div className="text-primary/40 text-xs">
+                    Allow AI to remember your conversations for better context around new queries or questions.
+                  </div>
+                </div>                
+              </div>
 
-        {/* Auto-cleanup Toggle */}
-        <div className="flex items-center justify-between">
-          <div className="space-y-1">
-            <Label htmlFor="auto-cleanup-enabled">Auto-cleanup Chat Sessions</Label>
-            <p className="text-sm text-muted-foreground">
-              Automatically delete memories when chat sessions end
-            </p>
-          </div>
-          <Switch
-            id="auto-cleanup-enabled"
-            checked={autoCleanupEnabled}
-            onCheckedChange={handleAutoCleanupToggle}
-          />
-        </div>
-
-        <Separator />
-
-        {/* Retention Settings */}
-        {memoryEnabled && (
-          <div className="space-y-4">
-            <h4 className="font-medium">Memory Retention</h4>
-            <div className="flex items-center gap-4">
-              <Label htmlFor="retention-days">Auto-delete memories older than:</Label>
-              <Select value={retentionDays} onValueChange={handleRetentionChange}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="7">7 days</SelectItem>
-                  <SelectItem value="30">30 days</SelectItem>
-                  <SelectItem value="90">90 days</SelectItem>
-                  <SelectItem value="365">1 year</SelectItem>
-                  <SelectItem value="never">Never</SelectItem>
-                </SelectContent>
-              </Select>
+              <Switch
+                id="memory-enabled"
+                checked={memoryEnabled}
+                onCheckedChange={handleMemoryToggle}
+              />
             </div>
 
-            <Separator />
+            <Separator className="bg-primary/5 scale-125" />
 
-            {/* Memory Actions */}
-            <div className="space-y-4">
-              <h4 className="font-medium">Memory Management</h4>
-              <div className="flex gap-3 flex-wrap">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleClearOldMemories(30)}
-                  disabled={isLoading}
-                >
-                  Clear 30+ Days Old
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleClearOldMemories(7)}
-                  disabled={isLoading}
-                >
-                  Clear 7+ Days Old
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClearSessionMemories}
-                  disabled={isLoading}
-                >
-                  Clear Chat Sessions
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleExportMemories}
-                  disabled={isLoading}
-                >
-                  <IconGlobe className="h-4 w-4 mr-2" />
-                  Export Data
-                </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleClearAllMemories}
-                  disabled={isLoading}
-                >
-                  <IconTrash className="h-4 w-4 mr-2" />
-                  Clear All
-                </Button>
+            {/* Auto-cleanup Toggle */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1">
+                  <IconEraserLineDashedFill className="h-5 w-5 fill-white/50" />
+                </div>
+                <div className="">
+                  <div className="font-bold text-xs">Auto-cleanup Chat Sessions</div>
+                  <div className="text-primary/40 text-xs">
+                    Automatically delete memories when chat sessions ended so new chats can start fresh.
+                  </div>
+                </div>
+              </div>
+              <Switch
+                id="auto-cleanup-enabled"
+                checked={autoCleanupEnabled}
+                onCheckedChange={handleAutoCleanupToggle}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Memory Retention & Management Card */}
+      {memoryEnabled && (
+        <div className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
+          {/* Header */}
+          <div className="px-3 py-2">
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              Data Retention & Management
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden">
+            <div className="p-4 space-y-4">
+              {/* Auto-delete retention setting */}
+              <div className="flex justify-between items-center">
+                <div className="font-bold text-xs">Memory Actions & Retention Settings</div>
+                <div className="flex items-center gap-2">
+                <Select value={retentionDays} onValueChange={handleRetentionChange}>
+                  <SelectTrigger className="w-40 h-8 text-xs rounded-lg hover:bg-black/20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-900 rounded-xl z-[101]">
+                    <SelectItem value="7">7 days</SelectItem>
+                    <SelectItem value="30">30 days</SelectItem>
+                    <SelectItem value="90">90 days</SelectItem>
+                    <SelectItem value="365">1 year</SelectItem>
+                    <SelectItem value="never">Never</SelectItem>
+                  </SelectContent>
+                </Select>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isLoading}
+                      className="h-8 space-x-2"
+                    >
+                      <span className="text-xs">Quick Actions</span>
+                      <IconCursorarrowRays className="h-3 w-3 fill-white/50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48 bg-zinc-900 rounded-xl z-[101]">
+                    <DropdownMenuItem onClick={() => handleClearOldMemories(7)}>
+                      Clear 7+ Days Old
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleClearOldMemories(30)}>
+                      Clear 30+ Days Old
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleClearSessionMemories}>
+                      Clear Chat Sessions
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleExportMemories}>
+                      <IconGlobe className="h-3 w-3 mr-2 fill-current" />
+                      Export Data
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={handleClearAllMemories}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <IconTrash className="h-3 w-3 mr-2 fill-current" />
+                      Clear All Memories
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                </div>
               </div>
             </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+
+    </div>
   );
 } 
