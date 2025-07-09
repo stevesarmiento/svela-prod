@@ -105,6 +105,14 @@ export function ChatMessage({
       )}
       
       <div className={`max-w-[66%] space-y-3 ${role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
+        {/* Render component first if it's an assistant message and we have component data */}
+        {role === 'assistant' && componentData?.type === 'price_card' && (
+          <PriceCard {...(componentData.data as PriceCardData)} />
+        )}
+        {role === 'assistant' && componentData?.type === 'comparison_chart' && (
+          <ComparisonChart {...(componentData.data as ComparisonChartData)} />
+        )}
+        
         <div
           className={`rounded-lg ${
             role === 'user'
@@ -195,14 +203,6 @@ export function ChatMessage({
             <p className="text-sm whitespace-pre-wrap">{content}</p>
           )}
         </div>
-        
-        {/* Render component if it's an assistant message and we have component data */}
-        {role === 'assistant' && componentData?.type === 'price_card' && (
-          <PriceCard {...(componentData.data as PriceCardData)} />
-        )}
-        {role === 'assistant' && componentData?.type === 'comparison_chart' && (
-          <ComparisonChart {...(componentData.data as ComparisonChartData)} />
-        )}
       </div>
       
       {role === 'user' && (

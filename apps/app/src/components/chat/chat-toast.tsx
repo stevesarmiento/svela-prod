@@ -5,7 +5,7 @@ import { useChat } from 'ai/react'
 import { useAuth } from '@v1/convex/hooks'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
-import { autoCleanupSessionMemories } from '@/lib/client-memory-utils'
+import { autoCleanupSessionMemories, bulkCleanupMemories } from '@/lib/client-memory-utils'
 import { Button } from '@v1/ui/button'
 import { ScrollArea } from '@v1/ui/scroll-area'
 import { ProgressiveBlur } from '@v1/ui/progressive-blur'
@@ -153,6 +153,7 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
   }, [user?.id]);
 
   const handleClose = React.useCallback(async () => {
+    // Note: Bulk archiving is handled by the toast's onDismiss callback
     // Auto-cleanup session if enabled
     await autoCleanupSession();
     
@@ -238,9 +239,36 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
 }
 
 // Hook to manage chat toast with shared state
+// Test functions removed - archiving moved to background jobs for performance
+
 export function useChatToast() {
   const toastIdRef = useRef<string | number | null>(null);
   const { user } = useAuth();
+
+  // Bulk delete chat memories when dismissing chat
+  const bulkDeleteChatMemories = React.useCallback(async () => {
+    if (!user?.id) return;
+    
+    try {
+      console.log('🗑️ Starting bulk deletion of chat memories for user:', user.id);
+      
+      // Delete all chat memories from current session
+      const cleanupResult = await bulkCleanupMemories(user.id, {
+        metadataFilter: {
+          category: 'chat',
+          source: 'chat'
+        }
+      });
+      
+      if (cleanupResult.success) {
+        console.log(`✅ Successfully deleted ${cleanupResult.count} chat memories`);
+      } else {
+        console.warn('⚠️ Failed to delete chat memories');
+      }
+    } catch (error) {
+      console.error('❌ Failed to bulk delete memories:', error);
+    }
+  }, [user?.id]);
 
   const showChatToast = () => {
     if (toastIdRef.current) {
@@ -287,6 +315,16 @@ export function useChatToast() {
       duration: Infinity,
       position: 'top-center',
       onDismiss: async () => {
+        // Bulk delete chat memories before dismissing
+        if (user?.id) {
+          try {
+            console.log('🗑️ Bulk deleting memories on dismiss');
+            await bulkDeleteChatMemories();
+          } catch (error) {
+            console.error('Failed to bulk delete on dismiss:', error);
+          }
+        }
+        
         // Auto-cleanup session if enabled
         if (user?.id) {
           await autoCleanupSessionMemories(user.id);
@@ -302,6 +340,16 @@ export function useChatToast() {
 
   const closeChatToast = async () => {
     if (toastIdRef.current) {
+      // Bulk delete chat memories before closing
+      if (user?.id) {
+        try {
+          console.log('🗑️ Bulk deleting memories before programmatic close');
+          await bulkDeleteChatMemories();
+        } catch (error) {
+          console.error('Failed to bulk delete on close:', error);
+        }
+      }
+      
       // Auto-cleanup session if enabled
       if (user?.id) {
         await autoCleanupSessionMemories(user.id);
@@ -421,8 +469,10 @@ export function useChatState() {
         }
       }
     },
-    onFinish: (message) => {
+    onFinish: async (message) => {
       console.log('🏁 Chat message finished:', message.role, message.id);
+      console.log('👤 User ID for archiving:', user?.id);
+      console.log('🔍 Message role check:', message.role === 'assistant');
       setIsDataLoading(false);
       setIsStopped(false);
       abortControllerRef.current = null;
@@ -447,6 +497,9 @@ export function useChatState() {
         });
         lastDataQueryRef.current = null;
       }
+      
+      // Note: Archiving moved to background job for better performance
+      // Chat interactions should be fast - no delays here!
       
       // Let the useEffect handle state updates - don't manually manage messages
       console.log('🎯 onFinish completed, letting useEffect handle state sync');

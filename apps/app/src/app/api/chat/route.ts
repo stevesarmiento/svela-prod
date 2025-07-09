@@ -2,6 +2,7 @@ import { streamText } from 'ai';
 import { gemini } from '@/lib/gemini';
 import { enhancedChatHandler } from '@/lib/enhanced-chat-handler';
 import { capxMemoryService, type CapxMemory } from '@/lib/capx-memory';
+// Removed storeMemoryWithMetadata import - using direct service instead
 import { NextResponse } from "next/server";
 
 export const maxDuration = 30;
@@ -137,43 +138,81 @@ ${enhancedResponse.textResponse}${memoryContext}`;
       // Store the conversation in memory if enabled
       if (hasMemoryEnabled) {
         try {
-          console.log('💾 Storing conversation in memory');
+          console.log('💾 Storing conversation in memory for userId:', userId);
+          console.log('🔑 Memory service available:', capxMemoryService.isAvailable());
           
-          // Store the user's query
-          await capxMemoryService.addMemory(
+          // Store the user's query with enhanced metadata
+          const userMemoryResult = await capxMemoryService.addMemory(
             userId,
             `User asked: "${latestUserMessage.content}"`,
             {
-              source: 'chat_query',
-              timestamp: Date.now(),
+              category: 'chat',
+              source: 'chat',
+              tags: ['user_query', enhancedResponse.dataContext.intent.type],
+              priority: 6,
+              namespace: 'chat_conversations',
               intentType: enhancedResponse.dataContext.intent.type,
+              processingType: 'enhanced',
+              timestamp: Date.now(),
             },
             'extract_facts'
           );
+          
+          console.log('💾 User query storage result:', {
+            success: !!userMemoryResult.memoryId,
+            memoryId: userMemoryResult.memoryId,
+            strategy: userMemoryResult.strategyUsed
+          });
           
           // Store key insights from the response
           const responseInsights = enhancedResponse.textResponse.length > 500 
             ? enhancedResponse.textResponse.substring(0, 500) + '...'
             : enhancedResponse.textResponse;
             
-          await capxMemoryService.addMemory(
+          const responseMemoryResult = await capxMemoryService.addMemory(
             userId,
             `Analysis provided: ${responseInsights}`,
             {
-              source: 'chat_response',
-              timestamp: Date.now(),
+              category: 'chat',
+              source: 'chat',
+              tags: ['ai_response', enhancedResponse.dataContext.intent.type],
+              priority: 7,
+              namespace: 'chat_conversations',
               intentType: enhancedResponse.dataContext.intent.type,
               dataQuality: enhancedResponse.dataContext.metadata.quality,
               dataSources: enhancedResponse.dataContext.metadata.sources,
+              processingType: 'enhanced',
+              timestamp: Date.now(),
             },
             'summarize_if_long'
           );
           
-          console.log('✅ Conversation stored in memory');
+          console.log('💾 AI response storage result:', {
+            success: !!responseMemoryResult.memoryId,
+            memoryId: responseMemoryResult.memoryId,
+            strategy: responseMemoryResult.strategyUsed
+          });
+          
+          if (userMemoryResult.memoryId && responseMemoryResult.memoryId) {
+            console.log('✅ Both memories stored successfully:', {
+              userMemoryId: userMemoryResult.memoryId,
+              responseMemoryId: responseMemoryResult.memoryId
+            });
+          } else {
+            console.warn('⚠️ Some memories failed to store:', {
+              userQuery: !!userMemoryResult.memoryId,
+              aiResponse: !!responseMemoryResult.memoryId
+            });
+          }
         } catch (error) {
           console.error('⚠️ Failed to store conversation in memory:', error);
           // Continue without storing memory if it fails
         }
+      } else {
+        console.log('🔕 Memory not enabled - hasMemoryEnabled:', hasMemoryEnabled, {
+          serviceAvailable: capxMemoryService.isAvailable(),
+          userId: userId ? 'provided' : 'missing'
+        });
       }
       
       console.log('🎯 Enhanced response sent via normal');
