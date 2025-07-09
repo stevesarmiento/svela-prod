@@ -4,11 +4,9 @@ import Cal, { getCalApi } from "@calcom/embed-react";
 import { useEffect } from "react";
 
 export function CalEmbed({ calLink }: { calLink: string }) {
-  if (!calLink) {
-    return null;
-  }
-
   useEffect(() => {
+    if (!calLink) return;
+    
     async function initializeCalendar() {
       const cal = await getCalApi();
 
@@ -20,7 +18,11 @@ export function CalEmbed({ calLink }: { calLink: string }) {
     }
 
     initializeCalendar();
-  }, []);
+  }, [calLink]);
+
+  if (!calLink) {
+    return null;
+  }
 
   return (
     <Cal
