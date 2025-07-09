@@ -203,12 +203,13 @@ export function WatchlistMultiLineChart({
   const lineSeriesMapRef = useRef<Map<string, LineSeriesData>>(new Map())
   const [watchlistData, setWatchlistData] = useState<Map<string, WatchlistSeries>>(new Map())
   
-  const watchlistGroups = useWatchlistGroups() || []
+  const watchlistGroupsData = useWatchlistGroups()
   
   // Filter to only selected watchlists
   const activeWatchlists = useMemo(() => {
-    return watchlistGroups.filter(group => selectedWatchlists.has(group._id))
-  }, [watchlistGroups, selectedWatchlists])
+    const groups = watchlistGroupsData || []
+    return groups.filter(group => selectedWatchlists.has(group._id))
+  }, [watchlistGroupsData, selectedWatchlists])
 
   // Handle data updates from individual fetchers
   const handleDataUpdate = useMemo(() => {
