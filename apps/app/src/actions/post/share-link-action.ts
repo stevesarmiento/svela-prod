@@ -1,7 +1,6 @@
 "use server";
 
 import { authActionClient } from "@/actions/safe-action";
-import { dub } from "@/lib/dub";
 import { shareLinkSchema } from "./schema";
 
 export const shareLinkAction = authActionClient
@@ -10,6 +9,9 @@ export const shareLinkAction = authActionClient
     name: "share-link",
   })
   .action(async ({ parsedInput: { postId, baseUrl } }) => {
+    // Dynamically import dub to avoid build-time serialization issues
+    const { dub } = await import("@/lib/dub");
+    
     const link = await dub.links.create({
       url: `${baseUrl}/post/${postId}`,
     });

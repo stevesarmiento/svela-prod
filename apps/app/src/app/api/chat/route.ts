@@ -1,6 +1,5 @@
 import { streamText } from 'ai';
 import { gemini } from '@/lib/gemini';
-import { enhancedChatHandler } from '@/lib/enhanced-chat-handler';
 import { capxMemoryService, type CapxMemory } from '@/lib/capx-memory';
 // Removed storeMemoryWithMetadata import - using direct service instead
 import { NextResponse } from "next/server";
@@ -51,6 +50,8 @@ export async function POST(req: Request) {
     console.log('🚀 Using enhanced chat processing');
     
     try {
+      // Dynamically import the enhanced chat handler to avoid build-time serialization issues
+      const { enhancedChatHandler } = await import('@/lib/enhanced-chat-handler');
       const enhancedResponse = await enhancedChatHandler.processChat(latestUserMessage.content);
       console.log('✅ Enhanced response generated:', {
         hasTextResponse: !!enhancedResponse.textResponse,

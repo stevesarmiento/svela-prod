@@ -146,7 +146,7 @@ export function useRequestThrottle(options: RequestThrottleOptions = {}) {
       
       debounceTimeoutsRef.current.set(urlKey, timeout)
     })
-  }, [debounceTime, processQueue])
+  }, [debounceTime, processQueue, maxConcurrent])
 
   // Get queue statistics
   const getQueueStats = useCallback(() => {

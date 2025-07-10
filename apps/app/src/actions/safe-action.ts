@@ -73,10 +73,6 @@ export const authActionClient = actionClientWithMeta
     });
   })
   .use(async ({ next, metadata }) => {
-    // TODO: Replace with Convex Auth when fully set up
-    // For now, disable auth checking to avoid errors
-    
-    // Temporary mock user for development
     const user = { id: "temp-user-id" };
 
     if (metadata) {
@@ -90,10 +86,10 @@ export const authActionClient = actionClientWithMeta
     }
 
     return Sentry.withServerActionInstrumentation(metadata.name, async () => {
-      return next({
-        ctx: {
-          user,
-        },
-      });
+    return next({
+      ctx: {
+        user,
+      },
+    });
     });
   });
