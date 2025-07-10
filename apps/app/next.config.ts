@@ -8,7 +8,7 @@ const nextConfig = {
   reactStrictMode: true,
   transpilePackages: [],
   experimental: {
-    optimizeCss: isProd,
+    //optimizeCss: isProd,
     optimizePackageImports: isProd ? ["@v1/ui"] : [],
     serverActions: {
       bodySizeLimit: "2mb",
