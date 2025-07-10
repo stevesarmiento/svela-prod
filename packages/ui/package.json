@@ -45,6 +45,7 @@
     "./dropdown-menu": "./src/components/dropdown-menu.tsx",
     "./form": "./src/components/form.tsx",
     "./editor": "./src/components/editor/index.tsx",
+    "./mult-step-loader": "./src/components/mult-step-loader.tsx",
     "./globals.css": "./src/globals.css",
     "./hover-card": "./src/components/hover-card.tsx",
     "./icons": "./src/components/icons.tsx",

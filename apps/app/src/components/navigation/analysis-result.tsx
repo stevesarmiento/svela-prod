@@ -3,7 +3,7 @@
 import React from 'react'
 import { IconSparkles } from 'symbols-react'
 import ReactMarkdown from 'react-markdown'
-import { TextShimmerWave } from '@v1/ui/text-shimmer'
+import { MultiStepLoader } from '@v1/ui/mult-step-loader'
 
 interface MarketData {
   name?: string
@@ -27,10 +27,32 @@ interface AnalysisResultProps {
 }
 
 export function AnalysisResult({ isLoading, result, marketData, tokenData }: AnalysisResultProps) {
+  // Define the analysis steps
+  const analysisSteps = [
+    { text: "Analyzing price data" },
+    { text: "Looking at trend" },
+    { text: "Understanding orderflow" },
+    { text: "Considering liquidations" },
+    { text: "Looking at open interest" },
+    { text: "Understanding the market" },
+    { text: "Thinking..." },
+    { text: "Writing out thoughts" },
+    { text: "I have a lot of thoughts..." },
+    { text: "Im embarassed to be taking this long..." },
+    { text: "Pardon my tardiness..." },
+    { text: "I'm just a little bit nervous..." },
+    { text: "You're so awesome :)" },
+  ]
+
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-12 w-full h-[51vh]">
-        <TextShimmerWave className="text-zinc-400 text-lg">Analyzing technical indicators...</TextShimmerWave>
+      <div className="relative w-full h-[51vh]">
+        <MultiStepLoader
+          loadingStates={analysisSteps}
+          loading={isLoading}
+          duration={2000}
+          loop={true}
+        />
       </div>
     )
   }

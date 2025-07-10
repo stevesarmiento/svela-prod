@@ -1,11 +1,14 @@
 'use client'
 
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useCallback, useMemo } from 'react'
 import { createChart, ColorType, LineStyle, IChartApi, LineSeries, HistogramSeries, Time, LineData } from 'lightweight-charts'
 import { useMiniChartData } from '@/hooks/use-mini-chart-data'
 import { Spinner } from '@v1/ui/spinner'
 import { createRoot } from "react-dom/client"
 import { useHullSuite } from '@/hooks/use-hull-suite'
+import { RateLimitErrorBoundary } from '@/components/error-boundary/rate-limit-error-boundary'
+import { AlertTriangle, WifiOff } from 'lucide-react'
+import { toast } from '@v1/ui/use-toast'
 
 interface MiniPriceChartProps {
   coinId: string
@@ -66,10 +69,32 @@ const TooltipContent = ({ data, tokenSymbol }: { data: { time: number; price: nu
 export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
+  const tooltipElRef = useRef<HTMLDivElement | null>(null)
+  const tooltipRootRef = useRef<ReturnType<typeof createRoot> | null>(null)
+  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const { chartData, volumeData, isLoading, priceChange24h } = useMiniChartData(coinId, currentPrice)
+  const { 
+    chartData, 
+    volumeData, 
+    isLoading, 
+    priceChange24h, 
+    isRateLimited, 
+    rateLimitState 
+  } = useMiniChartData(coinId, currentPrice)
 
-  const ohlcvData = React.useMemo(() => {
+  // Show rate limit warning
+  useEffect(() => {
+    if (isRateLimited && rateLimitState.retryAfter) {
+      toast({
+        title: "Rate Limited",
+        description: `Chart data will refresh in ${Math.ceil(rateLimitState.retryAfter / 1000)}s`,
+        variant: "destructive",
+      })
+    }
+  }, [isRateLimited, rateLimitState.retryAfter])
+
+  // Memoize OHLCV data calculation for performance
+  const ohlcvData = useMemo(() => {
     if (!chartData.length) return []
     return chartData.map((point, idx) => {
       const price = point.value
@@ -90,6 +115,65 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
     })
   }, [chartData, volumeData])
 
+  // Debounced resize handler for better performance
+  const handleResize = useCallback(() => {
+    if (resizeTimeoutRef.current) {
+      clearTimeout(resizeTimeoutRef.current)
+    }
+    
+    resizeTimeoutRef.current = setTimeout(() => {
+      if (chartContainerRef.current && chartRef.current) {
+        try {
+          chartRef.current.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+          })
+        } catch (error) {
+          console.debug('Chart resize error:', error)
+        }
+      }
+    }, 100) // 100ms debounce
+  }, [])
+
+  // Optimized cleanup function
+  const cleanupChart = useCallback(() => {
+    // Clear any pending resize timeouts
+    if (resizeTimeoutRef.current) {
+      clearTimeout(resizeTimeoutRef.current)
+      resizeTimeoutRef.current = null
+    }
+
+    // Clean up tooltip - defer unmount to avoid race condition
+    if (tooltipRootRef.current && tooltipElRef.current) {
+      const tooltipRoot = tooltipRootRef.current
+      const tooltipEl = tooltipElRef.current
+      
+      // Defer the unmount operation to avoid React race condition
+      requestAnimationFrame(() => {
+        try {
+          tooltipRoot.unmount()
+          if (document.body.contains(tooltipEl)) {
+            document.body.removeChild(tooltipEl)
+          }
+        } catch (error) {
+          console.debug('Tooltip cleanup error:', error)
+        }
+      })
+      
+      tooltipElRef.current = null
+      tooltipRootRef.current = null
+    }
+
+    // Clean up chart
+    if (chartRef.current) {
+      try {
+        chartRef.current.remove()
+      } catch (error) {
+        console.debug('Chart cleanup error:', error)
+      }
+      chartRef.current = null
+    }
+  }, [])
+
   const hullSuite = useHullSuite(ohlcvData, {
     src: 'close',
     modeSwitch: 'Ehma',
@@ -107,14 +191,8 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
   useEffect(() => {
     if (!chartContainerRef.current || chartData.length === 0) return
 
-    if (chartRef.current) {
-      try {
-        chartRef.current.remove()
-      } catch (error) {
-        console.debug('Chart already disposed:', error)
-      }
-      chartRef.current = null
-    }
+    // Clean up previous chart instance
+    cleanupChart()
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -199,8 +277,12 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
 
     chartRef.current = chart
 
+    // Create optimized tooltip with refs for cleanup
     const tooltipEl = document.createElement("div")
     const tooltipRoot = createRoot(tooltipEl)
+    tooltipElRef.current = tooltipEl
+    tooltipRootRef.current = tooltipRoot
+    
     tooltipEl.className = "fixed z-[9999] hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
     tooltipEl.style.cssText = ""
     document.body.appendChild(tooltipEl)
@@ -289,32 +371,30 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
       console.log('Tooltip positioned at:', { left, top })
     })
 
-    const handleResize = () => {
-      if (chartContainerRef.current && chart) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-        })
-      }
-    }
-
+    // Use optimized resize handler
     window.addEventListener('resize', handleResize)
 
     return () => {
       window.removeEventListener('resize', handleResize)
-      requestAnimationFrame(() => {
-        tooltipRoot.unmount()
-        document.body.removeChild(tooltipEl)
-      })
-      if (chart) {
-        try {
-          chart.remove()
-        } catch (error) {
-          console.debug('Chart cleanup - already disposed:', error)
-        }
-      }
-      chartRef.current = null
+      // Use centralized cleanup
+      cleanupChart()
     }
-  }, [chartData, volumeData, priceChange24h, tokenSymbol, hullSuite])
+  }, [chartData, volumeData, priceChange24h, tokenSymbol, hullSuite, handleResize, cleanupChart])
+
+  // Show rate limit error state
+  if (isRateLimited) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[120px] w-full text-xs text-gray-500 space-y-2">
+        <WifiOff className="w-4 h-4 text-amber-500" />
+        <div className="text-center">
+          <div className="text-amber-500">Rate Limited</div>
+          {rateLimitState.retryAfter && (
+            <div className="text-xs">Retry in {Math.ceil(rateLimitState.retryAfter / 1000)}s</div>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (
@@ -326,25 +406,27 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
 
   if (chartData.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[120px] w-full text-xs text-gray-500">
-        No chart data available
+      <div className="flex flex-col items-center justify-center h-[120px] w-full text-xs text-gray-500 space-y-2">
+        <AlertTriangle className="w-4 h-4 text-amber-500" />
+        <div>No chart data available</div>
       </div>
     )
   }
 
   return (
-    <div className="w-full relative">
-      
-      <div
-        className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-20"
-        style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
-            backgroundRepeat: "repeat",
-        }}
-      />
+    <RateLimitErrorBoundary>
+      <div className="w-full relative">
+        <div
+          className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-20"
+          style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
+              backgroundRepeat: "repeat",
+          }}
+        />
         <div className="w-full">
           <div ref={chartContainerRef} className="w-full h-full" />
         </div>
-    </div>
+      </div>
+    </RateLimitErrorBoundary>
   )
 } 
