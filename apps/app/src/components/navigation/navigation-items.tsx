@@ -6,7 +6,7 @@ import { usePathHelper } from './bottom-nav-hooks';
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
 import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings';
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'wallet' | 'settings';
 
 interface NavigationItemsProps {
   onOpenCommandSearch: (context: CommandContext | null) => void;
@@ -26,6 +26,8 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
       case "/watchlist":
       case "/overview":
         return navigation.overview;
+      case "/wallet":
+        return navigation.wallet;
       case "/settings":
         return navigation.settings;
       default:

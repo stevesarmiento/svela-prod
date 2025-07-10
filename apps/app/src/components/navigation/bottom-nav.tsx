@@ -10,7 +10,7 @@ import { CommandSearch } from "./command-search";
 import { ChatContainer } from "./chat-container";
 import { ChatStateManager } from "../chat/chat-toast";
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'wallet' | 'settings' | null;
 
 export function BottomNav() {
   const { 

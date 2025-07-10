@@ -23,7 +23,7 @@ export interface KeyboardShortcut {
 export const SEQUENTIAL_SHORTCUTS = {
   'g': {
     'h': '/watchlist',        // go to home/watchlist
-    'w': '/watchlist',       // go to watchlist  
+    'w': '/wallet',          // go to wallet
     'c': '/charts',          // go to charts
     's': '/settings',        // go to settings
     'n': '/news',           // go to news
@@ -136,6 +136,7 @@ export const CHART_SHORTCUTS: KeyboardShortcut[] = [
 export const NAVIGATION_SHORTCUTS = {
   '/overview': 'g + h',
   '/watchlist': 'g + h', 
+  '/wallet': 'g + w',
   '/charts': 'g + c',
   '/settings': 'g + s',
   '/news': 'g + n',

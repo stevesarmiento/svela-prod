@@ -26,6 +26,13 @@ export default clerkMiddleware(async (auth, req) => {
   // Check if this is a public route
   const isPublic = isPublicRoute(req);
   
+  // Handle API routes differently - return errors instead of redirects
+  if (req.nextUrl.pathname.startsWith('/api/')) {
+    // For API routes, just let them handle authentication themselves
+    // The auth() function will be available in the route handlers
+    return NextResponse.next();
+  }
+  
   // Redirect authenticated users away from auth pages
   if (isPublic && isAuthenticated) {
     return NextResponse.redirect(new URL("/watchlist", req.url));
@@ -55,6 +62,6 @@ export default clerkMiddleware(async (auth, req) => {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|api|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

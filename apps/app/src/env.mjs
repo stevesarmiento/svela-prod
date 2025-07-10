@@ -19,11 +19,14 @@ export const env = createEnv({
     CG_API_KEY: z.string().optional(),
     GEMINI_API_KEY: z.string().optional(),
     X_CAPI_API_KEY: z.string().optional(),
+    CROSSMINT_SERVER_API_KEY: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_OPENPANEL_CLIENT_ID: z.string().optional(),
     NEXT_PUBLIC_CONVEX_URL: z.string().optional(),
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
+    NEXT_PUBLIC_CROSSMINT_CLIENT_API_KEY: z.string().optional(),
+    NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
   },
   runtimeEnv: {
     NEXT_PUBLIC_OPENPANEL_CLIENT_ID:
@@ -31,6 +34,7 @@ export const env = createEnv({
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
     NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+    NEXT_PUBLIC_CROSSMINT_CLIENT_API_KEY: process.env.NEXT_PUBLIC_CROSSMINT_CLIENT_API_KEY,
     OPENPANEL_SECRET_KEY: process.env.OPENPANEL_SECRET_KEY,
     PORT: process.env.PORT,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
@@ -42,6 +46,7 @@ export const env = createEnv({
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     X_CAPI_API_KEY: process.env.X_CAPI_API_KEY,
+    CROSSMINT_SERVER_API_KEY: process.env.CROSSMINT_SERVER_API_KEY,
     'CG-API-KEY': process.env['CG-API-KEY'],
   },
   skipValidation: !!process.env.CI || !!process.env.SKIP_ENV_VALIDATION,

@@ -4,7 +4,7 @@ import { NavigationItems } from './navigation-items';
 import { SelectionContent } from './selection-content';
 import type { SelectionState } from './bottom-nav-context';
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'wallet' | 'settings' | null;
 
 interface NavigationDockProps {
   mode: 'navigation' | 'selection';

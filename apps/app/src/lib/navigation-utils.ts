@@ -17,6 +17,7 @@ export function useWatchlistPreservingNavigation() {
     charts: buildUrl('/charts'),
     watchlist: buildUrl('/watchlist'),
     overview: buildUrl('/watchlist'),
+    wallet: buildUrl('/wallet'),
     settings: buildUrl('/settings'),
     buildUrl
   }

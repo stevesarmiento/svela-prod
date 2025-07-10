@@ -6,6 +6,7 @@ import {
     IconCaptionsBubbleFill,
     IconBinocularsFill,
     IconGearshapeFill,
+    IconCreditcardFill,
    // IconCompassDrawing,
   } from "symbols-react";
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
@@ -15,6 +16,7 @@ export const BASE_ROUTES = {
   overview: "/watchlist",
   watchlist: "/watchlist", 
   charts: "/charts",
+  wallet: "/wallet",
   settings: "/settings"
 } as const;
   
@@ -33,6 +35,11 @@ export const BASE_ROUTES = {
       title: "Charts",
       href: "/charts", 
       icon: IconDistributeHorizontalCenterFill,
+    },
+    {
+      title: "Wallet",
+      href: "/wallet",
+      icon: IconCreditcardFill,
     },
     {
       title: "Settings",
@@ -65,6 +72,13 @@ export const BASE_ROUTES = {
           href: "/charts",
           icon: IconDistributeHorizontalCenterFill,
           shortcut: getShortcutForRoute("/charts"),
+        },
+        {
+          title: "Wallet",
+          subtitle: "Manage your cryptocurrency wallet",
+          href: "/wallet",
+          icon: IconCreditcardFill,
+          shortcut: getShortcutForRoute("/wallet"),
         },
         {
           title: "Settings",

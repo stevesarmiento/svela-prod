@@ -31,7 +31,7 @@ interface ContextualCommandGroup {
   items: ContextualCommand[];
 }
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'wallet' | 'settings' | null;
 
 export function useContextualCommands(searchQuery: string, context: CommandContext = null) {
   const contextualCommands = useMemo((): ContextualCommandGroup[] => {
@@ -124,6 +124,33 @@ export function useContextualCommands(searchQuery: string, context: CommandConte
                 subtitle: "Most viewed charts",
                 icon: IconChartLineUptrendXyaxis,
                 action: "trending-charts"
+              }
+            ]
+          }
+        ];
+
+      case 'wallet':
+        return [
+          {
+            group: "Wallet Actions",
+            items: [
+              {
+                title: "View Balance",
+                subtitle: "Check wallet balance",
+                icon: IconEye,
+                action: "view-balance"
+              },
+              {
+                title: "Transaction History",
+                subtitle: "View transaction history",
+                icon: IconChartBar,
+                action: "transaction-history"
+              },
+              {
+                title: "Wallet Settings",
+                subtitle: "Manage wallet preferences",
+                icon: IconGear,
+                action: "wallet-settings"
               }
             ]
           }

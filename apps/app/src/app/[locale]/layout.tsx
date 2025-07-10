@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexProvider } from "@v1/convex/provider";
 import { QueryProvider } from "@/components/providers/query-provider";
+import { CrossmintProviders } from "@/components/providers/crossmint-provider";
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
@@ -63,27 +64,29 @@ export default function RootLayout({
             },
           }}
         >
-          <ConvexProvider>
-            <QueryProvider>
-              <WatchlistProvider>
-              <ThemeProvider
-                attribute="class"
-                defaultTheme="system"
-                enableSystem
-                disableTransitionOnChange
-              >
-                {children}
+          <CrossmintProviders>
+            <ConvexProvider>
+              <QueryProvider>
+                <WatchlistProvider>
+                <ThemeProvider
+                  attribute="class"
+                  defaultTheme="system"
+                  enableSystem
+                  disableTransitionOnChange
+                >
+                  {children}
 
-                <ChatToast />
-                <Toaster 
-                  position="top-center" 
-                  offset={-10}
-                />
-              </ThemeProvider>
-              </WatchlistProvider>
+                  <ChatToast />
+                  <Toaster 
+                    position="top-center" 
+                    offset={-10}
+                  />
+                </ThemeProvider>
+                </WatchlistProvider>
 
-            </QueryProvider>
-          </ConvexProvider>
+              </QueryProvider>
+            </ConvexProvider>
+          </CrossmintProviders>
         </ClerkProvider>
       </body>
     </html>

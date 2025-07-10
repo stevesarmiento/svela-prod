@@ -185,4 +185,21 @@ export default defineSchema({
     .index("by_key", ["cacheKey"])
     .index("by_expiry", ["expiresAt"])
     .index("by_source", ["dataSource"]),
+
+  // User wallets - track Crossmint wallet associations
+  wallets: defineTable({
+    userId: v.id("users"), // Reference to Convex user
+    clerkId: v.string(), // Clerk user ID for direct lookup
+    walletAddress: v.string(), // The wallet address
+    chain: v.string(), // blockchain network (ethereum, polygon, etc.)
+    walletProvider: v.string(), // 'crossmint'
+    crossmintWalletId: v.optional(v.string()), // Crossmint's internal wallet ID
+    isActive: v.boolean(), // Whether this wallet is active
+    createdAt: v.number(),
+    lastUsed: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_clerk_id", ["clerkId"])
+    .index("by_address", ["walletAddress"])
+    .index("by_provider", ["walletProvider"]),
 });
