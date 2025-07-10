@@ -1,9 +1,16 @@
 import "server-only";
 
 import { Ratelimit } from "@upstash/ratelimit";
-import { client } from ".";
+import { client, isRedisConfigured } from ".";
 
-export const ratelimit = new Ratelimit({
-  limiter: Ratelimit.fixedWindow(10, "10s"),
-  redis: client,
-});
+// Create a mock ratelimit for when Redis is not configured
+const mockRatelimit = {
+  limit: async () => ({ success: true, remaining: 10, reset: Date.now() + 10000 }),
+};
+
+export const ratelimit = isRedisConfigured() 
+  ? new Ratelimit({
+      limiter: Ratelimit.fixedWindow(10, "10s"),
+      redis: client,
+    })
+  : mockRatelimit as any;

@@ -1,4 +1,4 @@
-// import * as Sentry from "@sentry/nextjs";
+import * as Sentry from "@sentry/nextjs";
 import { setupAnalytics } from "@v1/analytics/server";
 import { ratelimit } from "@v1/kv/ratelimit";
 import { logger } from "@v1/logger";
@@ -73,10 +73,6 @@ export const authActionClient = actionClientWithMeta
     });
   })
   .use(async ({ next, metadata }) => {
-    // TODO: Replace with Convex Auth when fully set up
-    // For now, disable auth checking to avoid errors
-    
-    // Temporary mock user for development
     const user = { id: "temp-user-id" };
 
     if (metadata) {
@@ -89,12 +85,11 @@ export const authActionClient = actionClientWithMeta
       }
     }
 
-    // Temporarily disabled to fix DataCloneError
-    // return Sentry.withServerActionInstrumentation(metadata.name, async () => {
+    return Sentry.withServerActionInstrumentation(metadata.name, async () => {
     return next({
       ctx: {
         user,
       },
     });
-    // });
+    });
   });
