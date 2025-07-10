@@ -5,24 +5,25 @@ import {
     IconStarFill,
     IconCaptionsBubbleFill,
     IconBinocularsFill,
-    IconCompassDrawing,
+    IconGearshapeFill,
+   // IconCompassDrawing,
   } from "symbols-react";
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
 
 // Base routes (will be enhanced with watchlist params by components)
 export const BASE_ROUTES = {
-  overview: "/overview",
+  overview: "/watchlist",
   watchlist: "/watchlist", 
   charts: "/charts",
   settings: "/settings"
 } as const;
   
   export const MENU_ITEMS = [
-    {
-      title: "Overview",
-      href: "/overview",
-      icon: IconCompassDrawing,
-    },
+    // {
+    //   title: "Overview",
+    //   href: "/overview",
+    //   icon: IconCompassDrawing,
+    // },
     {
       title: "Watchlist",
       href: "/watchlist",
@@ -36,7 +37,7 @@ export const BASE_ROUTES = {
     {
       title: "Settings",
       href: "/settings",
-      icon: IconGear,
+      icon: IconGearshapeFill,
     },
   ] as const;
   
@@ -46,10 +47,10 @@ export const BASE_ROUTES = {
       items: [
         {
           title: "Overview",
-          subtitle: "View dashboard and chat",
-          href: "/overview",
+          subtitle: "View dashboard and watchlist",
+          href: "/watchlist",
           icon: IconCaptionsBubbleFill,
-          shortcut: getShortcutForRoute("/overview"),
+          shortcut: getShortcutForRoute("/watchlist"),
         },
         {
           title: "Watchlist",

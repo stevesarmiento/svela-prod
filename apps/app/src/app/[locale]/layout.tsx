@@ -8,6 +8,8 @@ import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { WatchlistProvider } from "./(dashboard)/watchlist/_components/watchlist-context";
+import { Toaster } from "@v1/ui/sonner";
+import { ChatToast } from "@/components/chat/chat-toast";
 //import localFont from "next/font/local";
 
 // const geistSans = localFont({
@@ -71,6 +73,12 @@ export default function RootLayout({
                 disableTransitionOnChange
               >
                 {children}
+
+                <ChatToast />
+                <Toaster 
+                  position="top-center" 
+                  offset={-10}
+                />
               </ThemeProvider>
               </WatchlistProvider>
 

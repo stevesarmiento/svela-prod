@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
+import { useSearchParams } from "next/navigation"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { Button } from "@v1/ui/button"
 import { X } from "lucide-react"
@@ -12,8 +13,6 @@ import { toast } from "@v1/ui/use-toast"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Spinner } from "@v1/ui/spinner"
 import type { CoinMarketData } from '@/types/coins'
-import { buildWatchlistUrl } from '@/lib/navigation-utils'
-import { useQueryState } from 'nuqs'
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -25,8 +24,11 @@ interface ChartTableProps {
 }
 
 export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
-  const { removeFromWatchlist } = useWatchlist()
-  const [selectedGroupSlug] = useQueryState('wg', { defaultValue: '' })
+  const { removeFromSelectedGroup, selectedGroup } = useWatchlist()
+  const searchParams = useSearchParams()
+  
+  // Get current watchlist group parameter to preserve it in navigation (same as top-nav)
+  const watchlistGroup = searchParams.get('wg')
 
   // Calculate interval-based price changes
   const coinsWithIntervalChange = useMemo(() => {
@@ -91,11 +93,20 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
   }
 
   const handleRemove = async (coinId: number) => {
+    if (!selectedGroup) {
+      toast({
+        title: "Error",
+        description: "No watchlist group selected",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
-      await removeFromWatchlist(coinId)
+      await removeFromSelectedGroup(coinId)
       toast({
         title: "Removed",
-        description: "Coin removed from watchlist",
+        description: `Coin removed from ${selectedGroup.name}`,
       })
     } catch {
       toast({
@@ -188,7 +199,7 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
             ) : (
               // Show clickable link for real coins
               <Link 
-                href={buildWatchlistUrl(`/charts/${coin.id}`, selectedGroupSlug)}
+                href={watchlistGroup ? `/charts/${coin.id}?wg=${watchlistGroup}` : `/charts/${coin.id}`}
                 className="grid grid-cols-4 gap-4 px-4 py-2 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer"
               >
                 {/* Price */}

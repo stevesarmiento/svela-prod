@@ -7,7 +7,7 @@ export async function GET() {
       `${BASE_URL}/cryptocurrency/listings/latest?start=1&limit=25&sort=market_cap&sort_dir=desc&aux=cmc_rank`
     );
     
-    const topCoins = data.data.map((coin: any) => ({
+    const topCoins = data.data.map((coin: { id: string; name: string; symbol: string; cmc_rank: number; quote: { USD: { price: number; }; }; }) => ({
       id: coin.id,
       name: coin.name,
       symbol: coin.symbol,

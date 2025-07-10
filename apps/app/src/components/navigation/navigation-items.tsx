@@ -24,7 +24,6 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
       case "/charts":
         return navigation.charts;
       case "/watchlist":
-        return navigation.watchlist;
       case "/overview":
         return navigation.overview;
       case "/settings":
@@ -64,7 +63,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
                 }`} />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={15} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-zinc=-800/20 border bg-none shadow-none">
+            <TooltipContent side="top" sideOffset={15} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-zinc-800 border bg-none shadow-none">
               <span className="text-xs text-zinc-400">
                 {isActive ? `Search ${item.title}` : item.title}
               </span>

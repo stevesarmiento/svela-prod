@@ -1,141 +1,308 @@
 import { streamText } from 'ai';
-import { z } from 'zod';
-import { openai, isOpenAIAvailable } from '@/lib/openai';
-import { detectAndFetchData, formatDataForLLM } from '@/lib/data-fetcher';
+import { gemini } from '@/lib/gemini';
+import { enhancedChatHandler } from '@/lib/enhanced-chat-handler';
+import { capxMemoryService, type CapxMemory } from '@/lib/capx-memory';
+// Removed storeMemoryWithMetadata import - using direct service instead
+import { NextResponse } from "next/server";
 
-const ChatRequestSchema = z.object({
-  messages: z.array(z.object({
-    role: z.enum(['user', 'assistant', 'system']),
-    content: z.string(),
-  })),
-});
+export const maxDuration = 30;
 
 export async function POST(req: Request) {
   try {
-    // Check if OpenAI is available
-    if (!isOpenAIAvailable || !openai) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'OpenAI service is not available. Please configure OPENAI_API_KEY.' 
-        }), 
-        { 
-          status: 503,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
+    const { messages, userId } = await req.json();
+    
+    if (!Array.isArray(messages)) {
+      console.error('Invalid messages format - not an array:', messages);
+      return NextResponse.json({ error: 'Invalid messages format' }, { status: 400 });
     }
-
-    const body = await req.json();
-    const { messages } = ChatRequestSchema.parse(body);
     
-    const latestUserMessage = messages
-      .filter(m => m.role === 'user')
-      .pop();
+    console.log('📩 Received chat request with', messages.length, 'messages');
     
-    console.log('Latest user message:', latestUserMessage?.content);
+    const latestUserMessage = messages.filter(m => m.role === 'user').pop();
     
-    let dataContext = '';
-    let enhancedSystemPrompt = 'You are a helpful AI assistant with access to live cryptocurrency market data. Provide clear, concise, and helpful responses.';
-    let componentData = null;
+    if (!latestUserMessage) {
+      console.error('No user message found in request');
+      return NextResponse.json({ error: 'No user message found' }, { status: 400 });
+    }
     
-    if (latestUserMessage) {
-      const dataInfo = await detectAndFetchData(latestUserMessage.content);
-      console.log('Data info:', dataInfo);
+    console.log('🔍 Processing user message:', latestUserMessage.content);
+    
+    // Retrieve relevant memories if userId is provided and API key is available
+    let relevantMemories: CapxMemory[] = [];
+    const hasMemoryEnabled = capxMemoryService.isAvailable() && userId;
+    
+    if (hasMemoryEnabled) {
+      try {
+        console.log('🧠 Retrieving relevant memories for user:', userId);
+        const memoryContext = await capxMemoryService.retrieveContext(
+          userId,
+          latestUserMessage.content,
+          5 // Get up to 5 relevant memories
+        );
+        relevantMemories = memoryContext.memories;
+        console.log('✅ Retrieved', relevantMemories.length, 'relevant memories');
+      } catch (error) {
+        console.error('⚠️ Failed to retrieve memories:', error);
+        // Continue without memories if retrieval fails
+      }
+    }
+    
+    // Always use enhanced processing for better responses
+    console.log('🚀 Using enhanced chat processing');
+    
+    try {
+      const enhancedResponse = await enhancedChatHandler.processChat(latestUserMessage.content);
+      console.log('✅ Enhanced response generated:', {
+        hasTextResponse: !!enhancedResponse.textResponse,
+        componentsCount: enhancedResponse.components.length,
+        processingTime: enhancedResponse.processingTime
+      });
       
-      if (dataInfo.type !== 'none') {
-        dataContext = formatDataForLLM(dataInfo);
+      // Create component data for the first component (if any)
+      let componentData = null;
+      if (enhancedResponse.components.length > 0) {
+        const firstComponent = enhancedResponse.components[0];
         
-        if (dataInfo.type === 'coins' && dataInfo.data) {
-          if (!Array.isArray(dataInfo.data)) {
-            const coin = dataInfo.data;
-            console.log('Coin data:', coin);
-            componentData = {
-              type: 'price_card',
-              data: {
-                id: coin.id || 1,
-                name: coin.name,
-                symbol: coin.symbol,
-                price: coin.quote.USD.price,
-                change24h: coin.quote.USD.percent_change_24h,
-                marketCap: coin.quote.USD.market_cap,
-                volume24h: coin.quote.USD.volume_24h,
-                rank: coin.cmc_rank,
-                historical: coin.historical
-              }
-            };
-            console.log('Component data created:', componentData);
-          }
+        if (firstComponent && firstComponent.type === 'price_card') {
+          componentData = {
+            type: 'price_card',
+            data: firstComponent.data
+          };
+          console.log('📦 Component data to send:', { type: firstComponent.type, data: firstComponent.data });
+        } else if (firstComponent && firstComponent.type === 'comparison_chart') {
+          componentData = {
+            type: 'comparison_chart',
+            data: firstComponent.data
+          };
+          console.log('📦 Comparison chart data to send:', { type: firstComponent.type, data: firstComponent.data });
         }
-        
-        enhancedSystemPrompt = `You are a cryptocurrency and market data assistant with access to real-time information. 
-        
-When users ask about cryptocurrency prices, market data, or specific coins, use the provided live data to give accurate, current information. 
-
-Key guidelines:
-- Always use the most recent data provided in the context
-- Format prices and numbers clearly (use commas for thousands)
-- Highlight significant changes or trends
-- Provide context for price movements when possible
-- If asked about coins not in the data, mention that you'd need to fetch that specific information
-- Keep responses concise since a visual price card will also be shown
-
-${dataContext}`;
       }
-    }
+      
+      // Prepare memory context for the AI
+      let memoryContext = '';
+      if (relevantMemories.length > 0) {
+        memoryContext = `\n\n**Relevant Context from Previous Conversations:**\n${relevantMemories
+          .map((memory, index) => `${index + 1}. ${memory.text} (Score: ${memory.score.toFixed(2)})`)
+          .join('\n')}\n\n`;
+      }
+      
+      // Use enhanced content for streaming
+      const enhancedSystemPrompt = `You are a sophisticated cryptocurrency analyst providing the following analysis. The response has already been analyzed and enhanced - simply format it properly:
 
-    const result = await streamText({
-      model: openai.chat('gpt-4o-mini'),
-      messages: [
-        {
-          role: 'system',
-          content: enhancedSystemPrompt,
+${enhancedResponse.textResponse}${memoryContext}`;
+      
+      console.log('🔄 Falling through to normal streaming with enhanced content');
+      
+      if (!gemini) {
+        throw new Error('Gemini AI is not available. Please configure GOOGLE_GENERATIVE_AI_API_KEY.');
+      }
+      
+      const result = await streamText({
+        model: gemini('gemini-2.5-flash'),
+        messages: [
+          {
+            role: 'system',
+            content: enhancedSystemPrompt,
+          },
+          {
+            role: 'user',
+            content: latestUserMessage.content,
+          },
+        ],
+        temperature: 0.1, // Very low temperature since content is pre-generated
+        maxTokens: 3000,
+      });
+
+      const response = result.toDataStreamResponse({
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Enhanced-Response': 'true',
         },
-        ...messages,
-      ],
-      temperature: 0.3, // Lower temperature for more consistent data responses
-      maxTokens: 1000,
-    });
+      });
 
-    // Create a custom response that includes both text and component data
-    const response = result.toDataStreamResponse({
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'no-cache, no-transform',
-        'X-Content-Type-Options': 'nosniff',
-      },
-    });
-
-    // If we have component data, we need to modify the response
-    if (componentData) {
-      console.log('Setting component data header:', componentData);
-      response.headers.set('X-Component-Data', JSON.stringify(componentData));
-    } else {
-      console.log('No component data to set');
-    }
-
-    return response;
-  } catch (error) {
-    console.error('Chat error:', error);
-    
-    if (error instanceof z.ZodError) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'Invalid message format',
-          details: error.errors 
-        }), 
-        { 
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      );
-    }
-    
-    return new Response(
-      JSON.stringify({ error: 'Failed to process chat message' }), 
-      { 
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
+      // Add component data and enhanced metadata to headers
+      if (componentData) {
+        response.headers.set('X-Component-Data', JSON.stringify(componentData));
       }
+      
+      response.headers.set('X-Enhanced-Metadata', JSON.stringify({
+        processingTime: enhancedResponse.processingTime,
+        dataQuality: enhancedResponse.dataContext.metadata.quality,
+        dataSources: enhancedResponse.dataContext.metadata.sources,
+        intentType: enhancedResponse.dataContext.intent.type,
+        componentsGenerated: enhancedResponse.components.length
+      }));
+      
+      // Store the conversation in memory if enabled
+      if (hasMemoryEnabled) {
+        try {
+          console.log('💾 Storing conversation in memory for userId:', userId);
+          console.log('🔑 Memory service available:', capxMemoryService.isAvailable());
+          
+          // Store the user's query with enhanced metadata
+          const userMemoryResult = await capxMemoryService.addMemory(
+            userId,
+            `User asked: "${latestUserMessage.content}"`,
+            {
+              category: 'chat',
+              source: 'chat',
+              tags: ['user_query', enhancedResponse.dataContext.intent.type],
+              priority: 6,
+              namespace: 'chat_conversations',
+              intentType: enhancedResponse.dataContext.intent.type,
+              processingType: 'enhanced',
+              timestamp: Date.now(),
+            },
+            'extract_facts'
+          );
+          
+          console.log('💾 User query storage result:', {
+            success: !!userMemoryResult.memoryId,
+            memoryId: userMemoryResult.memoryId,
+            strategy: userMemoryResult.strategyUsed
+          });
+          
+          // Store key insights from the response
+          const responseInsights = enhancedResponse.textResponse.length > 500 
+            ? enhancedResponse.textResponse.substring(0, 500) + '...'
+            : enhancedResponse.textResponse;
+            
+          const responseMemoryResult = await capxMemoryService.addMemory(
+            userId,
+            `Analysis provided: ${responseInsights}`,
+            {
+              category: 'chat',
+              source: 'chat',
+              tags: ['ai_response', enhancedResponse.dataContext.intent.type],
+              priority: 7,
+              namespace: 'chat_conversations',
+              intentType: enhancedResponse.dataContext.intent.type,
+              dataQuality: enhancedResponse.dataContext.metadata.quality,
+              dataSources: enhancedResponse.dataContext.metadata.sources,
+              processingType: 'enhanced',
+              timestamp: Date.now(),
+            },
+            'summarize_if_long'
+          );
+          
+          console.log('💾 AI response storage result:', {
+            success: !!responseMemoryResult.memoryId,
+            memoryId: responseMemoryResult.memoryId,
+            strategy: responseMemoryResult.strategyUsed
+          });
+          
+          if (userMemoryResult.memoryId && responseMemoryResult.memoryId) {
+            console.log('✅ Both memories stored successfully:', {
+              userMemoryId: userMemoryResult.memoryId,
+              responseMemoryId: responseMemoryResult.memoryId
+            });
+          } else {
+            console.warn('⚠️ Some memories failed to store:', {
+              userQuery: !!userMemoryResult.memoryId,
+              aiResponse: !!responseMemoryResult.memoryId
+            });
+          }
+        } catch (error) {
+          console.error('⚠️ Failed to store conversation in memory:', error);
+          // Continue without storing memory if it fails
+        }
+      } else {
+        console.log('🔕 Memory not enabled - hasMemoryEnabled:', hasMemoryEnabled, {
+          serviceAvailable: capxMemoryService.isAvailable(),
+          userId: userId ? 'provided' : 'missing'
+        });
+      }
+      
+      console.log('🎯 Enhanced response sent via normal');
+      return response;
+
+    } catch (enhancedError) {
+      console.error('❌ Enhanced chat processing failed:', enhancedError);
+      
+      // Fallback to basic chat
+      console.log('⬇️ Falling back to basic chat processing');
+      
+      // Prepare memory context for fallback
+      let fallbackMemoryContext = '';
+      if (relevantMemories.length > 0) {
+        fallbackMemoryContext = `\n\n**Context from Previous Conversations:**\n${relevantMemories
+          .map((memory, index) => `${index + 1}. ${memory.text}`)
+          .join('\n')}\n\n`;
+      }
+      
+      const basicSystemPrompt = `You are a helpful AI assistant with knowledge about cryptocurrency markets. 
+
+**FORMATTING REQUIREMENTS:**
+- Format your response using **Markdown** for better readability
+- Use **## headers** for main sections
+- Use **### subheaders** for subsections
+- Use **bold** for important numbers and key insights
+- Use *italics* for emphasis and trends
+- Use bullet points (-) for lists
+- Use \`inline code\` for technical terms and indicators
+- Keep responses well-structured and scannable
+
+${fallbackMemoryContext}Provide clear, concise, and helpful responses about cryptocurrency topics.`;
+
+      if (!gemini) {
+        throw new Error('Gemini AI is not available. Please configure GOOGLE_GENERATIVE_AI_API_KEY.');
+      }
+
+      const result = await streamText({
+        model: gemini('gemini-2.5-flash'),
+        messages: [
+          {
+            role: 'system',
+            content: basicSystemPrompt,
+          },
+          ...messages,
+        ],
+        temperature: 0.3,
+        maxTokens: 3000,
+      });
+
+      const response = result.toDataStreamResponse({
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          'X-Content-Type-Options': 'nosniff',
+        },
+      });
+
+      // Store the conversation in memory for fallback case
+      if (hasMemoryEnabled) {
+        try {
+          console.log('💾 Storing fallback conversation in memory');
+          
+          // Store the user's query with fallback context
+          await capxMemoryService.addMemory(
+            userId,
+            `User asked: "${latestUserMessage.content}"`,
+            {
+              source: 'chat_query_fallback',
+              timestamp: Date.now(),
+              processingType: 'fallback',
+            },
+            'extract_facts'
+          );
+          
+          console.log('✅ Fallback conversation stored in memory');
+        } catch (error) {
+          console.error('⚠️ Failed to store fallback conversation in memory:', error);
+          // Continue without storing memory if it fails
+        }
+      }
+
+      return response;
+    }
+
+  } catch (error) {
+    console.error('Chat API error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' }, 
+      { status: 500 }
     );
   }
 }

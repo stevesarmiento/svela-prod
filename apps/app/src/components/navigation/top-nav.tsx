@@ -3,7 +3,7 @@
 //import Link from "next/link";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 // import { 
 //   IconHouseFill, 
 //   IconDistributeHorizontalCenterFill,  
@@ -11,6 +11,7 @@ import { usePathname } from "next/navigation";
 // } from "symbols-react";
 import { Button } from "@v1/ui/button";
 import { useAuth } from "@v1/convex/hooks";
+import { useUser } from "@clerk/nextjs";
 import { 
   DropdownMenu,
   DropdownMenuContent,
@@ -52,8 +53,8 @@ function getRouteGreeting(pathname: string): string {
   // Remove locale prefix if present (e.g., /en/charts -> /charts)
   const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
   
-  // Special case: Use time-based greeting for overview
-  if (cleanPath === '/overview' || cleanPath.startsWith('/overview/')) {
+  // Special case: Use time-based greeting for watchlist (now the default overview)
+  if (cleanPath === '/watchlist' || cleanPath.startsWith('/watchlist/') || cleanPath === '/' || cleanPath === '/overview' || cleanPath.startsWith('/overview/')) {
     const hour = new Date().getHours();
     
     if (hour < 12) return "Good morning";
@@ -65,8 +66,6 @@ function getRouteGreeting(pathname: string): string {
   const routeGreetings: Record<string, string> = {
     '/charts': 'Charts & Graphs',
     '/settings': 'Settings',
-    '/watchlist': 'Watchlist',
-    '/': 'Dashboard',
   };
 
   // Check for exact matches first
@@ -81,20 +80,30 @@ function getRouteGreeting(pathname: string): string {
     }
   }
 
-  // Default fallback
-  return 'Dashboard';
+  // Default fallback - use time-based greeting for unknown routes during redirect
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  if (hour < 21) return "Good evening";
+  return "Welcome";
 }
 
 export function TopNav() {
   const { user } = useAuth();
+  const { user: clerkUser, isLoaded } = useUser();
   const { openUserProfile } = useClerk();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [greeting, setGreeting] = useState("Dashboard");
   const [isMounted, setIsMounted] = useState(false);
   const { isChartDetailPage, tokenData, isLoading } = useTokenHeader();
 
   // Extract coin ID from pathname for watchlist button
   const coinId = isChartDetailPage ? pathname.split('/').pop() : null;
+
+  // Get current watchlist group parameter to preserve it in back navigation
+  const watchlistGroup = searchParams.get('wg');
+  const backToChartsUrl = watchlistGroup ? `/charts?wg=${watchlistGroup}` : '/charts';
 
   // Update greeting based on route after component mounts
   useEffect(() => {
@@ -106,14 +115,19 @@ export function TopNav() {
     openUserProfile();
   };
 
-  const name = user?.fullName;
-  const firstName = name?.split(' ')[0] || user?.email?.split('@')[0];
-  const email = user?.email;
-  const avatarUrl = user?.avatarUrl;
+  // Use Clerk user data for faster loading, fallback to Convex user
+  const userData = clerkUser || user;
+  const name = userData?.fullName;
+  const firstName = name?.split(' ')[0] || (clerkUser?.primaryEmailAddress?.emailAddress || user?.email)?.split('@')[0];
+  const email = clerkUser?.primaryEmailAddress?.emailAddress || user?.email;
+  const avatarUrl = clerkUser?.imageUrl || user?.avatarUrl;
 
-  // Check if current route is overview
+  // Check if current route is overview (now watchlist is the default overview)
   const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
-  const isOverviewRoute = cleanPath === '/overview' || cleanPath.startsWith('/overview/');
+  const isOverviewRoute = cleanPath === '/watchlist' || cleanPath.startsWith('/watchlist/') || cleanPath === '/' || cleanPath === '/overview' || cleanPath.startsWith('/overview/');
+
+  // Don't show greeting with name until user data is loaded
+  const showPersonalizedGreeting = isLoaded && firstName;
 
   return (
     <div className="py-12 px-4 z-50">
@@ -123,7 +137,7 @@ export function TopNav() {
           {isChartDetailPage ? (
             // Token Header with cached data
             <div className="flex items-center gap-4">
-              <Link href="/charts" className="flex text-white/70 hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150">
+              <Link href={backToChartsUrl} className="flex text-white/70 hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150">
                 <IconChevronBackward className="h-3 w-3 fill-current" />
               </Link>
               <div className="flex items-center gap-2">
@@ -166,7 +180,7 @@ export function TopNav() {
           ) : (
             // Default Logo and Greeting
             <>
-              <Link href="/overview">
+              <Link href="/watchlist">
                 <SvelaLogo 
                   width={22} 
                   height={22} 
@@ -178,11 +192,15 @@ export function TopNav() {
               <span className="text-lg font-bold text-white">
                 {isMounted 
                   ? isOverviewRoute 
-                    ? `${greeting}, ${firstName}` 
+                    ? showPersonalizedGreeting 
+                      ? `${greeting}, ${firstName}` 
+                      : greeting
                     : greeting
                   : isOverviewRoute 
-                    ? `Dashboard, ${firstName}` 
-                    : "Dashboard"
+                    ? showPersonalizedGreeting
+                      ? `Good morning, ${firstName}` 
+                      : "Good morning"
+                    : "Watchlist"
                 }
               </span>
             </>
@@ -211,7 +229,7 @@ export function TopNav() {
         <div className="flex-1" />
 
         {/* Right side - Conditional based on page type */}
-        {user && (
+        {userData && (
           <div className="flex items-center gap-2">
             {isChartDetailPage && coinId && (
               <>

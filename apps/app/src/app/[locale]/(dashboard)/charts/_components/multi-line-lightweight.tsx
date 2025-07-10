@@ -482,7 +482,7 @@ export function MultiPriceChartLightweight({
 
   // Always show the main UI structure
   return (
-    <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
+    <div className="grid grid-cols-12 gap-0 rounded-[16px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
       {/* Legend */}
       <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2">   
         <div className="flex flex-row items-center justify-between gap-2 mb-3"> 
@@ -494,7 +494,7 @@ export function MultiPriceChartLightweight({
             className="group w-full border-zinc-800/0 hover:border-zinc-800/80 bg-transparent hover:bg-transparent flex items-center gap-2 justify-between p-3 rounded-lg"
           >
             <span className="text-muted-foreground font-normal text-sm group-hover:text-white">Add to comparison</span>
-            <IconPlus className="group-hover:fill-blue-500 group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
+            <IconPlus className="group-hover:fill-white group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
           </Button>
         </div> 
         

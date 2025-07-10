@@ -1,13 +1,10 @@
 import { redirect } from "next/navigation";
 
 export const metadata = {
-  title: "Dashboard",
+  title: "Watchlist",
 };
 
 export default async function Page() {
-  // The middleware already handles redirects, so this page can just
-  // redirect to the main overview page.
-  redirect("/overview");
-
-  return null;
+  // Immediate redirect to watchlist to prevent flash
+  redirect("/watchlist");
 }

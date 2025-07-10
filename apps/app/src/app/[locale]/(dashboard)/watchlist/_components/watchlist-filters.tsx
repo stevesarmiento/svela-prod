@@ -254,7 +254,7 @@ export function WatchlistFilters({
                     </Button>
                   </PopoverTrigger>
                 </TooltipTrigger>
-                <TooltipContent side="left" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+                <TooltipContent side="right" className="flex items-center gap-2 p-1 pl-2 rounded-md">
                   <span>Filters</span>
                   <Kbd>Cmd</Kbd>
                   <span>+</span>
