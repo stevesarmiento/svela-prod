@@ -4,7 +4,7 @@ import { formatLargeNumber } from "@v1/ui/format-numbers";
 import { Button } from "@v1/ui/button"
 import { X } from "lucide-react"
 import { useWatchlist } from "./watchlist-context"
-import { useWatchlistCoins } from "@/hooks/use-watchlist-coins"
+import { useOptimizedWatchlistCoins } from "@/hooks/use-optimized-watchlist-coins"
 import Link from "next/link"
 import Image from "next/image"
 import { cn } from "@v1/ui/cn"
@@ -29,21 +29,8 @@ import { motion, AnimatePresence } from "framer-motion"
 import { WatchlistsGrid } from "./watchlists-grid"
 import { matchesShortcut, GLOBAL_SHORTCUTS } from "@/lib/keyboard-shortcuts"
 
-// Define the coin type for the table
-interface WatchlistCoin {
-  id: number;
-  name: string;
-  symbol: string;
-  quote: {
-    USD: {
-      price: number;
-      percent_change_24h: number;
-      market_cap: number;
-      volume_24h: number;
-    };
-  };
-  isOptimistic?: boolean;
-}
+// Use CoinMarketData from types - the optimized hook returns this interface
+import type { CoinMarketData } from '@/types/coins'
 
 // Filter interface
 interface FilterState {
@@ -66,7 +53,7 @@ const createColumns = (
   removingCoins: Set<number>,
   hoveredRowId: string | null,
   hasSelectedCoins: boolean
-): ColumnDef<WatchlistCoin>[] => [
+): ColumnDef<CoinMarketData>[] => [
   {
     id: 'select',
     header: () => (
@@ -137,31 +124,32 @@ const createColumns = (
             // Static position when selections exist
             <div className="translate-x-10 opacity-90 flex items-center gap-2">
               <div className="relative">
-                <Image
-                  src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
-                  alt={row.original.name}
-                  className={cn(
-                    "w-[20px] h-[20px] rounded-full",
-                    row.original.isOptimistic && "opacity-50"
-                  )}
-                  width={24}
-                  height={24}
-                />
-                {row.original.isOptimistic && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Spinner size={12} />
-                  </div>
+                {row.original.quote.USD.price > 0 ? (
+                  <Image
+                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
+                    alt={row.original.name}
+                    className="w-[20px] h-[20px] rounded-full"
+                    width={24}
+                    height={24}
+                  />
+                ) : (
+                  <Skeleton className="w-[20px] h-[20px] rounded-full" />
                 )}
               </div>
               <div className="text-white font-bold text-sm">
-                  {row.original.symbol.toUpperCase()}
-                </div>
-                <div className={cn(
-                  "",
-                  row.original.isOptimistic && "text-muted-foreground font-mono text-xs"
-                )}>
+                {row.original.quote.USD.price > 0 ? (
+                  row.original.symbol.toUpperCase()
+                ) : (
+                  <Skeleton className="h-4 w-8 rounded" />
+                )}
+              </div>
+              <div className="">
+                {row.original.quote.USD.price > 0 ? (
                   <span className="text-muted-foreground font-mono text-xs">{row.original.name}</span>
-                </div>
+                ) : (
+                  <Skeleton className="h-3 w-16 rounded" />
+                )}
+              </div>
             </div>
           ) : (
             // Animated content when no selections exist
@@ -180,31 +168,32 @@ const createColumns = (
               }}
             >
               <div className="relative">
-                <Image
-                  src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
-                  alt={row.original.name}
-                  className={cn(
-                    "w-[20px] h-[20px] rounded-full",
-                    row.original.isOptimistic && "opacity-50"
-                  )}
-                  width={24}
-                  height={24}
-                />
-                {row.original.isOptimistic && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Spinner size={12} />
-                  </div>
+                {row.original.quote.USD.price > 0 ? (
+                  <Image
+                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
+                    alt={row.original.name}
+                    className="w-[20px] h-[20px] rounded-full"
+                    width={24}
+                    height={24}
+                  />
+                ) : (
+                  <Skeleton className="w-[20px] h-[20px] rounded-full" />
                 )}
               </div>
               <div className="flex flex-row items-center gap-2">
                 <div className="text-white font-bold text-sm">
-                  {row.original.symbol.toUpperCase()}
+                  {row.original.quote.USD.price > 0 ? (
+                    row.original.symbol.toUpperCase()
+                  ) : (
+                    <Skeleton className="h-4 w-8 rounded" />
+                  )}
                 </div>
-                <div className={cn(
-                  "",
-                  row.original.isOptimistic && "text-muted-foreground font-mono text-xs"
-                )}>
-                  <span className="text-muted-foreground font-mono text-xs">{row.original.name}</span>
+                <div className="">
+                  {row.original.quote.USD.price > 0 ? (
+                    <span className="text-muted-foreground font-mono text-xs">{row.original.name}</span>
+                  ) : (
+                    <Skeleton className="h-3 w-16 rounded" />
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -236,9 +225,7 @@ const createColumns = (
     ),
     cell: ({ row }) => (
       <span className="font-mono text-xs">
-        {row.original.isOptimistic ? (
-          <Skeleton className="h-4 w-16 rounded-full" />
-        ) : row.original.quote.USD.price > 0 ? (
+        {row.original.quote.USD.price > 0 ? (
           `$${row.original.quote.USD.price.toLocaleString()}`
         ) : (
           <Skeleton className="h-4 w-16 rounded-full" />
@@ -255,20 +242,18 @@ const createColumns = (
         24h Change
       </div>
     ),
-    cell: ({ row }) => (
-      row.original.isOptimistic ? (
-        <Skeleton className="h-4 w-12 rounded-full" />
-      ) : row.original.quote.USD.price > 0 ? (
-        <span className={cn(
-          "font-mono text-xs",
-          row.original.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'
-        )}>
-          {row.original.quote.USD.percent_change_24h.toFixed(2)}%
-        </span>
-      ) : (
-        <Skeleton className="h-4 w-12 rounded-full" />
-      )
-    ),
+          cell: ({ row }) => (
+        row.original.quote.USD.price > 0 ? (
+          <span className={cn(
+            "font-mono text-xs",
+            row.original.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'
+          )}>
+            {row.original.quote.USD.percent_change_24h.toFixed(2)}%
+          </span>
+        ) : (
+          <Skeleton className="h-4 w-12 rounded-full" />
+        )
+      ),
     enableSorting: true,
   },
   {
@@ -281,10 +266,10 @@ const createColumns = (
     ),
     cell: ({ row }) => (
       <span className="font-mono text-xs">
-        {row.original.quote.USD.price === 0 ? (
-          <Skeleton className="h-4 w-16 rounded-full" />
-        ) : (
+        {row.original.quote.USD.price > 0 ? (
           `$${formatLargeNumber(row.original.quote.USD.volume_24h || 0)}`
+        ) : (
+          <Skeleton className="h-4 w-16 rounded-full" />
         )}
       </span>
     ),
@@ -391,9 +376,13 @@ export function Watchlist() {
   
   const { 
     data: coins, 
-    //isLoading: isCoinsLoading, 
+    isLoading: isCoinsLoading, 
     error,
-  } = useWatchlistCoins(stableWatchlist);
+    performance
+  } = useOptimizedWatchlistCoins(stableWatchlist);
+
+  // Log performance metrics for monitoring
+  console.log('🚀 Watchlist performance:', performance)
 
   // Keyboard shortcuts handler
   useEffect(() => {
@@ -416,14 +405,39 @@ export function Watchlist() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  // Create optimistic loading coins while data is being fetched
+  const optimisticCoins = useMemo(() => {
+    if (isCoinsLoading && !coins) {
+      // Show skeleton rows during initial load
+      return stableWatchlist.map(coinId => ({
+        id: coinId,
+        name: 'Loading...',
+        symbol: 'Loading...',
+        slug: `coin-${coinId}`,
+        cmc_rank: 0,
+        circulating_supply: 0,
+        max_supply: null,
+        quote: {
+          USD: {
+            price: 0, // 0 price triggers skeleton loading
+            volume_24h: 0,
+            market_cap: 0,
+            percent_change_24h: 0,
+          }
+        }
+      } as CoinMarketData))
+    }
+    return coins || []
+  }, [isCoinsLoading, coins, stableWatchlist])
+
   // Filter and sort coins based on filter state
   const filteredCoins = useMemo(() => {
-    if (!coins) return [];
+    if (!optimisticCoins.length) return [];
     
-    console.log('Raw coins data:', coins);
+    console.log('Raw coins data:', optimisticCoins);
     console.log('Current filters:', filters);
     
-    const filtered = coins.filter(coin => {
+    const filtered = optimisticCoins.filter(coin => {
       // Search filter
       if (filters.searchText) {
         const searchLower = filters.searchText.toLowerCase();
@@ -494,7 +508,7 @@ export function Watchlist() {
     });
     
     return filtered;
-  }, [coins, filters]);
+  }, [optimisticCoins, filters]);
 
   // Create stable remove handler with optimistic updates
   const handleRemove = useCallback(async (coinId: number) => {

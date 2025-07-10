@@ -21,6 +21,11 @@ export async function fetchWithErrorHandling(url: string) {
       console.log('Raw API Response:', data);
   
       if (!response.ok) {
+        // Handle rate limit errors more gracefully
+        if (response.status === 429 || data.status?.error_code === 1008) {
+          console.warn('🚨 CoinMarketCap API rate limit hit, returning cache-friendly error');
+          throw new Error('RATE_LIMIT_EXCEEDED');
+        }
         throw new Error(data.status?.error_message || `API error: ${response.status}`);
       }
   

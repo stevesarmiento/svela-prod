@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
+import { useRateLimitRecovery } from './use-rate-limit-recovery'
+import { useRequestThrottle } from './use-request-throttle'
 
 interface MiniChartData {
   time: Time
@@ -38,33 +40,99 @@ interface UseMiniChartDataReturn {
   isLoading: boolean
   currentPrice: number
   priceChange24h: number
+  isRateLimited: boolean
+  rateLimitState: {
+    isRateLimited: boolean
+    retryAfter: number | null
+    lastRateLimitTime: number | null
+  }
 }
 
 export function useMiniChartData(coinId: string, initialPrice?: number): UseMiniChartDataReturn {
   const [chartData, setChartData] = useState<MiniChartData[]>([])
   const [volumeData, setVolumeData] = useState<MiniVolumeData[]>([])
+  
+  // Use our rate limiting and throttling hooks
+  const { fetchWithRecovery, rateLimitState } = useRateLimitRecovery({
+    maxRetries: 2,
+    initialDelay: 1000,
+    maxDelay: 10000
+  })
+  const { throttledFetch } = useRequestThrottle({
+    delay: 200,
+    maxConcurrent: 2,
+    debounceTime: 1000
+  })
 
   // Fetch 90 days of historical data using the same working endpoint as main chart
   const { data: historicalData, isLoading } = useQuery({
     queryKey: ['miniChartData', coinId],
     queryFn: async () => {
-      const response = await fetch(`/api/coins/${coinId}?timeScale=90d`)
-      if (!response.ok) throw new Error('Failed to fetch mini chart data')
-      return response.json()
+      try {
+        const response = await throttledFetch(`/api/coins/${coinId}?timeScale=90d`)
+        if (!response.ok) {
+          // Check for rate limiting
+          if (response.status === 429) {
+            throw new Error('RATE_LIMITED')
+          }
+          throw new Error(`Failed to fetch mini chart data: ${response.status}`)
+        }
+        return response.json()
+      } catch (error) {
+        // Use fallback recovery for rate limited requests
+        if (error instanceof Error && error.message === 'RATE_LIMITED') {
+          console.warn('🚫 Mini chart data rate limited, using recovery...')
+          const recoveryResponse = await fetchWithRecovery(`/api/coins/${coinId}?timeScale=90d`)
+          if (!recoveryResponse.ok) throw new Error('Recovery fetch failed')
+          return recoveryResponse.json()
+        }
+        throw error
+      }
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: (failureCount, error) => {
+      // Don't retry rate limit errors immediately
+      if (error instanceof Error && error.message.includes('RATE_LIMITED')) {
+        return false
+      }
+      return failureCount < 2
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   })
 
   // Fetch current market data for live price
   const { data: marketData } = useQuery({
     queryKey: ['miniChartMarketData', coinId],
     queryFn: async () => {
-      const response = await fetch(`/api/coinmarketcap/quotes?ids=${coinId}`)
-      if (!response.ok) throw new Error('Failed to fetch market data')
-      const data = await response.json()
-      return data.data[coinId]
+      try {
+        const response = await throttledFetch(`/api/coinmarketcap/quotes?ids=${coinId}`)
+        if (!response.ok) {
+          if (response.status === 429) {
+            throw new Error('RATE_LIMITED')
+          }
+          throw new Error(`Failed to fetch market data: ${response.status}`)
+        }
+        const data = await response.json()
+        return data.data[coinId]
+      } catch (error) {
+        if (error instanceof Error && error.message === 'RATE_LIMITED') {
+          console.warn('🚫 Mini chart market data rate limited, using recovery...')
+          const recoveryResponse = await fetchWithRecovery(`/api/coinmarketcap/quotes?ids=${coinId}`)
+          if (!recoveryResponse.ok) throw new Error('Recovery fetch failed')
+          const data = await recoveryResponse.json()
+          return data.data[coinId]
+        }
+        throw error
+      }
     },
     staleTime: 30 * 1000, // 30 seconds
+    retry: (failureCount, error) => {
+      if (error instanceof Error && error.message.includes('RATE_LIMITED')) {
+        return false
+      }
+      return failureCount < 2
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 15000),
   })
 
   // Process historical data when it arrives (using same logic as main chart)
@@ -150,5 +218,7 @@ export function useMiniChartData(coinId: string, initialPrice?: number): UseMini
     isLoading: isLoading && chartData.length === 0,
     currentPrice,
     priceChange24h,
+    isRateLimited: rateLimitState.isRateLimited,
+    rateLimitState,
   }
 } 

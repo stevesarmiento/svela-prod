@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { ConvexHttpClient } from 'convex/browser';
+import { api } from '../../../../../convex/_generated/api';
 
 interface HistoricalQuote {
   timestamp: string;
@@ -12,11 +14,103 @@ interface HistoricalQuote {
   };
 }
 
+interface USDQuote {
+  price: number;
+  volume_24h: number;
+  market_cap: number;
+  percent_change_1h?: number;
+  percent_change_24h?: number;
+  percent_change_7d?: number;
+  percent_change_30d?: number;
+}
+
+interface CurrentMarketData {
+  quote: { USD: USDQuote };
+  cmc_rank?: number;
+  circulating_supply?: number;
+  total_supply?: number;
+  max_supply?: number;
+}
+
+interface HistoricalDataResponse {
+  data: {
+    id: number;
+    name?: string;
+    symbol?: string;
+    is_active?: number;
+    is_fiat?: number;
+    quotes: HistoricalQuote[];
+  };
+  status: {
+    error_code: number;
+    error_message: string;
+  };
+}
+
 const BASE_URLS = {
   v1: "https://pro-api.coinmarketcap.com/v1",
   v2: "https://pro-api.coinmarketcap.com/v2"
 };
 const API_KEY = process.env.COINMARKETCAP_API_KEY;
+
+// Initialize Convex client for caching
+const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+
+async function cacheDataInConvex(
+  coinId: string, 
+  timeScale: string, 
+  historicalData: HistoricalDataResponse, 
+  currentData: CurrentMarketData
+) {
+  try {
+    // Cache historical data if available
+    if (historicalData?.data?.quotes && historicalData.data.quotes.length > 0) {
+      const dataPoints = historicalData.data.quotes.map((quote: HistoricalQuote) => ({
+        timestamp: new Date(quote.timestamp).getTime(),
+        price: quote.quote.USD.price,
+        volume: quote.quote.USD.volume_24h || 0,
+        marketCap: quote.quote.USD.market_cap,
+        open: quote.quote.USD.price,
+        high: quote.quote.USD.price,
+        low: quote.quote.USD.price,
+        close: quote.quote.USD.price,
+      }));
+
+      await convex.mutation(api.historicalData.upsertHistoricalData, {
+        coinId: Number(coinId),
+        timeframe: timeScale,
+        dataPoints,
+        dataSource: "coinmarketcap"
+      });
+
+      console.log(`💾 Cached ${dataPoints.length} historical data points for coin ${coinId}`);
+    }
+
+    // Cache current market data if available
+    if (currentData?.quote?.USD) {
+      await convex.mutation(api.historicalData.upsertCurrentMarketData, {
+        coinId: Number(coinId),
+        price: currentData.quote.USD.price,
+        volume24h: currentData.quote.USD.volume_24h || 0,
+        marketCap: currentData.quote.USD.market_cap || 0,
+        change1h: currentData.quote.USD.percent_change_1h || undefined,
+        change24h: currentData.quote.USD.percent_change_24h,
+        change7d: currentData.quote.USD.percent_change_7d || undefined,
+        change30d: currentData.quote.USD.percent_change_30d || undefined,
+        rank: currentData.cmc_rank || undefined,
+        circulatingSupply: currentData.circulating_supply || undefined,
+        totalSupply: currentData.total_supply || undefined,
+        maxSupply: currentData.max_supply || undefined,
+        dataSource: "coinmarketcap"
+      });
+
+      console.log(`💾 Cached current market data for coin ${coinId}`);
+    }
+  } catch (error) {
+    // Don't fail the request if caching fails
+    console.warn('Failed to cache data in Convex:', error);
+  }
+}
 
 const idSchema = z.string().min(1);
 
@@ -31,10 +125,11 @@ async function fetchWithErrorHandling(url: string) {
         'X-CMC_PRO_API_KEY': API_KEY,
         'Accept': 'application/json',
       },
+      // Next.js specific caching
       next: {
         revalidate: 60,
       },
-    });
+    } as RequestInit);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => null);
@@ -48,18 +143,19 @@ async function fetchWithErrorHandling(url: string) {
   }
 }
 
-async function fetchHistoricalData(id: string, timeScale: string = '7d') {
+async function fetchHistoricalData(id: string, timeScale: string = '1d') {
   const now = new Date();
   
-  // Define time ranges - use daily data access (24 months) for longer periods
+  // Define time ranges - corrected to match actual timeframe labels
   const timeRanges = {
-    '7d': 30 * 24 * 60 * 60 * 1000,      // 30 days (granular data limit)  
-    '30d': 90 * 24 * 60 * 60 * 1000,     // 90 days (daily data access)
-    'max': 365 * 24 * 60 * 60 * 1000,    // 365 days (daily data access)
-    '2y': 730 * 24 * 60 * 60 * 1000,     // 730 days (daily data access)
+    '1d': 2 * 24 * 60 * 60 * 1000,       // 48 hours (2 days for better context)
+    '7d': 7 * 24 * 60 * 60 * 1000,       // 7 days  
+    '30d': 30 * 24 * 60 * 60 * 1000,     // 30 days
+    'max': 365 * 24 * 60 * 60 * 1000,    // 1 year (daily data access)
+    '2y': 730 * 24 * 60 * 60 * 1000,     // 2 years (daily data access)
   };
   
-  const timeRange = timeRanges[timeScale as keyof typeof timeRanges] || timeRanges['7d'];
+  const timeRange = timeRanges[timeScale as keyof typeof timeRanges] || timeRanges['1d'];
   const timeStart = new Date(now.getTime() - timeRange).toISOString();
   const timeEnd = new Date(Math.min(now.getTime(), Date.now())).toISOString();
   
@@ -77,8 +173,8 @@ async function fetchHistoricalData(id: string, timeScale: string = '7d') {
     id,
     time_start: timeStart,
     time_end: timeEnd,
-    interval: timeScale === '7d' ? '1h' : '1d', // Hourly for 7d (granular), daily for others
-    count: timeScale === '7d' ? '720' : timeScale === '30d' ? '90' : timeScale === 'max' ? '365' : '730',
+    interval: timeScale === '1d' ? '1h' : timeScale === '7d' ? '1h' : '1d', // hourly for 1d and 7d, daily for others
+    count: timeScale === '1d' ? '48' : timeScale === '7d' ? '168' : timeScale === '30d' ? '30' : timeScale === 'max' ? '365' : '730',
     convert: 'USD',
     aux: 'price,volume,market_cap',
     skip_invalid: 'true'
@@ -151,22 +247,28 @@ async function fetchHistoricalData(id: string, timeScale: string = '7d') {
   }
 }
 
-async function fetchOHLCVData(id: string, timeScale: string = '7d') {
+async function fetchOHLCVData(id: string, timeScale: string = '1d') {
   const now = new Date();
   
-  // Define time ranges - use daily data access (24 months) for longer periods
+  // Define time ranges - corrected to match actual timeframe labels
   const timeConfigs = {
-    '7d': { 
-      days: 30, 
+    '1d': { 
+      days: 2, 
       timePeriod: 'hourly',
       interval: '1h',
-      count: '720' // 30 days * 24 hours (granular data limit)
+      count: '48' // 48 hours (2 days of hourly data)
+    },
+    '7d': { 
+      days: 7, 
+      timePeriod: 'hourly',
+      interval: '1h',
+      count: '168' // 7 days * 24 hours
     },
     '30d': { 
-      days: 90, 
+      days: 30, 
       timePeriod: 'daily',
       interval: '1d',
-      count: '90' // 90 days (daily data access)
+      count: '30' // 30 days
     },
     'max': { 
       days: 365, 
@@ -182,7 +284,7 @@ async function fetchOHLCVData(id: string, timeScale: string = '7d') {
     },
   };
   
-  const config = timeConfigs[timeScale as keyof typeof timeConfigs] || timeConfigs['7d'];
+  const config = timeConfigs[timeScale as keyof typeof timeConfigs] || timeConfigs['1d'];
   const timeStart = new Date(now.getTime() - (config.days * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
   const timeEnd = new Date().toISOString().split('T')[0];
 
@@ -243,7 +345,7 @@ export async function GET(
 
   try {
     const { searchParams } = new URL(request.url);
-    const timeScale = searchParams.get('timeScale') || '7d'; // Default to 1D view
+    const timeScale = searchParams.get('timeScale') || '1d'; // Default to 1D view
     
     const id = await params.id;
     const validatedId = idSchema.parse(id);
@@ -257,7 +359,16 @@ export async function GET(
       ),
       fetchHistoricalData(validatedId, timeScale).catch(error => {
         console.error('Historical data fetch failed:', error);
-        return { quotes: [] };
+        return { 
+          data: { 
+            id: Number(validatedId), 
+            quotes: [] 
+          }, 
+          status: { 
+            error_code: 500, 
+            error_message: 'Historical data fetch failed' 
+          } 
+        };
       }),
       fetchOHLCVData(validatedId, timeScale).catch(error => {
         console.error('OHLCV data fetch failed:', error);
@@ -292,6 +403,16 @@ export async function GET(
       historical,
       ohlcv
     };
+
+    // Cache the fetched data in Convex for future requests
+    if (historical?.data?.quotes && quotes?.data?.[validatedId]) {
+      await cacheDataInConvex(
+        validatedId, 
+        timeScale, 
+        historical as HistoricalDataResponse, 
+        quotes.data[validatedId] as CurrentMarketData
+      );
+    }
 
     return NextResponse.json(coinData);
   } catch (error) {

@@ -3,7 +3,7 @@
 import { Suspense } from 'react'
 import { MultiPriceChartLightweight } from "./multi-line-lightweight"
 import { ChartTable } from "./chart-table"
-import { useChartsData } from '@/hooks/use-chart-data'
+import { useOptimizedChartsData } from '@/hooks/use-optimized-charts-data'
 import { Spinner } from "@v1/ui/spinner"
 
 function ChartsContent() {
@@ -13,8 +13,8 @@ function ChartsContent() {
     setActiveTimeScale, 
     isInitialized, 
     hasWatchlistItems,
-    selectedGroup
-  } = useChartsData()
+    selectedGroup,
+  } = useOptimizedChartsData()
 
   if (isInitialized && !hasWatchlistItems) {
     return (

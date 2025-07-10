@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
-import { useChartData } from '@/hooks/use-chart-data'
+import { useOptimizedChartData } from '@/hooks/use-optimized-chart-data'
 import { useChartInstance } from '@/hooks/use-chart-instance'
 import { usePriceCalculations } from '@/hooks/use-price-calculations'
 import type { CoinMarketData } from '@/types/coins'
@@ -36,10 +36,11 @@ const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: {
   setActiveTimeScale: (scale: string) => void 
 }) => {
   const scales = [
-    { value: "7d", label: "1D" },
-    { value: "30d", label: "1W" },
-    { value: "max", label: "1Y" },
-    { value: "2y", label: "2Y" },
+    { value: "1d", label: "1D" },   // 24h change
+    { value: "7d", label: "1W" },   // 7d change  
+    { value: "30d", label: "1M" },  // 30d change
+    { value: "max", label: "1Y" },  // Longest available
+    { value: "2y", label: "2Y" },   // N/A
   ]
 
   return (
@@ -104,9 +105,9 @@ const ChartTypeSelector = ({ chartType, setChartType }: {
 }
 
 export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTimeScale }: PriceChartProps) {
-  // Now we get proper OHLCV data from the hook
-  const { chartData, volumeData, ohlcvData, isLoading, tokenData } = useChartData(coinId, activeTimeScale, initialData)
-  const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData)
+  // Now we get proper OHLCV data from the optimized hook with intelligent caching
+  const { chartData, volumeData, ohlcvData, isLoading, tokenData } = useOptimizedChartData(coinId, activeTimeScale, initialData)
+  const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData, activeTimeScale)
   
   // Generate Hull Suite colors - same as hook to ensure consistency
   const hullColors = generatePastelColors(1)
@@ -209,20 +210,26 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                     </span>
                     {isLoading && <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" />}
                   </div>
-                  <div className={`text-xs font-bold font-mono ${calculatePercentageChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    <motion.span
-                      key={calculatePercentageChange >= 0 ? 'up' : 'down'}
-                      initial={{ rotate: calculatePercentageChange >= 0 ? 0 : 90 }}
-                      animate={{ rotate: calculatePercentageChange >= 0 ? 0 : 90 }}
-                      transition={{ type: "spring", bounce: 0.3, duration: 0.3 }}
-                      className="inline-block mr-2"
-                      style={{ transformOrigin: 'center' }}
-                    >
-                      <IconArrowUpRight className={`w-2 h-2 ${calculatePercentageChange >= 0 ? 'fill-emerald-500' : 'fill-rose-500'}`} />
-                    </motion.span>
-                    <span>
-                      {Math.abs(calculatePercentageChange).toFixed(2)}%
-                    </span>
+                  <div className={`text-xs font-bold font-mono ${isNaN(calculatePercentageChange) ? 'text-muted-foreground' : calculatePercentageChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {isNaN(calculatePercentageChange) ? (
+                      <span>N/A</span>
+                    ) : (
+                      <>
+                        <motion.span
+                          key={calculatePercentageChange >= 0 ? 'up' : 'down'}
+                          initial={{ rotate: calculatePercentageChange >= 0 ? 0 : 90 }}
+                          animate={{ rotate: calculatePercentageChange >= 0 ? 0 : 90 }}
+                          transition={{ type: "spring", bounce: 0.3, duration: 0.3 }}
+                          className="inline-block mr-2"
+                          style={{ transformOrigin: 'center' }}
+                        >
+                          <IconArrowUpRight className={`w-2 h-2 ${calculatePercentageChange >= 0 ? 'fill-emerald-500' : 'fill-rose-500'}`} />
+                        </motion.span>
+                        <span>
+                          {Math.abs(calculatePercentageChange).toFixed(2)}%
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <ChartTypeSelector

@@ -23,6 +23,7 @@ import { useWatchlistByGroup } from '@v1/convex/hooks'
 import { useWatchlistCoins } from '@/hooks/use-watchlist-coins'
 import { useWatchlistAggregateChart } from '@/hooks/use-watchlist-aggregate-chart'
 
+
 interface WatchlistMultiLineChartProps {
   activeTimeScale: string
   setActiveTimeScale: (scale: string) => void
@@ -49,12 +50,14 @@ interface WatchlistSeries {
   color: string
   data: PriceDataPoint[]
   coinsCount: number
+  latestValue: number
 }
 
 interface LineSeriesData {
   series: ISeriesApi<"Line">
   watchlistData: WatchlistSeries
 }
+
 
 interface WatchlistGroup {
   _id: string
@@ -104,7 +107,8 @@ function WatchlistDataFetcher({
       icon: group.icon,
       color: '', // Will be set by parent
       data: aggregateData,
-      coinsCount: coins.length
+      coinsCount: coins.length,
+      latestValue: aggregateData[aggregateData.length - 1]?.value || 0
     }
 
     onDataReady(watchlistSeries)
@@ -166,10 +170,11 @@ const TimeScaleSelector = ({
   setActiveTimeScale: (scale: string) => void 
 }) => {
   const scales = [
-    { value: "7d", label: "1D" },
-    { value: "30d", label: "1W" },
-    { value: "max", label: "1Y" },
-    { value: "2y", label: "2Y" },
+    { value: "1d", label: "1D" },   // 24h change
+    { value: "7d", label: "1W" },   // 7d change  
+    { value: "30d", label: "1M" },  // 30d change
+    { value: "max", label: "1Y" },  // Longest available
+    { value: "2y", label: "2Y" },   // N/A
   ]
 
   return (

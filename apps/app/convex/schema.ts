@@ -128,4 +128,61 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"]),
+
+  // Historical price data - optimized for chart rendering
+  priceHistory: defineTable({
+    coinId: v.number(),
+    timeframe: v.string(), // '7d', '30d', 'max', '2y' 
+    timestamp: v.number(), // Unix timestamp
+    price: v.number(),
+    volume: v.number(),
+    marketCap: v.optional(v.number()),
+    // OHLCV data for candlestick charts
+    open: v.optional(v.number()),
+    high: v.optional(v.number()),
+    low: v.optional(v.number()),
+    close: v.optional(v.number()),
+    // Metadata
+    dataSource: v.string(), // 'coinmarketcap', 'coingecko', etc.
+    lastUpdated: v.number(),
+  })
+    .index("by_coin_timeframe", ["coinId", "timeframe"])
+    .index("by_coin_timestamp", ["coinId", "timestamp"])
+    .index("by_timeframe_timestamp", ["timeframe", "timestamp"])
+    .index("by_last_updated", ["lastUpdated"]),
+
+  // Current market data - frequently updated
+  currentMarketData: defineTable({
+    coinId: v.number(),
+    price: v.number(),
+    volume24h: v.number(),
+    marketCap: v.number(),
+    change1h: v.optional(v.number()),
+    change24h: v.number(),
+    change7d: v.optional(v.number()),
+    change30d: v.optional(v.number()),
+    rank: v.optional(v.number()),
+    circulatingSupply: v.optional(v.number()),
+    totalSupply: v.optional(v.number()),
+    maxSupply: v.optional(v.number()),
+    lastUpdated: v.number(),
+    dataSource: v.string(),
+  })
+    .index("by_coin", ["coinId"])
+    .index("by_rank", ["rank"])
+    .index("by_last_updated", ["lastUpdated"]),
+
+  // API cache for complex responses and rate limiting
+  apiCache: defineTable({
+    cacheKey: v.string(), // Unique identifier for cached data
+    data: v.any(), // JSON data from API response
+    expiresAt: v.number(), // Unix timestamp when cache expires
+    hitCount: v.number(), // Number of times this cache has been accessed
+    lastAccessed: v.number(), // Last time cache was accessed
+    dataSource: v.string(), // API source identifier
+    createdAt: v.number(),
+  })
+    .index("by_key", ["cacheKey"])
+    .index("by_expiry", ["expiresAt"])
+    .index("by_source", ["dataSource"]),
 });
