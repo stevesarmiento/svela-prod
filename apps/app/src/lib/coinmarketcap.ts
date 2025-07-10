@@ -21,7 +21,7 @@ import type { Coin, CoinDetail } from '@/types/coins';
     try {
       const baseUrl = typeof window !== 'undefined' 
         ? window.location.origin 
-        : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+        : process.env.NEXT_PUBLIC_API_URL || process.env.VERCEL_URL || 'http://localhost:3000';
         
       const response = await fetch(`${baseUrl}/api/coins/${encodeURIComponent(id)}`);
 

@@ -32,6 +32,60 @@ export function LoadingStateManager({
     timeoutCount: 0
   })
 
+  const handleForceRecovery = useCallback(() => {
+    console.log('🔧 Forcing loading state recovery...')
+    
+    // Cancel all queries
+    queryClient.cancelQueries()
+    
+    // Clear query cache
+    queryClient.clear()
+    
+    // Reset loading state
+    setLoadingState({
+      isStuck: false,
+      hasTimedOut: false,
+      stuckSince: null,
+      timeoutCount: 0
+    })
+    
+    // Invalidate and refetch
+    setTimeout(() => {
+      queryClient.invalidateQueries()
+    }, 1000)
+    
+    toast({
+      title: "Recovery initiated",
+      description: "Clearing stuck requests and reloading data",
+      variant: "default",
+    })
+  }, [queryClient])
+
+  const handleRetry = useCallback(() => {
+    console.log('🔄 Retrying stuck requests...')
+    
+    // Cancel existing queries first
+    queryClient.cancelQueries()
+    
+    // Wait a moment then retry
+    setTimeout(() => {
+      queryClient.refetchQueries()
+      
+      setLoadingState(prev => ({
+        ...prev,
+        isStuck: false,
+        hasTimedOut: false,
+        stuckSince: Date.now() // Reset timer
+      }))
+    }, 500)
+    
+    toast({
+      title: "Retrying...",
+      description: "Attempting to reload stuck requests",
+      variant: "default",
+    })
+  }, [queryClient])
+
   // Monitor for stuck loading states
   useEffect(() => {
     let timeoutId: NodeJS.Timeout
@@ -99,61 +153,7 @@ export function LoadingStateManager({
       if (timeoutId) clearTimeout(timeoutId)
       if (maxTimeoutId) clearTimeout(maxTimeoutId)
     }
-  }, [queryClient, timeoutMs, maxWaitMs, loadingState.stuckSince])
-
-  const handleForceRecovery = useCallback(() => {
-    console.log('🔧 Forcing loading state recovery...')
-    
-    // Cancel all queries
-    queryClient.cancelQueries()
-    
-    // Clear query cache
-    queryClient.clear()
-    
-    // Reset loading state
-    setLoadingState({
-      isStuck: false,
-      hasTimedOut: false,
-      stuckSince: null,
-      timeoutCount: 0
-    })
-    
-    // Invalidate and refetch
-    setTimeout(() => {
-      queryClient.invalidateQueries()
-    }, 1000)
-    
-    toast({
-      title: "Recovery initiated",
-      description: "Clearing stuck requests and reloading data",
-      variant: "default",
-    })
-  }, [queryClient])
-
-  const handleRetry = useCallback(() => {
-    console.log('🔄 Retrying stuck requests...')
-    
-    // Cancel existing queries first
-    queryClient.cancelQueries()
-    
-    // Wait a moment then retry
-    setTimeout(() => {
-      queryClient.refetchQueries()
-      
-      setLoadingState(prev => ({
-        ...prev,
-        isStuck: false,
-        hasTimedOut: false,
-        stuckSince: Date.now() // Reset timer
-      }))
-    }, 500)
-    
-    toast({
-      title: "Retrying...",
-      description: "Attempting to reload stuck requests",
-      variant: "default",
-    })
-  }, [queryClient])
+  }, [queryClient, timeoutMs, maxWaitMs, loadingState.stuckSince, handleForceRecovery])
 
   // Show stuck state overlay when detected
   if (loadingState.isStuck && loadingState.hasTimedOut) {

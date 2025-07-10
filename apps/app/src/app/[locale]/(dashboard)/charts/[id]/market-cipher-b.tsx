@@ -152,6 +152,9 @@ export function MarketCipherB({ coinId, initialData, activeTimeScale, className 
   useEffect(() => {
     if (!chartContainerRef.current) return
 
+    // Capture the current seriesRefs to avoid stale closure issues
+    const currentSeriesRefs = seriesRefs.current
+
     const chart = createChart(chartContainerRef.current, {
       handleScale: false,
       handleScroll: false,
@@ -195,7 +198,7 @@ export function MarketCipherB({ coinId, initialData, activeTimeScale, className 
       window.removeEventListener("resize", handleResize)
       chart.remove()
       chartRef.current = null
-      seriesRefs.current.clear()
+      currentSeriesRefs.clear()
     }
   }, [])
 

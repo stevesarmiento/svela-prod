@@ -85,7 +85,7 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
         volume
       }
     })
-  }, [shouldCalculate, chartData, volumeData, coinId, activeTimeScale, EMPTY_ARRAY])
+  }, [shouldCalculate, chartData, volumeData, EMPTY_ARRAY])
 
   // Memoized Bollinger config
   const bollingerConfig = useMemo(() => ({

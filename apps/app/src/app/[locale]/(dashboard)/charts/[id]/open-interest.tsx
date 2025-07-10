@@ -9,7 +9,12 @@ interface OpenInterestProps {
 }
 
 export function OpenInterest({ cmcId }: OpenInterestProps) {
-  const { data, isLoading, error } = useOpenInterest(cmcId);
+  const { data, isLoading, error } = useOpenInterest({
+    symbol: cmcId,
+    interval: '4h',
+    limit: 50,
+    unit: 'usd'
+  });
 
   if (isLoading) {
     return (
@@ -35,7 +40,12 @@ export function OpenInterest({ cmcId }: OpenInterestProps) {
     );
   }
 
-  if (data.currentOpenInterest === null) {
+  // Get the most recent open interest value
+  const currentOpenInterest = data.data && data.data.length > 0 
+    ? data.data[data.data.length - 1]?.close 
+    : null;
+
+  if (currentOpenInterest === null) {
     return (
       <div className="flex flex-col items-center py-4">
         <span className="text-[11px] text-muted-foreground font-medium mb-2">
@@ -57,12 +67,12 @@ export function OpenInterest({ cmcId }: OpenInterestProps) {
       </div>
       
       <div className="text-md font-mono text-center text-foreground">
-        ${formatLargeNumber(data.currentOpenInterest || 0)}
+        ${formatLargeNumber(currentOpenInterest || 0)}
       </div>
       
-      {data.lastUpdate && (
+      {data.lastUpdated && (
         <span className="text-[8px] text-muted-foreground mt-1">
-          {new Date(data.lastUpdate).toLocaleTimeString()}
+          {new Date(data.lastUpdated).toLocaleTimeString()}
         </span>
       )}
     </div>
