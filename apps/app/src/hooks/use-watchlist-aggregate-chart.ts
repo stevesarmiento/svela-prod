@@ -28,17 +28,7 @@ interface UseWatchlistAggregateChartProps {
   timeScale?: string
 }
 
-interface HistoricalQuote {
-  timestamp: string
-  quote: {
-    USD: {
-      price: number
-      volume_24h?: number
-      market_cap?: number
-      timestamp: string
-    }
-  }
-}
+
 
 export function useWatchlistAggregateChart({ 
   coins, 
@@ -51,21 +41,86 @@ export function useWatchlistAggregateChart({
     return coins.map(coin => coin.id)
   }, [coins])
 
-  // Fetch historical data for all coins
+  // Optimized: Fetch data using individual coin endpoints for better caching
   const { data: historicalData, isLoading } = useQuery({
-    queryKey: ['watchlist-aggregate-chart', coinIds.sort().join(','), timeScale],
+    queryKey: ['optimized-watchlist-aggregate', coinIds.sort().join(','), timeScale],
     queryFn: async () => {
       if (!coinIds.length) return null
 
-      // Fetch historical data for all coins
-      const response = await fetch(`/api/coinmarketcap/historical?ids=${coinIds.join(',')}&timeScale=${timeScale}`)
-      if (!response.ok) throw new Error('Failed to fetch historical data')
-      
-      return response.json()
+      try {
+        // Use parallel individual API calls for better caching (same as main chart)
+        const responses = await Promise.allSettled(
+          coinIds.map(async (coinId) => {
+            const response = await fetch(`/api/coins/${coinId}?timeScale=${timeScale}`)
+            if (!response.ok) throw new Error(`Failed to fetch coin ${coinId}`)
+            const data = await response.json()
+            return { coinId, data }
+          })
+        )
+
+        // Transform responses to match existing data structure
+        const result: Record<string, { data: { quotes: Array<{ timestamp: string; quote: { USD: { price: number } } }> } }> = {}
+        
+        responses.forEach((response, index) => {
+          if (response.status === 'fulfilled') {
+            const coinId = coinIds[index]
+            if (!coinId) return
+            
+                         // Try OHLCV data first (better quality), then fall back to historical
+             if (response.value.data.ohlcv?.data?.quotes?.length) {
+               result[coinId] = {
+                 data: {
+                   quotes: response.value.data.ohlcv.data.quotes.map((quote: {
+                     time_close: string
+                     quote: { USD: { close: number } }
+                   }) => ({
+                     timestamp: quote.time_close,
+                     quote: {
+                       USD: {
+                         price: quote.quote.USD.close,
+                         volume_24h: 0,
+                         market_cap: 0,
+                         timestamp: quote.time_close
+                       }
+                     }
+                   }))
+                 }
+               }
+            } else if (response.value.data.historical?.data?.quotes?.length) {
+              result[coinId] = {
+                data: {
+                  quotes: response.value.data.historical.data.quotes
+                }
+              }
+            }
+          }
+        })
+
+        console.log(`📊 Optimized watchlist aggregate: ${Object.keys(result).length}/${coinIds.length} coins fetched`)
+        return { data: result }
+      } catch (error) {
+        console.error('Error fetching optimized watchlist data:', error)
+        return { data: {} }
+      }
     },
     enabled: coinIds.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: getStaleTime(timeScale), // Dynamic cache time
+    refetchInterval: false,
+    placeholderData: (previousData) => previousData,
   })
+
+// Helper function for dynamic cache timing
+function getStaleTime(timeScale: string): number {
+  const staleTimeMap = {
+    '1d': 30 * 1000,       // 30 seconds for intraday
+    '7d': 60 * 1000,       // 1 minute for short-term
+    '30d': 2 * 60 * 1000,  // 2 minutes for medium-term
+    'max': 10 * 60 * 1000, // 10 minutes for long-term
+    '2y': 10 * 60 * 1000,  // 10 minutes for long-term
+  } as const
+  
+  return staleTimeMap[timeScale as keyof typeof staleTimeMap] || 2 * 60 * 1000
+}
 
   // Process and aggregate the data
   useEffect(() => {
@@ -96,11 +151,10 @@ export function useWatchlistAggregateChart({
           quotesLength: coinData?.data?.quotes?.length || 0
         })
         
-        // The API returns: { data: { [coinId]: { data: { quotes: [...] } } } }
-        // NOT: { data: { [coinId]: { historical: { data: { quotes: [...] } } } } }
+        // Process the optimized data structure
         if (coinData?.data?.quotes?.length) {
           const quotes = coinData.data.quotes
-            .map((quote: HistoricalQuote) => ({
+            .map((quote: { timestamp: string; quote: { USD: { price: number } } }) => ({
               timestamp: quote.timestamp,
               price: quote.quote.USD.price || 0
             }))

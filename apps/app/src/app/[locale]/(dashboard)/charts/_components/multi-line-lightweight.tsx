@@ -25,6 +25,7 @@ import { Button } from '@v1/ui/button'
 import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { AvatarCircles } from "@v1/ui/token-stacks"
+import { useMultiChartData } from '@/hooks/use-multi-chart-data'
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -42,6 +43,7 @@ interface PriceDataPoint {
 }
 
 interface TooltipCoinData {
+  id: string
   name: string
   color: string
   value: number
@@ -80,7 +82,7 @@ const TooltipContent = ({
         <div className="w-full h-[1px] mb-3 bg-zinc-700/50 scale-125" />
         <div className="flex flex-col gap-2">
           {coinData.map((coin) => (
-            <div key={coin.name} className="flex items-center justify-between">
+            <div key={coin.id} className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div
                   className="h-3 w-1 rounded-full"
@@ -101,18 +103,7 @@ const TooltipContent = ({
   )
 }
 
-function filterValidPriceData(data: PriceDataPoint[]): PriceDataPoint[] {
-  return (
-    data?.filter(
-      (item) =>
-        item &&
-        typeof item.time === "number" &&
-        typeof item.value === "number" &&
-        !isNaN(item.value) &&
-        isFinite(item.value),
-    ) || []
-  )
-}
+
 
 const TimeScaleSelector = ({ 
   activeTimeScale, 
@@ -122,10 +113,11 @@ const TimeScaleSelector = ({
   setActiveTimeScale: (scale: string) => void 
 }) => {
   const scales = [
-    { value: "7d", label: "1D" },
-    { value: "30d", label: "1W" },
-    { value: "max", label: "1Y" },
-    { value: "2y", label: "2Y" },
+    { value: "1d", label: "1D" },   // 24h (48 hours of hourly data)
+    { value: "7d", label: "1W" },   // 7 days  
+    { value: "30d", label: "1M" },  // 30 days
+    { value: "max", label: "1Y" },  // 1 year
+    { value: "2y", label: "2Y" },   // 2 years
   ]
 
   return (
@@ -162,124 +154,38 @@ export function MultiPriceChartLightweight({
   // Use the bottom nav context to trigger contextual command search
   const { openContextualCommandSearch } = useBottomNav()
 
-  // Filter out optimistic coins for chart rendering (they don't have data yet)
-  const coinsWithData = useMemo(() => {
-    return coins.filter(coin => !coin.isOptimistic);
-  }, [coins]);
+  // 🚀 OPTIMIZED: Use multi-chart data hook with intelligent caching
+  const { series: coinSeriesData, isLoading: chartDataLoading, performance } = useMultiChartData(coins, activeTimeScale)
 
-  const coinSeriesData = useMemo((): CoinSeries[] => {
-    if (!coinsWithData.length) return []
-
-    const colors = generatePastelColors(coinsWithData.length)
+  // Generate colors for the series data
+  const coinSeriesWithColors = useMemo(() => {
+    if (!coinSeriesData.length) return []
     
-    console.log('Processing coins:', coinsWithData.length) // Add debugging
+    const colors = generatePastelColors(coinSeriesData.length)
     
-    return coinsWithData.map((coin, index) => {
-      const data: PriceDataPoint[] = []
-      
-      console.log(`Processing ${coin.symbol}:`, {
-        hasHistorical: !!coin.historical?.data?.quotes,
-        quotesLength: coin.historical?.data?.quotes?.length || 0,
-        currentPrice: coin.quote.USD.price
-      })
-      
-      if (coin.historical?.data?.quotes && coin.historical.data.quotes.length > 0) {
-        let quotes = coin.historical.data.quotes
-        
-        // Sort quotes by timestamp to ensure proper ordering
-        quotes = quotes.sort((a, b) => 
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        )
-        
-        // Filter based on activeTimeScale - updated to match API timeframes
-        const now = Date.now()
-        const timeFilters = {
-          '7d': 30 * 24 * 60 * 60 * 1000,     // Last 30 days (1D view with hourly data)
-          '30d': 90 * 24 * 60 * 60 * 1000,    // Last 90 days (1W view)
-          'max': 365 * 24 * 60 * 60 * 1000,   // Last 365 days (1Y view)
-          '2y': 730 * 24 * 60 * 60 * 1000,    // Last 730 days (2Y view)
-        }
-        
-        const timeLimit = timeFilters[activeTimeScale as keyof typeof timeFilters] || Infinity
-        
-        if (timeLimit !== Infinity) {
-          const cutoffTime = now - timeLimit
-          quotes = quotes.filter(quote => 
-            new Date(quote.timestamp).getTime() >= cutoffTime
-          )
-        }
-        
-        console.log(`${coin.symbol}: Total quotes: ${coin.historical.data.quotes.length}, Filtered: ${quotes.length}, Scale: ${activeTimeScale}`)
-        
-        if (quotes.length > 0) {
-          // Use the first quote's price as baseline
-          const initialPrice = quotes[0]?.quote?.USD?.price
-          
-          console.log(`${coin.symbol}: Initial price: ${initialPrice}`)
-          
-          if (initialPrice && initialPrice > 0) {
-            quotes.forEach((quote, idx) => {
-              const currentPrice = quote.quote?.USD?.price
-              if (currentPrice && currentPrice > 0) {
-                const percentChange = ((currentPrice - initialPrice) / initialPrice) * 100
-                data.push({
-                  time: (new Date(quote.timestamp).getTime() / 1000) as Time,
-                  value: percentChange,
-                })
-                
-                if (idx < 3) { // Log first few data points
-                  console.log(`${coin.symbol} data point ${idx}:`, {
-                    time: quote.timestamp,
-                    currentPrice,
-                    percentChange: percentChange.toFixed(2)
-                  })
-                }
-              }
-            })
-          }
-        } else {
-          console.log(`${coin.symbol}: No quotes after filtering`)
-        }
-        
-        data.sort((a, b) => (a.time as number) - (b.time as number))
-      } else {
-        console.log(`${coin.symbol}: No historical data available`)
-      }
-
-      const validData = filterValidPriceData(data)
-      console.log(`${coin.symbol}: Valid data points: ${validData.length}`)
-
-      return {
-        id: coin.id.toString(),
-        name: coin.name,
-        symbol: coin.symbol,
-        color: colors[index] || `hsl(${Math.random() * 360}, 40%, 75%)`,
-        data: validData,
-      }
-    }).filter(series => {
-      const hasData = series.data.length > 0
-      console.log(`${series.symbol}: Included in chart: ${hasData}`)
-      return hasData
-    })
-  }, [coinsWithData, activeTimeScale])
-
-  const latestValues = useMemo(() => {
-    return coinSeriesData.map(series => ({
+    return coinSeriesData.map((series, index) => ({
       ...series,
-      latestValue: series.data[series.data.length - 1]?.value || 0
+      color: colors[index] || `hsl(${Math.random() * 360}, 40%, 75%)`,
     }))
   }, [coinSeriesData])
 
-  // Create avatar data for coin logos
+  const latestValues = useMemo(() => {
+    return coinSeriesWithColors.map(series => ({
+      ...series,
+      latestValue: series.data[series.data.length - 1]?.value || 0
+    }))
+  }, [coinSeriesWithColors])
+
+  // Create avatar data for coin logos (filter out optimistic coins)
   const avatarData = useMemo(() => {
-    return coinsWithData.map((coin) => ({
+    return coins.filter(coin => !coin.isOptimistic).map((coin) => ({
       imageUrl: `https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`,
       profileUrl: `/charts/${coin.id}`,
     }))
-  }, [coinsWithData])
+  }, [coins])
 
   useEffect(() => {
-    if (!chartContainerRef.current || !coinSeriesData.length) return
+    if (!chartContainerRef.current || !coinSeriesWithColors.length) return
 
     const chart = createChart(chartContainerRef.current, {
       handleScale: false,
@@ -330,7 +236,7 @@ export function MultiPriceChartLightweight({
     // Create line series for each coin
     const lineSeriesMap = new Map()
     
-    coinSeriesData.forEach((coinSeries) => {
+    coinSeriesWithColors.forEach((coinSeries) => {
       const lineSeries = chart.addSeries(LineSeries, {
         lineWidth: 1,
         lastValueVisible: true,
@@ -388,15 +294,20 @@ export function MultiPriceChartLightweight({
 
       const coinData: TooltipCoinData[] = []
       
-      lineSeriesMap.forEach((lineData) => {
-        const seriesData = param.seriesData.get(lineData.series) as LineData<Time>
-        if (seriesData) {
-          coinData.push({
-            name: lineData.coinData.name,
-            color: lineData.coinData.color,
-            value: seriesData.value,
-            symbol: lineData.coinData.symbol,
-          })
+      // Use coinSeriesWithColors to maintain consistent order in tooltip
+      coinSeriesWithColors.forEach((coinSeries) => {
+        const lineData = lineSeriesMap.get(coinSeries.id)
+        if (lineData) {
+          const seriesData = param.seriesData.get(lineData.series) as LineData<Time>
+          if (seriesData) {
+            coinData.push({
+              id: coinSeries.id,
+              name: coinSeries.name,
+              symbol: coinSeries.symbol,
+              color: coinSeries.color,
+              value: seriesData.value,
+            })
+          }
         }
       })
 
@@ -447,7 +358,7 @@ export function MultiPriceChartLightweight({
       })
       chart.remove()
     }
-  }, [coinSeriesData])
+  }, [coinSeriesWithColors])
 
   // Handle hover effects on chart lines
   useEffect(() => {
@@ -618,14 +529,17 @@ export function MultiPriceChartLightweight({
             <CardContent className="pl-8">
               <div className="p-0 relative">
                 {/* Show loading message if no chart data yet */}
-                {coinsWithData.length === 0 && coins.length > 0 ? (
+                {chartDataLoading && coins.length > 0 ? (
                   <div className="flex items-center justify-center h-[400px]">
                     <div className="text-center">
                       <Spinner size={24} className="mb-2" />
                       <p className="text-sm text-muted-foreground">Loading chart data...</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cache: {performance.cacheHits}/{performance.totalQueries} hits
+                      </p>
                     </div>
                   </div>
-                ) : coinsWithData.length === 0 ? (
+                ) : coinSeriesWithColors.length === 0 ? (
                   <div className="flex items-center justify-center h-[400px]">
                     <div className="text-center">
                       <p className="text-sm text-muted-foreground">No coins to display</p>

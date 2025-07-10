@@ -30,7 +30,7 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
   // Get current watchlist group parameter to preserve it in navigation (same as top-nav)
   const watchlistGroup = searchParams.get('wg')
 
-  // Calculate interval-based price changes
+  // Calculate interval-based price changes using market data
   const coinsWithIntervalChange = useMemo(() => {
     return coins.map(coin => {
       let intervalChange = 0
@@ -43,37 +43,50 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
         }
       }
 
-      if (coin.historical?.data?.quotes && coin.historical.data.quotes.length > 0) {
-        const quotes = coin.historical.data.quotes.sort((a, b) => 
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        )
+      // ONLY use real data - no fake calculations or inappropriate fallbacks
+      if (coin.quote?.USD) {
+        switch (activeTimeScale) {
+          case '1d':
+            // 1D = 24h change (matches watchlist)
+            intervalChange = coin.quote.USD.percent_change_24h ?? 0
+            break
+          case '7d':
+            // 1W = 7d change 
+            intervalChange = coin.quote.USD.percent_change_7d ?? coin.quote.USD.percent_change_24h ?? 0
+            break
+          case '30d':
+            // 1M = 30d change
+            intervalChange = coin.quote.USD.percent_change_30d ?? coin.quote.USD.percent_change_7d ?? coin.quote.USD.percent_change_24h ?? 0
+            break
+          case 'max':
+            // 1Y = longest real data CoinMarketCap provides
+            intervalChange = coin.quote.USD.percent_change_30d ?? coin.quote.USD.percent_change_7d ?? coin.quote.USD.percent_change_24h ?? 0
+            break
+          case '2y':
+            // 2Y = CoinMarketCap doesn't provide this data
+            intervalChange = NaN
+            break
+          default:
+            // Default to 24h real data
+            intervalChange = coin.quote.USD.percent_change_24h ?? 0
+        }
+      }
 
-        // Filter based on activeTimeScale
-        const now = Date.now()
-        const timeFilters = {
-          '1d': 30 * 24 * 60 * 60 * 1000,     // Last 30 days
-          '7d': 90 * 24 * 60 * 60 * 1000,     // Last 90 days
-          'max': Infinity                      // All data
-        }
-        
-        const timeLimit = timeFilters[activeTimeScale as keyof typeof timeFilters] || Infinity
-        
-        let filteredQuotes = quotes
-        if (timeLimit !== Infinity) {
-          const cutoffTime = now - timeLimit
-          filteredQuotes = quotes.filter(quote => 
-            new Date(quote.timestamp).getTime() >= cutoffTime
-          )
-        }
-
-        if (filteredQuotes.length > 0) {
-          const initialPrice = filteredQuotes[0]?.quote?.USD?.price
-          const latestPrice = filteredQuotes[filteredQuotes.length - 1]?.quote?.USD?.price
-          
-          if (initialPrice && latestPrice && initialPrice > 0) {
-            intervalChange = ((latestPrice - initialPrice) / initialPrice) * 100
-          }
-        }
+      // Debug: Always log what data we're using to ensure it's real
+      if (!coin.isOptimistic) {
+        console.log(`📈 ${coin.symbol} (${activeTimeScale}):`, {
+          selectedChange: isNaN(intervalChange) ? 'N/A - No real data available' : intervalChange,
+          timeScale: activeTimeScale,
+          realDataAvailable: {
+            percent_change_1h: coin.quote?.USD?.percent_change_1h,
+            percent_change_24h: coin.quote?.USD?.percent_change_24h,
+            percent_change_7d: coin.quote?.USD?.percent_change_7d,
+            percent_change_30d: coin.quote?.USD?.percent_change_30d,
+            percent_change_90d: coin.quote?.USD?.percent_change_90d,
+          },
+          dataSource: 'CoinMarketCap API',
+          usingRealData: !isNaN(intervalChange)
+        })
       }
 
       return {
@@ -85,9 +98,11 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
 
   const getTimeScaleLabel = (scale: string) => {
     switch (scale) {
-      case '1d': return '1M'
-      case '7d': return '1D' 
-      case 'max': return '1Y'
+      case '1d': return '1D'    // 1 Day (24h)
+      case '7d': return '1W'    // 1 Week (7d)
+      case '30d': return '1M'   // 1 Month (30d)
+      case 'max': return '1Y'   // 1 Year (longest available)
+      case '2y': return '2Y'    // 2 Years (N/A)
       default: return scale.toUpperCase()
     }
   }
@@ -220,12 +235,18 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
 
                 {/* Interval Change */}
                 <div className="flex items-center justify-end">
-                  <span className={cn(
-                    "font-mono text-xs",
-                    coin.intervalChange > 0 ? 'text-green-600' : 'text-red-600'
-                  )}>
-                    {coin.intervalChange > 0 ? '+' : ''}{coin.intervalChange.toFixed(2)}%
-                  </span>
+                  {isNaN(coin.intervalChange) ? (
+                    <span className="font-mono text-xs text-muted-foreground">
+                      N/A
+                    </span>
+                  ) : (
+                    <span className={cn(
+                      "font-mono text-xs",
+                      coin.intervalChange > 0 ? 'text-green-600' : 'text-red-600'
+                    )}>
+                      {coin.intervalChange > 0 ? '+' : ''}{coin.intervalChange.toFixed(2)}%
+                    </span>
+                  )}
                 </div>
 
                 {/* Remove */}

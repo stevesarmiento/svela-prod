@@ -18,7 +18,8 @@ interface TokenData {
 export function usePriceCalculations(
   chartData: PriceDataPoint[], 
   tokenData: TokenData | null, 
-  initialData: CoinMarketData['quote']['USD']
+  initialData: CoinMarketData['quote']['USD'],
+  activeTimeScale?: string
 ) {
   const [activePrice, setActivePrice] = useState<number | null>(null)
   const [isHydrated, setIsHydrated] = useState(false)
@@ -34,12 +35,32 @@ export function usePriceCalculations(
       return initialData.percent_change_24h || 0
     }
     
-    const currentPrice = displayPrice;
-    const oldestPrice = chartData[0]?.value;
-    if (!oldestPrice) return initialData.percent_change_24h || 0;
+    // Use real CoinMarketCap percentage changes instead of calculating from chart data
+    if (activeTimeScale && initialData) {
+      switch (activeTimeScale) {
+        case '1d':
+          // 1D = 24h change (matches watchlist)
+          return initialData.percent_change_24h ?? 0
+        case '7d':
+          // 1W = 7d change
+          return initialData.percent_change_7d ?? initialData.percent_change_24h ?? 0
+        case '30d':
+          // 1M = 30d change
+          return initialData.percent_change_30d ?? initialData.percent_change_7d ?? initialData.percent_change_24h ?? 0
+        case 'max':
+          // 1Y = longest real data CoinMarketCap provides
+          return initialData.percent_change_30d ?? initialData.percent_change_7d ?? initialData.percent_change_24h ?? 0
+        case '2y':
+          // 2Y = CoinMarketCap doesn't provide this data
+          return NaN
+        default:
+          return initialData.percent_change_24h ?? 0
+      }
+    }
     
-    return ((currentPrice - oldestPrice) / oldestPrice) * 100;
-  }, [displayPrice, chartData, isHydrated, initialData.percent_change_24h]);
+    // Fallback to 24h change
+    return initialData.percent_change_24h || 0;
+  }, [isHydrated, initialData, activeTimeScale]);
 
   return {
     displayPrice,

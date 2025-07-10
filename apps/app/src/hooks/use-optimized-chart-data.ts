@@ -82,6 +82,8 @@ export function useOptimizedChartData(
 
       return { chartData, volumeData, ohlcvData }
     }
+
+
     
     // Priority 2: Use historical data (good quality)
     if (dataSource?.historical?.data?.quotes?.length) {
@@ -177,22 +179,24 @@ export function useOptimizedChartData(
 // Helper functions for dynamic caching strategy
 function getStaleTime(timeScale: string): number {
   const staleTimeMap = {
-    '7d': 30 * 1000,      // 30 seconds for short-term data
-    '30d': 2 * 60 * 1000, // 2 minutes for medium-term data
+    '1d': 30 * 1000,       // 30 seconds for intraday data
+    '7d': 60 * 1000,       // 1 minute for short-term data  
+    '30d': 2 * 60 * 1000,  // 2 minutes for medium-term data
     'max': 10 * 60 * 1000, // 10 minutes for long-term data
     '2y': 10 * 60 * 1000,  // 10 minutes for long-term data
   } as const
   
-  return staleTimeMap[timeScale as keyof typeof staleTimeMap] || staleTimeMap['7d']
+  return staleTimeMap[timeScale as keyof typeof staleTimeMap] || staleTimeMap['1d']
 }
 
 function getRefetchInterval(timeScale: string): number {
   const intervalMap = {
+    '1d': 30 * 1000,       // 30 seconds for intraday data
     '7d': 60 * 1000,       // 1 minute for short-term data
     '30d': 5 * 60 * 1000,  // 5 minutes for medium-term data
     'max': false,          // No auto-refetch for long-term data
     '2y': false,           // No auto-refetch for long-term data
   } as const
   
-  return intervalMap[timeScale as keyof typeof intervalMap] || 60 * 1000
+  return intervalMap[timeScale as keyof typeof intervalMap] || 30 * 1000
 } 

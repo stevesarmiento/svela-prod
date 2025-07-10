@@ -120,7 +120,7 @@ export function WatchlistCard({
     }))
   }, [coins])
 
-  // Get aggregate chart data
+  // Get aggregate chart data - using optimized individual API calls  
   const { aggregateData, isLoading: isChartLoading } = useWatchlistAggregateChart({
     coins,
     timeScale: '30d'

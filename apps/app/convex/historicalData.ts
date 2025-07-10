@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 // Cache duration constants in milliseconds
 const CACHE_DURATIONS = {
+  '1d': 2 * 60 * 1000,      // 2 minutes for intraday data
   '7d': 5 * 60 * 1000,      // 5 minutes for short-term data
   '30d': 15 * 60 * 1000,    // 15 minutes for medium-term data
   'max': 60 * 60 * 1000,    // 1 hour for long-term data
@@ -17,7 +18,7 @@ export const getHistoricalData = query({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    const cacheWindow = CACHE_DURATIONS[args.timeframe as keyof typeof CACHE_DURATIONS] || CACHE_DURATIONS['7d'];
+    const cacheWindow = CACHE_DURATIONS[args.timeframe as keyof typeof CACHE_DURATIONS] || CACHE_DURATIONS['1d'];
     const cacheThreshold = now - cacheWindow;
 
     // Try to get fresh cached data first

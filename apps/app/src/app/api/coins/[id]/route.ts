@@ -143,18 +143,19 @@ async function fetchWithErrorHandling(url: string) {
   }
 }
 
-async function fetchHistoricalData(id: string, timeScale: string = '7d') {
+async function fetchHistoricalData(id: string, timeScale: string = '1d') {
   const now = new Date();
   
-  // Define time ranges - use daily data access (24 months) for longer periods
+  // Define time ranges - corrected to match actual timeframe labels
   const timeRanges = {
-    '7d': 30 * 24 * 60 * 60 * 1000,      // 30 days (granular data limit)  
-    '30d': 90 * 24 * 60 * 60 * 1000,     // 90 days (daily data access)
-    'max': 365 * 24 * 60 * 60 * 1000,    // 365 days (daily data access)
-    '2y': 730 * 24 * 60 * 60 * 1000,     // 730 days (daily data access)
+    '1d': 2 * 24 * 60 * 60 * 1000,       // 48 hours (2 days for better context)
+    '7d': 7 * 24 * 60 * 60 * 1000,       // 7 days  
+    '30d': 30 * 24 * 60 * 60 * 1000,     // 30 days
+    'max': 365 * 24 * 60 * 60 * 1000,    // 1 year (daily data access)
+    '2y': 730 * 24 * 60 * 60 * 1000,     // 2 years (daily data access)
   };
   
-  const timeRange = timeRanges[timeScale as keyof typeof timeRanges] || timeRanges['7d'];
+  const timeRange = timeRanges[timeScale as keyof typeof timeRanges] || timeRanges['1d'];
   const timeStart = new Date(now.getTime() - timeRange).toISOString();
   const timeEnd = new Date(Math.min(now.getTime(), Date.now())).toISOString();
   
@@ -172,8 +173,8 @@ async function fetchHistoricalData(id: string, timeScale: string = '7d') {
     id,
     time_start: timeStart,
     time_end: timeEnd,
-    interval: timeScale === '7d' ? '1h' : '1d', // Hourly for 7d (granular), daily for others
-    count: timeScale === '7d' ? '720' : timeScale === '30d' ? '90' : timeScale === 'max' ? '365' : '730',
+    interval: timeScale === '1d' ? '1h' : timeScale === '7d' ? '1h' : '1d', // hourly for 1d and 7d, daily for others
+    count: timeScale === '1d' ? '48' : timeScale === '7d' ? '168' : timeScale === '30d' ? '30' : timeScale === 'max' ? '365' : '730',
     convert: 'USD',
     aux: 'price,volume,market_cap',
     skip_invalid: 'true'
@@ -246,22 +247,28 @@ async function fetchHistoricalData(id: string, timeScale: string = '7d') {
   }
 }
 
-async function fetchOHLCVData(id: string, timeScale: string = '7d') {
+async function fetchOHLCVData(id: string, timeScale: string = '1d') {
   const now = new Date();
   
-  // Define time ranges - use daily data access (24 months) for longer periods
+  // Define time ranges - corrected to match actual timeframe labels
   const timeConfigs = {
-    '7d': { 
-      days: 30, 
+    '1d': { 
+      days: 2, 
       timePeriod: 'hourly',
       interval: '1h',
-      count: '720' // 30 days * 24 hours (granular data limit)
+      count: '48' // 48 hours (2 days of hourly data)
+    },
+    '7d': { 
+      days: 7, 
+      timePeriod: 'hourly',
+      interval: '1h',
+      count: '168' // 7 days * 24 hours
     },
     '30d': { 
-      days: 90, 
+      days: 30, 
       timePeriod: 'daily',
       interval: '1d',
-      count: '90' // 90 days (daily data access)
+      count: '30' // 30 days
     },
     'max': { 
       days: 365, 
@@ -277,7 +284,7 @@ async function fetchOHLCVData(id: string, timeScale: string = '7d') {
     },
   };
   
-  const config = timeConfigs[timeScale as keyof typeof timeConfigs] || timeConfigs['7d'];
+  const config = timeConfigs[timeScale as keyof typeof timeConfigs] || timeConfigs['1d'];
   const timeStart = new Date(now.getTime() - (config.days * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
   const timeEnd = new Date().toISOString().split('T')[0];
 
@@ -338,7 +345,7 @@ export async function GET(
 
   try {
     const { searchParams } = new URL(request.url);
-    const timeScale = searchParams.get('timeScale') || '7d'; // Default to 1D view
+    const timeScale = searchParams.get('timeScale') || '1d'; // Default to 1D view
     
     const id = await params.id;
     const validatedId = idSchema.parse(id);

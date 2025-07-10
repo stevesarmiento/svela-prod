@@ -25,25 +25,8 @@ export function WatchlistAggregateChart({
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
 
-  console.log('WatchlistAggregateChart render:', {
-    dataLength: data.length,
-    isPositive,
-    width,
-    height,
-    sampleData: data.slice(0, 3),
-    lastData: data[data.length - 1]
-  })
-
   useEffect(() => {
-    console.log('Chart useEffect triggered:', {
-      hasContainer: !!chartContainerRef.current,
-      dataLength: data.length,
-      firstDataPoint: data[0],
-      lastDataPoint: data[data.length - 1]
-    })
-
     if (!chartContainerRef.current || data.length === 0) {
-      console.log('Early return - no container or no data')
       return
     }
 
@@ -52,12 +35,12 @@ export function WatchlistAggregateChart({
       try {
         chartRef.current.remove()
       } catch (error) {
-        console.debug('Chart already disposed:', error)
+        console.debug('Chart cleanup - already disposed:', error)
       }
       chartRef.current = null
     }
 
-    // Create new chart
+    // Create optimized chart
     const chart = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
@@ -90,9 +73,9 @@ export function WatchlistAggregateChart({
       handleScale: false,
     })
 
-    // Add line series
+    // Add line series with proper color based on performance
     const lineSeries = chart.addSeries(LineSeries, {
-      // color: isPositive ? '#10B981' : '#EF4444', // Green for positive, red for negative
+      //color: isPositive ? '#10B981' : '#EF4444', // Green for positive, red for negative
       color: '#ffffff50',
       lineWidth: 2,
       priceLineVisible: false,
@@ -137,9 +120,9 @@ export function WatchlistAggregateChart({
     return (
       <div 
         style={{ width, height }} 
-        className="flex items-center justify-center text-xs text-gray-500"
+        className="flex items-center justify-center text-xs text-muted-foreground"
       >
-        No data
+        Loading chart data...
       </div>
     )
   }
