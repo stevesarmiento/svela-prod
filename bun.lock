@@ -50,6 +50,7 @@
         "react": "19.0.0-rc-66855b96-20241106",
         "react-dom": "19.0.0-rc-66855b96-20241106",
         "react-markdown": "^10.1.0",
+        "v0-sdk": "^0.0.10",
         "zod": "^3.25.67",
         "zustand": "^5.0.5",
       },
@@ -2634,6 +2635,8 @@
     "util-deprecate": ["util-deprecate@1.0.2", "", {}, "sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw=="],
 
     "uuid": ["uuid@9.0.1", "", { "bin": { "uuid": "dist/bin/uuid" } }, "sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA=="],
+
+    "v0-sdk": ["v0-sdk@0.0.10", "", {}, "sha512-sLCvnsYYpuOEvyg/lRG8DSddJ5VK6QgsZ4dBfVssen6W3+JpLqXjRCZBcnQi2od9gbVLHCA7J21wkCYcGJnGIw=="],
 
     "vary": ["vary@1.1.2", "", {}, "sha512-BNGbWLfd0eUPabhkXUVm0j8uuvREyTh5ovRa/dyow/BqAbZJyC+5fU+IzQOzmAKzYqYRAISoRhdQr3eIZ/PXqg=="],
 

@@ -56,9 +56,17 @@ interface ComparisonChartData {
   chartType?: string;
 }
 
+interface GeneratedChartData {
+  code: string;
+  metadata?: {
+    name?: string;
+    description?: string;
+  };
+}
+
 interface ComponentData {
-  type: 'price_card' | 'comparison_chart';
-  data: PriceCardData | ComparisonChartData;
+  type: 'price_card' | 'comparison_chart' | 'line_chart';
+  data: PriceCardData | ComparisonChartData | GeneratedChartData;
 }
 
 interface ChatMessageProps {
@@ -111,6 +119,14 @@ export function ChatMessage({
         )}
         {role === 'assistant' && componentData?.type === 'comparison_chart' && (
           <ComparisonChart {...(componentData.data as ComparisonChartData)} />
+        )}
+        {role === 'assistant' && componentData?.type === 'line_chart' && (
+          <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4">
+            <div className="text-sm text-zinc-400 mb-2">Generated Chart Component</div>
+            <div className="text-xs text-zinc-500 font-mono bg-zinc-800/50 p-2 rounded">
+              {(componentData.data as GeneratedChartData).metadata?.name || 'Custom Chart'}
+            </div>
+          </div>
         )}
         
         <div
