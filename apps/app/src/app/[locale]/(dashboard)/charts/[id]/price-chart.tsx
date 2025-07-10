@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
-import { useChartData } from '@/hooks/use-chart-data'
+import { useOptimizedChartData } from '@/hooks/use-optimized-chart-data'
 import { useChartInstance } from '@/hooks/use-chart-instance'
 import { usePriceCalculations } from '@/hooks/use-price-calculations'
 import type { CoinMarketData } from '@/types/coins'
@@ -104,8 +104,8 @@ const ChartTypeSelector = ({ chartType, setChartType }: {
 }
 
 export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTimeScale }: PriceChartProps) {
-  // Now we get proper OHLCV data from the hook
-  const { chartData, volumeData, ohlcvData, isLoading, tokenData } = useChartData(coinId, activeTimeScale, initialData)
+  // Now we get proper OHLCV data from the optimized hook with intelligent caching
+  const { chartData, volumeData, ohlcvData, isLoading, tokenData } = useOptimizedChartData(coinId, activeTimeScale, initialData)
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData)
   
   // Generate Hull Suite colors - same as hook to ensure consistency

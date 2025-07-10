@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { ConvexHttpClient } from 'convex/browser';
+import { api } from '../../../../../convex/_generated/api';
 
 interface HistoricalQuote {
   timestamp: string;
@@ -12,11 +14,103 @@ interface HistoricalQuote {
   };
 }
 
+interface USDQuote {
+  price: number;
+  volume_24h: number;
+  market_cap: number;
+  percent_change_1h?: number;
+  percent_change_24h?: number;
+  percent_change_7d?: number;
+  percent_change_30d?: number;
+}
+
+interface CurrentMarketData {
+  quote: { USD: USDQuote };
+  cmc_rank?: number;
+  circulating_supply?: number;
+  total_supply?: number;
+  max_supply?: number;
+}
+
+interface HistoricalDataResponse {
+  data: {
+    id: number;
+    name?: string;
+    symbol?: string;
+    is_active?: number;
+    is_fiat?: number;
+    quotes: HistoricalQuote[];
+  };
+  status: {
+    error_code: number;
+    error_message: string;
+  };
+}
+
 const BASE_URLS = {
   v1: "https://pro-api.coinmarketcap.com/v1",
   v2: "https://pro-api.coinmarketcap.com/v2"
 };
 const API_KEY = process.env.COINMARKETCAP_API_KEY;
+
+// Initialize Convex client for caching
+const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+
+async function cacheDataInConvex(
+  coinId: string, 
+  timeScale: string, 
+  historicalData: HistoricalDataResponse, 
+  currentData: CurrentMarketData
+) {
+  try {
+    // Cache historical data if available
+    if (historicalData?.data?.quotes && historicalData.data.quotes.length > 0) {
+      const dataPoints = historicalData.data.quotes.map((quote: HistoricalQuote) => ({
+        timestamp: new Date(quote.timestamp).getTime(),
+        price: quote.quote.USD.price,
+        volume: quote.quote.USD.volume_24h || 0,
+        marketCap: quote.quote.USD.market_cap,
+        open: quote.quote.USD.price,
+        high: quote.quote.USD.price,
+        low: quote.quote.USD.price,
+        close: quote.quote.USD.price,
+      }));
+
+      await convex.mutation(api.historicalData.upsertHistoricalData, {
+        coinId: Number(coinId),
+        timeframe: timeScale,
+        dataPoints,
+        dataSource: "coinmarketcap"
+      });
+
+      console.log(`💾 Cached ${dataPoints.length} historical data points for coin ${coinId}`);
+    }
+
+    // Cache current market data if available
+    if (currentData?.quote?.USD) {
+      await convex.mutation(api.historicalData.upsertCurrentMarketData, {
+        coinId: Number(coinId),
+        price: currentData.quote.USD.price,
+        volume24h: currentData.quote.USD.volume_24h || 0,
+        marketCap: currentData.quote.USD.market_cap || 0,
+        change1h: currentData.quote.USD.percent_change_1h || undefined,
+        change24h: currentData.quote.USD.percent_change_24h,
+        change7d: currentData.quote.USD.percent_change_7d || undefined,
+        change30d: currentData.quote.USD.percent_change_30d || undefined,
+        rank: currentData.cmc_rank || undefined,
+        circulatingSupply: currentData.circulating_supply || undefined,
+        totalSupply: currentData.total_supply || undefined,
+        maxSupply: currentData.max_supply || undefined,
+        dataSource: "coinmarketcap"
+      });
+
+      console.log(`💾 Cached current market data for coin ${coinId}`);
+    }
+  } catch (error) {
+    // Don't fail the request if caching fails
+    console.warn('Failed to cache data in Convex:', error);
+  }
+}
 
 const idSchema = z.string().min(1);
 
@@ -31,10 +125,11 @@ async function fetchWithErrorHandling(url: string) {
         'X-CMC_PRO_API_KEY': API_KEY,
         'Accept': 'application/json',
       },
+      // Next.js specific caching
       next: {
         revalidate: 60,
       },
-    });
+    } as RequestInit);
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => null);
@@ -257,7 +352,16 @@ export async function GET(
       ),
       fetchHistoricalData(validatedId, timeScale).catch(error => {
         console.error('Historical data fetch failed:', error);
-        return { quotes: [] };
+        return { 
+          data: { 
+            id: Number(validatedId), 
+            quotes: [] 
+          }, 
+          status: { 
+            error_code: 500, 
+            error_message: 'Historical data fetch failed' 
+          } 
+        };
       }),
       fetchOHLCVData(validatedId, timeScale).catch(error => {
         console.error('OHLCV data fetch failed:', error);
@@ -292,6 +396,16 @@ export async function GET(
       historical,
       ohlcv
     };
+
+    // Cache the fetched data in Convex for future requests
+    if (historical?.data?.quotes && quotes?.data?.[validatedId]) {
+      await cacheDataInConvex(
+        validatedId, 
+        timeScale, 
+        historical as HistoricalDataResponse, 
+        quotes.data[validatedId] as CurrentMarketData
+      );
+    }
 
     return NextResponse.json(coinData);
   } catch (error) {
