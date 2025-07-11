@@ -249,7 +249,7 @@ export class EnhancedChatHandler {
         orderFlow: marketData.orderFlow
       },
       metadata: {
-        dataSource: 'Coinalyze, CoinGlass',
+        dataSource: 'CoinGlass',
         lastUpdated: Date.now(),
         reliability: 'high'
       }

@@ -1,6 +1,4 @@
-// CoinGlass symbol mapper - similar to coinalyze-mapper.ts
 export function coinIdToCoinglassSymbol(coinId: number): string | null {
-    // Common coin ID to CoinGlass symbol mappings
     const coinIdMappings: Record<number, string> = {
       1: 'BTC',      // Bitcoin
       1027: 'ETH',   // Ethereum  

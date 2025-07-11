@@ -337,7 +337,7 @@ async function fetchOHLCVData(id: string, timeScale: string = '1d') {
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: Promise<string> } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   if (!API_KEY) {
     throw new Error('CoinMarketCap API key is not configured');
@@ -347,7 +347,7 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const timeScale = searchParams.get('timeScale') || '1d'; // Default to 1D view
     
-    const id = await params.id;
+    const { id } = await params;
     const validatedId = idSchema.parse(id);
 
     const [info, quotes, historical, ohlcv] = await Promise.all([
@@ -423,3 +423,5 @@ export async function GET(
     );
   }
 }
+
+
