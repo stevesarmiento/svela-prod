@@ -71,35 +71,34 @@ export default function WalletPage() {
     try {
       console.log("Connecting to existing Crossmint wallet...");
       
-      // First, try to get wallet details via REST API
-      console.log("Fetching wallet details via REST API...");
-      try {
-        const response = await fetch("/api/wallet/get", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          // No body needed - email comes from Clerk auth
-        });
-
-        if (response.ok) {
-          const { wallet: walletDetails } = await response.json();
-          console.log("Wallet details from REST API:", walletDetails);
-          
-          if (walletDetails) {
-            toast.success("Wallet connected via REST API!");
-            return;
-          }
-        } else {
-          console.log("REST API wallet fetch failed:", response.status);
-        }
-      } catch (error) {
-        console.log("REST API approach failed:", error);
-      }
-      
-      // Fallback: Try React SDK approach
-      console.log("Trying React SDK approach...");
+      // Try to get the existing wallet using the SDK
       if (getOrCreateWallet) {
+        console.log("Attempting to reconnect to existing wallet with different approaches...");
+        
+        // Try with the existing wallet address if we have it
+        if (userWallet?.address) {
+          try {
+            console.log("Trying to connect to existing wallet with address:", userWallet.address);
+            const reconnectedWallet = await (getOrCreateWallet as unknown as (args: { chain: string; signer: { type: string } }) => Promise<{ address: string; chain?: string; id?: string }>)({
+              chain: "solana",
+              signer: {
+                type: "api-key",
+              },
+            });
+            
+            console.log("Reconnected wallet result:", reconnectedWallet);
+            
+            if (reconnectedWallet && reconnectedWallet.address === userWallet.address) {
+              console.log("Successfully reconnected to existing wallet!");
+              toast.success("Wallet reconnected! You can now send transactions.");
+              return;
+            }
+          } catch (error) {
+            console.log("Failed to reconnect to existing wallet:", error);
+          }
+        }
+        
+        // Try other approaches
         const walletTypes = ["solana-mpc-wallet", "solana-custodial-wallet"];
         let connectedWallet = null;
         
@@ -124,10 +123,10 @@ export default function WalletPage() {
         }
 
         if (connectedWallet) {
-          toast.success("Wallet connected! You can now send transactions.");
+          toast.success("Wallet reconnected! You can now send transactions.");
         } else {
           console.error("All wallet connection attempts failed");
-          toast.error("Failed to connect to wallet. Try creating a new wallet.");
+          toast.error("Failed to reconnect to wallet. Transactions will use demo mode.");
         }
       } else {
         toast.error("Wallet SDK not available");
@@ -160,54 +159,79 @@ export default function WalletPage() {
     setIsSending(true);
     try {
       console.log("Sending transaction...");
+      console.log("Available wallet object:", wallet);
+      console.log("Wallet methods:", wallet ? Object.getOwnPropertyNames(Object.getPrototypeOf(wallet)) : "No wallet");
+      console.log("Wallet send method:", wallet?.send);
+      console.log("Wallet type:", typeof wallet);
+      console.log("User wallet from database:", userWallet);
       
       if (wallet) {
-        // Use Crossmint React SDK if available
-        console.log("Using Crossmint React SDK");
-        const solanaWallet = SolanaWallet.from(wallet);
-        console.log("Solana wallet instance:", solanaWallet);
+        // Use Crossmint SDK's wallet.send() method for real transactions
+        console.log("Using Crossmint SDK wallet.send() method");
         
-        // For demo purposes, we'll just show success without actual transaction
-        // In production, you'd build a proper Solana transaction here
-        toast.success("Transaction ready - Crossmint SDK connected");
-        console.log("Would send", amount, "SOL to", recipientAddress, "using SDK");
-      } else {
-        // Use REST API approach
-        console.log("Using REST API approach for transaction");
-        
-        const response = await fetch("/api/wallet/send", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            recipientAddress,
-            amount: amountNum,
-            walletAddress: userWallet.address,
-          }),
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          console.log("Transaction sent via REST API:", result);
-          toast.success(result.note || "Transaction sent successfully!");
-          
-          setLastTransaction({
-            hash: result.hash || "rest_api_transaction_hash",
-            explorerLink: result.explorerLink || `https://explorer.solana.com/tx/${result.hash || "demo"}`
-          });
+        // Check if send method exists
+        if (typeof wallet.send === 'function') {
+          try {
+            console.log("Calling wallet.send with:", {
+              recipient: recipientAddress,
+              token: "SOL", 
+              amount: amountNum.toString()
+            });
+            
+            // Use the SDK's send method as documented
+            const result = await wallet.send(recipientAddress, "SOL", amountNum.toString());
+            
+            console.log("Transaction sent successfully:", result);
+            toast.success("Real SOL transaction sent successfully!");
+            
+            setLastTransaction({
+              hash: result.hash,
+              explorerLink: result.explorerLink || `https://explorer.solana.com/tx/${result.hash}?cluster=devnet`
+            });
+            
+            // Clear form
+            setRecipientAddress("");
+            setAmount("");
+            return; // Exit early on success
+            
+          } catch (sdkError) {
+            console.error("SDK send method failed:", sdkError);
+            console.error("Error details:", {
+              message: sdkError instanceof Error ? sdkError.message : 'Unknown error',
+              stack: sdkError instanceof Error ? sdkError.stack : undefined,
+              name: sdkError instanceof Error ? sdkError.name : undefined
+            });
+            
+            toast.error(`SDK send failed: ${sdkError instanceof Error ? sdkError.message : 'Unknown error'}`);
+          }
         } else {
-          const error = await response.text();
-          throw new Error(`REST API error: ${response.status} - ${error}`);
+          console.error("Wallet.send method is not available");
+          console.log("Available wallet properties:", Object.keys(wallet));
+          toast.error("Wallet.send method is not available on this wallet instance");
         }
-      }
-      
-      // Mock transaction result for demo if no actual transaction sent
-      if (!wallet) {
-        setLastTransaction({
-          hash: "demo_transaction_hash",
-          explorerLink: `https://explorer.solana.com/tx/demo_transaction_hash`
-        });
+        
+        // Try the Solana-specific approach
+        console.log("Trying SolanaWallet approach...");
+        try {
+          const solanaWallet = SolanaWallet.from(wallet);
+          console.log("Created SolanaWallet instance:", solanaWallet);
+          console.log("SolanaWallet methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(solanaWallet)));
+          
+          // For now, we need to build a Solana transaction manually
+          // This is a fallback approach - in production you'd use a Solana transaction builder
+          toast.error("SolanaWallet requires a pre-built transaction. Using REST API fallback.");
+          await sendViaRestAPI(amountNum);
+          
+        } catch (solanaError) {
+          console.error("SolanaWallet approach also failed:", solanaError);
+          // Final fallback to REST API
+          await sendViaRestAPI(amountNum);
+        }
+      } else {
+        console.log("No SDK wallet available, using REST API");
+        toast.error("No Crossmint SDK wallet available - using REST API fallback");
+        // No SDK wallet available, use REST API
+        await sendViaRestAPI(amountNum);
       }
 
     } catch (error) {
@@ -215,6 +239,40 @@ export default function WalletPage() {
       toast.error(`Transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const sendViaRestAPI = async (amountNum: number) => {
+    if (!userWallet?.address) {
+      throw new Error("No wallet address available");
+    }
+    
+    console.log("Using REST API approach for transaction");
+    
+    const response = await fetch("/api/wallet/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        recipientAddress,
+        amount: amountNum,
+        walletAddress: userWallet.address,
+      }),
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log("Transaction sent via REST API:", result);
+      toast.success(result.note || "Transaction sent successfully!");
+      
+      setLastTransaction({
+        hash: result.hash || "rest_api_transaction_hash",
+        explorerLink: result.explorerLink || `https://explorer.solana.com/tx/${result.hash || "demo"}`
+      });
+    } else {
+      const error = await response.text();
+      throw new Error(`REST API error: ${response.status} - ${error}`);
     }
   };
 
@@ -238,20 +296,36 @@ export default function WalletPage() {
       // Try multiple approaches for wallet creation
       console.log("Attempting wallet creation with different parameters...");
       
-      // Approach 1: With type and linkedUser (recommended approach)
+      // Approach 1: With API key signer for server-side transactions
       let wallet;
       try {
-        console.log("Trying with type and linkedUser parameters...");
-        wallet = await (getOrCreateWallet as unknown as (args: { type: string; linkedUser: string }) => Promise<{ address: string; chain?: string; id?: string }>)({
-          type: "solana-custodial-wallet",
-          linkedUser: `email:${user.email}`,
+        console.log("Trying with API key signer for server-side transactions...");
+        wallet = await (getOrCreateWallet as unknown as (args: { chain: string; signer: { type: string } }) => Promise<{ address: string; chain?: string; id?: string }>)({
+          chain: "solana",
+          signer: {
+            type: "api-key",
+          },
         });
-        console.log("Type + linkedUser approach result:", wallet);
+        console.log("API key signer approach result:", wallet);
       } catch (error) {
-        console.log("Type + linkedUser approach failed:", error);
+        console.log("API key signer approach failed:", error);
       }
 
-      // Approach 2: Basic chain parameter (fallback)
+      // Approach 2: With type and linkedUser (fallback)
+      if (!wallet) {
+        try {
+          console.log("Trying with type and linkedUser parameters...");
+          wallet = await (getOrCreateWallet as unknown as (args: { type: string; linkedUser: string }) => Promise<{ address: string; chain?: string; id?: string }>)({
+            type: "solana-custodial-wallet",
+            linkedUser: `email:${user.email}`,
+          });
+          console.log("Type + linkedUser approach result:", wallet);
+        } catch (error) {
+          console.log("Type + linkedUser approach failed:", error);
+        }
+      }
+
+      // Approach 3: Basic chain parameter (fallback)
       if (!wallet) {
         try {
           console.log("Trying basic chain parameter...");
@@ -264,7 +338,7 @@ export default function WalletPage() {
         }
       }
 
-      // Approach 3: With owner parameter
+      // Approach 4: With owner parameter
       if (!wallet) {
         try {
           console.log("Trying with owner parameter...");
@@ -278,7 +352,7 @@ export default function WalletPage() {
         }
       }
 
-      // Approach 4: Just call without parameters
+      // Approach 5: Just call without parameters
       if (!wallet) {
         try {
           console.log("Trying without parameters...");
@@ -295,6 +369,11 @@ export default function WalletPage() {
 
       if (wallet && wallet.address) {
         console.log("Wallet created successfully:", wallet);
+        console.log("Wallet type:", typeof wallet);
+        console.log("Wallet constructor:", wallet.constructor?.name);
+        console.log("Wallet methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(wallet)));
+        console.log("Wallet send method available:", typeof (wallet as unknown as { send?: (...args: unknown[]) => unknown }).send === 'function');
+        console.log("Wallet properties:", Object.keys(wallet));
         
         setUserWallet(wallet);
         setHasWallet(true);
@@ -509,12 +588,12 @@ export default function WalletPage() {
                 </div>
                 
                 {/* Connection Status */}
-                {!wallet && !userWallet && (
+                {!wallet && userWallet && (
                   <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-yellow-800">Wallet Connection Required</p>
-                        <p className="text-xs text-yellow-700">Connect to Crossmint to send transactions</p>
+                        <p className="text-sm font-medium text-yellow-800">Wallet SDK Connection Required</p>
+                        <p className="text-xs text-yellow-700">Connect SDK to enable real transactions</p>
                       </div>
                       <Button
                         size="sm"
@@ -522,7 +601,7 @@ export default function WalletPage() {
                         disabled={isConnecting}
                         className="ml-3"
                       >
-                        {isConnecting ? "Connecting..." : "Connect"}
+                        {isConnecting ? "Connecting..." : "Connect SDK"}
                       </Button>
                     </div>
                   </div>
@@ -645,16 +724,20 @@ export default function WalletPage() {
         {hasWallet && userWallet && (
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Send className="w-5 h-5" />
-                Send SOL
-              </CardTitle>
-              <CardDescription>
-                Send Solana to another wallet address
-              </CardDescription>
+                          <CardTitle className="flex items-center gap-2">
+              <Send className="w-5 h-5" />
+              Send SOL
+            </CardTitle>
+            <CardDescription>
+              Send real Solana (SOL) to another wallet address - This will execute actual transactions!
+            </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                  <p className="text-sm font-medium text-orange-800">⚠️ Real Transaction Warning</p>
+                  <p className="text-xs text-orange-700">This will send actual SOL from your wallet. Transactions cannot be reversed!</p>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="recipient">Recipient Address</Label>
                   <Input
@@ -681,14 +764,17 @@ export default function WalletPage() {
                   className="w-full gap-2"
                 >
                   <Send className="w-4 h-4" />
-                  {isSending ? "Sending..." : "Send Transaction"}
+                  {isSending ? "Sending Real SOL..." : "Send Real SOL"}
                 </Button>
                 
                 {lastTransaction && (
                   <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-sm font-medium text-green-800 mb-2">Demo Transaction Created!</p>
+                    <p className="text-sm font-medium text-green-800 mb-2">Transaction Completed!</p>
                     <p className="text-xs text-green-700 mb-2">
-                      ⚠️ This is a demo - no actual SOL was sent
+                      {lastTransaction.hash.startsWith('demo') || lastTransaction.hash.startsWith('rest_api') ? 
+                        "⚠️ Demo transaction - no actual SOL was sent" : 
+                        "✅ Real SOL transaction submitted to the blockchain"
+                      }
                     </p>
                     <div className="space-y-1">
                       <p className="text-xs text-green-700">
