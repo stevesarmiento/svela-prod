@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 import { IconPencilTipCropCircle, IconTrashFill } from "symbols-react"
 import { AvatarCircles } from "@v1/ui/token-stacks"
-import { useWatchlistAggregateChart } from "@/hooks/use-watchlist-aggregate-chart"
+import { useConvexWatchlistAggregateChart } from "@/hooks/use-convex-watchlist-aggregate-chart"
 import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
 import { Spinner } from "@v1/ui/spinner"
 import { WatchlistGroupIcon } from "@/components/watchlist-group-icon"
@@ -121,7 +121,7 @@ export function WatchlistCard({
   }, [coins])
 
   // Get aggregate chart data - using optimized individual API calls  
-  const { aggregateData, isLoading: isChartLoading } = useWatchlistAggregateChart({
+  const { aggregateData, isLoading: isChartLoading, performance } = useConvexWatchlistAggregateChart({
     coins,
     timeScale: '30d'
   })
@@ -250,7 +250,12 @@ export function WatchlistCard({
               </div>
             ) : isChartLoading ? (
               <div className="flex items-center justify-center h-full">
-                <Spinner className="w-4 h-4" />
+                <div className="flex items-center gap-2">
+                  <Spinner className="w-4 h-4" />
+                  <span className="text-white/50 text-xs">
+                    Cache: {performance.cacheHitRate.toFixed(0)}%
+                  </span>
+                </div>
               </div>
             ) : (
               <WatchlistAggregateChart

@@ -76,7 +76,7 @@ async function cacheDataInConvex(
         close: quote.quote.USD.price,
       }));
 
-      await convex.mutation(api.historicalData.upsertHistoricalData, {
+      await convex.mutation(api.historicalData.upsertHistoricalDataIncremental, {
         coinId: Number(coinId),
         timeframe: timeScale,
         dataPoints,

@@ -21,7 +21,7 @@ import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { useWatchlistGroups } from '@v1/convex/hooks'
 import { useWatchlistByGroup } from '@v1/convex/hooks'
 import { useWatchlistCoins } from '@/hooks/use-watchlist-coins'
-import { useWatchlistAggregateChart } from '@/hooks/use-watchlist-aggregate-chart'
+import { useConvexWatchlistAggregateChart } from '@/hooks/use-convex-watchlist-aggregate-chart'
 
 
 interface WatchlistMultiLineChartProps {
@@ -89,7 +89,7 @@ function WatchlistDataFetcher({
   const { data: coins } = useWatchlistCoins(coinIds)
   
   // Get aggregate chart data
-  const { aggregateData } = useWatchlistAggregateChart({
+  const { aggregateData } = useConvexWatchlistAggregateChart({
     coins: coins || [],
     timeScale
   })

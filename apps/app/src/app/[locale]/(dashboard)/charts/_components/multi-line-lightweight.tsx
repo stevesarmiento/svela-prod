@@ -25,7 +25,7 @@ import { Button } from '@v1/ui/button'
 import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { AvatarCircles } from "@v1/ui/token-stacks"
-import { useMultiChartData } from '@/hooks/use-multi-chart-data'
+import { useConvexBulkMultiChartData } from '@/hooks/use-convex-bulk-multi-chart-data'
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -154,8 +154,16 @@ export function MultiPriceChartLightweight({
   // Use the bottom nav context to trigger contextual command search
   const { openContextualCommandSearch } = useBottomNav()
 
-  // 🚀 OPTIMIZED: Use multi-chart data hook with intelligent caching
-  const { series: coinSeriesData, isLoading: chartDataLoading, performance } = useMultiChartData(coins, activeTimeScale)
+  // 🚀 OPTIMIZED: Use Convex-first BULK multi-chart data hook with intelligent caching
+  const { series: coinSeriesData, isLoading: chartDataLoading, performance } = useConvexBulkMultiChartData(coins, activeTimeScale)
+
+  // 🔍 DEBUG: Log bulk performance
+  console.log('📊 Bulk multi-line chart:', {
+    totalCoins: coins.length,
+    seriesCount: coinSeriesData.length,
+    bulkApiCalls: performance.bulkApiCalls,
+    cacheHitRate: performance.cacheHitRate.toFixed(1) + '%'
+  })
 
   // Generate colors for the series data
   const coinSeriesWithColors = useMemo(() => {
@@ -535,7 +543,7 @@ export function MultiPriceChartLightweight({
                       <Spinner size={24} className="mb-2" />
                       <p className="text-sm text-muted-foreground">Loading chart data...</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Cache: {performance.cacheHits}/{performance.totalQueries} hits
+                        Bulk API: {performance.bulkApiCalls} calls | Cache: {performance.cacheHitRate.toFixed(1)}%
                       </p>
                     </div>
                   </div>

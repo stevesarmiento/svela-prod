@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
-import { useOptimizedChartData } from '@/hooks/use-optimized-chart-data'
+import { useConvexOptimizedChartData } from '@/hooks/use-convex-optimized-chart-data'
 import { useChartInstance } from '@/hooks/use-chart-instance'
 import { usePriceCalculations } from '@/hooks/use-price-calculations'
 import type { CoinMarketData } from '@/types/coins'
@@ -105,8 +105,8 @@ const ChartTypeSelector = ({ chartType, setChartType }: {
 }
 
 export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTimeScale }: PriceChartProps) {
-  // Now we get proper OHLCV data from the optimized hook with intelligent caching
-  const { chartData, volumeData, ohlcvData, isLoading, tokenData } = useOptimizedChartData(coinId, activeTimeScale, initialData)
+  // Now we get proper OHLCV data from the Convex-first hook with intelligent caching
+  const { chartData, volumeData, ohlcvData, isLoading, tokenData, performance } = useConvexOptimizedChartData(coinId, activeTimeScale, initialData)
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData, activeTimeScale)
   
   // Generate Hull Suite colors - same as hook to ensure consistency
@@ -199,17 +199,30 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                       className="rounded-full w-3 h-3"
                     />
                     <span className="text-white font-bold text-xs">{coinName}</span>
-                    <span className="text-muted-foreground text-xs">is currently</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="text-3xl font-bold font-sans">
-                      ${displayPrice.toLocaleString('en-US', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}
-                    </span>
-                    {isLoading && <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" />}
-                  </div>
+                                          <span className="text-muted-foreground text-xs">is currently</span>
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-3xl font-bold font-sans">
+                        ${displayPrice.toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        })}
+                      </span>
+                      {isLoading && <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" />}
+                    </div>
+                    {/* Performance indicator */}
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-muted-foreground">
+                        Data: {performance.dataSource === 'convex-cache' ? '🚀 Cached' : 
+                               performance.dataSource === 'api-fresh' ? '🌐 Fresh' : 
+                               performance.dataSource === 'convex-stale' ? '⚠️ Stale' : '🔄 Fallback'}
+                      </span>
+                      {performance.cacheHitRate > 0 && (
+                        <span className="text-xs text-emerald-400">
+                          {performance.cacheHitRate.toFixed(0)}% cached
+                        </span>
+                      )}
+                    </div>
                   <div className={`text-xs font-bold font-mono ${isNaN(calculatePercentageChange) ? 'text-muted-foreground' : calculatePercentageChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                     {isNaN(calculatePercentageChange) ? (
                       <span>N/A</span>
