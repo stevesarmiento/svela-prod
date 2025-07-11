@@ -23,6 +23,27 @@ export const searchCoins = query({
   },
 });
 
+// CoinGecko coins search
+export const searchCoinGeckoCoins = query({
+  args: { query: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const searchTerm = args.query.toLowerCase();
+    const limit = args.limit || 20;
+
+    const allCoins = await ctx.db.query("coingeckoCoins").collect();
+
+    const filtered = allCoins
+      .filter(coin => 
+        coin.name.toLowerCase().includes(searchTerm) ||
+        coin.symbol.toLowerCase().includes(searchTerm) ||
+        coin.coingeckoId.toLowerCase().includes(searchTerm)
+      )
+      .slice(0, limit);
+
+    return filtered;
+  },
+});
+
 // More efficient bulk upsert
 export const bulkUpsertCoins = mutation({
   args: { coins: v.array(v.object({
@@ -32,6 +53,7 @@ export const bulkUpsertCoins = mutation({
     rank: v.optional(v.number()),
     logoUrl: v.string(),
     isActive: v.boolean(),
+    lastUpdated: v.optional(v.number()),
   }))},
   handler: async (ctx, args) => {
     // Get all existing coin IDs in one query
@@ -63,6 +85,39 @@ export const bulkUpsertCoins = mutation({
   },
 });
 
+// CoinGecko bulk upsert
+export const bulkUpsertCoinGeckoCoins = mutation({
+  args: { coins: v.array(v.object({
+    coingeckoId: v.string(),
+    name: v.string(),
+    symbol: v.string(),
+    logoUrl: v.string(),
+    isActive: v.boolean(),
+    platforms: v.optional(v.record(v.string(), v.string())),
+  }))},
+  handler: async (ctx, args) => {
+    const existingCoins = await ctx.db.query("coingeckoCoins").collect();
+    const existingIds = new Set(existingCoins.map(coin => coin.coingeckoId));
+    
+    for (const coin of args.coins) {
+      if (existingIds.has(coin.coingeckoId)) {
+        const existing = existingCoins.find(c => c.coingeckoId === coin.coingeckoId);
+        if (existing) {
+          await ctx.db.patch(existing._id, {
+            ...coin,
+            lastUpdated: Date.now(),
+          });
+        }
+      } else {
+        await ctx.db.insert("coingeckoCoins", {
+          ...coin,
+          lastUpdated: Date.now(),
+        });
+      }
+    }
+  },
+});
+
 // Add this new mutation for bulk inserts
 export const bulkInsertNewCoins = mutation({
   args: { coins: v.array(v.object({
@@ -86,6 +141,37 @@ export const bulkInsertNewCoins = mutation({
         console.log(`Skipping coin ${coin.coinId} - already exists`);
       }
     }
+  },
+});
+
+// CoinGecko queries
+export const getCoinGeckoCoinById = query({
+  args: { coingeckoId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("coingeckoCoins")
+      .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", args.coingeckoId))
+      .first();
+  },
+});
+
+export const getCoinGeckoCoinsBySymbol = query({
+  args: { symbol: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("coingeckoCoins")
+      .withIndex("by_symbol", (q) => q.eq("symbol", args.symbol.toUpperCase()))
+      .collect();
+  },
+});
+
+export const getAllCoinGeckoCoins = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 100;
+    return await ctx.db
+      .query("coingeckoCoins")
+      .take(limit);
   },
 });
 
