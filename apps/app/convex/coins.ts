@@ -191,6 +191,31 @@ export const getTopCoins = query({
   },
 });
 
+// Add this query to get top CoinGecko coins
+export const getTopCoinGeckoCoins = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 25;
+
+    // Just get coins from database - let API handle the market cap sorting
+    // We'll get more than needed and let the API filter to top coins
+    const coins = await ctx.db
+      .query("coingeckoCoins")
+      .order("asc")
+      .take(limit * 3); // Get 3x limit to have options for API to choose from
+
+    // Basic filtering - just remove obvious junk, but keep it simple
+    const filteredCoins = coins.filter((coin) => {
+      return coin.coingeckoId.length > 1 && 
+             coin.name.length > 1 &&
+             coin.symbol.length >= 1 &&
+             coin.symbol.length <= 10;
+    });
+
+    return filteredCoins.slice(0, limit * 2); // Return 2x limit for API to choose best ones
+  },
+});
+
 export const getCoinsByIds = query({
   args: { coinIds: v.array(v.number()) },
   handler: async (ctx, args) => {
