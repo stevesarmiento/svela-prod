@@ -12,6 +12,9 @@ import { useHullSuite } from '@/hooks/use-hull-suite'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { IconDistributeHorizontalCenter, IconChartLineUptrendXyaxis, IconArrowUpRight } from 'symbols-react'
 import Image from 'next/image'
+import { useQuery } from 'convex/react'
+import { api } from '../../../../../../convex/_generated/api'
+import { useQuery as useTanStackQuery } from '@tanstack/react-query'
 
 interface PriceChartProps {
   coinId: string;
@@ -105,8 +108,28 @@ const ChartTypeSelector = ({ chartType, setChartType }: {
 }
 
 export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTimeScale }: PriceChartProps) {
-  // Now we get proper OHLCV data from CoinGecko with intelligent caching
-  const { chartData, volumeData, ohlcvData, isLoading, tokenData, performance } = useCoinGeckoChartData(coinId, activeTimeScale, initialData)
+  // Get CoinGecko coin data from database
+  const coingeckoCoinData = useQuery(
+    api.coins.getCoinGeckoCoinById,
+    { coingeckoId: coinId }
+  )
+  
+  // Get live price data from CoinGecko API
+  const { data: livePrice, isLoading: isPriceLoading } = useTanStackQuery({
+    queryKey: ['coingecko-price', coinId],
+    queryFn: async () => {
+      const response = await fetch(`/api/coingecko/quotes?ids=${coinId}`)
+      if (!response.ok) throw new Error('Failed to fetch price')
+      const data = await response.json()
+      return data.data[coinId]
+    },
+    enabled: !!coinId,
+    staleTime: 30 * 1000, // 30 seconds
+    refetchInterval: 60 * 1000, // 1 minute
+  })
+  
+  // Now we get proper OHLC and OHLCV data from CoinGecko with intelligent caching
+  const { chartData, volumeData, ohlcvData, ohlcData, isLoading, tokenData, performance } = useCoinGeckoChartData(coinId, activeTimeScale, initialData)
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData, activeTimeScale)
   
   // Generate Hull Suite colors - same as hook to ensure consistency
@@ -167,11 +190,17 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
     legacyHullSuiteData,
     undefined, // No callback - tooltip handles dynamic updates
     chartType, // Chart type (line or candlestick)
-    ohlcvData // Real OHLCV data for candlestick chart
+    chartType === 'candlestick' && ohlcData.length > 0 ? ohlcData : ohlcvData // Use OHLC if available, otherwise OHLCV
   )
 
-  // Get coin info - fallback to loading state since tokenData is null in CoinGecko hook
-  const coinName = 'Loading...'
+  // Get coin info from CoinGecko database
+  const coinName = coingeckoCoinData?.name || 'Loading...'
+  const coinImage = coingeckoCoinData?.logoUrl
+  
+  // Use live price data if available, otherwise fall back to display price
+  const currentPrice = livePrice?.current_price || displayPrice || 0
+  const priceChange24h = livePrice?.price_change_percentage_24h || calculatePercentageChange || 0
+  const isLoadingPrice = isPriceLoading || isLoading
 
   return (
     <div>
@@ -192,23 +221,27 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                 <div className="flex flex-col space-y-1">
                   <div className="flex items-center gap-2">
                     <Image 
-                      src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coinId}.png`} 
+                      src={coinImage?.startsWith('http') || coinImage?.startsWith('/') ? coinImage : '/favicon.ico'} 
                       alt={coinName} 
                       width={20} 
                       height={20}
                       className="rounded-full w-3 h-3"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = '/favicon.ico';
+                      }}
                     />
                     <span className="text-white font-bold text-xs">{coinName}</span>
-                                          <span className="text-muted-foreground text-xs">is currently</span>
+                    <span className="text-muted-foreground text-xs">is currently</span>
                     </div>
                     <div className="flex items-center">
                       <span className="text-3xl font-bold font-sans">
-                        ${displayPrice.toLocaleString('en-US', {
+                        ${currentPrice.toLocaleString('en-US', {
                           minimumFractionDigits: 2,
-                          maximumFractionDigits: 2
+                          maximumFractionDigits: 8
                         })}
                       </span>
-                      {isLoading && <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" />}
+                      {isLoadingPrice && <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" />}
                     </div>
                     {/* Performance indicator */}
                     <div className="flex items-center gap-2 mt-1">
@@ -217,29 +250,40 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                                performance.dataSource === 'coingecko-fresh' ? '🌐 Fresh' : 
                                performance.dataSource === 'coingecko-stale' ? '⚠️ Stale' : '🔄 Fallback'}
                       </span>
+                      {chartType === 'candlestick' && (
+                        ohlcData.length > 0 ? (
+                          <span className="text-xs text-blue-400">
+                            📊 OHLC ({ohlcData.length} candles)
+                          </span>
+                        ) : (
+                          <span className="text-xs text-yellow-400">
+                            ⚠️ OHLC unavailable (using line data)
+                          </span>
+                        )
+                      )}
                       {performance.cacheHitRate > 0 && (
                         <span className="text-xs text-emerald-400">
                           {performance.cacheHitRate.toFixed(0)}% cached
                         </span>
                       )}
                     </div>
-                  <div className={`text-xs font-bold font-mono ${isNaN(calculatePercentageChange) ? 'text-muted-foreground' : calculatePercentageChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {isNaN(calculatePercentageChange) ? (
+                  <div className={`text-xs font-bold font-mono ${isNaN(priceChange24h) ? 'text-muted-foreground' : priceChange24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {isNaN(priceChange24h) ? (
                       <span>N/A</span>
                     ) : (
                       <>
                         <motion.span
-                          key={calculatePercentageChange >= 0 ? 'up' : 'down'}
-                          initial={{ rotate: calculatePercentageChange >= 0 ? 0 : 90 }}
-                          animate={{ rotate: calculatePercentageChange >= 0 ? 0 : 90 }}
+                          key={priceChange24h >= 0 ? 'up' : 'down'}
+                          initial={{ rotate: priceChange24h >= 0 ? 0 : 90 }}
+                          animate={{ rotate: priceChange24h >= 0 ? 0 : 90 }}
                           transition={{ type: "spring", bounce: 0.3, duration: 0.3 }}
                           className="inline-block mr-2"
                           style={{ transformOrigin: 'center' }}
                         >
-                          <IconArrowUpRight className={`w-2 h-2 ${calculatePercentageChange >= 0 ? 'fill-emerald-500' : 'fill-rose-500'}`} />
+                          <IconArrowUpRight className={`w-2 h-2 ${priceChange24h >= 0 ? 'fill-emerald-500' : 'fill-rose-500'}`} />
                         </motion.span>
                         <span>
-                          {Math.abs(calculatePercentageChange).toFixed(2)}%
+                          {Math.abs(priceChange24h).toFixed(2)}%
                         </span>
                       </>
                     )}

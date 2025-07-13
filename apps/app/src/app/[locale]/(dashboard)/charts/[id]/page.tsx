@@ -3,18 +3,16 @@
 import { CoinMarketData } from '@/types/coins'
 import Image from "next/image"
 import { TokenPageClient } from './token-page-client'
-import { useEffect, useState, use } from 'react'
-import { getCoinData } from "@/lib/coinmarketcap"
-
+import { use } from 'react'
 interface PageProps {
   params: Promise<{
     id: string
   }>
 }
 
-// Fallback data structure for initial render
+// Fallback data structure for initial render (CoinGecko compatible)
 const createFallbackData = (id: string): CoinMarketData => ({
-  id: parseInt(id),
+  id: id, // Keep as string for CoinGecko compatibility
   name: 'Loading...',
   symbol: 'LOADING',
   slug: `coin-${id}`,
@@ -33,30 +31,9 @@ const createFallbackData = (id: string): CoinMarketData => ({
 
 export default function TokenPage({ params }: PageProps) {  
   const { id } = use(params)
-  const [tokenData, setTokenData] = useState<CoinMarketData>(() => createFallbackData(id))
-
-  useEffect(() => {
-    let isMounted = true
-
-    async function fetchTokenData() {
-      try {
-        const data = await getCoinData(id)
-        
-        if (isMounted && data) {
-          setTokenData(data)
-        }
-      } catch (error) {
-        console.warn('Failed to fetch token data:', error)
-        // Keep fallback data on error
-      }
-    }
-
-    fetchTokenData()
-
-    return () => {
-      isMounted = false
-    }
-  }, [id])
+  
+  // Use fallback data since chart components will fetch their own CoinGecko data
+  const tokenData = createFallbackData(id)
 
   return (
     <div className="min-h-screen w-full px-4 relative">

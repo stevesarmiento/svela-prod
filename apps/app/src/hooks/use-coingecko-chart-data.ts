@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
+import { useCoinGeckoOHLC } from './use-coingecko-ohlc'
 
 // Map time scales to CoinGecko days parameter
 const TIME_SCALE_DAYS = {
@@ -31,6 +32,7 @@ interface CoinGeckoChartDataResult {
   chartData: Array<{ time: Time; value: number }>
   volumeData: Array<{ time: Time; value: number; color: string }>
   ohlcvData: OHLCVDataPoint[]
+  ohlcData: Array<{ time: Time; open: number; high: number; low: number; close: number }>
   isLoading: boolean
   tokenData: null // Can add later
   performance: {
@@ -46,6 +48,22 @@ export function useCoinGeckoChartData(
   initialData: CoinMarketData['quote']['USD']
 ): CoinGeckoChartDataResult {
   const days = TIME_SCALE_DAYS[activeTimeScale as keyof typeof TIME_SCALE_DAYS] || '7'
+  
+  // Fetch OHLC data
+  const { ohlcData: rawOhlcData, isLoading: isOhlcLoading } = useCoinGeckoOHLC(coinId, { 
+    days: days as '1' | '7' | '14' | '30' | '90' | '180' | '365' | 'max'
+  })
+  
+  // Transform OHLC data for chart usage, with fallback to line chart data
+  const ohlcData = rawOhlcData.length > 0 
+    ? rawOhlcData.map(point => ({
+        time: (point.timestamp / 1000) as Time,
+        open: point.open,
+        high: point.high,
+        low: point.low,
+        close: point.close,
+      }))
+    : []
   
   const { data, isLoading, error } = useQuery({
     queryKey: ['coingecko-chart-data', coinId, activeTimeScale],
@@ -124,7 +142,8 @@ export function useCoinGeckoChartData(
       chartData: fallbackData.map(d => d.chart),
       volumeData: fallbackData.map(d => d.volume),
       ohlcvData: fallbackData.map(d => d.ohlcv),
-      isLoading: false,
+      ohlcData,
+      isLoading: isOhlcLoading,
       tokenData: null,
       performance: {
         dataSource: 'fallback',
@@ -142,7 +161,8 @@ export function useCoinGeckoChartData(
     chartData,
     volumeData,
     ohlcvData,
-    isLoading,
+    ohlcData,
+    isLoading: isLoading || isOhlcLoading,
     tokenData: null,
     performance: {
       dataSource: dataSource as 'coingecko-cache' | 'coingecko-fresh' | 'coingecko-stale' | 'fallback',
