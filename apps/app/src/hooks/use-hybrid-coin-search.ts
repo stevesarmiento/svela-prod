@@ -46,11 +46,18 @@ interface HybridSearchOptions {
 }
 
 /**
- * Hybrid search that combines database efficiency with real-time pricing
+ * Optimized hybrid search that leverages database-first approach
  * 
- * 1. Searches our coingeckoCoins database for name/symbol matches (fast)
- * 2. Gets real-time pricing from API for only the matched coins
- * 3. Combines static DB data with dynamic API data
+ * 1. Searches our coingeckoCoins database for name/symbol matches (fast, with real images)
+ * 2. Gets live pricing data from API for only the matched coins
+ * 3. Combines static DB data (names, symbols, images) with dynamic API data (prices, changes)
+ * 4. Sorts results by market cap (highest first) for better relevance
+ * 
+ * Benefits:
+ * - Reduced API payload (only pricing data, not static data)
+ * - Faster initial display (static data from DB)
+ * - Real CoinGecko images from updated database
+ * - Most relevant coins (by market cap) appear first
  */
 export function useHybridCoinSearch(
   query: string,
@@ -97,30 +104,49 @@ export function useHybridCoinSearch(
 
   // Step 3: Combine database static data with API pricing data
   const combinedResults = useMemo((): HybridCoinSearchResult[] => {
-    if (!dbSearchResults || !pricingData) return [];
+    if (!dbSearchResults) return [];
 
     return dbSearchResults
       .map(dbCoin => {
-        const pricing = pricingData[dbCoin.coingeckoId];
+        const pricing = pricingData?.[dbCoin.coingeckoId];
         
         return {
           id: dbCoin.coingeckoId,
-          name: dbCoin.name, // From database
-          symbol: dbCoin.symbol, // From database  
-          image: pricing?.image || dbCoin.logoUrl, // Use API image first, fallback to DB
-          cmc_rank: pricing?.market_cap_rank || 0, // From API
+          name: dbCoin.name, // From database (static)
+          symbol: dbCoin.symbol, // From database (static)
+          image: dbCoin.logoUrl, // From database (now has real CoinGecko URLs)
+          cmc_rank: pricing?.market_cap_rank || 0, // From API (live ranking)
           quote: {
             USD: {
-              price: pricing?.current_price || 0, // From API
-              percent_change_24h: pricing?.price_change_percentage_24h || 0, // From API
-              percent_change_1h: pricing?.price_change_percentage_1h_in_currency,
-              percent_change_7d: pricing?.price_change_percentage_7d_in_currency,
-              percent_change_30d: pricing?.price_change_percentage_30d_in_currency,
-              market_cap: pricing?.market_cap || 0, // From API
-              volume_24h: pricing?.total_volume || 0, // From API
+              price: pricing?.current_price || 0, // From API (live price)
+              percent_change_24h: pricing?.price_change_percentage_24h || 0, // From API (live)
+              percent_change_1h: pricing?.price_change_percentage_1h_in_currency, // From API (live)
+              percent_change_7d: pricing?.price_change_percentage_7d_in_currency, // From API (live)
+              percent_change_30d: pricing?.price_change_percentage_30d_in_currency, // From API (live)
+              market_cap: pricing?.market_cap || 0, // From API (live)
+              volume_24h: pricing?.total_volume || 0, // From API (live)
             }
           }
         };
+      })
+      .sort((a, b) => {
+        // Sort by market cap descending (highest first)
+        const marketCapA = a.quote.USD.market_cap || 0;
+        const marketCapB = b.quote.USD.market_cap || 0;
+        
+        // If both have market caps, sort by market cap
+        if (marketCapA > 0 && marketCapB > 0) {
+          return marketCapB - marketCapA;
+        }
+        
+        // If only one has market cap, prioritize it
+        if (marketCapA > 0 && marketCapB === 0) return -1;
+        if (marketCapB > 0 && marketCapA === 0) return 1;
+        
+        // If neither has market cap, sort by CMC rank (lower rank = higher position)
+        const rankA = a.cmc_rank || 999999;
+        const rankB = b.cmc_rank || 999999;
+        return rankA - rankB;
       });
   }, [dbSearchResults, pricingData]);
 
@@ -150,13 +176,13 @@ export function useHybridCoinSearch(
 }
 
 /**
- * Get top coins using API directly for real market cap rankings
- * Database is only used for search, not for top coins
+ * Get top coins using API-first approach for real-time market cap rankings
+ * Uses direct API data to ensure accurate real-time top 25 by market cap
  */
 export function useHybridTopCoins(limit = 25) {
-  // Get top coins directly from API (not from database)
+  // Step 1: Get top coins directly from API by market cap (real-time ranking)
   const { data: pricingData, isLoading: isPricingLoading, error: pricingError } = useQuery({
-    queryKey: ["hybrid-top-coins-api-direct", limit],
+    queryKey: ["hybrid-top-coins-api-first", limit],
     queryFn: async (): Promise<Record<string, CoinGeckoPricingData>> => {
       // Get top coins directly from API by market cap
       const response = await fetch(`/api/coingecko/quotes?limit=${limit}`);
@@ -173,7 +199,7 @@ export function useHybridTopCoins(limit = 25) {
     refetchInterval: 60 * 1000,
   });
 
-  // Convert API data directly to our result format
+  // Step 2: Combine API data directly (API provides the real-time top coins)
   const combinedResults = useMemo((): HybridCoinSearchResult[] => {
     if (!pricingData) return [];
 
@@ -182,7 +208,7 @@ export function useHybridTopCoins(limit = 25) {
         id: pricing.id,
         name: pricing.name,
         symbol: pricing.symbol,
-        image: pricing.image, // Real image from API
+        image: pricing.image, // Use API image for top coins (ensures real-time accuracy)
         cmc_rank: pricing.market_cap_rank,
         quote: {
           USD: {

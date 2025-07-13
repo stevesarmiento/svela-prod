@@ -94,6 +94,7 @@ export const bulkUpsertCoinGeckoCoins = mutation({
     logoUrl: v.string(),
     isActive: v.boolean(),
     platforms: v.optional(v.record(v.string(), v.string())),
+    imageUpdated: v.optional(v.boolean()), // Track if image was updated
   }))},
   handler: async (ctx, args) => {
     const existingCoins = await ctx.db.query("coingeckoCoins").collect();
@@ -517,5 +518,35 @@ export const getCoinglassSupportedCoinsList = query({
     );
     
     return supportedCoins;
+  },
+});
+
+// Get coins that need image updates (incremental processing)
+export const getCoinsNeedingImageUpdates = query({
+  args: { 
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.string()) // _id for cursor-based pagination
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 1000;
+
+    let query = ctx.db
+      .query("coingeckoCoins")
+      .withIndex("by_image_updated")
+      .filter((q) => q.neq(q.field("imageUpdated"), true)); // Get coins where imageUpdated is not true
+
+    // Apply cursor if provided
+    if (args.cursor) {
+      const cursor = args.cursor;
+      query = query.filter((q) => q.gt(q.field("_id"), cursor));
+    }
+
+    const coins = await query.take(limit);
+    
+    return {
+      coins,
+      nextCursor: coins.length === limit ? coins[coins.length - 1]?._id : null,
+      hasMore: coins.length === limit
+    };
   },
 });

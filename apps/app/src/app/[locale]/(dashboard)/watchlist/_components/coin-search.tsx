@@ -183,7 +183,7 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
     const typeLabel = searchType === 'symbol' ? 'symbol' : 
                      searchType === 'name' ? 'name' : 'smart';
     
-    return `${totalResults} results • ${typeLabel} search`;
+    return `${totalResults} results • ${typeLabel} search • sorted by market cap`;
   };
 
   return (
@@ -274,11 +274,6 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                                 className="w-6 h-6 rounded-full"
                                 width={24}
                                 height={24}
-                                onError={(e) => {
-                                  // Fallback to a generic crypto icon if image fails
-                                  const target = e.target as HTMLImageElement;
-                                  target.src = `https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png?1696501400`;
-                                }}
                               />
                               <div>
                                 <div className="font-semibold font-sans text-sm text-white group-hover:text-white/90 mt-1">{coin.name}</div>

@@ -68,11 +68,13 @@ export default defineSchema({
     isActive: v.boolean(),
     lastUpdated: v.number(),
     platforms: v.optional(v.record(v.string(), v.string())), // Platform contracts (e.g., {"ethereum": "0x..."})
+    imageUpdated: v.optional(v.boolean()), // Track if image URL has been updated with real CoinGecko URL
   })
     .index("by_symbol", ["symbol"])
     .index("by_name", ["name"])
     .index("by_coingecko_id", ["coingeckoId"])
-    .index("search", ["name", "symbol"]),
+    .index("search", ["name", "symbol"])
+    .index("by_image_updated", ["imageUpdated"]), // Index for finding coins that need image updates
 
   coinMetadata: defineTable({
     coinId: v.number(),
