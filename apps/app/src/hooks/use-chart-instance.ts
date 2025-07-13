@@ -53,7 +53,7 @@ interface HullSuiteData {
 
 type ChartType = 'line' | 'candlestick'
 
-function createTooltipContent(price: number, percentageChange: number, timestamp: number, volume?: number, hullData?: { mhull?: number; shull?: number }) {
+function createTooltipContent(price: number, percentageChange: number, timestamp: number, volume?: number, hullData?: { mhull?: number; shull?: number }, ohlcData?: { open: number; high: number; low: number; close: number }) {
   const formatVolume = (vol: number) => {
     if (vol >= 1e9) return `$${(vol / 1e9).toFixed(2)}B`
     if (vol >= 1e6) return `$${(vol / 1e6).toFixed(2)}M`
@@ -119,8 +119,36 @@ function createTooltipContent(price: number, percentageChange: number, timestamp
     React.createElement('span', { className: 'text-[11px] font-mono text-zinc-300' }, formatVolume(volume))
   ) : null
 
+  // OHLC rows (conditional)
+  const ohlcRows = ohlcData ? [
+    React.createElement(
+      'div',
+      { className: 'flex items-center justify-between' },
+      React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'Open'),
+      React.createElement('span', { className: 'text-[11px] font-mono text-zinc-300' }, formatPrice(ohlcData.open))
+    ),
+    React.createElement(
+      'div',
+      { className: 'flex items-center justify-between' },
+      React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'High'),
+      React.createElement('span', { className: 'text-[11px] font-mono text-emerald-400' }, formatPrice(ohlcData.high))
+    ),
+    React.createElement(
+      'div',
+      { className: 'flex items-center justify-between' },
+      React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'Low'),
+      React.createElement('span', { className: 'text-[11px] font-mono text-rose-400' }, formatPrice(ohlcData.low))
+    ),
+    React.createElement(
+      'div',
+      { className: 'flex items-center justify-between' },
+      React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'Close'),
+      React.createElement('span', { className: 'text-[11px] font-mono text-zinc-300' }, formatPrice(ohlcData.close))
+    )
+  ] : []
+
   // Combine all rows
-  const dataRows = [priceRow, hullRow, volumeRow].filter(Boolean)
+  const dataRows = [priceRow, hullRow, volumeRow, ...ohlcRows].filter(Boolean)
 
   return React.createElement(
     'div',
@@ -344,6 +372,34 @@ export function useChartInstance(
         }
       }
 
+      // Get OHLC data for current time (find closest match)
+      let currentOHLCData: { open: number; high: number; low: number; close: number } | undefined = undefined
+      if (ohlcvData && ohlcvData.length > 0) {
+        const currentTime = param.time as number
+        
+        // Find the closest OHLC data point by timestamp
+        let closestPoint = ohlcvData[0]!
+        let minDiff = Math.abs((closestPoint.time as number) - currentTime)
+        
+        for (const point of ohlcvData) {
+          const diff = Math.abs((point.time as number) - currentTime)
+          if (diff < minDiff) {
+            minDiff = diff
+            closestPoint = point
+          }
+        }
+        
+        // Use the closest point if it's within a reasonable range (e.g., 2 hours = 7200 seconds)
+        if (minDiff <= 7200) {
+          currentOHLCData = {
+            open: closestPoint.open,
+            high: closestPoint.high,
+            low: closestPoint.low,
+            close: closestPoint.close
+          }
+        }
+      }
+
       if (currentPrice && onCrosshairMove) {
         onCrosshairMove(currentPrice)
       }
@@ -356,7 +412,7 @@ export function useChartInstance(
         const percentageChange = startPrice ? ((currentPrice - startPrice) / startPrice) * 100 : 0
 
         tooltipEl.style.display = "block"
-        tooltipRoot.render(createTooltipContent(currentPrice, percentageChange, Number(param.time) * 1000, currentVolume, currentHullData))
+        tooltipRoot.render(createTooltipContent(currentPrice, percentageChange, Number(param.time) * 1000, currentVolume, currentHullData, currentOHLCData))
 
         const tooltipWidth = tooltipEl.offsetWidth
         const tooltipHeight = tooltipEl.offsetHeight

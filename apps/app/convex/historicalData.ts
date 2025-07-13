@@ -8,6 +8,8 @@ const CACHE_DURATIONS = {
   '30d': 15 * 60 * 1000,    // 15 minutes for medium-term data
   'max': 60 * 60 * 1000,    // 1 hour for long-term data
   '2y': 60 * 60 * 1000,     // 1 hour for long-term data
+  'max_ohlc': 60 * 60 * 1000,    // 1 hour for OHLC data
+  '2y_ohlc': 60 * 60 * 1000,     // 1 hour for OHLC data
 } as const;
 
 // 🆕 NEW: Get CoinGecko historical data with intelligent caching
@@ -77,10 +79,25 @@ export const upsertCoinGeckoHistoricalData = mutation({
       price: v.number(),
       volume: v.number(),
       marketCap: v.optional(v.number()),
+      // 🆕 OHLC fields for candlestick data
+      open: v.optional(v.number()),
+      high: v.optional(v.number()),
+      low: v.optional(v.number()),
+      close: v.optional(v.number()),
     })),
     dataSource: v.string(),
   },
   handler: async (ctx, args) => {
+    console.log(`🎯 CoinGecko Convex mutation called for ${args.coingeckoId} (${args.timeframe}) with ${args.dataPoints.length} data points`);
+    console.log(`🔍 Mutation arguments:`, {
+      coingeckoId: args.coingeckoId,
+      timeframe: args.timeframe,
+      dataPointsCount: args.dataPoints.length,
+      dataSource: args.dataSource,
+      firstDataPoint: args.dataPoints[0],
+      hasOHLC: args.dataPoints[0]?.open !== undefined
+    });
+    
     const now = Date.now();
     
     // Get existing timestamps for this coin/timeframe to avoid duplicates
@@ -90,12 +107,30 @@ export const upsertCoinGeckoHistoricalData = mutation({
         q.eq("coingeckoId", args.coingeckoId).eq("timeframe", args.timeframe))
       .collect();
 
+    console.log(`📊 Found ${existingData.length} existing data points for ${args.coingeckoId} (${args.timeframe})`);
+
     const existingTimestamps = new Set(existingData.map(d => d.timestamp));
     
     // Only insert new data points that don't already exist
     const newDataPoints = args.dataPoints.filter(point => 
       !existingTimestamps.has(point.timestamp)
     );
+
+    console.log(`🆕 Inserting ${newDataPoints.length} new data points (${args.dataPoints.length - newDataPoints.length} duplicates skipped)`)
+    
+    // Log OHLC data if present
+    const hasOHLCData = newDataPoints.some(point => 
+      point.open !== undefined || point.high !== undefined || point.low !== undefined || point.close !== undefined
+    )
+    if (hasOHLCData) {
+      console.log(`📊 OHLC data detected - storing full candlestick information`)
+      console.log(`📈 Sample OHLC:`, {
+        open: newDataPoints[0]?.open,
+        high: newDataPoints[0]?.high,
+        low: newDataPoints[0]?.low,
+        close: newDataPoints[0]?.close
+      })
+    }
 
     // Batch insert new data points
     const insertPromises = newDataPoints.map(point => 
@@ -106,6 +141,11 @@ export const upsertCoinGeckoHistoricalData = mutation({
         price: point.price,
         volume: point.volume,
         marketCap: point.marketCap,
+        // 🆕 Store OHLC fields if provided
+        open: point.open,
+        high: point.high,
+        low: point.low,
+        close: point.close,
         dataSource: args.dataSource,
         lastUpdated: now,
       })
@@ -113,7 +153,32 @@ export const upsertCoinGeckoHistoricalData = mutation({
 
     await Promise.all(insertPromises);
 
-    console.log(`💾 CoinGecko: Cached ${newDataPoints.length} data points for ${args.coingeckoId} (${args.timeframe})`);
+    console.log(`✅ CoinGecko: Successfully cached ${newDataPoints.length} data points for ${args.coingeckoId} (${args.timeframe})`);
+
+    // Verify data was actually stored
+    try {
+      const verificationQuery = await ctx.db
+        .query("priceHistory")
+        .withIndex("by_coingecko_timeframe", (q) => 
+          q.eq("coingeckoId", args.coingeckoId).eq("timeframe", args.timeframe))
+        .take(5);
+      
+      console.log(`🔍 Verification: Found ${verificationQuery.length} records in DB for ${args.coingeckoId}/${args.timeframe}`);
+      if (verificationQuery.length > 0) {
+        console.log(`📊 Sample stored record:`, {
+          id: verificationQuery[0]._id,
+          timestamp: verificationQuery[0].timestamp,
+          price: verificationQuery[0].price,
+          open: verificationQuery[0].open,
+          high: verificationQuery[0].high,
+          low: verificationQuery[0].low,
+          close: verificationQuery[0].close,
+          dataSource: verificationQuery[0].dataSource
+        });
+      }
+    } catch (verifyError) {
+      console.error(`❌ Failed to verify stored data:`, verifyError);
+    }
 
     return { 
       success: true, 

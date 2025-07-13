@@ -108,15 +108,18 @@ export async function GET(request: NextRequest) {
     }))
 
     // Cache the data asynchronously
+    console.log(`🔄 Attempting to cache ${dataPoints.length} data points for ${coinId} (${timeframe})`)
+    console.log(`🔗 Convex URL configured:`, !!process.env.NEXT_PUBLIC_CONVEX_URL)
+    
     convex.mutation(api.historicalData.upsertCoinGeckoHistoricalData, {
       coingeckoId: coinId,
       timeframe: timeframe,
       dataPoints,
       dataSource: 'coingecko'
-    }).then(() => {
-      console.log(`💾 Cached ${dataPoints.length} data points for ${coinId}`)
+    }).then((result) => {
+      console.log(`✅ Successfully cached ${dataPoints.length} data points for ${coinId}:`, result)
     }).catch(error => {
-      console.warn(`Failed to cache data for ${coinId}:`, error)
+      console.error(`❌ Failed to cache data for ${coinId}:`, error)
     })
 
     // 4. Return fresh data

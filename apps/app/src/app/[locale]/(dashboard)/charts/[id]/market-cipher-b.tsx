@@ -22,9 +22,9 @@ import {
 } from 'lightweight-charts'
 import { cn } from "@v1/ui/cn"
 import { useMarketCipherB } from '@/hooks/use-market-cipher-b'
-import { useChartData } from '@/hooks/use-chart-data'
+import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { IconGear} from 'symbols-react'
-import type { CoinMarketData, OHLCVQuote } from '@/types/coins'
+import type { CoinMarketData } from '@/types/coins'
 
 interface MarketCipherBProps {
   coinId: string
@@ -76,7 +76,7 @@ export function MarketCipherB({ coinId, initialData, activeTimeScale, className 
   const seriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
   
   // Get the same data as the price chart
-  const { chartData, volumeData, tokenData } = useChartData(coinId, activeTimeScale, initialData)
+  const { chartData, volumeData, ohlcData } = useCoinGeckoChartData(coinId, activeTimeScale, initialData)
   
   const [displaySettings, setDisplaySettings] = useState<DisplaySettings>({
     showWaveTrend: true,
@@ -114,17 +114,15 @@ export function MarketCipherB({ coinId, initialData, activeTimeScale, className 
   const ohlcvData = React.useMemo(() => {
     if (!chartData.length) return []
 
-    // Check if we have OHLCV data from the API
-    const dataSource = tokenData?.fullData
-    if (dataSource?.ohlcv?.data?.quotes?.length) {
-      const ohlcvQuotes = dataSource.ohlcv.data.quotes as OHLCVQuote[]
-      return ohlcvQuotes.map(quote => ({
-        time: (new Date(quote.time_close).getTime() / 1000) as Time,
-        open: quote.quote.USD.open,
-        high: quote.quote.USD.high,
-        low: quote.quote.USD.low,
-        close: quote.quote.USD.close,
-        volume: quote.quote.USD.volume
+    // Use real OHLC data from CoinGecko if available
+    if (ohlcData.length > 0) {
+      return ohlcData.map((point, index) => ({
+        time: point.time,
+        open: point.open,
+        high: point.high,
+        low: point.low,
+        close: point.close,
+        volume: volumeData[index]?.value || 0 // Add volume data
       }))
     }
 
@@ -134,7 +132,6 @@ export function MarketCipherB({ coinId, initialData, activeTimeScale, className 
       const volume = volumeData[index]?.value || 0
       
       // For approximation, use price as all OHLC values
-      // In a real scenario, you'd want actual OHLC data
       return {
         time: point.time,
         open: price,
@@ -144,7 +141,7 @@ export function MarketCipherB({ coinId, initialData, activeTimeScale, className 
         volume
       }
     })
-  }, [chartData, volumeData, tokenData])
+  }, [chartData, volumeData, ohlcData])
 
   const calculations = useMarketCipherB(ohlcvData, config)
 

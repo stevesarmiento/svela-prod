@@ -3,42 +3,247 @@
 import { useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
-import { useCoinGeckoOHLC } from './use-coingecko-ohlc'
 
-// Map time scales to CoinGecko days parameter
-const TIME_SCALE_DAYS = {
-  '1d': '1',
-  '7d': '7', 
-  '30d': '30',
-  'max': '365',
-  '2y': '730'
-}
+// Map time scales to optimal CoinGecko parameters
+const TIMEFRAME_CONFIG = {
+  '1d': { days: '1', interval: 'hourly' },
+  '7d': { days: '7', interval: 'hourly' },
+  '30d': { days: '30', interval: 'daily' },
+  'max': { days: '365', interval: 'daily' },  // 1 year
+  '2y': { days: '1825', interval: 'daily' }   // 5 years maximum data
+} as const
 
-interface ChartDataPoint {
-  time: number
-  value: number
-}
-
-interface OHLCVDataPoint {
-  time: Time
+// API Response Interfaces
+interface OHLCDataPoint {
+  timestamp: number
   open: number
   high: number
   low: number
   close: number
-  volume: number
+}
+
+interface OHLCAPIResponse {
+  data: OHLCDataPoint[]
+  cached?: boolean
+}
+
+interface MarketChartPoint {
+  time: number
+  value: number
+}
+
+interface MarketChartAPIResponse {
+  data: {
+    prices: MarketChartPoint[]
+    volumes: MarketChartPoint[]
+    market_caps: MarketChartPoint[]
+  }
+  status?: {
+    cached?: boolean
+  }
+}
+
+interface ParsedChartData {
+  lineChart: Array<{ time: Time; value: number }>
+  volumeChart: Array<{ time: Time; value: number; color: string }>
+  ohlcData: Array<{ time: Time; open: number; high: number; low: number; close: number }> // For tooltip
+}
+
+interface DataSourceResult {
+  data: ParsedChartData | null
+  source: 'ohlc' | 'market-chart' | 'fallback'
+  cached: boolean
+  error?: string
 }
 
 interface CoinGeckoChartDataResult {
   chartData: Array<{ time: Time; value: number }>
   volumeData: Array<{ time: Time; value: number; color: string }>
-  ohlcvData: OHLCVDataPoint[]
-  ohlcData: Array<{ time: Time; open: number; high: number; low: number; close: number }>
+  ohlcData: Array<{ time: Time; open: number; high: number; low: number; close: number }> // For tooltip
   isLoading: boolean
-  tokenData: null // Can add later
+  tokenData: null
   performance: {
-    dataSource: 'coingecko-cache' | 'coingecko-fresh' | 'coingecko-stale' | 'fallback'
+    dataSource: 'ohlc' | 'market-chart' | 'fallback'
     cached: boolean
     cacheHitRate: number
+    dataPoints: number
+  }
+}
+
+/**
+ * Parse OHLC data from /api/coingecko/ohlc route
+ */
+function parseOHLCData(data: OHLCAPIResponse): ParsedChartData | null {
+  if (!data?.data || !Array.isArray(data.data) || data.data.length === 0) {
+    return null
+  }
+
+  try {
+    const ohlcPoints = data.data.map((point: OHLCDataPoint) => ({
+      time: (point.timestamp / 1000) as Time,
+      open: point.open || 0,
+      high: point.high || 0,
+      low: point.low || 0,
+      close: point.close || 0
+    }))
+
+    // Generate line chart from close prices
+    const lineChart = ohlcPoints.map((point: { time: Time; open: number; high: number; low: number; close: number }) => ({
+      time: point.time,
+      value: point.close
+    }))
+
+    // Generate volume data (OHLC doesn't include volume, so create placeholder)
+    const volumeChart = ohlcPoints.map((point: { time: Time; open: number; high: number; low: number; close: number }) => ({
+      time: point.time,
+      value: 0, // OHLC route doesn't provide volume
+      color: '#ffffff40'
+    }))
+
+    return {
+      lineChart,
+      volumeChart,
+      ohlcData: ohlcPoints // Real OHLC data for tooltip
+    }
+  } catch (error) {
+    console.error('Failed to parse OHLC data:', error)
+    return null
+  }
+}
+
+/**
+ * Parse market chart data from /api/coingecko/market-chart route
+ */
+function parseMarketChartData(data: MarketChartAPIResponse): ParsedChartData | null {
+  if (!data?.data || !data.data.prices || !Array.isArray(data.data.prices)) {
+    return null
+  }
+
+  try {
+    const { prices, volumes = [] } = data.data
+
+    // Parse line chart data
+    const lineChart = prices.map((point: MarketChartPoint) => ({
+      time: point.time as Time,
+      value: point.value || 0
+    }))
+
+    // Parse volume data
+    const volumeChart = volumes.map((point: MarketChartPoint) => ({
+      time: point.time as Time,
+      value: point.value || 0,
+      color: '#ffffff40'
+    }))
+
+    // Generate simple OHLC data from line chart for tooltip (no synthetic candlesticks)
+    const ohlcData = lineChart.map((point: { time: Time; value: number }) => {
+      const price = point.value
+      
+      return {
+        time: point.time,
+        open: price,
+        high: price,
+        low: price,
+        close: price
+      }
+    })
+
+    return {
+      lineChart,
+      volumeChart,
+      ohlcData // Simple OHLC for tooltip (all values = current price)
+    }
+  } catch (error) {
+    console.error('Failed to parse market chart data:', error)
+    return null
+  }
+}
+
+/**
+ * Generate fallback data when both API routes fail
+ */
+function generateFallbackData(
+  coinId: string,
+  timeframe: string,
+  initialData: CoinMarketData['quote']['USD']
+): ParsedChartData {
+  const config = TIMEFRAME_CONFIG[timeframe as keyof typeof TIMEFRAME_CONFIG] || TIMEFRAME_CONFIG['7d']
+  const days = parseInt(config.days)
+  const dataPoints = Math.min(days, 90) // Limit fallback data points
+  
+  const fallbackPoints = Array.from({ length: dataPoints }, (_, i) => {
+    const time = ((Date.now() - (dataPoints - i) * 24 * 60 * 60 * 1000) / 1000) as Time
+    const basePrice = initialData?.price || 100
+    const randomFactor = 0.95 + Math.random() * 0.1 // ±5% variation
+    const price = basePrice * randomFactor
+    const volume = (initialData?.volume_24h || 1000000) * (0.5 + Math.random() * 1.0)
+    
+    return {
+      time,
+      price,
+      volume,
+      open: price * 0.998,
+      high: price * 1.003,
+      low: price * 0.997,
+      close: price
+    }
+  })
+
+  const lineChart = fallbackPoints.map(p => ({ time: p.time, value: p.price }))
+  const volumeChart = fallbackPoints.map(p => ({ time: p.time, value: p.volume, color: '#ffffff40' }))
+  const ohlcData = fallbackPoints.map(p => ({ 
+    time: p.time, 
+    open: p.open, 
+    high: p.high, 
+    low: p.low, 
+    close: p.close 
+  }))
+
+  return { lineChart, volumeChart, ohlcData }
+}
+
+/**
+ * Combine real OHLC data with real volume data from market-chart
+ */
+function combineOHLCWithVolume(
+  ohlcData: OHLCAPIResponse, 
+  marketData: MarketChartAPIResponse
+): ParsedChartData | null {
+  if (!ohlcData?.data || !marketData?.data?.prices || !marketData?.data?.volumes) {
+    return null
+  }
+
+  try {
+    // Parse real OHLC data
+    const ohlcPoints = ohlcData.data.map((point: OHLCDataPoint) => ({
+      time: (point.timestamp / 1000) as Time,
+      open: point.open || 0,
+      high: point.high || 0,
+      low: point.low || 0,
+      close: point.close || 0
+    }))
+
+    // Parse real volume data
+    const volumePoints = marketData.data.volumes.map((point: MarketChartPoint) => ({
+      time: point.time as Time,
+      value: point.value || 0,
+      color: '#ffffff40'
+    }))
+
+    // Generate line chart from OHLC close prices
+    const lineChart = ohlcPoints.map(point => ({
+      time: point.time,
+      value: point.close
+    }))
+
+    return {
+      lineChart,
+      volumeChart: volumePoints,
+      ohlcData: ohlcPoints // Real OHLC data for tooltip
+    }
+  } catch (error) {
+    console.error('Failed to combine OHLC with volume data:', error)
+    return null
   }
 }
 
@@ -47,127 +252,142 @@ export function useCoinGeckoChartData(
   activeTimeScale: string,
   initialData: CoinMarketData['quote']['USD']
 ): CoinGeckoChartDataResult {
-  const days = TIME_SCALE_DAYS[activeTimeScale as keyof typeof TIME_SCALE_DAYS] || '7'
-  
-  // Fetch OHLC data
-  const { ohlcData: rawOhlcData, isLoading: isOhlcLoading } = useCoinGeckoOHLC(coinId, { 
-    days: days as '1' | '7' | '14' | '30' | '90' | '180' | '365' | 'max'
-  })
-  
-  // Transform OHLC data for chart usage, with fallback to line chart data
-  const ohlcData = rawOhlcData.length > 0 
-    ? rawOhlcData.map(point => ({
-        time: (point.timestamp / 1000) as Time,
-        open: point.open,
-        high: point.high,
-        low: point.low,
-        close: point.close,
-      }))
-    : []
-  
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['coingecko-chart-data', coinId, activeTimeScale],
-    queryFn: async () => {
-      console.log('🎯 Fetching CoinGecko chart data:', { coinId, days, timeScale: activeTimeScale })
-      
-      const response = await fetch(`/api/coingecko/market-chart?id=${coinId}&days=${days}`)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch chart data: ${response.status}`)
+  const config = TIMEFRAME_CONFIG[activeTimeScale as keyof typeof TIMEFRAME_CONFIG] || TIMEFRAME_CONFIG['7d']
+
+  // Fetch data from both routes with intelligent prioritization
+  const { data: combinedData, isLoading } = useQuery({
+    queryKey: ['coingecko-combined-chart-data', coinId, activeTimeScale],
+    queryFn: async (): Promise<DataSourceResult> => {
+      console.log('🎯 Fetching CoinGecko data for:', { coinId, timeframe: activeTimeScale, config })
+
+      let primaryResult: DataSourceResult | null = null
+
+            try {
+        // Always fetch both endpoints for their specific purposes
+        console.log('🔄 Fetching both OHLC (candlesticks) and market-chart (price+volume) data')
+        
+        let ohlcResult: OHLCAPIResponse | null = null
+        let marketResult: MarketChartAPIResponse | null = null
+        
+        // Fetch both endpoints in parallel
+        const [ohlcResponse, marketResponse] = await Promise.allSettled([
+          fetch(`/api/coingecko/ohlc?id=${coinId}&days=${config.days}&interval=${config.interval}&vs_currency=usd`),
+          fetch(`/api/coingecko/market-chart?id=${coinId}&days=${config.days}&vs_currency=usd`)
+        ])
+        
+        // Process OHLC response
+        if (ohlcResponse.status === 'fulfilled' && ohlcResponse.value.ok) {
+          try {
+            ohlcResult = await ohlcResponse.value.json()
+            console.log('✅ OHLC data fetched successfully')
+          } catch (error) {
+            console.warn('⚠️ Failed to parse OHLC data:', error)
+          }
+        } else {
+          console.warn('⚠️ OHLC request failed:', ohlcResponse.status === 'rejected' ? ohlcResponse.reason : ohlcResponse.value.status)
+        }
+        
+        // Process market-chart response
+        if (marketResponse.status === 'fulfilled' && marketResponse.value.ok) {
+          try {
+            marketResult = await marketResponse.value.json()
+            console.log('✅ Market-chart data fetched successfully')
+          } catch (error) {
+            console.warn('⚠️ Failed to parse market-chart data:', error)
+          }
+        } else {
+          console.warn('⚠️ Market-chart request failed:', marketResponse.status === 'rejected' ? marketResponse.reason : marketResponse.value.status)
+        }
+        
+        // Combine data intelligently based on what we got
+        if (ohlcResult && marketResult) {
+          // Best case: we have both real OHLC and real volume
+          const combinedData = combineOHLCWithVolume(ohlcResult, marketResult)
+          if (combinedData) {
+            console.log('✅ Combined real OHLC + real volume data')
+            primaryResult = {
+              data: combinedData,
+              source: 'ohlc',
+              cached: ohlcResult.cached || false
+            }
+          }
+        } else if (marketResult) {
+          // Market-chart only: real price line + volume, synthetic candlesticks
+          const parsedMarket = parseMarketChartData(marketResult)
+          if (parsedMarket) {
+            console.log('✅ Using market-chart data (real price+volume, synthetic OHLC)')
+            primaryResult = {
+              data: parsedMarket,
+              source: 'market-chart',
+              cached: marketResult.status?.cached || false
+            }
+          }
+        } else if (ohlcResult) {
+          // OHLC only: real candlesticks, no volume
+          const parsedOHLC = parseOHLCData(ohlcResult)
+          if (parsedOHLC) {
+            console.log('✅ Using OHLC data (real candlesticks, no volume)')
+            primaryResult = {
+              data: parsedOHLC,
+              source: 'ohlc',
+              cached: ohlcResult.cached || false
+            }
+          }
+        }
+
+        // Return the result if we have one
+        if (primaryResult) {
+          return primaryResult
+        }
+
+        // Generate fallback data if both routes fail
+        console.log('🔄 Generating fallback data (both API routes failed)')
+        return {
+          data: generateFallbackData(coinId, activeTimeScale, initialData),
+          source: 'fallback',
+          cached: false
+        }
+
+      } catch (error) {
+        console.error('❌ Complete chart data fetch failure:', error)
+        return {
+          data: generateFallbackData(coinId, activeTimeScale, initialData),
+          source: 'fallback',
+          cached: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }
       }
-      
-      return response.json()
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
     refetchInterval: 5 * 60 * 1000, // 5 minutes
     enabled: !!coinId,
-    retry: 2,
+    retry: 1, // Don't retry too much, fallback handles failures
   })
 
-  // Transform data for charts
-  const chartData = data?.data?.prices?.map((point: ChartDataPoint) => ({
-    time: point.time as Time,
-    value: point.value
-  })) || []
+  // Extract parsed data or use fallback
+  const parsedData = combinedData?.data || generateFallbackData(coinId, activeTimeScale, initialData)
+  const dataSource = combinedData?.source || 'fallback'
+  const cached = combinedData?.cached || false
 
-  const volumeData = data?.data?.volumes?.map((point: ChartDataPoint) => ({
-    time: point.time as Time,
-    value: point.value,
-    color: '#ffffff40'
-  })) || []
-
-  // Generate realistic OHLCV for candlestick charts
-  const ohlcvData: OHLCVDataPoint[] = chartData.map((point: { time: Time; value: number }, index: number) => {
-    const price = point.value
-    const prevPrice = index > 0 ? chartData[index - 1]?.value || price : price
-    const volatility = Math.abs(price - prevPrice) * 0.05 + price * 0.002 // 0.5% + 0.2% base volatility
-    
-    const open = prevPrice
-    const close = price
-    const spread = volatility * 0.6
-    
-    return {
-      time: point.time,
-      open: open,
-      high: Math.max(open, close) + spread,
-      low: Math.min(open, close) - spread, 
-      close: close,
-      volume: volumeData[index]?.value || 0
-    }
+  console.log('📊 Final chart data summary:', {
+    source: dataSource,
+    cached,
+    linePoints: parsedData.lineChart.length,
+    volumePoints: parsedData.volumeChart.length,
+    ohlcPoints: parsedData.ohlcData.length
   })
-
-  // Fallback data if no response
-  if (error || (!isLoading && chartData.length === 0)) {
-    console.log('🔄 Using fallback data for chart')
-    
-    const fallbackData = Array.from({ length: 30 }, (_, i) => {
-      const time = ((Date.now() - (30 - i) * 24 * 60 * 60 * 1000) / 1000) as Time
-      const price = initialData.price * (0.95 + Math.random() * 0.1)
-      const volume = initialData.volume_24h * (0.5 + Math.random() * 1.5)
-      
-      return {
-        chart: { time, value: price },
-        volume: { time, value: volume, color: '#ffffff40' },
-        ohlcv: {
-          time,
-          open: price * 0.998,
-          high: price * 1.002,
-          low: price * 0.997,
-          close: price,
-          volume
-        }
-      }
-    })
-    
-    return {
-      chartData: fallbackData.map(d => d.chart),
-      volumeData: fallbackData.map(d => d.volume),
-      ohlcvData: fallbackData.map(d => d.ohlcv),
-      ohlcData,
-      isLoading: isOhlcLoading,
-      tokenData: null,
-      performance: {
-        dataSource: 'fallback',
-        cached: false,
-        cacheHitRate: 0
-      }
-    }
-  }
-
-  // Determine data source for performance tracking
-  const dataSource = data?.status?.data_source || 'coingecko-fresh'
-  const cached = data?.status?.cached || false
 
   return {
-    chartData,
-    volumeData,
-    ohlcvData,
-    ohlcData,
-    isLoading: isLoading || isOhlcLoading,
+    chartData: parsedData.lineChart,
+    volumeData: parsedData.volumeChart,
+    ohlcData: parsedData.ohlcData, // OHLC data for tooltip
+    isLoading,
     tokenData: null,
     performance: {
-      dataSource: dataSource as 'coingecko-cache' | 'coingecko-fresh' | 'coingecko-stale' | 'fallback',
+      dataSource,
       cached,
-      cacheHitRate: cached ? 100 : 0
+      cacheHitRate: cached ? 100 : 0,
+      dataPoints: parsedData.lineChart.length
     }
   }
-} 
+}

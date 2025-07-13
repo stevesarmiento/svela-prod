@@ -8,6 +8,7 @@ import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { useTakerBuySell } from '@/hooks/use-taker-buy-sell'
 import { TrendingUp, TrendingDown, Info } from 'lucide-react'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
+import { coinGeckoIdToSymbolFallback } from '@/lib/coingecko-to-symbol'
 
 interface TakerBuySellProps {
   coinId: string
@@ -22,8 +23,11 @@ export function TakerBuySell({
   const chartRef = useRef<HTMLDivElement>(null)
   const chartInstance = useRef<ApexCharts | null>(null)
   
+  // Convert CoinGecko ID to symbol for Coinglass API
+  const symbol = coinGeckoIdToSymbolFallback(coinId)
+  
   const { data, isLoading, error } = useTakerBuySell({
-    symbol: coinId,
+    symbol,
     range,
   })
 
@@ -251,7 +255,10 @@ export function TakerBuySell({
     return (
       <Card className="border-none bg-transparent">
         <CardHeader>
-          <CardTitle className="text-destructive">Failed to load buy/sell data</CardTitle>
+          <CardTitle className="text-destructive">Failed to load buy/sell data for {symbol}</CardTitle>
+          <div className="text-xs text-muted-foreground">
+            CoinGecko ID &quot;{coinId}&quot; → Symbol &quot;{symbol}&quot;
+          </div>
         </CardHeader>
       </Card>
     )
@@ -263,6 +270,13 @@ export function TakerBuySell({
   return (
     <Card className="border-none bg-transparent">
       <CardContent className="space-y-6">
+        
+        {/* Data source indicator */}
+        <div className="text-right">
+          <div className="text-[10px] text-muted-foreground">
+            {symbol} data via Coinglass
+          </div>
+        </div>
         
         {/* Overall Market Summary */}
         <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20">

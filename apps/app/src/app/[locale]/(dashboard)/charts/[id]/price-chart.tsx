@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React from 'react'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
@@ -10,7 +10,7 @@ import { usePriceCalculations } from '@/hooks/use-price-calculations'
 import type { CoinMarketData } from '@/types/coins'
 import { useHullSuite } from '@/hooks/use-hull-suite'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
-import { IconDistributeHorizontalCenter, IconChartLineUptrendXyaxis, IconArrowUpRight } from 'symbols-react'
+import { IconArrowUpRight } from 'symbols-react'
 import Image from 'next/image'
 import { useQuery } from 'convex/react'
 import { api } from '../../../../../../convex/_generated/api'
@@ -32,18 +32,13 @@ interface IndicatorSettings {
   showHullSuite: boolean
 }
 
-type ChartType = 'line' | 'candlestick'
-
 const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: { 
   activeTimeScale: string
   setActiveTimeScale: (scale: string) => void 
 }) => {
   const scales = [
-    { value: "1d", label: "1D" },   // 24h change
-    { value: "7d", label: "1W" },   // 7d change  
-    { value: "30d", label: "1M" },  // 30d change
-    { value: "max", label: "1Y" },  // Longest available
-    { value: "2y", label: "2Y" },   // N/A
+    { value: "max", label: "1Y" },    // 1 year of data
+    { value: "2y", label: "Max" },    // Maximum data possible
   ]
 
   return (
@@ -62,47 +57,6 @@ const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: {
           {scale.label}
         </button>
       ))}
-    </div>
-  )
-}
-
-const ChartTypeSelector = ({ chartType, setChartType }: { 
-  chartType: ChartType
-  setChartType: (type: ChartType) => void 
-}) => {
-  const types = [
-    { 
-      value: "candlestick" as const, 
-      label: "Candles", 
-      icon: IconDistributeHorizontalCenter 
-    },
-    { 
-      value: "line" as const, 
-      label: "Line", 
-      icon: IconChartLineUptrendXyaxis 
-    },
-  ]
-
-  return (
-    <div className="flex gap-1 bg-zinc-900/10 border border-zinc-800/30 rounded-[12px] p-1">
-      {types.map((type) => {
-        const IconComponent = type.icon
-        return (
-          <button
-            key={type.value}
-            onClick={() => setChartType(type.value)}
-            className={cn(
-              "px-3 py-1 text-xs rounded-lg flex items-center gap-1.5",
-              chartType === type.value
-                ? "bg-zinc-800/50 border border-zinc-800/50 text-white shadow-md shadow-zinc-950/50"
-                : "bg-transparent text-muted-foreground hover:bg-muted/80"
-            )}
-          >
-            <IconComponent size={14} className="w-3 h-3 fill-white/50" />
-            {type.label}
-          </button>
-        )
-      })}
     </div>
   )
 }
@@ -128,16 +82,15 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
     refetchInterval: 60 * 1000, // 1 minute
   })
   
-  // Now we get proper OHLC and OHLCV data from CoinGecko with intelligent caching
-  const { chartData, volumeData, ohlcvData, ohlcData, isLoading, tokenData, performance } = useCoinGeckoChartData(coinId, activeTimeScale, initialData)
+  // Get line chart data with OHLC data for tooltips
+  const { chartData, volumeData, ohlcData, isLoading, tokenData, performance } = useCoinGeckoChartData(coinId, activeTimeScale, initialData)
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData, activeTimeScale)
   
   // Generate Hull Suite colors - same as hook to ensure consistency
   const hullColors = generatePastelColors(1)
   const primaryHullColor = addOpacityToColor(hullColors[0] || 'hsl(210, 40%, 75%)', 0.7)
   
-  // State for chart type only - crosshair updates handled by tooltip
-  const [chartType, setChartType] = useState<ChartType>('line')
+  // Always use line chart - simplified approach
 
   const indicators: IndicatorSettings = {
     showWaveTrend: false,
@@ -155,8 +108,9 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
     visualSwitch: true,
   }
 
-  // Use proper OHLCV data for Hull Suite (no need to create fake data anymore)
-  const hullSuiteData = useHullSuite(ohlcvData || [], {
+  // Use OHLC data for Hull Suite (add volume=0 for compatibility)
+  const ohlcvDataForHull = ohlcData.map(point => ({ ...point, volume: 0 }))
+  const hullSuiteData = useHullSuite(ohlcvDataForHull || [], {
     src: 'close',
     modeSwitch: hullSettings.modeSwitch,
     length: hullSettings.length,
@@ -189,8 +143,8 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
     indicators, // Hull Suite indicator settings
     legacyHullSuiteData,
     undefined, // No callback - tooltip handles dynamic updates
-    chartType, // Chart type (line or candlestick)
-    chartType === 'candlestick' && ohlcData.length > 0 ? ohlcData : ohlcvData // Use OHLC if available, otherwise OHLCV
+    'line', // Always use line chart
+    ohlcvDataForHull // Pass OHLC data for tooltips
   )
 
   // Get coin info from CoinGecko database
@@ -246,20 +200,13 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                     {/* Performance indicator */}
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">
-                        Data: {performance.dataSource === 'coingecko-cache' ? '🚀 Cached' : 
-                               performance.dataSource === 'coingecko-fresh' ? '🌐 Fresh' : 
-                               performance.dataSource === 'coingecko-stale' ? '⚠️ Stale' : '🔄 Fallback'}
+                        Data: {performance.dataSource === 'ohlc' ? '📊 OHLC' : 
+                               performance.dataSource === 'market-chart' ? '📈 Market' : '🔄 Fallback'}
                       </span>
-                      {chartType === 'candlestick' && (
-                        ohlcData.length > 0 ? (
-                          <span className="text-xs text-blue-400">
-                            📊 OHLC ({ohlcData.length} candles)
-                          </span>
-                        ) : (
-                          <span className="text-xs text-yellow-400">
-                            ⚠️ OHLC unavailable (using line data)
-                          </span>
-                        )
+                      {ohlcData.length > 0 && (
+                        <span className="text-xs text-blue-400">
+                          📊 OHLC ({ohlcData.length} points in tooltip)
+                        </span>
                       )}
                       {performance.cacheHitRate > 0 && (
                         <span className="text-xs text-emerald-400">
@@ -289,10 +236,6 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                     )}
                   </div>
                 </div>
-                <ChartTypeSelector
-                  chartType={chartType}
-                  setChartType={setChartType}
-                />
               </div>
             </CardHeader>
             <CardContent className="pl-8">
