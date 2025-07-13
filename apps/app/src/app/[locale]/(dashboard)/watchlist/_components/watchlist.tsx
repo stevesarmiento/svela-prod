@@ -128,7 +128,7 @@ const createColumns = (
                   // Use CoinGecko image if available, otherwise fallback to letter
                   row.original.image ? (
                     <Image
-                      src={row.original.image}
+                      src={row.original.image?.startsWith('http') || row.original.image?.startsWith('/') ? row.original.image : '/favicon.ico'}
                       alt={row.original.name}
                       className="w-[20px] h-[20px] rounded-full"
                       width={24}
@@ -189,7 +189,7 @@ const createColumns = (
                   // Use CoinGecko image if available, otherwise fallback to letter
                   row.original.image ? (
                     <Image
-                      src={row.original.image}
+                      src={row.original.image?.startsWith('http') || row.original.image?.startsWith('/') ? row.original.image : '/favicon.ico'}
                       alt={row.original.name}
                       className="w-[20px] h-[20px] rounded-full"
                       width={24}

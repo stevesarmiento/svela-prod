@@ -29,6 +29,7 @@ import { useCoinGeckoBulkChartData } from '@/hooks/use-coingecko-bulk-chart-data
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
+  image?: string; // CoinGecko image URL
 }
 
 interface MultiPriceChartLightweightProps {
@@ -186,8 +187,8 @@ export function MultiPriceChartLightweight({
 
   // Create avatar data for coin logos (filter out optimistic coins)
   const avatarData = useMemo(() => {
-    return coins.filter(coin => !coin.isOptimistic).map((coin) => ({
-      imageUrl: `https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`,
+    return coins.filter(coin => !coin.isOptimistic && coin.image).map((coin) => ({
+      imageUrl: coin.image!, // Only use CoinGecko images, skip coins without images
       profileUrl: `/charts/${coin.id}`,
     }))
   }, [coins])

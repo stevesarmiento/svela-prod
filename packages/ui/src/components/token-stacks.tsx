@@ -21,7 +21,7 @@ export const AvatarCircles = ({
 }: AvatarCirclesProps) => {
   return (
     <div className={cn("z-10 flex -space-x-4 rtl:space-x-reverse", className)}>
-      {avatarUrls.map((url, index) => (
+      {avatarUrls.filter(url => url.imageUrl && (url.imageUrl.startsWith('http') || url.imageUrl.startsWith('/'))).map((url, index) => (
         // <a
         //   key={index}
         //   href={url.profileUrl}
@@ -35,6 +35,10 @@ export const AvatarCircles = ({
             width={40}
             height={40}
             alt={`Avatar ${index + 1}`}
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.style.display = 'none';
+            }}
           />
         // </a>
       ))}

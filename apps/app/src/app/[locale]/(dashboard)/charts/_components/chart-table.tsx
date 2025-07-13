@@ -159,7 +159,7 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
                   <div className="relative">
                     {coin.image ? (
                       <Image
-                        src={coin.image}
+                        src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
                         alt={coin.name}
                         className={cn(
                           "w-4 h-4 rounded-full",
@@ -167,6 +167,10 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
                         )}
                         width={16}
                         height={16}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = '/favicon.ico';
+                        }}
                       />
                     ) : (
                       <div className={cn(

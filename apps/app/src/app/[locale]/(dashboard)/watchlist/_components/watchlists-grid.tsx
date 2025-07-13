@@ -11,7 +11,7 @@ import {
   useDeleteWatchlistGroup,
   useWatchlistByGroup
 } from '@v1/convex/hooks'
-import { useWatchlistCoins } from '@/hooks/use-watchlist-coins'
+import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { IconPicker } from '@/components/icon-picker'
 import { COLORS } from '@/components/color-picker'
 import { useWatchlist } from './watchlist-context'
@@ -63,11 +63,15 @@ function WatchlistGroupWithCoins({
   editingColor?: string
 }) {
   const groupWatchlist = useWatchlistByGroup(group._id)
-  const coinIds = useMemo(() => {
-    return groupWatchlist?.map(item => Number(item.coinId)) || []
+  
+  // For watchlist cards only: Convert to CoinGecko IDs for display
+  const coingeckoIds = useMemo(() => {
+    // Watchlist stores CoinGecko string IDs, use them directly for card display
+    return groupWatchlist?.map(item => item.coinId) || []
   }, [groupWatchlist])
   
-  const { data: coins = [] } = useWatchlistCoins(coinIds)
+  // Use CoinGecko data only for watchlist card display
+  const { data: coins = [] } = useCoinGeckoWatchlistCoins(coingeckoIds)
   
   return (
     <div ref={isEditing ? editCardRef : undefined}>

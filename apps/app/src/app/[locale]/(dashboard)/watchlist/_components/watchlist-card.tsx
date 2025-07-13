@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 import { IconPencilTipCropCircle, IconTrashFill } from "symbols-react"
 import { AvatarCircles } from "@v1/ui/token-stacks"
-import { useConvexWatchlistAggregateChart } from "@/hooks/use-convex-watchlist-aggregate-chart"
+import { useCoinGeckoWatchlistAggregateChartIsolated } from "@/hooks/use-coingecko-watchlist-aggregate-chart-isolated"
 import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
 import { Spinner } from "@v1/ui/spinner"
 import { WatchlistGroupIcon } from "@/components/watchlist-group-icon"
@@ -36,23 +36,31 @@ interface WatchlistGroup {
   updatedAt: number
 }
 
-interface WatchlistCoin {
-  id: number
-  name: string
-  symbol: string
+interface CoinGeckoWatchlistCoin {
+  id: string; // CoinGecko string ID
+  name: string;
+  symbol: string;
+  slug: string;
+  image: string; // CoinGecko image URL
+  cmc_rank: number;
+  circulating_supply: number;
+  max_supply: number | null;
   quote: {
     USD: {
-      price: number
-      percent_change_24h: number
-      market_cap: number
-      volume_24h: number
-    }
-  }
+      price: number;
+      volume_24h: number;
+      market_cap: number;
+      percent_change_24h: number;
+      percent_change_1h?: number;
+      percent_change_7d?: number;
+      percent_change_30d?: number;
+    };
+  };
 }
 
 interface WatchlistCardProps {
   group: WatchlistGroup
-  coins: WatchlistCoin[]
+  coins: CoinGeckoWatchlistCoin[]
   onEdit?: (group: WatchlistGroup) => void
   onDelete?: (group: WatchlistGroup) => void
   onSelect?: (group: WatchlistGroup) => void
@@ -115,15 +123,14 @@ export function WatchlistCard({
   // Create avatar data for coin logos
   const avatarData = useMemo(() => {
     return coins.slice(0, 4).map((coin) => ({
-      imageUrl: `https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`,
+      imageUrl: coin.image || '', // Use CoinGecko image URL
       profileUrl: `/charts/${coin.id}`,
     }))
   }, [coins])
 
-  // Get aggregate chart data - using optimized individual API calls  
-  const { aggregateData, isLoading: isChartLoading, performance } = useConvexWatchlistAggregateChart({
-    coins,
-    timeScale: '30d'
+  // Get aggregate chart data - using isolated CoinGecko API calls  
+  const { aggregateData, isLoading: isChartLoading, performance } = useCoinGeckoWatchlistAggregateChartIsolated({
+    coins
   })
 
   // Get color theme for this group

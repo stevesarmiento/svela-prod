@@ -20,8 +20,8 @@ import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { useWatchlistGroups } from '@v1/convex/hooks'
 import { useWatchlistByGroup } from '@v1/convex/hooks'
-import { useWatchlistCoins } from '@/hooks/use-watchlist-coins'
-import { useConvexWatchlistAggregateChart } from '@/hooks/use-convex-watchlist-aggregate-chart'
+import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
+import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
 
 
 interface WatchlistMultiLineChartProps {
@@ -69,29 +69,26 @@ interface WatchlistGroup {
 // Component to fetch data for a single watchlist
 function WatchlistDataFetcher({ 
   group, 
-  timeScale, 
   onDataReady 
 }: { 
   group: WatchlistGroup
-  timeScale: string
   onDataReady: (data: WatchlistSeries | null) => void 
 }) {
   // Get watchlist coins for this group
   const groupWatchlist = useWatchlistByGroup(group._id)
   
-  // Transform to array of coin IDs
+  // Transform to array of CoinGecko string IDs
   const coinIds = useMemo(() => {
     if (!groupWatchlist || !Array.isArray(groupWatchlist)) return []
-    return groupWatchlist.map(item => Number(item.coinId))
+    return groupWatchlist.map(item => item.coinId) // Keep as string for CoinGecko
   }, [groupWatchlist])
   
-  // Get coin data
-  const { data: coins } = useWatchlistCoins(coinIds)
+  // Get coin data using CoinGecko
+  const { data: coins } = useCoinGeckoWatchlistCoins(coinIds)
   
-  // Get aggregate chart data
-  const { aggregateData } = useConvexWatchlistAggregateChart({
-    coins: coins || [],
-    timeScale
+  // Get aggregate chart data using isolated CoinGecko hook
+  const { aggregateData } = useCoinGeckoWatchlistAggregateChartIsolated({
+    coins: coins || []
   })
 
   // Update parent when data changes
@@ -466,7 +463,6 @@ export function WatchlistMultiLineChart({
         <WatchlistDataFetcher
           key={group._id}
           group={group}
-          timeScale={activeTimeScale}
           onDataReady={handleDataUpdate.get(group._id) || (() => {})}
         />
       ))}

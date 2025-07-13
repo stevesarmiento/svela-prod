@@ -255,11 +255,15 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                           <TableCell className="text-white rounded-l-xl">
                             <div className="flex items-center gap-3">
                               <Image
-                                src={coin.image}
+                                src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
                                 alt={coin.name}
                                 className="w-6 h-6 rounded-full"
                                 width={24}
                                 height={24}
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.src = '/favicon.ico';
+                                }}
                               />
                               <div>
                                 <div className="font-semibold font-sans text-sm text-white group-hover:text-white/90 mt-1">{coin.name}</div>
