@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense } from 'react'
-import { MultiPriceChartLightweight } from "./multi-line-lightweight"
+// import { MultiPriceChartLightweight } from "./multi-line-lightweight"
 import { ChartTable } from "./chart-table"
 import { useOptimizedChartsData } from '@/hooks/use-optimized-charts-data'
 import { Spinner } from "@v1/ui/spinner"
@@ -10,7 +10,6 @@ function ChartsContent() {
   const { 
     optimisticCoins, 
     activeTimeScale, 
-    setActiveTimeScale, 
     isInitialized, 
     hasWatchlistItems,
     selectedGroup,
@@ -54,11 +53,15 @@ function ChartsContent() {
   return (
     <div className="space-y-6 w-full z-0 p-8">      
       <div className="space-y-14">
-        <MultiPriceChartLightweight 
+        {/* Temporarily disabled chart during CoinGecko migration */}
+        {/* <MultiPriceChartLightweight 
           coins={optimisticCoins} 
           activeTimeScale={activeTimeScale}
           setActiveTimeScale={setActiveTimeScale}
-        />
+        /> */}
+        <div className="text-center py-8 text-muted-foreground">
+          Chart temporarily disabled during CoinGecko migration
+        </div>
         <ChartTable 
           coins={optimisticCoins} 
           activeTimeScale={activeTimeScale}

@@ -117,21 +117,7 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
     });
   }
 
-  // Helper function to convert CoinGecko ID to a number for watchlist storage
-  // This is a temporary solution - ideally we'd update watchlist to support string IDs
-  const getCoinIdForWatchlist = (coingeckoId: string): number => {
-    // For now, we'll hash the string to a number
-    // In production, you might want a more sophisticated mapping
-    let hash = 0;
-    for (let i = 0; i < coingeckoId.length; i++) {
-      const char = coingeckoId.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32bit integer
-    }
-    return Math.abs(hash);
-  };
-
-  // Update the function parameter
+  // MIGRATED TO COINGECKO: Now uses CoinGecko string IDs directly
   const handleAddCoin = async (coin: HybridCoinSearchResult) => {
     if (!user) {
       toast({
@@ -145,14 +131,14 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
     try {
       setIsAdding(true)
       
-      // Convert CoinGecko string ID to number for watchlist compatibility
-      const watchlistId = getCoinIdForWatchlist(coin.id);
+      // Use CoinGecko string ID directly (e.g., "bitcoin", "ethereum")
+      const coingeckoId = coin.id;
       
       // Use group-specific add function if a group is selected
       if (selectedGroup) {
-        await addToSelectedGroup(watchlistId)
+        await addToSelectedGroup(coingeckoId)
       } else {
-        await addToWatchlist(watchlistId)
+        await addToWatchlist(coingeckoId)
       }
       
       const targetName = selectedGroup ? selectedGroup.name : "your watchlist"

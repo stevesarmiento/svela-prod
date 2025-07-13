@@ -25,10 +25,11 @@ export interface CoinData {
 }
 
 export interface CoinMarketData {
-  id: number
+  id: number | string // Support both CoinMarketCap (number) and CoinGecko (string) IDs
   name: string
   symbol: string
   slug: string
+  image?: string // Optional for CoinGecko compatibility
   cmc_rank: number
   circulating_supply: number
   max_supply: number | null

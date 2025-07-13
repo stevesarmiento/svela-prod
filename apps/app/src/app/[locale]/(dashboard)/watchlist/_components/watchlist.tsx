@@ -4,7 +4,7 @@ import { formatLargeNumber } from "@v1/ui/format-numbers";
 import { Button } from "@v1/ui/button"
 import { X } from "lucide-react"
 import { useWatchlist } from "./watchlist-context"
-import { useOptimizedWatchlistCoins } from "@/hooks/use-optimized-watchlist-coins"
+import { useCoinGeckoWatchlistCoins } from "@/hooks/use-coingecko-watchlist-coins"
 import Link from "next/link"
 import Image from "next/image"
 import { cn } from "@v1/ui/cn"
@@ -45,12 +45,12 @@ interface FilterState {
 
 // Update the columns definition
 const createColumns = (
-  handleRemove: (coinId: number) => void,
+  handleRemove: (coinId: number | string) => void,
   selectedCoins: Set<string>,
   onCoinSelect: (coinId: string, selected: boolean) => void,
   onSelectAll: (checked: boolean) => void,
   totalCoins: number,
-  removingCoins: Set<number>,
+  removingCoins: Set<string>,
   hoveredRowId: string | null,
   hasSelectedCoins: boolean
 ): ColumnDef<CoinMarketData>[] => [
@@ -125,13 +125,30 @@ const createColumns = (
             <div className="translate-x-10 opacity-90 flex items-center gap-2">
               <div className="relative">
                 {row.original.quote.USD.price > 0 ? (
-                  <Image
-                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
-                    alt={row.original.name}
-                    className="w-[20px] h-[20px] rounded-full"
-                    width={24}
-                    height={24}
-                  />
+                  // Use CoinGecko image if available, otherwise fallback to letter
+                  row.original.image ? (
+                    <Image
+                      src={row.original.image}
+                      alt={row.original.name}
+                      className="w-[20px] h-[20px] rounded-full"
+                      width={24}
+                      height={24}
+                      onError={(e) => {
+                        // Fallback to letter-based avatar on image error
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
+                        }
+                      }}
+                    />
+                  ) : (
+                    // Fallback for missing image
+                    <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
+                      {row.original.symbol.charAt(0).toUpperCase()}
+                    </div>
+                  )
                 ) : (
                   <Skeleton className="w-[20px] h-[20px] rounded-full" />
                 )}
@@ -169,13 +186,30 @@ const createColumns = (
             >
               <div className="relative">
                 {row.original.quote.USD.price > 0 ? (
-                  <Image
-                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
-                    alt={row.original.name}
-                    className="w-[20px] h-[20px] rounded-full"
-                    width={24}
-                    height={24}
-                  />
+                  // Use CoinGecko image if available, otherwise fallback to letter
+                  row.original.image ? (
+                    <Image
+                      src={row.original.image}
+                      alt={row.original.name}
+                      className="w-[20px] h-[20px] rounded-full"
+                      width={24}
+                      height={24}
+                      onError={(e) => {
+                        // Fallback to letter-based avatar on image error
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
+                        }
+                      }}
+                    />
+                  ) : (
+                    // Fallback for missing image
+                    <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
+                      {row.original.symbol.charAt(0).toUpperCase()}
+                    </div>
+                  )
                 ) : (
                   <Skeleton className="w-[20px] h-[20px] rounded-full" />
                 )}
@@ -292,10 +326,10 @@ const createColumns = (
             e.stopPropagation();
             handleRemove(row.original.id);
           }}
-          disabled={removingCoins.has(row.original.id)}
+          disabled={removingCoins.has(row.original.id.toString())}
           className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
           >
-          {removingCoins.has(row.original.id) ? (
+          {removingCoins.has(row.original.id.toString()) ? (
             <Spinner size={16} />
           ) : (
             <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
@@ -324,7 +358,7 @@ export function Watchlist() {
   const searchParams = useSearchParams()
   const [sorting, setSorting] = useState<SortingState>([])
   const [selectedCoins, setSelectedCoins] = useState<Set<string>>(new Set())
-  const [removingCoins, setRemovingCoins] = useState<Set<number>>(new Set())
+  const [removingCoins, setRemovingCoins] = useState<Set<string>>(new Set())
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null)
   const coinSearchRef = useRef<CoinSearchRef>(null)
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -379,7 +413,7 @@ export function Watchlist() {
     isLoading: isCoinsLoading, 
     error,
     performance
-  } = useOptimizedWatchlistCoins(stableWatchlist);
+  } = useCoinGeckoWatchlistCoins(stableWatchlist);
 
   // Log performance metrics for monitoring
   console.log('🚀 Watchlist performance:', performance)
@@ -413,6 +447,7 @@ export function Watchlist() {
         id: coinId,
         name: 'Loading...',
         symbol: 'Loading...',
+        image: '', // Empty image triggers skeleton loading
         slug: `coin-${coinId}`,
         cmc_rank: 0,
         circulating_supply: 0,
@@ -511,15 +546,16 @@ export function Watchlist() {
   }, [optimisticCoins, filters]);
 
   // Create stable remove handler with optimistic updates
-  const handleRemove = useCallback(async (coinId: number) => {
-    setRemovingCoins(prev => new Set([...prev, coinId]));
+  const handleRemove = useCallback(async (coinId: number | string) => {
+    const coinIdStr = coinId.toString();
+    setRemovingCoins(prev => new Set([...prev, coinIdStr]));
     
     try {
       // Use group-specific remove function if a group is selected
       if (selectedGroup) {
-        await removeFromSelectedGroup(coinId);
+        await removeFromSelectedGroup(coinIdStr);
       } else {
-        await removeFromWatchlist(coinId);
+        await removeFromWatchlist(coinIdStr);
       }
       
       toast({
@@ -529,7 +565,7 @@ export function Watchlist() {
     } finally {
       setRemovingCoins(prev => {
         const newSet = new Set(prev);
-        newSet.delete(coinId);
+        newSet.delete(coinIdStr);
         return newSet;
       });
     }
@@ -557,7 +593,7 @@ export function Watchlist() {
   }, [filteredCoins]);
 
   const handleRemoveSelected = useCallback(async () => {
-    const coinIdsToRemove = Array.from(selectedCoins).map(Number);
+    const coinIdsToRemove = Array.from(selectedCoins);
     setRemovingCoins(new Set(coinIdsToRemove));
     
     try {
