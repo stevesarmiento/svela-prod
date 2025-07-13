@@ -222,6 +222,41 @@ export default defineSchema({
     .index("by_rank", ["rank"])
     .index("by_last_updated", ["lastUpdated"]),
 
+  // CoinGecko Markets Data - real-time market information
+  coingeckoMarkets: defineTable({
+    coingeckoId: v.string(), // CoinGecko ID (e.g., "bitcoin")
+    symbol: v.string(),
+    name: v.string(),
+    image: v.string(),
+    currentPrice: v.optional(v.number()),
+    marketCap: v.optional(v.number()),
+    marketCapRank: v.optional(v.number()),
+    fullyDilutedValuation: v.optional(v.number()),
+    totalVolume: v.optional(v.number()),
+    high24h: v.optional(v.number()),
+    low24h: v.optional(v.number()),
+    priceChange24h: v.optional(v.number()),
+    priceChangePercentage24h: v.optional(v.number()),
+    marketCapChange24h: v.optional(v.number()),
+    marketCapChangePercentage24h: v.optional(v.number()),
+    circulatingSupply: v.optional(v.number()),
+    totalSupply: v.optional(v.number()),
+    maxSupply: v.optional(v.number()),
+    ath: v.optional(v.number()),
+    athChangePercentage: v.optional(v.number()),
+    athDate: v.optional(v.string()),
+    atl: v.optional(v.number()),
+    atlChangePercentage: v.optional(v.number()),
+    atlDate: v.optional(v.string()),
+    lastUpdated: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_coingecko_id", ["coingeckoId"])
+    .index("by_symbol", ["symbol"])
+    .index("by_market_cap_rank", ["marketCapRank"])
+    .index("by_last_updated", ["lastUpdated"]),
+
   // API cache for complex responses and rate limiting
   apiCache: defineTable({
     cacheKey: v.string(), // Unique identifier for cached data

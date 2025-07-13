@@ -5,12 +5,13 @@ import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
 
 // Map time scales to optimal CoinGecko parameters
+// Strategy: ≤90 days = prefer OHLC+volume for real candlesticks, >90 days = prefer market-chart for better granularity
 const TIMEFRAME_CONFIG = {
-  '1d': { days: '1', interval: 'hourly' },
-  '7d': { days: '7', interval: 'hourly' },
-  '30d': { days: '30', interval: 'daily' },
-  'max': { days: '365', interval: 'daily' },  // 1 year
-  '2y': { days: '1825', interval: 'daily' }   // 5 years maximum data
+  '1d': { days: '1' },     // Short: use OHLC + market-chart
+  '7d': { days: '7' },     // Short: use OHLC + market-chart  
+  '30d': { days: '90' },   // 30-day focus with 90 days context: use OHLC + market-chart
+  'max': { days: '365' },  // Long: prefer market-chart (daily vs OHLC's ~weekly)
+  '2y': { days: '1825' }   // Long: prefer market-chart (daily vs OHLC's sparse data)
 } as const
 
 // API Response Interfaces
@@ -263,15 +264,19 @@ export function useCoinGeckoChartData(
       let primaryResult: DataSourceResult | null = null
 
             try {
-        // Always fetch both endpoints for their specific purposes
-        console.log('🔄 Fetching both OHLC (candlesticks) and market-chart (price+volume) data')
+        // Smart strategy: For longer timeframes (and 30d), prefer market-chart for better granularity
+        const shouldPreferMarketChart = parseInt(config.days) > 90 || activeTimeScale === '30d'
+        console.log('🔄 Fetching both OHLC and market-chart data', { 
+          days: config.days, 
+          preferMarketChart: shouldPreferMarketChart 
+        })
         
         let ohlcResult: OHLCAPIResponse | null = null
         let marketResult: MarketChartAPIResponse | null = null
         
         // Fetch both endpoints in parallel
         const [ohlcResponse, marketResponse] = await Promise.allSettled([
-          fetch(`/api/coingecko/ohlc?id=${coinId}&days=${config.days}&interval=${config.interval}&vs_currency=usd`),
+          fetch(`/api/coingecko/ohlc?id=${coinId}&days=${config.days}&vs_currency=usd`),
           fetch(`/api/coingecko/market-chart?id=${coinId}&days=${config.days}&vs_currency=usd`)
         ])
         
@@ -299,20 +304,33 @@ export function useCoinGeckoChartData(
           console.warn('⚠️ Market-chart request failed:', marketResponse.status === 'rejected' ? marketResponse.reason : marketResponse.value.status)
         }
         
-        // Combine data intelligently based on what we got
+        // Combine data intelligently based on what we got and timeframe
         if (ohlcResult && marketResult) {
-          // Best case: we have both real OHLC and real volume
-          const combinedData = combineOHLCWithVolume(ohlcResult, marketResult)
-          if (combinedData) {
-            console.log('✅ Combined real OHLC + real volume data')
-            primaryResult = {
-              data: combinedData,
-              source: 'ohlc',
-              cached: ohlcResult.cached || false
+          if (shouldPreferMarketChart) {
+            // For longer timeframes: prefer market-chart for better daily granularity
+            const parsedMarket = parseMarketChartData(marketResult)
+            if (parsedMarket) {
+              console.log('✅ Using market-chart data for long timeframe (daily granularity preferred)')
+              primaryResult = {
+                data: parsedMarket,
+                source: 'market-chart',
+                cached: marketResult.status?.cached || false
+              }
+            }
+          } else {
+            // For shorter timeframes: combine real OHLC + real volume
+            const combinedData = combineOHLCWithVolume(ohlcResult, marketResult)
+            if (combinedData) {
+              console.log('✅ Combined real OHLC + real volume data for short timeframe')
+              primaryResult = {
+                data: combinedData,
+                source: 'ohlc',
+                cached: ohlcResult.cached || false
+              }
             }
           }
         } else if (marketResult) {
-          // Market-chart only: real price line + volume, synthetic candlesticks
+          // Market-chart only: real price line + volume, synthetic OHLC
           const parsedMarket = parseMarketChartData(marketResult)
           if (parsedMarket) {
             console.log('✅ Using market-chart data (real price+volume, synthetic OHLC)')
@@ -372,9 +390,12 @@ export function useCoinGeckoChartData(
   console.log('📊 Final chart data summary:', {
     source: dataSource,
     cached,
+    timeframe: activeTimeScale,
+    days: config.days,
     linePoints: parsedData.lineChart.length,
     volumePoints: parsedData.volumeChart.length,
-    ohlcPoints: parsedData.ohlcData.length
+    ohlcPoints: parsedData.ohlcData.length,
+    granularity: parsedData.lineChart.length > 0 ? `~${Math.round(parseInt(config.days) / parsedData.lineChart.length)} days per point` : 'unknown'
   })
 
   return {

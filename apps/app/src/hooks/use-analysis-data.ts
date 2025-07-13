@@ -1,3 +1,5 @@
+'use client'
+
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useChartData } from '@/hooks/use-chart-data'
@@ -25,20 +27,34 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
   const activeTimeScale = '30d'
   const EMPTY_ARRAY = useMemo(() => [], [])
 
-  // Fetch market data from CMC
+  // Fetch market data from CoinGecko
   const { data: marketData } = useQuery({
-    queryKey: ['coinMarketData', coinId],
+    queryKey: ['coinGeckoMarketData', coinId],
     queryFn: async () => {
-      const response = await fetch(`/api/coinmarketcap/quotes?ids=${coinId}`)
+      const response = await fetch(`/api/coingecko/markets?ids=${coinId}`)
       if (!response.ok) throw new Error('Failed to fetch market data')
       const data = await response.json()
-      return data.data[coinId]
+      return data.data?.[0] // CoinGecko returns an array, get the first item
     },
     staleTime: 30 * 1000,
   })
 
   // Safe fallback for market data
-  const safeInitialData = marketData?.quote?.USD || {
+  const safeInitialData = marketData ? {
+    price: marketData.current_price || 0,
+    volume_24h: marketData.total_volume || 0,
+    market_cap: marketData.market_cap || 0,
+    percent_change_24h: marketData.price_change_percentage_24h || 0,
+    percent_change_1h: 0, // CoinGecko doesn't provide 1h change in markets endpoint
+    percent_change_7d: 0, // Would need different endpoint for 7d change
+    percent_change_30d: 0, // Would need different endpoint for 30d change
+    percent_change_60d: 0, // Not available in CoinGecko markets
+    percent_change_90d: 0, // Not available in CoinGecko markets
+    market_cap_dominance: 0, // Not available in CoinGecko markets
+    fully_diluted_market_cap: marketData.fully_diluted_valuation || 0,
+    tvl: null,
+    last_updated: marketData.last_updated || new Date().toISOString()
+  } : {
     price: 0,
     volume_24h: 0,
     market_cap: 0,
@@ -132,7 +148,7 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
 
   // Prepare analysis data
   const prepareAnalysisData = () => {
-    if (!marketData?.quote?.USD) return null
+    if (!marketData) return null
 
     // Force calculate OHLCV data if not available
     let analysisOhlcvData = ohlcvData
@@ -205,7 +221,7 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
                        recentVolume < previousVolume * 0.8 ? 'decreasing' : 'stable'
     
     const recentPriceData = priceHistory.slice(-21)
-    const currentPrice = marketData?.quote?.USD?.price || 0
+    const currentPrice = marketData?.current_price || 0
     const support = recentPriceData.length > 0 ? Math.min(...recentPriceData) : currentPrice * 0.95
     const resistance = recentPriceData.length > 0 ? Math.max(...recentPriceData) : currentPrice * 1.05
 
@@ -218,8 +234,8 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
     const divergence = priceDirection !== rsiDirection ? 
       (priceDirection === 'up' ? 'bearish' : 'bullish') : 'none'
 
-    const usdData = marketData.quote.USD
-    const percentChange = usdData?.percent_change_24h || 0
+    const usdData = marketData
+    const percentChange = usdData?.price_change_percentage_24h || 0
 
     // Get real market data
     const latestOpenInterest = openInterestData?.data?.[openInterestData.data?.length - 1]
@@ -242,7 +258,7 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
     return {
       name: marketData.name || tokenData?.name || 'Unknown Token',
       symbol: marketData.symbol || tokenData?.symbol || 'UNK',
-      quote: marketData.quote,
+      quote: marketData,
       timeframe: activeTimeScale,
       
       priceContext: {
@@ -255,7 +271,7 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
       },
       
       volumeAnalysis: {
-        currentVolume: usdData?.volume_24h || 0,
+        currentVolume: usdData?.total_volume || 0,
         volumeHistory: volumeHistory,
         volumeTrend: volumeTrend,
         averageVolume: volumeHistory.length > 0 ? volumeHistory.reduce((a: number, b: number) => a + b, 0) / volumeHistory.length : 0,

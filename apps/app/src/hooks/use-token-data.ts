@@ -1,10 +1,8 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
-import { useQuery as useConvexQuery } from 'convex/react'
-import { api } from '../../convex/_generated/api'
-import { usePathname } from 'next/navigation'
-import type { CoinMarketData } from '@/types/coins'
+import { useQuery as useConvexQuery } from "convex/react"
+import { api } from "../../convex/_generated/api"
+import { useCoinGeckoMarketData } from "./use-coingecko-market-data"
 
 interface TokenData {
   id: string
@@ -17,42 +15,39 @@ interface TokenData {
     market_cap: number
     volume_24h: number
   }
-  fullData?: CoinMarketData
+  fullData?: Record<string, unknown>
 }
 
 export function useTokenData(coinId?: string) {
   // Get basic coin info from Convex (fast, cached)
   const convexCoin = useConvexQuery(
-    api.coins.getCoinByIdString,
-    coinId ? { coinId } : "skip"
+    api.coins.getCoinGeckoCoinById,
+    coinId ? { coingeckoId: coinId } : "skip"
   )
 
-  // Get detailed market data from API when needed
-  const { data: marketData, isLoading: isMarketDataLoading } = useQuery({
-    queryKey: ['coin-market-data', coinId],
-    queryFn: async () => {
-      if (!coinId) return null
-      const response = await fetch(`/api/coins/${coinId}`)
-      if (!response.ok) throw new Error('Failed to fetch market data')
-      return response.json()
-    },
-    enabled: !!coinId,
-    staleTime: 60 * 1000, // 1 minute
-    refetchInterval: 2 * 60 * 1000, // 2 minutes
+  // Get detailed market data from CoinGecko API
+  const { marketData, isLoading: isMarketDataLoading } = useCoinGeckoMarketData(coinId || "")
+  
+  // Debug logging
+  console.log('🔍 Token Data Debug:', {
+    coinId,
+    convexCoin,
+    marketData,
+    isMarketDataLoading
   })
 
-  const tokenData: TokenData | null = convexCoin ? {
+  const tokenData: TokenData | null = convexCoin && marketData ? {
     id: coinId!,
     name: convexCoin.name,
     symbol: convexCoin.symbol,
     logoUrl: convexCoin.logoUrl,
-    marketData: marketData?.quote?.USD ? {
-      price: marketData.quote.USD.price,
-      percent_change_24h: marketData.quote.USD.percent_change_24h,
-      market_cap: marketData.quote.USD.market_cap,
-      volume_24h: marketData.quote.USD.volume_24h,
-    } : undefined,
-    fullData: marketData
+    marketData: {
+      price: marketData.current_price || 0,
+      percent_change_24h: marketData.price_change_percentage_24h || 0,
+      market_cap: marketData.market_cap || 0,
+      volume_24h: marketData.total_volume || 0,
+    },
+    fullData: marketData as unknown as Record<string, unknown>
   } : null
 
   return {
@@ -61,30 +56,5 @@ export function useTokenData(coinId?: string) {
     isMarketDataLoading,
     hasBasicData: !!convexCoin,
     hasMarketData: !!marketData
-  }
-}
-
-export function useTokenHeader() {
-  const pathname = usePathname()
-  
-  // Extract coin ID from path
-  const pathSegments = pathname.split('/').filter(segment => segment !== '')
-  let isChartDetailPage = false
-  let coinId: string | null = null
-
-  if (pathSegments.length >= 2 && pathSegments.includes('charts')) {
-    const chartsIndex = pathSegments.indexOf('charts')
-    if (chartsIndex + 1 < pathSegments.length && pathSegments[chartsIndex + 1]) {
-      isChartDetailPage = true
-      coinId = pathSegments[chartsIndex + 1] || null
-    }
-  }
-
-  const { data: tokenData, isLoading } = useTokenData(coinId || undefined)
-
-  return {
-    isChartDetailPage,
-    tokenData,
-    isLoading: isLoading && !!coinId
   }
 }

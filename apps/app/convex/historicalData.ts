@@ -5,7 +5,7 @@ import { v } from "convex/values";
 const CACHE_DURATIONS = {
   '1d': 2 * 60 * 1000,      // 2 minutes for intraday data
   '7d': 5 * 60 * 1000,      // 5 minutes for short-term data
-  '30d': 15 * 60 * 1000,    // 15 minutes for medium-term data
+  '30d': 60 * 60 * 1000,    // 15 minutes for medium-term data
   'max': 60 * 60 * 1000,    // 1 hour for long-term data
   '2y': 60 * 60 * 1000,     // 1 hour for long-term data
   'max_ohlc': 60 * 60 * 1000,    // 1 hour for OHLC data

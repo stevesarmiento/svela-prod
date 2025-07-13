@@ -12,6 +12,7 @@ import { TakerBuySell } from './taker-buy-sell'
 import { MarketVisionChart } from './marketvision-chart'
 import { BollingerBandsChart } from './bollinger-bands-chart'
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
+import { useCoinGeckoMarketData } from '@/hooks/use-coingecko-market-data'
 import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
 
 
@@ -21,7 +22,7 @@ interface TokenPageClientProps {
 }
 
 export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
-  const [activeTimeScale, setActiveTimeScale] = useState<string>("max")
+  const [activeTimeScale, setActiveTimeScale] = useState<string>("30d")
   const [isSticky, setIsSticky] = useState(false)
 
   useEffect(() => {
@@ -42,6 +43,17 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
     activeTimeScale, 
     tokenData.quote.USD
   )
+
+  // Get CoinGecko market data for the metrics display
+  const { marketData, isLoading: marketDataLoading, error: marketDataError } = useCoinGeckoMarketData(id)
+  
+  // Debug logging
+  console.log('🔍 Token Page Debug:', {
+    id,
+    marketData,
+    marketDataLoading,
+    marketDataError
+  })
 
   // Use real OHLC data from CoinGecko with volume data
   const indicatorData = React.useMemo(() => {
@@ -72,7 +84,25 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
         </div>
         
         <div className="col-span-12">
-          <MarketMetrics data={tokenData} />
+          {marketData ? (
+            <MarketMetrics data={marketData} />
+          ) : marketDataError ? (
+            <div className="h-[120px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center">
+              <div className="text-center">
+                <p className="text-xs text-red-400 mb-2">Failed to load market data</p>
+                <p className="text-xs text-muted-foreground">ID: {id}</p>
+                <p className="text-xs text-muted-foreground">Error: {marketDataError?.message}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="h-[120px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
+                <p className="text-xs text-muted-foreground">Loading market data...</p>
+                <p className="text-xs text-muted-foreground">ID: {id}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         <SectionHeader title="Market Vision" icon={IconCircleDottedAndCircle} className="col-span-12 mt-24" />

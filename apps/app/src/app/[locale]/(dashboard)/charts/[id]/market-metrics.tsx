@@ -5,45 +5,71 @@ import { IconLaurelLeading, IconLaurelTrailing } from "symbols-react"
 
 interface MarketMetricsProps {
   data: {
-    quote: {
-      USD: {
-        price: number
-        volume_24h: number
-        market_cap: number
-        percent_change_24h: number
-      }
-    }
-    cmc_rank: number
-    circulating_supply: number
+    // CoinGecko format
+    current_price: number | null
+    total_volume: number | null
+    market_cap: number | null
+    price_change_percentage_24h: number | null
+    market_cap_rank: number | null
+    circulating_supply: number | null
     max_supply: number | null
     symbol: string
   }
 }
 
 export function MarketMetrics({ data }: MarketMetricsProps) {
+  // Debug logging for market metrics data
+  console.log('📊 MarketMetrics received data:', {
+    raw_data: data,
+    data_keys: Object.keys(data),
+    current_price: data.current_price,
+    total_volume: data.total_volume,
+    market_cap: data.market_cap,
+    price_change_percentage_24h: data.price_change_percentage_24h,
+    market_cap_rank: data.market_cap_rank,
+    circulating_supply: data.circulating_supply,
+    max_supply: data.max_supply,
+    symbol: data.symbol
+  })
+  
+  console.log('📊 MarketMetrics data types:', {
+    current_price_type: typeof data.current_price,
+    total_volume_type: typeof data.total_volume,
+    market_cap_type: typeof data.market_cap,
+    price_change_24h_type: typeof data.price_change_percentage_24h,
+    market_cap_rank_type: typeof data.market_cap_rank
+  })
+
   const metrics: { label: string; value: string; className?: string; }[] = [
     { 
       label: 'Market Cap', 
-      value: `$${formatLargeNumber(data.quote.USD.market_cap)}`,
+      value: data.market_cap ? `$${formatLargeNumber(data.market_cap)}` : 'N/A',
     },
     { 
       label: '24h Volume', 
-      value: `$${formatLargeNumber(data.quote.USD.volume_24h)}`,
+      value: data.total_volume ? `$${formatLargeNumber(data.total_volume)}` : 'N/A',
     },
     { 
       label: '24h Change', 
-      value: `${data.quote.USD.percent_change_24h.toFixed(2)}%`,
-      className: data.quote.USD.percent_change_24h > 0 ? 'text-emerald-500' : 'text-rose-500',
+      value: data.price_change_percentage_24h ? `${data.price_change_percentage_24h.toFixed(2)}%` : 'N/A',
+      className: data.price_change_percentage_24h && data.price_change_percentage_24h > 0 ? 'text-emerald-500' : 'text-rose-500',
     },
     { 
       label: 'Circulating Supply', 
-      value: `${(data.circulating_supply.toLocaleString())}`,
+      value: data.circulating_supply ? `${data.circulating_supply.toLocaleString()}` : 'N/A',
     },
     { 
       label: 'Max Supply', 
       value: data.max_supply ? `${data.max_supply.toLocaleString()}` : 'Unlimited',
     },
   ]
+
+  // Log the calculated metrics before rendering
+  console.log('📊 Calculated metrics for display:', metrics.map(metric => ({
+    label: metric.label,
+    value: metric.value,
+    className: metric.className
+  })))
 
   return (
     <div className="space-y-6">
@@ -60,7 +86,7 @@ export function MarketMetrics({ data }: MarketMetricsProps) {
           
           <div className="flex flex-col items-center">
             <span className="text-[11px] uppercase text-muted-foreground font-medium">Rank</span>
-            <span className="text-2xl font-mono text-white">{data.cmc_rank}</span>
+            <span className="text-2xl font-mono text-white">{data.market_cap_rank || 'N/A'}</span>
           </div>
           
           <IconLaurelTrailing className="w-10 h-10 fill-foreground/20" />

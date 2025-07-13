@@ -116,9 +116,9 @@ const TimeScaleSelector = ({
   const scales = [
     { value: "1d", label: "1D" },   // 24h (48 hours of hourly data)
     { value: "7d", label: "1W" },   // 7 days  
-    { value: "30d", label: "1M" },  // 30 days
-    { value: "max", label: "1Y" },  // 1 year
-    { value: "2y", label: "2Y" },   // 2 years
+    { value: "30d", label: "1Q" },   // 30 days focus with 90 days context
+    { value: "max", label: "1Y" },    // 1 year of data
+    { value: "2y", label: "Max" },    // Maximum data possible
   ]
 
   return (
@@ -211,7 +211,7 @@ export function MultiPriceChartLightweight({
           style: LineStyle.Dotted,
         },
         horzLines: { 
-          visible: true,
+          visible: false, // Hide default lines, we'll create gradient ones
           color: "#ffffff10",
           style: LineStyle.Solid,
         },
@@ -557,7 +557,25 @@ export function MultiPriceChartLightweight({
                     </div>
                   </div>
                 ) : (
-                  <div ref={chartContainerRef} />
+                  <div className="relative">
+                    {/* Custom gradient grid lines overlay */}
+                    <div 
+                      className="absolute inset-0 pointer-events-none z-10"
+                      style={{
+                        backgroundImage: `
+                          repeating-linear-gradient(
+                            to bottom,
+                            transparent 0px,
+                            transparent 79px,
+                            linear-gradient(to right, transparent 0%, rgba(255, 255, 255, 0.06) 50%, transparent 100%) 80px,
+                            transparent 81px,
+                            transparent 160px
+                          )
+                        `
+                      }}
+                    />
+                    <div ref={chartContainerRef} />
+                  </div>
                 )}
               </div>
             </CardContent>

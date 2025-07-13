@@ -82,7 +82,7 @@ function getStaleTime(timeScale: string): number {
   const staleTimeMap = {
     '1d': 5 * 60 * 1000,       // 5 minutes for intraday (increased)
     '7d': 15 * 60 * 1000,      // 15 minutes for short-term (increased)
-    '30d': 30 * 60 * 1000,     // 30 minutes for medium-term (increased)
+    '30d': 60 * 60 * 1000,     // 30 minutes for medium-term (increased)
     'max': 2 * 60 * 60 * 1000, // 2 hours for long-term (increased)
     '2y': 2 * 60 * 60 * 1000,  // 2 hours for long-term (increased)
   } as const

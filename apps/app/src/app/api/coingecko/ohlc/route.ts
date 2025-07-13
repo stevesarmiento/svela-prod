@@ -7,7 +7,6 @@ const OHLCParamsSchema = z.object({
   id: z.string(),
   vs_currency: z.string().optional().default('usd'),
   days: z.enum(['1', '7', '14', '30', '90', '180', '365', '1825', 'max']).optional().default('7'),
-  interval: z.enum(['daily', 'hourly']).optional().nullable(),
   precision: z.string().optional().nullable(),
 })
 
@@ -36,7 +35,6 @@ export async function GET(request: NextRequest) {
     id: searchParams.get('id'),
     vs_currency: searchParams.get('vs_currency'),
     days: searchParams.get('days'),
-    interval: searchParams.get('interval'),
     precision: searchParams.get('precision'),
   })
 
@@ -47,14 +45,13 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const { id: coinId, vs_currency, days, interval, precision } = params.data
+  const { id: coinId, vs_currency, days, precision } = params.data
 
   try {
     console.log('🎯 CoinGecko OHLC API request:', {
       coinId,
       vs_currency,
-      days,
-      interval
+      days
     })
 
     // Check Convex configuration
@@ -73,7 +70,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(`https://pro-api.coingecko.com/api/v3/coins/${coinId}/ohlc`)
     url.searchParams.set('vs_currency', vs_currency)
     url.searchParams.set('days', days)
-    if (interval && interval !== null) url.searchParams.set('interval', interval)
+    // Note: CoinGecko OHLC API does not accept 'interval' parameter - it auto-determines interval based on days
     if (precision && precision !== null) url.searchParams.set('precision', precision)
 
     console.log('🌐 Fetching OHLC data from CoinGecko:', url.toString())
@@ -91,10 +88,35 @@ export async function GET(request: NextRequest) {
 
     const rawData: number[][] = await response.json()
     console.log(`📊 Received ${rawData.length} OHLC data points from CoinGecko`)
+    
+    // 🔍 LOG RAW OHLC DATA FROM COINGECKO
+    console.log('🎯 RAW OHLC DATA FROM COINGECKO:')
+    console.log('📊 Total data points:', rawData.length)
+    console.log('📈 First 3 raw data points:', rawData.slice(0, 3))
+    console.log('📉 Last 3 raw data points:', rawData.slice(-3))
+    console.log('🔍 Raw data structure check:')
+    if (rawData.length > 0) {
+      const firstPoint = rawData[0]
+      console.log('   First point array:', firstPoint)
+      console.log('   Array length:', firstPoint?.length)
+      console.log('   Values: [timestamp, open, high, low, close]')
+      console.log('   [0] timestamp:', firstPoint?.[0], '(', firstPoint?.[0] ? new Date(firstPoint[0]).toISOString() : 'invalid', ')')
+      console.log('   [1] open:', firstPoint?.[1])
+      console.log('   [2] high:', firstPoint?.[2])
+      console.log('   [3] low:', firstPoint?.[3])
+      console.log('   [4] close:', firstPoint?.[4])
+    }
 
     // Transform the data
-    const transformedData: OHLCDataPoint[] = rawData.map((dataPoint) => {
+    const transformedData: OHLCDataPoint[] = rawData.map((dataPoint, index) => {
       const [timestamp, open, high, low, close] = dataPoint
+      
+      // Log transformation for first few points
+      if (index < 3) {
+        console.log(`🔄 Transforming point ${index}:`)
+        console.log(`   Raw: [${timestamp}, ${open}, ${high}, ${low}, ${close}]`)
+      }
+      
       return {
         timestamp: timestamp || 0,
         open: open || 0,
@@ -103,6 +125,12 @@ export async function GET(request: NextRequest) {
         close: close || 0,
       }
     })
+    
+    // 🔍 LOG TRANSFORMED OHLC DATA
+    console.log('✅ TRANSFORMED OHLC DATA:')
+    console.log('📊 Total transformed points:', transformedData.length)
+    console.log('📈 First 3 transformed points:', transformedData.slice(0, 3))
+    console.log('📉 Last 3 transformed points:', transformedData.slice(-3))
 
     // 🆕 Store OHLC data in Convex for caching with full OHLC information
     console.log(`💾 Starting OHLC data storage process for ${coinId}`)

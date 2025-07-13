@@ -37,6 +37,7 @@ const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: {
   setActiveTimeScale: (scale: string) => void 
 }) => {
   const scales = [
+    { value: "30d", label: "1Q" },   // 30 days focus with 90 days context
     { value: "max", label: "1Y" },    // 1 year of data
     { value: "2y", label: "Max" },    // Maximum data possible
   ]
@@ -83,7 +84,7 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
   })
   
   // Get line chart data with OHLC data for tooltips
-  const { chartData, volumeData, ohlcData, isLoading, tokenData, performance } = useCoinGeckoChartData(coinId, activeTimeScale, initialData)
+  const { chartData, volumeData, ohlcData, isLoading, tokenData } = useCoinGeckoChartData(coinId, activeTimeScale, initialData)
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData, activeTimeScale)
   
   // Generate Hull Suite colors - same as hook to ensure consistency
@@ -197,23 +198,7 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                       </span>
                       {isLoadingPrice && <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" />}
                     </div>
-                    {/* Performance indicator */}
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-muted-foreground">
-                        Data: {performance.dataSource === 'ohlc' ? '📊 OHLC' : 
-                               performance.dataSource === 'market-chart' ? '📈 Market' : '🔄 Fallback'}
-                      </span>
-                      {ohlcData.length > 0 && (
-                        <span className="text-xs text-blue-400">
-                          📊 OHLC ({ohlcData.length} points in tooltip)
-                        </span>
-                      )}
-                      {performance.cacheHitRate > 0 && (
-                        <span className="text-xs text-emerald-400">
-                          {performance.cacheHitRate.toFixed(0)}% cached
-                        </span>
-                      )}
-                    </div>
+
                   <div className={`text-xs font-bold font-mono ${isNaN(priceChange24h) ? 'text-muted-foreground' : priceChange24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                     {isNaN(priceChange24h) ? (
                       <span>N/A</span>
