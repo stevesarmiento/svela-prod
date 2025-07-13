@@ -25,7 +25,7 @@ import { Button } from '@v1/ui/button'
 import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { AvatarCircles } from "@v1/ui/token-stacks"
-import { useConvexBulkMultiChartData } from '@/hooks/use-convex-bulk-multi-chart-data'
+import { useCoinGeckoBulkChartData } from '@/hooks/use-coingecko-bulk-chart-data'
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -154,8 +154,8 @@ export function MultiPriceChartLightweight({
   // Use the bottom nav context to trigger contextual command search
   const { openContextualCommandSearch } = useBottomNav()
 
-  // 🚀 OPTIMIZED: Use Convex-first BULK multi-chart data hook with intelligent caching
-  const { series: coinSeriesData, isLoading: chartDataLoading, performance } = useConvexBulkMultiChartData(coins, activeTimeScale)
+  // 🚀 OPTIMIZED: Use CoinGecko BULK multi-chart data hook with intelligent caching
+  const { series: coinSeriesData, isLoading: chartDataLoading, performance } = useCoinGeckoBulkChartData(coins, activeTimeScale)
 
   // 🔍 DEBUG: Log bulk performance
   console.log('📊 Bulk multi-line chart:', {
@@ -210,14 +210,16 @@ export function MultiPriceChartLightweight({
           style: LineStyle.Dotted,
         },
         horzLines: { 
-          visible: false,
-          color: "#f5f5f50",
-          style: LineStyle.Dotted,
+          visible: true,
+          color: "#ffffff10",
+          style: LineStyle.Solid,
         },
       },
       rightPriceScale: {
         borderVisible: false,
         autoScale: true,
+        visible: true,
+        entireTextOnly: true,
       },
       crosshair: {
         mode: CrosshairMode.Magnet,
@@ -476,7 +478,7 @@ export function MultiPriceChartLightweight({
                           e.preventDefault()
                           e.stopPropagation()
                           try {
-                            await removeFromWatchlist(Number(coin.id))
+                            await removeFromWatchlist(coin.id.toString())
                             toast({
                               title: "Removed",
                               description: `${coin.name} removed from watchlist`,

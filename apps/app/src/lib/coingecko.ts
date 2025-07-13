@@ -255,6 +255,69 @@ export async function getCoinHistory(
   }
 }
 
+// 🆕 NEW: Get market chart data for a coin and cache in Convex
+export async function getCoinMarketChart(
+  id: string,
+  vsCurrency = 'usd',
+  days: string | number = 7,
+  interval?: string
+): Promise<{
+  prices: [number, number][];
+  market_caps: [number, number][];
+  total_volumes: [number, number][];
+  transformed: {
+    prices: { time: number; value: number }[];
+    volumes: { time: number; value: number }[];
+    market_caps: { time: number; value: number }[];
+  };
+}> {
+  try {
+    console.log(`🎯 Fetching CoinGecko market chart: ${id} (${days} days)`);
+    
+    const params = new URLSearchParams({
+      vs_currency: vsCurrency,
+      days: days.toString(),
+    });
+    
+    if (interval) {
+      params.append('interval', interval);
+    }
+    
+    const url = `${BASE_URL}/coins/${id}/market_chart?${params}`;
+    const data = await fetchWithErrorHandling(url) as {
+      prices: [number, number][];
+      market_caps: [number, number][];
+      total_volumes: [number, number][];
+    };
+    
+    // Transform to chart-friendly format
+    const transformed = {
+      prices: data.prices.map(([timestamp, price]) => ({
+        time: Math.floor(timestamp / 1000), // Convert to seconds
+        value: price
+      })),
+      volumes: data.total_volumes.map(([timestamp, volume]) => ({
+        time: Math.floor(timestamp / 1000),
+        value: volume
+      })),
+      market_caps: data.market_caps.map(([timestamp, market_cap]) => ({
+        time: Math.floor(timestamp / 1000),
+        value: market_cap
+      }))
+    };
+    
+    console.log(`✅ CoinGecko market chart fetched: ${transformed.prices.length} data points`);
+    
+    return {
+      ...data,
+      transformed
+    };
+  } catch (error) {
+    console.error('Get coin market chart error:', error);
+    throw error;
+  }
+}
+
 // Get current rate limit status
 export function getRateLimitStatus() {
   const now = Date.now();

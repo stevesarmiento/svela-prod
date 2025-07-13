@@ -4,7 +4,7 @@ import React, { useState } from 'react'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
-import { useConvexOptimizedChartData } from '@/hooks/use-convex-optimized-chart-data'
+import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { useChartInstance } from '@/hooks/use-chart-instance'
 import { usePriceCalculations } from '@/hooks/use-price-calculations'
 import type { CoinMarketData } from '@/types/coins'
@@ -105,8 +105,8 @@ const ChartTypeSelector = ({ chartType, setChartType }: {
 }
 
 export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTimeScale }: PriceChartProps) {
-  // Now we get proper OHLCV data from the Convex-first hook with intelligent caching
-  const { chartData, volumeData, ohlcvData, isLoading, tokenData, performance } = useConvexOptimizedChartData(coinId, activeTimeScale, initialData)
+  // Now we get proper OHLCV data from CoinGecko with intelligent caching
+  const { chartData, volumeData, ohlcvData, isLoading, tokenData, performance } = useCoinGeckoChartData(coinId, activeTimeScale, initialData)
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData, activeTimeScale)
   
   // Generate Hull Suite colors - same as hook to ensure consistency
@@ -170,8 +170,8 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
     ohlcvData // Real OHLCV data for candlestick chart
   )
 
-  // Get coin info from tokenData or use fallbacks
-  const coinName = tokenData?.fullData?.name || '...'
+  // Get coin info - fallback to loading state since tokenData is null in CoinGecko hook
+  const coinName = 'Loading...'
 
   return (
     <div>
@@ -213,9 +213,9 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                     {/* Performance indicator */}
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">
-                        Data: {performance.dataSource === 'convex-cache' ? '🚀 Cached' : 
-                               performance.dataSource === 'api-fresh' ? '🌐 Fresh' : 
-                               performance.dataSource === 'convex-stale' ? '⚠️ Stale' : '🔄 Fallback'}
+                        Data: {performance.dataSource === 'coingecko-cache' ? '🚀 Cached' : 
+                               performance.dataSource === 'coingecko-fresh' ? '🌐 Fresh' : 
+                               performance.dataSource === 'coingecko-stale' ? '⚠️ Stale' : '🔄 Fallback'}
                       </span>
                       {performance.cacheHitRate > 0 && (
                         <span className="text-xs text-emerald-400">
