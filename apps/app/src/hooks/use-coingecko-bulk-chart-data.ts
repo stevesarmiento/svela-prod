@@ -82,21 +82,33 @@ export function useCoinGeckoBulkChartData(
             value: basePrice > 0 ? ((point.value - basePrice) / basePrice) * 100 : 0 // Percentage change from start
           }))
           
-          // Debug: Log percentage conversion for first coin
-          if (coinId === coinIds[0] && percentageData.length > 0) {
-            console.log(`📊 ${coinId} percentage conversion:`, {
-              basePrice: basePrice.toFixed(2),
-              firstPoint: `${percentageData[0]?.value.toFixed(2)}%`,
-              lastPoint: `${percentageData[percentageData.length - 1]?.value.toFixed(2)}%`,
-              dataPoints: percentageData.length
-            })
+          // FIXED: Remove duplicates and ensure strict ascending order
+          // First, create a Map to remove duplicates (keep last occurrence for same time)
+          const uniqueData = new Map<number, { time: Time; value: number }>()
+          percentageData.forEach(point => {
+            uniqueData.set(point.time as number, point)
+          })
+          
+          // Then sort by time ascending
+          const sortedUniqueData = Array.from(uniqueData.values())
+            .sort((a, b) => (a.time as number) - (b.time as number))
+          
+          // If there are still duplicates (shouldn't be), but just in case
+          const finalData = sortedUniqueData.filter((point, index, array) => {
+            if (index === 0) return true
+            return (point.time as number) > (array[index - 1]?.time as number ?? 0) // FIXED: Added null check with ?? 0
+          })
+          
+          // Debug: Log if any duplicates were removed
+          if (finalData.length < percentageData.length) {
+            console.warn(`Removed ${percentageData.length - finalData.length} duplicate timestamps for ${coinId}`)
           }
           
           return {
             id: coinId,
             name: coin?.name || 'Unknown',
             symbol: coin?.symbol || 'UNK',
-            data: percentageData
+            data: finalData
           }
         } catch (error) {
           console.warn(`Error fetching data for ${coinId}:`, error)
