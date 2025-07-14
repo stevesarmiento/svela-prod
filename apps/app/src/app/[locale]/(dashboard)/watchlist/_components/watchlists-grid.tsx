@@ -36,6 +36,10 @@ interface WatchlistGroup {
 
 interface WatchlistsGridProps {
   onSelectWatchlist?: (group: WatchlistGroup) => void
+  viewMode?: 'grid' | 'chart'
+  activeTimeScale?: string
+  onTimeScaleChange?: (scale: string) => void
+  onViewModeChange?: (mode: 'grid' | 'chart') => void
 }
 
 // Component to fetch coins for a specific group
@@ -90,13 +94,16 @@ function WatchlistGroupWithCoins({
   )
 }
 
-export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
+export function WatchlistsGrid({ 
+  onSelectWatchlist,
+  viewMode = 'grid',
+  activeTimeScale = '7d',
+  onTimeScaleChange,
+  onViewModeChange
+}: WatchlistsGridProps) {
   const [isCreating, setIsCreating] = useState(false)
   const [editingGroup, setEditingGroup] = useState<WatchlistGroup | null>(null)
   const editCardRef = useRef<HTMLDivElement>(null)
-  const [activeTab, setActiveTab] = useState<'grid' | 'chart'>('grid')
-  const [activeTimeScale, setActiveTimeScale] = useState<string>("7d")
-
   
   // Current editing values for real-time preview
   const [editingName, setEditingName] = useState('')
@@ -215,7 +222,10 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
       {/* Header with tabs and create button */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">          
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'grid' | 'chart')}>
+          <Tabs value={viewMode} onValueChange={(value) => {
+            const newMode = value as 'grid' | 'chart'
+            onViewModeChange?.(newMode)
+          }}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="grid" className="flex items-center gap-2">
                 <IconStarFill className="h-4 w-4 fill-muted-foreground" />
@@ -231,7 +241,7 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
         <CreateWatchlistTrigger onClick={() => setIsCreating(true)} />
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'grid' | 'chart')}>
+      <Tabs value={viewMode}>
         <TabsContent value="grid" className="mt-0">
           {/* Empty State */}
           {!watchlistGroups || watchlistGroups.length === 0 ? (
@@ -372,7 +382,7 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
             {allWatchlistIds.size > 0 ? (
               <WatchlistMultiLineChart
                 activeTimeScale={activeTimeScale}
-                setActiveTimeScale={setActiveTimeScale}
+                setActiveTimeScale={onTimeScaleChange || (() => {})}
                 selectedWatchlists={allWatchlistIds}
                 onSelectWatchlist={(watchlistId) => {
                   const group = watchlistGroups?.find(g => g._id === watchlistId)
@@ -388,7 +398,7 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
                     Create watchlists in the Grid tab to see them compared here
                   </p>
                   <Button 
-                    onClick={() => setActiveTab('grid')} 
+                    onClick={() => onViewModeChange?.('grid')} 
                     variant="outline"
                   >
                     Go to Grid
