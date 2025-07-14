@@ -450,6 +450,8 @@ export class EnhancedChatHandler {
     
     let prompt = `You are a sophisticated cryptocurrency analyst with access to real-time market data. 
 
+**CRITICAL: You MUST use ONLY the provided real-time data in your response. Do NOT use generic price ranges or outdated information from your training data.**
+
 **FORMATTING REQUIREMENTS:**
 - Format your response using **Markdown** for better readability
 - Use **## headers** for main sections
@@ -460,27 +462,28 @@ export class EnhancedChatHandler {
 - Use \`inline code\` for technical terms and indicators
 - Keep responses well-structured and scannable
 
-**CONTEXT:**
+**REAL-TIME DATA CONTEXT:**
 - Query Type: ${intent.type}
 - Analysis Depth: ${intent.analysisDepth}
 - Data Sources: ${metadata.sources.join(', ')}
 - Data Quality: ${metadata.quality}
 - Data Coverage: ${Math.round(metadata.coverage * 100)}%
+- Data Freshness: LIVE DATA (fetched ${metadata.fetchTime}ms ago)
 
-**CAPABILITIES:**
-- Real-time price and volume data
-- Historical price analysis
-- Market structure insights (funding rates, liquidations, open interest)
-- Technical indicators and signals
-- Cross-asset comparisons
+**MANDATORY INSTRUCTIONS:**
+1. **USE ONLY THE PROVIDED PRICE DATA** - Never reference generic price ranges like "$69,000-$70,500"
+2. **REFERENCE THE EXACT CURRENT PRICE** provided in the data context
+3. **USE THE EXACT 24h CHANGE PERCENTAGE** from the real-time data  
+4. **BASE ALL ANALYSIS ON THE PROVIDED MARKET DATA** - not on training data
+5. Focus on the specific intent: ${intent.intent}
+6. Use the provided real-time data for accuracy
+7. Highlight key insights from market structure data when available
+8. Adjust detail level based on analysis depth (${intent.analysisDepth})
+9. Be concise but comprehensive
+10. Note any data limitations or gaps
 
-**GUIDELINES:**
-1. Focus on the specific intent: ${intent.intent}
-2. Use the provided real-time data for accuracy
-3. Highlight key insights from market structure data when available
-4. Adjust detail level based on analysis depth (${intent.analysisDepth})
-5. Be concise but comprehensive
-6. Note any data limitations or gaps
+**DATA VALIDATION REMINDER:**
+The data provided is LIVE and CURRENT. If you see a price like $122,612 for Bitcoin, that is the REAL current price - use it, don't replace it with outdated ranges.
 
 Since visual components will also be shown, focus your text response on insights and analysis rather than just stating numbers.`;
 
@@ -541,17 +544,18 @@ Since visual components will also be shown, focus your text response on insights
     // Fallback to basic formatting
     const { priceData, historicalData, marketStructureData } = dataContext;
     
-    let context = `User Query: "${userMessage}"\n\nLIVE DATA CONTEXT:\n`;
+    let context = `User Query: "${userMessage}"\n\n🔴 LIVE REAL-TIME DATA (USE THIS EXACT DATA - NOT TRAINING DATA):\n`;
     
     // Price data context
     if (priceData) {
       console.log('📊 Adding basic price data to context');
-      context += `\n**${priceData.name} (${priceData.symbol})**\n`;
-      context += `- Current Price: $${priceData.price.toLocaleString()}\n`;
-      context += `- 24h Change: ${priceData.priceChange24h.toFixed(2)}%\n`;
-      context += `- Market Cap: $${formatLargeNumber(priceData.marketCap)}\n`;
-      context += `- 24h Volume: $${formatLargeNumber(priceData.volume24h)}\n`;
-      context += `- Rank: #${priceData.rank}\n`;
+      context += `\n**${priceData.name} (${priceData.symbol}) - CURRENT LIVE DATA:**\n`;
+      context += `- 🔥 CURRENT PRICE: $${priceData.price.toLocaleString()} (THIS IS THE REAL CURRENT PRICE - USE THIS EXACT VALUE)\n`;
+      context += `- 📈 24h Change: ${priceData.priceChange24h >= 0 ? '+' : ''}${priceData.priceChange24h.toFixed(2)}% (USE THIS EXACT PERCENTAGE)\n`;
+      context += `- 💰 Market Cap: $${formatLargeNumber(priceData.marketCap)}\n`;
+      context += `- 📊 24h Volume: $${formatLargeNumber(priceData.volume24h)}\n`;
+      context += `- 🏆 Rank: #${priceData.rank}\n`;
+      context += `- ⏰ Data Timestamp: ${new Date().toISOString()} (LIVE DATA - NOT HISTORICAL)\n`;
     }
     
     // Historical context
@@ -596,7 +600,8 @@ Since visual components will also be shown, focus your text response on insights
       }
     }
     
-    context += '\nProvide insights and analysis based on this real-time data.';
+    context += '\n🚨 CRITICAL REMINDER: Use ONLY the live data provided above. Do NOT reference outdated price ranges from training data. The prices and changes shown are CURRENT and ACCURATE as of this moment.';
+    context += '\nProvide insights and analysis based on this REAL-TIME data only.';
     
     console.log('📝 Basic formatted data length for AI:', context.length, 'characters');
     return context;
@@ -783,15 +788,19 @@ Since visual components will also be shown, focus your text response on insights
   private formatComprehensiveDataForAI(userMessage: string, data: Record<string, unknown>): string {
     const sections: string[] = [];
 
+    // Add header emphasizing real-time data
+    sections.push(`User Query: "${userMessage}"\n\n🔴 COMPREHENSIVE LIVE MARKET ANALYSIS - USE THIS EXACT DATA:\n`);
+
     // Enhanced market data with historical context
     const quote = data['quote'] as Record<string, Record<string, number>> | undefined;
     sections.push(`
-**Market Overview:**
+**🔥 CURRENT MARKET OVERVIEW (LIVE DATA - USE THESE EXACT VALUES):**
 ${data.name} (${data.symbol})
-Price: $${quote?.USD?.price?.toLocaleString() || 'N/A'}
-24h Change: ${quote?.USD?.percent_change_24h?.toFixed(2) || 'N/A'}%
-Market Cap: $${formatLargeNumber(quote?.USD?.market_cap || 0)}
-24h Volume: $${formatLargeNumber(quote?.USD?.volume_24h || 0)}`);
+💰 CURRENT PRICE: $${quote?.USD?.price?.toLocaleString() || 'N/A'} (THIS IS THE REAL CURRENT PRICE)
+📈 24h Change: ${quote?.USD?.percent_change_24h ? (quote.USD.percent_change_24h >= 0 ? '+' : '') + quote.USD.percent_change_24h.toFixed(2) : 'N/A'}% (USE THIS EXACT PERCENTAGE)
+🏦 Market Cap: $${formatLargeNumber(quote?.USD?.market_cap || 0)}
+📊 24h Volume: $${formatLargeNumber(quote?.USD?.volume_24h || 0)}
+⏰ Data Timestamp: ${new Date().toISOString()} (LIVE - NOT HISTORICAL DATA)`);
 
     // Enhanced price context
     if (data['priceContext']) {
@@ -858,7 +867,10 @@ ${volumeAnalysis['volumeSpike'] ? 'VOLUME SPIKE DETECTED' : 'Normal volume activ
       sections.push(`\n**Price Action:**\nTrend: ${priceAction['trend'] || 'N/A'}, Volatility: ${priceAction['volatility'] || 'N/A'}, Volume: ${priceAction['volume_profile'] || 'N/A'}${priceLevelText}`);
     }
 
-    return `User Query: "${userMessage}"\n\n**COMPREHENSIVE MARKET ANALYSIS:**\n${sections.join('\n')}`;
+    // Add strong footer emphasizing real-time data usage
+    sections.push(`\n\n🚨 CRITICAL REMINDER: All data above is LIVE and CURRENT. Use ONLY these specific values in your analysis. Do NOT reference outdated price ranges or training data. The prices shown are the REAL current market prices.`);
+    
+    return sections.join('\n');
   }
 
   /**

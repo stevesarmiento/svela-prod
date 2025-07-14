@@ -24,7 +24,7 @@ export const searchCoins = query({
   },
 });
 
-// CoinGecko coins search
+// CoinGecko coins search with improved relevance ranking
 export const searchCoinGeckoCoins = query({
   args: { query: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -33,15 +33,58 @@ export const searchCoinGeckoCoins = query({
 
     const allCoins = await ctx.db.query("coingeckoCoins").collect();
 
-    const filtered = allCoins
-      .filter(coin => 
-        coin.name.toLowerCase().includes(searchTerm) ||
-        coin.symbol.toLowerCase().includes(searchTerm) ||
-        coin.coingeckoId.toLowerCase().includes(searchTerm)
-      )
-      .slice(0, limit);
+    // Categorize matches by relevance
+    const exactIdMatches: typeof allCoins = [];
+    const exactSymbolMatches: typeof allCoins = [];
+    const exactNameMatches: typeof allCoins = [];
+    const partialMatches: typeof allCoins = [];
 
-    return filtered;
+    allCoins.forEach(coin => {
+      const coinId = coin.coingeckoId.toLowerCase();
+      const symbol = coin.symbol.toLowerCase();
+      const name = coin.name.toLowerCase();
+
+      // Prioritize exact ID matches (e.g., "bitcoin" -> coingeckoId "bitcoin")
+      if (coinId === searchTerm) {
+        exactIdMatches.push(coin);
+      }
+      // Then exact symbol matches (e.g., "btc" -> symbol "BTC")
+      else if (symbol === searchTerm) {
+        exactSymbolMatches.push(coin);
+      }
+      // Then exact name matches (e.g., "bitcoin" -> name "Bitcoin")
+      else if (name === searchTerm) {
+        exactNameMatches.push(coin);
+      }
+      // Finally partial matches (e.g., "bitcoin" matches "Bitcoin Dogs")
+      else if (name.includes(searchTerm) || symbol.includes(searchTerm) || coinId.includes(searchTerm)) {
+        partialMatches.push(coin);
+      }
+    });
+
+    // Combine results in order of relevance and limit
+    const orderedResults = [
+      ...exactIdMatches,
+      ...exactSymbolMatches, 
+      ...exactNameMatches,
+      ...partialMatches
+    ].slice(0, limit);
+
+    // Log the search for debugging
+    console.log('🔍 CoinGecko search results for:', searchTerm, {
+      exactIdMatches: exactIdMatches.length,
+      exactSymbolMatches: exactSymbolMatches.length,
+      exactNameMatches: exactNameMatches.length,
+      partialMatches: partialMatches.length,
+      totalReturned: orderedResults.length,
+      firstResult: orderedResults[0] ? {
+        name: orderedResults[0].name,
+        symbol: orderedResults[0].symbol,
+        coingeckoId: orderedResults[0].coingeckoId
+      } : null
+    });
+
+    return orderedResults;
   },
 });
 

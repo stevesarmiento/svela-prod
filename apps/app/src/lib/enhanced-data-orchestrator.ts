@@ -22,6 +22,7 @@ interface CoinGeckoMarketData {
   price_change_percentage_24h: number;
   price_change_percentage_7d: number;
   market_cap_rank: number;
+  image: string; // Add image field for CoinGecko image URLs
 }
 
 export class EnhancedDataOrchestrator {
@@ -41,22 +42,50 @@ export class EnhancedDataOrchestrator {
     try {
       // Step 1: Resolve coin names to CoinGecko IDs
       const coinIds = await this.resolveCoinIds(intent.coins);
+      console.log('🪙 Resolved coin IDs:', coinIds);
+      
+      if (coinIds.length === 0 && intent.coins.length > 0) {
+        console.warn('⚠️ No coins could be resolved for:', intent.coins);
+        // Still continue with empty coinIds to see if we can get general market data
+      }
       
       // Step 2: Plan data fetching strategy
       const fetchPlan = this.createFetchPlan(intent, coinIds);
+      console.log('📋 Created fetch plan:', {
+        priceDataTargets: fetchPlan.priceData.length,
+        historicalDataTargets: fetchPlan.historicalData.length,
+        technicalDataTargets: fetchPlan.technicalData.length,
+        marketStructureTargets: fetchPlan.marketStructureData.length,
+        hasComparisonData: !!fetchPlan.comparisonData
+      });
       
       // Step 3: Execute parallel data fetching
       const dataResults = await this.executeFetchPlan(fetchPlan);
+      console.log('📊 Data fetch results:', {
+        priceData: dataResults.priceData.length,
+        historicalData: dataResults.historicalData.length,
+        technicalData: dataResults.technicalData.length,
+        marketStructureData: dataResults.marketStructureData.length,
+        errors: dataResults.errors.length,
+        errorMessages: dataResults.errors
+      });
       
       // Step 4: Assemble final data context
       const dataContext = this.assembleDataContext(intent, dataResults, startTime);
       
-      console.log(`Data orchestration completed in ${Date.now() - startTime}ms`);
+      // Log warnings if we have errors but still return data
+      if (dataResults.errors.length > 0) {
+        console.warn('⚠️ Data orchestration completed with errors:', dataResults.errors);
+      }
+      
+      console.log(`✅ Data orchestration completed in ${Date.now() - startTime}ms with quality: ${dataContext.metadata.quality}, coverage: ${Math.round(dataContext.metadata.coverage * 100)}%`);
       return dataContext;
       
     } catch (error) {
-      console.error('Data orchestration failed:', error);
-      return this.createEmptyDataContext(intent, startTime);
+      console.error('❌ Data orchestration failed:', error);
+      const emptyContext = this.createEmptyDataContext(intent, startTime);
+      emptyContext.metadata.sources = ['Error occurred during data fetching'];
+      return emptyContext;
     }
   }
 
@@ -257,25 +286,55 @@ export class EnhancedDataOrchestrator {
     results: FetchResults
   ): Promise<void> {
     try {
-      const coinIds = priceTargets.map(t => t.coinId).join(',');
-      const response = await fetch(`${this.baseUrl}/api/coingecko/markets?ids=${coinIds}`);
+      console.log('💰 Fetching price data for coins:', priceTargets.map(t => `${t.name} (${t.coinId})`));
       
-      if (!response.ok) throw new Error('Failed to fetch price data');
+      const coinIds = priceTargets.map(t => t.coinId).join(',');
+      const url = `${this.baseUrl}/api/coingecko/markets?ids=${coinIds}`;
+      console.log('🌐 Calling CoinGecko markets API:', url);
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ CoinGecko markets API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText: errorText.substring(0, 200)
+        });
+        throw new Error(`Failed to fetch price data: ${response.status} ${response.statusText}`);
+      }
       
       const data = await response.json();
+      console.log('📊 CoinGecko markets API response:', {
+        hasData: !!data.data,
+        dataLength: data.data?.length || 0,
+        dataPreview: data.data?.[0] ? {
+          id: data.data[0].id,
+          name: data.data[0].name,
+          current_price: data.data[0].current_price
+        } : null
+      });
       
       if (data.data && Array.isArray(data.data)) {
         priceTargets.forEach(target => {
           const coinData = data.data.find((coin: CoinGeckoMarketData) => coin.id === target.coinId);
           if (coinData) {
+            console.log(`✅ Found price data for ${target.name}: $${coinData.current_price}`);
             results.priceData.push(this.transformToPriceData(coinData, target));
+          } else {
+            console.warn(`⚠️ No price data found for ${target.name} (${target.coinId})`);
           }
         });
+        
+        console.log(`💰 Successfully processed ${results.priceData.length}/${priceTargets.length} price data entries`);
+      } else {
+        console.warn('⚠️ Invalid or empty price data response:', data);
+        results.errors.push('Price data: Invalid response format from CoinGecko markets API');
       }
       
     } catch (error) {
-      console.error('Price data fetch failed:', error);
-      results.errors.push(`Price data: ${error}`);
+      console.error('❌ Price data fetch failed:', error);
+      results.errors.push(`Price data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -490,7 +549,8 @@ export class EnhancedDataOrchestrator {
       priceChange24h: Number(apiData.price_change_percentage_24h) || 0,
       priceChange7d: Number(apiData.price_change_percentage_7d) || 0,
       rank: Number(apiData.market_cap_rank) || 0,
-      lastUpdated: new Date().toISOString()
+      lastUpdated: new Date().toISOString(),
+      image: apiData.image as string || '' // Add image field
     };
   }
 

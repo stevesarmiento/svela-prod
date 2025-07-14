@@ -382,10 +382,55 @@ export function useCoinGeckoChartData(
     retry: 1, // Don't retry too much, fallback handles failures
   })
 
-  // Extract parsed data or use fallback
-  const parsedData = combinedData?.data || generateFallbackData(coinId, activeTimeScale, initialData)
-  const dataSource = combinedData?.source || 'fallback'
-  const cached = combinedData?.cached || false
+  // Extract parsed data with better fallback logic
+  let parsedData: ParsedChartData;
+  let dataSource: 'ohlc' | 'market-chart' | 'fallback' = 'fallback';
+  let cached = false;
+
+  if (combinedData?.data) {
+    // We have real data from API
+    parsedData = combinedData.data;
+    dataSource = combinedData.source;
+    cached = combinedData.cached;
+    console.log('✅ Using real data from', dataSource);
+  } else if (combinedData?.error) {
+    // We have an error - log it and only use fallback if specifically needed
+    console.error('❌ Chart data fetch error:', combinedData.error);
+    
+    // Only generate fallback data if we have some initial pricing data to work with
+    if (initialData && initialData.price && initialData.price > 0) {
+      console.warn('⚠️ Using fallback data due to API error, but with real initial price');
+      parsedData = generateFallbackData(coinId, activeTimeScale, initialData);
+    } else {
+      console.error('💥 No real data and no valid initial data - returning empty chart');
+      // Return empty data instead of fake data
+      parsedData = {
+        lineChart: [],
+        volumeChart: [],
+        ohlcData: []
+      };
+    }
+  } else if (isLoading) {
+    // Still loading - return empty data
+    parsedData = {
+      lineChart: [],
+      volumeChart: [],
+      ohlcData: []
+    };
+  } else {
+    // No data and not loading - only use fallback if we have valid initial data
+    if (initialData && initialData.price && initialData.price > 0) {
+      console.warn('⚠️ No API data available, using fallback with real initial price');
+      parsedData = generateFallbackData(coinId, activeTimeScale, initialData);
+    } else {
+      console.warn('⚠️ No API data and no valid initial data - returning empty chart');
+      parsedData = {
+        lineChart: [],
+        volumeChart: [],
+        ohlcData: []
+      };
+    }
+  }
 
   console.log('📊 Final chart data summary:', {
     source: dataSource,

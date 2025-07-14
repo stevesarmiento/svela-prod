@@ -12,7 +12,7 @@ import { buildWatchlistUrl } from '@/lib/navigation-utils'
 import { useQueryState } from 'nuqs'
 
 interface ComparisonCoin {
-  id: number
+  id: string // Changed to string for CoinGecko ID
   name: string
   symbol: string
   price: number
@@ -20,16 +20,10 @@ interface ComparisonCoin {
   marketCap?: number
   volume24h?: number
   rank?: number
+  image?: string // Added for CoinGecko image URL
   historical?: {
     data?: {
-      quotes?: Array<{
-        timestamp: string
-        quote: {
-          USD: {
-            price: number
-          }
-        }
-      }>
+      prices?: Array<[number, number]> // CoinGecko format: [timestamp, price]
     }
   }
 }
@@ -58,14 +52,15 @@ export function ComparisonCard({
 
     // Collect all timestamps and organize prices by coin
     coins.forEach(coin => {
-      if (coin.historical?.data?.quotes) {
-        coin.historical.data.quotes.forEach(quote => {
-          const timestamp = new Date(quote.timestamp).getTime()
-          timePoints.add(timestamp)
+      if (coin.historical?.data?.prices) {
+        coin.historical.data.prices.forEach(([timestamp, priceValue]) => {
+          // CoinGecko timestamps are in milliseconds, convert to consistent format
+          const timeMs = timestamp
+          timePoints.add(timeMs)
           
-          const coinId = coin.id.toString()
+          const coinId = coin.id
           if (!priceMap[coinId]) priceMap[coinId] = {}
-          priceMap[coinId][timestamp] = quote.quote?.USD?.price ?? 0
+          priceMap[coinId][timeMs] = priceValue
         })
       }
     })
@@ -78,7 +73,7 @@ export function ComparisonCard({
       const dataPoint: ChartDataPoint = { time }
       
       coins.forEach(coin => {
-        const coinId = coin.id.toString()
+        const coinId = coin.id
         const firstTimestamp = sortedTimePoints[0] ?? time
         const initialPrice = priceMap[coinId]?.[firstTimestamp] || coin.price
         const currentPrice = priceMap[coinId]?.[time] || coin.price
@@ -120,13 +115,21 @@ export function ComparisonCard({
               <div className="flex items-center gap-3 overflow-x-auto">
                 {coins.map((coin) => (
                   <div key={coin.id} className="flex items-center gap-2 min-w-0">
-                    <Image
-                      src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`}
-                      alt={coin.name}
-                      className="w-8 h-8 rounded-full flex-shrink-0"
-                      width={32}
-                      height={32}
-                    />
+                    <div className="flex items-center gap-3">
+                      <div className="relative w-8 h-8 rounded-full overflow-hidden bg-muted flex-shrink-0">
+                        <Image
+                          src={coin.image || `https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png`}
+                          alt={coin.name}
+                          fill
+                          className="object-cover"
+                          sizes="32px"
+                          onError={(e) => {
+                            // Fallback to a default CoinGecko image if the primary image fails
+                            e.currentTarget.src = `https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png`
+                          }}
+                        />
+                      </div>
+                    </div>
                     <div className="min-w-0">
                       <p className="font-medium text-sm truncate">{coin.symbol.toUpperCase()}</p>
                       <p className="text-xs text-muted-foreground truncate">{coin.name}</p>
@@ -154,7 +157,7 @@ export function ComparisonCard({
                     <Line
                       key={coin.id}
                       type="monotone"
-                      dataKey={coin.id.toString()}
+                      dataKey={coin.id}
                       dot={false}
                       strokeWidth={2}
                       stroke={isPositive ? getRandomColor(index) : 'hsl(0, 100%, 67%)'}
