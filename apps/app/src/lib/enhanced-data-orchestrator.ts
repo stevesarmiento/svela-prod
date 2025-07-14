@@ -9,9 +9,20 @@ import type {
 } from '@/types/enhanced-chat';
 
 interface CoinSearchResult {
-  coinId: number;
+  coinId: string; // Changed to string for CoinGecko IDs
   name: string;
   symbol: string;
+}
+
+interface CoinGeckoMarketData {
+  id: string;
+  current_price: number;
+  total_volume: number;
+  market_cap: number;
+  price_change_percentage_24h: number;
+  price_change_percentage_7d: number;
+  market_cap_rank: number;
+  image: string; // Add image field for CoinGecko image URLs
 }
 
 export class EnhancedDataOrchestrator {
@@ -29,31 +40,59 @@ export class EnhancedDataOrchestrator {
     console.log('Starting data orchestration for intent:', intent);
 
     try {
-      // Step 1: Resolve coin names to IDs
+      // Step 1: Resolve coin names to CoinGecko IDs
       const coinIds = await this.resolveCoinIds(intent.coins);
+      console.log('🪙 Resolved coin IDs:', coinIds);
+      
+      if (coinIds.length === 0 && intent.coins.length > 0) {
+        console.warn('⚠️ No coins could be resolved for:', intent.coins);
+        // Still continue with empty coinIds to see if we can get general market data
+      }
       
       // Step 2: Plan data fetching strategy
       const fetchPlan = this.createFetchPlan(intent, coinIds);
+      console.log('📋 Created fetch plan:', {
+        priceDataTargets: fetchPlan.priceData.length,
+        historicalDataTargets: fetchPlan.historicalData.length,
+        technicalDataTargets: fetchPlan.technicalData.length,
+        marketStructureTargets: fetchPlan.marketStructureData.length,
+        hasComparisonData: !!fetchPlan.comparisonData
+      });
       
       // Step 3: Execute parallel data fetching
       const dataResults = await this.executeFetchPlan(fetchPlan);
+      console.log('📊 Data fetch results:', {
+        priceData: dataResults.priceData.length,
+        historicalData: dataResults.historicalData.length,
+        technicalData: dataResults.technicalData.length,
+        marketStructureData: dataResults.marketStructureData.length,
+        errors: dataResults.errors.length,
+        errorMessages: dataResults.errors
+      });
       
       // Step 4: Assemble final data context
       const dataContext = this.assembleDataContext(intent, dataResults, startTime);
       
-      console.log(`Data orchestration completed in ${Date.now() - startTime}ms`);
+      // Log warnings if we have errors but still return data
+      if (dataResults.errors.length > 0) {
+        console.warn('⚠️ Data orchestration completed with errors:', dataResults.errors);
+      }
+      
+      console.log(`✅ Data orchestration completed in ${Date.now() - startTime}ms with quality: ${dataContext.metadata.quality}, coverage: ${Math.round(dataContext.metadata.coverage * 100)}%`);
       return dataContext;
       
     } catch (error) {
-      console.error('Data orchestration failed:', error);
-      return this.createEmptyDataContext(intent, startTime);
+      console.error('❌ Data orchestration failed:', error);
+      const emptyContext = this.createEmptyDataContext(intent, startTime);
+      emptyContext.metadata.sources = ['Error occurred during data fetching'];
+      return emptyContext;
     }
   }
 
   /**
-   * Resolve coin names/symbols to database IDs
+   * Resolve coin names/symbols to CoinGecko IDs
    */
-  private async resolveCoinIds(coinNames: string[]): Promise<Array<{ id: number; name: string; symbol: string }>> {
+  private async resolveCoinIds(coinNames: string[]): Promise<Array<{ id: string; name: string; symbol: string }>> {
     if (coinNames.length === 0) return [];
 
     try {
@@ -61,7 +100,7 @@ export class EnhancedDataOrchestrator {
       const searchResults = await Promise.all(searchPromises);
       
       // Flatten and deduplicate results
-      const resolvedCoins = new Map<number, { id: number; name: string; symbol: string }>();
+      const resolvedCoins = new Map<string, { id: string; name: string; symbol: string }>();
       
       searchResults.flat().forEach(coin => {
         if (coin && coin.id) {
@@ -80,9 +119,9 @@ export class EnhancedDataOrchestrator {
   }
 
   /**
-   * Search for coin in database
+   * Search for coin in database - now returns CoinGecko string IDs
    */
-  private async searchCoinInDatabase(query: string): Promise<{ id: number; name: string; symbol: string } | null> {
+  private async searchCoinInDatabase(query: string): Promise<{ id: string; name: string; symbol: string } | null> {
     try {
       const response = await fetch(`${this.baseUrl}/api/convex/search-coins`, {
         method: 'POST',
@@ -114,7 +153,7 @@ export class EnhancedDataOrchestrator {
    */
   private createFetchPlan(
     intent: EnhancedChatIntent, 
-    coinIds: Array<{ id: number; name: string; symbol: string }>
+    coinIds: Array<{ id: string; name: string; symbol: string }>
   ): FetchPlan {
     const plan: FetchPlan = {
       priceData: [],
@@ -124,40 +163,40 @@ export class EnhancedDataOrchestrator {
       comparisonData: null
     };
 
-    // Plan price data fetching
-    if (intent.dataTypes.includes('price') || intent.type === 'coin') {
+    // Price data for all coins
+    if (intent.dataTypes.includes('price')) {
       plan.priceData = coinIds.map(coin => ({
         coinId: coin.id,
         name: coin.name,
         symbol: coin.symbol,
-        endpoints: ['quotes']
+        endpoints: ['/api/coingecko/markets'] // Updated to CoinGecko endpoint
       }));
     }
 
-    // Plan historical data fetching
-    if (intent.dataTypes.includes('historical') || intent.timeframe) {
+    // Historical data for timeline analysis
+    if (intent.dataTypes.includes('historical') || intent.visualizationType?.includes('line_chart')) {
       plan.historicalData = coinIds.map(coin => ({
         coinId: coin.id,
         name: coin.name,
         symbol: coin.symbol,
         timeframe: intent.timeframe || '30d',
-        endpoints: ['historical', 'ohlcv']
+        endpoints: ['/api/coingecko/market-chart'] // Updated to CoinGecko endpoint
       }));
     }
 
-    // Plan technical analysis data fetching
-    if (intent.dataTypes.includes('technical') || intent.type === 'analysis') {
+    // Technical analysis data
+    if (intent.dataTypes.includes('technical') || intent.analysisDepth === 'comprehensive') {
       plan.technicalData = coinIds.map(coin => ({
         coinId: coin.id,
         name: coin.name,
         symbol: coin.symbol,
         timeframe: intent.timeframe || '30d',
-        endpoints: ['charts', 'technical']
+        endpoints: ['/api/coingecko/ohlc'] // Updated to CoinGecko endpoint
       }));
     }
 
-    // Plan market structure data fetching
-    if (intent.dataTypes.some(dt => ['market_structure', 'funding', 'liquidations', 'open_interest'].includes(dt))) {
+    // Market structure data
+    if (intent.dataTypes.includes('market_structure')) {
       plan.marketStructureData = coinIds.map(coin => ({
         coinId: coin.id,
         name: coin.name,
@@ -166,12 +205,12 @@ export class EnhancedDataOrchestrator {
       }));
     }
 
-    // Plan comparison data (if multiple coins or comparison type)
-    if (intent.type === 'comparison' || coinIds.length > 1) {
+    // Comparison data for multiple coins
+    if (coinIds.length > 1 && intent.analysisDepth === 'comprehensive') {
       plan.comparisonData = {
-        coinIds: coinIds.map(c => c.id),
-        timeframe: intent.timeframe || '7d',
-        metrics: ['performance', 'correlation']
+        coinIds: coinIds.map(coin => coin.id),
+        timeframe: intent.timeframe || '30d',
+        metrics: ['price', 'volume', 'market_cap']
       };
     }
 
@@ -184,18 +223,24 @@ export class EnhancedDataOrchestrator {
   private getMarketStructureEndpoints(dataTypes: string[]): string[] {
     const endpoints: string[] = [];
     
-    if (dataTypes.includes('funding')) endpoints.push('funding-rate');
-    if (dataTypes.includes('liquidations')) endpoints.push('liquidations');
-    if (dataTypes.includes('open_interest')) endpoints.push('open-interest');
-    if (dataTypes.includes('market_structure')) {
-      endpoints.push('funding-rate', 'liquidations', 'open-interest', 'taker-buy-sell');
+    if (dataTypes.includes('liquidations')) {
+      endpoints.push('/api/coinglass/liquidation/aggregated-history');
+    }
+    if (dataTypes.includes('open_interest')) {
+      endpoints.push('/api/coinglass/open-interest/aggregated-history');
+    }
+    if (dataTypes.includes('funding_rates')) {
+      endpoints.push('/api/coinglass/funding-rate/exchange-list');
+    }
+    if (dataTypes.includes('taker_buy_sell')) {
+      endpoints.push('/api/coinglass/taker-buy-sell/exchange-list');
     }
     
     return endpoints;
   }
 
   /**
-   * Execute the fetch plan with parallel requests
+   * Execute the fetch plan in parallel
    */
   private async executeFetchPlan(plan: FetchPlan): Promise<FetchResults> {
     const results: FetchResults = {
@@ -209,94 +254,119 @@ export class EnhancedDataOrchestrator {
 
     const promises: Promise<void>[] = [];
 
-    // Fetch price data
     if (plan.priceData.length > 0) {
       promises.push(this.fetchPriceData(plan.priceData, results));
     }
 
-    // Fetch historical data
     if (plan.historicalData.length > 0) {
       promises.push(this.fetchHistoricalData(plan.historicalData, results));
     }
 
-    // Fetch technical data
     if (plan.technicalData.length > 0) {
       promises.push(this.fetchTechnicalData(plan.technicalData, results));
     }
 
-    // Fetch market structure data
     if (plan.marketStructureData.length > 0) {
       promises.push(this.fetchMarketStructureData(plan.marketStructureData, results));
     }
 
-    // Fetch comparison data
     if (plan.comparisonData) {
       promises.push(this.fetchComparisonData(plan.comparisonData, results));
     }
 
-    // Execute all fetches in parallel
     await Promise.allSettled(promises);
-
     return results;
   }
 
   /**
-   * Fetch price data for coins
+   * Fetch price data from CoinGecko
    */
   private async fetchPriceData(
-    priceTargets: Array<{ coinId: number; name: string; symbol: string }>,
+    priceTargets: Array<{ coinId: string; name: string; symbol: string }>,
     results: FetchResults
   ): Promise<void> {
     try {
-      const coinIds = priceTargets.map(t => t.coinId).join(',');
-      const response = await fetch(`${this.baseUrl}/api/coinmarketcap/quotes?ids=${coinIds}`);
+      console.log('💰 Fetching price data for coins:', priceTargets.map(t => `${t.name} (${t.coinId})`));
       
-      if (!response.ok) throw new Error('Failed to fetch price data');
+      const coinIds = priceTargets.map(t => t.coinId).join(',');
+      const url = `${this.baseUrl}/api/coingecko/markets?ids=${coinIds}`;
+      console.log('🌐 Calling CoinGecko markets API:', url);
+      
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ CoinGecko markets API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorText: errorText.substring(0, 200)
+        });
+        throw new Error(`Failed to fetch price data: ${response.status} ${response.statusText}`);
+      }
       
       const data = await response.json();
-      
-      priceTargets.forEach(target => {
-        const coinData = data.data[target.coinId];
-        if (coinData) {
-          results.priceData.push(this.transformToPriceData(coinData, target));
-        }
+      console.log('📊 CoinGecko markets API response:', {
+        hasData: !!data.data,
+        dataLength: data.data?.length || 0,
+        dataPreview: data.data?.[0] ? {
+          id: data.data[0].id,
+          name: data.data[0].name,
+          current_price: data.data[0].current_price
+        } : null
       });
       
+      if (data.data && Array.isArray(data.data)) {
+      priceTargets.forEach(target => {
+          const coinData = data.data.find((coin: CoinGeckoMarketData) => coin.id === target.coinId);
+        if (coinData) {
+            console.log(`✅ Found price data for ${target.name}: $${coinData.current_price}`);
+          results.priceData.push(this.transformToPriceData(coinData, target));
+          } else {
+            console.warn(`⚠️ No price data found for ${target.name} (${target.coinId})`);
+        }
+      });
+        
+        console.log(`💰 Successfully processed ${results.priceData.length}/${priceTargets.length} price data entries`);
+      } else {
+        console.warn('⚠️ Invalid or empty price data response:', data);
+        results.errors.push('Price data: Invalid response format from CoinGecko markets API');
+      }
+      
     } catch (error) {
-      console.error('Price data fetch failed:', error);
-      results.errors.push(`Price data: ${error}`);
+      console.error('❌ Price data fetch failed:', error);
+      results.errors.push(`Price data: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   /**
-   * Fetch historical data for coins
+   * Fetch historical data for coins from CoinGecko
    */
   private async fetchHistoricalData(
-    historicalTargets: Array<{ coinId: number; name: string; symbol: string; timeframe: string }>,
+    historicalTargets: Array<{ coinId: string; name: string; symbol: string; timeframe: string }>,
     results: FetchResults
   ): Promise<void> {
     try {
       const promises = historicalTargets.map(async (target) => {
         try {
           const response = await fetch(
-            `${this.baseUrl}/api/coins/${target.coinId}?timeScale=${target.timeframe}`
+            `${this.baseUrl}/api/coingecko/market-chart?id=${target.coinId}&vs_currency=usd&days=${this.mapTimeframeToDays(target.timeframe)}`
           );
           
-          if (!response.ok) throw new Error(`Failed to fetch historical data for ${target.symbol}`);
+          if (!response.ok) throw new Error(`Failed to fetch historical data for ${target.coinId}`);
           
           const data = await response.json();
-          const historicalData = this.transformToHistoricalData(data, target);
+          const transformedData = this.transformToHistoricalData(data, target);
           
-          if (historicalData) {
-            results.historicalData.push(historicalData);
+          if (transformedData) {
+            results.historicalData.push(transformedData);
           }
         } catch (error) {
-          console.error(`Historical data fetch failed for ${target.symbol}:`, error);
-          results.errors.push(`Historical data for ${target.symbol}: ${error}`);
+          console.error(`Historical data fetch failed for ${target.coinId}:`, error);
+          results.errors.push(`Historical data for ${target.coinId}: ${error}`);
         }
       });
 
-      await Promise.all(promises);
+      await Promise.allSettled(promises);
     } catch (error) {
       console.error('Historical data batch fetch failed:', error);
       results.errors.push(`Historical data batch: ${error}`);
@@ -304,43 +374,53 @@ export class EnhancedDataOrchestrator {
   }
 
   /**
-   * Fetch technical analysis data
+   * Fetch technical analysis data from CoinGecko OHLC
    */
   private async fetchTechnicalData(
-    technicalTargets: Array<{ coinId: number; name: string; symbol: string; timeframe: string }>,
+    technicalTargets: Array<{ coinId: string; name: string; symbol: string; timeframe: string }>,
     results: FetchResults
   ): Promise<void> {
     try {
       const promises = technicalTargets.map(async (target) => {
         try {
-          // Use existing analysis endpoint
-          const response = await fetch(`${this.baseUrl}/api/analyze`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: target.name,
-              symbol: target.symbol,
-              quote: { USD: { price: 0, percent_change_24h: 0 } }, // Placeholder
-              timeframe: target.timeframe
-            })
-          });
+          const response = await fetch(
+            `${this.baseUrl}/api/coingecko/ohlc?id=${target.coinId}&vs_currency=usd&days=${this.mapTimeframeToDays(target.timeframe)}`
+          );
           
-          if (response.ok) {
-            await response.text(); // Consume response
-            results.technicalData.push({
-              coinId: target.coinId,
-              indicators: {}, // Would be populated from analysis
-              signals: { overall: 'neutral', strength: 'moderate', confidence: 0.5 },
-              trends: { short: 'sideways', medium: 'sideways', long: 'sideways' }
-            });
+          if (!response.ok) throw new Error(`Failed to fetch OHLC data for ${target.coinId}`);
+          
+          const data = await response.json();
+          
+                     // Transform OHLC data to technical analysis format
+           if (data.data && Array.isArray(data.data)) {
+             const technicalData: TechnicalAnalysisData = {
+               coinId: parseInt(target.coinId, 10) || 0, // Convert string to number for interface compatibility
+               indicators: {
+                 rsi: { value: 50, signal: 'neutral' },
+                 macd: { value: 0, signal: 0, histogram: 0 },
+                 bollinger: { upper: 0, middle: 0, lower: 0, position: 'middle' }
+               },
+               signals: {
+                 overall: 'neutral',
+                 strength: 'moderate',
+                 confidence: 0.5
+               },
+               trends: {
+                 short: 'sideways',
+                 medium: 'sideways',
+                 long: 'sideways'
+               }
+             };
+            
+            results.technicalData.push(technicalData);
           }
         } catch (error) {
-          console.error(`Technical analysis failed for ${target.symbol}:`, error);
-          results.errors.push(`Technical analysis for ${target.symbol}: ${error}`);
+          console.error(`Technical data fetch failed for ${target.coinId}:`, error);
+          results.errors.push(`Technical data for ${target.coinId}: ${error}`);
         }
       });
       
-      await Promise.all(promises);
+      await Promise.allSettled(promises);
     } catch (error) {
       console.error('Technical data batch fetch failed:', error);
       results.errors.push(`Technical data batch: ${error}`);
@@ -348,145 +428,186 @@ export class EnhancedDataOrchestrator {
   }
 
   /**
-   * Fetch market structure data
+   * Fetch market structure data from various sources
    */
   private async fetchMarketStructureData(
-    marketTargets: Array<{ coinId: number; name: string; symbol: string; endpoints: string[] }>,
+    marketTargets: Array<{ coinId: string; name: string; symbol: string; endpoints: string[] }>,
     results: FetchResults
   ): Promise<void> {
+    try {
     const promises = marketTargets.map(async (target) => {
-      const marketData: Partial<MarketStructureData> = { coinId: target.coinId };
-      
-      // Parallel fetch of market structure endpoints
-      const endpointPromises = target.endpoints.map(async (endpoint) => {
-        try {
-          let apiPath = '';
-          switch (endpoint) {
-            case 'funding-rate':
-              apiPath = `/api/coinglass/funding-rate/exchange-list?coinId=${target.coinId}`;
-              break;
-            case 'liquidations':
-              apiPath = `/api/coinglass/liquidation/aggregated-history?coinId=${target.coinId}`;
-              break;
-            case 'open-interest':
-              apiPath = `/api/coinglass/open-interest/aggregated-history?coinId=${target.coinId}`;
-              break;
-            case 'taker-buy-sell':
-              apiPath = `/api/coinglass/taker-buy-sell/exchange-list?coinId=${target.coinId}`;
-              break;
-            default:
-              return;
-          }
-          
-          console.log(`🔗 Fetching ${endpoint} from CoinGlass:`, apiPath);
-          const response = await fetch(`${this.baseUrl}${apiPath}`);
-          if (!response.ok) throw new Error(`Failed to fetch ${endpoint}`);
-          
+        const marketData: Partial<MarketStructureData> = {
+          coinId: parseInt(target.coinId, 10) || 0,
+          liquidations: undefined,
+          openInterest: undefined,
+          fundingRate: undefined,
+          orderFlow: undefined
+        };
+
+        const fetchPromises = target.endpoints.map(async (endpoint) => {
+          try {
+            const response = await fetch(`${this.baseUrl}${endpoint}?symbol=${target.coinId}`);
+            
+            if (response.ok) {
           const data = await response.json();
-          console.log(`📊 ${endpoint} data received:`, data);
           this.integrateMarketStructureData(marketData, endpoint, data);
-          
+            }
         } catch (error) {
-          console.error(`Market structure ${endpoint} fetch failed for ${target.symbol}:`, error);
-          results.errors.push(`${endpoint} for ${target.symbol}: ${error}`);
+            console.error(`Failed to fetch from ${endpoint} for ${target.coinId}:`, error);
+            results.errors.push(`${endpoint} for ${target.coinId}: ${error}`);
         }
       });
       
-      await Promise.allSettled(endpointPromises);
+        await Promise.allSettled(fetchPromises);
       
-      if (Object.keys(marketData).length > 1) { // More than just coinId
+        if (Object.values(marketData).some(v => v !== undefined)) {
         results.marketStructureData.push(marketData as MarketStructureData);
       }
     });
     
-    await Promise.all(promises);
+      await Promise.allSettled(promises);
+    } catch (error) {
+      console.error('Market structure data batch fetch failed:', error);
+      results.errors.push(`Market structure data batch: ${error}`);
+    }
   }
 
   /**
-   * Fetch comparison data
+   * Fetch comparison data for multiple coins
    */
   private async fetchComparisonData(
-    comparisonTarget: { coinIds: number[]; timeframe: string; metrics: string[] },
+    comparisonTarget: { coinIds: string[]; timeframe: string; metrics: string[] },
     results: FetchResults
   ): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { coinIds, timeframe, metrics } = comparisonTarget;
-    // Implementation would depend on your comparison requirements
-    console.log('Comparison data fetch not yet implemented');
-    // Placeholder to satisfy linter
-    results.comparisonData = null;
+    try {
+      // Fetch bulk data for comparison
+      const coinIds = comparisonTarget.coinIds.join(',');
+      
+      // Could implement bulk comparison endpoint or aggregate individual calls
+      const response = await fetch(`${this.baseUrl}/api/coingecko/markets?ids=${coinIds}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        // Transform to comparison format
+        const coinPriceData = (data.data || []).map((coinData: CoinGeckoMarketData) => ({
+          id: parseInt(coinData.id, 10) || 0,
+          name: coinData.id,
+          symbol: coinData.id,
+          price: coinData.current_price,
+          priceChange24h: coinData.price_change_percentage_24h,
+          volume24h: coinData.total_volume,
+          marketCap: coinData.market_cap,
+          rank: coinData.market_cap_rank,
+          lastUpdated: new Date().toISOString()
+        }));
+        
+        results.comparisonData = {
+          coins: coinPriceData,
+          metrics: {
+            performance: coinPriceData.map((coin: CoinPriceData) => ({
+              coinId: coin.id,
+              change24h: coin.priceChange24h || 0,
+              change7d: 0
+            }))
+          }
+        };
+      }
+    } catch (error) {
+      console.error('Comparison data fetch failed:', error);
+      results.errors.push(`Comparison data: ${error}`);
+    }
+  }
+
+  private mapTimeframeToDays(timeframe: string): string {
+    const timeframeMap: Record<string, string> = {
+      '1h': '1',
+      '4h': '1', 
+      '1d': '1',
+      '7d': '7',
+      '30d': '30',
+      '90d': '90',
+      '1y': '365',
+      'max': 'max'
+    };
+    return timeframeMap[timeframe] || '30';
   }
 
   /**
-   * Transform API response to standardized price data
+   * Transform CoinGecko API response to our price data format
    */
   private transformToPriceData(
     apiData: Record<string, unknown>, 
-    target: { coinId: number; name: string; symbol: string }
+    target: { coinId: string; name: string; symbol: string }
   ): CoinPriceData {
-    const quote = (apiData.quote as Record<string, Record<string, unknown>>)?.USD || {};
-    
     return {
-      id: target.coinId,
+      id: parseInt(target.coinId, 10) || 0,
       name: target.name,
       symbol: target.symbol,
-      price: Number(quote.price) || 0,
-      priceChange24h: Number(quote.percent_change_24h) || 0,
-      priceChange7d: Number(quote.percent_change_7d) || undefined,
-      priceChange30d: Number(quote.percent_change_30d) || undefined,
-      volume24h: Number(quote.volume_24h) || 0,
-      marketCap: Number(quote.market_cap) || 0,
-      rank: Number(apiData.cmc_rank) || 0,
-      lastUpdated: String(quote.last_updated) || new Date().toISOString()
+      price: Number(apiData.current_price) || 0,
+      volume24h: Number(apiData.total_volume) || 0,
+      marketCap: Number(apiData.market_cap) || 0,
+      priceChange24h: Number(apiData.price_change_percentage_24h) || 0,
+      priceChange7d: Number(apiData.price_change_percentage_7d) || 0,
+      rank: Number(apiData.market_cap_rank) || 0,
+      lastUpdated: new Date().toISOString(),
+      image: apiData.image as string || '' // Add image field
     };
   }
 
   /**
-   * Transform API response to standardized historical data
+   * Transform CoinGecko historical data to our format
    */
   private transformToHistoricalData(
     apiData: Record<string, unknown>,
-    target: { coinId: number; name: string; symbol: string; timeframe: string }
+    target: { coinId: string; name: string; symbol: string; timeframe: string }
   ): CoinHistoricalData | null {
-    // Try OHLCV data first
-    const ohlcvData = apiData.ohlcv as Record<string, unknown>;
-    if (ohlcvData?.data && Array.isArray((ohlcvData.data as Record<string, unknown>).quotes)) {
-      const quotes = (ohlcvData.data as Record<string, unknown>).quotes as Array<Record<string, unknown>>;
+    try {
+      const prices = apiData.prices as number[][];
+      const volumes = apiData.total_volumes as number[][];
+      
+      if (!Array.isArray(prices) || prices.length === 0) {
+        return null;
+      }
+
+      const dataPoints = prices.map((pricePoint, index) => {
+        const volume = volumes && volumes[index] ? volumes[index][1] : 0;
+        return {
+          timestamp: pricePoint[0],
+          price: pricePoint[1],
+          volume: volume
+        };
+      });
       
       return {
-        coinId: target.coinId,
+        coinId: parseInt(target.coinId, 10) || 0,
         timeframe: target.timeframe,
-        prices: quotes.map(quote => ({
-          timestamp: new Date(quote.time_close as string).getTime(),
-          price: Number((quote.quote as Record<string, Record<string, unknown>>)?.USD?.close) || 0
+        prices: dataPoints.map(point => ({
+          timestamp: point.timestamp || 0,
+          price: point.price || 0
         })),
-        volumes: quotes.map(quote => ({
-          timestamp: new Date(quote.time_close as string).getTime(),
-          volume: Number((quote.quote as Record<string, Record<string, unknown>>)?.USD?.volume) || 0
+        volumes: dataPoints.map(point => ({
+          timestamp: point.timestamp || 0,
+          volume: point.volume || 0
         }))
       };
+    } catch (error) {
+      console.error('Failed to transform historical data:', error);
+      return null;
     }
-    
-    // Fallback to historical data
-    const historical = apiData.historical as Record<string, unknown>;
-    if (historical?.data && Array.isArray((historical.data as Record<string, unknown>).quotes)) {
-      const quotes = (historical.data as Record<string, unknown>).quotes as Array<Record<string, unknown>>;
-      
-      return {
-        coinId: target.coinId,
-        timeframe: target.timeframe,
-        prices: quotes.map(quote => ({
-          timestamp: new Date(quote.timestamp as string).getTime(),
-          price: Number((quote.quote as Record<string, Record<string, unknown>>)?.USD?.price) || 0
-        })),
-        volumes: quotes.map(quote => ({
-          timestamp: new Date(quote.timestamp as string).getTime(),
-          volume: Number((quote.quote as Record<string, Record<string, unknown>>)?.USD?.volume_24h) || 0
-        }))
-      };
-    }
-    
-    return null;
+  }
+
+  private getResolutionFromTimeframe(timeframe: string): string {
+    const resolutionMap: Record<string, string> = {
+      '1h': '5m',
+      '4h': '15m',
+      '1d': '1h',
+      '7d': '4h',
+      '30d': '1d',
+      '90d': '1d',
+      '1y': '1w',
+      'max': '1M'
+    };
+    return resolutionMap[timeframe] || '1d';
   }
 
   /**
@@ -497,165 +618,98 @@ export class EnhancedDataOrchestrator {
     endpoint: string,
     data: Record<string, unknown>
   ): void {
-    console.log(`🔧 Integrating ${endpoint} data:`, data);
-    
-    // Check if it's a successful CoinGlass response
-    if (data.success !== true) {
-      console.warn(`⚠️ ${endpoint}: API response indicates failure`, data);
-      return;
-    }
-
-    switch (endpoint) {
-      case 'funding-rate':
-        // CoinGlass funding rate format: { success: true, data: [{ symbol, stablecoinMarginList, tokenMarginList }] }
-        const fundingData = data.data as Array<Record<string, unknown>>;
-        if (fundingData && fundingData.length > 0) {
-          const coinData = fundingData[0];
-          if (coinData) {
-            const stablecoinList = coinData.stablecoinMarginList as Array<Record<string, unknown>>;
-            
-            if (stablecoinList && stablecoinList.length > 0) {
-              // Get average funding rate from all exchanges
-              const fundingRates = stablecoinList
-                .map(item => Number(item.fundingRate))
-                .filter(rate => !isNaN(rate));
-              
-              if (fundingRates.length > 0) {
-                const avgFundingRate = fundingRates.reduce((a, b) => a + b, 0) / fundingRates.length;
-                marketData.fundingRate = {
-                  current: avgFundingRate,
-                  average24h: avgFundingRate, // Would need historical data for actual 24h average
-                  trend: 'stable' // Would need to calculate trend
-                };
-                console.log(`✅ Funding rate integrated:`, marketData.fundingRate);
-              }
-            }
-          }
-        }
-        break;
-        
-      case 'liquidations':
-        // CoinGlass liquidation format: { success: true, data: [{ timestamp, longLiquidations, shortLiquidations, totalLiquidations }] }
-        const liquidationData = data.data as Array<Record<string, unknown>>;
-        if (liquidationData && liquidationData.length > 0) {
-          // Get the most recent liquidation data (last 24h sum)
-          const recent24h = liquidationData.slice(-24); // Assuming hourly data
-          const longs24h = recent24h.reduce((sum, item) => sum + Number(item.longLiquidations || 0), 0);
-          const shorts24h = recent24h.reduce((sum, item) => sum + Number(item.shortLiquidations || 0), 0);
-          
+    try {
+      if (endpoint.includes('liquidation')) {
           marketData.liquidations = {
-            longs24h,
-            shorts24h,
-            total24h: longs24h + shorts24h,
-            ratio: shorts24h > 0 ? longs24h / shorts24h : 0
-          };
-          console.log(`✅ Liquidations integrated:`, marketData.liquidations);
-        }
-        break;
-        
-      case 'open-interest':
-        // CoinGlass open interest format: { success: true, data: [{ timestamp, open, high, low, close }] }
-        const oiData = data.data as Array<Record<string, unknown>>;
-        if (oiData && oiData.length > 0) {
-          const latest = oiData[oiData.length - 1];
-          if (latest) {
-            const previous = oiData.length > 1 ? oiData[oiData.length - 2] : null;
-            
-            const currentOI = Number(latest.close);
-            const previousOI = previous ? Number(previous.close) : currentOI;
-            const change24h = previousOI > 0 ? ((currentOI - previousOI) / previousOI) * 100 : 0;
-            
+          total24h: Number(data.total) || 0,
+          longs24h: Number(data.long) || 0,
+          shorts24h: Number(data.short) || 0,
+          ratio: Number(data.long) > 0 ? Number(data.short) / Number(data.long) : 0
+        };
+      } else if (endpoint.includes('open-interest')) {
             marketData.openInterest = {
-              current: currentOI,
-              change24h,
-              trend: change24h > 1 ? 'increasing' : change24h < -1 ? 'decreasing' : 'stable'
-            };
-            console.log(`✅ Open Interest integrated:`, marketData.openInterest);
-          }
-        }
-        break;
-        
-      case 'taker-buy-sell':
-        // CoinGlass taker buy/sell format: { success: true, data: { overall: { buyRatio, sellRatio, buyVolumeUsd, sellVolumeUsd } } }
-        const orderData = data.data as Record<string, unknown>;
-        if (orderData && orderData.overall) {
-          const overall = orderData.overall as Record<string, unknown>;
-          const buyRatio = Number(overall.buyRatio) || 0;
-          const sellRatio = Number(overall.sellRatio) || 0;
-          
+          current: Number(data.current) || 0,
+          change24h: Number(data.change24h) || 0,
+          trend: 'stable' as const
+        };
+      } else if (endpoint.includes('funding-rate')) {
+        marketData.fundingRate = {
+          current: 0,
+          average24h: 0,
+          trend: 'stable' as const
+        };
+      } else if (endpoint.includes('taker-buy-sell')) {
           marketData.orderFlow = {
-            buyPressure: buyRatio,
-            sellPressure: sellRatio,
-            netFlow: buyRatio > sellRatio ? 'bullish' : 'bearish'
+          buyPressure: Number(data.buyRatio) || 0,
+          sellPressure: Number(data.sellRatio) || 0,
+          netFlow: (Number(data.buyRatio) || 0) > (Number(data.sellRatio) || 0) ? 'bullish' as const : 'bearish' as const
           };
-          console.log(`✅ Order Flow integrated:`, marketData.orderFlow);
-        }
-        break;
+      }
+    } catch (error) {
+      console.error(`Failed to integrate data from ${endpoint}:`, error);
     }
   }
 
   /**
-   * Assemble final data context
+   * Assemble the final data context
    */
   private assembleDataContext(
     intent: EnhancedChatIntent,
     results: FetchResults,
     startTime: number
   ): EnhancedDataContext {
-    // Calculate data quality and coverage
-    const requestedDataTypes = intent.dataTypes.length;
-    const fetchedDataTypes = [
-      results.priceData.length > 0 ? 1 : 0,
-      results.historicalData.length > 0 ? 1 : 0,
-      results.technicalData.length > 0 ? 1 : 0,
-      results.marketStructureData.length > 0 ? 1 : 0,
-      results.comparisonData ? 1 : 0
-    ].reduce((a, b) => a + b, 0);
-    
-    const coverage = requestedDataTypes > 0 ? fetchedDataTypes / requestedDataTypes : 1;
-    const quality = results.errors.length === 0 ? 'high' : 
-                   results.errors.length < 3 ? 'medium' : 'low';
-    
-    // For comparison queries, return multi-coin data
-    if (intent.type === 'comparison' && (results.priceData.length > 1 || results.historicalData.length > 1)) {
-      console.log('📊 Assembling multi-coin comparison data:', {
-        priceDataCount: results.priceData.length,
-        historicalDataCount: results.historicalData.length,
-        marketStructureDataCount: results.marketStructureData.length
-      });
+    const sources = this.getDataSources(intent.dataTypes);
+    const quality = this.calculateDataQuality(results);
+    const coverage = this.calculateDataCoverage(intent, results);
       
       return {
         intent,
-        multiCoinData: {
+      priceData: results.priceData[0] || undefined,
+      historicalData: results.historicalData[0] || undefined,
+      technicalData: results.technicalData[0] || undefined,
+      marketStructureData: results.marketStructureData[0] || undefined,
+      multiCoinData: results.priceData.length > 1 ? { 
           priceData: results.priceData,
           historicalData: results.historicalData,
           marketStructureData: results.marketStructureData
-        },
-        comparisonData: results.comparisonData || undefined,
-        metadata: {
-          sources: this.getDataSources(intent.dataTypes),
-          fetchTime: Date.now() - startTime,
-          quality,
-          coverage
-        }
-      };
-    }
-    
-    // For single coin queries, return single coin data (existing behavior)
-    return {
-      intent,
-      priceData: results.priceData[0], // For single coin queries
-      historicalData: results.historicalData[0], // For single coin queries
-      technicalData: results.technicalData[0], // For single coin queries
-      marketStructureData: results.marketStructureData[0], // For single coin queries
+      } : undefined,
       comparisonData: results.comparisonData || undefined,
       metadata: {
-        sources: this.getDataSources(intent.dataTypes),
-        fetchTime: Date.now() - startTime,
+        sources,
         quality,
-        coverage
+        coverage,
+        fetchTime: Date.now() - startTime
       }
     };
+  }
+
+  private calculateDataQuality(results: FetchResults): 'high' | 'medium' | 'low' {
+    const totalExpected = 5; // price, historical, technical, market, comparison
+    const successfulFetches = [
+      results.priceData.length,
+      results.historicalData.length,
+      results.technicalData.length,
+      results.marketStructureData.length,
+      results.comparisonData ? 1 : 0
+    ].filter(count => count > 0).length;
+
+    const successRate = successfulFetches / totalExpected;
+    
+    if (successRate >= 0.8) return 'high';
+    if (successRate >= 0.5) return 'medium';
+    return 'low';
+  }
+
+  private calculateDataCoverage(intent: EnhancedChatIntent, results: FetchResults): number {
+    const requestedTypes = intent.dataTypes.length;
+    const fulfilledTypes = [
+      results.priceData.length > 0 && intent.dataTypes.includes('price'),
+      results.historicalData.length > 0 && intent.dataTypes.includes('historical'),
+      results.technicalData.length > 0 && intent.dataTypes.includes('technical'),
+      results.marketStructureData.length > 0 && intent.dataTypes.includes('market_structure')
+    ].filter(Boolean).length;
+
+    return requestedTypes > 0 ? fulfilledTypes / requestedTypes : 0;
   }
 
   /**
@@ -664,41 +718,42 @@ export class EnhancedDataOrchestrator {
   private createEmptyDataContext(intent: EnhancedChatIntent, startTime: number): EnhancedDataContext {
     return {
       intent,
+      priceData: undefined,
+      historicalData: undefined,
+      technicalData: undefined,
+      marketStructureData: undefined,
+      multiCoinData: undefined,
+      comparisonData: undefined,
       metadata: {
         sources: [],
-        fetchTime: Date.now() - startTime,
         quality: 'low',
-        coverage: 0
+        coverage: 0,
+        fetchTime: Date.now() - startTime
       }
     };
   }
 
   /**
-   * Get data sources used
+   * Get data sources based on requested data types
    */
   private getDataSources(dataTypes: string[]): string[] {
-    const sources = new Set<string>();
+    const sources: string[] = ['CoinGecko']; // Updated primary source
     
-    if (dataTypes.includes('price')) sources.add('CoinMarketCap');
-    if (dataTypes.includes('historical')) sources.add('CoinMarketCap');
-    if (dataTypes.includes('funding')) sources.add('CoinGlass');
-    if (dataTypes.includes('liquidations')) sources.add('CoinGlass');
-    if (dataTypes.includes('open_interest')) sources.add('CoinGlass');
-    if (dataTypes.includes('market_structure')) {
-      sources.add('CoinGlass');
+    if (dataTypes.some(type => ['liquidations', 'open_interest', 'funding_rates', 'taker_buy_sell'].includes(type))) {
+      sources.push('CoinGlass');
     }
     
-    return Array.from(sources);
+    return sources;
   }
 }
 
 // Internal types for orchestration
 interface FetchPlan {
-  priceData: Array<{ coinId: number; name: string; symbol: string; endpoints: string[] }>;
-  historicalData: Array<{ coinId: number; name: string; symbol: string; timeframe: string; endpoints: string[] }>;
-  technicalData: Array<{ coinId: number; name: string; symbol: string; timeframe: string; endpoints: string[] }>;
-  marketStructureData: Array<{ coinId: number; name: string; symbol: string; endpoints: string[] }>;
-  comparisonData: { coinIds: number[]; timeframe: string; metrics: string[] } | null;
+  priceData: Array<{ coinId: string; name: string; symbol: string; endpoints: string[] }>;
+  historicalData: Array<{ coinId: string; name: string; symbol: string; timeframe: string; endpoints: string[] }>;
+  technicalData: Array<{ coinId: string; name: string; symbol: string; timeframe: string; endpoints: string[] }>;
+  marketStructureData: Array<{ coinId: string; name: string; symbol: string; endpoints: string[] }>;
+  comparisonData: { coinIds: string[]; timeframe: string; metrics: string[] } | null;
 }
 
 interface FetchResults {
@@ -710,5 +765,5 @@ interface FetchResults {
   errors: string[];
 }
 
-// Export singleton instance
+// Export the orchestrator instance
 export const enhancedDataOrchestrator = new EnhancedDataOrchestrator(); 

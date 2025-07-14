@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { Button } from "@v1/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { IconMagnifyingglass, IconCircleSlash, IconCommand } from "symbols-react";
@@ -17,9 +17,10 @@ import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
 
 // Custom hooks
 import { useCommandInput } from '@/hooks/use-command-input';
-import { useCommandSearch } from '@/hooks/use-command-search';
+import { useHybridCoinSearch, useHybridTopCoins } from '@/hooks/use-hybrid-coin-search';
 import { useContextualCommands } from '@/hooks/use-contextual-commands';
 import { useAddCoinToWatchlist } from '@/hooks/use-add-coin-to-watchlist';
+import { useDebounce } from '@/hooks/use-debounce';
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
 
@@ -36,14 +37,45 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   
   // Custom hooks
   const { inputRef } = useCommandInput(isOpen);
+  
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  
+  // Use hybrid search hooks (DB + API) - same as coin-search.tsx
   const { 
-    searchQuery, 
-    setSearchQuery, 
-    coinsToDisplay, 
-    isLoading: coinResultsLoading, 
-    clearSearch,
-    hasSearch 
-  } = useCommandSearch();
+    data: searchResults, 
+    isLoading: isSearchLoading 
+  } = useHybridCoinSearch(debouncedSearchQuery, {
+    limit: 5 // Limit for command search
+  });
+  
+  const { 
+    data: topCoins, 
+    isLoading: isTopCoinsLoading 
+  } = useHybridTopCoins(5);
+
+  // Determine which coins to display
+  const coinsToDisplay = useMemo(() => {
+    if (debouncedSearchQuery.trim()) {
+      return searchResults || [];
+    }
+    return topCoins || [];
+  }, [debouncedSearchQuery, searchResults, topCoins]);
+
+  // Determine loading state
+  const coinResultsLoading = useMemo(() => {
+    if (debouncedSearchQuery.trim()) {
+      return isSearchLoading;
+    }
+    return isTopCoinsLoading;
+  }, [debouncedSearchQuery, isSearchLoading, isTopCoinsLoading]);
+
+  const hasSearch = debouncedSearchQuery.trim().length > 0;
+  
+  const clearSearch = useCallback(() => {
+    setSearchQuery('');
+  }, []);
   
   const { 
     contextualCommands, 
@@ -54,7 +86,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   const { handleAddCoin, isAddingCoin } = useAddCoinToWatchlist();
 
   // Handle token navigation
-  const handleTokenNavigation = useCallback((coinId: number) => {
+  const handleTokenNavigation = useCallback((coinId: string) => {
     clearSearch();
     setIsOpen(false);
     router.push(navigation.buildUrl(`/charts/${coinId}`));
@@ -107,7 +139,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   const handleCommandSelect = useCallback(async (value: string) => {
     // Check if this is a watchlist add action (starts with "watchlist-add:")
     if (value.startsWith('watchlist-add:')) {
-      const coinId = parseInt(value.replace('watchlist-add:', ''));
+      const coinId = value.replace('watchlist-add:', '');
       const coin = coinsToDisplay.find(c => c.id === coinId);
       if (coin) {
         const success = await handleAddCoin(coin);
@@ -121,7 +153,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
 
     // Check if this is a coin selection (starts with "coin:")
     if (value.startsWith('coin:')) {
-      const coinId = parseInt(value.replace('coin:', ''));
+      const coinId = value.replace('coin:', '');
       handleTokenNavigation(coinId);
       return;
     }
@@ -287,11 +319,15 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                         <div className="flex items-center gap-3 pr-5">
                           <div className="relative">
                             <Image
-                              src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`}
+                              src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
                               alt={coin.name}
                               className="w-6 h-6 rounded-full"
                               width={24}
                               height={24}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.src = '/favicon.ico';
+                              }}
                             />
                           </div>
                           <div className="flex flex-col">
@@ -346,11 +382,15 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                         <div className="flex items-center gap-3 pr-5">
                           <div className="relative">
                             <Image
-                              src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`}
+                              src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
                               alt={coin.name}
                               className="w-6 h-6 rounded-full"
                               width={24}
                               height={24}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.src = '/favicon.ico';
+                              }}
                             />
                           </div>
                           <div className="flex flex-col">

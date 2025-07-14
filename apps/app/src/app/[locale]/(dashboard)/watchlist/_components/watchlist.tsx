@@ -4,7 +4,7 @@ import { formatLargeNumber } from "@v1/ui/format-numbers";
 import { Button } from "@v1/ui/button"
 import { X } from "lucide-react"
 import { useWatchlist } from "./watchlist-context"
-import { useOptimizedWatchlistCoins } from "@/hooks/use-optimized-watchlist-coins"
+import { useCoinGeckoWatchlistCoins } from "@/hooks/use-coingecko-watchlist-coins"
 import Link from "next/link"
 import Image from "next/image"
 import { cn } from "@v1/ui/cn"
@@ -27,7 +27,9 @@ import { useSearchParams } from "next/navigation"
 import { Spinner } from "@v1/ui/spinner"
 import { motion, AnimatePresence } from "framer-motion"
 import { WatchlistsGrid } from "./watchlists-grid"
+import { WatchlistTable } from "./watchlist-table"
 import { matchesShortcut, GLOBAL_SHORTCUTS } from "@/lib/keyboard-shortcuts"
+//import { AvatarCircles } from '@v1/ui/token-stacks'
 
 // Use CoinMarketData from types - the optimized hook returns this interface
 import type { CoinMarketData } from '@/types/coins'
@@ -43,14 +45,22 @@ interface FilterState {
   sortOrder: "asc" | "desc";
 }
 
+interface WatchlistProps {
+  viewMode?: 'comparison' | 'watchlist';
+  activeTimeScale?: string;
+  onTimeScaleChange?: (scale: string) => void;
+  gridViewMode?: 'grid' | 'chart';
+  onGridViewModeChange?: (mode: 'grid' | 'chart') => void;
+}
+
 // Update the columns definition
 const createColumns = (
-  handleRemove: (coinId: number) => void,
+  handleRemove: (coinId: number | string) => void,
   selectedCoins: Set<string>,
   onCoinSelect: (coinId: string, selected: boolean) => void,
   onSelectAll: (checked: boolean) => void,
   totalCoins: number,
-  removingCoins: Set<number>,
+  removingCoins: Set<string>,
   hoveredRowId: string | null,
   hasSelectedCoins: boolean
 ): ColumnDef<CoinMarketData>[] => [
@@ -125,13 +135,30 @@ const createColumns = (
             <div className="translate-x-10 opacity-90 flex items-center gap-2">
               <div className="relative">
                 {row.original.quote.USD.price > 0 ? (
-                  <Image
-                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
-                    alt={row.original.name}
-                    className="w-[20px] h-[20px] rounded-full"
-                    width={24}
-                    height={24}
-                  />
+                  // Use CoinGecko image if available, otherwise fallback to letter
+                  row.original.image ? (
+                    <Image
+                      src={row.original.image?.startsWith('http') || row.original.image?.startsWith('/') ? row.original.image : '/favicon.ico'}
+                      alt={row.original.name}
+                      className="w-[20px] h-[20px] rounded-full"
+                      width={24}
+                      height={24}
+                      onError={(e) => {
+                        // Fallback to letter-based avatar on image error
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
+                        }
+                      }}
+                    />
+                  ) : (
+                    // Fallback for missing image
+                    <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
+                      {row.original.symbol.charAt(0).toUpperCase()}
+                    </div>
+                  )
                 ) : (
                   <Skeleton className="w-[20px] h-[20px] rounded-full" />
                 )}
@@ -169,13 +196,30 @@ const createColumns = (
             >
               <div className="relative">
                 {row.original.quote.USD.price > 0 ? (
-                  <Image
-                    src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${row.original.id}.png`}
-                    alt={row.original.name}
-                    className="w-[20px] h-[20px] rounded-full"
-                    width={24}
-                    height={24}
-                  />
+                  // Use CoinGecko image if available, otherwise fallback to letter
+                  row.original.image ? (
+                    <Image
+                      src={row.original.image?.startsWith('http') || row.original.image?.startsWith('/') ? row.original.image : '/favicon.ico'}
+                      alt={row.original.name}
+                      className="w-[20px] h-[20px] rounded-full"
+                      width={24}
+                      height={24}
+                      onError={(e) => {
+                        // Fallback to letter-based avatar on image error
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
+                        }
+                      }}
+                    />
+                  ) : (
+                    // Fallback for missing image
+                    <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
+                      {row.original.symbol.charAt(0).toUpperCase()}
+                    </div>
+                  )
                 ) : (
                   <Skeleton className="w-[20px] h-[20px] rounded-full" />
                 )}
@@ -242,18 +286,18 @@ const createColumns = (
         24h Change
       </div>
     ),
-          cell: ({ row }) => (
-        row.original.quote.USD.price > 0 ? (
-          <span className={cn(
-            "font-mono text-xs",
-            row.original.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'
-          )}>
-            {row.original.quote.USD.percent_change_24h.toFixed(2)}%
-          </span>
-        ) : (
-          <Skeleton className="h-4 w-12 rounded-full" />
-        )
-      ),
+    cell: ({ row }) => (
+      row.original.quote.USD.price > 0 ? (
+        <span className={cn(
+          "font-mono text-xs",
+          row.original.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'
+        )}>
+          {row.original.quote.USD.percent_change_24h.toFixed(2)}%
+        </span>
+      ) : (
+        <Skeleton className="h-4 w-12 rounded-full" />
+      )
+    ),
     enableSorting: true,
   },
   {
@@ -292,10 +336,10 @@ const createColumns = (
             e.stopPropagation();
             handleRemove(row.original.id);
           }}
-          disabled={removingCoins.has(row.original.id)}
+          disabled={removingCoins.has(row.original.id.toString())}
           className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
           >
-          {removingCoins.has(row.original.id) ? (
+          {removingCoins.has(row.original.id.toString()) ? (
             <Spinner size={16} />
           ) : (
             <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
@@ -306,7 +350,13 @@ const createColumns = (
   },
 ];
 
-export function Watchlist() {
+export function Watchlist({ 
+  viewMode = 'watchlist',
+  activeTimeScale = '7d',
+  onTimeScaleChange,
+  gridViewMode = 'grid',
+  onGridViewModeChange
+}: WatchlistProps) {
   const { 
     // Legacy for backward compatibility
     watchlist, 
@@ -324,7 +374,7 @@ export function Watchlist() {
   const searchParams = useSearchParams()
   const [sorting, setSorting] = useState<SortingState>([])
   const [selectedCoins, setSelectedCoins] = useState<Set<string>>(new Set())
-  const [removingCoins, setRemovingCoins] = useState<Set<number>>(new Set())
+  const [removingCoins, setRemovingCoins] = useState<Set<string>>(new Set())
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null)
   const coinSearchRef = useRef<CoinSearchRef>(null)
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -379,7 +429,7 @@ export function Watchlist() {
     isLoading: isCoinsLoading, 
     error,
     performance
-  } = useOptimizedWatchlistCoins(stableWatchlist);
+  } = useCoinGeckoWatchlistCoins(stableWatchlist);
 
   // Log performance metrics for monitoring
   console.log('🚀 Watchlist performance:', performance)
@@ -413,6 +463,7 @@ export function Watchlist() {
         id: coinId,
         name: 'Loading...',
         symbol: 'Loading...',
+        image: '', // Empty image triggers skeleton loading
         slug: `coin-${coinId}`,
         cmc_rank: 0,
         circulating_supply: 0,
@@ -510,16 +561,28 @@ export function Watchlist() {
     return filtered;
   }, [optimisticCoins, filters]);
 
+  // Create coin images array for token stacks
+  // const coinImages = useMemo(() => {
+  //   return filteredCoins
+  //     .filter(coin => coin.image && (coin.image.startsWith('http') || coin.image.startsWith('/')))
+  //     .slice(0, 5) // Limit to first 5 coins
+  //     .map(coin => ({
+  //       imageUrl: coin.image!, // Add non-null assertion since we filtered for truthy values
+  //       profileUrl: `/charts/${coin.id}`
+  //     }))
+  // }, [filteredCoins])
+
   // Create stable remove handler with optimistic updates
-  const handleRemove = useCallback(async (coinId: number) => {
-    setRemovingCoins(prev => new Set([...prev, coinId]));
+  const handleRemove = useCallback(async (coinId: number | string) => {
+    const coinIdStr = coinId.toString();
+    setRemovingCoins(prev => new Set([...prev, coinIdStr]));
     
     try {
       // Use group-specific remove function if a group is selected
       if (selectedGroup) {
-        await removeFromSelectedGroup(coinId);
+        await removeFromSelectedGroup(coinIdStr);
       } else {
-        await removeFromWatchlist(coinId);
+        await removeFromWatchlist(coinIdStr);
       }
       
       toast({
@@ -529,7 +592,7 @@ export function Watchlist() {
     } finally {
       setRemovingCoins(prev => {
         const newSet = new Set(prev);
-        newSet.delete(coinId);
+        newSet.delete(coinIdStr);
         return newSet;
       });
     }
@@ -557,7 +620,7 @@ export function Watchlist() {
   }, [filteredCoins]);
 
   const handleRemoveSelected = useCallback(async () => {
-    const coinIdsToRemove = Array.from(selectedCoins).map(Number);
+    const coinIdsToRemove = Array.from(selectedCoins);
     setRemovingCoins(new Set(coinIdsToRemove));
     
     try {
@@ -638,15 +701,29 @@ export function Watchlist() {
     )
   }
 
-  // No coins in watchlist at all
-  if (!watchlist.length) {
-    return (
-      <div className="space-y-6 px-4">
-        {/* Watchlists Grid */}
-        <WatchlistsGrid onSelectWatchlist={selectWatchlistGroup} />
-        
-        <div className="space-y-4">          
+  return (
+    <div className="space-y-6 px-4">
+      {/* Watchlists Grid - Always show */}
+      <WatchlistsGrid 
+        onSelectWatchlist={selectWatchlistGroup}
+        viewMode={gridViewMode}
+        activeTimeScale={activeTimeScale}
+        onTimeScaleChange={onTimeScaleChange}
+        onViewModeChange={onGridViewModeChange}
+      />
+      
+      {/* Conditional Content Based on View Mode */}
+      {viewMode === 'comparison' ? (
+        // Comparison mode shows the watchlist table
+        <div className="space-y-4">
+          <WatchlistTable activeTimeScale={activeTimeScale} />
+        </div>
+      ) : (
+        // Watchlist mode shows individual coins
+        <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
+
+          <div className="flex justify-start items-center gap-2">
           <WatchlistFilters
             searchText={filters.searchText}
             priceRange={filters.priceRange}
@@ -656,7 +733,7 @@ export function Watchlist() {
             sortBy={filters.sortBy}
             sortOrder={filters.sortOrder}
             selectedCoins={selectedCoins}
-            totalCoins={0}
+            totalCoins={filteredCoins.length}
             onSearchTextChange={(value) => setFilters(prev => ({ ...prev, searchText: value }))}
             onPriceRangeChange={(range) => setFilters(prev => ({ ...prev, priceRange: range }))}
             onMarketCapRangeChange={(range) => setFilters(prev => ({ ...prev, marketCapRange: range }))}
@@ -669,185 +746,158 @@ export function Watchlist() {
             onRemoveSelected={handleRemoveSelected}
             isRemoving={removingCoins.size > 0}
           />
+            {/* {coinImages.length > 0 && (
+              <AvatarCircles 
+                avatarUrls={coinImages}
+                numPeople={Math.max(0, filteredCoins.length - coinImages.length)}
+                className="scale-[0.6]"
+              />
+            )} */}
+          </div>
           <CoinSearch ref={coinSearchRef} />
-        </div>
-        
-        <div className="py-6 border border-dashed border-border rounded-lg">
-          <div className="flex flex-col items-center justify-center gap-3">
-            <div className="text-center">
-              <h3 className="font-medium">No coins in watchlist</h3>
-              <p className="text-sm text-muted-foreground">Add coins to track their performance</p>
-            </div>
           </div>
-        </div>
-        </div>
-      </div>
-    )
-  }
 
-  return (
-    <div className="space-y-6 px-4">
-      {/* Watchlists Grid */}
-      <WatchlistsGrid onSelectWatchlist={selectWatchlistGroup} />
-      
-      <div className="space-y-4">
-        
-        <div className="flex items-center justify-between gap-2">
-        <WatchlistFilters
-          searchText={filters.searchText}
-          priceRange={filters.priceRange}
-          marketCapRange={filters.marketCapRange}
-          volumeRange={filters.volumeRange}
-          changeFilter={filters.changeFilter}
-          sortBy={filters.sortBy}
-          sortOrder={filters.sortOrder}
-          selectedCoins={selectedCoins}
-          totalCoins={filteredCoins.length}
-          onSearchTextChange={(value) => setFilters(prev => ({ ...prev, searchText: value }))}
-          onPriceRangeChange={(range) => setFilters(prev => ({ ...prev, priceRange: range }))}
-          onMarketCapRangeChange={(range) => setFilters(prev => ({ ...prev, marketCapRange: range }))}
-          onVolumeRangeChange={(range) => setFilters(prev => ({ ...prev, volumeRange: range }))}
-          onChangeFilterChange={(value) => setFilters(prev => ({ ...prev, changeFilter: value }))}
-          onSortByChange={(value) => setFilters(prev => ({ ...prev, sortBy: value }))}
-          onSortOrderChange={(value) => setFilters(prev => ({ ...prev, sortOrder: value }))}
-          onClearAllFilters={handleClearAllFilters}
-          onSelectAll={handleSelectAll}
-          onRemoveSelected={handleRemoveSelected}
-          isRemoving={removingCoins.size > 0}
-        />
-        <CoinSearch ref={coinSearchRef} />
-      </div>
-      
-      {/* Show empty state if no coins after filtering */}
-      {filteredCoins.length === 0 ? (
-        <div className="py-6 border border-dashed border-border rounded-lg">
-          <div className="flex flex-col items-center justify-center gap-3">
-            <div className="text-center">
-              <h3 className="font-medium">No coins match your filters</h3>
-              <p className="text-sm text-muted-foreground">
-                Try adjusting your search or filter criteria
-              </p>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleClearAllFilters}
-                className="mt-2"
-              >
-                Clear all filters
-              </Button>
+          
+          {/* Show empty state if no coins after filtering */}
+          {!watchlist.length ? (
+            <div className="py-6 border border-dashed border-border rounded-lg">
+              <div className="flex flex-col items-center justify-center gap-3">
+                <div className="text-center">
+                  <h3 className="font-medium">No coins in watchlist</h3>
+                  <p className="text-sm text-muted-foreground">Add coins to track their performance</p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      ) : (
-      <div className="rounded-[10px] bg-primary/5 overflow-hidden p-0.5">
-          {/* Header - adjust grid to account for merged columns */}
-        <div className="px-3 py-1">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-            {table.getHeaderGroups().map(headerGroup => (
-                <div key={headerGroup.id} className="grid grid-cols-5 gap-4">
-                  {headerGroup.headers.slice(0, 1).map(header => ( // Show first header (select/token merged)
-                    <div 
-                      key={header.id}
-                      className="flex items-center gap-1 cursor-pointer select-none hover:text-foreground"
-                      onClick={() => table.getColumn('token-sort')?.toggleSorting()} // Sort by token
-                    >
-                      Token
-                      {{
-                        asc: ' ↑',
-                        desc: ' ↓',
-                      }[table.getColumn('token-sort')?.getIsSorted() as string] ?? null}
+          ) : filteredCoins.length === 0 ? (
+            <div className="py-6 border border-dashed border-border rounded-lg">
+              <div className="flex flex-col items-center justify-center gap-3">
+                <div className="text-center">
+                  <h3 className="font-medium">No coins match your filters</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Try adjusting your search or filter criteria
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleClearAllFilters}
+                    className="mt-2"
+                  >
+                    Clear all filters
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-[10px] bg-primary/5 overflow-hidden p-0.5">
+              {/* Header - adjust grid to account for merged columns */}
+              <div className="px-3 py-1">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  {table.getHeaderGroups().map(headerGroup => (
+                    <div key={headerGroup.id} className="grid grid-cols-5 gap-4">
+                      {headerGroup.headers.slice(0, 1).map(header => ( // Show first header (select/token merged)
+                        <div 
+                          key={header.id}
+                          className="flex items-center gap-2 cursor-pointer select-none hover:text-foreground"
+                          onClick={() => table.getColumn('token-sort')?.toggleSorting()} // Sort by token
+                        >
+                          <span>Token</span>
+                          {{
+                            asc: ' ↑',
+                            desc: ' ↓',
+                          }[table.getColumn('token-sort')?.getIsSorted() as string] ?? null}
+                        </div>
+                      ))}
+                      {headerGroup.headers.slice(2).map(header => ( // Skip the hidden token-sort column
+                        <div 
+                          key={header.id}
+                          className={cn(
+                            "flex items-center gap-1",
+                            header.column.getCanSort() ? "cursor-pointer select-none hover:text-foreground" : "",
+                            header.id === 'actions' ? "justify-end" : "justify-start"
+                          )}
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          {{
+                            asc: ' ↑',
+                            desc: ' ↓',
+                          }[header.column.getIsSorted() as string] ?? null}
+                        </div>
+                      ))}
                     </div>
                   ))}
-                  {headerGroup.headers.slice(2).map(header => ( // Skip the hidden token-sort column
-                  <div 
-                    key={header.id}
-                    className={cn(
-                      "flex items-center gap-1",
-                      header.column.getCanSort() ? "cursor-pointer select-none hover:text-foreground" : "",
-                      header.id === 'actions' ? "justify-end" : "justify-start"
-                    )}
-                    onClick={header.column.getToggleSortingHandler()}
-                  >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                    {{
-                      asc: ' ↑',
-                      desc: ' ↓',
-                    }[header.column.getIsSorted() as string] ?? null}
-                  </div>
-                ))}
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Table Body */}
-        <div 
-          className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden"
-          onMouseLeave={() => clearHoverWithDelay()}
-        >
-          {table.getRowModel().rows.map(row => {
-            const isSelected = selectedCoins.has(row.original.id.toString());
-            const hasAnySelections = selectedCoins.size > 0;
-            
-            return (
-              <Link 
-                key={row.id}
-                href={watchlistGroup ? `/charts/${row.original.id}?wg=${watchlistGroup}` : `/charts/${row.original.id}`}
-                className={cn(
-                  "grid grid-cols-5 gap-4 px-4 py-2.5 border-b last:border-b-0 hover:bg-primary/[0.02] transition-opacity duration-200 cursor-pointer",
-                  hasAnySelections ? (isSelected ? "opacity-100" : "opacity-40") : "opacity-100"
-                )}
+              {/* Table Body */}
+              <div 
+                className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden"
+                onMouseLeave={() => clearHoverWithDelay()}
               >
-                {/* First cell - merged select + token with specific hover */}
-                <div 
-                  className="flex items-center"
-                  onMouseEnter={() => setHoverState(row.id)}
-                  onMouseLeave={() => clearHoverWithDelay()}
-                  onClick={(e) => {
-                    e.preventDefault(); // Always prevent navigation for first cell
-                    e.stopPropagation();
-                    
-                    // Toggle checkbox selection when clicking anywhere in first cell
-                    const isCurrentlySelected = selectedCoins.has(row.original.id.toString());
-                    handleCoinSelect(row.original.id.toString(), !isCurrentlySelected);
-                  }}
-                >
-                  {(() => {
-                    const firstCell = row.getVisibleCells()[0];
-                    return firstCell && flexRender(firstCell.column.columnDef.cell, firstCell.getContext());
-                  })()}
-                </div>
-                
-                {/* Rest of the cells (skip the hidden token-sort column and removed market cap) */}
-                {row.getVisibleCells().slice(2, -1).map(cell => ( // Exclude last cell (actions)
-                  <div 
-                    key={cell.id}
-                    className="flex items-center justify-start"
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </div>
-                ))}
-                
-                {/* Actions cell - prevent navigation */}
-                <div 
-                  className="flex items-center justify-end"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                >
-                  {(() => {
-                    const lastCell = row.getVisibleCells()[row.getVisibleCells().length - 1];
-                    return lastCell && flexRender(lastCell.column.columnDef.cell, lastCell.getContext());
-                  })()}
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+                {table.getRowModel().rows.map(row => {
+                  const isSelected = selectedCoins.has(row.original.id.toString());
+                  const hasAnySelections = selectedCoins.size > 0;
+                  
+                  return (
+                    <Link 
+                      key={row.id}
+                      href={watchlistGroup ? `/charts/${row.original.id}?wg=${watchlistGroup}` : `/charts/${row.original.id}`}
+                      className={cn(
+                        "grid grid-cols-5 gap-4 px-4 py-2.5 border-b last:border-b-0 hover:bg-primary/[0.02] transition-opacity duration-200 cursor-pointer",
+                        hasAnySelections ? (isSelected ? "opacity-100" : "opacity-40") : "opacity-100"
+                      )}
+                    >
+                      {/* First cell - merged select + token with specific hover */}
+                      <div 
+                        className="flex items-center"
+                        onMouseEnter={() => setHoverState(row.id)}
+                        onMouseLeave={() => clearHoverWithDelay()}
+                        onClick={(e) => {
+                          e.preventDefault(); // Always prevent navigation for first cell
+                          e.stopPropagation();
+                          
+                          // Toggle checkbox selection when clicking anywhere in first cell
+                          const isCurrentlySelected = selectedCoins.has(row.original.id.toString());
+                          handleCoinSelect(row.original.id.toString(), !isCurrentlySelected);
+                        }}
+                      >
+                        {(() => {
+                          const firstCell = row.getVisibleCells()[0];
+                          return firstCell && flexRender(firstCell.column.columnDef.cell, firstCell.getContext());
+                        })()}
+                      </div>
+                      
+                      {/* Rest of the cells (skip the hidden token-sort column and removed market cap) */}
+                      {row.getVisibleCells().slice(2, -1).map(cell => ( // Exclude last cell (actions)
+                        <div 
+                          key={cell.id}
+                          className="flex items-center justify-start"
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </div>
+                      ))}
+                      
+                      {/* Actions cell - prevent navigation */}
+                      <div 
+                        className="flex items-center justify-end"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                      >
+                        {(() => {
+                          const lastCell = row.getVisibleCells()[row.getVisibleCells().length - 1];
+                          return lastCell && flexRender(lastCell.column.columnDef.cell, lastCell.getContext());
+                        })()}
+                      </div>
+                    </Link>
+                  );
+                })}
               </div>
+            </div>
+          )}
+        </div>
       )}
-      </div>
     </div>
   )
 }

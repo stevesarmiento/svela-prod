@@ -20,8 +20,8 @@ import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { useWatchlistGroups } from '@v1/convex/hooks'
 import { useWatchlistByGroup } from '@v1/convex/hooks'
-import { useWatchlistCoins } from '@/hooks/use-watchlist-coins'
-import { useWatchlistAggregateChart } from '@/hooks/use-watchlist-aggregate-chart'
+import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
+import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
 
 
 interface WatchlistMultiLineChartProps {
@@ -69,29 +69,29 @@ interface WatchlistGroup {
 // Component to fetch data for a single watchlist
 function WatchlistDataFetcher({ 
   group, 
-  timeScale, 
-  onDataReady 
+  onDataReady,
+  activeTimeScale
 }: { 
   group: WatchlistGroup
-  timeScale: string
   onDataReady: (data: WatchlistSeries | null) => void 
+  activeTimeScale: string
 }) {
   // Get watchlist coins for this group
   const groupWatchlist = useWatchlistByGroup(group._id)
   
-  // Transform to array of coin IDs
+  // Transform to array of CoinGecko string IDs
   const coinIds = useMemo(() => {
     if (!groupWatchlist || !Array.isArray(groupWatchlist)) return []
-    return groupWatchlist.map(item => Number(item.coinId))
+    return groupWatchlist.map(item => item.coinId) // Keep as string for CoinGecko
   }, [groupWatchlist])
   
-  // Get coin data
-  const { data: coins } = useWatchlistCoins(coinIds)
+  // Get coin data using CoinGecko
+  const { data: coins } = useCoinGeckoWatchlistCoins(coinIds)
   
-  // Get aggregate chart data
-  const { aggregateData } = useWatchlistAggregateChart({
+  // Get aggregate chart data using isolated CoinGecko hook
+  const { aggregateData } = useCoinGeckoWatchlistAggregateChartIsolated({
     coins: coins || [],
-    timeScale
+    timeScale: activeTimeScale
   })
 
   // Update parent when data changes
@@ -174,7 +174,6 @@ const TimeScaleSelector = ({
     { value: "7d", label: "1W" },   // 7d change  
     { value: "30d", label: "1M" },  // 30d change
     { value: "max", label: "1Y" },  // Longest available
-    { value: "2y", label: "2Y" },   // N/A
   ]
 
   return (
@@ -466,8 +465,8 @@ export function WatchlistMultiLineChart({
         <WatchlistDataFetcher
           key={group._id}
           group={group}
-          timeScale={activeTimeScale}
           onDataReady={handleDataUpdate.get(group._id) || (() => {})}
+          activeTimeScale={activeTimeScale}
         />
       ))}
       

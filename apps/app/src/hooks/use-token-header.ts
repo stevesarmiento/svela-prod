@@ -18,38 +18,38 @@ export function useTokenHeader() {
   const pathSegments = pathname.split('/').filter(segment => segment !== '')
   
   let isChartDetailPage = false
-  let coinId: string | null = null
+  let coingeckoId: string | null = null
 
   // Check for pattern: charts/[id] or [locale]/charts/[id]
   if (pathSegments.length >= 2 && pathSegments.includes('charts')) {
     const chartsIndex = pathSegments.indexOf('charts')
     if (chartsIndex + 1 < pathSegments.length && pathSegments[chartsIndex + 1]) {
       isChartDetailPage = true
-      coinId = pathSegments[chartsIndex + 1] || null
+      coingeckoId = pathSegments[chartsIndex + 1] || null
     }
   }
 
-  // Use Convex query to get coin data
+  // Use CoinGecko database query to get coin data
   const coinData = useQuery(
-    api.coins.getCoinByIdString,
-    coinId ? { coinId } : "skip"
+    api.coins.getCoinGeckoCoinById,
+    coingeckoId ? { coingeckoId } : "skip"
   )
 
-  // Transform Convex data to match expected interface
+  // Transform CoinGecko data to match expected interface
   const tokenData: TokenHeaderData | null = coinData ? {
-    id: coinData.coinId.toString(),
+    id: coinData.coingeckoId,
     name: coinData.name,
-    symbol: coinData.symbol,
+    symbol: coinData.symbol.toUpperCase(),
     logoUrl: coinData.logoUrl
   } : null
 
-  const isLoading = coinId ? coinData === undefined : false
+  const isLoading = coingeckoId ? coinData === undefined : false
 
-  console.log('useTokenHeader Debug:', { 
+  console.log('useTokenHeader Debug (CoinGecko):', { 
     pathname, 
     pathSegments, 
     isChartDetailPage, 
-    coinId,
+    coingeckoId,
     tokenData,
     isLoading
   })

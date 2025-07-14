@@ -6,6 +6,7 @@ import { Skeleton } from "@v1/ui/skeleton"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { useLiquidationHistory } from '@/hooks/use-liquidation-history'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
+import { coinGeckoIdToSymbolFallback } from '@/lib/coingecko-to-symbol'
 import {
   createChart,
   ColorType,
@@ -58,8 +59,11 @@ export function LiquidationHistoryChart({
     visible: false
   })
 
+  // Convert CoinGecko ID to symbol for Coinglass API
+  const symbol = coinGeckoIdToSymbolFallback(coinId)
+  
   const { data, isLoading, error } = useLiquidationHistory({
-    symbol: coinId,
+    symbol,
     interval,
     exchangeList,
     limit,
@@ -248,7 +252,10 @@ export function LiquidationHistoryChart({
       <div className="">
         <Card className="border-none bg-transparent">
           <CardContent>
-            <div className="text-destructive">Failed to load liquidation data</div>
+            <div className="text-destructive">Failed to load liquidation data for {symbol}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              CoinGecko ID &quot;{coinId}&quot; → Symbol &quot;{symbol}&quot;
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -260,6 +267,10 @@ export function LiquidationHistoryChart({
       <Card className="border-none bg-transparent">          
         <CardContent className="pl-8">
           <div className="p-0 relative">
+            {/* Data source indicator */}
+            <div className="absolute top-2 right-2 z-10 text-[10px] text-muted-foreground bg-black/20 px-2 py-1 rounded">
+              {symbol} via Coinglass
+            </div>
             <div ref={chartContainerRef} />
             
             {/* Custom Tooltip */}

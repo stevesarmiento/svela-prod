@@ -5,12 +5,17 @@ import { MultiPriceChartLightweight } from "./multi-line-lightweight"
 import { ChartTable } from "./chart-table"
 import { useOptimizedChartsData } from '@/hooks/use-optimized-charts-data'
 import { Spinner } from "@v1/ui/spinner"
+import type { CoinMarketData } from '@/types/coins'
+
+interface OptimisticCoinMarketData extends CoinMarketData {
+  isOptimistic?: boolean;
+}
 
 function ChartsContent() {
   const { 
     optimisticCoins, 
     activeTimeScale, 
-    setActiveTimeScale, 
+    setActiveTimeScale,
     isInitialized, 
     hasWatchlistItems,
     selectedGroup,
@@ -55,7 +60,7 @@ function ChartsContent() {
     <div className="space-y-6 w-full z-0 p-8">      
       <div className="space-y-14">
         <MultiPriceChartLightweight 
-          coins={optimisticCoins} 
+          coins={optimisticCoins as OptimisticCoinMarketData[]} 
           activeTimeScale={activeTimeScale}
           setActiveTimeScale={setActiveTimeScale}
         />

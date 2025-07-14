@@ -1,17 +1,20 @@
 'use client'
 
-import React, { useState } from 'react'
+import React from 'react'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
-import { useOptimizedChartData } from '@/hooks/use-optimized-chart-data'
+import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { useChartInstance } from '@/hooks/use-chart-instance'
 import { usePriceCalculations } from '@/hooks/use-price-calculations'
 import type { CoinMarketData } from '@/types/coins'
 import { useHullSuite } from '@/hooks/use-hull-suite'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
-import { IconDistributeHorizontalCenter, IconChartLineUptrendXyaxis, IconArrowUpRight } from 'symbols-react'
+import { IconArrowUpRight } from 'symbols-react'
 import Image from 'next/image'
+import { useQuery } from 'convex/react'
+import { api } from '../../../../../../convex/_generated/api'
+import { useQuery as useTanStackQuery } from '@tanstack/react-query'
 
 interface PriceChartProps {
   coinId: string;
@@ -29,18 +32,14 @@ interface IndicatorSettings {
   showHullSuite: boolean
 }
 
-type ChartType = 'line' | 'candlestick'
-
 const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: { 
   activeTimeScale: string
   setActiveTimeScale: (scale: string) => void 
 }) => {
   const scales = [
-    { value: "1d", label: "1D" },   // 24h change
-    { value: "7d", label: "1W" },   // 7d change  
-    { value: "30d", label: "1M" },  // 30d change
-    { value: "max", label: "1Y" },  // Longest available
-    { value: "2y", label: "2Y" },   // N/A
+    { value: "30d", label: "1Q" },   // 30 days focus with 90 days context
+    { value: "max", label: "1Y" },    // 1 year of data
+    { value: "2y", label: "Max" },    // Maximum data possible
   ]
 
   return (
@@ -63,58 +62,36 @@ const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: {
   )
 }
 
-const ChartTypeSelector = ({ chartType, setChartType }: { 
-  chartType: ChartType
-  setChartType: (type: ChartType) => void 
-}) => {
-  const types = [
-    { 
-      value: "candlestick" as const, 
-      label: "Candles", 
-      icon: IconDistributeHorizontalCenter 
-    },
-    { 
-      value: "line" as const, 
-      label: "Line", 
-      icon: IconChartLineUptrendXyaxis 
-    },
-  ]
-
-  return (
-    <div className="flex gap-1 bg-zinc-900/10 border border-zinc-800/30 rounded-[12px] p-1">
-      {types.map((type) => {
-        const IconComponent = type.icon
-        return (
-          <button
-            key={type.value}
-            onClick={() => setChartType(type.value)}
-            className={cn(
-              "px-3 py-1 text-xs rounded-lg flex items-center gap-1.5",
-              chartType === type.value
-                ? "bg-zinc-800/50 border border-zinc-800/50 text-white shadow-md shadow-zinc-950/50"
-                : "bg-transparent text-muted-foreground hover:bg-muted/80"
-            )}
-          >
-            <IconComponent size={14} className="w-3 h-3 fill-white/50" />
-            {type.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTimeScale }: PriceChartProps) {
-  // Now we get proper OHLCV data from the optimized hook with intelligent caching
-  const { chartData, volumeData, ohlcvData, isLoading, tokenData } = useOptimizedChartData(coinId, activeTimeScale, initialData)
+  // Get CoinGecko coin data from database
+  const coingeckoCoinData = useQuery(
+    api.coins.getCoinGeckoCoinById,
+    { coingeckoId: coinId }
+  )
+  
+  // Get live price data from CoinGecko API
+  const { data: livePrice, isLoading: isPriceLoading } = useTanStackQuery({
+    queryKey: ['coingecko-price', coinId],
+    queryFn: async () => {
+      const response = await fetch(`/api/coingecko/quotes?ids=${coinId}`)
+      if (!response.ok) throw new Error('Failed to fetch price')
+      const data = await response.json()
+      return data.data[coinId]
+    },
+    enabled: !!coinId,
+    staleTime: 30 * 1000, // 30 seconds
+    refetchInterval: 60 * 1000, // 1 minute
+  })
+  
+  // Get line chart data with OHLC data for tooltips
+  const { chartData, volumeData, ohlcData, isLoading, tokenData } = useCoinGeckoChartData(coinId, activeTimeScale, initialData)
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData, activeTimeScale)
   
   // Generate Hull Suite colors - same as hook to ensure consistency
   const hullColors = generatePastelColors(1)
   const primaryHullColor = addOpacityToColor(hullColors[0] || 'hsl(210, 40%, 75%)', 0.7)
   
-  // State for chart type only - crosshair updates handled by tooltip
-  const [chartType, setChartType] = useState<ChartType>('line')
+  // Always use line chart - simplified approach
 
   const indicators: IndicatorSettings = {
     showWaveTrend: false,
@@ -132,8 +109,9 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
     visualSwitch: true,
   }
 
-  // Use proper OHLCV data for Hull Suite (no need to create fake data anymore)
-  const hullSuiteData = useHullSuite(ohlcvData || [], {
+  // Use OHLC data for Hull Suite (add volume=0 for compatibility)
+  const ohlcvDataForHull = ohlcData.map(point => ({ ...point, volume: 0 }))
+  const hullSuiteData = useHullSuite(ohlcvDataForHull || [], {
     src: 'close',
     modeSwitch: hullSettings.modeSwitch,
     length: hullSettings.length,
@@ -166,12 +144,18 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
     indicators, // Hull Suite indicator settings
     legacyHullSuiteData,
     undefined, // No callback - tooltip handles dynamic updates
-    chartType, // Chart type (line or candlestick)
-    ohlcvData // Real OHLCV data for candlestick chart
+    'line', // Always use line chart
+    ohlcvDataForHull // Pass OHLC data for tooltips
   )
 
-  // Get coin info from tokenData or use fallbacks
-  const coinName = tokenData?.fullData?.name || '...'
+  // Get coin info from CoinGecko database
+  const coinName = coingeckoCoinData?.name || 'Loading...'
+  const coinImage = coingeckoCoinData?.logoUrl
+  
+  // Use live price data if available, otherwise fall back to display price
+  const currentPrice = livePrice?.current_price || displayPrice || 0
+  const priceChange24h = livePrice?.price_change_percentage_24h || calculatePercentageChange || 0
+  const isLoadingPrice = isPriceLoading || isLoading
 
   return (
     <div>
@@ -192,50 +176,51 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                 <div className="flex flex-col space-y-1">
                   <div className="flex items-center gap-2">
                     <Image 
-                      src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coinId}.png`} 
+                      src={coinImage?.startsWith('http') || coinImage?.startsWith('/') ? coinImage : '/favicon.ico'} 
                       alt={coinName} 
                       width={20} 
                       height={20}
                       className="rounded-full w-3 h-3"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = '/favicon.ico';
+                      }}
                     />
                     <span className="text-white font-bold text-xs">{coinName}</span>
                     <span className="text-muted-foreground text-xs">is currently</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="text-3xl font-bold font-sans">
-                      ${displayPrice.toLocaleString('en-US', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2
-                      })}
-                    </span>
-                    {isLoading && <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" />}
-                  </div>
-                  <div className={`text-xs font-bold font-mono ${isNaN(calculatePercentageChange) ? 'text-muted-foreground' : calculatePercentageChange >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {isNaN(calculatePercentageChange) ? (
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-3xl font-bold font-sans">
+                        ${currentPrice.toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 8
+                        })}
+                      </span>
+                      {isLoadingPrice && <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" />}
+                    </div>
+
+                  <div className={`text-xs font-bold font-mono ${isNaN(priceChange24h) ? 'text-muted-foreground' : priceChange24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {isNaN(priceChange24h) ? (
                       <span>N/A</span>
                     ) : (
                       <>
                         <motion.span
-                          key={calculatePercentageChange >= 0 ? 'up' : 'down'}
-                          initial={{ rotate: calculatePercentageChange >= 0 ? 0 : 90 }}
-                          animate={{ rotate: calculatePercentageChange >= 0 ? 0 : 90 }}
+                          key={priceChange24h >= 0 ? 'up' : 'down'}
+                          initial={{ rotate: priceChange24h >= 0 ? 0 : 90 }}
+                          animate={{ rotate: priceChange24h >= 0 ? 0 : 90 }}
                           transition={{ type: "spring", bounce: 0.3, duration: 0.3 }}
                           className="inline-block mr-2"
                           style={{ transformOrigin: 'center' }}
                         >
-                          <IconArrowUpRight className={`w-2 h-2 ${calculatePercentageChange >= 0 ? 'fill-emerald-500' : 'fill-rose-500'}`} />
+                          <IconArrowUpRight className={`w-2 h-2 ${priceChange24h >= 0 ? 'fill-emerald-500' : 'fill-rose-500'}`} />
                         </motion.span>
                         <span>
-                          {Math.abs(calculatePercentageChange).toFixed(2)}%
+                          {Math.abs(priceChange24h).toFixed(2)}%
                         </span>
                       </>
                     )}
                   </div>
                 </div>
-                <ChartTypeSelector
-                  chartType={chartType}
-                  setChartType={setChartType}
-                />
               </div>
             </CardHeader>
             <CardContent className="pl-8">

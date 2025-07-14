@@ -47,6 +47,22 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
     handleAnalyze,
   } = useAnalysisData({ coinId, tokenData, shouldCalculate })
 
+  // Transform CoinGecko marketData to expected format for MarketMetricsSidebar
+  const transformedMarketData = React.useMemo(() => {
+    if (!marketData) return {}
+    
+    return {
+      quote: {
+        USD: {
+          price: marketData.current_price || 0,
+          market_cap: marketData.market_cap || 0,
+          volume_24h: marketData.total_volume || 0,
+          percent_change_24h: marketData.price_change_percentage_24h || 0,
+        }
+      }
+    }
+  }, [marketData])
+
   // Handle the analyze button click
   const onAnalyzeClick = () => {
     setIsDialogOpen(true)
@@ -73,7 +89,7 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
             <div className="flex items-center">
               <div className="flex items-center gap-4 pt-3 pl-4">
                 <Image
-                  src={tokenData?.logoUrl || `https://s2.coinmarketcap.com/static/img/coins/64x64/${coinId}.png`}
+                  src={tokenData?.logoUrl || `https://assets.coingecko.com/coins/images/1/standard/bitcoin.png`}
                   alt={tokenData?.name || marketData?.name || 'Token'}
                   className="w-8 h-8 rounded-full ring-1 ring-white/10"
                   width={32}
@@ -92,12 +108,12 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
                       {marketData?.name || tokenData?.name || 'Token Details'}
                     </h1>   
                     <span className={`text-[11px] font-mono font-thin ${
-                      (marketData?.quote?.USD?.percent_change_24h ?? 0) >= 0 
+                      (marketData?.price_change_percentage_24h ?? 0) >= 0 
                         ? 'text-green-400' 
                         : 'text-red-400'
                     }`}>
-                      {(marketData?.quote?.USD?.percent_change_24h ?? 0) >= 0 ? '+' : ''}
-                      {marketData?.quote?.USD?.percent_change_24h?.toFixed(2)}%
+                      {(marketData?.price_change_percentage_24h ?? 0) >= 0 ? '+' : ''}
+                      {marketData?.price_change_percentage_24h?.toFixed(2)}%
                     </span>                 
                   </div>
                   <p className="text-xs text-white">
@@ -122,7 +138,7 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
                   <MarketMetricsSidebar
                     coinId={coinId}
                     tokenSymbol={tokenData?.symbol}
-                    marketData={marketData || {}}
+                    marketData={transformedMarketData}
                     chartData={chartData || []}
                     volumeData={volumeData || []}
                     bbData={bbData || { indicator: [], upper: [], lower: [] }}

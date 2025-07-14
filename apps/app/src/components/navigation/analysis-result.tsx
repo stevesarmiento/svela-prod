@@ -7,11 +7,10 @@ import { MultiStepLoader } from '@v1/ui/mult-step-loader'
 
 interface MarketData {
   name?: string
-  quote?: {
-    USD?: {
-      percent_change_24h?: number
-    }
-  }
+  current_price?: number
+  price_change_percentage_24h?: number
+  market_cap?: number
+  total_volume?: number
 }
 
 interface TokenData {

@@ -14,7 +14,16 @@ const CoinglassResponseSchema = z.object({
 
 async function fetchWithErrorHandling(url: string) {
   if (!API_KEY) {
-    throw new Error('CoinGlass API key is not configured');
+    return {
+      ok: false,
+      status: 503,
+      statusText: 'CoinGlass API key not configured',
+      json: async () => ({
+        success: false,
+        error: 'CoinGlass API key is not configured. Please set CG_API_KEY or CG-API-KEY in your environment.',
+        data: []
+      })
+    };
   }
 
   try {
@@ -37,8 +46,7 @@ async function fetchWithErrorHandling(url: string) {
       throw new Error(errorData?.msg || `API error: ${response.status}`);
     }
 
-    const data = await response.json();
-    return data;
+    return response;
   } catch (error) {
     console.error("CoinGlass API error:", error);
     throw error;
@@ -59,9 +67,23 @@ export async function GET(request: Request) {
     }
 
     // Fetch supported coins from CoinGlass
-    const data = await fetchWithErrorHandling(
+    const response = await fetchWithErrorHandling(
       `${BASE_URL}/futures/supported-coins`
     );
+    
+    // Handle missing API key case
+    if (!response.ok) {
+      const errorData = await response.json();
+      return NextResponse.json({
+        success: false,
+        error: errorData.error,
+        data: [],
+        count: 0,
+        lastUpdated: new Date().toISOString(),
+      }, { status: 503 });
+    }
+
+    const data = await response.json();
     
     // Validate response structure
     const validatedData = CoinglassResponseSchema.parse(data);

@@ -11,7 +11,7 @@ import {
   useDeleteWatchlistGroup,
   useWatchlistByGroup
 } from '@v1/convex/hooks'
-import { useWatchlistCoins } from '@/hooks/use-watchlist-coins'
+import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { IconPicker } from '@/components/icon-picker'
 import { COLORS } from '@/components/color-picker'
 import { useWatchlist } from './watchlist-context'
@@ -34,8 +34,34 @@ interface WatchlistGroup {
   updatedAt: number
 }
 
+interface CoinGeckoWatchlistCoin {
+  id: string; // CoinGecko string ID
+  name: string;
+  symbol: string;
+  slug: string;
+  image: string; // CoinGecko image URL
+  cmc_rank: number;
+  circulating_supply: number;
+  max_supply: number | null;
+  quote: {
+    USD: {
+      price: number;
+      volume_24h: number;
+      market_cap: number;
+      percent_change_24h: number;
+      percent_change_1h?: number;
+      percent_change_7d?: number;
+      percent_change_30d?: number;
+    };
+  };
+}
+
 interface WatchlistsGridProps {
   onSelectWatchlist?: (group: WatchlistGroup) => void
+  viewMode?: 'grid' | 'chart'
+  activeTimeScale?: string
+  onTimeScaleChange?: (scale: string) => void
+  onViewModeChange?: (mode: 'grid' | 'chart') => void
 }
 
 // Component to fetch coins for a specific group
@@ -63,17 +89,63 @@ function WatchlistGroupWithCoins({
   editingColor?: string
 }) {
   const groupWatchlist = useWatchlistByGroup(group._id)
-  const coinIds = useMemo(() => {
-    return groupWatchlist?.map(item => Number(item.coinId)) || []
-  }, [groupWatchlist])
+  const prevCoinsRef = useRef<CoinGeckoWatchlistCoin[]>([])
   
-  const { data: coins = [] } = useWatchlistCoins(coinIds)
+  // For watchlist cards only: Convert to CoinGecko IDs for display
+  const coingeckoIds = useMemo(() => {
+    // Watchlist stores CoinGecko string IDs, use them directly for card display
+    const ids = groupWatchlist?.map(item => item.coinId) || []
+    
+    // Debug logging for edit mode
+    if (isEditing) {
+      console.log('🔍 WatchlistGroupWithCoins DEBUG (Edit Mode):', {
+        groupName: group.name,
+        groupId: group._id,
+        isEditing,
+        groupWatchlistLength: groupWatchlist?.length || 0,
+        groupWatchlistData: groupWatchlist,
+        coingeckoIdsLength: ids.length,
+        coingeckoIds: ids
+      })
+    }
+    
+    return ids
+  }, [groupWatchlist]) // Removed isEditing and group props from dependencies to prevent unnecessary recalculations
+  
+  // Use CoinGecko data only for watchlist card display
+  const { data: coins = [], isLoading, error } = useCoinGeckoWatchlistCoins(coingeckoIds)
+  
+  // Maintain previous coin data during edit transitions to prevent empty state
+  const stableCoins = useMemo(() => {
+    if (coins.length > 0) {
+      prevCoinsRef.current = coins
+      return coins
+    }
+    // If no coins and we're editing, use previous data to prevent flash of empty state
+    if (isEditing && prevCoinsRef.current.length > 0) {
+      console.log('🔄 Using cached coin data during edit mode for:', group.name)
+      return prevCoinsRef.current
+    }
+    return coins
+  }, [coins, isEditing, group.name])
+  
+  // Debug logging for coin data in edit mode
+  if (isEditing) {
+    console.log('🪙 Coins data DEBUG (Edit Mode):', {
+      groupName: group.name,
+      originalCoinsLength: coins.length,
+      stableCoinsLength: stableCoins.length,
+      isLoading,
+      error,
+      usingCached: stableCoins.length > 0 && coins.length === 0
+    })
+  }
   
   return (
     <div ref={isEditing ? editCardRef : undefined}>
       <WatchlistCard
         group={group}
-        coins={coins}
+        coins={stableCoins}
         onEdit={onEdit}
         onDelete={onDelete}
         onSelect={onSelect}
@@ -86,13 +158,16 @@ function WatchlistGroupWithCoins({
   )
 }
 
-export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
+export function WatchlistsGrid({ 
+  onSelectWatchlist,
+  viewMode = 'grid',
+  activeTimeScale = '7d',
+  onTimeScaleChange,
+  onViewModeChange
+}: WatchlistsGridProps) {
   const [isCreating, setIsCreating] = useState(false)
   const [editingGroup, setEditingGroup] = useState<WatchlistGroup | null>(null)
   const editCardRef = useRef<HTMLDivElement>(null)
-  const [activeTab, setActiveTab] = useState<'grid' | 'chart'>('grid')
-  const [activeTimeScale, setActiveTimeScale] = useState<string>("7d")
-
   
   // Current editing values for real-time preview
   const [editingName, setEditingName] = useState('')
@@ -211,7 +286,10 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
       {/* Header with tabs and create button */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">          
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'grid' | 'chart')}>
+          <Tabs value={viewMode} onValueChange={(value) => {
+            const newMode = value as 'grid' | 'chart'
+            onViewModeChange?.(newMode)
+          }}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="grid" className="flex items-center gap-2">
                 <IconStarFill className="h-4 w-4 fill-muted-foreground" />
@@ -227,7 +305,7 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
         <CreateWatchlistTrigger onClick={() => setIsCreating(true)} />
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'grid' | 'chart')}>
+      <Tabs value={viewMode}>
         <TabsContent value="grid" className="mt-0">
           {/* Empty State */}
           {!watchlistGroups || watchlistGroups.length === 0 ? (
@@ -368,7 +446,7 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
             {allWatchlistIds.size > 0 ? (
               <WatchlistMultiLineChart
                 activeTimeScale={activeTimeScale}
-                setActiveTimeScale={setActiveTimeScale}
+                setActiveTimeScale={onTimeScaleChange || (() => {})}
                 selectedWatchlists={allWatchlistIds}
                 onSelectWatchlist={(watchlistId) => {
                   const group = watchlistGroups?.find(g => g._id === watchlistId)
@@ -384,7 +462,7 @@ export function WatchlistsGrid({ onSelectWatchlist }: WatchlistsGridProps) {
                     Create watchlists in the Grid tab to see them compared here
                   </p>
                   <Button 
-                    onClick={() => setActiveTab('grid')} 
+                    onClick={() => onViewModeChange?.('grid')} 
                     variant="outline"
                   >
                     Go to Grid

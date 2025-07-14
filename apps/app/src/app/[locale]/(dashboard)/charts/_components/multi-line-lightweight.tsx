@@ -6,7 +6,6 @@ import {
   ColorType,
   CrosshairMode,
   LineStyle,
-  LineData,
   Time,
   LastPriceAnimationMode,
   LineSeries,
@@ -25,10 +24,11 @@ import { Button } from '@v1/ui/button'
 import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { AvatarCircles } from "@v1/ui/token-stacks"
-import { useMultiChartData } from '@/hooks/use-multi-chart-data'
+import { useCoinGeckoBulkChartData } from '@/hooks/use-coingecko-bulk-chart-data'
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
+  image?: string; // CoinGecko image URL
 }
 
 interface MultiPriceChartLightweightProps {
@@ -115,9 +115,9 @@ const TimeScaleSelector = ({
   const scales = [
     { value: "1d", label: "1D" },   // 24h (48 hours of hourly data)
     { value: "7d", label: "1W" },   // 7 days  
-    { value: "30d", label: "1M" },  // 30 days
-    { value: "max", label: "1Y" },  // 1 year
-    { value: "2y", label: "2Y" },   // 2 years
+    { value: "30d", label: "1Q" },   // 30 days focus with 90 days context
+    { value: "max", label: "1Y" },    // 1 year of data
+    { value: "2y", label: "Max" },    // Maximum data possible
   ]
 
   return (
@@ -154,8 +154,16 @@ export function MultiPriceChartLightweight({
   // Use the bottom nav context to trigger contextual command search
   const { openContextualCommandSearch } = useBottomNav()
 
-  // 🚀 OPTIMIZED: Use multi-chart data hook with intelligent caching
-  const { series: coinSeriesData, isLoading: chartDataLoading, performance } = useMultiChartData(coins, activeTimeScale)
+  // 🚀 OPTIMIZED: Use CoinGecko BULK multi-chart data hook with intelligent caching
+  const { series: coinSeriesData, isLoading: chartDataLoading, performance } = useCoinGeckoBulkChartData(coins, activeTimeScale)
+
+  // 🔍 DEBUG: Log bulk performance
+  console.log('📊 Bulk multi-line chart:', {
+    totalCoins: coins.length,
+    seriesCount: coinSeriesData.length,
+    bulkApiCalls: performance.bulkApiCalls,
+    cacheHitRate: performance.cacheHitRate.toFixed(1) + '%'
+  })
 
   // Generate colors for the series data
   const coinSeriesWithColors = useMemo(() => {
@@ -178,8 +186,8 @@ export function MultiPriceChartLightweight({
 
   // Create avatar data for coin logos (filter out optimistic coins)
   const avatarData = useMemo(() => {
-    return coins.filter(coin => !coin.isOptimistic).map((coin) => ({
-      imageUrl: `https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`,
+    return coins.filter(coin => !coin.isOptimistic && coin.image).map((coin) => ({
+      imageUrl: coin.image!, // Only use CoinGecko images, skip coins without images
       profileUrl: `/charts/${coin.id}`,
     }))
   }, [coins])
@@ -202,14 +210,16 @@ export function MultiPriceChartLightweight({
           style: LineStyle.Dotted,
         },
         horzLines: { 
-          visible: false,
-          color: "#f5f5f50",
-          style: LineStyle.Dotted,
+          visible: false, // Hide default lines, we'll create gradient ones
+          color: "#ffffff10",
+          style: LineStyle.Solid,
         },
       },
       rightPriceScale: {
         borderVisible: false,
         autoScale: true,
+        visible: true,
+        entireTextOnly: true,
       },
       crosshair: {
         mode: CrosshairMode.Magnet,
@@ -295,19 +305,46 @@ export function MultiPriceChartLightweight({
       const coinData: TooltipCoinData[] = []
       
       // Use coinSeriesWithColors to maintain consistent order in tooltip
+      // Always show all coins by finding closest data point for each
       coinSeriesWithColors.forEach((coinSeries) => {
-        const lineData = lineSeriesMap.get(coinSeries.id)
-        if (lineData) {
-          const seriesData = param.seriesData.get(lineData.series) as LineData<Time>
-          if (seriesData) {
-            coinData.push({
-              id: coinSeries.id,
-              name: coinSeries.name,
-              symbol: coinSeries.symbol,
-              color: coinSeries.color,
-              value: seriesData.value,
-            })
+        const lineData = lineSeriesMapRef.current.get(coinSeries.id)
+        if (lineData && coinSeries.data.length > 0 && param.time) { // Added param.time check
+          // Find the closest data point to the crosshair time
+          let closestPoint = coinSeries.data[0]!
+          let minDiff = Math.abs((closestPoint.time as number) - (param.time as number))
+          
+          for (const point of coinSeries.data) {
+            const diff = Math.abs((point.time as number) - (param.time as number))
+            if (diff < minDiff) {
+              minDiff = diff
+              closestPoint = point
+            }
           }
+          
+          // DEBUG: Log why coin might be skipped
+          console.log(`Tooltip for ${coinSeries.symbol}:`, {
+            dataPoints: coinSeries.data.length,
+            minDiffSeconds: minDiff,
+            minDiffHours: (minDiff / 3600).toFixed(2),
+            timeframe: activeTimeScale,
+            hasData: coinSeries.data.length > 0,
+            closestTime: closestPoint.time,
+            crosshairTime: param.time
+          })
+          
+          coinData.push({
+            id: coinSeries.id,
+            name: coinSeries.name,
+            symbol: coinSeries.symbol,
+            color: coinSeries.color,
+            value: closestPoint.value,
+          })
+        } else {
+          // DEBUG: Log skipped coins
+          console.warn(`Skipped coin ${coinSeries.symbol}: no data available`, {
+            hasLineData: !!lineData,
+            dataLength: coinSeries.data.length
+          })
         }
       })
 
@@ -358,7 +395,7 @@ export function MultiPriceChartLightweight({
       })
       chart.remove()
     }
-  }, [coinSeriesWithColors])
+  }, [coinSeriesWithColors, activeTimeScale])
 
   // Handle hover effects on chart lines
   useEffect(() => {
@@ -468,7 +505,7 @@ export function MultiPriceChartLightweight({
                           e.preventDefault()
                           e.stopPropagation()
                           try {
-                            await removeFromWatchlist(Number(coin.id))
+                            await removeFromWatchlist(coin.id.toString())
                             toast({
                               title: "Removed",
                               description: `${coin.name} removed from watchlist`,
@@ -535,7 +572,7 @@ export function MultiPriceChartLightweight({
                       <Spinner size={24} className="mb-2" />
                       <p className="text-sm text-muted-foreground">Loading chart data...</p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Cache: {performance.cacheHits}/{performance.totalQueries} hits
+                        Bulk API: {performance.bulkApiCalls} calls | Cache: {performance.cacheHitRate.toFixed(1)}%
                       </p>
                     </div>
                   </div>
@@ -546,7 +583,25 @@ export function MultiPriceChartLightweight({
                     </div>
                   </div>
                 ) : (
-                  <div ref={chartContainerRef} />
+                  <div className="relative">
+                    {/* Custom gradient grid lines overlay */}
+                    <div 
+                      className="absolute inset-0 pointer-events-none z-10"
+                      style={{
+                        backgroundImage: `
+                          repeating-linear-gradient(
+                            to bottom,
+                            transparent 0px,
+                            transparent 79px,
+                            linear-gradient(to right, transparent 0%, rgba(255, 255, 255, 0.06) 50%, transparent 100%) 80px,
+                            transparent 81px,
+                            transparent 160px
+                          )
+                        `
+                      }}
+                    />
+                    <div ref={chartContainerRef} />
+                  </div>
                 )}
               </div>
             </CardContent>

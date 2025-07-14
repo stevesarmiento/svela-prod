@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
+// Legacy CoinMarketCap search - deprecated, use searchCoinGeckoCoins instead
 export const searchCoins = query({
   args: { query: v.string(), limit: v.optional(v.number()) },
   handler: async (ctx, args) => {
@@ -23,6 +24,70 @@ export const searchCoins = query({
   },
 });
 
+// CoinGecko coins search with improved relevance ranking
+export const searchCoinGeckoCoins = query({
+  args: { query: v.string(), limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const searchTerm = args.query.toLowerCase();
+    const limit = args.limit || 20;
+
+    const allCoins = await ctx.db.query("coingeckoCoins").collect();
+
+    // Categorize matches by relevance
+    const exactIdMatches: typeof allCoins = [];
+    const exactSymbolMatches: typeof allCoins = [];
+    const exactNameMatches: typeof allCoins = [];
+    const partialMatches: typeof allCoins = [];
+
+    allCoins.forEach(coin => {
+      const coinId = coin.coingeckoId.toLowerCase();
+      const symbol = coin.symbol.toLowerCase();
+      const name = coin.name.toLowerCase();
+
+      // Prioritize exact ID matches (e.g., "bitcoin" -> coingeckoId "bitcoin")
+      if (coinId === searchTerm) {
+        exactIdMatches.push(coin);
+      }
+      // Then exact symbol matches (e.g., "btc" -> symbol "BTC")
+      else if (symbol === searchTerm) {
+        exactSymbolMatches.push(coin);
+      }
+      // Then exact name matches (e.g., "bitcoin" -> name "Bitcoin")
+      else if (name === searchTerm) {
+        exactNameMatches.push(coin);
+      }
+      // Finally partial matches (e.g., "bitcoin" matches "Bitcoin Dogs")
+      else if (name.includes(searchTerm) || symbol.includes(searchTerm) || coinId.includes(searchTerm)) {
+        partialMatches.push(coin);
+      }
+    });
+
+    // Combine results in order of relevance and limit
+    const orderedResults = [
+      ...exactIdMatches,
+      ...exactSymbolMatches, 
+      ...exactNameMatches,
+      ...partialMatches
+    ].slice(0, limit);
+
+    // Log the search for debugging
+    console.log('🔍 CoinGecko search results for:', searchTerm, {
+      exactIdMatches: exactIdMatches.length,
+      exactSymbolMatches: exactSymbolMatches.length,
+      exactNameMatches: exactNameMatches.length,
+      partialMatches: partialMatches.length,
+      totalReturned: orderedResults.length,
+      firstResult: orderedResults[0] ? {
+        name: orderedResults[0].name,
+        symbol: orderedResults[0].symbol,
+        coingeckoId: orderedResults[0].coingeckoId
+      } : null
+    });
+
+    return orderedResults;
+  },
+});
+
 // More efficient bulk upsert
 export const bulkUpsertCoins = mutation({
   args: { coins: v.array(v.object({
@@ -32,6 +97,7 @@ export const bulkUpsertCoins = mutation({
     rank: v.optional(v.number()),
     logoUrl: v.string(),
     isActive: v.boolean(),
+    lastUpdated: v.optional(v.number()),
   }))},
   handler: async (ctx, args) => {
     // Get all existing coin IDs in one query
@@ -55,6 +121,40 @@ export const bulkUpsertCoins = mutation({
       } else {
         // Insert new coin
         await ctx.db.insert("coins", {
+          ...coin,
+          lastUpdated: Date.now(),
+        });
+      }
+    }
+  },
+});
+
+// CoinGecko bulk upsert
+export const bulkUpsertCoinGeckoCoins = mutation({
+  args: { coins: v.array(v.object({
+    coingeckoId: v.string(),
+    name: v.string(),
+    symbol: v.string(),
+    logoUrl: v.string(),
+    isActive: v.boolean(),
+    platforms: v.optional(v.record(v.string(), v.string())),
+    imageUpdated: v.optional(v.boolean()), // Track if image was updated
+  }))},
+  handler: async (ctx, args) => {
+    const existingCoins = await ctx.db.query("coingeckoCoins").collect();
+    const existingIds = new Set(existingCoins.map(coin => coin.coingeckoId));
+    
+    for (const coin of args.coins) {
+      if (existingIds.has(coin.coingeckoId)) {
+        const existing = existingCoins.find(c => c.coingeckoId === coin.coingeckoId);
+        if (existing) {
+          await ctx.db.patch(existing._id, {
+            ...coin,
+            lastUpdated: Date.now(),
+          });
+        }
+      } else {
+        await ctx.db.insert("coingeckoCoins", {
           ...coin,
           lastUpdated: Date.now(),
         });
@@ -89,6 +189,37 @@ export const bulkInsertNewCoins = mutation({
   },
 });
 
+// CoinGecko queries
+export const getCoinGeckoCoinById = query({
+  args: { coingeckoId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("coingeckoCoins")
+      .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", args.coingeckoId))
+      .first();
+  },
+});
+
+export const getCoinGeckoCoinsBySymbol = query({
+  args: { symbol: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("coingeckoCoins")
+      .withIndex("by_symbol", (q) => q.eq("symbol", args.symbol.toUpperCase()))
+      .collect();
+  },
+});
+
+export const getAllCoinGeckoCoins = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 100;
+    return await ctx.db
+      .query("coingeckoCoins")
+      .take(limit);
+  },
+});
+
 // Add this query to get top coins by rank
 export const getTopCoins = query({
   args: { limit: v.optional(v.number()) },
@@ -102,6 +233,31 @@ export const getTopCoins = query({
       .take(limit);
 
     return coins;
+  },
+});
+
+// Add this query to get top CoinGecko coins
+export const getTopCoinGeckoCoins = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 25;
+
+    // Just get coins from database - let API handle the market cap sorting
+    // We'll get more than needed and let the API filter to top coins
+    const coins = await ctx.db
+      .query("coingeckoCoins")
+      .order("asc")
+      .take(limit * 3); // Get 3x limit to have options for API to choose from
+
+    // Basic filtering - just remove obvious junk, but keep it simple
+    const filteredCoins = coins.filter((coin) => {
+      return coin.coingeckoId.length > 1 && 
+             coin.name.length > 1 &&
+             coin.symbol.length >= 1 &&
+             coin.symbol.length <= 10;
+    });
+
+    return filteredCoins.slice(0, limit * 2); // Return 2x limit for API to choose best ones
   },
 });
 
@@ -141,83 +297,8 @@ export const getCoinByIdString = query({
   },
 });
 
-export const bulkUpsertMetadata = mutation({
-  args: { 
-    metadata: v.array(v.object({
-      coinId: v.number(),
-      slug: v.string(),
-      name: v.string(),
-      symbol: v.string(),
-      description: v.optional(v.string()),
-      logo: v.string(),
-      dateAdded: v.optional(v.string()),
-      dateLaunched: v.optional(v.string()),
-      tags: v.optional(v.array(v.string())),
-      category: v.optional(v.string()),
-      platform: v.optional(v.object({
-        id: v.number(),
-        name: v.string(),
-        symbol: v.string(),
-        slug: v.string(),
-        token_address: v.string(),
-      })),
-      urls: v.optional(v.object({
-        website: v.optional(v.array(v.string())),
-        technical_doc: v.optional(v.array(v.string())),
-        twitter: v.optional(v.array(v.string())),
-        reddit: v.optional(v.array(v.string())),
-        message_board: v.optional(v.array(v.string())),
-        announcement: v.optional(v.array(v.string())),
-        chat: v.optional(v.array(v.string())),
-        explorer: v.optional(v.array(v.string())),
-        source_code: v.optional(v.array(v.string())),
-      })),
-    }))
-  },
-  handler: async (ctx, args) => {
-    const existingMetadata = await ctx.db.query("coinMetadata").collect();
-    const existingIds = new Set(existingMetadata.map(m => m.coinId));
-    
-    for (const meta of args.metadata) {
-      if (existingIds.has(meta.coinId)) {
-        const existing = existingMetadata.find(m => m.coinId === meta.coinId);
-        if (existing) {
-          await ctx.db.patch(existing._id, {
-            ...meta,
-            lastUpdated: Date.now(),
-          });
-        }
-      } else {
-        await ctx.db.insert("coinMetadata", {
-          ...meta,
-          lastUpdated: Date.now(),
-        });
-      }
-    }
-  },
-});
-
-export const getMetadataByCoinId = query({
-  args: { coinId: v.number() },
-  handler: async (ctx, args) => {
-    const metadata = await ctx.db
-      .query("coinMetadata")
-      .withIndex("by_coin_id", (q) => q.eq("coinId", args.coinId))
-      .first();
-    return metadata;
-  },
-});
-
-export const getMetadataBySlug = query({
-  args: { slug: v.string() },
-  handler: async (ctx, args) => {
-    const metadata = await ctx.db
-      .query("coinMetadata")
-      .withIndex("by_slug", (q) => q.eq("slug", args.slug))
-      .first();
-    return metadata;
-  },
-});
+// Legacy CoinMarketCap metadata functions - removed as coinMetadata table has been removed
+// Use CoinGecko metadata functions instead
 
 // CoinGlass supported coins mutations and queries
 export const bulkUpsertCoinglassSupportedCoins = mutation({
@@ -311,19 +392,11 @@ export const getCoinglassSymbolByCoinId = query({
       return null;
     }
     
-    // Get metadata for additional info
-    const metadata = await ctx.db
-      .query("coinMetadata")
-      .withIndex("by_coin_id", (q) => q.eq("coinId", args.coinId))
-      .first();
-    
     // Try multiple symbol variations to find a supported one
     const symbolsToTry = [
       coin.symbol.toUpperCase(),
-      metadata?.symbol?.toUpperCase(),
       // Common variations
       coin.symbol.replace(/USD$/, '').toUpperCase(),
-      metadata?.symbol?.replace(/USD$/, '').toUpperCase(),
     ].filter(Boolean) as string[];
     
     // Remove duplicates
@@ -339,11 +412,10 @@ export const getCoinglassSymbolByCoinId = query({
       if (isSupported?.isActive) {
         return {
           symbol: symbolToCheck,
-          name: metadata?.name || coin.name,
+          name: coin.name,
           coinId: args.coinId,
           isSupported: true,
           originalSymbol: coin.symbol,
-          metadataSymbol: metadata?.symbol
         };
       }
     }
@@ -368,22 +440,7 @@ export const getCoinBySymbol = query({
       return coin;
     }
     
-    // Try metadata table as fallback
-    const metadata = await ctx.db
-      .query("coinMetadata")
-      .withIndex("by_symbol", (q) => q.eq("symbol", symbolUpper))
-      .first();
-    
-    if (metadata) {
-      // Get the corresponding coin
-      const coinFromMetadata = await ctx.db
-        .query("coins")
-        .filter((q) => q.eq(q.field("coinId"), metadata.coinId))
-        .first();
-      
-      return coinFromMetadata;
-    }
-    
+    // No coin found
     return null;
   },
 });
@@ -406,5 +463,35 @@ export const getCoinglassSupportedCoinsList = query({
     );
     
     return supportedCoins;
+  },
+});
+
+// Get coins that need image updates (incremental processing)
+export const getCoinsNeedingImageUpdates = query({
+  args: { 
+    limit: v.optional(v.number()),
+    cursor: v.optional(v.string()) // _id for cursor-based pagination
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit || 1000;
+
+    let query = ctx.db
+      .query("coingeckoCoins")
+      .withIndex("by_image_updated")
+      .filter((q) => q.neq(q.field("imageUpdated"), true)); // Get coins where imageUpdated is not true
+
+    // Apply cursor if provided
+    if (args.cursor) {
+      const cursor = args.cursor;
+      query = query.filter((q) => q.gt(q.field("_id"), cursor));
+    }
+
+    const coins = await query.take(limit);
+    
+    return {
+      coins,
+      nextCursor: coins.length === limit ? coins[coins.length - 1]?._id : null,
+      hasMore: coins.length === limit
+    };
   },
 });

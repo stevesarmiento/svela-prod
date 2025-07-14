@@ -12,14 +12,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Query parameter is required" }, { status: 400 });
     }
 
-    const coins = await convex.query(api.coins.searchCoins, { 
+    // Use CoinGecko search instead of legacy CoinMarketCap search
+    const coins = await convex.query(api.coins.searchCoinGeckoCoins, { 
       query: query.toString(),
       limit: Number(limit)
     });
 
-    return NextResponse.json(coins);
+    // Transform to match expected interface (coinId -> coingeckoId)
+    const transformedCoins = coins.map(coin => ({
+      coinId: coin.coingeckoId, // Use CoinGecko ID as coinId
+      name: coin.name,
+      symbol: coin.symbol
+    }));
+
+    return NextResponse.json(transformedCoins);
   } catch (error) {
-    console.error("Error searching coins:", error);
+    console.error("Error searching CoinGecko coins:", error);
     return NextResponse.json(
       { error: "Failed to search coins" },
       { status: 500 }

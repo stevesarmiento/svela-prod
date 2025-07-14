@@ -5,7 +5,7 @@ import { Input } from "@v1/ui/input"
 import { Table, TableBody, TableCell, TableRow } from "@v1/ui/table"
 import { Button } from "@v1/ui/button"
 import { toast } from "@v1/ui/use-toast"
-import { useCoinSearch, useTopCoins } from '@/hooks/use-coin-search'
+import { useHybridCoinSearch, useHybridTopCoins, type HybridCoinSearchResult } from '@/hooks/use-hybrid-coin-search'
 import Image from 'next/image'
 import { IconXmarkCircleFill, IconMagnifyingglass, IconBookmarkFill } from 'symbols-react'
 import { useWatchlist } from "./watchlist-context"
@@ -48,22 +48,6 @@ const CoinSearchSkeleton = ({ rowCount = 5 }: { rowCount?: number }) => (
   </Table>
 );
 
-// Add this interface at the top of the file
-interface CoinSearchResult {
-  id: number;
-  name: string;
-  symbol: string;
-  cmc_rank?: number;
-  quote: {
-    USD: {
-      price: number;
-      percent_change_24h: number;
-      market_cap: number;
-      volume_24h: number;
-    };
-  };
-}
-
 export interface CoinSearchRef {
   open: () => void
 }
@@ -90,18 +74,22 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
   // Debounce search query
   const debouncedSearchQuery = useDebounce(searchQuery, 300)
   
-  // Use hybrid Convex + API hooks
+  // Use hybrid search hooks (DB + API)
   const { 
     data: searchResults, 
     isLoading: isSearchLoading, 
-    error: searchError 
-  } = useCoinSearch(debouncedSearchQuery);
+    error: searchError,
+    searchType,
+    totalResults
+  } = useHybridCoinSearch(debouncedSearchQuery, {
+    limit: 50 // Increased limit for better results
+  });
   
   const { 
     data: topCoins, 
     isLoading: isTopCoinsLoading, 
     error: topCoinsError 
-  } = useTopCoins();
+  } = useHybridTopCoins(25);
 
   // Determine which coins to display
   const coinsToDisplay = useMemo(() => {
@@ -129,8 +117,8 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
     });
   }
 
-  // Update the function parameter
-  const handleAddCoin = async (coin: CoinSearchResult) => {
+  // MIGRATED TO COINGECKO: Now uses CoinGecko string IDs directly
+  const handleAddCoin = async (coin: HybridCoinSearchResult) => {
     if (!user) {
       toast({
         title: "Error",
@@ -143,11 +131,14 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
     try {
       setIsAdding(true)
       
+      // Use CoinGecko string ID directly (e.g., "bitcoin", "ethereum")
+      const coingeckoId = coin.id;
+      
       // Use group-specific add function if a group is selected
       if (selectedGroup) {
-        await addToSelectedGroup(Number(coin.id))
+        await addToSelectedGroup(coingeckoId)
       } else {
-        await addToWatchlist(Number(coin.id))
+        await addToWatchlist(coingeckoId)
       }
       
       const targetName = selectedGroup ? selectedGroup.name : "your watchlist"
@@ -169,8 +160,17 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
     }
   }
 
-  // Add this after coinsToDisplay
-  console.log('Coin Search - Query:', debouncedSearchQuery, 'Results:', searchResults?.length, 'Display:', coinsToDisplay.length);
+  // Enhanced search info display
+  const getSearchInfo = () => {
+    if (!debouncedSearchQuery.trim()) {
+      return "Top 25 tokens by market cap";
+    }
+    
+    const typeLabel = searchType === 'symbol' ? 'symbol' : 
+                     searchType === 'name' ? 'name' : 'smart';
+    
+    return `${totalResults} results • ${typeLabel} search • sorted by market cap`;
+  };
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -195,17 +195,6 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
       <SheetContent className="p-0 !z-50 overflow-auto no-scrollbar rounded-[20px] bg-zinc-950 border-zinc-800
                                shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
                                dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
-        
-        {/* Background Pattern */}
-        {/* <div className="absolute inset-0 opacity-5 z-0"
-          style={{
-            backgroundImage: `
-              radial-gradient(circle at 25% 25%, white 1px, transparent 1px),
-              radial-gradient(circle at 75% 75%, white 1px, transparent 1px)
-            `,
-            backgroundSize: "24px 24px",
-          }}
-        /> */}
 
           <SheetHeader className="p-2 sticky top-0 border-b border-zinc-800/50">
             <div className="flex-1 flex items-center w-full">
@@ -216,7 +205,7 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                     <Input
                       ref={inputRef}
                       type="text"
-                      placeholder="Search any token name or symbol..."
+                      placeholder="Search by symbol (BTC) or name (Bitcoin)..."
                       className="flex-1 border-0 bg-transparent text-white placeholder:text-white/50 focus-visible:ring-0 focus-visible:ring-offset-0"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -240,7 +229,7 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
           
           <div className="space-y-2 p-3 px-2">
             <div className="text-xs text-white/50 ml-3">
-              Top 25 tokens by market cap
+              {getSearchInfo()}
             </div>
             {isLoading ? (
               <div className="">
@@ -266,11 +255,15 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                           <TableCell className="text-white rounded-l-xl">
                             <div className="flex items-center gap-3">
                               <Image
-                                src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`}
+                                src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
                                 alt={coin.name}
                                 className="w-6 h-6 rounded-full"
                                 width={24}
                                 height={24}
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.src = '/favicon.ico';
+                                }}
                               />
                               <div>
                                 <div className="font-semibold font-sans text-sm text-white group-hover:text-white/90 mt-1">{coin.name}</div>

@@ -12,14 +12,28 @@ import { cn } from "@v1/ui/cn"
 import { toast } from "@v1/ui/use-toast"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Spinner } from "@v1/ui/spinner"
-import type { CoinMarketData } from '@/types/coins'
-
-interface OptimisticCoinMarketData extends CoinMarketData {
+// Accept whatever data format the existing hook provides
+interface OptimisticCoinData {
+  id: string | number;
+  name: string;
+  symbol: string;
+  image?: string; // CoinGecko image URL when available
+  quote: {
+    USD: {
+      price: number;
+      percent_change_24h: number;
+      percent_change_1h?: number;
+      percent_change_7d?: number;
+      percent_change_30d?: number;
+      market_cap: number;
+      volume_24h: number;
+    };
+  };
   isOptimistic?: boolean;
 }
 
 interface ChartTableProps {
-  coins: OptimisticCoinMarketData[]
+  coins: OptimisticCoinData[]
   activeTimeScale: string
 }
 
@@ -82,9 +96,8 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
             percent_change_24h: coin.quote?.USD?.percent_change_24h,
             percent_change_7d: coin.quote?.USD?.percent_change_7d,
             percent_change_30d: coin.quote?.USD?.percent_change_30d,
-            percent_change_90d: coin.quote?.USD?.percent_change_90d,
           },
-          dataSource: 'CoinMarketCap API',
+          dataSource: 'Pure CoinGecko API',
           usingRealData: !isNaN(intervalChange)
         })
       }
@@ -107,7 +120,7 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
     }
   }
 
-  const handleRemove = async (coinId: number) => {
+  const handleRemove = async (coinId: string | number) => {
     if (!selectedGroup) {
       toast({
         title: "Error",
@@ -118,7 +131,7 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
     }
 
     try {
-      await removeFromSelectedGroup(coinId)
+      await removeFromSelectedGroup(String(coinId))
       toast({
         title: "Removed",
         description: `Coin removed from ${selectedGroup.name}`,
@@ -137,23 +150,36 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
   return (
     <div className="space-y-4">
       {coinsWithIntervalChange.map(coin => (
-        <div key={coin.id} className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
+        <div key={coin.id} className="rounded-[10px] bg-primary/5 p-0.5">
           {/* Header with Token Name */}
           <div className="px-3 py-2">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
               <div className="grid grid-cols-4 gap-4">
                 <div className="flex items-center gap-2">
                   <div className="relative">
-                    <Image
-                      src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`}
-                      alt={coin.name}
-                      className={cn(
-                        "w-4 h-4 rounded-full",
+                    {coin.image ? (
+                      <Image
+                        src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
+                        alt={coin.name}
+                        className={cn(
+                          "w-4 h-4 rounded-full",
+                          coin.isOptimistic && "opacity-50"
+                        )}
+                        width={16}
+                        height={16}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = '/favicon.ico';
+                        }}
+                      />
+                    ) : (
+                      <div className={cn(
+                        "w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center text-[8px] font-bold text-primary/70",
                         coin.isOptimistic && "opacity-50"
-                      )}
-                      width={16}
-                      height={16}
-                    />
+                      )}>
+                        {coin.symbol?.charAt(0) || '?'}
+                      </div>
+                    )}
                     {coin.isOptimistic && (
                       <div className="absolute inset-0 flex items-center justify-center">
                         <Spinner size={12} />

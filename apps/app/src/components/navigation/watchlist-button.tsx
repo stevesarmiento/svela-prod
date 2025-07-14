@@ -22,8 +22,9 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
     isInitialized,
     selectedGroup 
   } = useWatchlist();
-  const coinIdNumber = typeof coinId === 'string' ? parseInt(coinId) : coinId;
-  const isInWatchlist = isInitialized && selectedGroupCoins.includes(coinIdNumber);
+  // Keep coinId as string since Convex and context expect string IDs (CoinGecko format)
+  const coinIdString = typeof coinId === 'number' ? coinId.toString() : coinId;
+  const isInWatchlist = isInitialized && selectedGroupCoins.includes(coinIdString);
   const [showSlash, setShowSlash] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
 
@@ -48,13 +49,13 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
       try {
         if (isInWatchlist) {
           setShowSlash(true);
-          await removeFromSelectedGroup(coinIdNumber);
+          await removeFromSelectedGroup(coinIdString);
           toast({
             title: "Removed",
             description: `${coinName || 'Coin'} removed from ${selectedGroup.name}`,
           });
         } else {
-          await addToSelectedGroup(coinIdNumber);
+          await addToSelectedGroup(coinIdString);
           toast({
             title: "Added",
             description: `${coinName || 'Coin'} added to ${selectedGroup.name}`,
@@ -87,7 +88,7 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [toggleShortcut, isInWatchlist, isToggling, coinIdNumber, coinName, addToSelectedGroup, removeFromSelectedGroup, setShowSlash, selectedGroup]);
+  }, [toggleShortcut, isInWatchlist, isToggling, coinIdString, coinName, addToSelectedGroup, removeFromSelectedGroup, setShowSlash, selectedGroup]);
 
   const handleButtonClick = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -100,13 +101,13 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
     try {
       if (isInWatchlist) {
         setShowSlash(true);
-        await removeFromSelectedGroup(coinIdNumber);
+          await removeFromSelectedGroup(coinIdString);
         toast({
           title: "Removed",
           description: `${coinName || 'Coin'} removed from ${selectedGroup.name}`,
         });
       } else {
-        await addToSelectedGroup(coinIdNumber);
+          await addToSelectedGroup(coinIdString);
         toast({
           title: "Added",
           description: `${coinName || 'Coin'} added to ${selectedGroup.name}`,

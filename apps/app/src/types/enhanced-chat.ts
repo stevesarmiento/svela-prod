@@ -94,6 +94,7 @@ export interface CoinPriceData {
   marketCap: number
   rank: number
   lastUpdated: string
+  image?: string // Add image field for CoinGecko image URLs
 }
 
 export interface CoinHistoricalData {

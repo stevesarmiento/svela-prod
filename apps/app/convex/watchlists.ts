@@ -210,8 +210,6 @@ export const getWatchlist = query({
       return [];
     }
 
-    if (!defaultGroup) return [];
-
     return await ctx.db
       .query("watchlists")
       .withIndex("by_group", (q) => q.eq("watchlistGroupId", defaultGroup._id))
@@ -299,10 +297,12 @@ export const getWatchlistGroupBySlug = query({
   },
 });
 
+// MIGRATED TO COINGECKO: Now accepts CoinGecko string IDs (e.g., "bitcoin", "ethereum")
+// instead of numeric CoinMarketCap IDs
 export const addToWatchlist = mutation({
   args: {
     clerkId: v.string(),
-    coinId: v.string(),
+    coinId: v.string(), // Now accepts CoinGecko string IDs (e.g., "bitcoin", "ethereum")
     groupId: v.optional(v.id("watchlistGroups")),
   },
   handler: async (ctx, args) => {
@@ -355,18 +355,20 @@ export const addToWatchlist = mutation({
 
     if (existing) throw new Error("Already in watchlist");
 
+    // Store CoinGecko string ID directly (e.g., "bitcoin", "ethereum")
     return await ctx.db.insert("watchlists", {
       userId: user._id,
       watchlistGroupId: targetGroupId,
-      coinId: args.coinId,
+      coinId: args.coinId, // CoinGecko string ID
     });
   },
 });
 
+// MIGRATED TO COINGECKO: Now accepts CoinGecko string IDs
 export const removeFromWatchlist = mutation({
   args: {
     clerkId: v.string(),
-    coinId: v.string(),
+    coinId: v.string(), // Now accepts CoinGecko string IDs
     groupId: v.optional(v.id("watchlistGroups")),
   },
   handler: async (ctx, args) => {
@@ -403,10 +405,11 @@ export const removeFromWatchlist = mutation({
   },
 });
 
+// MIGRATED TO COINGECKO: Now accepts array of CoinGecko string IDs
 export const removeBulkFromWatchlist = mutation({
   args: {
     clerkId: v.string(),
-    coinIds: v.array(v.string()),
+    coinIds: v.array(v.string()), // Now accepts array of CoinGecko string IDs
     groupId: v.optional(v.id("watchlistGroups")),
   },
   handler: async (ctx, args) => {
@@ -430,7 +433,7 @@ export const removeBulkFromWatchlist = mutation({
       targetGroupId = defaultGroup._id;
     }
 
-    // Find all watchlist items for the given coins in this group
+    // Find all watchlist items for the given CoinGecko IDs in this group
     const watchlistItems = await Promise.all(
       args.coinIds.map(coinId =>
         ctx.db
@@ -450,5 +453,80 @@ export const removeBulkFromWatchlist = mutation({
     );
 
     return { removedCount: validItems.length };
+  },
+});
+
+// NEW: Check if a CoinGecko coin is in a specific watchlist group
+export const isInWatchlist = query({
+  args: {
+    clerkId: v.string(),
+    coinId: v.string(), // CoinGecko string ID
+    groupId: v.optional(v.id("watchlistGroups")),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+    
+    if (!user) return false;
+
+    let targetGroupId = args.groupId;
+
+    // If no group specified, use default
+    if (!targetGroupId) {
+      const defaultGroup = await ctx.db
+        .query("watchlistGroups")
+        .withIndex("by_user_default", (q) => q.eq("userId", user._id).eq("isDefault", true))
+        .first();
+      
+      if (!defaultGroup) return false;
+      targetGroupId = defaultGroup._id;
+    }
+
+    const watchlistItem = await ctx.db
+      .query("watchlists")
+      .withIndex("by_group_coin", (q) => 
+        q.eq("watchlistGroupId", targetGroupId).eq("coinId", args.coinId)
+      )
+      .first();
+
+    return !!watchlistItem;
+  },
+});
+
+// NEW: Get all CoinGecko IDs from a watchlist group for batch processing
+export const getWatchlistCoinIds = query({
+  args: {
+    clerkId: v.string(),
+    groupId: v.optional(v.id("watchlistGroups")),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+    
+    if (!user) return [];
+
+    let targetGroupId = args.groupId;
+
+    // If no group specified, use default
+    if (!targetGroupId) {
+      const defaultGroup = await ctx.db
+        .query("watchlistGroups")
+        .withIndex("by_user_default", (q) => q.eq("userId", user._id).eq("isDefault", true))
+        .first();
+      
+      if (!defaultGroup) return [];
+      targetGroupId = defaultGroup._id;
+    }
+
+    const watchlistItems = await ctx.db
+      .query("watchlists")
+      .withIndex("by_group", (q) => q.eq("watchlistGroupId", targetGroupId))
+      .collect();
+
+    return watchlistItems.map(item => item.coinId); // Returns CoinGecko string IDs
   },
 });

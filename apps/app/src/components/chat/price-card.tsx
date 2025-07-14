@@ -22,7 +22,7 @@ import {
 } from 'lightweight-charts'
 
 interface PriceCardProps {
-  id: number
+  id: string // Changed to string for CoinGecko ID
   name: string
   symbol: string
   price: number
@@ -30,16 +30,10 @@ interface PriceCardProps {
   marketCap?: number
   volume24h?: number
   rank?: number
+  image?: string // Added for CoinGecko image URL
   historical?: {
     data?: {
-      quotes?: Array<{
-        timestamp: string
-        quote: {
-          USD: {
-            price: number
-          }
-        }
-      }>
+      prices?: Array<[number, number]> // CoinGecko format: [timestamp, price]
     }
   }
 }
@@ -53,6 +47,7 @@ export function PriceCard({
   marketCap, 
   volume24h, 
   rank,
+  image,
   historical 
 }: PriceCardProps) {
   const [selectedGroupSlug] = useQueryState('wg', { defaultValue: '' })
@@ -60,17 +55,18 @@ export function PriceCard({
   const chartContainerRef = useRef<HTMLDivElement>(null)
 
   const chartData = useMemo(() => {
-    if (!historical?.data?.quotes?.length) {
-      // Fallback data for demo purposes
+    if (!historical?.data?.prices?.length) {
+      // Fallback data for demo purposes using current price
       return Array.from({ length: 20 }, (_, i) => ({
         time: (Date.now() - (20 - i) * 60 * 60 * 1000) / 1000 as Time,
         value: price * (0.95 + Math.random() * 0.1)
       }));
     }
     
-    const historicalPoints = historical.data.quotes.map(quote => ({
-      time: (new Date(quote.timestamp).getTime() / 1000) as Time,
-      value: quote.quote.USD.price
+    // Convert CoinGecko price data format: [timestamp, price]
+    const historicalPoints = historical.data.prices.map(([timestamp, priceValue]) => ({
+      time: (timestamp / 1000) as Time, // CoinGecko timestamps are in milliseconds
+      value: priceValue
     }));
 
     return historicalPoints.sort((a, b) => (a.time as number) - (b.time as number));
@@ -147,14 +143,19 @@ export function PriceCard({
 
         <CardHeader className="pb-3 relative">
           <div className="flex items-center justify-between">
+            {/* Coin Image and Basic Info */}
             <div className="flex items-center gap-3">
-              <div className="relative">
+              <div className="relative w-10 h-10 rounded-full overflow-hidden bg-muted flex-shrink-0">
                 <Image
-                  src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${id}.png`}
+                  src={image || `https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png`}
                   alt={name}
-                  className="w-8 h-8 rounded-full ring-1 ring-zinc-700/30"
-                  width={32}
-                  height={32}
+                  fill
+                  className="object-cover"
+                  sizes="40px"
+                  onError={(e) => {
+                    // Fallback to a default CoinGecko image if the primary image fails
+                    e.currentTarget.src = `https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png`
+                  }}
                 />
               </div>
               <div>

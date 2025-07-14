@@ -17,6 +17,8 @@ export const env = createEnv({
     CLERK_SECRET_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
     CG_API_KEY: z.string().optional(),
+    'CG-API-KEY': z.string().optional(),
+    X_CG_PRO_API_KEY: z.string().optional(),
     GEMINI_API_KEY: z.string().optional(),
     X_CAPI_API_KEY: z.string().optional(),
   },
@@ -28,7 +30,6 @@ export const env = createEnv({
   runtimeEnv: {
     NEXT_PUBLIC_OPENPANEL_CLIENT_ID:
       process.env.NEXT_PUBLIC_OPENPANEL_CLIENT_ID,
-    NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
     NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
     OPENPANEL_SECRET_KEY: process.env.OPENPANEL_SECRET_KEY,
@@ -39,6 +40,7 @@ export const env = createEnv({
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
     VERCEL_URL: process.env.VERCEL_URL,
     CG_API_KEY: process.env.CG_API_KEY,
+    X_CG_PRO_API_KEY: process.env.X_CG_PRO_API_KEY,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     X_CAPI_API_KEY: process.env.X_CAPI_API_KEY,
