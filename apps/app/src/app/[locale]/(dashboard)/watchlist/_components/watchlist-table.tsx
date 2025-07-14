@@ -275,7 +275,7 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-xs">{watchlist.name}</span>
                   <span className="text-primary/40 text-xs">watchlist has</span>
-                  <span className="font-mono text-xs font-semibold">
+                  <span className="font-mono text-xs font-semibold bg-primary/5 border border-primary/10 px-1.5 py-0.5 rounded-md">
                     {watchlist.coinsCount}
                   </span>
                   <span className="text-primary/40 text-xs">{watchlist.coinsCount === 1 ? 'token' : 'tokens'}</span>
