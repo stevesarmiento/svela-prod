@@ -34,6 +34,28 @@ interface WatchlistGroup {
   updatedAt: number
 }
 
+interface CoinGeckoWatchlistCoin {
+  id: string; // CoinGecko string ID
+  name: string;
+  symbol: string;
+  slug: string;
+  image: string; // CoinGecko image URL
+  cmc_rank: number;
+  circulating_supply: number;
+  max_supply: number | null;
+  quote: {
+    USD: {
+      price: number;
+      volume_24h: number;
+      market_cap: number;
+      percent_change_24h: number;
+      percent_change_1h?: number;
+      percent_change_7d?: number;
+      percent_change_30d?: number;
+    };
+  };
+}
+
 interface WatchlistsGridProps {
   onSelectWatchlist?: (group: WatchlistGroup) => void
   viewMode?: 'grid' | 'chart'
@@ -67,21 +89,63 @@ function WatchlistGroupWithCoins({
   editingColor?: string
 }) {
   const groupWatchlist = useWatchlistByGroup(group._id)
+  const prevCoinsRef = useRef<CoinGeckoWatchlistCoin[]>([])
   
   // For watchlist cards only: Convert to CoinGecko IDs for display
   const coingeckoIds = useMemo(() => {
     // Watchlist stores CoinGecko string IDs, use them directly for card display
-    return groupWatchlist?.map(item => item.coinId) || []
-  }, [groupWatchlist])
+    const ids = groupWatchlist?.map(item => item.coinId) || []
+    
+    // Debug logging for edit mode
+    if (isEditing) {
+      console.log('🔍 WatchlistGroupWithCoins DEBUG (Edit Mode):', {
+        groupName: group.name,
+        groupId: group._id,
+        isEditing,
+        groupWatchlistLength: groupWatchlist?.length || 0,
+        groupWatchlistData: groupWatchlist,
+        coingeckoIdsLength: ids.length,
+        coingeckoIds: ids
+      })
+    }
+    
+    return ids
+  }, [groupWatchlist]) // Removed isEditing and group props from dependencies to prevent unnecessary recalculations
   
   // Use CoinGecko data only for watchlist card display
-  const { data: coins = [] } = useCoinGeckoWatchlistCoins(coingeckoIds)
+  const { data: coins = [], isLoading, error } = useCoinGeckoWatchlistCoins(coingeckoIds)
+  
+  // Maintain previous coin data during edit transitions to prevent empty state
+  const stableCoins = useMemo(() => {
+    if (coins.length > 0) {
+      prevCoinsRef.current = coins
+      return coins
+    }
+    // If no coins and we're editing, use previous data to prevent flash of empty state
+    if (isEditing && prevCoinsRef.current.length > 0) {
+      console.log('🔄 Using cached coin data during edit mode for:', group.name)
+      return prevCoinsRef.current
+    }
+    return coins
+  }, [coins, isEditing, group.name])
+  
+  // Debug logging for coin data in edit mode
+  if (isEditing) {
+    console.log('🪙 Coins data DEBUG (Edit Mode):', {
+      groupName: group.name,
+      originalCoinsLength: coins.length,
+      stableCoinsLength: stableCoins.length,
+      isLoading,
+      error,
+      usingCached: stableCoins.length > 0 && coins.length === 0
+    })
+  }
   
   return (
     <div ref={isEditing ? editCardRef : undefined}>
       <WatchlistCard
         group={group}
-        coins={coins}
+        coins={stableCoins}
         onEdit={onEdit}
         onDelete={onDelete}
         onSelect={onSelect}

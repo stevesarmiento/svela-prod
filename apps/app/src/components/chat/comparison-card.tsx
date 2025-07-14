@@ -117,9 +117,9 @@ export function ComparisonCard({
                   <div key={coin.id} className="flex items-center gap-2 min-w-0">
                     <div className="flex items-center gap-3">
                       <div className="relative w-8 h-8 rounded-full overflow-hidden bg-muted flex-shrink-0">
-                        <Image
+                    <Image
                           src={coin.image || `https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png`}
-                          alt={coin.name}
+                      alt={coin.name}
                           fill
                           className="object-cover"
                           sizes="32px"
@@ -127,7 +127,7 @@ export function ComparisonCard({
                             // Fallback to a default CoinGecko image if the primary image fails
                             e.currentTarget.src = `https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png`
                           }}
-                        />
+                    />
                       </div>
                     </div>
                     <div className="min-w-0">

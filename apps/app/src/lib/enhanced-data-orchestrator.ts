@@ -316,15 +316,15 @@ export class EnhancedDataOrchestrator {
       });
       
       if (data.data && Array.isArray(data.data)) {
-        priceTargets.forEach(target => {
+      priceTargets.forEach(target => {
           const coinData = data.data.find((coin: CoinGeckoMarketData) => coin.id === target.coinId);
-          if (coinData) {
+        if (coinData) {
             console.log(`✅ Found price data for ${target.name}: $${coinData.current_price}`);
-            results.priceData.push(this.transformToPriceData(coinData, target));
+          results.priceData.push(this.transformToPriceData(coinData, target));
           } else {
             console.warn(`⚠️ No price data found for ${target.name} (${target.coinId})`);
-          }
-        });
+        }
+      });
         
         console.log(`💰 Successfully processed ${results.priceData.length}/${priceTargets.length} price data entries`);
       } else {
@@ -419,7 +419,7 @@ export class EnhancedDataOrchestrator {
           results.errors.push(`Technical data for ${target.coinId}: ${error}`);
         }
       });
-
+      
       await Promise.allSettled(promises);
     } catch (error) {
       console.error('Technical data batch fetch failed:', error);
@@ -435,7 +435,7 @@ export class EnhancedDataOrchestrator {
     results: FetchResults
   ): Promise<void> {
     try {
-      const promises = marketTargets.map(async (target) => {
+    const promises = marketTargets.map(async (target) => {
         const marketData: Partial<MarketStructureData> = {
           coinId: parseInt(target.coinId, 10) || 0,
           liquidations: undefined,
@@ -449,22 +449,22 @@ export class EnhancedDataOrchestrator {
             const response = await fetch(`${this.baseUrl}${endpoint}?symbol=${target.coinId}`);
             
             if (response.ok) {
-              const data = await response.json();
-              this.integrateMarketStructureData(marketData, endpoint, data);
+          const data = await response.json();
+          this.integrateMarketStructureData(marketData, endpoint, data);
             }
-          } catch (error) {
+        } catch (error) {
             console.error(`Failed to fetch from ${endpoint} for ${target.coinId}:`, error);
             results.errors.push(`${endpoint} for ${target.coinId}: ${error}`);
-          }
-        });
-
-        await Promise.allSettled(fetchPromises);
-        
-        if (Object.values(marketData).some(v => v !== undefined)) {
-          results.marketStructureData.push(marketData as MarketStructureData);
         }
       });
-
+      
+        await Promise.allSettled(fetchPromises);
+      
+        if (Object.values(marketData).some(v => v !== undefined)) {
+        results.marketStructureData.push(marketData as MarketStructureData);
+      }
+    });
+    
       await Promise.allSettled(promises);
     } catch (error) {
       console.error('Market structure data batch fetch failed:', error);
@@ -577,7 +577,7 @@ export class EnhancedDataOrchestrator {
           volume: volume
         };
       });
-
+      
       return {
         coinId: parseInt(target.coinId, 10) || 0,
         timeframe: target.timeframe,
@@ -620,14 +620,14 @@ export class EnhancedDataOrchestrator {
   ): void {
     try {
       if (endpoint.includes('liquidation')) {
-        marketData.liquidations = {
+          marketData.liquidations = {
           total24h: Number(data.total) || 0,
           longs24h: Number(data.long) || 0,
           shorts24h: Number(data.short) || 0,
           ratio: Number(data.long) > 0 ? Number(data.short) / Number(data.long) : 0
         };
       } else if (endpoint.includes('open-interest')) {
-        marketData.openInterest = {
+            marketData.openInterest = {
           current: Number(data.current) || 0,
           change24h: Number(data.change24h) || 0,
           trend: 'stable' as const
@@ -639,11 +639,11 @@ export class EnhancedDataOrchestrator {
           trend: 'stable' as const
         };
       } else if (endpoint.includes('taker-buy-sell')) {
-        marketData.orderFlow = {
+          marketData.orderFlow = {
           buyPressure: Number(data.buyRatio) || 0,
           sellPressure: Number(data.sellRatio) || 0,
           netFlow: (Number(data.buyRatio) || 0) > (Number(data.sellRatio) || 0) ? 'bullish' as const : 'bearish' as const
-        };
+          };
       }
     } catch (error) {
       console.error(`Failed to integrate data from ${endpoint}:`, error);
@@ -661,17 +661,17 @@ export class EnhancedDataOrchestrator {
     const sources = this.getDataSources(intent.dataTypes);
     const quality = this.calculateDataQuality(results);
     const coverage = this.calculateDataCoverage(intent, results);
-
-    return {
-      intent,
+      
+      return {
+        intent,
       priceData: results.priceData[0] || undefined,
       historicalData: results.historicalData[0] || undefined,
       technicalData: results.technicalData[0] || undefined,
       marketStructureData: results.marketStructureData[0] || undefined,
       multiCoinData: results.priceData.length > 1 ? { 
-        priceData: results.priceData, 
-        historicalData: results.historicalData, 
-        marketStructureData: results.marketStructureData 
+          priceData: results.priceData,
+          historicalData: results.historicalData,
+          marketStructureData: results.marketStructureData
       } : undefined,
       comparisonData: results.comparisonData || undefined,
       metadata: {

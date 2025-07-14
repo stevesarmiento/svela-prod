@@ -98,21 +98,21 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
     
     setIsToggling(true);
     
-          try {
-        if (isInWatchlist) {
-          setShowSlash(true);
+    try {
+      if (isInWatchlist) {
+        setShowSlash(true);
           await removeFromSelectedGroup(coinIdString);
-          toast({
-            title: "Removed",
-            description: `${coinName || 'Coin'} removed from ${selectedGroup.name}`,
-          });
-        } else {
+        toast({
+          title: "Removed",
+          description: `${coinName || 'Coin'} removed from ${selectedGroup.name}`,
+        });
+      } else {
           await addToSelectedGroup(coinIdString);
-          toast({
-            title: "Added",
-            description: `${coinName || 'Coin'} added to ${selectedGroup.name}`,
-          });
-        }
+        toast({
+          title: "Added",
+          description: `${coinName || 'Coin'} added to ${selectedGroup.name}`,
+        });
+      }
     } catch (error) {
       console.error('Watchlist toggle error:', error);
       toast({

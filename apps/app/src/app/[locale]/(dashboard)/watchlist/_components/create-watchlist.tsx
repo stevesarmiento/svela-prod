@@ -14,42 +14,66 @@ import { Kbd } from "@v1/ui/kbd"
 import { IconWidgetSmallBadgePlus } from 'symbols-react'
 import { Dialog, DialogContent } from '@v1/ui/dialog'
 
-// Mock coin data for preview
+// Mock coin data for preview - Updated to match CoinGecko format
 const mockCoins = [
   {
-    id: 1,
+    id: "bitcoin", // CoinGecko string ID
     name: "Bitcoin",
     symbol: "BTC",
+    slug: "bitcoin",
+    image: "https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png", // CoinGecko image URL
+    cmc_rank: 1,
+    circulating_supply: 19750000,
+    max_supply: 21000000,
     quote: {
       USD: {
         price: 43250.32,
         percent_change_24h: 2.47,
+        percent_change_1h: 0.15,
+        percent_change_7d: 5.23,
+        percent_change_30d: 12.45,
         market_cap: 850000000000,
         volume_24h: 25000000000
       }
     }
   },
   {
-    id: 1027,
+    id: "ethereum", // CoinGecko string ID
     name: "Ethereum", 
     symbol: "ETH",
+    slug: "ethereum",
+    image: "https://coin-images.coingecko.com/coins/images/279/large/ethereum.png", // CoinGecko image URL
+    cmc_rank: 2,
+    circulating_supply: 120280000,
+    max_supply: null,
     quote: {
       USD: {
         price: 2650.85,
         percent_change_24h: -1.23,
+        percent_change_1h: -0.45,
+        percent_change_7d: 3.67,
+        percent_change_30d: 8.92,
         market_cap: 320000000000,
         volume_24h: 15000000000
       }
     }
   },
   {
-    id: 5426,
+    id: "solana", // CoinGecko string ID
     name: "Solana",
-    symbol: "SOL", 
+    symbol: "SOL",
+    slug: "solana", 
+    image: "https://coin-images.coingecko.com/coins/images/4128/large/solana.png", // CoinGecko image URL
+    cmc_rank: 5,
+    circulating_supply: 467000000,
+    max_supply: null,
     quote: {
       USD: {
         price: 98.45,
         percent_change_24h: 4.82,
+        percent_change_1h: 1.25,
+        percent_change_7d: 7.15,
+        percent_change_30d: 15.33,
         market_cap: 45000000000,
         volume_24h: 2500000000
       }
@@ -129,7 +153,7 @@ export function CreateWatchlist({ onClose, isOpen }: CreateWatchlistProps) {
         </div>
 
         {/* Create Panel */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl mt-3 ml-[-2px] w-[auto space-y-6 p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl mt-3 ml-[-2px] w-auto space-y-6 p-4">
             {/* Name and Icon Row */}
             <div className="flex gap-2 items-start">
               <div className="flex-shrink-0">

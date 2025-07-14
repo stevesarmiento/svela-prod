@@ -31,12 +31,15 @@ export function useCoinGeckoWatchlistCoins(coinIds: string[]) {
   const { data: coins, isLoading, error } = useQuery({
     queryKey: ['coingecko-watchlist-coins', coinIds.join(',')],
     queryFn: async (): Promise<CoinGeckoWatchlistCoin[]> => {
-      if (!coinIds.length) return [];
+      if (!coinIds.length) {
+        console.log('🚫 CoinGecko watchlist hook: No coin IDs provided')
+        return [];
+      }
       
       console.log('🎯 Fetching CoinGecko watchlist data:', coinIds);
       const response = await fetch(`/api/coingecko/quotes?ids=${coinIds.join(',')}`);
       if (!response.ok) {
-        console.warn('Failed to fetch CoinGecko watchlist data:', response.status);
+        console.warn('❌ Failed to fetch CoinGecko watchlist data:', response.status);
         return [];
       }
       
@@ -45,7 +48,7 @@ export function useCoinGeckoWatchlistCoins(coinIds: string[]) {
       
              if (data.data) {
          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-         return Object.values(data.data).map((coin: any) => ({
+         const transformedCoins = Object.values(data.data).map((coin: any) => ({
           id: coin.id, // CoinGecko string ID
           name: coin.name,
           symbol: coin.symbol,
@@ -66,8 +69,12 @@ export function useCoinGeckoWatchlistCoins(coinIds: string[]) {
             }
           }
         }));
+        
+        console.log('✅ CoinGecko transformed coins:', transformedCoins.length, 'coins');
+        return transformedCoins;
       }
       
+      console.warn('⚠️ CoinGecko API returned no data for:', coinIds);
       return [];
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
