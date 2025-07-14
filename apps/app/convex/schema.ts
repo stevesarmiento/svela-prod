@@ -76,40 +76,7 @@ export default defineSchema({
     .index("search", ["name", "symbol"])
     .index("by_image_updated", ["imageUpdated"]), // Index for finding coins that need image updates
 
-  coinMetadata: defineTable({
-    coinId: v.number(),
-    slug: v.string(),
-    name: v.string(),
-    symbol: v.string(),
-    description: v.optional(v.string()),
-    logo: v.string(),
-    dateAdded: v.optional(v.string()),
-    dateLaunched: v.optional(v.string()),
-    tags: v.optional(v.array(v.string())),
-    category: v.optional(v.string()),
-    platform: v.optional(v.object({
-      id: v.number(),
-      name: v.string(),
-      symbol: v.string(),
-      slug: v.string(),
-      token_address: v.string(),
-    })),
-    urls: v.optional(v.object({
-      website: v.optional(v.array(v.string())),
-      technical_doc: v.optional(v.array(v.string())),
-      twitter: v.optional(v.array(v.string())),
-      reddit: v.optional(v.array(v.string())),
-      message_board: v.optional(v.array(v.string())),
-      announcement: v.optional(v.array(v.string())),
-      chat: v.optional(v.array(v.string())),
-      explorer: v.optional(v.array(v.string())),
-      source_code: v.optional(v.array(v.string())),
-    })),
-    lastUpdated: v.number(),
-  })
-    .index("by_coin_id", ["coinId"])
-    .index("by_slug", ["slug"])
-    .index("by_symbol", ["symbol"]),
+
 
   // CoinGecko specific metadata table
   coingeckoMetadata: defineTable({
@@ -170,12 +137,9 @@ export default defineSchema({
   })
     .index("by_user", ["userId"]),
 
-  // Historical price data - optimized for chart rendering
+  // Historical price data - optimized for chart rendering (CoinGecko only)
   priceHistory: defineTable({
-    // Support both CoinMarketCap and CoinGecko
-    coinId: v.optional(v.number()), // CoinMarketCap ID
-    coingeckoId: v.optional(v.string()), // CoinGecko ID
-    
+    coingeckoId: v.string(), // CoinGecko ID
     timeframe: v.string(), // '7d', '30d', 'max', '2y' 
     timestamp: v.number(), // Unix timestamp
     price: v.number(),
@@ -187,22 +151,17 @@ export default defineSchema({
     low: v.optional(v.number()),
     close: v.optional(v.number()),
     // Metadata
-    dataSource: v.string(), // 'coinmarketcap', 'coingecko', etc.
+    dataSource: v.string(), // 'coingecko', etc.
     lastUpdated: v.number(),
   })
-    .index("by_coin_timeframe", ["coinId", "timeframe"])
     .index("by_coingecko_timeframe", ["coingeckoId", "timeframe"])
-    .index("by_coin_timestamp", ["coinId", "timestamp"])
     .index("by_coingecko_timestamp", ["coingeckoId", "timestamp"])
     .index("by_timeframe_timestamp", ["timeframe", "timestamp"])
     .index("by_last_updated", ["lastUpdated"]),
 
-  // Current market data - frequently updated
+  // Current market data - frequently updated (CoinGecko only)
   currentMarketData: defineTable({
-    // Support both CoinMarketCap and CoinGecko
-    coinId: v.optional(v.number()), // CoinMarketCap ID
-    coingeckoId: v.optional(v.string()), // CoinGecko ID
-    
+    coingeckoId: v.string(), // CoinGecko ID
     price: v.number(),
     volume24h: v.number(),
     marketCap: v.number(),
@@ -217,7 +176,6 @@ export default defineSchema({
     lastUpdated: v.number(),
     dataSource: v.string(),
   })
-    .index("by_coin", ["coinId"])
     .index("by_coingecko", ["coingeckoId"])
     .index("by_rank", ["rank"])
     .index("by_last_updated", ["lastUpdated"]),

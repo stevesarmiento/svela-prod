@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useChartData } from '@/hooks/use-chart-data'
+import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { useMarketVisionB, calculateBollingerBands } from '@/hooks/market-vision'
 import { useOpenInterest } from '@/hooks/use-open-interest'
 import { useLiquidationHistory } from '@/hooks/use-liquidation-history'
@@ -70,7 +70,7 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
     last_updated: new Date().toISOString()
   }
   
-  const { chartData, volumeData } = useChartData(coinId, activeTimeScale, safeInitialData)
+  const { chartData, volumeData } = useCoinGeckoChartData(coinId, activeTimeScale, safeInitialData)
 
   // Calculate OHLCV data when needed
   const ohlcvData = useMemo(() => {
@@ -93,7 +93,7 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
       const low = Math.min(open, close) - spread
       
       return {
-        time: point.time,
+        time: typeof point.time === 'string' ? new Date(point.time).getTime() / 1000 : point.time as number,
         open,
         high,
         low,
@@ -162,7 +162,7 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
         const spread = Math.abs(priceChange) * 0.01
         
         return {
-          time: point.time,
+          time: typeof point.time === 'string' ? new Date(point.time).getTime() / 1000 : point.time as number,
           open: prevPrice,
           high: Math.max(prevPrice, price) + spread,
           low: Math.min(prevPrice, price) - spread,
@@ -234,8 +234,7 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
     const divergence = priceDirection !== rsiDirection ? 
       (priceDirection === 'up' ? 'bearish' : 'bullish') : 'none'
 
-    const usdData = marketData
-    const percentChange = usdData?.price_change_percentage_24h || 0
+    const percentChange = marketData?.price_change_percentage_24h || 0
 
     // Get real market data
     const latestOpenInterest = openInterestData?.data?.[openInterestData.data?.length - 1]
@@ -258,7 +257,16 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
     return {
       name: marketData.name || tokenData?.name || 'Unknown Token',
       symbol: marketData.symbol || tokenData?.symbol || 'UNK',
-      quote: marketData,
+      quote: {
+        USD: {
+          price: marketData.current_price || 0,
+          percent_change_24h: marketData.price_change_percentage_24h || 0,
+          market_cap: marketData.market_cap || 0,
+          volume_24h: marketData.total_volume || 0,
+          volume_change_24h: 0, // CoinGecko doesn't provide this in markets endpoint
+          market_cap_dominance: 0, // CoinGecko doesn't provide this in markets endpoint
+        }
+      },
       timeframe: activeTimeScale,
       
       priceContext: {
@@ -271,7 +279,7 @@ export function useAnalysisData({ coinId, tokenData, shouldCalculate }: UseAnaly
       },
       
       volumeAnalysis: {
-        currentVolume: usdData?.total_volume || 0,
+        currentVolume: marketData?.total_volume || 0,
         volumeHistory: volumeHistory,
         volumeTrend: volumeTrend,
         averageVolume: volumeHistory.length > 0 ? volumeHistory.reduce((a: number, b: number) => a + b, 0) / volumeHistory.length : 0,

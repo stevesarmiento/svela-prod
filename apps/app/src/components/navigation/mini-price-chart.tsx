@@ -2,13 +2,12 @@
 
 import React, { useRef, useEffect, useCallback, useMemo } from 'react'
 import { createChart, ColorType, LineStyle, IChartApi, LineSeries, HistogramSeries, Time, LineData } from 'lightweight-charts'
-import { useMiniChartData } from '@/hooks/use-mini-chart-data'
+import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { Spinner } from '@v1/ui/spinner'
 import { createRoot } from "react-dom/client"
 import { useHullSuite } from '@/hooks/use-hull-suite'
 import { RateLimitErrorBoundary } from '@/components/error-boundary/rate-limit-error-boundary'
-import { AlertTriangle, WifiOff } from 'lucide-react'
-import { toast } from '@v1/ui/use-toast'
+import { AlertTriangle } from 'lucide-react'
 
 interface MiniPriceChartProps {
   coinId: string
@@ -73,25 +72,30 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
   const tooltipRootRef = useRef<ReturnType<typeof createRoot> | null>(null)
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Create fallback initial data for CoinGecko hook
+  const initialData = useMemo(() => ({
+    price: currentPrice || 0,
+    volume_24h: 0,
+    market_cap: 0,
+    percent_change_24h: 0
+  }), [currentPrice])
+
   const { 
     chartData, 
     volumeData, 
-    isLoading, 
-    priceChange24h, 
-    isRateLimited, 
-    rateLimitState 
-  } = useMiniChartData(coinId, currentPrice)
+    isLoading
+  } = useCoinGeckoChartData(coinId, '7d', initialData)
 
-  // Show rate limit warning
-  useEffect(() => {
-    if (isRateLimited && rateLimitState.retryAfter) {
-      toast({
-        title: "Rate Limited",
-        description: `Chart data will refresh in ${Math.ceil(rateLimitState.retryAfter / 1000)}s`,
-        variant: "destructive",
-      })
-    }
-  }, [isRateLimited, rateLimitState.retryAfter])
+  // Calculate price change from chart data
+  const priceChange24h = useMemo(() => {
+    if (chartData.length < 2) return 0
+    const firstPrice = chartData[0]?.value || 0
+    const lastPrice = chartData[chartData.length - 1]?.value || 0
+    if (firstPrice === 0) return 0
+    return ((lastPrice - firstPrice) / firstPrice) * 100
+  }, [chartData])
+
+
 
   // Memoize OHLCV data calculation for performance
   const ohlcvData = useMemo(() => {
@@ -381,20 +385,7 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
     }
   }, [chartData, volumeData, priceChange24h, tokenSymbol, hullSuite, handleResize, cleanupChart])
 
-  // Show rate limit error state
-  if (isRateLimited) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[120px] w-full text-xs text-gray-500 space-y-2">
-        <WifiOff className="w-4 h-4 text-amber-500" />
-        <div className="text-center">
-          <div className="text-amber-500">Rate Limited</div>
-          {rateLimitState.retryAfter && (
-            <div className="text-xs">Retry in {Math.ceil(rateLimitState.retryAfter / 1000)}s</div>
-          )}
-        </div>
-      </div>
-    )
-  }
+
 
   if (isLoading) {
     return (

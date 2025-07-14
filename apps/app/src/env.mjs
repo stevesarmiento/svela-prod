@@ -17,6 +17,7 @@ export const env = createEnv({
     CLERK_SECRET_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
     CG_API_KEY: z.string().optional(),
+    'CG-API-KEY': z.string().optional(),
     X_CG_PRO_API_KEY: z.string().optional(),
     GEMINI_API_KEY: z.string().optional(),
     X_CAPI_API_KEY: z.string().optional(),

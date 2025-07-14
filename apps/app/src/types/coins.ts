@@ -25,12 +25,12 @@ export interface CoinData {
 }
 
 export interface CoinMarketData {
-  id: number | string // Support both CoinMarketCap (number) and CoinGecko (string) IDs
+  id: string // CoinGecko ID
   name: string
   symbol: string
   slug: string
-  image?: string // Optional for CoinGecko compatibility
-  cmc_rank: number
+  image?: string // CoinGecko image URL
+  cmc_rank: number // Market cap rank (using cmc_rank for backward compatibility)
   circulating_supply: number
   max_supply: number | null
   quote: {
@@ -46,78 +46,10 @@ export interface CoinMarketData {
       percent_change_90d?: number
     }
   }
-  historical?: HistoricalData;
-  ohlcv?: OHLCVData;
   fundingRate?: number | null
 }
 
-export interface HistoricalQuote {
-  timestamp: string;
-  quote: {
-    USD: {
-      price: number;
-      volume_24h?: number;
-      market_cap?: number;
-      timestamp: string;
-      circulating_supply?: number;
-      total_supply?: number;
-    }
-  }
-}
-
-export interface HistoricalData {
-  data: {
-    id: number;
-    name: string;
-    symbol: string;
-    is_active: number;
-    is_fiat: number;
-    quotes: HistoricalQuote[];
-  };
-  status: {
-    timestamp: string;
-    error_code: number;
-    error_message: string;
-    elapsed: number;
-    credit_count: number;
-    notice: string;
-  };
-}
-
-export interface Coin {
-  id: number;
-  name: string;
-  symbol: string;
-  cmc_rank: number;
-  logo: string;
-  slug: string;
-  quote: {
-    USD: {
-      price: number;
-      percent_change_24h: number;
-      percent_change_1h?: number;
-      percent_change_7d?: number;
-      percent_change_30d?: number;
-      percent_change_60d?: number;
-      percent_change_90d?: number;
-      market_cap: number;
-      volume_24h: number;
-    };
-  };
-}
-
-export interface CoinDetail extends Coin {
-  description: string;
-  logo: string;
-  urls: {
-    website: string[];
-    technical_doc: string[];
-    explorer: string[];
-  };
-  circulating_supply: number;
-  max_supply: number | null;
-  historical?: HistoricalData;
-}
+// Legacy CoinMarketCap types removed - use CoinMarketData for current data needs
 
 export interface LiquidationData {
   symbol: string
@@ -137,38 +69,4 @@ export interface LiquidationResponse {
   }
 }
 
-// Add OHLCV types after the existing interfaces
-export interface OHLCVQuote {
-  time_open: string;
-  time_close: string;
-  time_high: string;
-  time_low: string;
-  quote: {
-    USD: {
-      open: number;
-      high: number;
-      low: number;
-      close: number;
-      volume: number;
-      market_cap: number;
-      timestamp: string;
-    };
-  };
-}
-
-export interface OHLCVData {
-  data: {
-    id: number;
-    name: string;
-    symbol: string;
-    quotes: OHLCVQuote[];
-  };
-  status: {
-    timestamp: string;
-    error_code: number;
-    error_message: string;
-    elapsed: number;
-    credit_count: number;
-    notice: string;
-  };
-}
+// Legacy CoinMarketCap OHLCV types removed - use CoinGecko market chart data instead
