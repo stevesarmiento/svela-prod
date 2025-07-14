@@ -69,10 +69,12 @@ interface WatchlistGroup {
 // Component to fetch data for a single watchlist
 function WatchlistDataFetcher({ 
   group, 
-  onDataReady 
+  onDataReady,
+  activeTimeScale
 }: { 
   group: WatchlistGroup
   onDataReady: (data: WatchlistSeries | null) => void 
+  activeTimeScale: string
 }) {
   // Get watchlist coins for this group
   const groupWatchlist = useWatchlistByGroup(group._id)
@@ -88,7 +90,8 @@ function WatchlistDataFetcher({
   
   // Get aggregate chart data using isolated CoinGecko hook
   const { aggregateData } = useCoinGeckoWatchlistAggregateChartIsolated({
-    coins: coins || []
+    coins: coins || [],
+    timeScale: activeTimeScale
   })
 
   // Update parent when data changes
@@ -171,7 +174,6 @@ const TimeScaleSelector = ({
     { value: "7d", label: "1W" },   // 7d change  
     { value: "30d", label: "1M" },  // 30d change
     { value: "max", label: "1Y" },  // Longest available
-    { value: "2y", label: "2Y" },   // N/A
   ]
 
   return (
@@ -464,6 +466,7 @@ export function WatchlistMultiLineChart({
           key={group._id}
           group={group}
           onDataReady={handleDataUpdate.get(group._id) || (() => {})}
+          activeTimeScale={activeTimeScale}
         />
       ))}
       

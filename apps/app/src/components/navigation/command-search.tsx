@@ -319,11 +319,15 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                         <div className="flex items-center gap-3 pr-5">
                           <div className="relative">
                             <Image
-                              src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`}
+                              src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
                               alt={coin.name}
                               className="w-6 h-6 rounded-full"
                               width={24}
                               height={24}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.src = '/favicon.ico';
+                              }}
                             />
                           </div>
                           <div className="flex flex-col">
@@ -378,11 +382,15 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                         <div className="flex items-center gap-3 pr-5">
                           <div className="relative">
                             <Image
-                              src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${coin.id}.png`}
+                              src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
                               alt={coin.name}
                               className="w-6 h-6 rounded-full"
                               width={24}
                               height={24}
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.src = '/favicon.ico';
+                              }}
                             />
                           </div>
                           <div className="flex flex-col">

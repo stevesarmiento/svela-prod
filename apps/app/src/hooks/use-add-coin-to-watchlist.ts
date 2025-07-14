@@ -4,14 +4,14 @@ import { useState, useCallback } from 'react';
 import { useWatchlist } from '../app/[locale]/(dashboard)/watchlist/_components/watchlist-context';
 import { useUser } from './use-user';
 import { toast } from "@v1/ui/use-toast";
-import type { CoinSearchResult } from './use-command-search';
+import type { HybridCoinSearchResult } from './use-hybrid-coin-search';
 
 export function useAddCoinToWatchlist() {
   const [isAddingCoin, setIsAddingCoin] = useState(false);
   const { addToWatchlist } = useWatchlist();
   const { user } = useUser();
 
-  const handleAddCoin = useCallback(async (coin: CoinSearchResult) => {
+  const handleAddCoin = useCallback(async (coin: HybridCoinSearchResult) => {
     if (!user) {
       toast({
         title: "Error",
@@ -27,7 +27,7 @@ export function useAddCoinToWatchlist() {
 
     try {
       setIsAddingCoin(true);
-      await addToWatchlist(Number(coin.id));
+      await addToWatchlist(coin.id); // Use CoinGecko string ID directly
       
       toast({
         title: "Success",

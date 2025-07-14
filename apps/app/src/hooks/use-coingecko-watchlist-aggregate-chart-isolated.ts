@@ -38,6 +38,7 @@ interface CoinHistoricalData {
 
 interface UseCoinGeckoWatchlistAggregateChartIsolatedProps {
   coins: CoinGeckoWatchlistCoin[]
+  timeScale?: string
 }
 
 interface CoinGeckoWatchlistAggregateIsolatedResult {
@@ -60,7 +61,8 @@ interface CoinGeckoWatchlistAggregateIsolatedResult {
  * 3. Shows the actual combined performance over time
  */
 export function useCoinGeckoWatchlistAggregateChartIsolated({ 
-  coins
+  coins,
+  timeScale = '7d'
 }: UseCoinGeckoWatchlistAggregateChartIsolatedProps): CoinGeckoWatchlistAggregateIsolatedResult {
   const [aggregateData, setAggregateData] = useState<AggregateDataPoint[]>([])
 
@@ -71,18 +73,31 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
     return ids
   }, [coins])
 
+  // Convert timeScale to days for CoinGecko API
+  const getDaysFromTimeScale = (scale: string): string => {
+    switch (scale) {
+      case '1d': return '1'
+      case '7d': return '7'
+      case '30d': return '30'
+      case 'max': return '365'
+      default: return '7'
+    }
+  }
+
+  const days = getDaysFromTimeScale(timeScale)
+
   // Fetch historical market chart data for all coins in the watchlist
   const { data: historicalData, isLoading } = useQuery({
-    queryKey: ['watchlist-aggregate-historical', coinIds.sort().join(','), '30d'],
+    queryKey: ['watchlist-aggregate-historical', coinIds.sort().join(','), timeScale],
     queryFn: async () => {
       if (!coinIds.length) return { data: {}, performance: { cacheHits: 0, cacheMisses: 0, totalQueries: 0 } }
 
       try {
-        console.log('🔍 Fetching historical data for watchlist aggregate...', coinIds)
+        console.log('🔍 Fetching historical data for watchlist aggregate...', { coinIds, timeScale, days })
         
         // Fetch historical data for each coin in parallel
         const promises = coinIds.map(async (coinId) => {
-          const response = await fetch(`/api/coingecko/market-chart?id=${coinId}&days=30`)
+          const response = await fetch(`/api/coingecko/market-chart?id=${coinId}&days=${days}`)
           if (!response.ok) {
             console.warn(`Failed to fetch historical data for ${coinId}:`, response.status)
             return { coinId, data: null }
