@@ -81,7 +81,7 @@ export function useConvexMultiChartData(
          try {
           // 1. Check Convex cache first
           const cachedData = await convex.query(api.historicalData.getHistoricalData, {
-            coinId: coin.id,
+            coinId: typeof coin.id === 'string' ? parseInt(coin.id) || 0 : coin.id,
             timeframe: activeTimeScale
           })
 
@@ -179,7 +179,7 @@ export function useConvexMultiChartData(
           // Try to return any available stale data as last resort
           try {
             const staleData = await convex.query(api.historicalData.getHistoricalData, {
-              coinId: coin.id,
+              coinId: typeof coin.id === 'string' ? parseInt(coin.id) || 0 : coin.id,
               timeframe: activeTimeScale
             })
             

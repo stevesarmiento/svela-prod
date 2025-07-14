@@ -395,7 +395,7 @@ export function MultiPriceChartLightweight({
       })
       chart.remove()
     }
-  }, [coinSeriesWithColors])
+  }, [coinSeriesWithColors, activeTimeScale])
 
   // Handle hover effects on chart lines
   useEffect(() => {

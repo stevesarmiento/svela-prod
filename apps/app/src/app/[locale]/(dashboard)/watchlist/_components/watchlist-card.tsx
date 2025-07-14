@@ -283,7 +283,7 @@ export function WatchlistCard({
                   <AvatarCircles
                     avatarUrls={avatarData}
                     numPeople={coins.length > 4 ? coins.length - 4 : 0}
-                    className="scale-75 -ml-3"
+                    className=""
                   />
                 </div>
               )}

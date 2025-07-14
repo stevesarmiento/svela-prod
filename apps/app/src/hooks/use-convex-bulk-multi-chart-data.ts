@@ -129,7 +129,7 @@ export function useConvexBulkMultiChartData(
       const cachePromises = realCoins.map(async (coin) => {
         try {
           const cachedData = await convex.query(api.historicalData.getHistoricalData, {
-            coinId: coin.id,
+            coinId: typeof coin.id === 'string' ? parseInt(coin.id) || 0 : coin.id,
             timeframe: activeTimeScale
           })
 
@@ -250,7 +250,7 @@ export function useConvexBulkMultiChartData(
                for (const coin of chunk) {
                  try {
                    const staleData = await convex.query(api.historicalData.getHistoricalData, {
-                     coinId: coin.id,
+                     coinId: typeof coin.id === 'string' ? parseInt(coin.id) || 0 : coin.id,
                      timeframe: activeTimeScale
                    })
                    
@@ -279,7 +279,7 @@ export function useConvexBulkMultiChartData(
                for (const coin of chunk) {
                  try {
                    const staleData = await convex.query(api.historicalData.getHistoricalData, {
-                     coinId: coin.id,
+                     coinId: typeof coin.id === 'string' ? parseInt(coin.id) || 0 : coin.id,    
                      timeframe: activeTimeScale
                    })
                    

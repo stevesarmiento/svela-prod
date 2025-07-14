@@ -278,12 +278,12 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
                   <span className="font-mono text-xs font-semibold">
                     {watchlist.coinsCount}
                   </span>
-                  <span className="text-primary/40 text-xs">coins</span>
+                  <span className="text-primary/40 text-xs">{watchlist.coinsCount === 1 ? 'token' : 'tokens'}</span>
                   {!watchlist.isLoading && watchlist.coinImages.length > 0 && (
                     <AvatarCircles 
                       avatarUrls={watchlist.coinImages}
                       numPeople={Math.max(0, watchlist.coinsCount - watchlist.coinImages.length)}
-                      className="scale-50"
+                      className="scale-75 -ml-1"
                     />
                   )}
                 </div>
