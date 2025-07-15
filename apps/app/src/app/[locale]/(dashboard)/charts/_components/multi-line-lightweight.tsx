@@ -121,7 +121,7 @@ const TimeScaleSelector = ({
   ]
 
   return (
-    <div className="flex gap-1 bg-zinc-950/10 backdrop-blur-xl border border-zinc-800/30 rounded-[12px] p-1">
+    <div className="flex gap-1 dark:bg-zinc-950/10 bg-zinc-950/5 backdrop-blur-xl border dark:border-zinc-800/30 border-zinc-800/10 rounded-[12px] p-1">
       {scales.map((scale) => (
         <button
           key={scale.value}
@@ -129,7 +129,7 @@ const TimeScaleSelector = ({
           className={cn(
             "px-2 py-1 text-xs rounded-lg",
             activeTimeScale === scale.value
-              ? "bg-zinc-800/50 border border-zinc-800/50  shadow-md shadow-zinc-950/50 text-white"
+              ? "dark:bg-zinc-800/50 bg-zinc-950/50 border dark:border-zinc-800/50 border-zinc-800/20  shadow-md dark:shadow-zinc-950/50 shadow-zinc-950/10 text-white"
               : "bg-transparent text-muted-foreground hover:bg-muted/80"
           )}
         >
@@ -430,7 +430,7 @@ export function MultiPriceChartLightweight({
 
   // Always show the main UI structure
   return (
-    <div className="grid grid-cols-12 gap-0 rounded-[16px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
+    <div className="grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/20 border-zinc-800/10 overflow-hidden p-1">
       {/* Legend */}
       <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2">   
         <div className="flex flex-row items-center justify-between gap-2 mb-3"> 
@@ -439,10 +439,10 @@ export function MultiPriceChartLightweight({
           <Button
             variant="outline"
             onClick={() => openContextualCommandSearch('charts')}
-            className="group w-full border-zinc-800/0 hover:border-zinc-800/80 bg-transparent hover:bg-transparent flex items-center gap-2 justify-between p-3 rounded-lg"
+            className="group w-full border-zinc-800/0 dark:hover:border-zinc-800/80 bg-transparent hover:bg-transparent flex items-center gap-2 justify-between p-3 rounded-lg"
           >
-            <span className="text-muted-foreground font-normal text-sm group-hover:text-white">Add to comparison</span>
-            <IconPlus className="group-hover:fill-white group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
+            <span className="text-muted-foreground font-normal text-sm group-hover:text-primary">Add to comparison</span>
+            <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
           </Button>
         </div> 
         
@@ -474,7 +474,7 @@ export function MultiPriceChartLightweight({
                         hoveredCoin && hoveredCoin !== coin.id.toString() ? "opacity-40" : "opacity-100",
                         hoveredCoin === coin.id.toString() ? "bg-white/5" : ""
                       )}
-                      style={{ backgroundColor: addOpacityToColor(realCoin.color, 0.05) }}
+                      style={{ backgroundColor: addOpacityToColor(realCoin.color, 0.1) }}
                       onMouseEnter={() => setHoveredCoin(coin.id.toString())}
                       onMouseLeave={() => setHoveredCoin(null)}
                     >
@@ -537,7 +537,7 @@ export function MultiPriceChartLightweight({
         </div>
       </div>
       
-      <div className="col-span-9 border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+      <div className="col-span-9 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
         {/* Chart Content */}
         <div className="p-0 relative">
           <div

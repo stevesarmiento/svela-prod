@@ -72,6 +72,7 @@
     "./multiple-selector": "./src/components/multiple-selector.tsx",
     "./table": "./src/components/table.tsx",
     "./tabs": "./src/components/tabs.tsx",
+    "./theme-toggle": "./src/components/theme-toggle.tsx",
     "./tailwind.config": "./tailwind.config.ts",
     "./textarea": "./src/components/textarea.tsx",
     "./text-shimmer": "./src/components/text-shimmer.tsx",

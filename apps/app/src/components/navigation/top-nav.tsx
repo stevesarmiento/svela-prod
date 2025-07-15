@@ -181,15 +181,15 @@ export function TopNav() {
             // Default Logo and Greeting
             <>
               <Link href="/watchlist">
+              <div className="flex items-center gap-2 p-1.5 bg-white dark:bg-zinc-800 border border-zinc-800/20 dark:border-zinc-700/50 backdrop-blur-xl rounded-xl"> 
                 <SvelaLogo 
-                  width={22} 
-                  height={22} 
-                  className="text-white/30"
-                  fillColor="currentColor"
-                  strokeOpacity={0.3}
+                  width={20} 
+                  height={20}
+                  adaptive={true}
                 />
+              </div>
               </Link>
-              <span className="text-lg font-bold text-white">
+              <span className="text-xl font-bold text-zinc-950 dark:text-white">
                 {isMounted 
                   ? isOverviewRoute 
                     ? showPersonalizedGreeting 

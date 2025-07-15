@@ -163,9 +163,9 @@ const createColumns = (
                   <Skeleton className="w-[20px] h-[20px] rounded-full" />
                 )}
               </div>
-              <div className="text-white font-bold text-sm">
+              <div className="font-bold text-sm">
                 {row.original.quote.USD.price > 0 ? (
-                  row.original.symbol.toUpperCase()
+                  <span className="text-primary">{row.original.symbol.toUpperCase()}</span>
                 ) : (
                   <Skeleton className="h-4 w-8 rounded" />
                 )}
@@ -225,9 +225,9 @@ const createColumns = (
                 )}
               </div>
               <div className="flex flex-row items-center gap-2">
-                <div className="text-white font-bold text-sm">
+                <div className="font-bold text-sm">
                   {row.original.quote.USD.price > 0 ? (
-                    row.original.symbol.toUpperCase()
+                    <span className="text-primary">{row.original.symbol.toUpperCase()}</span>
                   ) : (
                     <Skeleton className="h-4 w-8 rounded" />
                   )}

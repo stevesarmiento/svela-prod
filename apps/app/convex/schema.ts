@@ -118,7 +118,7 @@ export default defineSchema({
     retentionDays: v.string(), // '7', '30', '90', '365', 'never'
     
     // UI/UX Settings (for future use)
-    theme: v.optional(v.string()), // 'light', 'dark', 'system'
+    theme: v.optional(v.string()), // 'light', 'dark', 'system', 'sunrise', 'cherry', 'blueberry'
     currency: v.optional(v.string()), // 'USD', 'EUR', 'BTC', etc.
     dateFormat: v.optional(v.string()), // 'MM/DD/YYYY', 'DD/MM/YYYY', etc.
     

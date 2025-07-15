@@ -127,13 +127,13 @@ const TooltipContent = ({
   return (
     <div className="flex flex-col gap-1 overflow-hidden">
       <div className="px-4 py-3">
-        <div className="mb-3 text-[11px] text-zinc-400 font-medium">
+        <div className="mb-3 text-[11px] text-muted-foreground font-medium">
           {new Date(timestamp).toLocaleDateString(undefined, {
             month: 'long',
             day: 'numeric'
           })}
         </div>
-        <div className="w-full h-[1px] mb-3 bg-zinc-700/50 scale-125" />
+        <div className="w-full h-[1px] mb-3 bg-border/50 scale-125" />
         <div className="flex flex-col gap-2">
           {watchlistData.map((watchlist) => (
             <div key={watchlist.name} className="flex items-center justify-between">
@@ -144,14 +144,14 @@ const TooltipContent = ({
                 />
                 <WatchlistGroupIcon 
                   icon={watchlist.icon} 
-                  className="w-3 h-3 text-zinc-400"
+                  className="w-3 h-3 text-muted-foreground"
                   size={12}
                 />
-                <span className="text-[11px] text-zinc-400 truncate max-w-[120px]">
+                <span className="text-[11px] text-muted-foreground truncate max-w-[120px]">
                   {watchlist.name}
                 </span>
               </div>
-              <span className="text-[11px] font-mono text-white font-bold">
+              <span className="text-[11px] font-mono text-foreground font-bold">
                 {watchlist.value > 0 ? '+' : ''}{watchlist.value.toFixed(2)}%
               </span>
             </div>
@@ -177,7 +177,7 @@ const TimeScaleSelector = ({
   ]
 
   return (
-    <div className="flex gap-1 bg-zinc-950/10 backdrop-blur-xl border border-zinc-800/30 rounded-[12px] p-1">
+    <div className="flex gap-1 dark:bg-zinc-950/10 bg-zinc-950/5 backdrop-blur-xl border dark:border-zinc-800/30 border-zinc-800/10 rounded-[12px] p-1">
       {scales.map((scale) => (
         <button
           key={scale.value}
@@ -185,7 +185,7 @@ const TimeScaleSelector = ({
           className={cn(
             "px-2 py-1 text-xs rounded-lg",
             activeTimeScale === scale.value
-              ? "bg-zinc-800/50 border border-zinc-800/50  shadow-md shadow-zinc-950/50 text-white"
+              ? "dark:bg-zinc-800/50 bg-zinc-950/50 border dark:border-zinc-800/50 border-zinc-800/20  shadow-md dark:shadow-zinc-950/50 shadow-zinc-950/10 text-white"
               : "bg-transparent text-muted-foreground hover:bg-muted/80"
           )}
         >
@@ -259,23 +259,29 @@ export function WatchlistMultiLineChart({
   useEffect(() => {
     if (!chartContainerRef.current || !watchlistSeriesData.length) return
 
+    // Get theme colors from CSS variables
+    const computedStyle = getComputedStyle(document.documentElement);
+    const foreground = computedStyle.getPropertyValue('--foreground');
+    const primary = computedStyle.getPropertyValue('--primary');
+    const muted = computedStyle.getPropertyValue('--muted');
+    
     const chart = createChart(chartContainerRef.current, {
       handleScale: false,
       handleScroll: false,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#ffffff50",
+        textColor: `hsl(${foreground}/0.5)`,
         attributionLogo: false,
       },
       grid: {
         vertLines: { 
           visible: false,
-          color: "#e5e7eb0",
+          color: `hsl(${muted}/0.3)`,
           style: LineStyle.Dotted,
         },
         horzLines: { 
           visible: false,
-          color: "#f5f5f50",
+          color: `hsl(${foreground}/0.1)`,
           style: LineStyle.Dotted,
         },
       },
@@ -288,7 +294,7 @@ export function WatchlistMultiLineChart({
         vertLine: {
           labelVisible: true,
           width: 1,
-          color: "#d1d5db40",
+          color: `hsl(${primary}/0.4)`,
           visible: true,
           style: LineStyle.Solid,
         },
@@ -346,7 +352,7 @@ export function WatchlistMultiLineChart({
     // Add tooltip
     const tooltipEl = document.createElement("div")
     const tooltipRoot = createRoot(tooltipEl)
-    tooltipEl.className = "fixed hidden overflow-hidden text-[11px] text-white rounded-xl w-[220px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
+    tooltipEl.className = "fixed hidden overflow-hidden text-[11px] text-foreground rounded-xl w-[220px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-background/95 border border-border/50 transition-all duration-100 ease-in-out"
     document.body.appendChild(tooltipEl)
 
     // Subscribe to crosshair move
@@ -459,7 +465,7 @@ export function WatchlistMultiLineChart({
   }, [hoveredWatchlist])
 
   return (
-    <div className="grid grid-cols-12 gap-0 rounded-[16px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
+    <div className="grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/20 border-zinc-800/10 overflow-hidden p-1">
       {/* Data fetchers - render components that fetch data for each watchlist */}
       {activeWatchlists.map(group => (
         <WatchlistDataFetcher
@@ -477,11 +483,11 @@ export function WatchlistMultiLineChart({
             <div key={watchlist.id}>
               <div 
                 className={cn(
-                  "flex overflow-hidden items-center gap-2 cursor-pointer transition-opacity duration-200 rounded-lg p-0 -m-2 relative group hover:bg-white/10",
+                  "flex overflow-hidden items-center gap-2 cursor-pointer transition-opacity duration-200 rounded-lg p-0 -m-2 relative group hover:bg-foreground/10",
                   hoveredWatchlist && hoveredWatchlist !== watchlist.id ? "opacity-40" : "opacity-100",
-                  hoveredWatchlist === watchlist.id ? "bg-white/5" : ""
+                  hoveredWatchlist === watchlist.id ? "bg-foreground/5" : ""
                 )}
-                style={{ backgroundColor: addOpacityToColor(watchlist.color, 0.05) }}
+                style={{ backgroundColor: addOpacityToColor(watchlist.color, 0.1) }}
                 onMouseEnter={() => setHoveredWatchlist(watchlist.id)}
                 onMouseLeave={() => setHoveredWatchlist(null)}
                 onClick={() => onSelectWatchlist?.(watchlist.id)}
@@ -493,10 +499,10 @@ export function WatchlistMultiLineChart({
                 <div className="flex flex-row items-center gap-2 flex-1 ml-2">
                   <WatchlistGroupIcon 
                     icon={watchlist.icon} 
-                    className="w-4 h-4 text-zinc-300"
+                    className="w-4 h-4 text-foreground/70"
                     size={16}
                   />
-                  <span className="text-xs font-medium">{watchlist.name}</span>
+                  <span className="text-xs font-medium text-foreground">{watchlist.name}</span>
                   <span className="text-xs font-mono text-muted-foreground">({watchlist.coinsCount})</span>
                 </div>
                 
@@ -513,7 +519,7 @@ export function WatchlistMultiLineChart({
         </div>
       </div>
       
-      <div className="col-span-9 border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+      <div className="col-span-9 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
         {/* Chart Content */}
         <div className="p-0 relative">
           <div

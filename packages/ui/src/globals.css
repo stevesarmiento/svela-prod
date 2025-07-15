@@ -49,6 +49,72 @@
     --input: 0, 0%, 11%;
     --ring: 240 4.9% 83.9%;
   }
+
+  .sunrise {
+    --background: 43 96% 95%;
+    --foreground: 33 30% 8%;
+    --card: 45 60% 91%;
+    --card-foreground: 33 30% 8%;
+    --popover: 45 60% 91%;
+    --popover-foreground: 33 30% 8%;
+    --primary: 25 95% 53%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 45 20% 83%;
+    --secondary-foreground: 33 30% 8%;
+    --muted: 45 20% 83%;
+    --muted-foreground: 33 15% 46%;
+    --accent: 35 80% 75%;
+    --accent-foreground: 33 30% 8%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 45 40% 75%;
+    --input: 45 30% 85%;
+    --ring: 25 95% 53%;
+  }
+
+  .cherry {
+    --background: 350 60% 96%;
+    --foreground: 340 30% 8%;
+    --card: 348 45% 90%;
+    --card-foreground: 340 30% 8%;
+    --popover: 348 45% 90%;
+    --popover-foreground: 340 30% 8%;
+    --primary: 347 77% 50%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 350 25% 83%;
+    --secondary-foreground: 340 30% 8%;
+    --muted: 350 25% 83%;
+    --muted-foreground: 340 15% 46%;
+    --accent: 355 70% 75%;
+    --accent-foreground: 340 30% 8%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 350 35% 75%;
+    --input: 350 25% 85%;
+    --ring: 347 77% 50%;
+  }
+
+  .blueberry {
+    --background: 235 60% 96%;
+    --foreground: 225 30% 8%;
+    --card: 233 45% 90%;
+    --card-foreground: 225 30% 8%;
+    --popover: 233 45% 90%;
+    --popover-foreground: 225 30% 8%;
+    --primary: 231 81% 55%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 235 25% 83%;
+    --secondary-foreground: 225 30% 8%;
+    --muted: 235 25% 83%;
+    --muted-foreground: 225 15% 46%;
+    --accent: 240 70% 75%;
+    --accent-foreground: 225 30% 8%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 235 35% 75%;
+    --input: 235 25% 85%;
+    --ring: 231 81% 55%;
+  }
 }
  
 @layer base {

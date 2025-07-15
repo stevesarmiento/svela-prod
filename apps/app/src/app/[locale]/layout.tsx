@@ -1,6 +1,6 @@
 import "@v1/ui/globals.css";
 import { cn } from "@v1/ui/cn";
-import { ThemeProvider } from "next-themes";
+import { ThemeProvider } from "@/components/providers/theme-provider";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexProvider } from "@v1/convex/provider";
 import { QueryProvider } from "@/components/providers/query-provider";
@@ -66,12 +66,7 @@ export default function RootLayout({
           <ConvexProvider>
             <QueryProvider>
               <WatchlistProvider>
-              <ThemeProvider
-                attribute="class"
-                defaultTheme="system"
-                enableSystem
-                disableTransitionOnChange
-              >
+              <ThemeProvider>
                 {children}
 
                 <ChatToast />
