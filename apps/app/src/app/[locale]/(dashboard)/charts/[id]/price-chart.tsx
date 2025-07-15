@@ -43,7 +43,7 @@ const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: {
   ]
 
   return (
-    <div className="flex gap-1 bg-zinc-950/10 backdrop-blur-xl border border-zinc-800/30 rounded-[12px] p-1">
+    <div className="flex gap-1 bg-white dark:bg-zinc-950/10 backdrop-blur-xl border border-zinc-800/30 rounded-[12px] p-1">
       {scales.map((scale) => (
         <button
           key={scale.value}
@@ -160,7 +160,7 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
   return (
     <div>
       {/* Main Price Chart */}
-      <div className="bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+      <div className="bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
         <div className="p-0 relative">
           <div
             className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-20"

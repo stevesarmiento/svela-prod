@@ -262,7 +262,7 @@ export function WatchlistFilters({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <PopoverContent className="rounded-xl bg-zinc-900 p-0" align="start" side="right">
+            <PopoverContent className="rounded-xl bg-white dark:bg-zinc-900  p-0" align="start" side="right">
               {/* Search Input - Top Level */}
               <div className="">
                 <div className="relative">
@@ -275,7 +275,7 @@ export function WatchlistFilters({
                     className="h-8 border-none"
                   />
                   <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
-                    <Kbd className="text-xs"><IconReturn className="h-2.5 w-2.5 fill-white/50" /></Kbd>
+                    <Kbd className="text-xs"><IconReturn className="h-2.5 w-2.5 fill-zinc-900 dark:fill-white/50" /></Kbd>
                   </div>
                 </div>
               </div>

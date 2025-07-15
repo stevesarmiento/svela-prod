@@ -204,7 +204,7 @@ export function MemorySettings() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1">
-                  <IconPoint3FilledConnectedTrianglepathDotted className="h-5 w-5 fill-white/50" />
+                  <IconPoint3FilledConnectedTrianglepathDotted className="h-5 w-5 dark:fill-white/50 fill-zinc-950/50" />
                 </div>
                 <div className="">
                   <div className="font-bold text-xs">Enable Memory</div>
@@ -227,7 +227,7 @@ export function MemorySettings() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1">
-                  <IconEraserLineDashedFill className="h-5 w-5 fill-white/50" />
+                  <IconEraserLineDashedFill className="h-5 w-5 dark:fill-white/50 fill-zinc-950/50" />
                 </div>
                 <div className="">
                   <div className="font-bold text-xs">Auto-cleanup Chat Sessions</div>

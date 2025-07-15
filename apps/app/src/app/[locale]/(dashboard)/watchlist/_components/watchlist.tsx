@@ -227,7 +227,7 @@ const createColumns = (
               <div className="flex flex-row items-center gap-2">
                 <div className="font-bold text-sm">
                   {row.original.quote.USD.price > 0 ? (
-                    <span className="text-primary">{row.original.symbol.toUpperCase()}</span>
+                    <span className="text-zinc-950 dark:text-white">{row.original.symbol.toUpperCase()}</span>
                   ) : (
                     <Skeleton className="h-4 w-8 rounded" />
                   )}

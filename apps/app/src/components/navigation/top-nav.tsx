@@ -180,14 +180,12 @@ export function TopNav() {
           ) : (
             // Default Logo and Greeting
             <>
-              <Link href="/watchlist">
-              <div className="flex items-center gap-2 p-1.5 bg-white dark:bg-zinc-800 border border-zinc-800/20 dark:border-zinc-700/50 backdrop-blur-xl rounded-xl"> 
+              <Link href="/watchlist" className="opacity-50 hover:opacity-100 transition-opacity duration-150">
                 <SvelaLogo 
-                  width={20} 
-                  height={20}
+                  width={25} 
+                  height={25}
                   adaptive={true}
                 />
-              </div>
               </Link>
               <span className="text-xl font-bold text-zinc-950 dark:text-white">
                 {isMounted 
@@ -262,7 +260,7 @@ export function TopNav() {
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-zinc-900 rounded-xl z-[101]" align="end" forceMount>
+              <DropdownMenuContent className="w-56 bg-white dark:bg-zinc-900 rounded-xl z-[101]" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">
