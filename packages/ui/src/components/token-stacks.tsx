@@ -22,9 +22,11 @@ export const AvatarCircles = ({
   return (
     <div className={cn("z-10 flex -space-x-4 rtl:space-x-reverse ", className)}>
       {avatarUrls.filter(url => url.imageUrl && (url.imageUrl.startsWith('http') || url.imageUrl.startsWith('/'))).map((url, index) => (
-        <div className="h-8 w-8 rounded-full border dark:border-white/5 border-zinc-950/10 bg-background backdrop-blur-xl shadow-sm shadow-black/10">
+        <div 
+          key={index}
+          className="h-8 w-8 rounded-full border dark:border-white/5 border-zinc-950/10 bg-background backdrop-blur-xl shadow-sm shadow-black/10"
+        >
           <Image
-            key={index}
             className="rounded-full"
             src={url.imageUrl}
             width={50}
