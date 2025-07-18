@@ -113,6 +113,26 @@ export function ThemeSettings() {
         {/* Content */}
         <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden">
           <div className="p-4 space-y-4">
+            {/* Current Theme Display */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1">
+                  {getThemeIcon(selectedTheme)}
+                </div>
+                <div className="">
+                  <div className="font-bold text-xs">Current Setting</div>
+                  <div className="text-primary/40 text-xs">
+                    {getThemeDescription(selectedTheme)}
+                  </div>
+                </div>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {selectedTheme.charAt(0).toUpperCase() + selectedTheme.slice(1)} Mode
+              </div>
+            </div>
+            
+            <Separator className="bg-primary/5 scale-125" />
+            
             {/* Theme Selection Header */}
             <div className="flex items-center gap-4">
               <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1">
@@ -358,26 +378,6 @@ export function ThemeSettings() {
               <div></div>
               <div></div>
               <div></div>
-            </div>
-
-            <Separator className="bg-primary/5 scale-125" />
-
-            {/* Current Theme Display */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1">
-                  {getThemeIcon(selectedTheme)}
-                </div>
-                <div className="">
-                  <div className="font-bold text-xs">Current Setting</div>
-                  <div className="text-primary/40 text-xs">
-                    {getThemeDescription(selectedTheme)}
-                  </div>
-                </div>
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {selectedTheme.charAt(0).toUpperCase() + selectedTheme.slice(1)} Mode
-              </div>
             </div>
           </div>
         </div>
