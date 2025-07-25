@@ -1,45 +1,40 @@
 "use client";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
-import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@v1/convex/hooks";
 import { PriceCard } from "./price-card";
 import { ComparisonChart } from "./comparison-chart";
+import { SvelaLogo } from "@v1/ui/svela-logo";
 
 interface PriceCardData {
-  id: number;
+  coingeckoId: string; // CoinGecko ID
   name: string;
   symbol: string;
-  price: number;
-  change24h: number;
+  currentPrice: number;
+  priceChangePercentage24h: number;
   marketCap?: number;
-  volume24h?: number;
-  rank?: number;
+  totalVolume?: number;
+  marketCapRank?: number;
+  image?: string;
   historical?: {
     data?: {
-      quotes?: Array<{
-        timestamp: string;
-        quote: {
-          USD: {
-            price: number;
-          };
-        };
-      }>;
+      prices?: Array<[number, number]>; // CoinGecko format: [timestamp, price]
     };
   };
 }
 
 interface ComparisonChartData {
   coins: Array<{
-    id: number;
+    coingeckoId: string;
     name: string;
     symbol: string;
-    price: number;
-    change24h: number;
+    currentPrice: number;
+    priceChangePercentage24h: number;
     marketCap: number;
-    volume24h: number;
-    rank: number;
+    totalVolume: number;
+    marketCapRank: number;
+    image?: string;
     historical?: {
       timeframe: string;
       prices: Array<{
@@ -91,14 +86,12 @@ export function ChatMessage({
       }`}
     >
       {role === 'assistant' && (
-        <Avatar className="size-8 bg-transparent">
-          <AvatarFallback>
-            <Image 
-              src="/svela-logo.svg" 
-              alt="Svela" 
-              width={15} 
-              height={15}
-              className="opacity-70"
+        <Avatar className="size-8">
+          <AvatarFallback className="bg-zinc-800 border/50 border-zinc-700/50 p-1.5">
+            <SvelaLogo
+              width={20} 
+              height={20}
+              adaptive={true}
             />
           </AvatarFallback>
         </Avatar>
@@ -106,9 +99,21 @@ export function ChatMessage({
       
       <div className={`max-w-[66%] space-y-3 ${role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
         {/* Render component first if it's an assistant message and we have component data */}
-        {role === 'assistant' && componentData?.type === 'price_card' && (
-          <PriceCard {...(componentData.data as PriceCardData)} />
-        )}
+        {role === 'assistant' && componentData?.type === 'price_card' && (() => {
+          const data = componentData.data as PriceCardData;
+          return <PriceCard 
+            coingeckoId={data.coingeckoId}
+            name={data.name}
+            symbol={data.symbol}
+            currentPrice={data.currentPrice}
+            priceChangePercentage24h={data.priceChangePercentage24h}
+            marketCap={data.marketCap}
+            totalVolume={data.totalVolume}
+            marketCapRank={data.marketCapRank}
+            image={data.image}
+            historical={data.historical}
+          />;
+        })()}
         {role === 'assistant' && componentData?.type === 'comparison_chart' && (
           <ComparisonChart {...(componentData.data as ComparisonChartData)} />
         )}

@@ -13,39 +13,35 @@ import { IconXmarkCircleFill } from 'symbols-react'
 import { ChatMessageList } from './chat-message-list'
 import type { Message } from 'ai'
 
+// Chat-specific interfaces using CoinGecko format
 interface PriceCardData {
-  id: number;
+  coingeckoId: string;
   name: string;
   symbol: string;
-  price: number;
-  change24h: number;
+  currentPrice: number;
+  priceChangePercentage24h: number;
   marketCap?: number;
-  volume24h?: number;
-  rank?: number;
+  totalVolume?: number;
+  marketCapRank?: number;
+  image?: string;
   historical?: {
     data?: {
-      quotes?: Array<{
-        timestamp: string;
-        quote: {
-          USD: {
-            price: number;
-          };
-        };
-      }>;
+      prices?: Array<[number, number]>;
     };
   };
 }
 
 interface ComparisonChartData {
   coins: Array<{
-    id: number;
+    coingeckoId: string;
     name: string;
     symbol: string;
-    price: number;
-    change24h: number;
+    currentPrice: number;
+    priceChangePercentage24h: number;
     marketCap: number;
-    volume24h: number;
-    rank: number;
+    totalVolume: number;
+    marketCapRank: number;
+    image?: string;
     historical?: {
       timeframe: string;
       prices: Array<{

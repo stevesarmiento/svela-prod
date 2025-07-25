@@ -83,22 +83,22 @@ export interface EnhancedChatResponse {
 
 // Data Interfaces
 export interface CoinPriceData {
-  id: number
+  coingeckoId: string // Changed from id: number to coingeckoId: string
   name: string
   symbol: string
-  price: number
-  priceChange24h: number
+  currentPrice: number // Changed from price
+  priceChangePercentage24h: number // Changed from priceChange24h
   priceChange7d?: number
   priceChange30d?: number
-  volume24h: number
+  totalVolume: number // Changed from volume24h
   marketCap: number
-  rank: number
+  marketCapRank: number // Changed from rank
   lastUpdated: string
-  image?: string // Add image field for CoinGecko image URLs
+  image?: string // CoinGecko image URL
 }
 
 export interface CoinHistoricalData {
-  coinId: number
+  coingeckoId: string // Changed from coinId: number
   timeframe: string
   prices: Array<{ timestamp: number; price: number }>
   volumes?: Array<{ timestamp: number; volume: number }>
@@ -106,7 +106,7 @@ export interface CoinHistoricalData {
 }
 
 export interface TechnicalAnalysisData {
-  coinId: number
+  coingeckoId: string // Changed from coinId: number
   indicators: {
     rsi?: { value: number; signal: 'overbought' | 'oversold' | 'neutral' }
     macd?: { value: number; signal: number; histogram: number }
@@ -126,7 +126,7 @@ export interface TechnicalAnalysisData {
 }
 
 export interface MarketStructureData {
-  coinId: number
+  coingeckoId: string // Changed from coinId: number
   fundingRate?: {
     current: number
     average24h: number
@@ -153,9 +153,9 @@ export interface MarketStructureData {
 export interface ComparisonData {
   coins: CoinPriceData[]
   metrics: {
-    performance: Array<{ coinId: number; change24h: number; change7d: number }>
-    correlation?: Array<{ coin1: number; coin2: number; correlation: number }>
-    relative_strength?: Array<{ coinId: number; strength: number }>
+    performance: Array<{ coingeckoId: string; change24h: number; change7d: number }> // Changed coinId to coingeckoId
+    correlation?: Array<{ coin1: string; coin2: string; correlation: number }> // Changed to strings
+    relative_strength?: Array<{ coingeckoId: string; strength: number }> // Changed coinId to coingeckoId
   }
 }
 

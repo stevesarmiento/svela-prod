@@ -78,6 +78,7 @@
     "./text-shimmer": "./src/components/text-shimmer.tsx",
     "./toast": "./src/components/toast.tsx",
     "./sonner": "./src/components/sonner.tsx",
+    "./sonner-notif": "./src/components/sonner-notif.tsx",
     "./toaster": "./src/components/toaster.tsx",
     "./tooltip": "./src/components/tooltip.tsx",
     "./progressive-blur": "./src/components/progressive-blur.tsx",

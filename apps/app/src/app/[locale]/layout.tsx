@@ -8,7 +8,7 @@ import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { WatchlistProvider } from "./(dashboard)/watchlist/_components/watchlist-context";
-import { Toaster } from "@v1/ui/sonner";
+import { NotifToaster } from "@v1/ui/sonner-notif";
 import { ChatToast } from "@/components/chat/chat-toast";
 //import localFont from "next/font/local";
 
@@ -70,7 +70,7 @@ export default function RootLayout({
                 {children}
 
                 <ChatToast />
-                <Toaster 
+                <NotifToaster 
                   position="top-center" 
                   offset={-10}
                 />

@@ -3,7 +3,7 @@
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, ToasterProps } from "sonner"
 
-const Toaster = ({ ...props }: ToasterProps) => {
+const NotifToaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
 
   return (
@@ -19,18 +19,18 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         style: {
-          //textAlign: "center",
-          //padding: "16px 24px",
-          //borderRadius: "12px",
-          //boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-          //fontWeight: "500",
-          //marginTop: "20px",
-          //display: "flex",
-          //alignItems: "center",
-          //justifyContent: "center",
-          //backgroundColor: "var(--background)",
-          //backdropFilter: "blur(10px)",
-          //flexDirection: "row",
+          textAlign: "center",
+          padding: "16px 24px",
+          borderRadius: "12px",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+          fontWeight: "500",
+          marginTop: "20px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: "var(--background)",
+          backdropFilter: "blur(10px)",
+          flexDirection: "row",
         },
       }}
       {...props}
@@ -38,4 +38,4 @@ const Toaster = ({ ...props }: ToasterProps) => {
   )
 }
 
-export { Toaster }
+export { NotifToaster }

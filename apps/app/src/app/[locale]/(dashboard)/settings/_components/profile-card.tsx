@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@v1/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@v1/ui/avatar';
 import { IconSparkle } from 'symbols-react';
@@ -27,13 +27,24 @@ function NoiseTexture() {
 export function ProfileCard() {
   const { user } = useAuth();
 
-  // Mock user data - replace with real data from your auth/subscription system
-  const [userStats] = useState(() => {
+  // Initialize with default values to prevent hydration mismatch
+  const [userStats, setUserStats] = useState(() => ({
+    memberSince: new Date('2024-01-01'), // Default fallback date
+    isProMember: false,
+    isTrialActive: false,
+    trialDaysRemaining: 0,
+    totalCharts: 0,
+    totalWatchlists: 0,
+    totalMemories: 0
+  }));
+
+  // Set actual values after component mounts to avoid hydration mismatch
+  useEffect(() => {
     const memberSince = new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000);
     const trialEndDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const daysRemaining = Math.ceil((trialEndDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
     
-    return {
+    setUserStats({
       memberSince,
       isProMember: Math.random() > 0.7, // 30% chance of being pro for demo
       isTrialActive: !!(Math.random() > 0.5 && daysRemaining > 0),
@@ -41,8 +52,8 @@ export function ProfileCard() {
       totalCharts: Math.floor(Math.random() * 50) + 10,
       totalWatchlists: Math.floor(Math.random() * 8) + 2,
       totalMemories: Math.floor(Math.random() * 200) + 50
-    };
-  });
+    });
+  }, []);
 
   const getMembershipStatus = () => {
     if (userStats.isProMember) {

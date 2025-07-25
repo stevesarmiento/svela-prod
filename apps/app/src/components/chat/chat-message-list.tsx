@@ -7,26 +7,33 @@ import { ChatLoading } from "./chat-loading";
 import type { Message } from "ai";
 
 interface PriceCardData {
-  id: number;
+  coingeckoId: string; // Changed from id: number
   name: string;
   symbol: string;
-  price: number;
-  change24h: number;
+  currentPrice: number; // Changed from price
+  priceChangePercentage24h: number; // Changed from change24h
   marketCap?: number;
-  volume24h?: number;
-  rank?: number;
+  totalVolume?: number; // Changed from volume24h
+  marketCapRank?: number; // Changed from rank
+  image?: string; // Added for CoinGecko image URLs
+  historical?: {
+    data?: {
+      prices?: Array<[number, number]>; // CoinGecko format: [timestamp, price]
+    };
+  };
 }
 
 interface ComparisonChartData {
   coins: Array<{
-    id: number;
+    coingeckoId: string; // Changed from id: number
     name: string;
     symbol: string;
-    price: number;
-    change24h: number;
+    currentPrice: number; // Changed from price
+    priceChangePercentage24h: number; // Changed from change24h
     marketCap: number;
-    volume24h: number;
-    rank: number;
+    totalVolume: number; // Changed from volume24h
+    marketCapRank: number; // Changed from rank
+    image?: string; // Added for CoinGecko image URLs
     historical?: {
       timeframe: string;
       prices: Array<{
