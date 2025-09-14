@@ -7,7 +7,7 @@ export function GoogleSignin() {
   const { signIn } = useAuth();
 
   const handleSignin = () => {
-    signIn();
+    signIn('google');
   };
 
   return (

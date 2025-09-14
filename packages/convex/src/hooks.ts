@@ -1,13 +1,14 @@
 "use client";
 
-import { useUser, useClerk } from "@clerk/nextjs";
+import { useUser, useClerk, useSignIn } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../apps/app/convex/_generated/api.js";
 
 // Auth hooks using Clerk
 export function useAuth() {
   const { user, isLoaded } = useUser();
-  const { signOut, openSignIn } = useClerk();
+  const clerk = useClerk();
+  const { signIn: clerkSignIn } = useSignIn();
   
   return {
     user: user ? {
@@ -17,13 +18,23 @@ export function useAuth() {
       avatarUrl: user.imageUrl,
     } : null,
     signIn: (provider?: string) => {
-      openSignIn({
-        appearance: {
-          baseTheme: undefined,
-        }
-      });
+      if (provider === 'google' && clerkSignIn) {
+        // Direct redirect to Google OAuth without modal using authenticateWithRedirect
+        clerkSignIn.authenticateWithRedirect({
+          strategy: "oauth_google",
+          redirectUrl: "/sso-callback",
+          redirectUrlComplete: "/watchlist"
+        });
+      } else {
+        // Fallback to modal for other providers or no provider specified
+        clerk.openSignIn({
+          appearance: {
+            baseTheme: undefined,
+          }
+        });
+      }
     },
-    signOut: () => signOut(),
+    signOut: () => clerk.signOut(),
     isLoading: !isLoaded,
     isAuthenticated: !!user,
   };
