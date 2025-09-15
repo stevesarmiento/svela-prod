@@ -25,9 +25,9 @@ export default function Page() {
                 className="opacity-50"
               />
           <div className="flex flex-col items-center justify-center">
-            <h1 className="text-2xl font-bold">Log in or sign up to Svela</h1>
-            <p className="text-md text-muted-foreground w-[320px] text-center">
-              Simply, connect a Google account in order to continue to the dashboard.
+            <h1 className="text-4xl font-semibold">Clarity & Action</h1>
+            <p className="text-lg text-muted-foreground text-center">
+              Connect an account to start using Svela.
             </p>
           </div>
           <GoogleSignin />
