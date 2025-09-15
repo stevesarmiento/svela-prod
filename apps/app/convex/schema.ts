@@ -137,6 +137,24 @@ export default defineSchema({
   })
     .index("by_user", ["userId"]),
 
+  userApiKeys: defineTable({
+    userId: v.id("users"),
+    provider: v.string(), // 'coingecko', 'coinglass', 'openai', 'gemini', 'coinmarketcap'
+    keyName: v.string(), // Display name for the key (e.g., "My CoinGecko Pro Key")
+    encryptedKey: v.string(), // Encrypted API key using AES-256-GCM
+    isActive: v.boolean(), // Whether this key should be used
+    lastValidated: v.optional(v.number()), // Timestamp of last successful validation
+    validationError: v.optional(v.string()), // Last validation error message
+    usageCount: v.optional(v.number()), // Track API usage for user insights
+    rateLimitRemaining: v.optional(v.number()), // Track rate limits if available
+    rateLimitReset: v.optional(v.number()), // When rate limit resets
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_provider", ["userId", "provider"])
+    .index("by_user_active", ["userId", "isActive"]),
+
   // Historical price data - optimized for chart rendering (CoinGecko only)
   priceHistory: defineTable({
     coingeckoId: v.string(), // CoinGecko ID

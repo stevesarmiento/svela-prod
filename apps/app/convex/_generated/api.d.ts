@@ -13,6 +13,8 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as apiKeys from "../apiKeys.js";
+import type * as apiKeysActions from "../apiKeysActions.js";
 import type * as coingeckoMarkets from "../coingeckoMarkets.js";
 import type * as coins from "../coins.js";
 import type * as historicalData from "../historicalData.js";
@@ -29,6 +31,8 @@ import type * as watchlists from "../watchlists.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  apiKeys: typeof apiKeys;
+  apiKeysActions: typeof apiKeysActions;
   coingeckoMarkets: typeof coingeckoMarkets;
   coins: typeof coins;
   historicalData: typeof historicalData;

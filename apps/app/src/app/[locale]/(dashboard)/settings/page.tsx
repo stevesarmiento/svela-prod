@@ -1,5 +1,6 @@
 'use client';
 
+import { ApiKeysManagement } from './_components/api-keys-management';
 import { MemorySettings, ProfileCard, ThemeSettings } from './_components';
 import { ScrollArea } from '@v1/ui/scroll-area';
 
@@ -31,6 +32,9 @@ export default function SettingsPage() {
 
                 {/* Memory Settings */}
                 <MemorySettings />
+
+                {/* API Keys Management */}
+                <ApiKeysManagement />
               
               </div>
             </ScrollArea>

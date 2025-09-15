@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { ConvexHttpClient } from "convex/browser"
+import { auth } from "@clerk/nextjs/server"
 import { api } from "../../../../../convex/_generated/api"
+import { getUserApiKey, getApiHeaders, updateUserApiKeyRateLimit, reportApiKeyError } from "@/lib/user-api-keys"
 
 const MarketsParamsSchema = z.object({
   ids: z.string(), // Comma-separated CoinGecko IDs (e.g., "bitcoin,ethereum")
@@ -75,30 +77,27 @@ export async function GET(request: NextRequest) {
       include_24hr_vol,
       include_last_updated_at
     })
+
+    // Get user authentication (optional for API key resolution)
+    const { userId: clerkId } = await auth();
     
-    // Debug environment variables
-    console.log('🌍 Environment check:', {
-      NODE_ENV: process.env.NODE_ENV,
-      available_env_vars: Object.keys(process.env).filter(key => key.includes('CG') || key.includes('COINGECKO')),
-      X_CG_PRO_API_KEY_exists: !!process.env.X_CG_PRO_API_KEY,
-      COINGECKO_API_KEY_exists: !!process.env.COINGECKO_API_KEY
+    // Get API key - user's key takes precedence over environment variable
+    const apiKeyResult = await getUserApiKey(clerkId, 'coingecko', 'X_CG_PRO_API_KEY');
+    
+    if (!apiKeyResult.key) {
+      throw new Error('CoinGecko API key not available. Please add your API key in settings or configure X_CG_PRO_API_KEY environment variable.');
+    }
+
+    console.log('🔑 API Key check:', {
+      hasKey: !!apiKeyResult.key,
+      isUserKey: apiKeyResult.isUserKey,
+      keySource: apiKeyResult.isUserKey ? 'user' : 'environment',
+      keyLength: apiKeyResult.key?.length || 0,
     })
 
     // Check Convex configuration
     if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
       console.warn('⚠️ NEXT_PUBLIC_CONVEX_URL not configured - database storage will fail')
-    }
-
-    // Get CoinGecko API key
-    const cgApiKey = process.env.X_CG_PRO_API_KEY
-    console.log('🔑 API Key check:', {
-      hasKey: !!cgApiKey,
-      keyLength: cgApiKey?.length || 0,
-      envVarName: 'X_CG_PRO_API_KEY'
-    })
-    
-    if (!cgApiKey) {
-      throw new Error('CoinGecko API key not configured. Please set X_CG_PRO_API_KEY in your environment.')
     }
 
     const url = new URL(`https://pro-api.coingecko.com/api/v3/coins/markets`)
@@ -112,15 +111,37 @@ export async function GET(request: NextRequest) {
 
     console.log('🌐 Fetching markets data from CoinGecko:', url.toString())
 
+    const headers = getApiHeaders('coingecko', apiKeyResult.key);
+    
     const response = await fetch(url.toString(), {
       headers: {
-        'x-cg-pro-api-key': cgApiKey,
+        ...headers,
         'Accept': 'application/json',
       },
     })
 
+    // Handle rate limiting and update user API key stats if applicable
+    const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
+    const rateLimitReset = response.headers.get('x-ratelimit-reset');
+    
+    if (apiKeyResult.isUserKey && rateLimitRemaining && rateLimitReset) {
+      updateUserApiKeyRateLimit(
+        clerkId,
+        'coingecko',
+        parseInt(rateLimitRemaining),
+        parseInt(rateLimitReset) * 1000 // Convert to milliseconds
+      ).catch(console.error);
+    }
+
     if (!response.ok) {
-      throw new Error(`CoinGecko API error: ${response.status} ${response.statusText}`)
+      const errorMessage = `CoinGecko API error: ${response.status} ${response.statusText}`;
+      
+      // Report error for user API keys
+      if (apiKeyResult.isUserKey) {
+        reportApiKeyError(clerkId, 'coingecko', errorMessage).catch(console.error);
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const rawData: CoinGeckoMarketData[] = await response.json()
@@ -197,7 +218,8 @@ export async function GET(request: NextRequest) {
     const responseData = {
       data: rawData,
       cached: false,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      apiKeySource: apiKeyResult.isUserKey ? 'user' : 'environment'
     }
     
     console.log('📤 Sending response:', {
@@ -205,7 +227,8 @@ export async function GET(request: NextRequest) {
       response_structure: {
         data: 'array',
         cached: responseData.cached,
-        timestamp: responseData.timestamp
+        timestamp: responseData.timestamp,
+        apiKeySource: responseData.apiKeySource
       },
       first_coin_id: rawData[0]?.id,
       success: true
