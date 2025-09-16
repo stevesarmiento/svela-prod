@@ -48,8 +48,13 @@ async function encryptValue(plaintext: string): Promise<string> {
   }
 }
 
-// Removed API_PROVIDERS - no client-side validation needed
-// Let the actual APIs validate the keys when they're used
+// Helper function to create display version of API key
+function createDisplayKey(apiKey: string): string {
+  if (apiKey.length <= 12) return apiKey;
+  const start = apiKey.substring(0, 8);
+  const end = apiKey.substring(apiKey.length - 4);
+  return `${start}...${end}`;
+}
 
 // Server-side action to encrypt and store API key
 export const addApiKeyWithEncryption = action({
@@ -70,7 +75,8 @@ export const addApiKeyWithEncryption = action({
     // Skip format validation - let the APIs themselves validate the keys
     // API key formats change over time and vary too much to reliably validate client-side
 
-    // Encrypt the API key server-side
+    // Create display version and encrypt the API key server-side
+    const displayKey = createDisplayKey(args.apiKey);
     const encryptedKey = await encryptValue(args.apiKey);
     
     // Store in database via mutation
@@ -80,6 +86,7 @@ export const addApiKeyWithEncryption = action({
       provider: args.provider,
       keyName: args.keyName,
       encryptedKey,
+      displayKey,
       isActive: args.isActive,
     });
   },

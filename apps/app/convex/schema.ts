@@ -142,6 +142,7 @@ export default defineSchema({
     provider: v.string(), // 'coingecko', 'coinglass', 'openai', 'gemini'
     keyName: v.string(), // Display name for the key (e.g., "My CoinGecko Pro Key")
     encryptedKey: v.string(), // Encrypted API key using AES-256-GCM
+    displayKey: v.optional(v.string()), // Truncated key for display (e.g., "CG-7c6G...HmU8")
     isActive: v.boolean(), // Whether this key should be used
     lastValidated: v.optional(v.number()), // Timestamp of last successful validation
     validationError: v.optional(v.string()), // Last validation error message

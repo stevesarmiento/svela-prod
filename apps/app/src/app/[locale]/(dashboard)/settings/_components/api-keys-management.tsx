@@ -6,7 +6,7 @@ import { Button } from "@v1/ui/button";
 import { Input } from "@v1/ui/input";
 import { Badge } from "@v1/ui/badge";
 import { Switch } from "@v1/ui/switch";
-import { Plus, Trash2, Shield, Key, ExternalLink } from "lucide-react";
+import { Trash2, Shield, Key } from "lucide-react";
 import type { ApiProvider } from "@/../convex/apiKeys";
 
 
@@ -21,7 +21,6 @@ export function ApiKeysManagement() {
   } = useUserSettings();
   
   const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({});
-  const [showInputs, setShowInputs] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState<Record<string, boolean>>({});
   const [mounted, setMounted] = useState(false);
 
@@ -59,12 +58,8 @@ export function ApiKeysManagement() {
     setApiKeyInputs(prev => ({ ...prev, [provider]: value }));
   };
 
-  const toggleInput = (provider: string) => {
-    setShowInputs(prev => ({ ...prev, [provider]: !prev[provider] }));
-    // Clear input when hiding
-    if (showInputs[provider]) {
-      setApiKeyInputs(prev => ({ ...prev, [provider]: '' }));
-    }
+  const clearInput = (provider: string) => {
+    setApiKeyInputs(prev => ({ ...prev, [provider]: '' }));
   };
 
   const handleSubmitKey = async (provider: ApiProvider) => {
@@ -77,7 +72,6 @@ export function ApiKeysManagement() {
       await addApiKey(provider, `My ${providers.find(p => p.id === provider)?.name} Key`, apiKey.trim());
       // Clear input on success
       setApiKeyInputs(prev => ({ ...prev, [provider]: '' }));
-      setShowInputs(prev => ({ ...prev, [provider]: false }));
     } finally {
       setIsSubmitting(prev => ({ ...prev, [provider]: false }));
     }
@@ -100,15 +94,15 @@ export function ApiKeysManagement() {
     await updateApiKeyActiveStatus(apiKey._id, !apiKey.isActive);
   };
 
+
   return (
     <div className="space-y-4">
       {/* API Keys Management Card */}
-      <div className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
+      <div className="rounded-[10px] bg-primary/5 overflow-hidden p-0.5">
         {/* Header */}
         <div className="px-3 py-2">
           <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
             <div className="flex items-center gap-2">
-              <Shield className="h-3 w-3" />
               <span>API Keys Configuration</span>
             </div>
           </div>
@@ -128,7 +122,6 @@ export function ApiKeysManagement() {
             <div className="space-y-3">
               {providers.map((provider) => {
                 const existingKey = apiKeys?.find(k => k.provider === provider.id);
-                const isInputVisible = showInputs[provider.id];
                 const inputValue = apiKeyInputs[provider.id] || '';
                 const isSubmittingThis = isSubmitting[provider.id];
 
@@ -160,80 +153,53 @@ export function ApiKeysManagement() {
                             />
                             <Button
                               variant="outline"
-                              size="sm"
+                              size="icon"
                               onClick={() => handleRemoveKey(provider.id)}
-                              className="h-7 text-xs"
+                              className="h-7 w-7"
                             >
-                              <Trash2 className="h-3 w-3 mr-1" />
-                              Remove
+                              <Trash2 className="h-3 w-3" />
                             </Button>
                           </>
                         ) : (
                           <Button
-                            variant={isInputVisible ? "outline" : "default"}
+                            variant="outline"
                             size="sm"
-                            onClick={() => toggleInput(provider.id)}
+                            onClick={() => clearInput(provider.id)}
                             className="h-7 text-xs"
                           >
-                            {isInputVisible ? (
-                              <>Cancel</>
-                            ) : (
-                              <>
-                                <Plus className="h-3 w-3 mr-1" />
-                                Add Key
-                              </>
-                            )}
+                            Clear
                           </Button>
                         )}
                       </div>
                     </div>
 
-                    {/* API Key Input (when visible) */}
-                    {isInputVisible && !existingKey && (
-                      <div className="space-y-2">
-                        <div className="flex gap-2">
-                          <Input
-                            type="text"
-                            placeholder={`Enter your ${provider.name} API key...`}
-                            value={inputValue}
-                            onChange={(e) => handleInputChange(provider.id, e.target.value)}
-                            className="text-xs flex-1"
-                          />
-                          <Button
-                            onClick={() => handleSubmitKey(provider.id)}
-                            disabled={!inputValue.trim() || isSubmittingThis}
-                            size="sm"
-                            className="h-9 text-xs whitespace-nowrap"
-                          >
-                            {isSubmittingThis ? "Adding..." : "Save"}
-                          </Button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <a
-                            href={provider.id === 'coingecko' ? 'https://www.coingecko.com/en/api/pricing' : 
-                                 provider.id === 'openai' ? 'https://platform.openai.com/api-keys' :
-                                 provider.id === 'gemini' ? 'https://aistudio.google.com/app/apikey' :
-                                 'https://www.coinglass.com/pricing'}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 h-6 px-2 text-[10px] border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md font-medium"
-                          >
-                            Get API Key <ExternalLink className="h-2 w-2" />
-                          </a>
-                          <div className="text-[10px] text-primary/30">
-                            Rate: {provider.rateLimit.requests}/{Math.round(provider.rateLimit.window / 60000)}min
-                          </div>
-                        </div>
+                    {/* API Key Input (always visible when no existing key) */}
+                    {!existingKey && (
+                      <div className="flex gap-2">
+                        <Input
+                          type="text"
+                          placeholder={`Enter your ${provider.name} API key...`}
+                          value={inputValue}
+                          onChange={(e) => handleInputChange(provider.id, e.target.value)}
+                          className="text-xs flex-1"
+                        />
+                        <Button
+                          onClick={() => handleSubmitKey(provider.id)}
+                          disabled={!inputValue.trim() || isSubmittingThis}
+                          size="sm"
+                          className="h-9 text-xs whitespace-nowrap"
+                        >
+                          {isSubmittingThis ? "Adding..." : "Save"}
+                        </Button>
                       </div>
                     )}
 
-                    {/* Existing Key Info */}
+                    {/* Existing Key Display */}
                     {existingKey && (
-                      <div className="text-[10px] text-primary/30 flex items-center gap-4">
-                        <span>Usage: {existingKey.usageCount.toLocaleString()}</span>
-                        <span>Added: {new Date(existingKey.createdAt).toLocaleDateString()}</span>
+                      <div className="text-[10px] text-primary/30">
+                        <div className="font-mono mb-1">{existingKey.displayKey || 'key...hidden'}</div>
                         {existingKey.validationError && (
-                          <span className="text-red-400">Error: {existingKey.validationError}</span>
+                          <div className="text-red-400">Error: {existingKey.validationError}</div>
                         )}
                       </div>
                     )}

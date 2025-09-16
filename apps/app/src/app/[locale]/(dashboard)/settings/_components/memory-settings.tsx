@@ -187,7 +187,7 @@ export function MemorySettings() {
   return (
     <div className="space-y-4">
       {/* Memory System Card */}
-      <div className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
+      <div className="rounded-[10px] bg-primary/5 overflow-hidden p-0.5">
         {/* Header */}
         <div className="px-3 py-2">
           <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
@@ -248,7 +248,7 @@ export function MemorySettings() {
 
       {/* Memory Retention & Management Card */}
       {memoryEnabled && (
-        <div className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
+        <div className="rounded-[10px] bg-primary/5 overflow-hidden p-0.5">
           {/* Header */}
           <div className="px-3 py-2">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">

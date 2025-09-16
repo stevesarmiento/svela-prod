@@ -60,6 +60,7 @@ export const getUserApiKeys = query({
       _id: key._id,
       provider: key.provider,
       keyName: key.keyName,
+      displayKey: key.displayKey,
       isActive: key.isActive,
       lastValidated: key.lastValidated,
       validationError: key.validationError,
@@ -119,6 +120,7 @@ export const upsertApiKey = mutation({
     provider: v.string(),
     keyName: v.string(),
     encryptedKey: v.string(),
+    displayKey: v.optional(v.string()),
     isActive: v.boolean(),
   },
   handler: async (ctx, args) => {
@@ -152,6 +154,7 @@ export const upsertApiKey = mutation({
       await ctx.db.patch(existingKey._id, {
         keyName: args.keyName,
         encryptedKey: args.encryptedKey,
+        displayKey: args.displayKey,
         isActive: args.isActive,
         updatedAt: now,
         // Reset validation status when key is updated
@@ -166,6 +169,7 @@ export const upsertApiKey = mutation({
         provider: args.provider,
         keyName: args.keyName,
         encryptedKey: args.encryptedKey,
+        displayKey: args.displayKey,
         isActive: args.isActive,
         createdAt: now,
         updatedAt: now,
