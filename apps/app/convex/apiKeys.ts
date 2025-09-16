@@ -6,38 +6,32 @@ export const API_PROVIDERS = {
   coingecko: {
     name: "CoinGecko Pro",
     description: "Premium cryptocurrency market data and pricing",
-    keyPattern: /^CG-[A-Za-z0-9\-]{20,}$/, // CoinGecko Pro API key format (flexible length)
+    keyPattern: /^.{10,}$/, // Just check minimum length - let the API validate
     testEndpoint: "https://pro-api.coingecko.com/api/v3/ping",
     rateLimit: { requests: 500, window: 60000 }, // 500 requests per minute
   },
   coinglass: {
     name: "CoinGlass",
     description: "Derivatives and futures market data",
-    keyPattern: /^[A-Za-z0-9]{32,}$/, // Generic API key pattern
+    keyPattern: /^.{10,}$/, // Just check minimum length - let the API validate
     testEndpoint: "https://fapi.coinglass.com/api/futures/supported-coins",
     rateLimit: { requests: 1000, window: 60000 }, // 1000 requests per minute
   },
   openai: {
     name: "OpenAI",
     description: "AI-powered analysis and chat features",
-    keyPattern: /^sk-[A-Za-z0-9]{48,}$/, // OpenAI API key format
+    keyPattern: /^.{10,}$/, // Just check minimum length - let the API validate
     testEndpoint: "https://api.openai.com/v1/models",
     rateLimit: { requests: 3500, window: 60000 }, // Varies by tier
   },
   gemini: {
     name: "Google Gemini",
     description: "Google's AI model for analysis and chat",
-    keyPattern: /^[A-Za-z0-9]{39}$/, // Gemini API key format
+    keyPattern: /^.{10,}$/, // Just check minimum length - let the API validate
     testEndpoint: "https://generativelanguage.googleapis.com/v1beta/models",
     rateLimit: { requests: 60, window: 60000 }, // 60 requests per minute
   },
-  coinmarketcap: {
-    name: "CoinMarketCap",
-    description: "Comprehensive cryptocurrency market data",
-    keyPattern: /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/, // UUID format
-    testEndpoint: "https://pro-api.coinmarketcap.com/v1/key/info",
-    rateLimit: { requests: 333, window: 60000 }, // 10,000 per month basic
-  },
+  // coinmarketcap removed - no longer used
 } as const;
 
 export type ApiProvider = keyof typeof API_PROVIDERS;

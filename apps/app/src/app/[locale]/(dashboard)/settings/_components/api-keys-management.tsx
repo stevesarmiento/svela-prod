@@ -213,8 +213,7 @@ export function ApiKeysManagement() {
                             href={provider.id === 'coingecko' ? 'https://www.coingecko.com/en/api/pricing' : 
                                  provider.id === 'openai' ? 'https://platform.openai.com/api-keys' :
                                  provider.id === 'gemini' ? 'https://aistudio.google.com/app/apikey' :
-                                 provider.id === 'coinglass' ? 'https://www.coinglass.com/pricing' :
-                                 'https://coinmarketcap.com/api/pricing/'}
+                                 'https://www.coinglass.com/pricing'}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 h-6 px-2 text-[10px] border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md font-medium"

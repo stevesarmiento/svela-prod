@@ -66,13 +66,12 @@ export async function POST(request: NextRequest) {
 async function validateApiKeyWithProvider(
   provider: string, 
   apiKey: string
-): Promise<{ valid: boolean; error?: string; details?: any }> {
+): Promise<{ valid: boolean; error?: string; details?: object }> {
   const headers = getApiHeaders(provider, apiKey);
   const timeout = 10000; // 10 second timeout
 
   try {
     let testUrl: string;
-    let expectedStatus = 200;
 
     switch (provider) {
       case 'coingecko':
@@ -93,9 +92,7 @@ async function validateApiKeyWithProvider(
         delete headers['x-goog-api-key'];
         break;
         
-      case 'coinmarketcap':
-        testUrl = 'https://pro-api.coinmarketcap.com/v1/key/info';
-        break;
+      // coinmarketcap removed - no longer supported
         
       default:
         return { valid: false, error: "Unsupported provider for validation" };
@@ -113,7 +110,6 @@ async function validateApiKeyWithProvider(
     clearTimeout(timeoutId);
 
     if (response.ok) {
-      const data = await response.json();
       return { 
         valid: true, 
         details: {
@@ -133,8 +129,7 @@ async function validateApiKeyWithProvider(
           errorMessage = errorData.error;
         } else if (provider === 'openai' && errorData.error?.message) {
           errorMessage = errorData.error.message;
-        } else if (provider === 'coinmarketcap' && errorData.status?.error_message) {
-          errorMessage = errorData.status.error_message;
+        // coinmarketcap error handling removed
         }
       } catch {
         // Use generic error message if parsing fails
@@ -174,8 +169,7 @@ function getExpectedFormat(provider: string): string {
       return 'sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (starts with sk-)';
     case 'gemini':
       return '39 character alphanumeric string';
-    case 'coinmarketcap':
-      return 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (UUID format)';
+    // coinmarketcap removed
     case 'coinglass':
       return '32+ character alphanumeric string';
     default:

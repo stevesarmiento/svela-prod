@@ -139,7 +139,7 @@ export default defineSchema({
 
   userApiKeys: defineTable({
     userId: v.id("users"),
-    provider: v.string(), // 'coingecko', 'coinglass', 'openai', 'gemini', 'coinmarketcap'
+    provider: v.string(), // 'coingecko', 'coinglass', 'openai', 'gemini'
     keyName: v.string(), // Display name for the key (e.g., "My CoinGecko Pro Key")
     encryptedKey: v.string(), // Encrypted API key using AES-256-GCM
     isActive: v.boolean(), // Whether this key should be used

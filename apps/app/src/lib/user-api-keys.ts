@@ -195,11 +195,7 @@ export function getApiHeaders(provider: string, apiKey: string): Record<string, 
         'x-goog-api-key': apiKey,
       };
     
-    case 'coinmarketcap':
-      return {
-        ...baseHeaders,
-        'X-CMC_PRO_API_KEY': apiKey,
-      };
+    // coinmarketcap removed - no longer supported
     
     default:
       return {

@@ -14,7 +14,7 @@ const ALGORITHM = 'aes-256-gcm';
 const KEY_LENGTH = 32;
 const IV_LENGTH = 16;
 const SALT_LENGTH = 32;
-const TAG_LENGTH = 16;
+// TAG_LENGTH removed as it was unused
 
 // Generate a secret key from environment or use a default for development
 const MASTER_KEY = process.env.API_ENCRYPTION_KEY || 'dev-key-change-in-production-32-bytes';
@@ -48,29 +48,8 @@ async function encryptValue(plaintext: string): Promise<string> {
   }
 }
 
-// API Provider configurations (copied from apiKeys.ts)
-const API_PROVIDERS = {
-  coingecko: {
-    name: "CoinGecko Pro",
-    keyPattern: /^CG-[A-Za-z0-9\-]{20,}$/,
-  },
-  coinglass: {
-    name: "CoinGlass", 
-    keyPattern: /^[A-Za-z0-9]{32,}$/,
-  },
-  openai: {
-    name: "OpenAI",
-    keyPattern: /^sk-[A-Za-z0-9]{48,}$/,
-  },
-  gemini: {
-    name: "Google Gemini",
-    keyPattern: /^[A-Za-z0-9]{39}$/,
-  },
-  coinmarketcap: {
-    name: "CoinMarketCap",
-    keyPattern: /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/,
-  },
-} as const;
+// Removed API_PROVIDERS - no client-side validation needed
+// Let the actual APIs validate the keys when they're used
 
 // Server-side action to encrypt and store API key
 export const addApiKeyWithEncryption = action({
@@ -81,24 +60,21 @@ export const addApiKeyWithEncryption = action({
     apiKey: v.string(),
     isActive: v.boolean(),
   },
-  handler: async (ctx, args): Promise<any> => {
-    // Validate provider
-    if (!(args.provider in API_PROVIDERS)) {
+  handler: async (ctx, args): Promise<string> => {
+    // Basic provider validation - just check it's one of the known providers
+    const validProviders = ['coingecko', 'coinglass', 'openai', 'gemini'];
+    if (!validProviders.includes(args.provider)) {
       throw new Error(`Invalid API provider: ${args.provider}`);
     }
 
-    const providerConfig = API_PROVIDERS[args.provider as keyof typeof API_PROVIDERS];
-    
-    // Validate API key format
-    if (!providerConfig.keyPattern.test(args.apiKey)) {
-      throw new Error(`Invalid ${providerConfig.name} API key format`);
-    }
+    // Skip format validation - let the APIs themselves validate the keys
+    // API key formats change over time and vary too much to reliably validate client-side
 
     // Encrypt the API key server-side
     const encryptedKey = await encryptValue(args.apiKey);
     
     // Store in database via mutation
-    // @ts-ignore - internal API types may not be fully generated yet
+    // @ts-expect-error - internal API types may not be fully generated yet
     return await ctx.runMutation(internal.apiKeys.upsertApiKey, {
       clerkId: args.clerkId,
       provider: args.provider,
