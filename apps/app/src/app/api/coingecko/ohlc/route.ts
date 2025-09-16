@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { ConvexHttpClient } from "convex/browser"
+import { auth } from "@clerk/nextjs/server"
+import { getUserApiKey } from "@/lib/user-api-keys"
 import { api } from "../../../../../convex/_generated/api"
 
 const OHLCParamsSchema = z.object({
@@ -61,10 +63,14 @@ export async function GET(request: NextRequest) {
       console.log('🔗 Convex URL configured:', process.env.NEXT_PUBLIC_CONVEX_URL.substring(0, 20) + '...')
     }
 
-    // Fetch data from CoinGecko API
-    const cgApiKey = process.env.X_CG_PRO_API_KEY
-    if (!cgApiKey) {
-      throw new Error('CoinGecko API key not configured')
+    // Get user authentication for API key resolution
+    const { userId: clerkId } = await auth();
+    
+    // Get API key - user's key takes precedence over environment variable
+    const apiKeyResult = await getUserApiKey(clerkId, 'coingecko', 'X_CG_PRO_API_KEY');
+    
+    if (!apiKeyResult.key) {
+      throw new Error('CoinGecko API key not available. Please add your API key in settings or configure X_CG_PRO_API_KEY environment variable.');
     }
 
     const url = new URL(`https://pro-api.coingecko.com/api/v3/coins/${coinId}/ohlc`)
@@ -77,7 +83,7 @@ export async function GET(request: NextRequest) {
 
     const response = await fetch(url.toString(), {
       headers: {
-        'x-cg-pro-api-key': cgApiKey,
+        'x-cg-pro-api-key': apiKeyResult.key,
         'Accept': 'application/json',
       },
     })

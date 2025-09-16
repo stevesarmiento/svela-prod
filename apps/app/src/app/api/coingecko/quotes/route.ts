@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCoinsMarketData } from '@/lib/coingecko'
+import { auth } from '@clerk/nextjs/server'
+import { getUserApiKey } from '@/lib/user-api-keys'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +51,19 @@ interface SearchParams {
 
 export async function GET(request: NextRequest) {
   try {
+    // Get user authentication for API key resolution
+    const { userId: clerkId } = await auth();
+    
+    // Get API key - user's key takes precedence over environment variable
+    const apiKeyResult = await getUserApiKey(clerkId, 'coingecko', 'X_CG_PRO_API_KEY');
+    
+    if (!apiKeyResult.key) {
+      return NextResponse.json(
+        { error: 'CoinGecko API key not available. Please add your API key in settings or configure X_CG_PRO_API_KEY environment variable.' },
+        { status: 500 }
+      );
+    }
+    
     const searchParams = request.nextUrl.searchParams
     
     // Extract all possible search parameters
@@ -119,7 +134,7 @@ export async function GET(request: NextRequest) {
         `https://pro-api.coingecko.com/api/v3/coins/markets?${apiParams}`,
         {
           headers: {
-            'x-cg-pro-api-key': process.env.X_CG_PRO_API_KEY!,
+            'x-cg-pro-api-key': apiKeyResult.key,
             'Content-Type': 'application/json',
           },
         }
