@@ -24,9 +24,9 @@ export default function Page() {
                 adaptive={true}
                 className="opacity-50"
               />
-          <div className="flex flex-col items-center justify-center">
-            <h1 className="text-4xl font-semibold">Clarity & Action</h1>
-            <p className="text-lg text-muted-foreground text-center">
+          <div className="flex flex-col items-center justify-center text-center">
+            <h1 className="text-4xl font-semibold bg-gradient-to-br from-primary to-primary/40 bg-clip-text text-transparent">The feeling you get in the moments<br /> where clarity meets action.</h1>
+            <p className="text-xl text-muted-foreground text-center mt-2">
               Connect an account to start using Svela.
             </p>
           </div>

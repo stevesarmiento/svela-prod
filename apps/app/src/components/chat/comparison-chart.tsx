@@ -211,12 +211,12 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
   const coinNames = coins.map(coin => coin.symbol.toUpperCase()).join(' vs ')
 
   return (
-    <Card className="w-full bg-zinc-950/30 border-zinc-800/30">
+    <Card className="w-full bg-white/80 border-gray-200/50 dark:bg-zinc-950/30 dark:border-zinc-800/30">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-medium text-white">{coinNames} Comparison</h3>
-            <p className="text-xs text-zinc-400">Performance over {timeframe}</p>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white">{coinNames} Comparison</h3>
+            <p className="text-xs text-gray-500 dark:text-zinc-400">Performance over {timeframe}</p>
           </div>
         </div>
         
@@ -228,8 +228,8 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
                 className="h-2 w-2 rounded-full"
                 style={{ backgroundColor: series.color }}
               />
-              <span className="text-xs text-zinc-300">{series.symbol.toUpperCase()}</span>
-              <span className="text-xs font-mono text-white">
+              <span className="text-xs text-gray-700 dark:text-zinc-300">{series.symbol.toUpperCase()}</span>
+              <span className="text-xs font-mono text-gray-900 dark:text-white">
                 {series.latestValue > 0 ? '+' : ''}{series.latestValue.toFixed(2)}%
               </span>
             </div>

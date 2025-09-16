@@ -43,7 +43,7 @@ const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: {
   ]
 
   return (
-    <div className="flex gap-1 bg-white dark:bg-zinc-950/10 backdrop-blur-xl border border-zinc-800/30 rounded-[12px] p-1">
+    <div className="flex gap-1 bg-white/95 dark:bg-zinc-950/10 backdrop-blur-xl border border-gray-200/50 dark:border-zinc-800/30 rounded-[12px] p-1">
       {scales.map((scale) => (
         <button
           key={scale.value}
@@ -51,7 +51,7 @@ const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: {
           className={cn(
             "px-2 py-1 text-xs rounded-lg",
             activeTimeScale === scale.value
-              ? "bg-zinc-800/50 border border-zinc-800/50  shadow-md shadow-zinc-950/50 text-white"
+              ? "bg-gray-200 border border-gray-300 shadow-md shadow-gray-500/20 text-gray-900 dark:bg-zinc-800/50 dark:border-zinc-800/50 dark:shadow-zinc-950/50 dark:text-white"
               : "bg-transparent text-muted-foreground hover:bg-muted/80"
           )}
         >
@@ -87,9 +87,13 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
   const { chartData, volumeData, ohlcData, isLoading, tokenData } = useCoinGeckoChartData(coinId, activeTimeScale, initialData)
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData, activeTimeScale)
   
-  // Generate Hull Suite colors - same as hook to ensure consistency
+  // Generate Hull Suite colors - theme-aware
   const hullColors = generatePastelColors(1)
-  const primaryHullColor = addOpacityToColor(hullColors[0] || 'hsl(210, 40%, 75%)', 0.7)
+  const isDarkMode = typeof window !== 'undefined' ? 
+    window.matchMedia('(prefers-color-scheme: dark)').matches ||
+    document.documentElement.classList.contains('dark') : true
+  const baseHullColor = isDarkMode ? 'hsl(210, 40%, 75%)' : 'hsl(210, 60%, 30%)'
+  const primaryHullColor = addOpacityToColor(hullColors[0] || baseHullColor, isDarkMode ? 0.7 : 0.9)
   
   // Always use line chart - simplified approach
 
@@ -186,17 +190,17 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                         target.src = '/favicon.ico';
                       }}
                     />
-                    <span className="text-white font-bold text-xs">{coinName}</span>
+                    <span className="text-gray-900 dark:text-white font-bold text-xs">{coinName}</span>
                     <span className="text-muted-foreground text-xs">is currently</span>
                     </div>
                     <div className="flex items-center">
-                      <span className="text-3xl font-bold font-sans">
+                      <span className="text-3xl font-bold font-sans text-gray-900 dark:text-white">
                         ${currentPrice.toLocaleString('en-US', {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 8
                         })}
                       </span>
-                      {isLoadingPrice && <div className="w-2 h-2 bg-white/50 rounded-full animate-pulse" />}
+                      {isLoadingPrice && <div className="w-2 h-2 bg-gray-400 dark:bg-white/50 rounded-full animate-pulse" />}
                     </div>
 
                   <div className={`text-xs font-bold font-mono ${isNaN(priceChange24h) ? 'text-muted-foreground' : priceChange24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>

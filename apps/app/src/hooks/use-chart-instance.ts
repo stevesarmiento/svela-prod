@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createChart, ColorType, CrosshairMode, LineStyle, LineSeries, CandlestickSeries, HistogramSeries, LastPriceAnimationMode, Time, ISeriesApi } from 'lightweight-charts'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { createRoot } from "react-dom/client"
@@ -180,6 +180,43 @@ export function useChartInstance(
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const seriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
 
+  // Theme detection hook
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ||
+           document.documentElement.classList.contains('dark')
+  })
+
+  // Listen for theme changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const observer = new MutationObserver(() => {
+      setIsDarkMode(
+        mediaQuery.matches || document.documentElement.classList.contains('dark')
+      )
+    })
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    })
+
+    const handleChange = () => {
+      setIsDarkMode(
+        mediaQuery.matches || document.documentElement.classList.contains('dark')
+      )
+    }
+
+    mediaQuery.addEventListener('change', handleChange)
+
+    return () => {
+      observer.disconnect()
+      mediaQuery.removeEventListener('change', handleChange)
+    }
+  }, [])
+
   useEffect(() => {
     if (!chartContainerRef.current || (!chartData.length && !ohlcvData?.length)) return
 
@@ -188,12 +225,12 @@ export function useChartInstance(
       handleScroll: false,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#ffffff50",
+        textColor: isDarkMode ? "#ffffff" : "#000000",
         attributionLogo: false,
       },
       grid: {
-        vertLines: { visible: false, color: "#e5e7eb20", style: LineStyle.Dotted },
-        horzLines: { visible: false, color: "#f5f5f510", style: LineStyle.Dotted },
+        vertLines: { visible: false, color: isDarkMode ? "#e5e7eb20" : "#00000020", style: LineStyle.Dotted },
+        horzLines: { visible: false, color: isDarkMode ? "#f5f5f510" : "#00000010", style: LineStyle.Dotted },
       },
       rightPriceScale: { 
         borderVisible: false, 
@@ -202,7 +239,7 @@ export function useChartInstance(
       },
       crosshair: {
         mode: CrosshairMode.Magnet,
-        vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
+        vertLine: { labelVisible: true, width: 1, color: isDarkMode ? "#d1d5db40" : "#00000040", visible: true, style: LineStyle.Solid },
         horzLine: { visible: false, labelVisible: false },
       },
       timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
@@ -242,7 +279,7 @@ export function useChartInstance(
         lastValueVisible: true,
         visible: true,
         priceLineVisible: false,
-        color: '#ffffff',
+        color: isDarkMode ? '#ffffff' : '#000000',
         lastPriceAnimation: LastPriceAnimationMode.Continuous,
         priceFormat: { type: "price", precision: 2, minMove: 0.01 },
       })
@@ -250,7 +287,7 @@ export function useChartInstance(
     }
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
-      color: '#ffffff40',
+      color: isDarkMode ? '#ffffff50' : '#00000050',
       priceFormat: { type: 'volume' },
       priceScaleId: 'volume',
     })
@@ -265,7 +302,9 @@ export function useChartInstance(
 
     // Add Hull Suite overlay if enabled
     if (displaySettings?.showHullSuite && hullSuiteData) {
-      const hullPastelColor = addOpacityToColor(pastelColors[0] || 'hsl(210, 40%, 75%)', 0.4)
+      // Use theme-aware colors for Hull Suite
+      const baseHullColor = isDarkMode ? 'hsl(210, 40%, 75%)' : 'hsl(210, 60%, 35%)'
+      const hullPastelColor = addOpacityToColor(pastelColors[0] || baseHullColor, isDarkMode ? 0.4 : 0.8)
       
       if (hullSuiteData.mhull.length > 0) {
         const validMhullData = hullSuiteData.mhull.filter(point => 
@@ -447,7 +486,7 @@ export function useChartInstance(
       })
       chart.remove()
     }
-  }, [chartData, volumeData, indicators, displaySettings, hullSuiteData, onCrosshairMove, chartType, ohlcvData])
+  }, [chartData, volumeData, indicators, displaySettings, hullSuiteData, onCrosshairMove, chartType, ohlcvData, isDarkMode])
 
   return chartContainerRef
 }

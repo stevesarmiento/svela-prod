@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@v1/ui/button'
 import { Input } from '@v1/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@v1/ui/tooltip'
-import { IconCaptionsBubbleFill, IconCommand, IconPaperplaneFill, IconXmarkCircleFill } from 'symbols-react'
+import { IconCaptionsBubbleFill, IconCommand, IconPaperplaneFill, IconXmark, IconXmarkCircleFill } from 'symbols-react'
 import { useBottomNav } from './bottom-nav-context'
 import { useClickOutside } from '@v1/ui/hooks'
 import { useChatToast, useChatState } from '../chat/chat-toast'
@@ -79,8 +79,8 @@ export function ChatContainer() {
     <motion.div
       ref={containerRef}
       layout
-      className="relative rounded-[20px] bg-zinc-900 overflow-hidden transition-all duration-300 ease-out
-                 shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
+      className="relative rounded-[20px] bg-white/95 backdrop-blur-md border border-gray-200/50 dark:bg-zinc-900 dark:border-transparent overflow-hidden transition-all duration-300 ease-out
+                 shadow-[0_4px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
                  dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]"
       animate={{ 
         width: isChatOpen ? '460px' : '54px',
@@ -92,11 +92,20 @@ export function ChatContainer() {
       }}
     >
       {/* Background Pattern */}
-      <div className="absolute inset-0 opacity-5 z-0"
+      <div className="absolute inset-0 opacity-5 dark:opacity-5 z-0"
         style={{
           backgroundImage: `
-            radial-gradient(circle at 25% 25%, white 1px, transparent 1px),
-            radial-gradient(circle at 75% 75%, white 1px, transparent 1px)
+            radial-gradient(circle at 25% 25%, rgb(0 0 0) 1px, transparent 1px),
+            radial-gradient(circle at 75% 75%, rgb(0 0 0) 1px, transparent 1px)
+          `,
+          backgroundSize: "24px 24px",
+        }}
+      />
+      <div className="absolute inset-0 opacity-5 dark:opacity-0 z-0"
+        style={{
+          backgroundImage: `
+            radial-gradient(circle at 25% 25%, rgb(255 255 255) 1px, transparent 1px),
+            radial-gradient(circle at 75% 75%, rgb(255 255 255) 1px, transparent 1px)
           `,
           backgroundSize: "24px 24px",
         }}
@@ -121,17 +130,17 @@ export function ChatContainer() {
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="p-0 h-[54px] w-[54px] hover:bg-zinc-800/40 group" 
+                    className="p-0 h-[54px] w-[54px] hover:bg-gray-100/40 dark:hover:bg-zinc-800/40 group" 
                     onClick={openChat}
                     aria-label="Open chat"
                   >
-                    <IconCaptionsBubbleFill className="h-4 w-4 fill-white/70 group-hover:fill-white transition-all duration-200" />
+                    <IconCaptionsBubbleFill className="h-4 w-4 fill-gray-600 group-hover:fill-gray-900 dark:fill-white/70 dark:group-hover:fill-white transition-all duration-200" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="top" sideOffset={5} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-zinc-800 border bg-none shadow-none">
-                  <span className="text-xs text-zinc-400">Quick Chat</span>
-                  <kbd className="flex items-center gap-1 rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-zinc-300 uppercase">
-                    <IconCommand className="h-2.5 w-2.5 fill-zinc-300" />
+                <TooltipContent side="top" sideOffset={5} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-gray-200 dark:border-zinc-800 border bg-white/95 dark:bg-zinc-900/95 shadow-sm">
+                  <span className="text-xs text-gray-600 dark:text-zinc-400">Quick Chat</span>
+                  <kbd className="flex items-center gap-1 rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
+                    <IconCommand className="h-2.5 w-2.5 fill-gray-700 dark:fill-zinc-300" />
                     <span>+ J</span>
                   </kbd>
                 </TooltipContent>
@@ -163,24 +172,21 @@ export function ChatContainer() {
                     onChange={handleInputChange}
                     placeholder="Ask about crypto prices, market trends..."
                     disabled={isRequestActive}
-                    className="flex-1 border-0 bg-transparent text-md text-white placeholder:text-white/50 focus-visible:ring-0 focus-visible:ring-offset-0 h-[54px] p-0 pl-2"
+                    className="flex-1 border-0 bg-transparent text-md text-gray-900 placeholder:text-gray-500 dark:text-white dark:placeholder:text-white/50 focus-visible:ring-0 focus-visible:ring-offset-0 h-[54px] p-0 pl-2"
                   />
                   
                   <Button 
                     type="submit" 
                     disabled={!isRequestActive && !input.trim()}
+                    variant={isRequestActive ? "destructive" : "default"}
                     size="icon"
-                    className={`group transition-all duration-200 h-8 w-8 ${
-                      isRequestActive 
-                        ? 'bg-red-500/20 hover:bg-red-500/30' 
-                        : 'bg-white/0 hover:bg-white/10'
-                    }`}
+                    className="group transition-all duration-200 h-8 w-8"
                     title={isRequestActive ? "Stop request" : "Send message"}
                   >
                     {isRequestActive ? (
-                      <IconXmarkCircleFill className="w-4 h-4 fill-red-400 group-hover:fill-red-300" />
+                      <IconXmark className="size-3 fill-white" />
                     ) : (
-                      <IconPaperplaneFill className="w-4 h-4 fill-white/50 group-hover:fill-white" />
+                      <IconPaperplaneFill className="size-4 fill-white" />
                     )}
                   </Button>
                 </div>
@@ -202,7 +208,7 @@ export function ChatContainer() {
                 ease: [0.4, 0, 0.2, 1]
               }}
             className={`absolute top-full left-4 mt-2 flex items-center gap-2 text-sm ${
-              isStopped ? 'text-red-400' : 'text-white/70'
+              isStopped ? 'text-red-400' : 'text-gray-600 dark:text-white/70'
             }`}
           >
             <div className={`w-2 h-2 rounded-full ${

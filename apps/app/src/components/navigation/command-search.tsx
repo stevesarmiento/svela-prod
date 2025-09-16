@@ -186,16 +186,25 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   };
 
   return (
-    <div className="group relative rounded-[20px] bg-zinc-900 overflow-hidden px-2 py-0 hover:bg-zinc-800/80 transition-all duration-200 cursor-pointer
-                   shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
+    <div className="group relative rounded-[20px] bg-white/95 backdrop-blur-md border border-gray-200/50 dark:bg-zinc-900 dark:border-transparent overflow-hidden px-2 py-0 hover:bg-gray-50/80 dark:hover:bg-zinc-800/80 transition-all duration-200 cursor-pointer
+                   shadow-[0_4px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
                    dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
       
       {/* Background Pattern */}
-      <div className="absolute inset-0 opacity-5 z-0"
+      <div className="absolute inset-0 opacity-5 dark:opacity-5 z-0"
         style={{
           backgroundImage: `
-            radial-gradient(circle at 25% 25%, white 1px, transparent 1px),
-            radial-gradient(circle at 75% 75%, white 1px, transparent 1px)
+            radial-gradient(circle at 25% 25%, rgb(0 0 0) 1px, transparent 1px),
+            radial-gradient(circle at 75% 75%, rgb(0 0 0) 1px, transparent 1px)
+          `,
+          backgroundSize: "24px 24px",
+        }}
+      />
+      <div className="absolute inset-0 opacity-5 dark:opacity-0 z-0"
+        style={{
+          backgroundImage: `
+            radial-gradient(circle at 25% 25%, rgb(255 255 255) 1px, transparent 1px),
+            radial-gradient(circle at 75% 75%, rgb(255 255 255) 1px, transparent 1px)
           `,
           backgroundSize: "24px 24px",
         }}
@@ -217,12 +226,12 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
               >
                 <Tooltip delayDuration={500}>
                   <TooltipTrigger asChild>
-                    <IconMagnifyingglass className="h-4 w-4 fill-white/70 group-hover:fill-white" />
+                    <IconMagnifyingglass className="h-4 w-4 fill-gray-600 group-hover:fill-gray-900 dark:fill-white/70 dark:group-hover:fill-white" />
                   </TooltipTrigger>
-                  <TooltipContent side="top" sideOffset={25} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-zinc-800 border bg-none shadow-none">
-                    <span className="text-xs text-zinc-400">Quick Actions</span>
-                        <kbd className="flex items-center gap-1 rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-zinc-300 uppercase">
-                            <IconCommand className="h-2.5 w-2.5 fill-zinc-300" />
+                  <TooltipContent side="top" sideOffset={25} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-gray-200 dark:border-zinc-800 border bg-white/95 dark:bg-zinc-900/95 shadow-sm">
+                    <span className="text-xs text-gray-600 dark:text-zinc-400">Quick Actions</span>
+                        <kbd className="flex items-center gap-1 rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
+                            <IconCommand className="h-2.5 w-2.5 fill-gray-700 dark:fill-zinc-300" />
                             <span>+ K</span>
                         </kbd>
                     </TooltipContent>
@@ -235,7 +244,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                 <CommandInput 
                   ref={inputRef}
                   placeholder={getPlaceholder()}
-                  className="bg-transparent border-none rounded-2xl h-[53px] pl-2 text-white placeholder:text-white/50" 
+                  className="bg-transparent border-none rounded-2xl h-[53px] pl-2 text-gray-900 placeholder:text-gray-500 dark:text-white dark:placeholder:text-white/50" 
                   autoFocus={isOpen}
                   value={searchQuery}
                   onValueChange={setSearchQuery}
@@ -244,7 +253,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
             </div>
           }
         >
-          <CommandList className="z-[100] bg-transparent max-h-[400px]">
+          <CommandList className="z-[100] bg-transparent border-transparent max-h-[400px]">
             <CommandEmpty>
               <div className="flex flex-col items-center justify-center py-6 gap-2">
                 <IconCircleSlash className="h-8 w-8 fill-muted-foreground rotate-90" />
@@ -275,7 +284,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                       </div>
                       <div className="flex items-center gap-1">
                         {item.shortcut ? (
-                          <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-zinc-300 uppercase">
+                          <kbd className="rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
                             {item.shortcut}
                           </kbd>
                         ) : item.href ? (
@@ -429,8 +438,8 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                   >
                     <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
                       <div className="flex items-center gap-3 pr-5">
-                        <div className="flex items-center justify-center p-2 bg-zinc-800/50 rounded-lg">
-                          <item.icon className="size-4 fill-white/30" />
+                        <div className="flex items-center justify-center p-2 bg-gray-100/50 dark:bg-zinc-800/50 rounded-lg">
+                          <item.icon className="size-4 fill-gray-500 dark:fill-white/30" />
                         </div>
                         <div className="flex flex-col">
                           <span className="font-medium text-foreground">{item.title}</span>
@@ -439,7 +448,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                       </div>
                       <div className="flex items-center gap-1">
                         {'href' in item && item.shortcut ? (
-                          <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-zinc-300 uppercase">
+                          <kbd className="rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
                             {item.shortcut}
                           </kbd>
                         ) : 'href' in item ? (
@@ -456,20 +465,20 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
           </CommandList>
           
           {/* Footer with shortcuts */}
-          <div className="border-t border-border p-2">
-            <div className="flex items-center justify-between gap-4 px-2 text-xs text-muted-foreground">
+          <div className="border-t border-gray-200 dark:border-border p-2">
+            <div className="flex items-center justify-between gap-4 px-2 text-xs text-gray-600 dark:text-muted-foreground">
               <div className="flex items-center gap-1">
                 <span>navigate</span>
-                <kbd className="rounded border border-border bg-muted px-1.5 font-mono">↑</kbd>
-                <kbd className="rounded border border-border bg-muted px-1.5 font-mono">↓</kbd>
+                <kbd className="rounded border border-gray-300 dark:border-border bg-gray-100 dark:bg-muted px-1.5 font-mono text-gray-700 dark:text-muted-foreground">↑</kbd>
+                <kbd className="rounded border border-gray-300 dark:border-border bg-gray-100 dark:bg-muted px-1.5 font-mono text-gray-700 dark:text-muted-foreground">↓</kbd>
               </div>
               <div className="flex items-center gap-1">
                 <span>select</span>
-                <kbd className="rounded border border-border bg-muted px-1.5 font-mono">enter</kbd>
+                <kbd className="rounded border border-gray-300 dark:border-border bg-gray-100 dark:bg-muted px-1.5 font-mono text-gray-700 dark:text-muted-foreground">enter</kbd>
               </div>
               <div className="flex items-center gap-1">
                 <span>close</span>
-                <kbd className="rounded border border-border bg-muted px-1.5 font-mono">esc</kbd>
+                <kbd className="rounded border border-gray-300 dark:border-border bg-gray-100 dark:bg-muted px-1.5 font-mono text-gray-700 dark:text-muted-foreground">esc</kbd>
               </div>
             </div>
           </div>

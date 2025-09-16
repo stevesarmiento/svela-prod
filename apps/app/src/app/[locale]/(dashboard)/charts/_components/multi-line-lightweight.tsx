@@ -73,13 +73,13 @@ const TooltipContent = ({
   return (
     <div className="flex flex-col gap-1 overflow-hidden">
       <div className="px-4 py-3">
-        <div className="mb-3 text-[11px] text-zinc-400 font-medium">
+        <div className="mb-3 text-[11px] text-gray-600 dark:text-zinc-400 font-medium">
           {new Date(timestamp).toLocaleDateString(undefined, {
             month: 'long',
             day: 'numeric'
           })}
         </div>
-        <div className="w-full h-[1px] mb-3 bg-zinc-700/50 scale-125" />
+        <div className="w-full h-[1px] mb-3 bg-gray-300 dark:bg-zinc-700/50 scale-125" />
         <div className="flex flex-col gap-2">
           {coinData.map((coin) => (
             <div key={coin.id} className="flex items-center justify-between">
@@ -88,11 +88,11 @@ const TooltipContent = ({
                   className="h-3 w-1 rounded-full"
                   style={{ backgroundColor: coin.color }}
                 />
-                <span className="text-[11px] text-zinc-400 truncate max-w-[80px]">
-                  {coin.symbol.toUpperCase()} <span className="text-zinc-500">{coin.name}</span>
+                <span className="text-[11px] text-gray-600 dark:text-zinc-400 truncate max-w-[80px]">
+                  {coin.symbol.toUpperCase()} <span className="text-gray-500 dark:text-zinc-500">{coin.name}</span>
                 </span>
               </div>
-              <span className="text-[11px] font-mono text-white font-bold">
+              <span className="text-[11px] font-mono text-gray-900 dark:text-white font-bold">
                 {coin.value > 0 ? '+' : ''}{coin.value.toFixed(2)}%
               </span>
             </div>
@@ -121,7 +121,7 @@ const TimeScaleSelector = ({
   ]
 
   return (
-    <div className="flex gap-1 dark:bg-zinc-950/10 bg-zinc-950/5 backdrop-blur-xl border dark:border-zinc-800/30 border-zinc-800/10 rounded-[12px] p-1">
+    <div className="flex gap-1 bg-white/95 dark:bg-zinc-950/10 backdrop-blur-xl border border-gray-200/50 dark:border-zinc-800/30 rounded-[12px] p-1">
       {scales.map((scale) => (
         <button
           key={scale.value}
@@ -129,7 +129,7 @@ const TimeScaleSelector = ({
           className={cn(
             "px-2 py-1 text-xs rounded-lg",
             activeTimeScale === scale.value
-              ? "dark:bg-zinc-800/50 bg-zinc-950/50 border dark:border-zinc-800/50 border-zinc-800/20  shadow-md dark:shadow-zinc-950/50 shadow-zinc-950/10 text-white"
+              ? "bg-gray-200 border border-gray-300 shadow-md shadow-gray-500/20 text-gray-900 dark:bg-zinc-800/50 dark:border-zinc-800/50 dark:shadow-zinc-950/50 dark:text-white"
               : "bg-transparent text-muted-foreground hover:bg-muted/80"
           )}
         >
@@ -151,6 +151,43 @@ export function MultiPriceChartLightweight({
   const [hoveredRemoveId, setHoveredRemoveId] = useState<string | null>(null)
   const lineSeriesMapRef = useRef<Map<string, LineSeriesData>>(new Map())
   
+  // Theme detection state
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ||
+           document.documentElement.classList.contains('dark')
+  })
+
+  // Listen for theme changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const observer = new MutationObserver(() => {
+      setIsDarkMode(
+        mediaQuery.matches || document.documentElement.classList.contains('dark')
+      )
+    })
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    })
+
+    const handleChange = () => {
+      setIsDarkMode(
+        mediaQuery.matches || document.documentElement.classList.contains('dark')
+      )
+    }
+
+    mediaQuery.addEventListener('change', handleChange)
+
+    return () => {
+      observer.disconnect()
+      mediaQuery.removeEventListener('change', handleChange)
+    }
+  }, [])
+  
   // Use the bottom nav context to trigger contextual command search
   const { openContextualCommandSearch } = useBottomNav()
 
@@ -165,17 +202,28 @@ export function MultiPriceChartLightweight({
     cacheHitRate: performance.cacheHitRate.toFixed(1) + '%'
   })
 
-  // Generate colors for the series data
+  // Generate colors for the series data - theme-aware
   const coinSeriesWithColors = useMemo(() => {
     if (!coinSeriesData.length) return []
     
     const colors = generatePastelColors(coinSeriesData.length)
     
-    return coinSeriesData.map((series, index) => ({
-      ...series,
-      color: colors[index] || `hsl(${Math.random() * 360}, 40%, 75%)`,
-    }))
-  }, [coinSeriesData])
+    return coinSeriesData.map((series, index) => {
+      const baseColor = colors[index] || `hsl(${Math.random() * 360}, 40%, 75%)`
+      // For light mode, make colors darker and more saturated
+      const themeAwareColor = isDarkMode 
+        ? baseColor 
+        : baseColor.replace(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/, (_, h, s, l) => {
+            // Increase saturation and decrease lightness for light mode
+            return `hsl(${h}, ${Math.min(100, parseInt(s) + 20)}%, ${Math.max(30, parseInt(l) - 40)}%)`
+          })
+      
+      return {
+        ...series,
+        color: themeAwareColor,
+      }
+    })
+  }, [coinSeriesData, isDarkMode])
 
   const latestValues = useMemo(() => {
     return coinSeriesWithColors.map(series => ({
@@ -195,23 +243,28 @@ export function MultiPriceChartLightweight({
   useEffect(() => {
     if (!chartContainerRef.current || !coinSeriesWithColors.length) return
 
+    // Detect current theme
+    const isDarkMode = typeof window !== 'undefined' ? 
+      window.matchMedia('(prefers-color-scheme: dark)').matches ||
+      document.documentElement.classList.contains('dark') : true
+
     const chart = createChart(chartContainerRef.current, {
       handleScale: false,
       handleScroll: false,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#ffffff50",
+        textColor: isDarkMode ? "#ffffff50" : "#00000050",
         attributionLogo: false,
       },
       grid: {
         vertLines: { 
           visible: false,
-          color: "#e5e7eb0",
+          color: isDarkMode ? "#e5e7eb0" : "#00000020",
           style: LineStyle.Dotted,
         },
         horzLines: { 
           visible: false, // Hide default lines, we'll create gradient ones
-          color: "#ffffff10",
+          color: isDarkMode ? "#ffffff10" : "#00000010",
           style: LineStyle.Solid,
         },
       },
@@ -226,7 +279,7 @@ export function MultiPriceChartLightweight({
         vertLine: {
           labelVisible: true,
           width: 1,
-          color: "#d1d5db40",
+          color: isDarkMode ? "#d1d5db40" : "#00000040",
           visible: true,
           style: LineStyle.Solid,
         },
@@ -284,7 +337,11 @@ export function MultiPriceChartLightweight({
     // Add tooltip
     const tooltipEl = document.createElement("div")
     const tooltipRoot = createRoot(tooltipEl)
-    tooltipEl.className = "fixed hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
+    tooltipEl.className = `fixed hidden overflow-hidden text-[11px] rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-all duration-100 ease-in-out ${
+      isDarkMode 
+        ? 'text-white bg-zinc-900/95 border border-zinc-700/50' 
+        : 'text-gray-900 bg-white/95 border border-gray-200/50'
+    }`
     document.body.appendChild(tooltipEl)
 
     // Subscribe to crosshair move
@@ -395,7 +452,7 @@ export function MultiPriceChartLightweight({
       })
       chart.remove()
     }
-  }, [coinSeriesWithColors, activeTimeScale])
+  }, [coinSeriesWithColors, activeTimeScale, isDarkMode])
 
   // Handle hover effects on chart lines
   useEffect(() => {

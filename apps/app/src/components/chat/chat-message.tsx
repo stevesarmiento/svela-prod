@@ -87,7 +87,7 @@ export function ChatMessage({
     >
       {role === 'assistant' && (
         <Avatar className="size-8">
-          <AvatarFallback className="bg-zinc-800 border/50 border-zinc-700/50 p-1.5">
+          <AvatarFallback className="bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 p-1.5">
             <SvelaLogo
               width={20} 
               height={20}
@@ -121,36 +121,36 @@ export function ChatMessage({
         <div
           className={`rounded-lg ${
             role === 'user'
-              ? 'bg-gradient-to-br from-zinc-800/80 to-zinc-800/40 rounded-tr-none text-white px-4 py-2'
-              : 'text-white'
+              ? 'bg-gradient-to-br from-gray-200/80 to-gray-100/60 dark:from-zinc-800/80 dark:to-zinc-800/40 rounded-tr-none text-gray-900 dark:text-white px-4 py-2'
+              : 'text-gray-900 dark:text-white'
           }`}
         >
           {role === 'assistant' ? (
-            <div className="prose prose-sm prose-invert max-w-none">
+            <div className="prose prose-sm prose-gray dark:prose-invert max-w-none">
               <ReactMarkdown 
                 components={{
                   h1: ({ children }) => (
-                    <h1 className="text-base font-bold text-white mb-2 border-b border-zinc-700/50 pb-1">
+                    <h1 className="text-base font-bold text-gray-900 dark:text-white mb-2 border-b border-gray-300 dark:border-zinc-700/50 pb-1">
                       {children}
                     </h1>
                   ),
                   h2: ({ children }) => (
-                    <h2 className="text-sm font-semibold text-white mb-2 mt-3">
+                    <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 mt-3">
                       {children}
                     </h2>
                   ),
                   h3: ({ children }) => (
-                    <h3 className="text-sm font-medium text-zinc-200 mb-1 mt-2">
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-zinc-200 mb-1 mt-2">
                       {children}
                     </h3>
                   ),
                   p: ({ children }) => (
-                    <p className="text-sm text-zinc-300 mb-2 leading-relaxed">
+                    <p className="text-sm text-gray-700 dark:text-zinc-300 mb-2 leading-relaxed">
                       {children}
                     </p>
                   ),
                   strong: ({ children }) => (
-                    <strong className="text-white font-semibold">
+                    <strong className="text-gray-900 dark:text-white font-semibold">
                       {children}
                     </strong>
                   ),
@@ -165,12 +165,12 @@ export function ChatMessage({
                     </ol>
                   ),
                   li: ({ children }) => (
-                    <li className="text-sm text-zinc-300">
+                    <li className="text-sm text-gray-700 dark:text-zinc-300">
                       {children}
                     </li>
                   ),
                   em: ({ children }) => (
-                    <em className="text-zinc-300 italic">
+                    <em className="text-gray-700 dark:text-zinc-300 italic">
                       {children}
                     </em>
                   ),
@@ -178,24 +178,24 @@ export function ChatMessage({
                     const isInline = !className;
                     if (isInline) {
                       return (
-                        <code className="bg-zinc-800/50 text-zinc-200 px-1.5 py-0.5 rounded text-xs font-mono">
+                        <code className="bg-gray-100 text-gray-800 dark:bg-zinc-800/50 dark:text-zinc-200 px-1.5 py-0.5 rounded text-xs font-mono">
                           {children}
                         </code>
                       );
                     }
                     return (
-                      <code className="block bg-zinc-900/50 text-zinc-200 p-2 rounded text-xs font-mono overflow-x-auto">
+                      <code className="block bg-gray-100 text-gray-800 dark:bg-zinc-900/50 dark:text-zinc-200 p-2 rounded text-xs font-mono overflow-x-auto">
                         {children}
                       </code>
                     );
                   },
                   pre: ({ children }) => (
-                    <pre className="bg-zinc-900/50 rounded p-2 overflow-x-auto mb-2">
+                    <pre className="bg-gray-100 dark:bg-zinc-900/50 rounded p-2 overflow-x-auto mb-2">
                       {children}
                     </pre>
                   ),
                   blockquote: ({ children }) => (
-                    <blockquote className="border-l-2 border-zinc-600 pl-3 my-2 text-zinc-400 italic">
+                    <blockquote className="border-l-2 border-gray-400 dark:border-zinc-600 pl-3 my-2 text-gray-600 dark:text-zinc-400 italic">
                       {children}
                     </blockquote>
                   ),

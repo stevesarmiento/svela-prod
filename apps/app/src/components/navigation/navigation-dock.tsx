@@ -21,11 +21,11 @@ export const NavigationDock = React.memo(({
 }: NavigationDockProps) => {
   const dockClassName = React.useMemo(() => {
     return `relative rounded-[20px] overflow-hidden p-1 h-[56px] w-auto flex items-center justify-center
-           shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
+           shadow-[0_4px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
            dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]
            ${mode === 'selection' 
              ? 'bg-red-500/10 border border-red-200 dark:border-red-800/50' 
-             : 'bg-zinc-900'
+             : 'bg-white/95 backdrop-blur-md border border-gray-200/50 dark:bg-zinc-900 dark:border-transparent'
            } ${isCommandOpen && mode === 'navigation' ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'}`;
   }, [mode, isCommandOpen]);
 
@@ -42,11 +42,20 @@ export const NavigationDock = React.memo(({
         }}
       >
         {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-5 z-0"
+        <div className="absolute inset-0 opacity-5 dark:opacity-5 z-0"
           style={{
             backgroundImage: `
-              radial-gradient(circle at 25% 25%, white 1px, transparent 1px),
-              radial-gradient(circle at 75% 75%, white 1px, transparent 1px)
+              radial-gradient(circle at 25% 25%, rgb(0 0 0) 1px, transparent 1px),
+              radial-gradient(circle at 75% 75%, rgb(0 0 0) 1px, transparent 1px)
+            `,
+            backgroundSize: "24px 24px",
+          }}
+        />
+        <div className="absolute inset-0 opacity-5 dark:opacity-0 z-0"
+          style={{
+            backgroundImage: `
+              radial-gradient(circle at 25% 25%, rgb(255 255 255) 1px, transparent 1px),
+              radial-gradient(circle at 75% 75%, rgb(255 255 255) 1px, transparent 1px)
             `,
             backgroundSize: "24px 24px",
           }}

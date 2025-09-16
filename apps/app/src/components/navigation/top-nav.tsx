@@ -139,7 +139,7 @@ export function TopNav() {
           {isChartDetailPage ? (
             // Token Header with cached data
             <div className="flex items-center gap-4">
-              <Link href={backToChartsUrl} className="flex text-white/70 hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150">
+              <Link href={backToChartsUrl} className="flex text-gray-600 hover:text-gray-900 dark:text-white/70 dark:hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150">
                 <IconChevronBackward className="h-3 w-3 fill-current" />
               </Link>
               <div className="flex items-center gap-2">
@@ -147,7 +147,7 @@ export function TopNav() {
                   <Image
                     src={tokenData.logoUrl?.startsWith('http') || tokenData.logoUrl?.startsWith('/') ? tokenData.logoUrl : '/favicon.ico'}
                     alt={tokenData.name}
-                    className="w-8 h-8 rounded-full ring-1 ring-white/10"
+                    className="w-8 h-8 rounded-full ring-1 ring-gray-200 dark:ring-white/10"
                     width={32}
                     height={32}
                     onError={(e) => {
@@ -161,15 +161,15 @@ export function TopNav() {
                   />
                 )}
                 <div className="flex flex-col gap-0">
-                  <h1 className="text-sm font-semibold text-white">
+                  <h1 className="text-sm font-semibold text-gray-900 dark:text-white">
                     {isLoading ? (
-                      <div className="h-4 w-16 bg-white/10 rounded animate-pulse" />
+                      <div className="h-4 w-16 bg-gray-200 dark:bg-white/10 rounded animate-pulse" />
                     ) : (
                       tokenData?.symbol || 'Token Details'
                     )}
                   </h1>
-                  <p className="text-xs text-white">
-                    <span className="text-xs text-white/60">Today is </span> 
+                  <p className="text-xs text-gray-900 dark:text-white">
+                    <span className="text-xs text-gray-500 dark:text-white/60">Today is </span> 
                     {new Date().toLocaleDateString('en-US', { 
                       weekday: 'long', 
                       month: 'long', 

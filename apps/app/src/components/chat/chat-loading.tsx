@@ -8,7 +8,7 @@ export function ChatLoading() {
   return (
     <div className="flex gap-3 justify-start items-center">
       <Avatar className="size-8">
-      <AvatarFallback className="bg-zinc-800 border/50 border-zinc-700/50 p-1.5">
+      <AvatarFallback className="bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 p-1.5">
             <SvelaLogo
               width={20} 
               height={20}
@@ -16,7 +16,7 @@ export function ChatLoading() {
             />
         </AvatarFallback>
       </Avatar>
-      <SpinnerEllipsis className="fill-zinc-800/50" />
+      <SpinnerEllipsis className="fill-gray-400 dark:fill-zinc-800/50" />
     </div>
   );
 } 

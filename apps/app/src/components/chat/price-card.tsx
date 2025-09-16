@@ -149,7 +149,7 @@ export function PriceCard({
 
   return (
     <Link href={buildWatchlistUrl(`/charts/${coingeckoId}`, selectedGroupSlug)} className="block">
-      <Card className="w-[600px] bg-zinc-950/30 border-zinc-800/30 hover:bg-zinc-950/50 hover:border-zinc-700/50 transition-all duration-200 group relative overflow-hidden">
+      <Card className="w-[600px] bg-white/80 border-gray-200/50 hover:bg-white/90 hover:border-gray-300/60 dark:bg-zinc-950/30 dark:border-zinc-800/30 dark:hover:bg-zinc-950/50 dark:hover:border-zinc-700/50 transition-all duration-200 group relative overflow-hidden">
         {/* Subtle background pattern */}
         <div className="absolute inset-0 opacity-[0.02] group-hover:opacity-[0.04] transition-opacity">
           <div
@@ -179,13 +179,13 @@ export function PriceCard({
                 />
               </div>
               <div>
-                <h3 className="text-sm font-medium text-white group-hover:text-zinc-100 transition-colors">{name}</h3>
-                <p className="text-xs text-zinc-400">{symbol.toUpperCase()}</p>
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-gray-800 dark:group-hover:text-zinc-100 transition-colors">{name}</h3>
+                <p className="text-xs text-gray-500 dark:text-zinc-400">{symbol.toUpperCase()}</p>
               </div>
             </div>
             
             <div className="flex flex-col items-end">
-              <span className="text-sm font-mono font-semibold text-white">
+              <span className="text-sm font-mono font-semibold text-gray-900 dark:text-white">
                 <NumberFlow
                   value={currentPrice}
                   format={{
@@ -216,17 +216,17 @@ export function PriceCard({
           </div>
 
           {marketCapRank && (
-            <div className="flex items-center gap-1 text-xs text-zinc-400 mt-2">
-              <IconLaurelLeading className="w-4 h-4 fill-zinc-600" />
-              <span className="font-medium text-zinc-300">Rank #{marketCapRank}</span>
-              <IconLaurelTrailing className="w-4 h-4 fill-zinc-600" />
+            <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-zinc-400 mt-2">
+              <IconLaurelLeading className="w-4 h-4 fill-gray-400 dark:fill-zinc-600" />
+              <span className="font-medium text-gray-700 dark:text-zinc-300">Rank #{marketCapRank}</span>
+              <IconLaurelTrailing className="w-4 h-4 fill-gray-400 dark:fill-zinc-600" />
             </div>
           )}
         </CardHeader>
         
         <CardContent className="pt-0 relative">
           {/* Lightweight Chart */}
-          <div className="w-full h-[60px] mb-4 rounded-lg overflow-hidden bg-zinc-900/20">
+          <div className="w-full h-[60px] mb-4 rounded-lg overflow-hidden bg-gray-100/40 dark:bg-zinc-900/20">
             <div ref={chartContainerRef} className="w-full h-full" />
           </div>
           
@@ -235,14 +235,14 @@ export function PriceCard({
             <div className="flex justify-between gap-4 text-xs">
               {marketCap && (
                 <div>
-                  <span className="text-zinc-400 block mb-1">Market Cap</span>
-                  <p className="font-mono text-white">${formatLargeNumber(marketCap)}</p>
+                  <span className="text-gray-500 dark:text-zinc-400 block mb-1">Market Cap</span>
+                  <p className="font-mono text-gray-900 dark:text-white">${formatLargeNumber(marketCap)}</p>
                 </div>
               )}
               {totalVolume && (
                 <div>
-                  <span className="text-zinc-400 block mb-1">Volume 24h</span>
-                  <p className="font-mono text-white">${formatLargeNumber(totalVolume)}</p>
+                  <span className="text-gray-500 dark:text-zinc-400 block mb-1">Volume 24h</span>
+                  <p className="font-mono text-gray-900 dark:text-white">${formatLargeNumber(totalVolume)}</p>
                 </div>
               )}
             </div>

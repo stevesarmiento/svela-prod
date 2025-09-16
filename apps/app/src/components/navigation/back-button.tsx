@@ -18,16 +18,25 @@ export const BackButton = React.memo(({ onExitSelection, selectionState }: BackB
   };
 
   return (
-    <div className="relative rounded-[20px] bg-zinc-900 overflow-hidden px-2 py-2 hover:bg-zinc-800/80 transition-all duration-200 cursor-pointer
-                   shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
+    <div className="relative rounded-[20px] bg-white/95 backdrop-blur-md border border-gray-200/50 dark:bg-zinc-900 dark:border-transparent overflow-hidden px-2 py-2 hover:bg-gray-50/80 dark:hover:bg-zinc-800/80 transition-all duration-200 cursor-pointer
+                   shadow-[0_4px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
                    dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
       
       {/* Background Pattern */}
-      <div className="absolute inset-0 opacity-5 z-0"
+      <div className="absolute inset-0 opacity-5 dark:opacity-5 z-0"
         style={{
           backgroundImage: `
-            radial-gradient(circle at 25% 25%, white 1px, transparent 1px),
-            radial-gradient(circle at 75% 75%, white 1px, transparent 1px)
+            radial-gradient(circle at 25% 25%, rgb(0 0 0) 1px, transparent 1px),
+            radial-gradient(circle at 75% 75%, rgb(0 0 0) 1px, transparent 1px)
+          `,
+          backgroundSize: "24px 24px",
+        }}
+      />
+      <div className="absolute inset-0 opacity-5 dark:opacity-0 z-0"
+        style={{
+          backgroundImage: `
+            radial-gradient(circle at 25% 25%, rgb(255 255 255) 1px, transparent 1px),
+            radial-gradient(circle at 75% 75%, rgb(255 255 255) 1px, transparent 1px)
           `,
           backgroundSize: "24px 24px",
         }}
@@ -43,10 +52,10 @@ export const BackButton = React.memo(({ onExitSelection, selectionState }: BackB
         >
           <Tooltip>
             <TooltipTrigger asChild>
-              <IconXmark className="h-3 w-3 fill-white/70 hover:fill-white" />
+              <IconXmark className="h-3 w-3 fill-gray-600 hover:fill-gray-900 dark:fill-white/70 dark:hover:fill-white" />
             </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={25} className="flex items-center text-xs p-0 border-none bg-none shadow-none">
-              <kbd className="rounded-sm bg-border px-1.5 py-0.5 text-xs font-mono">
+            <TooltipContent side="top" sideOffset={25} className="flex items-center text-xs p-0 border-none bg-white/95 dark:bg-zinc-900/95 shadow-sm">
+              <kbd className="rounded-sm bg-gray-100 dark:bg-border px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-white">
                 ESC
               </kbd>
             </TooltipContent>

@@ -178,20 +178,20 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
 
   if (!chatState) {
     return (
-      <div className="w-[540px] mx-auto bg-zinc-900/90 backdrop-blur-[100px] border border-zinc-800/50 rounded-[20px] overflow-hidden shadow-xl shadow-black/50 active:cursor-grabbing cursor-grab">
+      <div className="w-[540px] mx-auto bg-zinc-50/80 dark:bg-zinc-900/90 backdrop-blur-[100px] border border-white dark:border-zinc-800/50 rounded-[20px] overflow-hidden shadow-xl dark:shadow-black/50 shadow-black/10 active:cursor-grabbing cursor-grab">
         <div className="flex flex-col h-[calc(100vh-200px)]">
-          <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-            <h3 className="text-sm font-medium text-white">Chat</h3>
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-zinc-800">
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white">Chat</h3>
             <Button
               variant="ghost"
               size="icon"
               onClick={handleClose}
-              className="h-6 w-6 rounded-xl text-zinc-400 hover:text-white"
+              className="h-6 w-6 rounded-xl text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white"
             >
-              <IconXmarkCircleFill className="h-4 w-4 fill-white/50" />
+              <IconXmarkCircleFill className="h-4 w-4 fill-gray-500 dark:fill-white/50" />
             </Button>
           </div>
-          <div className="flex-1 flex items-center justify-center text-zinc-400 text-sm">
+          <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-zinc-400 text-sm">
             Start a conversation using the chat input
           </div>
         </div>
@@ -200,21 +200,21 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
   }
 
   return (
-    <div className="w-full -translate-x-1/3 bg-zinc-900/90 backdrop-blur-[100px] border border-zinc-800/50 rounded-[20px] overflow-hidden mx-auto shadow-xl shadow-black/50 active:cursor-grabbing cursor-grab">
+    <div className="w-full -translate-x-1/3 bg-zinc-50/80 dark:bg-zinc-900/90 backdrop-blur-[100px] border border-white dark:border-zinc-800/50 rounded-[20px] overflow-hidden mx-auto shadow-xl dark:shadow-black/50 shadow-black/10 active:cursor-grabbing cursor-grab">
       <div className="flex flex-col h-[calc(100vh-300px)]">
         {/* Chat Header */}
-        <div className="flex items-center justify-between p-4 border-b border-zinc-800/50">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-zinc-800/50">
           <div className="flex items-center gap-3">
-          <h3 className="text-sm font-medium text-white">Chat</h3>
+          <h3 className="text-sm font-medium text-gray-900 dark:text-white">Chat</h3>
             <EnhancedIndicator />
           </div>
           <Button
             variant="ghost"
             size="icon"
             onClick={handleClose}
-            className="h-6 w-6 rounded-xl text-zinc-400 hover:text-white"
+            className="h-6 w-6 rounded-xl text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white"
           >
-            <IconXmarkCircleFill className="h-4 w-4 fill-white/50" />
+            <IconXmarkCircleFill className="h-4 w-4 fill-gray-500 dark:fill-white/50" />
           </Button>
         </div>
 

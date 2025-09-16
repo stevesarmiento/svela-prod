@@ -76,22 +76,22 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
           onClick={onAnalyzeClick}
           variant="ghost"
           size="sm"
-          className="h-8 px-2 rounded-xl w-auto pr-3 bg-zinc-800/40 hover:bg-zinc-900/50 ring-1 ring-zinc-800/80"
+          className="h-8 px-2 rounded-xl w-auto pr-3 bg-gray-100/80 hover:bg-gray-200/80 ring-1 ring-gray-300/60 dark:bg-zinc-800/40 dark:hover:bg-zinc-900/50 dark:ring-zinc-800/80"
         >
-          <IconSparkles className="h-4 w-4 fill-white/50" />
-          <span className="text-white">Analyze</span>
+          <IconSparkles className="h-4 w-4 fill-gray-600 dark:fill-white/50" />
+          <span className="text-gray-900 dark:text-white">Analyze</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
         {/* Header */}
-        <DialogHeader className="border-b border-zinc-800/50 pb-4">
+        <DialogHeader className="border-b border-gray-200 dark:border-zinc-800/50 pb-4">
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center">
               <div className="flex items-center gap-4 pt-3 pl-4">
                 <Image
                   src={tokenData?.logoUrl || `https://assets.coingecko.com/coins/images/1/standard/bitcoin.png`}
                   alt={tokenData?.name || marketData?.name || 'Token'}
-                  className="w-8 h-8 rounded-full ring-1 ring-white/10"
+                  className="w-8 h-8 rounded-full ring-1 ring-gray-200 dark:ring-white/10"
                   width={32}
                   height={32}
                   priority={true}
@@ -104,7 +104,7 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
                 />
                 <div className="flex flex-col gap-0">
                   <div className="flex items-center gap-2">
-                    <h1 className="text-sm font-semibold text-white">
+                    <h1 className="text-sm font-semibold text-gray-900 dark:text-white">
                       {marketData?.name || tokenData?.name || 'Token Details'}
                     </h1>   
                     <span className={`text-[11px] font-mono font-thin ${
@@ -116,8 +116,8 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
                       {marketData?.price_change_percentage_24h?.toFixed(2)}%
                     </span>                 
                   </div>
-                  <p className="text-xs text-white">
-                    <span className="text-xs text-white/60">Today is </span> 
+                  <p className="text-xs text-gray-900 dark:text-white">
+                    <span className="text-xs text-gray-500 dark:text-white/60">Today is </span> 
                     {new Date().toLocaleDateString('en-US', { 
                       weekday: 'long', 
                       month: 'long', 
@@ -132,7 +132,7 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
         
         <div>
           <div className="h-[75vh] w-full">
-            <div className="grid grid-cols-1 lg:grid-cols-4 divide-x divide-zinc-800/50">
+            <div className="grid grid-cols-1 lg:grid-cols-4 divide-x divide-gray-200 dark:divide-zinc-800/50">
               <div className="sticky top-0 lg:col-span-1">
                   {/* Market Metrics Sidebar */}
                   <MarketMetricsSidebar
@@ -151,7 +151,7 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
 
 
               {/* Main Content */}
-              <ScrollArea hideScrollbar={true} className="h-[75vh] w-full col-span-3 bg-zinc-950/50">
+              <ScrollArea hideScrollbar={true} className="h-[75vh] w-full col-span-3 bg-gray-50/50 dark:bg-zinc-950/50">
                 <div className="relative lg:col-span-3 space-y-6 p-12 h-full">
                   <div className="relative h-full">
                     <AnalysisResult

@@ -8,7 +8,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "border-t rounded-lg border-white/40 bg-gradient-to-b from-blue-600 to-blue-600 hover:from-blue-700 hover:to-blue-600 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-blue-700 dark:ring-blue-700 text-white transition-colors duration-300 ease-in-out",
+        default: "border-t rounded-lg border-white/40 bg-gradient-to-b from-zinc-800 to-zinc-600 hover:from-zinc-700 hover:to-zinc-600 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-zinc-700 dark:ring-zinc-700 text-white transition-colors duration-300 ease-in-out",
         destructive:
           "border-t rounded-lg border-white/40 bg-gradient-to-b from-rose-500 to-rose-500 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-rose-700 dark:ring-rose-700 text-white",
         outline:

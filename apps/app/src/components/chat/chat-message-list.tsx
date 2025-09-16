@@ -98,7 +98,7 @@ export function ChatMessageList({ messages, isLoading, isDataLoading, messageCom
   }, [isLoading, isDataLoading]);
 
   return (
-    <div className="h-full overflow-hidden p-4">
+    <div className="h-full overflow-hidden p-4 text-zinc-900 dark:text-white">
       <ScrollArea className="h-full pr-4" ref={scrollAreaRef}>
         <div className="space-y-4">
           {messages.map((message) => (
