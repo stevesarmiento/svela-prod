@@ -79,7 +79,15 @@ export async function GET(request: NextRequest) {
     })
 
     // Get user authentication (optional for API key resolution)
-    const { userId: clerkId } = await auth();
+    // Note: auth() may fail in API routes due to middleware config, so we handle it gracefully
+    let clerkId: string | null = null;
+    try {
+      const authResult = await auth();
+      clerkId = authResult.userId;
+    } catch (error) {
+      // Auth failed, will use environment fallback
+      console.log('Auth not available in API route, using environment fallback:', error instanceof Error ? error.message : 'Unknown error');
+    }
     
     // Get API key - user's key takes precedence over environment variable
     const apiKeyResult = await getUserApiKey(clerkId, 'coingecko', 'X_CG_PRO_API_KEY');
