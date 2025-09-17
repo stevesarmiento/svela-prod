@@ -3,6 +3,7 @@ import { Button } from "@v1/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { IconXmark } from "symbols-react";
 import type { SelectionState } from './bottom-nav-context';
+import { BackgroundPattern } from './background-pattern';
 
 interface BackButtonProps {
   onExitSelection: () => void;
@@ -22,25 +23,8 @@ export const BackButton = React.memo(({ onExitSelection, selectionState }: BackB
                    shadow-[0_4px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
                    dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
       
-      {/* Background Pattern */}
-      <div className="absolute inset-0 opacity-5 dark:opacity-5 z-0"
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 25% 25%, rgb(0 0 0) 1px, transparent 1px),
-            radial-gradient(circle at 75% 75%, rgb(0 0 0) 1px, transparent 1px)
-          `,
-          backgroundSize: "24px 24px",
-        }}
-      />
-      <div className="absolute inset-0 opacity-5 dark:opacity-0 z-0"
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 25% 25%, rgb(255 255 255) 1px, transparent 1px),
-            radial-gradient(circle at 75% 75%, rgb(255 255 255) 1px, transparent 1px)
-          `,
-          backgroundSize: "24px 24px",
-        }}
-      />
+      {/* React 19: Optimized shared background pattern */}
+      <BackgroundPattern />
       
       <div className="relative z-10 flex items-center">
         <Button 

@@ -6,12 +6,14 @@ import { Button } from '@v1/ui/button'
 import { Input } from '@v1/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@v1/ui/tooltip'
 import { IconCaptionsBubbleFill, IconCommand, IconPaperplaneFill, IconXmark} from 'symbols-react'
-import { useBottomNav } from './bottom-nav-context'
+import { useOverlayState, useChatContext } from './bottom-nav-context'
 import { useClickOutside } from '@v1/ui/hooks'
 import { useChatToast, useChatState } from '../chat/chat-toast'
+import { BackgroundPattern } from './background-pattern'
 
 export function ChatContainer() {
-  const { isChatOpen, openChat, setIsChatOpen } = useBottomNav()
+  const { isChatOpen, setIsChatOpen } = useOverlayState()
+  const { openChat } = useChatContext()
   const { showChatToast } = useChatToast()
   const {
     input,
@@ -91,25 +93,8 @@ export function ChatContainer() {
         ease: [0.4, 0, 0.2, 1]
       }}
     >
-      {/* Background Pattern */}
-      <div className="absolute inset-0 opacity-5 dark:opacity-5 z-0"
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 25% 25%, rgb(0 0 0) 1px, transparent 1px),
-            radial-gradient(circle at 75% 75%, rgb(0 0 0) 1px, transparent 1px)
-          `,
-          backgroundSize: "24px 24px",
-        }}
-      />
-      <div className="absolute inset-0 opacity-5 dark:opacity-0 z-0"
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 25% 25%, rgb(255 255 255) 1px, transparent 1px),
-            radial-gradient(circle at 75% 75%, rgb(255 255 255) 1px, transparent 1px)
-          `,
-          backgroundSize: "24px 24px",
-        }}
-      />
+      {/* React 19: Optimized shared background pattern */}
+      <BackgroundPattern />
       
       <div className="relative z-10 h-full">
         <AnimatePresence mode="wait">

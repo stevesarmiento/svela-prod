@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo, useDeferredValue } from 'react';
 import { Button } from "@v1/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { IconMagnifyingglass, IconCircleSlash, IconCommand } from "symbols-react";
@@ -21,6 +21,7 @@ import { useHybridCoinSearch, useHybridTopCoins } from '@/hooks/use-hybrid-coin-
 import { useContextualCommands } from '@/hooks/use-contextual-commands';
 import { useAddCoinToWatchlist } from '@/hooks/use-add-coin-to-watchlist';
 import { useDebounce } from '@/hooks/use-debounce';
+import { BackgroundPattern } from './background-pattern';
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
 
@@ -38,15 +39,16 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   // Custom hooks
   const { inputRef } = useCommandInput(isOpen);
   
-  // Search state
+  // React 19: Enhanced search state with useDeferredValue
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const deferredSearchQuery = useDeferredValue(debouncedSearchQuery);
   
-  // Use hybrid search hooks (DB + API) - same as coin-search.tsx
+  // React 19: Use hybrid search hooks with deferred values for better performance
   const { 
     data: searchResults, 
     isLoading: isSearchLoading 
-  } = useHybridCoinSearch(debouncedSearchQuery, {
+  } = useHybridCoinSearch(deferredSearchQuery, {
     limit: 5 // Limit for command search
   });
   
@@ -55,23 +57,23 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
     isLoading: isTopCoinsLoading 
   } = useHybridTopCoins(5);
 
-  // Determine which coins to display
+  // React 19: Determine which coins to display with deferred values
   const coinsToDisplay = useMemo(() => {
-    if (debouncedSearchQuery.trim()) {
+    if (deferredSearchQuery.trim()) {
       return searchResults || [];
     }
     return topCoins || [];
-  }, [debouncedSearchQuery, searchResults, topCoins]);
+  }, [deferredSearchQuery, searchResults, topCoins]);
 
-  // Determine loading state
+  // React 19: Determine loading state with deferred values
   const coinResultsLoading = useMemo(() => {
-    if (debouncedSearchQuery.trim()) {
+    if (deferredSearchQuery.trim()) {
       return isSearchLoading;
     }
     return isTopCoinsLoading;
-  }, [debouncedSearchQuery, isSearchLoading, isTopCoinsLoading]);
+  }, [deferredSearchQuery, isSearchLoading, isTopCoinsLoading]);
 
-  const hasSearch = debouncedSearchQuery.trim().length > 0;
+  const hasSearch = deferredSearchQuery.trim().length > 0;
   
   const clearSearch = useCallback(() => {
     setSearchQuery('');
@@ -81,7 +83,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
     contextualCommands, 
     globalCommands, 
     hasContextualCommands
-  } = useContextualCommands(searchQuery, context);
+  } = useContextualCommands(deferredSearchQuery, context);
 
   const { handleAddCoin, isAddingCoin } = useAddCoinToWatchlist();
 
@@ -190,25 +192,8 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                    shadow-[0_4px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
                    dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
       
-      {/* Background Pattern */}
-      <div className="absolute inset-0 opacity-5 dark:opacity-5 z-0"
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 25% 25%, rgb(0 0 0) 1px, transparent 1px),
-            radial-gradient(circle at 75% 75%, rgb(0 0 0) 1px, transparent 1px)
-          `,
-          backgroundSize: "24px 24px",
-        }}
-      />
-      <div className="absolute inset-0 opacity-5 dark:opacity-0 z-0"
-        style={{
-          backgroundImage: `
-            radial-gradient(circle at 25% 25%, rgb(255 255 255) 1px, transparent 1px),
-            radial-gradient(circle at 75% 75%, rgb(255 255 255) 1px, transparent 1px)
-          `,
-          backgroundSize: "24px 24px",
-        }}
-      />
+      {/* React 19: Optimized shared background pattern */}
+      <BackgroundPattern />
       
       <div className="relative z-10">
         <CommandPopover

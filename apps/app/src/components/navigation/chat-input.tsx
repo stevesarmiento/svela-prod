@@ -5,12 +5,13 @@ import { motion } from 'framer-motion'
 import { Button } from '@v1/ui/button'
 import { Input } from '@v1/ui/input'
 import { IconPaperplaneFill, IconSquareFill } from 'symbols-react'
-import { useBottomNav } from './bottom-nav-context'
+import { useOverlayState } from './bottom-nav-context'
 import { useClickOutside } from '@v1/ui/hooks'
 import { useChatToast, useChatState } from '../chat/chat-toast'
+import { BackgroundPattern } from './background-pattern'
 
 export function ChatInput() {
-  const { isChatOpen, setIsChatOpen } = useBottomNav()
+  const { isChatOpen, setIsChatOpen } = useOverlayState()
   const { showChatToast } = useChatToast()
   const {
     input,
@@ -102,16 +103,8 @@ export function ChatInput() {
                        shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
                        dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
           
-          {/* Background Pattern */}
-          <div className="absolute inset-0 opacity-5 z-0"
-            style={{
-              backgroundImage: `
-                radial-gradient(circle at 25% 25%, white 1px, transparent 1px),
-                radial-gradient(circle at 75% 75%, white 1px, transparent 1px)
-              `,
-              backgroundSize: "24px 24px",
-            }}
-          />
+          {/* React 19: Optimized shared background pattern */}
+          <BackgroundPattern />
           
           <div className="relative z-10 flex items-center gap-3 p-3">
             <Input

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { NavigationItems } from './navigation-items';
 import { SelectionContent } from './selection-content';
 import type { SelectionState } from './bottom-nav-context';
+import { BackgroundPattern } from './background-pattern';
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
 
@@ -13,7 +14,7 @@ interface NavigationDockProps {
   onOpenCommandSearch?: (context: CommandContext) => void;
 }
 
-export const NavigationDock = React.memo(({ 
+const NavigationDockComponent = ({ 
   mode, 
   selectionState, 
   isCommandOpen,
@@ -41,25 +42,8 @@ export const NavigationDock = React.memo(({
           mass: 0.3,
         }}
       >
-        {/* Background Pattern */}
-        <div className="absolute inset-0 opacity-5 dark:opacity-5 z-0"
-          style={{
-            backgroundImage: `
-              radial-gradient(circle at 25% 25%, rgb(0 0 0) 1px, transparent 1px),
-              radial-gradient(circle at 75% 75%, rgb(0 0 0) 1px, transparent 1px)
-            `,
-            backgroundSize: "24px 24px",
-          }}
-        />
-        <div className="absolute inset-0 opacity-5 dark:opacity-0 z-0"
-          style={{
-            backgroundImage: `
-              radial-gradient(circle at 25% 25%, rgb(255 255 255) 1px, transparent 1px),
-              radial-gradient(circle at 75% 75%, rgb(255 255 255) 1px, transparent 1px)
-            `,
-            backgroundSize: "24px 24px",
-          }}
-        />
+        {/* React 19: Optimized shared background pattern */}
+        <BackgroundPattern />
         
         <div className="relative z-10 flex items-center gap-1 p-1 w-auto">
           {mode === 'navigation' && (
@@ -103,6 +87,23 @@ export const NavigationDock = React.memo(({
       </motion.div>
     </AnimatePresence>
   );
-});
+};
+
+// React 19: Enhanced memo with custom comparison function
+export const NavigationDock = React.memo(NavigationDockComponent, areNavigationDockPropsEqual);
 
 NavigationDock.displayName = 'NavigationDock';
+
+// React 19: Enhanced memo comparison for better performance
+function areNavigationDockPropsEqual(
+  prevProps: NavigationDockProps, 
+  nextProps: NavigationDockProps
+): boolean {
+  return (
+    prevProps.mode === nextProps.mode &&
+    prevProps.isCommandOpen === nextProps.isCommandOpen &&
+    prevProps.selectionState?.selectedCoins === nextProps.selectionState?.selectedCoins &&
+    prevProps.selectionState?.totalCoins === nextProps.selectionState?.totalCoins &&
+    prevProps.selectionState?.isRemoving === nextProps.selectionState?.isRemoving
+  );
+}

@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useBottomNav } from "./bottom-nav-context";
+import { useNavigationMode, useSelectionMode, useOverlayState, useCommandContext, useChatContext } from "./bottom-nav-context";
 import { useKeyboardShortcuts, useCommandHandler, useSequentialShortcuts } from "./bottom-nav-hooks";
 import { NavigationDock } from "./navigation-dock";
 import { BackButton } from "./back-button";
@@ -13,17 +13,12 @@ import { ChatStateManager } from "../chat/chat-toast";
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
 
 export function BottomNav() {
-  const { 
-    mode, 
-    selectionState, 
-    setNavigationMode, 
-    isCommandOpen,
-    isChatOpen,
-    setIsCommandOpen,
-    commandContext,
-    setCommandContext,
-    closeChat
-  } = useBottomNav();
+  // React 19: Use selective context hooks for better performance
+  const { mode, setNavigationMode } = useNavigationMode();
+  const { selectionState } = useSelectionMode();
+  const { isCommandOpen, isChatOpen, setIsCommandOpen } = useOverlayState();
+  const { commandContext, setCommandContext } = useCommandContext();
+  const { closeChat } = useChatContext();
   
   // Register closeChat callback with ChatStateManager
   useEffect(() => {
@@ -34,7 +29,7 @@ export function BottomNav() {
   // Initialize sequential shortcuts (still needed for functionality)
   useSequentialShortcuts();
   
-  // Custom hooks for cleaner logic
+  // Custom hooks for cleaner logic with React 19 performance improvements
   useKeyboardShortcuts(mode, setNavigationMode, setIsCommandOpen);
   const handleCommandSelect = useCommandHandler();
 
