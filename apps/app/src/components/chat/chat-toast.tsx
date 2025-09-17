@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect, useTransition, useDeferredValue } from 'react'
+import React, { useState, useRef, useEffect, useDeferredValue } from 'react'
 import { useChat } from 'ai/react'
 import { useAuth } from '@v1/convex/hooks'
 import { toast } from 'sonner'
@@ -129,26 +129,22 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
   const [chatState, setChatState] = useState<ChatState | null>(null);
   const { user } = useAuth();
   const chatManager = ChatStateManager.getInstance();
-  const [, startTransition] = useTransition();
+  // React 19: Transition hook removed - not needed in this context
   
   // React 19: Defer expensive chat state updates
   const deferredChatState = useDeferredValue(chatState);
 
   useEffect(() => {
-    // React 19: Get initial state with transition
-    startTransition(() => {
-      setChatState(chatManager.getChatState());
-    });
+    // Get initial state without transition (not needed in useEffect)
+    setChatState(chatManager.getChatState());
     
-    // React 19: Subscribe to updates with batched state changes
+    // Subscribe to updates with direct state changes (React will batch automatically)
     const unsubscribe = chatManager.subscribe((state: ChatState | null) => {
-      startTransition(() => {
-        setChatState(state);
-      });
+      setChatState(state);
     });
 
     return unsubscribe;
-  }, [chatManager, startTransition]);
+  }, [chatManager]);
 
   // Auto-cleanup session memories if enabled
   const autoCleanupSession = React.useCallback(async () => {
@@ -332,14 +328,17 @@ export function useChatToast() {
         chatManager.closeInput();
         toastIdRef.current = null;
         
-        // React 19: Heavy cleanup operations (async functions can't use startTransition directly)
+        // Background cleanup operations
         if (user?.id) {
-          try {
-            await bulkDeleteChatMemories();
-            await autoCleanupSessionMemories(user.id);
-          } catch (error) {
-            console.error('Failed to cleanup on dismiss:', error);
-          }
+          // Use Promise.resolve to ensure these run after the current render cycle
+          Promise.resolve().then(async () => {
+            try {
+              await bulkDeleteChatMemories();
+              await autoCleanupSessionMemories(user.id);
+            } catch (error) {
+              console.error('Failed to cleanup on dismiss:', error);
+            }
+          });
         }
       }
     });
@@ -379,8 +378,7 @@ export function useChatState() {
   const chatManager = ChatStateManager.getInstance();
   const { user } = useAuth();
   
-  // React 19: Add transition for heavy state updates
-  const [isPending, startTransition] = useTransition();
+  // React 19: Transition hook removed - state updates are batched automatically
   
   // React 19: Defer expensive message components for better performance
   const deferredMessageComponents = useDeferredValue(messageComponents);
@@ -416,14 +414,12 @@ export function useChatState() {
                 [`temp_${lastDataQueryRef.current}`]: componentData
               };
               
-              // React 19: Use startTransition instead of setTimeout for better batching
-              startTransition(() => {
-                chatManager.setChatState({
-                  messages,
-                  isLoading,
-                  isDataLoading,
-                  messageComponents: newComponents,
-                });
+              // Update chat state directly - React will batch these updates
+              chatManager.setChatState({
+                messages,
+                isLoading,
+                isDataLoading,
+                messageComponents: newComponents,
               });
               
               return newComponents;
@@ -445,14 +441,12 @@ export function useChatState() {
               [`temp_${lastDataQueryRef.current}`]: parsedComponentData
             };
             
-            // React 19: Use startTransition instead of setTimeout for better batching
-            startTransition(() => {
-              chatManager.setChatState({
-                messages,
-                isLoading,
-                isDataLoading,
-                messageComponents: newComponents,
-              });
+            // Update chat state directly - React will batch these updates
+            chatManager.setChatState({
+              messages,
+              isLoading,
+              isDataLoading,
+              messageComponents: newComponents,
             });
             
             return newComponents;
@@ -487,17 +481,15 @@ export function useChatState() {
     },
   });
 
-  // React 19: Update shared state with concurrent features
+  // React 19: Update shared state with deferred values for better performance
   useEffect(() => {
-    startTransition(() => {
-      chatManager.setChatState({
-        messages,
-        isLoading,
-        isDataLoading,
-        messageComponents: deferredMessageComponents, // Use deferred value for better performance
-      });
+    chatManager.setChatState({
+      messages,
+      isLoading,
+      isDataLoading,
+      messageComponents: deferredMessageComponents,
     });
-  }, [messages, isLoading, isDataLoading, deferredMessageComponents, chatManager, startTransition]);
+  }, [messages, isLoading, isDataLoading, deferredMessageComponents, chatManager]);
 
   const detectDataQuery = async (message: string): Promise<boolean> => {
     try {
@@ -562,12 +554,10 @@ Examples:
     setIsDataLoading(false);
     setIsStopped(true);
     
-    // React 19: Use startTransition for delayed state reset
-    startTransition(() => {
-      setTimeout(() => {
-        setIsStopped(false);
-      }, 3000);
-    });
+    // Reset stopped state after delay (no need for transition here)
+    setTimeout(() => {
+      setIsStopped(false);
+    }, 3000);
   };
 
   return {
@@ -580,7 +570,7 @@ Examples:
     error,
     stop: handleStop,
     isStopped,
-    isPending, // React 19: Expose pending state for UI feedback
+    // isPending removed - not needed with current implementation
   };
 }
 

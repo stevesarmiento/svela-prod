@@ -3,6 +3,7 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { API_PROVIDERS } from "./apiKeys";
 import { createCipheriv, randomBytes, scrypt } from 'crypto';
 import { promisify } from 'util';
 
@@ -16,8 +17,48 @@ const IV_LENGTH = 16;
 const SALT_LENGTH = 32;
 // TAG_LENGTH removed as it was unused
 
-// Generate a secret key from environment or use a default for development
-const MASTER_KEY = process.env.API_ENCRYPTION_KEY || 'dev-key-change-in-production-32-bytes';
+/**
+ * Validates and returns the API encryption key from environment variables
+ * Fails fast on startup if key is missing or invalid in production
+ */
+function validateAndGetEncryptionKey(): string {
+  const apiKey = process.env.API_ENCRYPTION_KEY;
+  
+  // In production, API_ENCRYPTION_KEY is required
+  if (process.env.NODE_ENV === 'production') {
+    if (!apiKey) {
+      throw new Error(
+        'FATAL: API_ENCRYPTION_KEY environment variable is required in production but not set. Service startup failed.'
+      );
+    }
+  }
+  
+  // If no key provided at all (dev or prod), fail
+  if (!apiKey) {
+    throw new Error(
+      'FATAL: API_ENCRYPTION_KEY environment variable is required but not set. Service startup failed.'
+    );
+  }
+  
+  // Validate key format and length (must be exactly 32 bytes when used as string)
+  if (typeof apiKey !== 'string' || apiKey.length < 32) {
+    throw new Error(
+      `FATAL: API_ENCRYPTION_KEY must be at least 32 characters long for AES-256 security. Current length: ${apiKey.length}. Service startup failed.`
+    );
+  }
+  
+  // Additional validation: ensure it's not the old default value
+  if (apiKey.includes('dev-key-change-in-production') || apiKey === 'dev-key-change-in-production-32-bytes') {
+    throw new Error(
+      'FATAL: API_ENCRYPTION_KEY appears to be using a default/example value. Please set a secure encryption key. Service startup failed.'
+    );
+  }
+  
+  return apiKey;
+}
+
+// Validate encryption key on module load (startup)
+const MASTER_KEY = validateAndGetEncryptionKey();
 
 /**
  * Derives an encryption key from the master key and salt
@@ -67,8 +108,7 @@ export const addApiKeyWithEncryption = action({
   },
   handler: async (ctx, args): Promise<string> => {
     // Basic provider validation - just check it's one of the known providers
-    const validProviders = ['coingecko', 'coinglass', 'openai', 'gemini'];
-    if (!validProviders.includes(args.provider)) {
+    if (!(args.provider in API_PROVIDERS)) {
       throw new Error(`Invalid API provider: ${args.provider}`);
     }
 

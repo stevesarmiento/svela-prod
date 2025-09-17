@@ -17,11 +17,13 @@ export function ApiKeysManagement() {
     getApiProviders,
     addApiKey,
     removeApiKey,
-    updateApiKeyActiveStatus 
+    updateApiKeyActiveStatus,
+    validateApiKey 
   } = useUserSettings();
   
   const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState<Record<string, boolean>>({});
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [mounted, setMounted] = useState(false);
 
   // Ensure component is mounted before rendering dynamic content
@@ -67,11 +69,29 @@ export function ApiKeysManagement() {
     if (!apiKey?.trim()) return;
 
     setIsSubmitting(prev => ({ ...prev, [provider]: true }));
+    setValidationErrors(prev => ({ ...prev, [provider]: '' }));
     
     try {
+      // Validate the API key before adding it
+      const validationResult = await validateApiKey(provider, apiKey.trim());
+      
+      if (!validationResult.isValid) {
+        setValidationErrors(prev => ({ 
+          ...prev, 
+          [provider]: validationResult.error || 'API key validation failed' 
+        }));
+        return;
+      }
+      
+      // Add the validated API key
       await addApiKey(provider, `My ${providers.find(p => p.id === provider)?.name} Key`, apiKey.trim());
-      // Clear input on success
+      
+      // Clear input and validation errors on success
       setApiKeyInputs(prev => ({ ...prev, [provider]: '' }));
+      setValidationErrors(prev => ({ ...prev, [provider]: '' }));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add API key';
+      setValidationErrors(prev => ({ ...prev, [provider]: errorMessage }));
     } finally {
       setIsSubmitting(prev => ({ ...prev, [provider]: false }));
     }
@@ -125,6 +145,8 @@ export function ApiKeysManagement() {
                 const inputValue = apiKeyInputs[provider.id] || '';
                 const isSubmittingThis = isSubmitting[provider.id];
 
+                const validationError = validationErrors[provider.id];
+                
                 return (
                   <div key={provider.id} className="p-3 bg-primary/5 rounded-lg space-y-3">
                     {/* Provider Header */}
@@ -175,22 +197,38 @@ export function ApiKeysManagement() {
 
                     {/* API Key Input (always visible when no existing key) */}
                     {!existingKey && (
-                      <div className="flex gap-2">
-                        <Input
-                          type="text"
-                          placeholder={`Enter your ${provider.name} API key...`}
-                          value={inputValue}
-                          onChange={(e) => handleInputChange(provider.id, e.target.value)}
-                          className="text-xs flex-1"
-                        />
-                        <Button
-                          onClick={() => handleSubmitKey(provider.id)}
-                          disabled={!inputValue.trim() || isSubmittingThis}
-                          size="sm"
-                          className="h-9 text-xs whitespace-nowrap"
-                        >
-                          {isSubmittingThis ? "Adding..." : "Save"}
-                        </Button>
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <Input
+                            type="text"
+                            placeholder={`Enter your ${provider.name} API key...`}
+                            value={inputValue}
+                            onChange={(e) => {
+                              handleInputChange(provider.id, e.target.value);
+                              // Clear validation error when user starts typing
+                              if (validationError) {
+                                setValidationErrors(prev => ({ ...prev, [provider.id]: '' }));
+                              }
+                            }}
+                            className={`text-xs flex-1 ${validationError ? 'border-red-500 focus:border-red-500' : ''}`}
+                          />
+                          <Button
+                            onClick={() => handleSubmitKey(provider.id)}
+                            disabled={!inputValue.trim() || isSubmittingThis}
+                            size="sm"
+                            className="h-9 text-xs whitespace-nowrap"
+                          >
+                            {isSubmittingThis ? "Validating..." : "Save"}
+                          </Button>
+                        </div>
+                        
+                        {/* Validation Error Display */}
+                        {validationError && (
+                          <div className="text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-md px-2 py-1">
+                            <div className="font-medium">Validation Error:</div>
+                            <div>{validationError}</div>
+                          </div>
+                        )}
                       </div>
                     )}
 

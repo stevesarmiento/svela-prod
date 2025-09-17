@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { API_PROVIDERS, type ApiProvider } from "@/../convex/apiKeys";
 import { getApiHeaders } from "@/lib/user-api-keys";
+import { ratelimit } from "@v1/kv/ratelimit";
 
 /**
  * Validates an API key by making a test request to the provider's API
@@ -9,6 +10,17 @@ import { getApiHeaders } from "@/lib/user-api-keys";
  */
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting check
+    const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
+    const rateLimitResult = await ratelimit.limit(`${ip}-validate-api-key`);
+    
+    if (!rateLimitResult.success) {
+      return NextResponse.json(
+        { error: "Too many requests" }, 
+        { status: 429 }
+      );
+    }
+
     const { userId: clerkId } = await auth();
     
     if (!clerkId) {
@@ -38,7 +50,7 @@ export async function POST(request: NextRequest) {
     if (!providerConfig.keyPattern.test(apiKey)) {
       return NextResponse.json(
         { 
-          valid: false, 
+          isValid: false, 
           error: "Invalid API key format",
           expectedFormat: getExpectedFormat(provider)
         }, 
@@ -66,7 +78,7 @@ export async function POST(request: NextRequest) {
 async function validateApiKeyWithProvider(
   provider: string, 
   apiKey: string
-): Promise<{ valid: boolean; error?: string; details?: object }> {
+): Promise<{ isValid: boolean; error?: string; details?: object }> {
   const headers = getApiHeaders(provider, apiKey);
   const timeout = 10000; // 10 second timeout
 
@@ -95,7 +107,7 @@ async function validateApiKeyWithProvider(
       // coinmarketcap removed - no longer supported
         
       default:
-        return { valid: false, error: "Unsupported provider for validation" };
+        return { isValid: false, error: "Unsupported provider for validation" };
     }
 
     const controller = new AbortController();
@@ -111,7 +123,7 @@ async function validateApiKeyWithProvider(
 
     if (response.ok) {
       return { 
-        valid: true, 
+        isValid: true, 
         details: {
           status: response.status,
           provider: provider,
@@ -136,7 +148,7 @@ async function validateApiKeyWithProvider(
       }
 
       return { 
-        valid: false, 
+        isValid: false, 
         error: errorMessage,
         details: {
           status: response.status,
@@ -149,12 +161,12 @@ async function validateApiKeyWithProvider(
   } catch (error) {
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        return { valid: false, error: "Request timeout - API endpoint unreachable" };
+        return { isValid: false, error: "Request timeout - API endpoint unreachable" };
       }
-      return { valid: false, error: error.message };
+      return { isValid: false, error: error.message };
     }
     
-    return { valid: false, error: "Unknown validation error" };
+    return { isValid: false, error: "Unknown validation error" };
   }
 }
 

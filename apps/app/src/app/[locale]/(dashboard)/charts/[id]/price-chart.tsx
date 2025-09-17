@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useTransition, useDeferredValue, useCallback, memo } from 'react'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
@@ -21,6 +21,7 @@ interface PriceChartProps {
   initialData: CoinMarketData['quote']['USD'];
   activeTimeScale: string;
   setActiveTimeScale: (scale: string) => void;
+  isPending?: boolean;
 }
 
 interface IndicatorSettings {
@@ -32,10 +33,11 @@ interface IndicatorSettings {
   showHullSuite: boolean
 }
 
-const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: { 
+// React 19: Memoized time scale selector
+const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, setActiveTimeScale }: { 
   activeTimeScale: string
   setActiveTimeScale: (scale: string) => void 
-}) => {
+}) {
   const scales = [
     { value: "30d", label: "1Q" },   // 30 days focus with 90 days context
     { value: "max", label: "1Y" },    // 1 year of data
@@ -49,7 +51,7 @@ const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: {
           key={scale.value}
           onClick={() => setActiveTimeScale(scale.value)}
           className={cn(
-            "px-2 py-1 text-xs rounded-lg",
+            "px-2 py-1 text-xs rounded-lg transition-all duration-200",
             activeTimeScale === scale.value
               ? "bg-gray-200 border border-gray-300 shadow-md shadow-gray-500/20 text-gray-900 dark:bg-zinc-800/50 dark:border-zinc-800/50 dark:shadow-zinc-950/50 dark:text-white"
               : "bg-transparent text-muted-foreground hover:bg-muted/80"
@@ -60,32 +62,46 @@ const TimeScaleSelector = ({ activeTimeScale, setActiveTimeScale }: {
       ))}
     </div>
   )
-}
+})
 
-export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTimeScale }: PriceChartProps) {
-  // Get CoinGecko coin data from database
+export const PriceChart = memo(function PriceChart({ coinId, initialData, activeTimeScale, setActiveTimeScale, isPending }: PriceChartProps) {
+  // React 19: Add concurrent features
+  const [isDataPending, startDataTransition] = useTransition()
+  
+  // React 19: Defer expensive computations
+  const deferredCoinId = useDeferredValue(coinId)
+  const deferredTimeScale = useDeferredValue(activeTimeScale)
+  const deferredInitialData = useDeferredValue(initialData)
+  // React 19: Enhanced time scale change handler
+  const handleTimeScaleChange = useCallback((scale: string) => {
+    startDataTransition(() => {
+      setActiveTimeScale(scale)
+    })
+  }, [setActiveTimeScale])
+
+  // React 19: Use deferred values for data fetching
   const coingeckoCoinData = useQuery(
     api.coins.getCoinGeckoCoinById,
-    { coingeckoId: coinId }
+    { coingeckoId: deferredCoinId }
   )
   
   // Get live price data from CoinGecko API
   const { data: livePrice, isLoading: isPriceLoading } = useTanStackQuery({
-    queryKey: ['coingecko-price', coinId],
+    queryKey: ['coingecko-price', deferredCoinId],
     queryFn: async () => {
-      const response = await fetch(`/api/coingecko/quotes?ids=${coinId}`)
+      const response = await fetch(`/api/coingecko/quotes?ids=${deferredCoinId}`)
       if (!response.ok) throw new Error('Failed to fetch price')
       const data = await response.json()
-      return data.data[coinId]
+      return data.data[deferredCoinId]
     },
-    enabled: !!coinId,
+    enabled: !!deferredCoinId,
     staleTime: 30 * 1000, // 30 seconds
     refetchInterval: 60 * 1000, // 1 minute
   })
   
-  // Get line chart data with OHLC data for tooltips
-  const { chartData, volumeData, ohlcData, isLoading, tokenData } = useCoinGeckoChartData(coinId, activeTimeScale, initialData)
-  const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, initialData, activeTimeScale)
+  // React 19: Get line chart data with OHLC data for tooltips using deferred values
+  const { chartData, volumeData, ohlcData, isLoading, tokenData } = useCoinGeckoChartData(deferredCoinId, deferredTimeScale, deferredInitialData)
+  const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, deferredInitialData, deferredTimeScale)
   
   // Generate Hull Suite colors - theme-aware
   const hullColors = generatePastelColors(1)
@@ -140,7 +156,7 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
     }))
   }
 
-  // Use chart instance with tooltip (no callback needed for header updates)
+  // React 19: Memoized chart instance creation
   const chartContainerRef = useChartInstance(
     chartData, 
     volumeData, 
@@ -156,15 +172,22 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
   const coinName = coingeckoCoinData?.name || 'Loading...'
   const coinImage = coingeckoCoinData?.logoUrl
   
-  // Use live price data if available, otherwise fall back to display price
+  // React 19: Show pending states and optimize price display
   const currentPrice = livePrice?.current_price || displayPrice || 0
   const priceChange24h = livePrice?.price_change_percentage_24h || calculatePercentageChange || 0
   const isLoadingPrice = isPriceLoading || isLoading
+  const showPending = isPending || isDataPending || isLoadingPrice
 
   return (
-    <div>
-      {/* Main Price Chart */}
-      <div className="bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+    <div className={cn(
+      "will-change-auto transform-gpu",
+      showPending ? 'opacity-90 transition-opacity duration-200' : ''
+    )}>
+      {/* React 19: Enhanced Main Price Chart with hardware acceleration */}
+      <div className={cn(
+        "bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)] will-change-auto",
+        showPending && "opacity-95"
+      )}>
         <div className="p-0 relative">
           <div
             className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-20"
@@ -194,13 +217,20 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
                     <span className="text-muted-foreground text-xs">is currently</span>
                     </div>
                     <div className="flex items-center">
-                      <span className="text-3xl font-bold font-sans text-gray-900 dark:text-white">
+                      <span className={cn(
+                        "text-3xl font-bold font-sans text-gray-900 dark:text-white",
+                        showPending && "animate-pulse"
+                      )}>
                         ${currentPrice.toLocaleString('en-US', {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 8
                         })}
                       </span>
-                      {isLoadingPrice && <div className="w-2 h-2 bg-gray-400 dark:bg-white/50 rounded-full animate-pulse" />}
+                      {showPending && (
+                        <div className="inline-flex items-center ml-2">
+                          <div className="w-2 h-2 bg-gray-400 dark:bg-white/50 rounded-full animate-pulse" />
+                        </div>
+                      )}
                     </div>
 
                   <div className={`text-xs font-bold font-mono ${isNaN(priceChange24h) ? 'text-muted-foreground' : priceChange24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
@@ -228,21 +258,34 @@ export function PriceChart({ coinId, initialData, activeTimeScale, setActiveTime
               </div>
             </CardHeader>
             <CardContent className="pl-8">
-              <div className="p-0 relative">
-                <div ref={chartContainerRef} />
+              <div className={cn(
+                "p-0 relative will-change-auto",
+                showPending && "opacity-80 transition-opacity duration-300"
+              )}>
+                <div 
+                  ref={chartContainerRef} 
+                  className="min-h-[400px] w-full will-change-auto transform-gpu"
+                  style={{ 
+                    minHeight: '400px',
+                    contain: 'layout style paint'
+                  }}
+                />
               </div>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Chart Controls - Outside the chart box */}
-      <div className="flex items-center justify-between mt-4">
+      {/* React 19: Enhanced Chart Controls with optimized handlers */}
+      <div className={cn(
+        "flex items-center justify-between mt-4",
+        showPending && "opacity-80"
+      )}>
         <TimeScaleSelector
-          activeTimeScale={activeTimeScale}
-          setActiveTimeScale={setActiveTimeScale}
+          activeTimeScale={deferredTimeScale}
+          setActiveTimeScale={handleTimeScaleChange}
         />
       </div>
     </div>
   )
-}
+})

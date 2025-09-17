@@ -249,6 +249,12 @@ export const updateApiKeyStats = mutation({
   handler: async (ctx, args) => {
     const { keyId, ...updateData } = args;
     
+    // Verify the key exists
+    const apiKey = await ctx.db.get(keyId);
+    if (!apiKey) {
+      throw new Error("API key not found");
+    }
+    
     await ctx.db.patch(keyId, {
       ...updateData,
       updatedAt: Date.now(),

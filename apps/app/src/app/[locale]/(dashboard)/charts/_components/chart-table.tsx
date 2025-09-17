@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useTransition, useDeferredValue, memo, useCallback } from 'react'
 import { useSearchParams } from "next/navigation"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { Button } from "@v1/ui/button"
@@ -35,18 +35,28 @@ interface OptimisticCoinData {
 interface ChartTableProps {
   coins: OptimisticCoinData[]
   activeTimeScale: string
+  isPending?: boolean
 }
 
-export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
+export const ChartTable = memo(function ChartTable({ 
+  coins, 
+  activeTimeScale,
+  isPending 
+}: ChartTableProps) {
   const { removeFromSelectedGroup, selectedGroup } = useWatchlist()
   const searchParams = useSearchParams()
+  const [isRemovePending, startRemoveTransition] = useTransition()
+  
+  // React 19: Defer expensive computations
+  const deferredCoins = useDeferredValue(coins)
+  const deferredTimeScale = useDeferredValue(activeTimeScale)
   
   // Get current watchlist group parameter to preserve it in navigation (same as top-nav)
   const watchlistGroup = searchParams.get('wg')
 
-  // Calculate interval-based price changes using market data
+  // React 19: Memoize expensive interval calculations with deferred values
   const coinsWithIntervalChange = useMemo(() => {
-    return coins.map(coin => {
+    return deferredCoins.map(coin => {
       let intervalChange = 0
 
       // Skip calculation for optimistic coins
@@ -59,7 +69,7 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
 
       // ONLY use real data - no fake calculations or inappropriate fallbacks
       if (coin.quote?.USD) {
-        switch (activeTimeScale) {
+        switch (deferredTimeScale) {
           case '1d':
             // 1D = 24h change (matches watchlist)
             intervalChange = coin.quote.USD.percent_change_24h ?? 0
@@ -107,7 +117,7 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
         intervalChange
       }
     })
-  }, [coins, activeTimeScale])
+  }, [deferredCoins, deferredTimeScale])
 
   const getTimeScaleLabel = (scale: string) => {
     switch (scale) {
@@ -120,7 +130,8 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
     }
   }
 
-  const handleRemove = async (coinId: string | number) => {
+  // React 19: Optimized remove handler with transition
+  const handleRemove = useCallback(async (coinId: string | number) => {
     if (!selectedGroup) {
       toast({
         title: "Error",
@@ -130,27 +141,41 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
       return
     }
 
-    try {
-      await removeFromSelectedGroup(String(coinId))
-      toast({
-        title: "Removed",
-        description: `Coin removed from ${selectedGroup.name}`,
-      })
-    } catch {
-      toast({
-        title: "Error",
-        description: "Failed to remove coin",
-        variant: "destructive",
-      })
-    }
-  }
+    startRemoveTransition(async () => {
+      try {
+        await removeFromSelectedGroup(String(coinId))
+        toast({
+          title: "Removed",
+          description: `Coin removed from ${selectedGroup.name}`,
+        })
+      } catch {
+        toast({
+          title: "Error",
+          description: "Failed to remove coin",
+          variant: "destructive",
+        })
+      }
+    })
+  }, [selectedGroup, removeFromSelectedGroup])
+
+  // React 19: Show pending states
+  const showPending = isPending || isRemovePending
 
   if (!coins.length) return null
 
   return (
-    <div className="space-y-4">
+    <div className={cn(
+      "space-y-4",
+      showPending && "opacity-60 transition-opacity duration-200"
+    )}>
       {coinsWithIntervalChange.map(coin => (
-        <div key={coin.id} className="rounded-[10px] bg-primary/5 p-0.5">
+        <div 
+          key={coin.id} 
+          className={cn(
+            "rounded-[10px] bg-primary/5 p-0.5",
+            isRemovePending && "pointer-events-none"
+          )}
+        >
           {/* Header with Token Name */}
           <div className="px-3 py-2">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
@@ -230,8 +255,11 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled
-                    className="h-6 w-6 p-0 rounded-lg bg-transparent opacity-50"
+                    disabled={showPending}
+                    className={cn(
+                      "h-6 w-6 p-0 rounded-lg bg-transparent",
+                      showPending && "opacity-50"
+                    )}
                   >
                     <X className="h-4 w-4 text-muted-foreground" />
                   </Button>
@@ -291,7 +319,11 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
                       e.stopPropagation()
                       handleRemove(coin.id)
                     }}
-                    className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
+                    disabled={showPending}
+                    className={cn(
+                      "h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group",
+                      showPending && "opacity-50 cursor-not-allowed"
+                    )}
                   >
                     <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
                   </Button>
@@ -303,4 +335,4 @@ export function ChartTable({ coins, activeTimeScale }: ChartTableProps) {
       ))}
     </div>
   )
-}
+})

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useRef, useMemo, useState } from 'react'
+import React, { useEffect, useRef, useMemo, useState, useTransition, useDeferredValue, useCallback, memo } from 'react'
 import {
   createChart,
   ColorType,
@@ -35,6 +35,7 @@ interface MultiPriceChartLightweightProps {
   coins: OptimisticCoinMarketData[]
   activeTimeScale: string
   setActiveTimeScale: (scale: string) => void
+  isPending?: boolean
 }
 
 interface PriceDataPoint {
@@ -140,16 +141,24 @@ const TimeScaleSelector = ({
   )
 }
 
-export function MultiPriceChartLightweight({ 
+export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweight({ 
   coins, 
   activeTimeScale, 
-  setActiveTimeScale 
+  setActiveTimeScale,
+  isPending 
 }: MultiPriceChartLightweightProps) {
   const { removeFromWatchlist } = useWatchlist()
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const [hoveredCoin, setHoveredCoin] = useState<string | null>(null)
   const [hoveredRemoveId, setHoveredRemoveId] = useState<string | null>(null)
   const lineSeriesMapRef = useRef<Map<string, LineSeriesData>>(new Map())
+  
+  // React 19: Add concurrent features
+  const [isChartPending, startChartTransition] = useTransition()
+  
+  // React 19: Defer expensive computations
+  const deferredCoins = useDeferredValue(coins)
+  const deferredTimeScale = useDeferredValue(activeTimeScale)
   
   // Theme detection state
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -192,7 +201,7 @@ export function MultiPriceChartLightweight({
   const { openContextualCommandSearch } = useBottomNav()
 
   // 🚀 OPTIMIZED: Use CoinGecko BULK multi-chart data hook with intelligent caching
-  const { series: coinSeriesData, isLoading: chartDataLoading, performance } = useCoinGeckoBulkChartData(coins, activeTimeScale)
+  const { series: coinSeriesData, isLoading: chartDataLoading, performance } = useCoinGeckoBulkChartData(deferredCoins, deferredTimeScale)
 
   // 🔍 DEBUG: Log bulk performance
   console.log('📊 Bulk multi-line chart:', {
@@ -202,7 +211,7 @@ export function MultiPriceChartLightweight({
     cacheHitRate: performance.cacheHitRate.toFixed(1) + '%'
   })
 
-  // Generate colors for the series data - theme-aware
+  // React 19: Memoize expensive color generation with deferred data
   const coinSeriesWithColors = useMemo(() => {
     if (!coinSeriesData.length) return []
     
@@ -232,14 +241,26 @@ export function MultiPriceChartLightweight({
     }))
   }, [coinSeriesWithColors])
 
-  // Create avatar data for coin logos (filter out optimistic coins)
+  // React 19: Use callback for hover handlers
+  const handleCoinHover = useCallback((coinId: string | null) => {
+    startChartTransition(() => {
+      setHoveredCoin(coinId)
+    })
+  }, [])
+
+  const handleRemoveHover = useCallback((coinId: string | null) => {
+    setHoveredRemoveId(coinId)
+  }, [])
+
+  // Create avatar data for coin logos (filter out optimistic coins) - using deferred coins
   const avatarData = useMemo(() => {
-    return coins.filter(coin => !coin.isOptimistic && coin.image).map((coin) => ({
+    return deferredCoins.filter(coin => !coin.isOptimistic && coin.image).map((coin) => ({
       imageUrl: coin.image!, // Only use CoinGecko images, skip coins without images
       profileUrl: `/charts/${coin.id}`,
     }))
-  }, [coins])
+  }, [deferredCoins])
 
+  // React 19: Optimize chart creation with transition
   useEffect(() => {
     if (!chartContainerRef.current || !coinSeriesWithColors.length) return
 
@@ -452,7 +473,7 @@ export function MultiPriceChartLightweight({
       })
       chart.remove()
     }
-  }, [coinSeriesWithColors, activeTimeScale, isDarkMode])
+  }, [coinSeriesWithColors, deferredTimeScale, isDarkMode, activeTimeScale])
 
   // Handle hover effects on chart lines
   useEffect(() => {
@@ -485,9 +506,15 @@ export function MultiPriceChartLightweight({
     })
   }, [hoveredCoin])
 
+  // React 19: Show pending states
+  const showPending = isPending || isChartPending || chartDataLoading
+
   // Always show the main UI structure
   return (
-    <div className="grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/20 border-zinc-800/10 overflow-hidden p-1">
+    <div className={cn(
+      "grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/20 border-zinc-800/10 overflow-hidden p-1",
+      showPending && "opacity-60 transition-opacity duration-200"
+    )}>
       {/* Legend */}
       <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2">   
         <div className="flex flex-row items-center justify-between gap-2 mb-3"> 
@@ -532,8 +559,8 @@ export function MultiPriceChartLightweight({
                         hoveredCoin === coin.id.toString() ? "bg-white/5" : ""
                       )}
                       style={{ backgroundColor: addOpacityToColor(realCoin.color, 0.1) }}
-                      onMouseEnter={() => setHoveredCoin(coin.id.toString())}
-                      onMouseLeave={() => setHoveredCoin(null)}
+                      onMouseEnter={() => handleCoinHover(coin.id.toString())}
+                      onMouseLeave={() => handleCoinHover(null)}
                     >
                       <div 
                         className="w-1 h-9 rounded-full transition-transform duration-200"
@@ -552,11 +579,11 @@ export function MultiPriceChartLightweight({
                         )}
                         onMouseEnter={(e) => {
                           e.stopPropagation()
-                          setHoveredRemoveId(coin.id.toString())
+                          handleRemoveHover(coin.id.toString())
                         }}
                         onMouseLeave={(e) => {
                           e.stopPropagation()
-                          setHoveredRemoveId(null)
+                          handleRemoveHover(null)
                         }}
                         onClick={async (e) => {
                           e.preventDefault()
@@ -667,4 +694,4 @@ export function MultiPriceChartLightweight({
       </div>
     </div>
   )
-}
+})

@@ -4,9 +4,19 @@ import { useAuth } from "@v1/convex/hooks";
 import { toast } from "sonner";
 import { API_PROVIDERS, type ApiProvider } from "@/../convex/apiKeys";
 import type { Id } from "@/../convex/_generated/dataModel";
+import { useState, useCallback } from "react";
 
 export function useUserSettings() {
   const { user } = useAuth();
+  
+  // Optimistic updates state for API keys
+  const [optimisticApiKeys, setOptimisticApiKeys] = useState<Array<{
+    _id: string;
+    provider: ApiProvider;
+    keyName: string;
+    isActive: boolean;
+    isOptimistic?: boolean;
+  }>>([]);
   
   // Get settings from database
   const settings = useQuery(
@@ -24,10 +34,16 @@ export function useUserSettings() {
   const deleteApiKey = useMutation(api.apiKeys.deleteApiKey);
   
   // API Key Queries
-  const apiKeys = useQuery(
+  const apiKeysFromDb = useQuery(
     api.apiKeys.getUserApiKeys,
     user?.id ? { clerkId: user.id } : "skip"
   );
+
+  // Combine real API keys with optimistic updates
+  const apiKeys = useCallback(() => {
+    const realKeys = apiKeysFromDb || [];
+    return [...realKeys, ...optimisticApiKeys];
+  }, [apiKeysFromDb, optimisticApiKeys])();
   
   const apiKeyStats = useQuery(
     api.apiKeys.getApiKeyStats,
@@ -135,6 +151,18 @@ export function useUserSettings() {
       return;
     }
 
+    // Create optimistic update with temporary ID
+    const optimisticKey = {
+      _id: `optimistic-${Date.now()}-${Math.random()}`,
+      provider,
+      keyName,
+      isActive,
+      isOptimistic: true,
+    };
+
+    // Add optimistic update immediately
+    setOptimisticApiKeys(prev => [...prev, optimisticKey]);
+
     try {
       // Use Convex action for server-side encryption and storage
       await addApiKeyAction({
@@ -148,11 +176,21 @@ export function useUserSettings() {
       const providerConfig = API_PROVIDERS[provider];
       toast.success(`${providerConfig.name} API key added successfully`);
       
-      // Actions don't auto-refresh queries, so we need to reload
-      window.location.reload();
+      // Remove optimistic update - real data will come from the server
+      setOptimisticApiKeys(prev => prev.filter(key => key._id !== optimisticKey._id));
+      
+      // Trigger a refetch of API keys to get the real data
+      // We could also implement a small delay to allow server propagation
+      setTimeout(() => {
+        // The useQuery will automatically refetch and update the UI
+      }, 100);
+      
     } catch (error) {
       console.error("Failed to add API key:", error);
       toast.error("Failed to add API key");
+      
+      // Rollback optimistic update on error
+      setOptimisticApiKeys(prev => prev.filter(key => key._id !== optimisticKey._id));
     }
   };
 
@@ -197,17 +235,16 @@ export function useUserSettings() {
     }
   };
 
-  // Validate an API key by testing it against the provider
-  const validateApiKey = async (provider: ApiProvider, apiKey: string): Promise<boolean> => {
+  // Validate an API key by testing it against the provider using server-side validation
+  const validateApiKey = async (provider: ApiProvider, apiKey: string): Promise<{ isValid: boolean; error?: string }> => {
     const providerConfig = API_PROVIDERS[provider];
     
     // Basic format validation
     if (!providerConfig.keyPattern.test(apiKey)) {
-      return false;
+      return { isValid: false, error: `Invalid ${provider} API key format` };
     }
 
-    // TODO: Implement actual API validation by making test requests
-    // This would require server-side validation to avoid exposing keys
+    // Server-side validation with real provider test requests
     try {
       const response = await fetch('/api/validate-api-key', {
         method: 'POST',
@@ -215,11 +252,23 @@ export function useUserSettings() {
         body: JSON.stringify({ provider, apiKey }),
       });
       
-      return response.ok;
-    } catch {
-      // For now, just return true if format is valid
-      // Real validation should be implemented server-side
-      return true;
+      const result = await response.json();
+      
+      if (!response.ok) {
+        return { 
+          isValid: false, 
+          error: result.error || `Failed to validate ${provider} API key` 
+        };
+      }
+      
+      return { isValid: result.isValid, error: result.error };
+    } catch (error) {
+      // Network/server errors should reject the key for security
+      const errorMessage = error instanceof Error ? error.message : 'Unknown validation error';
+      return { 
+        isValid: false, 
+        error: `Validation failed: ${errorMessage}. Please check your connection and try again.` 
+      };
     }
   };
 
@@ -244,7 +293,7 @@ export function useUserSettings() {
     // API Keys
     apiKeys,
     apiKeyStats,
-    isApiKeysLoading: apiKeys === undefined,
+    isApiKeysLoading: apiKeysFromDb === undefined,
     addApiKey,
     updateApiKeyActiveStatus,
     removeApiKey,

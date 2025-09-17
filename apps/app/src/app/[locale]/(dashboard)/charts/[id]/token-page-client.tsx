@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useTransition, useDeferredValue, useCallback, memo, useRef } from 'react'
 import { PriceChart } from "./price-chart"
 import { MarketMetrics } from "./market-metrics"
 import { CoinMarketData } from '@/types/coins'
@@ -19,33 +19,68 @@ import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
 interface TokenPageClientProps {
   id: string
   tokenData: CoinMarketData
+  isPending?: boolean
 }
 
-export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
+export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, isPending }: TokenPageClientProps) {
   const [activeTimeScale, setActiveTimeScale] = useState<string>("30d")
   const [isSticky, setIsSticky] = useState(false)
+  
+  // React 19: Add concurrent features
+  const [isTransitionPending, startTransition] = useTransition()
+  
+  // React 19: Defer expensive computations
+  const deferredId = useDeferredValue(id)
+  const deferredTimeScale = useDeferredValue(activeTimeScale)
+  const deferredTokenData = useDeferredValue(tokenData)
 
-  useEffect(() => {
-    const handleScroll = () => {
-      // Check if we've scrolled past the initial position where sticky would trigger
-      // Adjust this threshold based on your header height and layout
-      const scrollThreshold = 100 // Adjust this value as needed
-      setIsSticky(window.scrollY > scrollThreshold)
+  // React 19: High-performance scroll handler with RAF and state change detection
+  const rafIdRef = useRef<number | undefined>(undefined)
+  const lastStickyStateRef = useRef(false)
+  
+  const handleScroll = useCallback(() => {
+    if (rafIdRef.current) {
+      return // Already scheduled
     }
-
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
+    
+    rafIdRef.current = requestAnimationFrame(() => {
+      const scrollThreshold = 100
+      const shouldBeSticky = window.scrollY > scrollThreshold
+      
+      // Only update state if it actually changed
+      if (shouldBeSticky !== lastStickyStateRef.current) {
+        lastStickyStateRef.current = shouldBeSticky
+        setIsSticky(shouldBeSticky)
+      }
+      
+      rafIdRef.current = undefined
+    })
   }, [])
 
-  // Get CoinGecko chart data including real OHLC and volume data
+  useEffect(() => {
+    // Set initial state
+    const initialSticky = window.scrollY > 100
+    setIsSticky(initialSticky)
+    lastStickyStateRef.current = initialSticky
+    
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current)
+      }
+    }
+  }, [handleScroll])
+
+  // React 19: Use deferred values for data fetching
   const { volumeData, ohlcData, isLoading } = useCoinGeckoChartData(
-    id, 
-    activeTimeScale, 
-    tokenData.quote.USD
+    deferredId, 
+    deferredTimeScale, 
+    deferredTokenData.quote.USD
   )
 
   // Get CoinGecko market data for the metrics display
-  const { marketData, isLoading: marketDataLoading, error: marketDataError } = useCoinGeckoMarketData(id)
+  const { marketData, isLoading: marketDataLoading, error: marketDataError } = useCoinGeckoMarketData(deferredId)
   
   // Debug logging
   console.log('🔍 Token Page Debug:', {
@@ -55,7 +90,14 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
     marketDataError
   })
 
-  // Use real OHLC data from CoinGecko with volume data
+  // React 19: Enhanced time scale change handler with transition
+  const handleTimeScaleChange = useCallback((scale: string) => {
+    startTransition(() => {
+      setActiveTimeScale(scale)
+    })
+  }, [setActiveTimeScale])
+
+  // React 19: Optimized indicator data with deferred values
   const indicatorData = React.useMemo(() => {
     if (ohlcData.length > 0) {
       return ohlcData.map((point, index) => ({
@@ -71,35 +113,41 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
     return []
   }, [ohlcData, volumeData])
 
+  // React 19: Show pending states
+  const showPending = isPending || isTransitionPending || isLoading || marketDataLoading
+
   return (
-    <main className="mx-auto py-6 px-4 relative z-10">
+    <main className={`mx-auto py-6 px-4 relative z-10 ${showPending ? 'opacity-90 transition-opacity duration-200' : ''}`}>
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-        <div className={`col-span-12 sm:space-y-0 sticky top-0 z-[100] transition-all duration-300 ${isSticky ? 'pt-4' : 'pt-0'}`}>
-          <PriceChart 
-            coinId={id}
-            initialData={tokenData.quote.USD}
-            activeTimeScale={activeTimeScale}
-            setActiveTimeScale={setActiveTimeScale}
-          />              
+        <div className="col-span-12 sm:space-y-0 sticky top-0 z-[100] will-change-transform">
+          <div className={`transition-all duration-300 ${isSticky ? 'pt-4' : 'pt-0'}`}>
+            <PriceChart 
+              coinId={deferredId}
+              initialData={deferredTokenData.quote.USD}
+              activeTimeScale={deferredTimeScale}
+              setActiveTimeScale={handleTimeScaleChange}
+              isPending={showPending}
+            />              
+          </div>
         </div>
         
         <div className="col-span-12">
           {marketData ? (
-            <MarketMetrics data={marketData} />
+            <MarketMetrics data={marketData} isPending={showPending} />
           ) : marketDataError ? (
-            <div className="h-[120px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center">
+            <div className={`h-[120px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center ${showPending ? 'opacity-60' : ''}`}>
               <div className="text-center">
                 <p className="text-xs text-red-400 mb-2">Failed to load market data</p>
-                <p className="text-xs text-muted-foreground">ID: {id}</p>
+                <p className="text-xs text-muted-foreground">ID: {deferredId}</p>
                 <p className="text-xs text-muted-foreground">Error: {marketDataError?.message}</p>
               </div>
             </div>
           ) : (
-            <div className="h-[120px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center">
+            <div className={`h-[120px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center ${showPending ? 'opacity-60' : ''}`}>
               <div className="text-center">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
                 <p className="text-xs text-muted-foreground">Loading market data...</p>
-                <p className="text-xs text-muted-foreground">ID: {id}</p>
+                <p className="text-xs text-muted-foreground">ID: {deferredId}</p>
               </div>
             </div>
           )}
@@ -109,7 +157,7 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
 
         <div className="col-span-12">
           {isLoading ? (
-            <div className="h-[250px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center">
+            <div className={`h-[250px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center ${showPending ? 'opacity-60' : ''}`}>
               <div className="text-center">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
                 <p className="text-xs text-muted-foreground">Loading Market Vision data...</p>
@@ -127,7 +175,7 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
 
         <div className="col-span-12">
           {isLoading ? (
-            <div className="h-[250px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center">
+            <div className={`h-[250px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center ${showPending ? 'opacity-60' : ''}`}>
               <div className="text-center">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
                 <p className="text-xs text-muted-foreground">Loading Bollinger Bands data...</p>
@@ -155,18 +203,18 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
 
         <SectionHeader title="Liquidation & Open Interest" icon={IconDropFill} className="col-span-12 mt-24" />
 
-        <div className="col-span-12">
+        <div className={`col-span-12 ${showPending ? 'opacity-90' : ''}`}>
           <LiquidationHistoryChart
-            coinId={id}
+            coinId={deferredId}
             interval="1d"
             exchangeList="Binance, Bybit, OKX, Gate, HTX, Hyperliquid, CoinEx, Bitmex, Bitfinex"
             limit={200}
           />              
         </div>
 
-        <div className="col-span-12">
+        <div className={`col-span-12 ${showPending ? 'opacity-90' : ''}`}>
         <OpenInterestChart
-          coinId={id}
+          coinId={deferredId}
           interval="1d"
           limit={30}
           unit="usd"
@@ -175,13 +223,13 @@ export function TokenPageClient({ id, tokenData }: TokenPageClientProps) {
         
         <SectionHeader title="Buy/Sell Pressure by Exchange" icon={IconBinocularsFill} className="col-span-12 mt-24" />
 
-        <div className="col-span-12">
+        <div className={`col-span-12 ${showPending ? 'opacity-90' : ''}`}>
           <TakerBuySell
-            coinId={id}
+            coinId={deferredId}
             range="24h"
           />
         </div>
       </div>
     </main>
   )
-}
+})

@@ -1,5 +1,5 @@
 // Server-side only encryption utilities
-import { createCipheriv, createDecipheriv, randomBytes, scrypt } from 'crypto';
+import { createCipheriv, createDecipheriv, randomBytes, scrypt, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
 
 // Ensure this only runs on the server
@@ -17,8 +17,27 @@ const IV_LENGTH = 16; // 128 bits
 const SALT_LENGTH = 32; // 256 bits
 const TAG_LENGTH = 16; // 128 bits
 
-// Generate a secret key from environment or use a default for development
-const MASTER_KEY = process.env.API_ENCRYPTION_KEY || 'dev-key-change-in-production-32-bytes';
+// Generate a secret key from environment with proper validation
+function initializeMasterKey(): string {
+  const apiEncryptionKey = process.env.API_ENCRYPTION_KEY;
+  
+  if (process.env.NODE_ENV === 'production') {
+    if (!apiEncryptionKey) {
+      throw new Error('API_ENCRYPTION_KEY environment variable is required in production');
+    }
+    return apiEncryptionKey;
+  }
+  
+  // Non-production environment
+  if (!apiEncryptionKey) {
+    console.warn('⚠️  API_ENCRYPTION_KEY not set. Using development fallback. DO NOT use in production!');
+    return 'dev-key-change-in-production-32-bytes';
+  }
+  
+  return apiEncryptionKey;
+}
+
+const MASTER_KEY = initializeMasterKey();
 
 /**
  * Derives an encryption key from the master key and salt
@@ -108,14 +127,24 @@ export async function validateEncryptedValue(encryptedData: string): Promise<boo
 
 /**
  * Securely compares two strings to prevent timing attacks
+ * Uses Node.js crypto.timingSafeEqual for constant-time comparison
  */
 export function secureCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
+  // Convert strings to buffers
+  const bufferA = Buffer.from(a, 'utf8');
+  const bufferB = Buffer.from(b, 'utf8');
   
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
+  // Determine the maximum length needed
+  const maxLength = Math.max(bufferA.length, bufferB.length);
   
-  return result === 0;
+  // Pad both buffers to the same length with zeros
+  const paddedA = Buffer.alloc(maxLength);
+  const paddedB = Buffer.alloc(maxLength);
+  
+  bufferA.copy(paddedA);
+  bufferB.copy(paddedB);
+  
+  // Use crypto.timingSafeEqual for constant-time comparison
+  // This will return false if the original lengths were different
+  return bufferA.length === bufferB.length && timingSafeEqual(paddedA, paddedB);
 }
