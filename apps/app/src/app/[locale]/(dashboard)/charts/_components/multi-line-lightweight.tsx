@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useMemo, useState, useTransition, useDeferredValue, useCallback, memo } from 'react'
+import { useTheme } from 'next-themes'
 import {
   createChart,
   ColorType,
@@ -160,42 +161,27 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   const deferredCoins = useDeferredValue(coins)
   const deferredTimeScale = useDeferredValue(activeTimeScale)
   
-  // Theme detection state
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window === 'undefined') return true
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ||
-           document.documentElement.classList.contains('dark')
-  })
-
-  // Listen for theme changes
+  // Use next-themes for proper theme detection (handles manual overrides correctly)
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  
+  // Prevent hydration mismatch
   useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    const observer = new MutationObserver(() => {
-      setIsDarkMode(
-        mediaQuery.matches || document.documentElement.classList.contains('dark')
-      )
-    })
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class']
-    })
-
-    const handleChange = () => {
-      setIsDarkMode(
-        mediaQuery.matches || document.documentElement.classList.contains('dark')
-      )
-    }
-
-    mediaQuery.addEventListener('change', handleChange)
-
-    return () => {
-      observer.disconnect()
-      mediaQuery.removeEventListener('change', handleChange)
-    }
+    setMounted(true)
   }, [])
+  
+  // Get theme state from next-themes (this respects manual theme selection)
+  const isDarkMode = mounted ? resolvedTheme === 'dark' : true
+  
+  console.log('🎨 [MultiLineChart] Using next-themes for theme detection:', { 
+    mounted,
+    resolvedTheme,
+    isDarkMode,
+    manualDetection: {
+      hasClass: typeof window !== 'undefined' ? document.documentElement.classList.contains('dark') : false,
+      systemPrefers: typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false
+    }
+  })
   
   // Use the bottom nav context to trigger contextual command search
   const { openContextualCommandSearch } = useBottomNav()
@@ -264,10 +250,11 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   useEffect(() => {
     if (!chartContainerRef.current || !coinSeriesWithColors.length) return
 
-    // Detect current theme
-    const isDarkMode = typeof window !== 'undefined' ? 
-      window.matchMedia('(prefers-color-scheme: dark)').matches ||
-      document.documentElement.classList.contains('dark') : true
+    console.log('🎨 [MultiLineChart] Creating chart with theme:', { 
+      isDarkMode,
+      resolvedTheme,
+      mounted
+    })
 
     const chart = createChart(chartContainerRef.current, {
       handleScale: false,
@@ -473,7 +460,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
       })
       chart.remove()
     }
-  }, [coinSeriesWithColors, deferredTimeScale, isDarkMode, activeTimeScale])
+  }, [coinSeriesWithColors, deferredTimeScale, isDarkMode, activeTimeScale, resolvedTheme, mounted])
 
   // Handle hover effects on chart lines
   useEffect(() => {

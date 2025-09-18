@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useTransition, useDeferredValue, useCallback, memo } from 'react'
+import React, { useTransition, useDeferredValue, useCallback, memo, useState, useEffect } from 'react'
+import { useTheme } from 'next-themes'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
@@ -103,13 +104,32 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   const { chartData, volumeData, ohlcData, isLoading, tokenData } = useCoinGeckoChartData(deferredCoinId, deferredTimeScale, deferredInitialData)
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, deferredInitialData, deferredTimeScale)
   
+  // Use next-themes for proper theme detection (handles manual overrides correctly)
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  
+  // Prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+  
+  // Get theme state from next-themes (this respects manual theme selection)
+  const isDarkMode = mounted ? resolvedTheme === 'dark' : true
+  
+  console.log('🎨 [PriceChart] Using next-themes for theme detection:', { 
+    mounted,
+    resolvedTheme,
+    isDarkMode,
+    manualDetection: {
+      hasClass: typeof window !== 'undefined' ? document.documentElement.classList.contains('dark') : false,
+      systemPrefers: typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false
+    }
+  })
+
   // Generate Hull Suite colors - theme-aware
   const hullColors = generatePastelColors(1)
-  const isDarkMode = typeof window !== 'undefined' ? 
-    window.matchMedia('(prefers-color-scheme: dark)').matches ||
-    document.documentElement.classList.contains('dark') : true
   const baseHullColor = isDarkMode ? 'hsl(210, 40%, 75%)' : 'hsl(210, 60%, 30%)'
-  const primaryHullColor = addOpacityToColor(hullColors[0] || baseHullColor, isDarkMode ? 0.7 : 0.9)
+  const primaryHullColor = addOpacityToColor(hullColors[0] || baseHullColor, isDarkMode ? 0.4 : 0.6)
   
   // Always use line chart - simplified approach
 
@@ -157,6 +177,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   }
 
   // React 19: Memoized chart instance creation
+  console.log('🎨 [PriceChart] Calling useChartInstance with theme:', { isDarkMode })
   const chartContainerRef = useChartInstance(
     chartData, 
     volumeData, 
@@ -165,7 +186,8 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
     legacyHullSuiteData,
     undefined, // No callback - tooltip handles dynamic updates
     'line', // Always use line chart
-    ohlcvDataForHull // Pass OHLC data for tooltips
+    ohlcvDataForHull, // Pass OHLC data for tooltips
+    isDarkMode // Pass theme state for consistent theming
   )
 
   // Get coin info from CoinGecko database

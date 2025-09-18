@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useMemo, useState } from 'react'
+import { useTheme } from 'next-themes'
 import {
   createChart,
   ColorType,
@@ -207,6 +208,28 @@ export function WatchlistMultiLineChart({
   const lineSeriesMapRef = useRef<Map<string, LineSeriesData>>(new Map())
   const [watchlistData, setWatchlistData] = useState<Map<string, WatchlistSeries>>(new Map())
   
+  // Use next-themes for proper theme detection (handles manual overrides correctly)
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  
+  // Prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+  
+  // Get theme state from next-themes (this respects manual theme selection)
+  const isDarkMode = mounted ? resolvedTheme === 'dark' : true
+  
+  console.log('🎨 [WatchlistMultiLineChart] Using next-themes for theme detection:', { 
+    mounted,
+    resolvedTheme,
+    isDarkMode,
+    manualDetection: {
+      hasClass: typeof window !== 'undefined' ? document.documentElement.classList.contains('dark') : false,
+      systemPrefers: typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false
+    }
+  })
+  
   const watchlistGroupsData = useWatchlistGroups()
   
   // Filter to only selected watchlists
@@ -243,11 +266,22 @@ export function WatchlistMultiLineChart({
 
     const colors = generatePastelColors(seriesArray.length)
     
-    return seriesArray.map((series, index) => ({
-      ...series,
-      color: colors[index] || `hsl(${Math.random() * 360}, 40%, 75%)`
-    }))
-  }, [watchlistData])
+    return seriesArray.map((series, index) => {
+      const baseColor = colors[index] || `hsl(${Math.random() * 360}, 40%, 75%)`
+      // For light mode, make colors darker and more saturated
+      const themeAwareColor = isDarkMode 
+        ? baseColor 
+        : baseColor.replace(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/, (_, h, s, l) => {
+            // Increase saturation and decrease lightness for light mode
+            return `hsl(${h}, ${Math.min(100, parseInt(s) + 20)}%, ${Math.max(30, parseInt(l) - 40)}%)`
+          })
+      
+      return {
+        ...series,
+        color: themeAwareColor
+      }
+    })
+  }, [watchlistData, isDarkMode])
 
   const latestValues = useMemo(() => {
     return watchlistSeriesData.map(series => ({
@@ -259,29 +293,29 @@ export function WatchlistMultiLineChart({
   useEffect(() => {
     if (!chartContainerRef.current || !watchlistSeriesData.length) return
 
-    // Get theme colors from CSS variables
-    const computedStyle = getComputedStyle(document.documentElement);
-    const foreground = computedStyle.getPropertyValue('--foreground');
-    const primary = computedStyle.getPropertyValue('--primary');
-    const muted = computedStyle.getPropertyValue('--muted');
+    console.log('🎨 [WatchlistMultiLineChart] Creating chart with theme:', { 
+      isDarkMode,
+      resolvedTheme,
+      mounted
+    })
     
     const chart = createChart(chartContainerRef.current, {
       handleScale: false,
       handleScroll: false,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: `hsl(${foreground}/0.5)`,
+        textColor: isDarkMode ? "#ffffff50" : "#00000050",
         attributionLogo: false,
       },
       grid: {
         vertLines: { 
           visible: false,
-          color: `hsl(${muted}/0.3)`,
+          color: isDarkMode ? "#e5e7eb20" : "#00000020",
           style: LineStyle.Dotted,
         },
         horzLines: { 
           visible: false,
-          color: `hsl(${foreground}/0.1)`,
+          color: isDarkMode ? "#ffffff10" : "#00000010",
           style: LineStyle.Dotted,
         },
       },
@@ -294,7 +328,7 @@ export function WatchlistMultiLineChart({
         vertLine: {
           labelVisible: true,
           width: 1,
-          color: `hsl(${primary}/0.4)`,
+          color: isDarkMode ? "#d1d5db40" : "#00000040",
           visible: true,
           style: LineStyle.Solid,
         },
@@ -352,7 +386,11 @@ export function WatchlistMultiLineChart({
     // Add tooltip
     const tooltipEl = document.createElement("div")
     const tooltipRoot = createRoot(tooltipEl)
-    tooltipEl.className = "fixed hidden overflow-hidden text-[11px] text-foreground rounded-xl w-[220px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-background/95 border border-border/50 transition-all duration-100 ease-in-out"
+    tooltipEl.className = `fixed hidden overflow-hidden text-[11px] rounded-xl w-[220px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-all duration-100 ease-in-out ${
+      isDarkMode 
+        ? 'text-white bg-zinc-900/95 border border-zinc-700/50' 
+        : 'text-gray-900 bg-white/95 border border-gray-200/50'
+    }`
     document.body.appendChild(tooltipEl)
 
     // Subscribe to crosshair move
@@ -431,7 +469,7 @@ export function WatchlistMultiLineChart({
       })
       chart.remove()
     }
-  }, [watchlistSeriesData])
+  }, [watchlistSeriesData, isDarkMode, resolvedTheme, mounted])
 
   // Handle hover effects on chart lines
   useEffect(() => {

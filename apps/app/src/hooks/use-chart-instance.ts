@@ -175,27 +175,39 @@ export function useChartInstance(
   hullSuiteData?: HullSuiteData,
   onCrosshairMove?: (price: number | null) => void,
   chartType: ChartType = 'line',
-  ohlcvData?: OHLCVDataPoint[]
+  ohlcvData?: OHLCVDataPoint[],
+  externalIsDarkMode?: boolean
 ) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const seriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
 
-  // Theme detection hook
-  const [isDarkMode, setIsDarkMode] = useState(() => {
+  // Theme detection hook - use external if provided, otherwise internal detection
+  const [internalIsDarkMode, setInternalIsDarkMode] = useState(() => {
     if (typeof window === 'undefined') return true
     return window.matchMedia('(prefers-color-scheme: dark)').matches ||
            document.documentElement.classList.contains('dark')
   })
 
-  // Listen for theme changes
+  // Use external isDarkMode if provided, otherwise use internal
+  const isDarkMode = externalIsDarkMode !== undefined ? externalIsDarkMode : internalIsDarkMode
+  
+  console.log('📊 [useChartInstance] Theme state:', { 
+    externalIsDarkMode, 
+    internalIsDarkMode, 
+    finalIsDarkMode: isDarkMode,
+    hasExternalTheme: externalIsDarkMode !== undefined
+  })
+
+  // Listen for theme changes (only if not using external)
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || externalIsDarkMode !== undefined) return
+    console.log('📊 [useChartInstance] Setting up internal theme listeners')
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const observer = new MutationObserver(() => {
-      setIsDarkMode(
-        mediaQuery.matches || document.documentElement.classList.contains('dark')
-      )
+      const newDarkMode = mediaQuery.matches || document.documentElement.classList.contains('dark')
+      console.log('📊 [useChartInstance] Internal theme change detected:', { newDarkMode })
+      setInternalIsDarkMode(newDarkMode)
     })
 
     observer.observe(document.documentElement, {
@@ -204,21 +216,29 @@ export function useChartInstance(
     })
 
     const handleChange = () => {
-      setIsDarkMode(
-        mediaQuery.matches || document.documentElement.classList.contains('dark')
-      )
+      const newDarkMode = mediaQuery.matches || document.documentElement.classList.contains('dark')
+      console.log('📊 [useChartInstance] Internal media query changed:', { newDarkMode })
+      setInternalIsDarkMode(newDarkMode)
     }
 
     mediaQuery.addEventListener('change', handleChange)
 
     return () => {
+      console.log('📊 [useChartInstance] Cleaning up internal theme listeners')
       observer.disconnect()
       mediaQuery.removeEventListener('change', handleChange)
     }
-  }, [])
+  }, [externalIsDarkMode])
 
   useEffect(() => {
     if (!chartContainerRef.current || (!chartData.length && !ohlcvData?.length)) return
+    
+    console.log('📊 [useChartInstance] Creating chart with theme:', { 
+      isDarkMode, 
+      textColor: isDarkMode ? "#ffffff" : "#000000",
+      chartDataLength: chartData.length,
+      ohlcvDataLength: ohlcvData?.length || 0
+    })
 
     const chart = createChart(chartContainerRef.current, {
       handleScale: false,
@@ -274,16 +294,25 @@ export function useChartInstance(
       })
       priceSeries.setData(ohlcvData)
     } else {
+      const priceLineColor = isDarkMode ? '#ffffff' : '#000000'
+      console.log('📊 [useChartInstance] Creating price line series:', { 
+        isDarkMode, 
+        priceLineColor,
+        lineWidth: 1,
+        chartType: 'line'
+      })
+      
       priceSeries = chart.addSeries(LineSeries, {
         lineWidth: 1,
         lastValueVisible: true,
         visible: true,
         priceLineVisible: false,
-        color: isDarkMode ? '#ffffff' : '#000000',
+        color: priceLineColor,
         lastPriceAnimation: LastPriceAnimationMode.Continuous,
         priceFormat: { type: "price", precision: 2, minMove: 0.01 },
       })
       priceSeries.setData(chartData)
+      console.log('📊 [useChartInstance] Price line series created and data set')
     }
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -305,6 +334,15 @@ export function useChartInstance(
       // Use theme-aware colors for Hull Suite
       const baseHullColor = isDarkMode ? 'hsl(210, 40%, 75%)' : 'hsl(210, 60%, 35%)'
       const hullPastelColor = addOpacityToColor(pastelColors[0] || baseHullColor, isDarkMode ? 0.4 : 0.8)
+      
+      console.log('📊 [useChartInstance] Creating Hull Suite overlay:', { 
+        isDarkMode, 
+        baseHullColor, 
+        hullPastelColor, 
+        showHullSuite: displaySettings?.showHullSuite,
+        mhullLength: hullSuiteData.mhull.length,
+        shullLength: hullSuiteData.shull.length
+      })
       
       if (hullSuiteData.mhull.length > 0) {
         const validMhullData = hullSuiteData.mhull.filter(point => 
@@ -339,7 +377,7 @@ export function useChartInstance(
             lineWidth: 1,
             color: hullPastelColor,
             lineStyle: LineStyle.Dotted,
-            lastValueVisible: false,
+            lastValueVisible: true,
             priceLineVisible: false,
           })
           
@@ -486,7 +524,7 @@ export function useChartInstance(
       })
       chart.remove()
     }
-  }, [chartData, volumeData, indicators, displaySettings, hullSuiteData, onCrosshairMove, chartType, ohlcvData, isDarkMode])
+  }, [chartData, volumeData, indicators, displaySettings, hullSuiteData, onCrosshairMove, chartType, ohlcvData, isDarkMode, externalIsDarkMode])
 
   return chartContainerRef
 }
