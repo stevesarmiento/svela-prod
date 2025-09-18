@@ -13,7 +13,7 @@ export function GoogleSignin() {
 
   return (
     <Button onClick={handleSignin} variant="outline" className="text-sm" startIcon={<IconGoogleLogo className="size-4 dark:fill-white/40 fill-black/40" />}>
-      Authenticate with Google
+      Connect with Google
     </Button>
   );
 }

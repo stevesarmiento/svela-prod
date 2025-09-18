@@ -25,9 +25,9 @@ export default function Page() {
                 className="opacity-50"
               />
           <div className="flex flex-col items-center justify-center text-center">
-            <h1 className="text-4xl font-semibold bg-gradient-to-br from-primary to-primary/40 bg-clip-text text-transparent">The feeling you get in the moments<br /> where clarity meets action.</h1>
+            <h1 className="text-4xl font-semibold bg-gradient-to-br from-primary to-primary/40 bg-clip-text text-transparent">Hello World</h1>
             <p className="text-xl text-muted-foreground text-center mt-2">
-              Connect an account to start using Svela.
+            Svela is the feeling you get in the moments where clarity meets action. <br />Track tokens and get meaningful insights.
             </p>
           </div>
           <GoogleSignin />
