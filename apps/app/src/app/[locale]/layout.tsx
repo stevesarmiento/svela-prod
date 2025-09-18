@@ -11,6 +11,7 @@ import { GeistSans } from "geist/font/sans";
 import { WatchlistProvider } from "./(dashboard)/watchlist/_components/watchlist-context";
 import { NotifToaster } from "@v1/ui/sonner-notif";
 import { ChatToast } from "@/components/chat/chat-toast";
+import { ChatProvider } from "@/lib/chat-context";
 //import localFont from "next/font/local";
 
 // const geistSans = localFont({
@@ -67,15 +68,17 @@ export default function RootLayout({
           <ConvexProvider>
             <QueryProvider>
               <WatchlistProvider>
-              <ThemeProvider>
-                {children}
+              <ChatProvider>
+                <ThemeProvider>
+                  {children}
 
-                <ChatToast />
-                <NotifToaster 
-                  position="top-center" 
-                  offset={-10}
-                />
-              </ThemeProvider>
+                  <ChatToast />
+                  <NotifToaster 
+                    position="top-center" 
+                    offset={-10}
+                  />
+                </ThemeProvider>
+              </ChatProvider>
               </WatchlistProvider>
 
             </QueryProvider>

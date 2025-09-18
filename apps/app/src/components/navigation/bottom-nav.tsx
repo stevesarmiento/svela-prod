@@ -1,14 +1,13 @@
 "use client";
 
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigationMode, useSelectionMode, useOverlayState, useCommandContext, useChatContext } from "./bottom-nav-context";
+import { useNavigationMode, useSelectionMode, useOverlayState, useCommandContext } from "./bottom-nav-context";
 import { useKeyboardShortcuts, useCommandHandler, useSequentialShortcuts } from "./bottom-nav-hooks";
 import { NavigationDock } from "./navigation-dock";
 import { BackButton } from "./back-button";
 import { CommandSearch } from "./command-search";
 import { ChatContainer } from "./chat-container";
-import { ChatStateManager } from "../chat/chat-toast";
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
 
@@ -18,13 +17,8 @@ export function BottomNav() {
   const { selectionState } = useSelectionMode();
   const { isCommandOpen, isChatOpen, setIsCommandOpen } = useOverlayState();
   const { commandContext, setCommandContext } = useCommandContext();
-  const { closeChat } = useChatContext();
   
-  // Register closeChat callback with ChatStateManager
-  useEffect(() => {
-    const manager = ChatStateManager.getInstance();
-    manager.setInputCloseCallback(closeChat);
-  }, [closeChat]);
+  // Chat state is now managed globally - no manual callback registration needed
   
   // Initialize sequential shortcuts (still needed for functionality)
   useSequentialShortcuts();
