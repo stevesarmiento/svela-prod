@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 
 import { Separator } from '@v1/ui/separator';
-import { IconPaintbrushFill, IconSunMaxFill, IconMoonStarsFill } from 'symbols-react';
+import { IconSunMaxFill, IconMoonStarsFill } from 'symbols-react';
 import { useAuth } from '@v1/convex/hooks';
 import { toast } from 'sonner';
 import { useUserSettings } from '@/hooks/use-user-settings';
@@ -33,7 +33,7 @@ export function ThemeSettings() {
     
     // Clean theme switching - ensure previous theme classes are removed
     const htmlElement = document.documentElement;
-    const allThemes = ['light', 'dark', 'sunrise', 'cherry', 'blueberry'];
+    const allThemes = ['light', 'dark'];
     
     // Remove all theme classes first
     allThemes.forEach(theme => {
@@ -97,6 +97,117 @@ export function ThemeSettings() {
     }
   };
 
+  // Theme configurations
+  const themeConfigs = [
+    {
+      id: 'dark',
+      name: 'Dark',
+      description: 'Night',
+      background: 'bg-zinc-900',
+      windowBg: 'bg-zinc-800',
+      headerBg: 'bg-zinc-700',
+      headerBorder: 'border-zinc-600',
+      tabColors: ['bg-zinc-600', 'bg-zinc-500', 'bg-zinc-600'],
+      profileColor: 'bg-zinc-500',
+      fadeColor: 'from-zinc-900',
+      icon: <IconMoonStarsFill className="w-2.5 h-2.5 fill-blue-500" />
+    },
+    {
+      id: 'light',
+      name: 'Light',
+      description: 'Bright',
+      background: 'bg-white',
+      windowBg: 'bg-gray-50',
+      headerBg: 'bg-gray-100',
+      headerBorder: 'border-gray-200',
+      tabColors: ['bg-gray-300', 'bg-gray-400', 'bg-gray-300'],
+      profileColor: 'bg-gray-400',
+      fadeColor: 'from-white',
+      icon: <IconSunMaxFill className="w-2.5 h-2.5 fill-amber-500" />
+    },
+    {
+      id: 'system',
+      name: 'System',
+      description: 'Auto',
+      background: 'bg-gradient-to-br from-slate-50 to-slate-200',
+      windowBg: 'bg-slate-100',
+      headerBg: 'bg-slate-200',
+      headerBorder: 'border-slate-300',
+      tabColors: ['bg-slate-300', 'bg-slate-400', 'bg-slate-300'],
+      profileColor: 'bg-slate-400',
+      fadeColor: 'from-slate-200',
+      icon: <span className="text-slate-700 text-[6px] font-mono font-semibold">SYS</span>
+    }
+  ];
+
+  // Theme preview component
+  function ThemePreview({ config }: { config: typeof themeConfigs[0] }) {
+    return (
+      <div 
+        className={cn(
+          "relative cursor-pointer rounded-xl p-3 h-32 transition-all duration-200 group overflow-hidden",
+          config.background,
+          selectedTheme === config.id 
+            ? "ring-4 ring-offset-4 ring-primary/20 ring-offset-background" 
+            : "hover:ring-4 hover:ring-primary/10 ring-offset-background ring-offset-4"
+        )}
+        onClick={() => handleThemeChange(config.id)}
+      >
+        {/* Browser window representation */}
+        <div className="absolute inset-2 top-4 left-24">
+          {/* Browser window frame */}
+          <div className={cn("w-full h-full rounded-sm overflow-hidden relative", config.windowBg)}>
+            {/* Browser header */}
+            <div className={cn("h-2 border-b flex items-center px-1 gap-0.5", config.headerBg, config.headerBorder)}>
+              <div className="w-0.5 h-0.5 bg-red-400 rounded-full"></div>
+              <div className="w-0.5 h-0.5 bg-yellow-400 rounded-full"></div>
+              <div className="w-0.5 h-0.5 bg-green-400 rounded-full"></div>
+            </div>
+            {/* Content area with colored cards */}
+            <div className="p-1.5 h-full">
+              {/* Top bar with tabs and profile */}
+              <div className="flex justify-between items-center mb-1">
+                {/* Tabs block */}
+                <div className="flex gap-1">
+                  <div className={cn("w-3 h-1 rounded-sm", config.tabColors[0])}></div>
+                  <div className={cn("w-3 h-1 rounded-sm", config.tabColors[1])}></div>
+                  <div className={cn("w-3 h-1 rounded-sm", config.tabColors[2])}></div>
+                </div>
+                {/* Profile circle */}
+                <div className={cn("w-2 h-2 rounded-full", config.profileColor)}></div>
+              </div>
+              <div className="grid grid-cols-4 gap-1 h-1/2">
+                {['bg-blue-400', 'bg-green-400', 'bg-purple-400', 'bg-orange-400', 'bg-red-400', 'bg-yellow-400', 'bg-cyan-400', 'bg-pink-400'].map((color, index) => (
+                  <div key={index} className={cn("rounded-sm flex items-start justify-start p-1", color)}>
+                    <div className="w-1 h-1 bg-white/20 rounded-full"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Fade overlay */}
+            <div className={cn("absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t to-transparent pointer-events-none", config.fadeColor)}></div>
+          </div>
+          {/* Theme icon overlay */}
+          <div className="absolute bottom-1 right-1">
+            <div className="w-6 h-6 bg-white rounded-lg border-[1px] border-black/5 shadow-sm flex items-center justify-center">
+              {config.icon}
+            </div>
+          </div>
+        </div>
+        
+        {/* Text in top-left */}
+        <div className="absolute top-2 left-2 text-left z-10">
+          <div className={cn("text-xs font-medium", config.id === 'dark' ? 'text-white' : config.id === 'system' ? 'text-slate-900' : 'text-zinc-900')}>
+            {config.name}
+          </div>
+          <div className={cn("text-[10px]", config.id === 'dark' ? 'text-zinc-400' : config.id === 'system' ? 'text-slate-700' : 'text-zinc-600')}>
+            {config.description}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Theme Settings Card */}
@@ -132,252 +243,13 @@ export function ThemeSettings() {
             </div>
             
             <Separator className="bg-primary/5 scale-125" />
-            
-            {/* Theme Selection Header */}
-            <div className="flex items-center gap-4">
-              <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1">
-                <IconPaintbrushFill className="h-5 w-5 dark:fill-white/50 fill-zinc-950/50" />
-              </div>
-              <div className="">
-                <div className="font-bold text-xs">Theme Preference</div>
-                <div className="text-primary/40 text-xs">
-                  Choose your preferred color scheme for the application interface.
-                </div>
-              </div>                
-            </div>
 
             {/* Theme Grid */}
             <div className="grid grid-cols-3 gap-6">
-              {/* System Theme */}
-              <div 
-                className={cn(
-                  "relative cursor-pointer rounded-xl p-3 h-32 transition-all duration-200  group overflow-hidden bg-gradient-to-br from-slate-50 to-slate-200",
-                  selectedTheme === 'system' 
-                    ? "ring-4 ring-offset-4 ring-primary/20 ring-offset-background" 
-                    : "hover:ring-4 hover:ring-primary/10 ring-offset-background ring-offset-4"
-                )}
-                onClick={() => handleThemeChange('system')}
-              >
-                {/* Mini UI representation */}
-                <div className="absolute inset-2 top-4 left-24">
-                  {/* Header */}
-                  <div className="w-full h-2 bg-white/80 rounded-t mb-1 flex items-center px-1">
-                    <div className="w-1 h-1 bg-rose-400 rounded-full"></div>
-                    <div className="w-1 h-1 bg-amber-400 rounded-full ml-0.5"></div>
-                    <div className="w-1 h-1 bg-emerald-400 rounded-full ml-0.5"></div>
-                  </div>
-                  {/* Content area */}
-                  <div className="w-full h-24 flex-1 bg-white/60 rounded-b p-1">
-                    <div className="w-3/4 h-1 bg-slate-300 rounded mb-1"></div>
-                    <div className="w-1/2 h-1 bg-slate-300 rounded"></div>
-                  </div>
-                  {/* System icon overlay */}
-                  <div className="absolute bottom-1 right-1">
-                    <div className="w-4 h-4 bg-slate-600 rounded flex items-center justify-center">
-                      <span className="text-white text-[6px] font-mono">SYS</span>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Text in top-left */}
-                <div className="absolute top-2 left-2 text-left z-10">
-                  <div className="text-xs font-medium text-slate-900">System</div>
-                  <div className="text-[10px] text-slate-700">Auto</div>
-                </div>
-              </div>
+              {themeConfigs.map((config) => (
+                <ThemePreview key={config.id} config={config} />
+              ))}
 
-              {/* Light Theme */}
-              <div 
-                className={cn(
-                  "relative cursor-pointer rounded-xl p-3 h-32 transition-all duration-200  group overflow-hidden bg-white",
-                  selectedTheme === 'light' 
-                    ? "ring-4 ring-offset-4 ring-primary/20 ring-offset-background" 
-                    : "hover:ring-4 hover:ring-primary/10 ring-offset-background ring-offset-4"
-                )}
-                onClick={() => handleThemeChange('light')}
-              >
-                {/* Mini UI representation */}
-                <div className="absolute inset-2 top-4 left-24">
-                  {/* Header */}
-                  <div className="w-full h-2 bg-white/80 rounded-t mb-1 flex items-center px-1">
-                    <div className="w-1 h-1 bg-rose-400 rounded-full"></div>
-                    <div className="w-1 h-1 bg-amber-400 rounded-full ml-0.5"></div>
-                    <div className="w-1 h-1 bg-emerald-400 rounded-full ml-0.5"></div>
-                  </div>
-                  {/* Content area */}
-                  <div className="w-full h-24 flex-1 bg-gray-50 rounded-b p-1">
-                    <div className="w-3/4 h-1 bg-gray-300 rounded mb-1"></div>
-                    <div className="w-1/2 h-1 bg-gray-300 rounded mb-1"></div>
-                    <div className="w-full h-2 bg-blue-100 rounded mt-1"></div>
-                  </div>
-                  {/* Sun icon overlay */}
-                  <div className="absolute bottom-1 right-1">
-                    <IconSunMaxFill className="w-4 h-4 fill-amber-500" />
-                  </div>
-                </div>
-                
-                {/* Text in top-left */}
-                <div className="absolute top-2 left-2 text-left z-10">
-                  <div className="text-xs font-medium text-zinc-900">Light</div>
-                  <div className="text-[10px] text-zinc-600">Bright</div>
-                </div>
-              </div>
-
-              {/* Dark Theme */}
-              <div 
-                className={cn(
-                  "relative cursor-pointer rounded-xl p-3 h-32 transition-all duration-200  group overflow-hidden bg-zinc-900",
-                  selectedTheme === 'dark' 
-                    ? "ring-4 ring-offset-4 ring-primary/20 ring-offset-background" 
-                    : "hover:ring-4 hover:ring-primary/10 ring-offset-background ring-offset-4"
-                )}
-                onClick={() => handleThemeChange('dark')}
-              >
-                {/* Mini UI representation */}
-                <div className="absolute inset-2 top-4 left-24">
-                  {/* Header */}
-                  <div className="w-full h-2 bg-white/80 rounded-t mb-1 flex items-center px-1">
-                    <div className="w-1 h-1 bg-rose-400 rounded-full"></div>
-                    <div className="w-1 h-1 bg-amber-400 rounded-full ml-0.5"></div>
-                    <div className="w-1 h-1 bg-emerald-400 rounded-full ml-0.5"></div>
-                  </div>
-                  {/* Content area */}
-                  <div className="w-full h-24 flex-1 bg-zinc-800/60 rounded-b p-1">
-                    <div className="w-3/4 h-1 bg-zinc-600 rounded mb-1"></div>
-                    <div className="w-1/2 h-1 bg-zinc-600 rounded mb-1"></div>
-                    <div className="w-full h-2 bg-blue-900/50 rounded mt-1"></div>
-                  </div>
-                  {/* Moon icon overlay */}
-                  <div className="absolute bottom-1 right-1">
-                    <IconMoonStarsFill className="w-4 h-4 fill-blue-500" />
-                  </div>
-                </div>
-                
-                {/* Text in top-left */}
-                <div className="absolute top-2 left-2 text-left z-10">
-                  <div className="text-xs font-medium text-white">Dark</div>
-                  <div className="text-[10px] text-zinc-400">Night</div>
-                </div>
-              </div>
-
-              {/* Sunrise Theme */}
-              <div 
-                className={cn(
-                  "relative cursor-pointer rounded-xl p-3 h-32 transition-all duration-200  group overflow-hidden",
-                  selectedTheme === 'sunrise' 
-                    ? "ring-4 ring-offset-4 ring-primary/20 ring-offset-white dark:ring-offset-background" 
-                    : "hover:ring-4 hover:ring-primary/10 ring-offset-white dark:ring-offset-background ring-offset-4"
-                )}
-                onClick={() => handleThemeChange('sunrise')}
-                style={{ background: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%)' }}
-              >
-                {/* Mini UI representation */}
-                <div className="absolute inset-2 top-4 left-24">
-                  {/* Header */}
-                  <div className="w-full h-2 bg-white/80 rounded-t mb-1 flex items-center px-1">
-                    <div className="w-1 h-1 bg-rose-400 rounded-full"></div>
-                    <div className="w-1 h-1 bg-amber-400 rounded-full ml-0.5"></div>
-                    <div className="w-1 h-1 bg-emerald-400 rounded-full ml-0.5"></div>
-                  </div>
-                  {/* Content area */}
-                  <div className="w-full h-24 flex-1 bg-yellow-100/80 rounded-b p-1">
-                    <div className="w-3/4 h-1 bg-orange-300 rounded mb-1"></div>
-                    <div className="w-1/2 h-1 bg-orange-300 rounded mb-1"></div>
-                    <div className="w-full h-2 bg-gradient-to-r from-orange-200 to-yellow-200 rounded mt-1"></div>
-                  </div>
-                  {/* Sunrise icon overlay */}
-                  <div className="absolute bottom-1 right-1">
-                    <div className="w-4 h-4 rounded-full bg-gradient-to-r from-orange-400 to-yellow-400"></div>
-                  </div>
-                </div>
-                
-                {/* Text in top-left */}
-                <div className="absolute top-2 left-2 text-left z-10">
-                  <div className="text-xs font-medium text-orange-900">Sunrise</div>
-                  <div className="text-[10px] text-orange-700">Warm</div>
-                </div>
-              </div>
-
-              {/* Cherry Theme */}
-              <div 
-                className={cn(
-                  "relative cursor-pointer rounded-xl p-3 h-32 transition-all duration-200  group overflow-hidden",
-                  selectedTheme === 'cherry' 
-                  ? "ring-4 ring-offset-4 ring-primary/20 ring-offset-white dark:ring-offset-background" 
-                  : "hover:ring-4 hover:ring-primary/10 ring-offset-white dark:ring-offset-background ring-offset-4"
-              )}
-                onClick={() => handleThemeChange('cherry')}
-                style={{ background: 'linear-gradient(135deg, #fce7f3 0%, #fecaca 100%)' }}
-              >
-                {/* Mini UI representation */}
-                <div className="absolute inset-2 top-4 left-24">
-                  {/* Header */}
-                  <div className="w-full h-2 bg-white/80 rounded-t mb-1 flex items-center px-1">
-                    <div className="w-1 h-1 bg-rose-400 rounded-full"></div>
-                    <div className="w-1 h-1 bg-amber-400 rounded-full ml-0.5"></div>
-                    <div className="w-1 h-1 bg-emerald-400 rounded-full ml-0.5"></div>
-                  </div>
-                  {/* Content area */}
-                  <div className="w-full h-24 flex-1 bg-rose-100/80 rounded-b p-1">
-                    <div className="w-3/4 h-1 bg-pink-300 rounded mb-1"></div>
-                    <div className="w-1/2 h-1 bg-pink-300 rounded mb-1"></div>
-                    <div className="w-full h-2 bg-gradient-to-r from-pink-200 to-red-200 rounded mt-1"></div>
-                  </div>
-                  {/* Cherry icon overlay */}
-                  <div className="absolute bottom-1 right-1">
-                    <div className="w-4 h-4 rounded-full bg-gradient-to-r from-pink-400 to-red-400"></div>
-                  </div>
-                </div>
-                
-                {/* Text in top-left */}
-                <div className="absolute top-2 left-2 text-left z-10">
-                  <div className="text-xs font-medium text-rose-900">Cherry</div>
-                  <div className="text-[10px] text-rose-700">Rose</div>
-                </div>
-              </div>
-
-              {/* Blueberry Theme */}
-              <div 
-                className={cn(
-                  "relative cursor-pointer rounded-xl p-3 h-32 transition-all duration-200  group overflow-hidden",
-                  selectedTheme === 'blueberry' 
-                  ? "ring-4 ring-offset-4 ring-primary/20 ring-offset-white dark:ring-offset-background" 
-                  : "hover:ring-4 hover:ring-primary/10 ring-offset-white dark:ring-offset-background ring-offset-4"
-              )}
-                onClick={() => handleThemeChange('blueberry')}
-                style={{ background: 'linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%)' }}
-              >
-                {/* Mini UI representation */}
-                <div className="absolute inset-2 top-4 left-24">
-                  {/* Header */}
-                  <div className="w-full h-2 bg-white/80 rounded-t mb-1 flex items-center px-1">
-                    <div className="w-1 h-1 bg-rose-400 rounded-full"></div>
-                    <div className="w-1 h-1 bg-amber-400 rounded-full ml-0.5"></div>
-                    <div className="w-1 h-1 bg-emerald-400 rounded-full ml-0.5"></div>
-                  </div>
-                  {/* Content area */}
-                  <div className="w-full h-24 flex-1 bg-indigo-100/80 rounded-b p-1">
-                    <div className="w-3/4 h-1 bg-blue-300 rounded mb-1"></div>
-                    <div className="w-1/2 h-1 bg-blue-300 rounded mb-1"></div>
-                    <div className="w-full h-2 bg-gradient-to-r from-blue-200 to-purple-200 rounded mt-1"></div>
-                  </div>
-                  {/* Blueberry icon overlay */}
-                  <div className="absolute bottom-1 right-1">
-                    <div className="w-4 h-4 rounded-full bg-gradient-to-r from-blue-400 to-purple-400"></div>
-                  </div>
-                </div>
-                
-                {/* Text in top-left */}
-                <div className="absolute top-2 left-2 text-left z-10">
-                  <div className="text-xs font-medium text-blue-900">Blueberry</div>
-                  <div className="text-[10px] text-blue-700">Cool</div>
-                </div>
-              </div>
-
-              {/* Empty slots for 3x2 grid completion */}
-              <div></div>
-              <div></div>
-              <div></div>
             </div>
           </div>
         </div>
