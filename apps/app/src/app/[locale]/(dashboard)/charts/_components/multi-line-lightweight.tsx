@@ -173,15 +173,6 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   // Get theme state from next-themes (this respects manual theme selection)
   const isDarkMode = mounted ? resolvedTheme === 'dark' : true
   
-  console.log('🎨 [MultiLineChart] Using next-themes for theme detection:', { 
-    mounted,
-    resolvedTheme,
-    isDarkMode,
-    manualDetection: {
-      hasClass: typeof window !== 'undefined' ? document.documentElement.classList.contains('dark') : false,
-      systemPrefers: typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false
-    }
-  })
   
   // Use the bottom nav context to trigger contextual command search
   const { openContextualCommandSearch } = useBottomNav()
@@ -250,11 +241,6 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   useEffect(() => {
     if (!chartContainerRef.current || !coinSeriesWithColors.length) return
 
-    console.log('🎨 [MultiLineChart] Creating chart with theme:', { 
-      isDarkMode,
-      resolvedTheme,
-      mounted
-    })
 
     const chart = createChart(chartContainerRef.current, {
       handleScale: false,

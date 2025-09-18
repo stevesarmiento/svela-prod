@@ -5,55 +5,8 @@ import { ScrollArea } from "@v1/ui/scroll-area";
 import { ChatMessage } from "./chat-message";
 import { ChatLoading } from "./chat-loading";
 import type { Message } from "ai";
+import type { ComponentData } from "./types";
 
-interface PriceCardData {
-  coingeckoId: string; // Changed from id: number
-  name: string;
-  symbol: string;
-  currentPrice: number; // Changed from price
-  priceChangePercentage24h: number; // Changed from change24h
-  marketCap?: number;
-  totalVolume?: number; // Changed from volume24h
-  marketCapRank?: number; // Changed from rank
-  image?: string; // Added for CoinGecko image URLs
-  historical?: {
-    data?: {
-      prices?: Array<[number, number]>; // CoinGecko format: [timestamp, price]
-    };
-  };
-}
-
-interface ComparisonChartData {
-  coins: Array<{
-    coingeckoId: string; // Changed from id: number
-    name: string;
-    symbol: string;
-    currentPrice: number; // Changed from price
-    priceChangePercentage24h: number; // Changed from change24h
-    marketCap: number;
-    totalVolume: number; // Changed from volume24h
-    marketCapRank: number; // Changed from rank
-    image?: string; // Added for CoinGecko image URLs
-    historical?: {
-      timeframe: string;
-      prices: Array<{
-        timestamp: number;
-        price: number;
-      }>;
-      volumes?: Array<{
-        timestamp: number;
-        volume: number;
-      }>;
-    };
-  }>;
-  timeframe: string;
-  chartType?: string;
-}
-
-interface ComponentData {
-  type: 'price_card' | 'comparison_chart';
-  data: PriceCardData | ComparisonChartData;
-}
 
 interface ChatMessageListProps {
   messages: Message[];

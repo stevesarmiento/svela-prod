@@ -1,4 +1,4 @@
-import type { HistoricalData } from '@/types/coins';
+// HistoricalData type removed - using direct data structures
 
 interface CoinQuote {
   price: number;
@@ -15,7 +15,11 @@ interface DetailedCoin {
   quote: {
     USD: CoinQuote;
   };
-  historical?: HistoricalData;
+  historical?: {
+    data?: {
+      prices?: Array<[number, number]>;
+    };
+  };
 }
 
 interface SimpleCoin {

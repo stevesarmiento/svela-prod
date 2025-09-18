@@ -116,15 +116,6 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   // Get theme state from next-themes (this respects manual theme selection)
   const isDarkMode = mounted ? resolvedTheme === 'dark' : true
   
-  console.log('🎨 [PriceChart] Using next-themes for theme detection:', { 
-    mounted,
-    resolvedTheme,
-    isDarkMode,
-    manualDetection: {
-      hasClass: typeof window !== 'undefined' ? document.documentElement.classList.contains('dark') : false,
-      systemPrefers: typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false
-    }
-  })
 
   // Generate Hull Suite colors - theme-aware
   const hullColors = generatePastelColors(1)
@@ -177,7 +168,6 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   }
 
   // React 19: Memoized chart instance creation
-  console.log('🎨 [PriceChart] Calling useChartInstance with theme:', { isDarkMode })
   const chartContainerRef = useChartInstance(
     chartData, 
     volumeData, 

@@ -191,12 +191,6 @@ export function useChartInstance(
   // Use external isDarkMode if provided, otherwise use internal
   const isDarkMode = externalIsDarkMode !== undefined ? externalIsDarkMode : internalIsDarkMode
   
-  console.log('📊 [useChartInstance] Theme state:', { 
-    externalIsDarkMode, 
-    internalIsDarkMode, 
-    finalIsDarkMode: isDarkMode,
-    hasExternalTheme: externalIsDarkMode !== undefined
-  })
 
   // Listen for theme changes (only if not using external)
   useEffect(() => {
@@ -233,12 +227,6 @@ export function useChartInstance(
   useEffect(() => {
     if (!chartContainerRef.current || (!chartData.length && !ohlcvData?.length)) return
     
-    console.log('📊 [useChartInstance] Creating chart with theme:', { 
-      isDarkMode, 
-      textColor: isDarkMode ? "#ffffff" : "#000000",
-      chartDataLength: chartData.length,
-      ohlcvDataLength: ohlcvData?.length || 0
-    })
 
     const chart = createChart(chartContainerRef.current, {
       handleScale: false,
@@ -295,12 +283,6 @@ export function useChartInstance(
       priceSeries.setData(ohlcvData)
     } else {
       const priceLineColor = isDarkMode ? '#ffffff' : '#000000'
-      console.log('📊 [useChartInstance] Creating price line series:', { 
-        isDarkMode, 
-        priceLineColor,
-        lineWidth: 1,
-        chartType: 'line'
-      })
       
       priceSeries = chart.addSeries(LineSeries, {
         lineWidth: 1,
@@ -312,7 +294,6 @@ export function useChartInstance(
         priceFormat: { type: "price", precision: 2, minMove: 0.01 },
       })
       priceSeries.setData(chartData)
-      console.log('📊 [useChartInstance] Price line series created and data set')
     }
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -335,14 +316,6 @@ export function useChartInstance(
       const baseHullColor = isDarkMode ? 'hsl(210, 40%, 75%)' : 'hsl(210, 60%, 35%)'
       const hullPastelColor = addOpacityToColor(pastelColors[0] || baseHullColor, isDarkMode ? 0.4 : 0.8)
       
-      console.log('📊 [useChartInstance] Creating Hull Suite overlay:', { 
-        isDarkMode, 
-        baseHullColor, 
-        hullPastelColor, 
-        showHullSuite: displaySettings?.showHullSuite,
-        mhullLength: hullSuiteData.mhull.length,
-        shullLength: hullSuiteData.shull.length
-      })
       
       if (hullSuiteData.mhull.length > 0) {
         const validMhullData = hullSuiteData.mhull.filter(point => 

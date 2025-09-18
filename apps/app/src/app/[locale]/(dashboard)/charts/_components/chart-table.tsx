@@ -98,9 +98,9 @@ export const ChartTable = memo(function ChartTable({
 
       // Debug: Always log what data we're using to ensure it's real
       if (!coin.isOptimistic) {
-        console.log(`📈 ${coin.symbol} (${activeTimeScale}):`, {
+        console.log(`📈 ${coin.symbol} (${deferredTimeScale}):`, {
           selectedChange: isNaN(intervalChange) ? 'N/A - No real data available' : intervalChange,
-          timeScale: activeTimeScale,
+          timeScale: deferredTimeScale,
           realDataAvailable: {
             percent_change_1h: coin.quote?.USD?.percent_change_1h,
             percent_change_24h: coin.quote?.USD?.percent_change_24h,

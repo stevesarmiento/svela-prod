@@ -6,55 +6,8 @@ import { useAuth } from "@v1/convex/hooks";
 import { PriceCard } from "./price-card";
 import { ComparisonChart } from "./comparison-chart";
 import { SvelaLogo } from "@v1/ui/svela-logo";
+import type { ComponentData, PriceCardData, ComparisonChartData } from "./types";
 
-interface PriceCardData {
-  coingeckoId: string; // CoinGecko ID
-  name: string;
-  symbol: string;
-  currentPrice: number;
-  priceChangePercentage24h: number;
-  marketCap?: number;
-  totalVolume?: number;
-  marketCapRank?: number;
-  image?: string;
-  historical?: {
-    data?: {
-      prices?: Array<[number, number]>; // CoinGecko format: [timestamp, price]
-    };
-  };
-}
-
-interface ComparisonChartData {
-  coins: Array<{
-    coingeckoId: string;
-    name: string;
-    symbol: string;
-    currentPrice: number;
-    priceChangePercentage24h: number;
-    marketCap: number;
-    totalVolume: number;
-    marketCapRank: number;
-    image?: string;
-    historical?: {
-      timeframe: string;
-      prices: Array<{
-        timestamp: number;
-        price: number;
-      }>;
-      volumes?: Array<{
-        timestamp: number;
-        volume: number;
-      }>;
-    };
-  }>;
-  timeframe: string;
-  chartType?: string;
-}
-
-interface ComponentData {
-  type: 'price_card' | 'comparison_chart';
-  data: PriceCardData | ComparisonChartData;
-}
 
 interface ChatMessageProps {
   role: 'user' | 'assistant' | 'system' | 'data';

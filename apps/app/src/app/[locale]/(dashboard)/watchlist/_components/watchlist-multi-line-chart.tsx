@@ -220,15 +220,6 @@ export function WatchlistMultiLineChart({
   // Get theme state from next-themes (this respects manual theme selection)
   const isDarkMode = mounted ? resolvedTheme === 'dark' : true
   
-  console.log('🎨 [WatchlistMultiLineChart] Using next-themes for theme detection:', { 
-    mounted,
-    resolvedTheme,
-    isDarkMode,
-    manualDetection: {
-      hasClass: typeof window !== 'undefined' ? document.documentElement.classList.contains('dark') : false,
-      systemPrefers: typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)').matches : false
-    }
-  })
   
   const watchlistGroupsData = useWatchlistGroups()
   
@@ -293,11 +284,6 @@ export function WatchlistMultiLineChart({
   useEffect(() => {
     if (!chartContainerRef.current || !watchlistSeriesData.length) return
 
-    console.log('🎨 [WatchlistMultiLineChart] Creating chart with theme:', { 
-      isDarkMode,
-      resolvedTheme,
-      mounted
-    })
     
     const chart = createChart(chartContainerRef.current, {
       handleScale: false,

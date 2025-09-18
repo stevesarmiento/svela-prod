@@ -29,21 +29,18 @@ export function ThemeSettings() {
 
   // Handle theme change
   const handleThemeChange = async (newTheme: string) => {
-    console.log('🎨 [ThemeSettings] Theme change initiated:', { newTheme, currentTheme: selectedTheme })
     setSelectedTheme(newTheme); // Update local state immediately
     
     // Clean theme switching - ensure previous theme classes are removed
     const htmlElement = document.documentElement;
     const allThemes = ['light', 'dark'];
     
-    console.log('🎨 [ThemeSettings] Before cleanup - classList:', htmlElement.classList.toString())
     
     // Remove all theme classes first
     allThemes.forEach(theme => {
       htmlElement.classList.remove(theme);
     });
     
-    console.log('🎨 [ThemeSettings] After cleanup - classList:', htmlElement.classList.toString())
     
     // Apply new theme
     setTheme(newTheme); // Update next-themes
@@ -52,14 +49,11 @@ export function ThemeSettings() {
     if (newTheme !== 'system') {
       // Small delay to ensure next-themes has processed
       setTimeout(() => {
-        console.log('🎨 [ThemeSettings] Adding theme class:', { newTheme, hasClass: htmlElement.classList.contains(newTheme) })
         if (!htmlElement.classList.contains(newTheme)) {
           htmlElement.classList.add(newTheme);
-          console.log('🎨 [ThemeSettings] Theme class added - classList:', htmlElement.classList.toString())
         }
       }, 50);
     } else {
-      console.log('🎨 [ThemeSettings] System theme selected - no explicit class needed')
     }
     
     if (user?.id) {

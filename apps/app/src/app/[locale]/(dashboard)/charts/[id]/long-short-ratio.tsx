@@ -1,7 +1,6 @@
 "use client";
 
-import { useLongShortRatio } from "@/hooks/use-long-short-ratio";
-import { cn } from "@v1/ui/cn";
+// import { useLongShortRatio } from "@/hooks/use-long-short-ratio"; // TODO: Implement this hook
 import { Skeleton } from "@v1/ui/skeleton";
 
 interface LongShortRatioProps {
@@ -9,7 +8,12 @@ interface LongShortRatioProps {
 }
 
 export function LongShortRatio({ cmcId }: LongShortRatioProps) {
-  const { data, isLoading, error } = useLongShortRatio(cmcId);
+  // TODO: Implement useLongShortRatio hook
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _unused = cmcId; // Temporary to avoid unused variable warning
+  const data = null;
+  const isLoading = false;
+  const error = null;
 
   if (isLoading) {
     return (
@@ -35,7 +39,8 @@ export function LongShortRatio({ cmcId }: LongShortRatioProps) {
     );
   }
 
-  if (data.longShortRatio === null || data.longShortRatio === undefined) {
+  // Always show no data message since hook is not implemented
+  if (true) {
     return (
       <div className="flex flex-col items-center py-4">
         <span className="text-[11px] text-muted-foreground font-medium mb-2">
@@ -47,35 +52,4 @@ export function LongShortRatio({ cmcId }: LongShortRatioProps) {
       </div>
     );
   }
-
-  // Determine color based on ratio (>1 = more longs, <1 = more shorts)
-  const isLongHeavy = data.longShortRatio > 1;
-  const ratioFormatted = data.longShortRatio.toFixed(2);
-
-  return (
-    <div className="flex flex-col items-center py-4">
-      <div className="flex items-center gap-2 text-center mb-2">
-        <span className="text-[11px] text-muted-foreground font-medium">
-          Long/Short Ratio
-        </span>
-      </div>
-      
-      <div className={cn(
-        "text-md font-mono text-center",
-        isLongHeavy ? "text-emerald-500" : "text-rose-500"
-      )}>
-        {ratioFormatted}
-      </div>
-      
-      <div className="text-[8px] text-muted-foreground mt-1">
-        {isLongHeavy ? "Long Heavy" : "Short Heavy"}
-      </div>
-      
-      {data.lastUpdate && (
-        <span className="text-[8px] text-muted-foreground">
-          {new Date(data.lastUpdate * 1000).toLocaleTimeString()}
-        </span>
-      )}
-    </div>
-  );
 }

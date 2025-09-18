@@ -21,9 +21,14 @@ const TAG_LENGTH = 16; // 128 bits
 function initializeMasterKey(): string {
   const apiEncryptionKey = process.env.API_ENCRYPTION_KEY;
   
-  if (process.env.NODE_ENV === 'production') {
+  // Only require encryption key at runtime in production, not during build
+  const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' || 
+                     process.env.NEXT_PHASE === 'phase-export' ||
+                     process.env.npm_lifecycle_event?.includes('build');
+  
+  if (process.env.NODE_ENV === 'production' && !isBuildTime) {
     if (!apiEncryptionKey) {
-      throw new Error('API_ENCRYPTION_KEY environment variable is required in production');
+      throw new Error('API_ENCRYPTION_KEY environment variable is required in production runtime');
     }
     return apiEncryptionKey;
   }

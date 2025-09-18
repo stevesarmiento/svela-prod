@@ -95,8 +95,11 @@ function WatchlistGroupWithCoins({
   const coingeckoIds = useMemo(() => {
     // Watchlist stores CoinGecko string IDs, use them directly for card display
     const ids = groupWatchlist?.map(item => item.coinId) || []
-    
-    // Debug logging for edit mode
+    return ids
+  }, [groupWatchlist])
+
+  // Debug logging for edit mode - separate useEffect to avoid dependency issues
+  useEffect(() => {
     if (isEditing) {
       console.log('🔍 WatchlistGroupWithCoins DEBUG (Edit Mode):', {
         groupName: group.name,
@@ -104,13 +107,11 @@ function WatchlistGroupWithCoins({
         isEditing,
         groupWatchlistLength: groupWatchlist?.length || 0,
         groupWatchlistData: groupWatchlist,
-        coingeckoIdsLength: ids.length,
-        coingeckoIds: ids
+        coingeckoIdsLength: coingeckoIds.length,
+        coingeckoIds: coingeckoIds
       })
     }
-    
-    return ids
-  }, [groupWatchlist]) // Removed isEditing and group props from dependencies to prevent unnecessary recalculations
+  }, [isEditing, group.name, group._id, groupWatchlist, coingeckoIds])
   
   // Use CoinGecko data only for watchlist card display
   const { data: coins = [], isLoading, error } = useCoinGeckoWatchlistCoins(coingeckoIds)

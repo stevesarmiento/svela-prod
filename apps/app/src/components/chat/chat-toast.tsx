@@ -12,56 +12,9 @@ import { IconXmarkCircleFill } from 'symbols-react'
 import { ChatMessageList } from './chat-message-list'
 import GradualBlur from '@v1/ui/progressive-blur'
 import type { Message } from 'ai'
+import type { ComponentData } from './types'
 
-// Chat-specific interfaces using CoinGecko format
-interface PriceCardData {
-  coingeckoId: string;
-  name: string;
-  symbol: string;
-  currentPrice: number;
-  priceChangePercentage24h: number;
-  marketCap?: number;
-  totalVolume?: number;
-  marketCapRank?: number;
-  image?: string;
-  historical?: {
-    data?: {
-      prices?: Array<[number, number]>;
-    };
-  };
-}
-
-interface ComparisonChartData {
-  coins: Array<{
-    coingeckoId: string;
-    name: string;
-    symbol: string;
-    currentPrice: number;
-    priceChangePercentage24h: number;
-    marketCap: number;
-    totalVolume: number;
-    marketCapRank: number;
-    image?: string;
-    historical?: {
-      timeframe: string;
-      prices: Array<{
-        timestamp: number;
-        price: number;
-      }>;
-      volumes?: Array<{
-        timestamp: number;
-        volume: number;
-      }>;
-    };
-  }>;
-  timeframe: string;
-  chartType?: string;
-}
-
-interface ComponentData {
-  type: 'price_card' | 'comparison_chart';
-  data: PriceCardData | ComparisonChartData;
-}
+// Use shared types from ./types to avoid duplicates
 
 interface ChatState {
   messages: Message[];
