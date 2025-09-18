@@ -12,10 +12,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from "@v1/ui/dropdown-menu"
-import { 
-  MoreHorizontal 
-} from "lucide-react"
-import { IconPencilTipCropCircle, IconTrashFill } from "symbols-react"
+import { IconEllipsis, IconPencilTipCropCircle, IconTrashFill } from "symbols-react"
 import { AvatarCircles } from "@v1/ui/token-stacks"
 import { useCoinGeckoWatchlistAggregateChartIsolated } from "@/hooks/use-coingecko-watchlist-aggregate-chart-isolated"
 import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
@@ -149,10 +146,10 @@ export function WatchlistCard({
     <Card 
       className={cn(
         "relative w-full h-auto min-h-[200px] mx-auto hover:shadow-lg shadow-md transition-all duration-150 ease-in-out cursor-pointer overflow-hidden rounded-[20px] group active:scale-[0.98]",
-        "hover:ring-4 hover:ring-white/20 hover:ring-offset-4 hover:ring-offset-background",
+        "hover:ring-4 dark:hover:ring-white/20 hover:ring-zinc-800/20 hover:ring-offset-4 hover:ring-offset-background",
         colorTheme.bg,
         colorTheme.border,
-        selected && "ring-4 ring-white/10 ring-offset-4 ring-offset-background"
+        selected && "ring-4 dark:ring-white/10 ring-zinc-800/10 ring-offset-4 ring-offset-background"
       )}
       onClick={() => onSelect?.(group)}
     >
@@ -164,7 +161,7 @@ export function WatchlistCard({
         }}
       />
       
-      <CardContent className="p-3 relative">
+      <CardContent className="p-3 h-full relative">
         <div className="absolute top-0 left-0 w-24 h-24 -translate-x-2 -translate-y-2 z-0">
           <div className="w-full h-full flex items-center justify-center">
             <WatchlistGroupIcon 
@@ -175,7 +172,7 @@ export function WatchlistCard({
           </div>
         </div>
         
-        <div className="relative z-10">
+        <div className="relative flex flex-col justify-between h-full z-10">
           {/* Header with watchlist info and actions */}
           <div className="flex items-start justify-between mb-3">
             <div 
@@ -190,7 +187,7 @@ export function WatchlistCard({
                 />
               </div>
               <div className="flex flex-col min-w-0">
-                <h3 className="font-semibold text-lg truncate">{displayName}</h3>
+                <h3 className="font-semibold text-white text-lg truncate">{displayName}</h3>
                 <div className="flex text-[10px] flex-row items-center gap-2">
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
@@ -219,7 +216,7 @@ export function WatchlistCard({
                       size="icon"
                       className="h-7 w-7 p-0 rounded-lg bg-transparent hover:bg-white/5"
                     >
-                      <MoreHorizontal className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                      <IconEllipsis className="h-4 w-4 fill-white" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent 
@@ -276,7 +273,7 @@ export function WatchlistCard({
           
           {/* Performance indicators - Only show if there are coins */}
           {coins.length > 0 && (
-            <div className="flex items-end justify-between text-xs">            
+            <div className="flex items-end justify-between text-xs mt-4">            
               {/* Avatar circles */}
               {avatarData.length > 0 && (
                 <div className="flex items-center gap-2">

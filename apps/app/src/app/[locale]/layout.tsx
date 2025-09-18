@@ -1,6 +1,7 @@
 import "@v1/ui/globals.css";
 import { cn } from "@v1/ui/cn";
-import { ThemeProvider } from "next-themes";
+import { ThemeProvider } from "@/components/providers/theme-provider";
+import Script from "next/script";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexProvider } from "@v1/convex/provider";
 import { QueryProvider } from "@/components/providers/query-provider";
@@ -8,7 +9,7 @@ import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import { WatchlistProvider } from "./(dashboard)/watchlist/_components/watchlist-context";
-import { Toaster } from "@v1/ui/sonner";
+import { NotifToaster } from "@v1/ui/sonner-notif";
 import { ChatToast } from "@/components/chat/chat-toast";
 //import localFont from "next/font/local";
 
@@ -44,10 +45,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* <script
-          crossOrigin="anonymous"
+        <Script
           src="//unpkg.com/react-scan/dist/auto.global.js"
-        /> */}
+          strategy="beforeInteractive"
+        />
       </head>
       <body
         className={cn(
@@ -66,16 +67,11 @@ export default function RootLayout({
           <ConvexProvider>
             <QueryProvider>
               <WatchlistProvider>
-              <ThemeProvider
-                attribute="class"
-                defaultTheme="system"
-                enableSystem
-                disableTransitionOnChange
-              >
+              <ThemeProvider>
                 {children}
 
                 <ChatToast />
-                <Toaster 
+                <NotifToaster 
                   position="top-center" 
                   offset={-10}
                 />

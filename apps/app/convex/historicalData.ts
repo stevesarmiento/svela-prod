@@ -165,16 +165,19 @@ export const upsertCoinGeckoHistoricalData = mutation({
       
       console.log(`🔍 Verification: Found ${verificationQuery.length} records in DB for ${args.coingeckoId}/${args.timeframe}`);
       if (verificationQuery.length > 0) {
-        console.log(`📊 Sample stored record:`, {
-          id: verificationQuery[0]._id,
-          timestamp: verificationQuery[0].timestamp,
-          price: verificationQuery[0].price,
-          open: verificationQuery[0].open,
-          high: verificationQuery[0].high,
-          low: verificationQuery[0].low,
-          close: verificationQuery[0].close,
-          dataSource: verificationQuery[0].dataSource
-        });
+        const firstRecord = verificationQuery[0];
+        if (firstRecord) {
+          console.log(`📊 Sample stored record:`, {
+            id: firstRecord._id,
+            timestamp: firstRecord.timestamp,
+            price: firstRecord.price,
+            open: firstRecord.open,
+            high: firstRecord.high,
+            low: firstRecord.low,
+            close: firstRecord.close,
+            dataSource: firstRecord.dataSource
+          });
+        }
       }
     } catch (verifyError) {
       console.error(`❌ Failed to verify stored data:`, verifyError);
@@ -282,97 +285,39 @@ export const upsertCoinGeckoCurrentMarketData = mutation({
   },
 });
 
-// Get or fetch historical price data with intelligent caching (LEGACY - CoinMarketCap)
+// Get or fetch historical price data with intelligent caching (LEGACY - CoinMarketCap - DEPRECATED)
 export const getHistoricalData = query({
   args: { 
     coinId: v.number(), 
     timeframe: v.string(),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
-    const cacheWindow = CACHE_DURATIONS[args.timeframe as keyof typeof CACHE_DURATIONS] || CACHE_DURATIONS['1d'];
-    const cacheThreshold = now - cacheWindow;
-
-    // Try to get fresh cached data first
-    const cachedData = await ctx.db
-      .query("priceHistory")
-      .withIndex("by_coin_timeframe", (q) => 
-        q.eq("coinId", args.coinId).eq("timeframe", args.timeframe))
-      .filter((q) => q.gt(q.field("lastUpdated"), cacheThreshold))
-      .collect();
-
-    if (cachedData.length > 0) {
-      return {
-        data: cachedData.sort((a, b) => a.timestamp - b.timestamp),
-        cached: true,
-        lastUpdated: Math.max(...cachedData.map(d => d.lastUpdated)),
-        dataPoints: cachedData.length,
-      };
-    }
-
-    // Check for stale data that we can return while refreshing
-    const staleData = await ctx.db
-      .query("priceHistory")
-      .withIndex("by_coin_timeframe", (q) => 
-        q.eq("coinId", args.coinId).eq("timeframe", args.timeframe))
-      .collect();
-
-    if (staleData.length > 0) {
-      return {
-        data: staleData.sort((a, b) => a.timestamp - b.timestamp),
-        cached: true,
-        stale: true,
-        lastUpdated: Math.max(...staleData.map(d => d.lastUpdated)),
-        dataPoints: staleData.length,
-      };
-    }
-
-    // No data available - trigger refresh and return empty for now
+    // LEGACY function - return empty data since priceHistory table uses coingeckoId, not coinId
+    console.log('⚠️ [LEGACY] getHistoricalData called with coinId:', args.coinId, '- returning empty data');
     return {
       data: [],
       cached: false,
-      lastUpdated: 0,
+      lastUpdated: Date.now(),
       dataPoints: 0,
     };
   },
 });
 
-// Get current market data with caching
+// Get current market data with caching (LEGACY - DEPRECATED)
 export const getCurrentMarketData = query({
   args: { coinId: v.number() },
   handler: async (ctx, args) => {
-    const cacheWindow = 2 * 60 * 1000; // 2 minutes for current data
-    const now = Date.now();
-    const cacheThreshold = now - cacheWindow;
-
-    const currentData = await ctx.db
-      .query("currentMarketData")
-      .withIndex("by_coin", (q) => q.eq("coinId", args.coinId))
-      .filter((q) => q.gt(q.field("lastUpdated"), cacheThreshold))
-      .first();
-
-    if (currentData) {
-      return {
-        data: currentData,
-        cached: true,
-      };
-    }
-
-    // Return stale data if available and indicate refresh needed
-    const staleData = await ctx.db
-      .query("currentMarketData")
-      .withIndex("by_coin", (q) => q.eq("coinId", args.coinId))
-      .first();
-
+    // LEGACY function - return empty data since currentMarketData table uses coingeckoId, not coinId
+    console.log('⚠️ [LEGACY] getCurrentMarketData called with coinId:', args.coinId, '- returning empty data');
     return {
-      data: staleData || null,
-      cached: true,
-      stale: !!staleData,
+      data: null,
+      cached: false,
+      lastUpdated: Date.now(),
     };
   },
 });
 
-// Optimized incremental upsert - only update changed records
+// Optimized incremental upsert - only update changed records (LEGACY - DEPRECATED)
 export const upsertHistoricalDataIncremental = mutation({
   args: {
     coinId: v.number(),
@@ -390,53 +335,19 @@ export const upsertHistoricalDataIncremental = mutation({
     dataSource: v.string(),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
-    
-    // Get existing timestamps for this coin/timeframe to avoid duplicates
-    const existingData = await ctx.db
-      .query("priceHistory")
-      .withIndex("by_coin_timeframe", (q) => 
-        q.eq("coinId", args.coinId).eq("timeframe", args.timeframe))
-      .collect();
-
-    const existingTimestamps = new Set(existingData.map(d => d.timestamp));
-    
-    // Only insert new data points that don't already exist
-    const newDataPoints = args.dataPoints.filter(point => 
-      !existingTimestamps.has(point.timestamp)
-    );
-
-    // Batch insert new data points
-    const insertPromises = newDataPoints.map(point => 
-      ctx.db.insert("priceHistory", {
-        coinId: args.coinId,
-        timeframe: args.timeframe,
-        timestamp: point.timestamp,
-        price: point.price,
-        volume: point.volume,
-        marketCap: point.marketCap,
-        open: point.open,
-        high: point.high,
-        low: point.low,
-        close: point.close,
-        dataSource: args.dataSource,
-        lastUpdated: now,
-      })
-    );
-
-    await Promise.all(insertPromises);
-
-    return { 
-      success: true, 
-      insertedCount: newDataPoints.length,
-      skippedCount: args.dataPoints.length - newDataPoints.length,
+    // LEGACY function - deprecated
+    console.log('⚠️ [LEGACY] upsertHistoricalDataIncremental called - function deprecated');
+    return {
+      success: true,
+      insertedCount: 0,
+      skippedCount: args.dataPoints.length,
       coinId: args.coinId,
       timeframe: args.timeframe
     };
   },
 });
 
-// Legacy upsert (kept for compatibility, but use incremental version for better performance)
+// Legacy upsert (DEPRECATED - schema mismatch with coinId vs coingeckoId)
 export const upsertHistoricalData = mutation({
   args: {
     coinId: v.number(),
@@ -454,47 +365,18 @@ export const upsertHistoricalData = mutation({
     dataSource: v.string(),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
-    
-    // Delete existing data for this coin/timeframe to avoid duplicates
-    const existingData = await ctx.db
-      .query("priceHistory")
-      .withIndex("by_coin_timeframe", (q) => 
-        q.eq("coinId", args.coinId).eq("timeframe", args.timeframe))
-      .collect();
-
-    for (const item of existingData) {
-      await ctx.db.delete(item._id);
-    }
-
-    // Insert new data points
-    for (const point of args.dataPoints) {
-      await ctx.db.insert("priceHistory", {
-        coinId: args.coinId,
-        timeframe: args.timeframe,
-        timestamp: point.timestamp,
-        price: point.price,
-        volume: point.volume,
-        marketCap: point.marketCap,
-        open: point.open,
-        high: point.high,
-        low: point.low,
-        close: point.close,
-        dataSource: args.dataSource,
-        lastUpdated: now,
-      });
-    }
-
-    return { 
+    // LEGACY function - deprecated
+    console.log('⚠️ [LEGACY] upsertHistoricalData called - function deprecated');
+    return {
       success: true, 
-      insertedCount: args.dataPoints.length,
+      insertedCount: 0,
       coinId: args.coinId,
       timeframe: args.timeframe
     };
   },
 });
 
-// Upsert current market data
+// Upsert current market data (LEGACY - DEPRECATED - schema mismatch)
 export const upsertCurrentMarketData = mutation({
   args: {
     coinId: v.number(),
@@ -512,37 +394,8 @@ export const upsertCurrentMarketData = mutation({
     dataSource: v.string(),
   },
   handler: async (ctx, args) => {
-    const now = Date.now();
-
-    // Check if we already have data for this coin
-    const existing = await ctx.db
-      .query("currentMarketData")
-      .withIndex("by_coin", (q) => q.eq("coinId", args.coinId))
-      .first();
-
-    const data = {
-      coinId: args.coinId,
-      price: args.price,
-      volume24h: args.volume24h,
-      marketCap: args.marketCap,
-      change1h: args.change1h,
-      change24h: args.change24h || 0,
-      change7d: args.change7d,
-      change30d: args.change30d,
-      rank: args.rank,
-      circulatingSupply: args.circulatingSupply,
-      totalSupply: args.totalSupply,
-      maxSupply: args.maxSupply,
-      dataSource: args.dataSource,
-      lastUpdated: now,
-    };
-
-    if (existing) {
-      await ctx.db.patch(existing._id, data);
-    } else {
-      await ctx.db.insert("currentMarketData", data);
-    }
-
+    // LEGACY function - deprecated
+    console.log('⚠️ [LEGACY] upsertCurrentMarketData called - function deprecated');
     return { 
       success: true, 
       coinId: args.coinId,
@@ -582,26 +435,15 @@ export const getCacheStats = query({
     const sampleSize = args.sampleSize || 1000; // Limit to 1K records max
     
     if (args.coinId) {
-      // Efficient stats for specific coin
-      const coinId = args.coinId;
-      const [historicalData, currentData] = await Promise.all([
-        ctx.db
-          .query("priceHistory")
-          .withIndex("by_coin_timeframe", (q) => q.eq("coinId", coinId))
-          .take(sampleSize),
-        ctx.db
-          .query("currentMarketData") 
-          .withIndex("by_coin", (q) => q.eq("coinId", coinId))
-          .first(),
-      ]);
-
+      // LEGACY: stats for specific coin - deprecated due to schema mismatch
+      console.log('⚠️ [LEGACY] getCacheStats called with coinId - returning empty stats');
       return {
-        historicalDataPoints: historicalData.length,
-        currentDataEntries: currentData ? 1 : 0,
-        uniqueCoins: 1,
-        timeframes: new Set(historicalData.map(d => d.timeframe)).size,
-        sampleSize: historicalData.length,
-        limited: historicalData.length === sampleSize,
+        historicalDataPoints: 0,
+        currentDataEntries: 0,
+        uniqueCoins: 0,
+        timeframes: 0,
+        sampleSize: 0,
+        limited: false,
       };
     }
 
@@ -613,8 +455,8 @@ export const getCacheStats = query({
 
     // Get unique coin count using a smaller sample
     const uniqueCoinsSample = new Set([
-      ...historicalSample.map(h => h.coinId),
-      ...currentSample.map(c => c.coinId)
+      ...historicalSample.map(h => h.coingeckoId),
+      ...currentSample.map(c => c.coingeckoId)
     ]);
 
     return {

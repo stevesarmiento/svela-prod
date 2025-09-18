@@ -141,7 +141,7 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
             e.stopPropagation();
           }}
           disabled={!isInitialized || isToggling}
-          className="z-10 rounded-xl w-8 h-8 bg-zinc-800/40 hover:bg-zinc-900/50 ring-1 ring-zinc-800/80"
+          className="z-10 rounded-xl w-8 h-8 bg-gray-100/80 hover:bg-gray-200/80 ring-1 ring-gray-300/60 dark:bg-zinc-800/40 dark:hover:bg-zinc-900/50 dark:ring-zinc-800/80"
         >
           <AnimatePresence mode="wait">
             {!isInitialized ? (
@@ -151,7 +151,7 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0.8 }}
               >
-                <IconStar className="h-4 w-4 fill-zinc-400" />
+                <IconStar className="h-4 w-4 fill-gray-500 dark:fill-zinc-400" />
               </motion.div>
             ) : showSlash ? (
               <motion.div
@@ -171,7 +171,7 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
                     mass: 0.3,
                 }}
               >
-                <IconStarSlashFill className="h-4 w-4 fill-zinc-400" />
+                <IconStarSlashFill className="h-4 w-4 fill-gray-500 dark:fill-zinc-400" />
               </motion.div>
             ) : isInWatchlist ? (
               <motion.div
@@ -189,23 +189,23 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
                 animate={{ scale: 1, rotate: 0 }}
                 exit={{ scale: 1.1, rotate: 20 }}
               >
-                <IconStarFill className="h-4 w-4 fill-zinc-400" />
+                <IconStarFill className="h-4 w-4 fill-gray-500 dark:fill-zinc-400" />
               </motion.div>
             )}
           </AnimatePresence>
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="bottom" sideOffset={10} className="bg-zinc-900 p-2 py-1 rounded-lg flex items-center gap-2 opacity-100">
-        <p className="text-white text-xs">
+      <TooltipContent side="bottom" sideOffset={10} className="bg-white/95 dark:bg-zinc-900 p-2 py-1 rounded-lg flex items-center gap-2 opacity-100 border border-gray-200 dark:border-zinc-800">
+        <p className="text-gray-900 dark:text-white text-xs">
           {isInWatchlist ? `Remove from ${selectedGroup.name}` : `Add to ${selectedGroup.name}`}
         </p>
         {toggleShortcut && (
           <>
-          <kbd className="rounded-sm bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-zinc-300 uppercase">
+          <kbd className="rounded-sm bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
             shift
           </kbd>
-          <span className="text-zinc-400 text-xs">+</span>
-          <kbd className="rounded-sm bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-zinc-300 uppercase">
+          <span className="text-gray-500 dark:text-zinc-400 text-xs">+</span>
+          <kbd className="rounded-sm bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
             W
           </kbd>
           </>

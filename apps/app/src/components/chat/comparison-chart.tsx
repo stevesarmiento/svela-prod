@@ -15,14 +15,15 @@ import { generatePastelColors } from '@/lib/chart-colors'
 
 interface ComparisonChartProps {
   coins: Array<{
-    id: number;
+    coingeckoId: string;
     name: string;
     symbol: string;
-    price: number;
-    change24h: number;
+    currentPrice: number;
+    priceChangePercentage24h: number;
     marketCap: number;
-    volume24h: number;
-    rank: number;
+    totalVolume: number;
+    marketCapRank: number;
+    image?: string;
     historical?: {
       timeframe: string;
       prices: Array<{
@@ -67,22 +68,34 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
       if (coin.historical?.prices && coin.historical.prices.length > 0) {
         const prices = coin.historical.prices
         
-        // Sort prices by timestamp to ensure proper ordering
-        const sortedPrices = [...prices].sort((a, b) => a.timestamp - b.timestamp)
+        // Sort prices by timestamp to ensure proper ordering and filter out invalid data
+        const sortedPrices = [...prices]
+          .filter(price => 
+            price && 
+            typeof price.timestamp === 'number' && 
+            typeof price.price === 'number' && 
+            !isNaN(price.timestamp) && 
+            !isNaN(price.price) && 
+            price.price > 0
+          )
+          .sort((a, b) => a.timestamp - b.timestamp)
         
         if (sortedPrices.length > 0) {
           // Use the first price as baseline for percentage calculation
           const initialPrice = sortedPrices[0]?.price
           
-          if (initialPrice && initialPrice > 0) {
+          if (initialPrice && initialPrice > 0 && !isNaN(initialPrice)) {
             sortedPrices.forEach((pricePoint) => {
               const currentPrice = pricePoint.price
-              if (currentPrice && currentPrice > 0) {
+              if (currentPrice && currentPrice > 0 && !isNaN(currentPrice)) {
                 const percentChange = ((currentPrice - initialPrice) / initialPrice) * 100
-                data.push({
-                  time: (pricePoint.timestamp / 1000) as Time,
-                  value: percentChange,
-                })
+                // Additional validation for the calculated percentage
+                if (!isNaN(percentChange) && isFinite(percentChange)) {
+                  data.push({
+                    time: (pricePoint.timestamp / 1000) as Time,
+                    value: percentChange,
+                  })
+                }
               }
             })
           }
@@ -92,7 +105,7 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
       const latestValue = data.length > 0 ? data[data.length - 1]?.value || 0 : 0
 
       return {
-        id: coin.id.toString(),
+        id: coin.coingeckoId,
         name: coin.name,
         symbol: coin.symbol,
         color: colors[index] || `hsl(${Math.random() * 360}, 40%, 75%)`,
@@ -198,12 +211,12 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
   const coinNames = coins.map(coin => coin.symbol.toUpperCase()).join(' vs ')
 
   return (
-    <Card className="w-full bg-zinc-950/30 border-zinc-800/30">
+    <Card className="w-full bg-white/80 border-gray-200/50 dark:bg-zinc-950/30 dark:border-zinc-800/30">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-medium text-white">{coinNames} Comparison</h3>
-            <p className="text-xs text-zinc-400">Performance over {timeframe}</p>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white">{coinNames} Comparison</h3>
+            <p className="text-xs text-gray-500 dark:text-zinc-400">Performance over {timeframe}</p>
           </div>
         </div>
         
@@ -215,8 +228,8 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
                 className="h-2 w-2 rounded-full"
                 style={{ backgroundColor: series.color }}
               />
-              <span className="text-xs text-zinc-300">{series.symbol.toUpperCase()}</span>
-              <span className="text-xs font-mono text-white">
+              <span className="text-xs text-gray-700 dark:text-zinc-300">{series.symbol.toUpperCase()}</span>
+              <span className="text-xs font-mono text-gray-900 dark:text-white">
                 {series.latestValue > 0 ? '+' : ''}{series.latestValue.toFixed(2)}%
               </span>
             </div>

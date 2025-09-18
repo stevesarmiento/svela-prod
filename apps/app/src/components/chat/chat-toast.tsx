@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useDeferredValue } from 'react'
 import { useChat } from 'ai/react'
 import { useAuth } from '@v1/convex/hooks'
 import { toast } from 'sonner'
@@ -8,64 +8,13 @@ import { motion } from 'framer-motion'
 import { autoCleanupSessionMemories, bulkCleanupMemories } from '@/lib/client-memory-utils'
 import { Button } from '@v1/ui/button'
 import { ScrollArea } from '@v1/ui/scroll-area'
-import { ProgressiveBlur } from '@v1/ui/progressive-blur'
 import { IconXmarkCircleFill } from 'symbols-react'
 import { ChatMessageList } from './chat-message-list'
+import GradualBlur from '@v1/ui/progressive-blur'
 import type { Message } from 'ai'
+import type { ComponentData } from './types'
 
-interface PriceCardData {
-  id: number;
-  name: string;
-  symbol: string;
-  price: number;
-  change24h: number;
-  marketCap?: number;
-  volume24h?: number;
-  rank?: number;
-  historical?: {
-    data?: {
-      quotes?: Array<{
-        timestamp: string;
-        quote: {
-          USD: {
-            price: number;
-          };
-        };
-      }>;
-    };
-  };
-}
-
-interface ComparisonChartData {
-  coins: Array<{
-    id: number;
-    name: string;
-    symbol: string;
-    price: number;
-    change24h: number;
-    marketCap: number;
-    volume24h: number;
-    rank: number;
-    historical?: {
-      timeframe: string;
-      prices: Array<{
-        timestamp: number;
-        price: number;
-      }>;
-      volumes?: Array<{
-        timestamp: number;
-        volume: number;
-      }>;
-    };
-  }>;
-  timeframe: string;
-  chartType?: string;
-}
-
-interface ComponentData {
-  type: 'price_card' | 'comparison_chart';
-  data: PriceCardData | ComparisonChartData;
-}
+// Use shared types from ./types to avoid duplicates
 
 interface ChatState {
   messages: Message[];
@@ -128,17 +77,21 @@ function EnhancedIndicator() {
   );
 }
 
-// Custom chat toast component - only shows conversation output
+// React 19: Optimized chat toast component with concurrent features
 function ChatToastContent({ toastId, onClose }: { toastId: string | number; onClose?: () => void }) {
   const [chatState, setChatState] = useState<ChatState | null>(null);
   const { user } = useAuth();
   const chatManager = ChatStateManager.getInstance();
+  // React 19: Transition hook removed - not needed in this context
+  
+  // React 19: Defer expensive chat state updates
+  const deferredChatState = useDeferredValue(chatState);
 
   useEffect(() => {
-    // Get initial state
+    // Get initial state without transition (not needed in useEffect)
     setChatState(chatManager.getChatState());
     
-    // Subscribe to updates
+    // Subscribe to updates with direct state changes (React will batch automatically)
     const unsubscribe = chatManager.subscribe((state: ChatState | null) => {
       setChatState(state);
     });
@@ -180,22 +133,22 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
     return () => document.removeEventListener('keydown', handleEscape);
   }, [handleClose]);
 
-  if (!chatState) {
+  if (!deferredChatState) {
     return (
-      <div className="w-[540px] mx-auto bg-zinc-900/90 backdrop-blur-[100px] border border-zinc-800/50 rounded-[20px] overflow-hidden shadow-xl shadow-black/50 active:cursor-grabbing cursor-grab">
+      <div className="w-[540px] mx-auto bg-zinc-50/80 dark:bg-zinc-900/90 backdrop-blur-[100px] border border-white dark:border-zinc-800/50 rounded-[20px] overflow-hidden shadow-xl dark:shadow-black/50 shadow-black/10 active:cursor-grabbing cursor-grab">
         <div className="flex flex-col h-[calc(100vh-200px)]">
-          <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-            <h3 className="text-sm font-medium text-white">Chat</h3>
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-zinc-800">
+            <h3 className="text-sm font-medium text-gray-900 dark:text-white">Chat</h3>
             <Button
               variant="ghost"
               size="icon"
               onClick={handleClose}
-              className="h-6 w-6 rounded-xl text-zinc-400 hover:text-white"
+              className="h-6 w-6 rounded-xl text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white"
             >
-              <IconXmarkCircleFill className="h-4 w-4 fill-white/50" />
+              <IconXmarkCircleFill className="h-4 w-4 fill-gray-500 dark:fill-white/50" />
             </Button>
           </div>
-          <div className="flex-1 flex items-center justify-center text-zinc-400 text-sm">
+          <div className="flex-1 flex items-center justify-center text-gray-500 dark:text-zinc-400 text-sm">
             Start a conversation using the chat input
           </div>
         </div>
@@ -204,33 +157,33 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
   }
 
   return (
-    <div className="w-full -translate-x-1/3 bg-zinc-900/90 backdrop-blur-[100px] border border-zinc-800/50 rounded-[20px] overflow-hidden mx-auto shadow-xl shadow-black/50 active:cursor-grabbing cursor-grab">
+    <div className="w-full -translate-x-1/3 bg-zinc-50/80 dark:bg-zinc-900/90 backdrop-blur-[100px] border border-white dark:border-zinc-800/50 rounded-[20px] overflow-hidden mx-auto shadow-xl dark:shadow-black/50 shadow-black/10 active:cursor-grabbing cursor-grab">
       <div className="flex flex-col h-[calc(100vh-300px)]">
         {/* Chat Header */}
-        <div className="flex items-center justify-between p-4 border-b border-zinc-800/50">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-zinc-800/50">
           <div className="flex items-center gap-3">
-          <h3 className="text-sm font-medium text-white">Chat</h3>
+          <h3 className="text-sm font-medium text-gray-900 dark:text-white">Chat</h3>
             <EnhancedIndicator />
           </div>
           <Button
             variant="ghost"
             size="icon"
             onClick={handleClose}
-            className="h-6 w-6 rounded-xl text-zinc-400 hover:text-white"
+            className="h-6 w-6 rounded-xl text-gray-500 dark:text-zinc-400 hover:text-gray-900 dark:hover:text-white"
           >
-            <IconXmarkCircleFill className="h-4 w-4 fill-white/50" />
+            <IconXmarkCircleFill className="h-4 w-4 fill-gray-500 dark:fill-white/50" />
           </Button>
         </div>
 
-        {/* Chat Messages - Only Output */}
+        {/* Chat Messages - optimized scroll area */}
         <ScrollArea className="flex-1">
           <ChatMessageList
-            messages={chatState.messages || []}
-            isLoading={chatState.isLoading || false}
-            isDataLoading={chatState.isDataLoading || false}
+            messages={deferredChatState.messages || []}
+            isLoading={deferredChatState.isLoading || false}
+            isDataLoading={deferredChatState.isDataLoading || false}
             userImage={user?.avatarUrl}
             userName={user?.fullName || user?.email?.split('@')[0]}
-            messageComponents={chatState.messageComponents || {}}
+            messageComponents={deferredChatState.messageComponents || {}}
           />
         </ScrollArea>
       </div>
@@ -250,7 +203,6 @@ export function useChatToast() {
     if (!user?.id) return;
     
     try {
-      console.log('🗑️ Starting bulk deletion of chat memories for user:', user.id);
       
       // Delete all chat memories from current session
       const cleanupResult = await bulkCleanupMemories(user.id, {
@@ -260,9 +212,7 @@ export function useChatToast() {
         }
       });
       
-      if (cleanupResult.success) {
-        console.log(`✅ Successfully deleted ${cleanupResult.count} chat memories`);
-      } else {
+      if (!cleanupResult.success) {
         console.warn('⚠️ Failed to delete chat memories');
       }
     } catch (error) {
@@ -279,27 +229,38 @@ export function useChatToast() {
       toastIdRef.current = t;
       
       return (
-        <div className="relative w-screen h-[90%] flex pt-24">
-          {/* Progressive Blur Background - Full viewport */}
-          <ProgressiveBlur 
-            direction="top"
-            blurLayers={12}
-            blurIntensity={1.3}
-            className="absolute inset-0 -z-10 translate-x-[-50%] h-[90%]"
+        <div className="relative w-screen h-[90%] flex pt-24 z-[9999]">
+          {/* Progressive blur at the top of the page */}
+          <GradualBlur
+            target="page"
+            position="top"
+            height="50rem"
+            width="100vw"
+            strength={3}
+            divCount={8}
+            curve="bezier"
+            exponential={true}
+            opacity={1}
+            zIndex={0}
+            style={{
+              left: '50%',
+              transform: 'translateX(-34%)',
+              right: 'auto'
+            }}
           />
           
-          {/* Toast Content */}
+          {/* Chat content with original positioning */}
           <motion.div
-            initial={{ opacity: 0, y: -20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            initial={{ y: -20, scale: 0.96 }}
+            animate={{ y: 0, scale: 1 }}
+            exit={{ y: -20, scale: 0.96 }}
             transition={{
-              type: "spring",
-              stiffness: 280,
-              damping: 18,
-              mass: 0.3,
+              type: "tween",
+              duration: 0.12,
+              ease: [0.4, 0, 0.2, 1], // Custom easing for smoothness
             }}
-            className="w-[60%] relative z-10"
+            className="w-[60%] relative z-[9999]"
+            style={{ willChange: "transform" }}
           >
             <ChatToastContent 
               toastId={t} 
@@ -315,59 +276,52 @@ export function useChatToast() {
       duration: Infinity,
       position: 'top-center',
       onDismiss: async () => {
-        // Bulk delete chat memories before dismissing
-        if (user?.id) {
-          try {
-            console.log('🗑️ Bulk deleting memories on dismiss');
-            await bulkDeleteChatMemories();
-          } catch (error) {
-            console.error('Failed to bulk delete on dismiss:', error);
-          }
-        }
-        
-        // Auto-cleanup session if enabled
-        if (user?.id) {
-          await autoCleanupSessionMemories(user.id);
-        }
-        
-        // Clear ref and close input when toast is dismissed by any means (swipe, etc.)
+        // Immediate UI updates for responsiveness
         const chatManager = ChatStateManager.getInstance();
         chatManager.closeInput();
         toastIdRef.current = null;
+        
+        // Background cleanup operations
+        if (user?.id) {
+          // Use Promise.resolve to ensure these run after the current render cycle
+          Promise.resolve().then(async () => {
+            try {
+              await bulkDeleteChatMemories();
+              await autoCleanupSessionMemories(user.id);
+            } catch (error) {
+              console.error('Failed to cleanup on dismiss:', error);
+            }
+          });
+        }
       }
     });
   };
 
   const closeChatToast = async () => {
     if (toastIdRef.current) {
-      // Bulk delete chat memories before closing
-      if (user?.id) {
-        try {
-          console.log('🗑️ Bulk deleting memories before programmatic close');
-          await bulkDeleteChatMemories();
-        } catch (error) {
-          console.error('Failed to bulk delete on close:', error);
-        }
-      }
-      
-      // Auto-cleanup session if enabled
-      if (user?.id) {
-        await autoCleanupSessionMemories(user.id);
-      }
-      
-      // Close the input when toast is dismissed programmatically
+      // Immediate UI updates for responsiveness
       const chatManager = ChatStateManager.getInstance();
       chatManager.closeInput();
       
       toast.dismiss(toastIdRef.current);
       toastIdRef.current = null;
+      
+      // Heavy cleanup operations in background
+      if (user?.id) {
+        try {
+          await bulkDeleteChatMemories();
+          await autoCleanupSessionMemories(user.id);
+        } catch (error) {
+          console.error('Failed to cleanup on close:', error);
+        }
+      }
     }
   };
 
   return { showChatToast, closeChatToast };
 }
 
-// Hook to manage chat state and share it with toast
+// React 19: Optimized hook to manage chat state with concurrent features
 export function useChatState() {
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [messageComponents, setMessageComponents] = useState<Record<string, ComponentData>>({});
@@ -376,8 +330,11 @@ export function useChatState() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const chatManager = ChatStateManager.getInstance();
   const { user } = useAuth();
-
-  console.log('🚀 Always using enhanced chat mode');
+  
+  // React 19: Transition hook removed - state updates are batched automatically
+  
+  // React 19: Defer expensive message components for better performance
+  const deferredMessageComponents = useDeferredValue(messageComponents);
 
   const {
     messages,
@@ -397,16 +354,12 @@ export function useChatState() {
       const isEnhancedResponse = response.headers.get('X-Enhanced-Chat') === 'true';
       
       if (isEnhancedResponse) {
-        console.log('📊 Enhanced response received');
-        
         // Handle enhanced response from headers
         const componentDataHeader = response.headers.get('X-Component-Data');
-        const enhancedMetadataHeader = response.headers.get('X-Enhanced-Metadata');
         
         if (componentDataHeader && lastDataQueryRef.current) {
           try {
             const componentData = JSON.parse(componentDataHeader);
-            console.log('Enhanced component data:', componentData);
             
             setMessageComponents(prev => {
               const newComponents = {
@@ -414,29 +367,18 @@ export function useChatState() {
                 [`temp_${lastDataQueryRef.current}`]: componentData
               };
               
-              setTimeout(() => {
-                chatManager.setChatState({
-                  messages,
-                  isLoading,
-                  isDataLoading,
-                  messageComponents: newComponents,
-                });
-              }, 0);
+              // Update chat state directly - React will batch these updates
+              chatManager.setChatState({
+                messages,
+                isLoading,
+                isDataLoading,
+                messageComponents: newComponents,
+              });
               
               return newComponents;
             });
           } catch (err) {
             console.error('Failed to parse enhanced component data:', err);
-          }
-        }
-        
-        // Log enhanced metadata for debugging
-        if (enhancedMetadataHeader) {
-          try {
-            const enhancedMetadata = JSON.parse(enhancedMetadataHeader);
-            console.log('Enhanced metadata:', enhancedMetadata);
-          } catch (err) {
-            console.error('Failed to parse enhanced metadata:', err);
           }
         }
       } else {
@@ -452,14 +394,13 @@ export function useChatState() {
               [`temp_${lastDataQueryRef.current}`]: parsedComponentData
             };
             
-            setTimeout(() => {
-              chatManager.setChatState({
-                messages,
-                isLoading,
-                isDataLoading,
-                messageComponents: newComponents,
-              });
-            }, 0);
+            // Update chat state directly - React will batch these updates
+            chatManager.setChatState({
+              messages,
+              isLoading,
+              isDataLoading,
+              messageComponents: newComponents,
+            });
             
             return newComponents;
           });
@@ -470,9 +411,6 @@ export function useChatState() {
       }
     },
     onFinish: async (message) => {
-      console.log('🏁 Chat message finished:', message.role, message.id);
-      console.log('👤 User ID for archiving:', user?.id);
-      console.log('🔍 Message role check:', message.role === 'assistant');
       setIsDataLoading(false);
       setIsStopped(false);
       abortControllerRef.current = null;
@@ -480,7 +418,6 @@ export function useChatState() {
       // Move component data from temp key to actual message ID
       if (message.role === 'assistant' && lastDataQueryRef.current) {
         const tempKey = `temp_${lastDataQueryRef.current}`;
-        console.log('🔄 Moving component data from temp key to message ID:', tempKey, '->', message.id);
         
         setMessageComponents(prev => {
           const componentData = prev[tempKey];
@@ -488,37 +425,24 @@ export function useChatState() {
             const newComponents = { ...prev };
             delete newComponents[tempKey];
             newComponents[message.id] = componentData;
-            console.log('✅ Component data moved successfully');
             return newComponents;
-          } else {
-            console.log('⚠️ No component data found for temp key:', tempKey);
-            return prev;
           }
+          return prev;
         });
         lastDataQueryRef.current = null;
       }
-      
-      // Note: Archiving moved to background job for better performance
-      // Chat interactions should be fast - no delays here!
-      
-      // Let the useEffect handle state updates - don't manually manage messages
-      console.log('🎯 onFinish completed, letting useEffect handle state sync');
     },
   });
 
-  // Update shared state whenever local state changes (deferred)
+  // React 19: Update shared state with deferred values for better performance
   useEffect(() => {
-    const timer = setTimeout(() => {
-      chatManager.setChatState({
-        messages,
-        isLoading,
-        isDataLoading,
-        messageComponents,
-      });
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [messages, isLoading, isDataLoading, messageComponents, chatManager]);
+    chatManager.setChatState({
+      messages,
+      isLoading,
+      isDataLoading,
+      messageComponents: deferredMessageComponents,
+    });
+  }, [messages, isLoading, isDataLoading, deferredMessageComponents, chatManager]);
 
   const detectDataQuery = async (message: string): Promise<boolean> => {
     try {
@@ -555,28 +479,19 @@ Examples:
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (input.trim() && !isLoading) {
-      console.log('🚀 Form submit with enhanced mode: ON');
-      console.log('📝 Input message:', input);
-      console.log('🔗 API endpoint:', '/api/chat', 'Enhanced: true');
-      console.log('🧠 Memory enabled:', !!user?.id, 'UserID:', user?.id);
-      
       setIsStopped(false);
-      
       abortControllerRef.current = new AbortController();
       
       const isDataQuery = await detectDataQuery(input);
-      console.log('🤖 Detected as data query:', isDataQuery);
       
       if (isDataQuery) {
         setIsDataLoading(true);
         const queryId = Date.now().toString();
         lastDataQueryRef.current = queryId;
-        console.log('📊 Set data loading with query ID:', queryId);
       } else {
         lastDataQueryRef.current = null;
       }
       
-      console.log('📤 Submitting to API...');
       handleSubmit(e);
     }
   };
@@ -592,6 +507,7 @@ Examples:
     setIsDataLoading(false);
     setIsStopped(true);
     
+    // Reset stopped state after delay (no need for transition here)
     setTimeout(() => {
       setIsStopped(false);
     }, 3000);
@@ -607,12 +523,11 @@ Examples:
     error,
     stop: handleStop,
     isStopped,
+    // isPending removed - not needed with current implementation
   };
 }
 
-// Legacy component for backward compatibility
+// Legacy component for backward compatibility - renders nothing
 export function ChatToast() {
-  // Remove the automatic toast showing logic
-  // The toast should only appear when explicitly called via useChatToast
   return null;
 } 

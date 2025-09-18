@@ -5,48 +5,8 @@ import { ScrollArea } from "@v1/ui/scroll-area";
 import { ChatMessage } from "./chat-message";
 import { ChatLoading } from "./chat-loading";
 import type { Message } from "ai";
+import type { ComponentData } from "./types";
 
-interface PriceCardData {
-  id: number;
-  name: string;
-  symbol: string;
-  price: number;
-  change24h: number;
-  marketCap?: number;
-  volume24h?: number;
-  rank?: number;
-}
-
-interface ComparisonChartData {
-  coins: Array<{
-    id: number;
-    name: string;
-    symbol: string;
-    price: number;
-    change24h: number;
-    marketCap: number;
-    volume24h: number;
-    rank: number;
-    historical?: {
-      timeframe: string;
-      prices: Array<{
-        timestamp: number;
-        price: number;
-      }>;
-      volumes?: Array<{
-        timestamp: number;
-        volume: number;
-      }>;
-    };
-  }>;
-  timeframe: string;
-  chartType?: string;
-}
-
-interface ComponentData {
-  type: 'price_card' | 'comparison_chart';
-  data: PriceCardData | ComparisonChartData;
-}
 
 interface ChatMessageListProps {
   messages: Message[];
@@ -91,7 +51,7 @@ export function ChatMessageList({ messages, isLoading, isDataLoading, messageCom
   }, [isLoading, isDataLoading]);
 
   return (
-    <div className="h-full overflow-hidden p-4">
+    <div className="h-full overflow-hidden p-4 text-zinc-900 dark:text-white">
       <ScrollArea className="h-full pr-4" ref={scrollAreaRef}>
         <div className="space-y-4">
           {messages.map((message) => (

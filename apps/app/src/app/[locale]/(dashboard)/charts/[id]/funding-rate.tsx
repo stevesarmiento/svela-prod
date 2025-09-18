@@ -1,6 +1,6 @@
 "use client";
 
-import { useFundingRate } from "@/hooks/use-funding-rate";
+import { useFundingRateExchanges } from "@/hooks/use-funding-rate-exchange";
 import { cn } from "@v1/ui/cn";
 import { Skeleton } from "@v1/ui/skeleton";
 import { TrendingUp, TrendingDown, Target } from "lucide-react";
@@ -28,25 +28,21 @@ interface FundingRateProps {
 }
 
 const chartConfig = {
-  actualRate: {
-    label: "Actual Rate",
+  fundingRate: {
+    label: "Funding Rate",
     color: "#3b82f6", // Blue
-  },
-  predictedRate: {
-    label: "Predicted Rate",
-    color: "#8b5cf6", // Purple
   },
 } satisfies ChartConfig;
 
 export function FundingRate({ cmcId }: FundingRateProps) {
-  const { data, isLoading, error } = useFundingRate(cmcId);
+  const { data, isLoading, error } = useFundingRateExchanges({ symbol: cmcId });
 
   if (isLoading) {
     return (
       <Card className="w-full">
         <CardHeader>
           <CardTitle className="text-sm font-medium">24h Funding Rate</CardTitle>
-          <CardDescription>Loading actual & predicted funding rates...</CardDescription>
+          <CardDescription>Loading funding rates from exchanges...</CardDescription>
         </CardHeader>
         <CardContent>
           <Skeleton className="h-64 w-full" />
@@ -55,7 +51,7 @@ export function FundingRate({ cmcId }: FundingRateProps) {
     );
   }
 
-  if (error || !data || !data.combinedHistorical?.length) {
+  if (error || !data || !data.data?.length) {
     return (
       <Card className="w-full">
         <CardHeader>
@@ -71,19 +67,26 @@ export function FundingRate({ cmcId }: FundingRateProps) {
     );
   }
 
-  // Calculate trends
-  const actualRate = data.actualFundingRate;
-  const predictedRate = data.predictedFundingRate;
-  const firstActual = data.combinedHistorical[0]?.actualRateRaw || 0;
-  const actualTrend = actualRate && firstActual ? actualRate - firstActual : 0;
-  const isActualPositive = actualRate && actualRate > 0;
-  const isPredictedPositive = predictedRate && predictedRate > 0;
-  const isUpTrend = actualTrend > 0;
-
-  // Calculate accuracy (how close predicted is to actual)
-  const accuracy = actualRate && predictedRate 
-    ? (1 - Math.abs(actualRate - predictedRate) / Math.abs(actualRate)) * 100 
+  // Extract funding rate data from the response
+  const fundingData = data.data?.[0]; // Get first symbol's data
+  const stablecoinRates = fundingData?.stablecoinMarginList || [];
+  const tokenRates = fundingData?.tokenMarginList || [];
+  
+  // Calculate average funding rate across exchanges
+  const allRates = [...stablecoinRates, ...tokenRates];
+  const actualRate = allRates.length > 0 
+    ? allRates.reduce((sum, rate) => sum + rate.fundingRate, 0) / allRates.length 
     : 0;
+  
+  const isActualPositive = actualRate > 0;
+  
+  // For chart data, transform exchange data
+  const chartData = allRates.map((rate) => ({
+    name: rate.exchange,
+    fundingRate: rate.fundingRate,
+    interval: rate.fundingRateInterval,
+    nextFunding: rate.nextFundingTime
+  }));
 
   return (
     <Card className="w-full">
@@ -91,7 +94,7 @@ export function FundingRate({ cmcId }: FundingRateProps) {
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="text-sm font-medium">24h Funding Rate</CardTitle>
-            <CardDescription>Actual vs Predicted rates</CardDescription>
+            <CardDescription>Average across exchanges</CardDescription>
           </div>
           <div className="text-right space-y-1">
             <div className={cn(
@@ -103,35 +106,25 @@ export function FundingRate({ cmcId }: FundingRateProps) {
             <div className="text-xs text-muted-foreground">
               Actual Rate
             </div>
-            {predictedRate && (
-              <>
-                <div className={cn(
-                  "text-xs font-mono",
-                  isPredictedPositive ? "text-emerald-400" : "text-rose-400"
-                )}>
-                  {`${isPredictedPositive ? '+' : ''}${(predictedRate * 100).toFixed(4)}%`}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Predicted
-                </div>
-              </>
-            )}
+            <div className="text-xs text-muted-foreground">
+              {allRates.length} exchange{allRates.length !== 1 ? 's' : ''}
+            </div>
           </div>
         </div>
       </CardHeader>
       <CardContent>
         <div className="w-full">
           <ChartContainer config={chartConfig}>
-            <LineChart data={data.combinedHistorical}>
+            <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
-                dataKey="time"
+                dataKey="name"
                 tickLine={false}
                 tickMargin={10}
                 axisLine={false}
                 interval="preserveStartEnd"
                 tick={{ fontSize: 10 }}
-                tickFormatter={(value) => value.slice(0, 5)} // Show HH:MM
+                tickFormatter={(value) => value.slice(0, 8)} // Show exchange name
               />
               <YAxis
                 tickLine={false}
@@ -145,29 +138,18 @@ export function FundingRate({ cmcId }: FundingRateProps) {
                   `${(value as number).toFixed(4)}%`,
                   chartConfig[name as keyof typeof chartConfig]?.label || name
                 ]}
-                labelFormatter={(label) => `Time: ${label}`}
+                labelFormatter={(label) => `Exchange: ${label}`}
               />
               <ChartLegend content={<ChartLegendContent />} />
-              {/* Actual funding rate line */}
+              {/* Funding rate line */}
               <Line
                 type="monotone"
-                dataKey="actualRate"
-                stroke="var(--color-actualRate)"
+                dataKey="fundingRate"
+                stroke="var(--color-fundingRate)"
                 strokeWidth={2}
                 dot={false}
-                activeDot={{ r: 4, stroke: "var(--color-actualRate)", strokeWidth: 2 }}
-                name="actualRate"
-              />
-              {/* Predicted funding rate line */}
-              <Line
-                type="monotone"
-                dataKey="predictedRate"
-                stroke="var(--color-predictedRate)"
-                strokeWidth={2}
-                strokeDasharray="5 5" // Dashed line for prediction
-                dot={false}
-                activeDot={{ r: 4, stroke: "var(--color-predictedRate)", strokeWidth: 2 }}
-                name="predictedRate"
+                activeDot={{ r: 4, stroke: "var(--color-fundingRate)", strokeWidth: 2 }}
+                name="fundingRate"
               />
             </LineChart>
           </ChartContainer>
@@ -175,8 +157,8 @@ export function FundingRate({ cmcId }: FundingRateProps) {
       </CardContent>
       <CardFooter className="flex-col items-start gap-2 text-sm">
         <div className="flex gap-2 leading-none font-medium">
-          Funding rate {isUpTrend ? 'increased' : 'decreased'} by {Math.abs(actualTrend * 100).toFixed(4)}%
-          {isUpTrend ? (
+          Current funding rate: {(actualRate * 100).toFixed(4)}%
+          {isActualPositive ? (
             <TrendingUp className="h-4 w-4 text-emerald-500" />
           ) : (
             <TrendingDown className="h-4 w-4 text-rose-500" />
@@ -184,10 +166,10 @@ export function FundingRate({ cmcId }: FundingRateProps) {
         </div>
         <div className="flex gap-2 leading-none text-muted-foreground">
           <Target className="h-4 w-4" />
-          Prediction accuracy: {accuracy.toFixed(1)}%
+          Real-time funding rates
         </div>
         <div className="text-muted-foreground leading-none">
-          {isActualPositive ? 'Longs pay shorts' : 'Shorts pay longs'} • Solid line: actual, Dashed: predicted
+          {isActualPositive ? 'Longs pay shorts' : 'Shorts pay longs'} • Average across {allRates.length} exchanges
         </div>
       </CardFooter>
     </Card>

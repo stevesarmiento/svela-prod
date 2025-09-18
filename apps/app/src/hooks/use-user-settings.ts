@@ -1,10 +1,22 @@
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/../convex/_generated/api";
 import { useAuth } from "@v1/convex/hooks";
 import { toast } from "sonner";
+import { API_PROVIDERS, type ApiProvider } from "@/../convex/apiKeys";
+import type { Id } from "@/../convex/_generated/dataModel";
+import { useState, useCallback } from "react";
 
 export function useUserSettings() {
   const { user } = useAuth();
+  
+  // Optimistic updates state for API keys
+  const [optimisticApiKeys, setOptimisticApiKeys] = useState<Array<{
+    _id: string;
+    provider: ApiProvider;
+    keyName: string;
+    isActive: boolean;
+    isOptimistic?: boolean;
+  }>>([]);
   
   // Get settings from database
   const settings = useQuery(
@@ -12,9 +24,31 @@ export function useUserSettings() {
     user?.id ? { clerkId: user.id } : "skip"
   );
   
-  // Mutations
+  // Settings Mutations
   const upsertSettings = useMutation(api.userSettings.upsertUserSettings);
   const updateMemorySettings = useMutation(api.userSettings.updateMemorySettings);
+  
+  // API Key Mutations and Actions
+  const addApiKeyAction = useAction(api.apiKeysActions.addApiKeyWithEncryption);
+  const updateApiKeyStatus = useMutation(api.apiKeys.updateApiKeyStatus);
+  const deleteApiKey = useMutation(api.apiKeys.deleteApiKey);
+  
+  // API Key Queries
+  const apiKeysFromDb = useQuery(
+    api.apiKeys.getUserApiKeys,
+    user?.id ? { clerkId: user.id } : "skip"
+  );
+
+  // Combine real API keys with optimistic updates
+  const apiKeys = useCallback(() => {
+    const realKeys = apiKeysFromDb || [];
+    return [...realKeys, ...optimisticApiKeys];
+  }, [apiKeysFromDb, optimisticApiKeys])();
+  
+  const apiKeyStats = useQuery(
+    api.apiKeys.getApiKeyStats,
+    user?.id ? { clerkId: user.id } : "skip"
+  );
   
   // Update memory-specific settings
   const updateMemory = async (memorySettings: {
@@ -110,11 +144,161 @@ export function useUserSettings() {
     };
   };
 
+  // API Key Management Functions
+  const addApiKey = async (provider: ApiProvider, keyName: string, apiKey: string, isActive: boolean = true) => {
+    if (!user?.id) {
+      toast.error("Please sign in to manage API keys");
+      return;
+    }
+
+    // Create optimistic update with temporary ID
+    const optimisticKey = {
+      _id: `optimistic-${Date.now()}-${Math.random()}`,
+      provider,
+      keyName,
+      isActive,
+      isOptimistic: true,
+    };
+
+    // Add optimistic update immediately
+    setOptimisticApiKeys(prev => [...prev, optimisticKey]);
+
+    try {
+      // Use Convex action for server-side encryption and storage
+      await addApiKeyAction({
+        clerkId: user.id,
+        provider,
+        keyName,
+        apiKey,
+        isActive,
+      });
+      
+      const providerConfig = API_PROVIDERS[provider];
+      toast.success(`${providerConfig.name} API key added successfully`);
+      
+      // Remove optimistic update - real data will come from the server
+      setOptimisticApiKeys(prev => prev.filter(key => key._id !== optimisticKey._id));
+      
+      // Trigger a refetch of API keys to get the real data
+      // We could also implement a small delay to allow server propagation
+      setTimeout(() => {
+        // The useQuery will automatically refetch and update the UI
+      }, 100);
+      
+    } catch (error) {
+      console.error("Failed to add API key:", error);
+      toast.error("Failed to add API key");
+      
+      // Rollback optimistic update on error
+      setOptimisticApiKeys(prev => prev.filter(key => key._id !== optimisticKey._id));
+    }
+  };
+
+  const updateApiKeyActiveStatus = async (keyId: string, isActive: boolean) => {
+    if (!user?.id) {
+      toast.error("Please sign in to manage API keys");
+      return;
+    }
+
+    try {
+      await updateApiKeyStatus({
+        clerkId: user.id,
+        keyId: keyId as Id<"userApiKeys">,
+        isActive,
+      });
+      
+      toast.success(`API key ${isActive ? 'activated' : 'deactivated'}`);
+      // No need to refresh - Convex queries auto-update!
+    } catch (error) {
+      console.error("Failed to update API key status:", error);
+      toast.error("Failed to update API key status");
+    }
+  };
+
+  const removeApiKey = async (keyId: string, providerName: string) => {
+    if (!user?.id) {
+      toast.error("Please sign in to manage API keys");
+      return;
+    }
+
+    try {
+      await deleteApiKey({
+        clerkId: user.id,
+        keyId: keyId as Id<"userApiKeys">,
+      });
+      
+      toast.success(`${providerName} API key removed`);
+      // No need to refresh - Convex queries auto-update!
+    } catch (error) {
+      console.error("Failed to remove API key:", error);
+      toast.error("Failed to remove API key");
+    }
+  };
+
+  // Validate an API key by testing it against the provider using server-side validation
+  const validateApiKey = async (provider: ApiProvider, apiKey: string): Promise<{ isValid: boolean; error?: string }> => {
+    const providerConfig = API_PROVIDERS[provider];
+    
+    // Basic format validation
+    if (!providerConfig.keyPattern.test(apiKey)) {
+      return { isValid: false, error: `Invalid ${provider} API key format` };
+    }
+
+    // Server-side validation with real provider test requests
+    try {
+      const response = await fetch('/api/validate-api-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider, apiKey }),
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok) {
+        return { 
+          isValid: false, 
+          error: result.error || `Failed to validate ${provider} API key` 
+        };
+      }
+      
+      return { isValid: result.isValid, error: result.error };
+    } catch (error) {
+      // Network/server errors should reject the key for security
+      const errorMessage = error instanceof Error ? error.message : 'Unknown validation error';
+      return { 
+        isValid: false, 
+        error: `Validation failed: ${errorMessage}. Please check your connection and try again.` 
+      };
+    }
+  };
+
+  // Get available API providers with their current status
+  const getApiProviders = () => {
+    return Object.entries(API_PROVIDERS).map(([key, config]) => ({
+      id: key as ApiProvider,
+      ...config,
+      hasKey: apiKeys?.some((apiKey) => apiKey.provider === key) ?? false,
+      isActive: apiKeys?.some((apiKey) => apiKey.provider === key && apiKey.isActive) ?? false,
+    }));
+  };
+
   return {
+    // Settings
     settings,
     isLoading: settings === undefined,
     updateMemory,
     updateSettings,
     getMemorySettings,
+    
+    // API Keys
+    apiKeys,
+    apiKeyStats,
+    isApiKeysLoading: apiKeysFromDb === undefined,
+    addApiKey,
+    updateApiKeyActiveStatus,
+    removeApiKey,
+    validateApiKey,
+    getApiProviders,
+    API_PROVIDERS,
   };
 } 

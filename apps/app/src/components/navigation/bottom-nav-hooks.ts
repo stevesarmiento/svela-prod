@@ -1,13 +1,10 @@
-import { useEffect, useCallback, useState, Dispatch, SetStateAction } from 'react';
+import { useEffect, useCallback, useState, Dispatch, SetStateAction, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { COMMAND_ITEMS, type NavigationItem, type ActionItem } from './bottom-nav-constants';
 import { SEQUENTIAL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
-import { useBottomNav } from './bottom-nav-context';
+import { useChatContext } from './bottom-nav-context';
 
-type CommandGroup = {
-  group: string;
-  items: (NavigationItem | ActionItem)[];
-};
+// React 19: Inline type definition for better maintainability
 
 export function useSequentialShortcuts() {
   const [activeSequence, setActiveSequence] = useState<string | null>(null);
@@ -77,12 +74,36 @@ export function useSequentialShortcuts() {
   return { activeSequence, resetSequence };
 }
 
+// React 19: Simplified keyboard shortcut handling with direct callbacks
 export function useKeyboardShortcuts(
   mode: 'navigation' | 'selection',
   setNavigationMode: () => void,
   setIsOpen: Dispatch<SetStateAction<boolean>>
 ) {
-  const { setIsChatOpen, openChat } = useBottomNav();
+  const { openChat } = useChatContext();
+  const [isPending, startTransition] = useTransition();
+
+  // React 19: Simplified handler - direct state changes with transition batching
+  const handleShortcut = useCallback((key: string, modifiers: string[], currentMode: 'navigation' | 'selection') => {
+    startTransition(() => {
+      // Handle meta/ctrl key combinations
+      if (modifiers.includes('meta') || modifiers.includes('ctrl')) {
+        switch (key.toLowerCase()) {
+          case 'k':
+            setIsOpen(prev => !prev);
+            break;
+          case 'j':
+            openChat();
+            break;
+        }
+      }
+      
+      // Handle escape key
+      if (key === 'Escape' && currentMode === 'selection') {
+        setNavigationMode();
+      }
+    });
+  }, [setIsOpen, openChat, setNavigationMode, startTransition]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -91,32 +112,31 @@ export function useKeyboardShortcuts(
         return;
       }
 
-      // Command + K for command search
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      const modifiers: string[] = [];
+      if (event.metaKey) modifiers.push('meta');
+      if (event.ctrlKey) modifiers.push('ctrl');
+      if (event.altKey) modifiers.push('alt');
+
+      // Only handle specific shortcuts to avoid unnecessary processing
+      const key = event.key.toLowerCase();
+      const isRelevantShortcut = 
+        ((modifiers.includes('meta') || modifiers.includes('ctrl')) && (key === 'k' || key === 'j')) ||
+        (key === 'escape' && mode === 'selection');
+
+      if (isRelevantShortcut) {
         event.preventDefault();
-        setIsOpen(prev => !prev);
-        setIsChatOpen(false); // Close chat when opening command search
-      }
-      
-      // Command + J for chat
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'j') {
-        event.preventDefault();
-        openChat();
-      }
-      
-      // Escape to exit selection mode or close overlays
-      if (event.key === 'Escape') {
-        if (mode === 'selection') {
-          setNavigationMode();
-        }
+        handleShortcut(event.key, modifiers, mode);
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [mode, setNavigationMode, setIsOpen, setIsChatOpen, openChat]);
+  }, [mode, handleShortcut]);
+
+  return { isPending }; // Return pending state for UI feedback if needed
 }
 
+// React 19: Simplified command handler - no setTimeout needed with enhanced batching
 export function useCommandHandler() {
   const router = useRouter();
 
@@ -124,29 +144,28 @@ export function useCommandHandler() {
     setIsOpen(false);
     
     // Find the selected item from all command groups
-    const allItems = (COMMAND_ITEMS as CommandGroup[]).flatMap(group => group.items);
+    const allItems = (COMMAND_ITEMS as { group: string; items: (NavigationItem | ActionItem)[] }[]).flatMap(group => group.items);
     const selectedItem = allItems.find(item => item.title.toLowerCase() === value.toLowerCase());
     
     if (!selectedItem) return;
     
-    setTimeout(() => {
-      if ('href' in selectedItem) {
-        router.push(selectedItem.href);
-      } else if ('action' in selectedItem) {
-        // Handle action items
-        switch (selectedItem.action) {
-          case 'bitcoin-price':
-            router.push('/overview?q=What is the current price of Bitcoin?');
-            break;
-          case 'ethereum-price':
-            router.push('/overview?q=What is the current price of Ethereum?');
-            break;
-          case 'market-overview':
-            router.push('/overview?q=Show me the top 10 cryptocurrencies');
-            break;
-        }
+    // React 19: Direct execution - batching handles timing automatically
+    if ('href' in selectedItem) {
+      router.push(selectedItem.href);
+    } else if ('action' in selectedItem) {
+      // Handle action items
+      switch (selectedItem.action) {
+        case 'bitcoin-price':
+          router.push('/overview?q=What is the current price of Bitcoin?');
+          break;
+        case 'ethereum-price':
+          router.push('/overview?q=What is the current price of Ethereum?');
+          break;
+        case 'market-overview':
+          router.push('/overview?q=Show me the top 10 cryptocurrencies');
+          break;
       }
-    }, 100);
+    }
   }, [router]);
 }
 

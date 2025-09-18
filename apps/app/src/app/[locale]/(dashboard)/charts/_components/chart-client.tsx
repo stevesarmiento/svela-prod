@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense } from 'react'
+import { Suspense, useTransition, useDeferredValue, memo, Component, ErrorInfo } from 'react'
 import { MultiPriceChartLightweight } from "./multi-line-lightweight"
 import { ChartTable } from "./chart-table"
 import { useOptimizedChartsData } from '@/hooks/use-optimized-charts-data'
@@ -11,7 +11,8 @@ interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
 }
 
-function ChartsContent() {
+// React 19: Memoized content component with concurrent features
+const ChartsContent = memo(function ChartsContent() {
   const { 
     optimisticCoins, 
     activeTimeScale, 
@@ -20,6 +21,20 @@ function ChartsContent() {
     hasWatchlistItems,
     selectedGroup,
   } = useOptimizedChartsData()
+  
+  // React 19: Use transition for time scale changes
+  const [isPending, startTransition] = useTransition()
+  
+  // React 19: Defer expensive coin data for better responsiveness
+  const deferredCoins = useDeferredValue(optimisticCoins)
+  const deferredTimeScale = useDeferredValue(activeTimeScale)
+
+  // Enhanced time scale setter with transition
+  const handleTimeScaleChange = (scale: string) => {
+    startTransition(() => {
+      setActiveTimeScale(scale)
+    })
+  }
 
   if (isInitialized && !hasWatchlistItems) {
     return (
@@ -59,37 +74,104 @@ function ChartsContent() {
   return (
     <div className="space-y-6 w-full z-0 p-8">      
       <div className="space-y-14">
-        <MultiPriceChartLightweight 
-          coins={optimisticCoins as OptimisticCoinMarketData[]} 
-          activeTimeScale={activeTimeScale}
-          setActiveTimeScale={setActiveTimeScale}
-        />
+        {/* React 19: Show loading state during transitions */}
+        <div className={isPending ? 'opacity-60 transition-opacity duration-200' : ''}>
+          <MultiPriceChartLightweight 
+            coins={deferredCoins as OptimisticCoinMarketData[]} 
+            activeTimeScale={deferredTimeScale}
+            setActiveTimeScale={handleTimeScaleChange}
+            isPending={isPending}
+          />
+        </div>
+        
         <ChartTable 
-          coins={optimisticCoins} 
-          activeTimeScale={activeTimeScale}
+          coins={deferredCoins} 
+          activeTimeScale={deferredTimeScale}
+          isPending={isPending}
         />
       </div>
     </div>
   )
+})
+
+// TypeScript interfaces for error boundary
+interface ChartErrorBoundaryProps {
+  children: React.ReactNode;
 }
 
-export function ChartsClient() {
-  return (
-    <Suspense fallback={
+interface ChartErrorBoundaryState {
+  hasError: boolean;
+}
+
+// React error boundary class component
+class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBoundaryState> {
+  constructor(props: ChartErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): ChartErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('ChartErrorBoundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="space-y-6 w-full z-0 p-8">
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="text-center">
+              <h3 className="text-lg font-medium mb-2">Something went wrong</h3>
+              <p className="text-muted-foreground mb-4">
+                An error occurred while loading the charts. Please try refreshing the page.
+              </p>
+              <button 
+                onClick={() => this.setState({ hasError: false })}
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
       <div className="space-y-6 w-full z-0 p-8">
-        <div className="space-y-14">
-          <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
-            <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2" />
-            <div className="col-span-9 border border-zinc-800/30 rounded-[13px] overflow-hidden">
-              <div className="h-[400px] flex items-center justify-center">
-                <Spinner size={24} />
-              </div>
+        {this.props.children}
+      </div>
+    );
+  }
+}
+
+// React 19: Optimized suspense fallback
+const ChartSkeleton = memo(function ChartSkeleton() {
+  return (
+    <div className="space-y-6 w-full z-0 p-8">
+      <div className="space-y-14">
+        <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
+          <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2" />
+          <div className="col-span-9 border border-zinc-800/30 rounded-[13px] overflow-hidden">
+            <div className="h-[400px] flex items-center justify-center">
+              <Spinner size={24} />
             </div>
           </div>
         </div>
       </div>
-    }>
-      <ChartsContent />
-    </Suspense>
+    </div>
   )
-}
+})
+
+export const ChartsClient = memo(function ChartsClient() {
+  return (
+    <ChartErrorBoundary>
+      <Suspense fallback={<ChartSkeleton />}>
+        <ChartsContent />
+      </Suspense>
+    </ChartErrorBoundary>
+  )
+})

@@ -12,15 +12,15 @@ import { buildWatchlistUrl } from '@/lib/navigation-utils'
 import { useQueryState } from 'nuqs'
 
 interface ComparisonCoin {
-  id: string // Changed to string for CoinGecko ID
+  coingeckoId: string // CoinGecko ID (e.g., "bitcoin", "ethereum")
   name: string
   symbol: string
-  price: number
-  change24h: number
+  currentPrice: number
+  priceChangePercentage24h: number
   marketCap?: number
-  volume24h?: number
-  rank?: number
-  image?: string // Added for CoinGecko image URL
+  totalVolume?: number
+  marketCapRank?: number
+  image?: string // CoinGecko image URL
   historical?: {
     data?: {
       prices?: Array<[number, number]> // CoinGecko format: [timestamp, price]
@@ -54,13 +54,20 @@ export function ComparisonCard({
     coins.forEach(coin => {
       if (coin.historical?.data?.prices) {
         coin.historical.data.prices.forEach(([timestamp, priceValue]) => {
-          // CoinGecko timestamps are in milliseconds, convert to consistent format
-          const timeMs = timestamp
-          timePoints.add(timeMs)
-          
-          const coinId = coin.id
-          if (!priceMap[coinId]) priceMap[coinId] = {}
-          priceMap[coinId][timeMs] = priceValue
+          // Validate timestamp and price values
+          if (typeof timestamp === 'number' && 
+              typeof priceValue === 'number' && 
+              !isNaN(timestamp) && 
+              !isNaN(priceValue) && 
+              priceValue > 0) {
+            // CoinGecko timestamps are in milliseconds, convert to consistent format
+            const timeMs = timestamp
+            timePoints.add(timeMs)
+            
+            const coinId = coin.coingeckoId
+            if (!priceMap[coinId]) priceMap[coinId] = {}
+            priceMap[coinId][timeMs] = priceValue
+          }
         })
       }
     })
@@ -73,11 +80,21 @@ export function ComparisonCard({
       const dataPoint: ChartDataPoint = { time }
       
       coins.forEach(coin => {
-        const coinId = coin.id
+        const coinId = coin.coingeckoId
         const firstTimestamp = sortedTimePoints[0] ?? time
-        const initialPrice = priceMap[coinId]?.[firstTimestamp] || coin.price
-        const currentPrice = priceMap[coinId]?.[time] || coin.price
-        dataPoint[coinId] = ((currentPrice - initialPrice) / initialPrice) * 100
+        const initialPrice = priceMap[coinId]?.[firstTimestamp] || coin.currentPrice
+        const currentPrice = priceMap[coinId]?.[time] || coin.currentPrice
+        
+        // Validate prices before calculating percentage
+        if (typeof initialPrice === 'number' && 
+            typeof currentPrice === 'number' && 
+            !isNaN(initialPrice) && 
+            !isNaN(currentPrice) && 
+            initialPrice > 0) {
+          dataPoint[coinId] = ((currentPrice - initialPrice) / initialPrice) * 100
+        } else {
+          dataPoint[coinId] = 0 // Default to 0% change if invalid data
+        }
       })
 
       return dataPoint
@@ -96,7 +113,7 @@ export function ComparisonCard({
   }
 
   return (
-    <Link href={buildWatchlistUrl(`/charts?compare=${coins.map(c => c.id).join(',')}`, selectedGroupSlug)} className="block">
+    <Link href={buildWatchlistUrl(`/charts?compare=${coins.map(c => c.coingeckoId).join(',')}`, selectedGroupSlug)} className="block">
       <Card className="relative w-[400px] bg-gradient-to-b from-zinc-800/50 hover:from-zinc-800/80 to-zinc-800/20 hover:to-zinc-800/50 h-auto mx-auto hover:shadow-lg shadow-md transition-colors duration-200 ease-in-out cursor-pointer overflow-hidden rounded-[20px] border-zinc-800/50">
         <div
           className="absolute inset-0 z-0 size-full opacity-40 dark:opacity-30"
@@ -114,7 +131,7 @@ export function ComparisonCard({
               <h3 className="font-semibold text-lg mb-3">{title}</h3>
               <div className="flex items-center gap-3 overflow-x-auto">
                 {coins.map((coin) => (
-                  <div key={coin.id} className="flex items-center gap-2 min-w-0">
+                  <div key={coin.coingeckoId} className="flex items-center gap-2 min-w-0">
                     <div className="flex items-center gap-3">
                       <div className="relative w-8 h-8 rounded-full overflow-hidden bg-muted flex-shrink-0">
                     <Image
@@ -152,12 +169,12 @@ export function ComparisonCard({
                 />
                 <YAxis domain={['dataMin', 'dataMax']} hide={true} />
                 {coins.map((coin, index) => {
-                  const isPositive = coin.change24h >= 0
+                  const isPositive = coin.priceChangePercentage24h >= 0
                   return (
                     <Line
-                      key={coin.id}
+                      key={coin.coingeckoId}
                       type="monotone"
-                      dataKey={coin.id}
+                      dataKey={coin.coingeckoId}
                       dot={false}
                       strokeWidth={2}
                       stroke={isPositive ? getRandomColor(index) : 'hsl(0, 100%, 67%)'}
@@ -170,9 +187,9 @@ export function ComparisonCard({
             {/* Price comparison grid */}
             <div className="grid grid-cols-1 gap-3">
               {coins.map((coin) => {
-                const isPositive = coin.change24h >= 0
+                const isPositive = coin.priceChangePercentage24h >= 0
                 return (
-                  <div key={coin.id} className="flex items-center justify-between py-2 border-b border-zinc-700/30 last:border-b-0">
+                  <div key={coin.coingeckoId} className="flex items-center justify-between py-2 border-b border-zinc-700/30 last:border-b-0">
                     <div className="flex items-center gap-2">
                       <div 
                         className="w-2 h-2 rounded-full"
@@ -184,12 +201,12 @@ export function ComparisonCard({
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-mono">
                         <NumberFlow
-                          value={coin.price}
+                          value={coin.currentPrice}
                           format={{
                             style: 'currency',
                             currency: 'USD',
                             minimumFractionDigits: 2,
-                            maximumFractionDigits: coin.price >= 1 ? 2 : 6
+                            maximumFractionDigits: coin.currentPrice >= 1 ? 2 : 6
                           }}
                           transformTiming={{ duration: 400, easing: 'ease-out' }}
                         />
@@ -201,7 +218,7 @@ export function ComparisonCard({
                       )}>
                         <span>{isPositive ? "↗" : "↘"}</span>
                         <NumberFlow
-                          value={Math.abs(coin.change24h)}
+                          value={Math.abs(coin.priceChangePercentage24h)}
                           format={{ 
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2
@@ -227,7 +244,7 @@ export function ComparisonCard({
               <div>
                 <span className="text-zinc-700">Total Volume 24h</span>
                 <p className="font-mono text-sm">
-                  ${formatLargeNumber(coins.reduce((sum, coin) => sum + (coin.volume24h || 0), 0))}
+                  ${formatLargeNumber(coins.reduce((sum, coin) => sum + (coin.totalVolume || 0), 0))}
                 </p>
               </div>
             </div>

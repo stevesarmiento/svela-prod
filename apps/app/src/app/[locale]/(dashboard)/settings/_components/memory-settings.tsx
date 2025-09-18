@@ -187,7 +187,7 @@ export function MemorySettings() {
   return (
     <div className="space-y-4">
       {/* Memory System Card */}
-      <div className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
+      <div className="rounded-[10px] bg-primary/5 overflow-hidden p-0.5">
         {/* Header */}
         <div className="px-3 py-2">
           <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
@@ -204,7 +204,7 @@ export function MemorySettings() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1">
-                  <IconPoint3FilledConnectedTrianglepathDotted className="h-5 w-5 fill-white/50" />
+                  <IconPoint3FilledConnectedTrianglepathDotted className="h-5 w-5 dark:fill-white/50 fill-zinc-950/50" />
                 </div>
                 <div className="">
                   <div className="font-bold text-xs">Enable Memory</div>
@@ -227,7 +227,7 @@ export function MemorySettings() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1">
-                  <IconEraserLineDashedFill className="h-5 w-5 fill-white/50" />
+                  <IconEraserLineDashedFill className="h-5 w-5 dark:fill-white/50 fill-zinc-950/50" />
                 </div>
                 <div className="">
                   <div className="font-bold text-xs">Auto-cleanup Chat Sessions</div>
@@ -248,7 +248,7 @@ export function MemorySettings() {
 
       {/* Memory Retention & Management Card */}
       {memoryEnabled && (
-        <div className="rounded-[12px] bg-primary/5 overflow-hidden p-0.5">
+        <div className="rounded-[10px] bg-primary/5 overflow-hidden p-0.5">
           {/* Header */}
           <div className="px-3 py-2">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">

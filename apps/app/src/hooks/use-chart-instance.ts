@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createChart, ColorType, CrosshairMode, LineStyle, LineSeries, CandlestickSeries, HistogramSeries, LastPriceAnimationMode, Time, ISeriesApi } from 'lightweight-charts'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { createRoot } from "react-dom/client"
@@ -175,25 +175,70 @@ export function useChartInstance(
   hullSuiteData?: HullSuiteData,
   onCrosshairMove?: (price: number | null) => void,
   chartType: ChartType = 'line',
-  ohlcvData?: OHLCVDataPoint[]
+  ohlcvData?: OHLCVDataPoint[],
+  externalIsDarkMode?: boolean
 ) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const seriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
 
+  // Theme detection hook - use external if provided, otherwise internal detection
+  const [internalIsDarkMode, setInternalIsDarkMode] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ||
+           document.documentElement.classList.contains('dark')
+  })
+
+  // Use external isDarkMode if provided, otherwise use internal
+  const isDarkMode = externalIsDarkMode !== undefined ? externalIsDarkMode : internalIsDarkMode
+  
+
+  // Listen for theme changes (only if not using external)
+  useEffect(() => {
+    if (typeof window === 'undefined' || externalIsDarkMode !== undefined) return
+    console.log('📊 [useChartInstance] Setting up internal theme listeners')
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const observer = new MutationObserver(() => {
+      const newDarkMode = mediaQuery.matches || document.documentElement.classList.contains('dark')
+      console.log('📊 [useChartInstance] Internal theme change detected:', { newDarkMode })
+      setInternalIsDarkMode(newDarkMode)
+    })
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class']
+    })
+
+    const handleChange = () => {
+      const newDarkMode = mediaQuery.matches || document.documentElement.classList.contains('dark')
+      console.log('📊 [useChartInstance] Internal media query changed:', { newDarkMode })
+      setInternalIsDarkMode(newDarkMode)
+    }
+
+    mediaQuery.addEventListener('change', handleChange)
+
+    return () => {
+      console.log('📊 [useChartInstance] Cleaning up internal theme listeners')
+      observer.disconnect()
+      mediaQuery.removeEventListener('change', handleChange)
+    }
+  }, [externalIsDarkMode])
+
   useEffect(() => {
     if (!chartContainerRef.current || (!chartData.length && !ohlcvData?.length)) return
+    
 
     const chart = createChart(chartContainerRef.current, {
       handleScale: false,
       handleScroll: false,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#ffffff50",
+        textColor: isDarkMode ? "#ffffff" : "#000000",
         attributionLogo: false,
       },
       grid: {
-        vertLines: { visible: false, color: "#e5e7eb20", style: LineStyle.Dotted },
-        horzLines: { visible: false, color: "#f5f5f510", style: LineStyle.Dotted },
+        vertLines: { visible: false, color: isDarkMode ? "#e5e7eb20" : "#00000020", style: LineStyle.Dotted },
+        horzLines: { visible: false, color: isDarkMode ? "#f5f5f510" : "#00000010", style: LineStyle.Dotted },
       },
       rightPriceScale: { 
         borderVisible: false, 
@@ -202,7 +247,7 @@ export function useChartInstance(
       },
       crosshair: {
         mode: CrosshairMode.Magnet,
-        vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
+        vertLine: { labelVisible: true, width: 1, color: isDarkMode ? "#d1d5db40" : "#00000040", visible: true, style: LineStyle.Solid },
         horzLine: { visible: false, labelVisible: false },
       },
       timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
@@ -237,12 +282,14 @@ export function useChartInstance(
       })
       priceSeries.setData(ohlcvData)
     } else {
+      const priceLineColor = isDarkMode ? '#ffffff' : '#000000'
+      
       priceSeries = chart.addSeries(LineSeries, {
         lineWidth: 1,
         lastValueVisible: true,
         visible: true,
         priceLineVisible: false,
-        color: '#ffffff',
+        color: priceLineColor,
         lastPriceAnimation: LastPriceAnimationMode.Continuous,
         priceFormat: { type: "price", precision: 2, minMove: 0.01 },
       })
@@ -250,7 +297,7 @@ export function useChartInstance(
     }
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
-      color: '#ffffff40',
+      color: isDarkMode ? '#ffffff50' : '#00000050',
       priceFormat: { type: 'volume' },
       priceScaleId: 'volume',
     })
@@ -265,7 +312,10 @@ export function useChartInstance(
 
     // Add Hull Suite overlay if enabled
     if (displaySettings?.showHullSuite && hullSuiteData) {
-      const hullPastelColor = addOpacityToColor(pastelColors[0] || 'hsl(210, 40%, 75%)', 0.4)
+      // Use theme-aware colors for Hull Suite
+      const baseHullColor = isDarkMode ? 'hsl(210, 40%, 75%)' : 'hsl(210, 60%, 35%)'
+      const hullPastelColor = addOpacityToColor(pastelColors[0] || baseHullColor, isDarkMode ? 0.4 : 0.8)
+      
       
       if (hullSuiteData.mhull.length > 0) {
         const validMhullData = hullSuiteData.mhull.filter(point => 
@@ -300,7 +350,7 @@ export function useChartInstance(
             lineWidth: 1,
             color: hullPastelColor,
             lineStyle: LineStyle.Dotted,
-            lastValueVisible: false,
+            lastValueVisible: true,
             priceLineVisible: false,
           })
           
@@ -447,7 +497,7 @@ export function useChartInstance(
       })
       chart.remove()
     }
-  }, [chartData, volumeData, indicators, displaySettings, hullSuiteData, onCrosshairMove, chartType, ohlcvData])
+  }, [chartData, volumeData, indicators, displaySettings, hullSuiteData, onCrosshairMove, chartType, ohlcvData, isDarkMode, externalIsDarkMode])
 
   return chartContainerRef
 }

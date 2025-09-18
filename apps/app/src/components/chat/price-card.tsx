@@ -22,15 +22,15 @@ import {
 } from 'lightweight-charts'
 
 interface PriceCardProps {
-  id: string // Changed to string for CoinGecko ID
+  coingeckoId: string // CoinGecko ID (e.g., "bitcoin", "ethereum")
   name: string
   symbol: string
-  price: number
-  change24h: number
+  currentPrice: number
+  priceChangePercentage24h: number
   marketCap?: number
-  volume24h?: number
-  rank?: number
-  image?: string // Added for CoinGecko image URL
+  totalVolume?: number
+  marketCapRank?: number
+  image?: string // CoinGecko image URL
   historical?: {
     data?: {
       prices?: Array<[number, number]> // CoinGecko format: [timestamp, price]
@@ -39,38 +39,58 @@ interface PriceCardProps {
 }
 
 export function PriceCard({ 
-  id, 
+  coingeckoId, 
   name, 
   symbol, 
-  price, 
-  change24h, 
+  currentPrice, 
+  priceChangePercentage24h, 
   marketCap, 
-  volume24h, 
-  rank,
+  totalVolume, 
+  marketCapRank,
   image,
   historical 
 }: PriceCardProps) {
   const [selectedGroupSlug] = useQueryState('wg', { defaultValue: '' })
-  const isPositive = change24h >= 0
+  const isPositive = priceChangePercentage24h >= 0
   const chartContainerRef = useRef<HTMLDivElement>(null)
 
   const chartData = useMemo(() => {
+    // Validate currentPrice to prevent NaN values
+    const validPrice = typeof currentPrice === 'number' && !isNaN(currentPrice) && currentPrice > 0 ? currentPrice : 1;
+    
     if (!historical?.data?.prices?.length) {
       // Fallback data for demo purposes using current price
       return Array.from({ length: 20 }, (_, i) => ({
         time: (Date.now() - (20 - i) * 60 * 60 * 1000) / 1000 as Time,
-        value: price * (0.95 + Math.random() * 0.1)
+        value: validPrice * (0.95 + Math.random() * 0.1)
       }));
     }
     
     // Convert CoinGecko price data format: [timestamp, price]
-    const historicalPoints = historical.data.prices.map(([timestamp, priceValue]) => ({
-      time: (timestamp / 1000) as Time, // CoinGecko timestamps are in milliseconds
-      value: priceValue
-    }));
+    const historicalPoints = historical.data.prices
+      .filter(([timestamp, priceValue]) => {
+        // Filter out invalid data points
+        return typeof timestamp === 'number' && 
+               typeof priceValue === 'number' && 
+               !isNaN(timestamp) && 
+               !isNaN(priceValue) && 
+               priceValue > 0;
+      })
+      .map(([timestamp, priceValue]) => ({
+        time: (timestamp / 1000) as Time, // CoinGecko timestamps are in milliseconds
+        value: priceValue
+      }));
+
+    // If no valid historical data, fall back to generated data
+    if (historicalPoints.length === 0) {
+      return Array.from({ length: 20 }, (_, i) => ({
+        time: (Date.now() - (20 - i) * 60 * 60 * 1000) / 1000 as Time,
+        value: validPrice * (0.95 + Math.random() * 0.1)
+      }));
+    }
 
     return historicalPoints.sort((a, b) => (a.time as number) - (b.time as number));
-  }, [historical, price]);
+  }, [historical, currentPrice]);
 
   useEffect(() => {
     if (!chartContainerRef.current || !chartData.length) return
@@ -128,8 +148,8 @@ export function PriceCard({
   }, [chartData, isPositive]);
 
   return (
-    <Link href={buildWatchlistUrl(`/charts/${id}`, selectedGroupSlug)} className="block">
-      <Card className="w-[600px] bg-zinc-950/30 border-zinc-800/30 hover:bg-zinc-950/50 hover:border-zinc-700/50 transition-all duration-200 group relative overflow-hidden">
+    <Link href={buildWatchlistUrl(`/charts/${coingeckoId}`, selectedGroupSlug)} className="block">
+      <Card className="w-[600px] bg-white/80 border-gray-200/50 hover:bg-white/90 hover:border-gray-300/60 dark:bg-zinc-950/30 dark:border-zinc-800/30 dark:hover:bg-zinc-950/50 dark:hover:border-zinc-700/50 transition-all duration-200 group relative overflow-hidden">
         {/* Subtle background pattern */}
         <div className="absolute inset-0 opacity-[0.02] group-hover:opacity-[0.04] transition-opacity">
           <div
@@ -159,20 +179,20 @@ export function PriceCard({
                 />
               </div>
               <div>
-                <h3 className="text-sm font-medium text-white group-hover:text-zinc-100 transition-colors">{name}</h3>
-                <p className="text-xs text-zinc-400">{symbol.toUpperCase()}</p>
+                <h3 className="text-sm font-medium text-gray-900 dark:text-white group-hover:text-gray-800 dark:group-hover:text-zinc-100 transition-colors">{name}</h3>
+                <p className="text-xs text-gray-500 dark:text-zinc-400">{symbol.toUpperCase()}</p>
               </div>
             </div>
             
             <div className="flex flex-col items-end">
-              <span className="text-sm font-mono font-semibold text-white">
+              <span className="text-sm font-mono font-semibold text-gray-900 dark:text-white">
                 <NumberFlow
-                  value={price}
+                  value={currentPrice}
                   format={{
                     style: 'currency',
                     currency: 'USD',
                     minimumFractionDigits: 2,
-                    maximumFractionDigits: price >= 1 ? 2 : 6
+                    maximumFractionDigits: currentPrice >= 1 ? 2 : 6
                   }}
                   transformTiming={{ duration: 400, easing: 'ease-out' }}
                 />
@@ -183,7 +203,7 @@ export function PriceCard({
               )}>
                 <span>{isPositive ? "↗" : "↘"}</span>
                 <NumberFlow
-                  value={Math.abs(change24h)}
+                  value={Math.abs(priceChangePercentage24h)}
                   format={{ 
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2
@@ -195,34 +215,34 @@ export function PriceCard({
             </div>
           </div>
 
-          {rank && (
-            <div className="flex items-center gap-1 text-xs text-zinc-400 mt-2">
-              <IconLaurelLeading className="w-4 h-4 fill-zinc-600" />
-              <span className="font-medium text-zinc-300">Rank #{rank}</span>
-              <IconLaurelTrailing className="w-4 h-4 fill-zinc-600" />
+          {marketCapRank && (
+            <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-zinc-400 mt-2">
+              <IconLaurelLeading className="w-4 h-4 fill-gray-400 dark:fill-zinc-600" />
+              <span className="font-medium text-gray-700 dark:text-zinc-300">Rank #{marketCapRank}</span>
+              <IconLaurelTrailing className="w-4 h-4 fill-gray-400 dark:fill-zinc-600" />
             </div>
           )}
         </CardHeader>
         
         <CardContent className="pt-0 relative">
           {/* Lightweight Chart */}
-          <div className="w-full h-[60px] mb-4 rounded-lg overflow-hidden bg-zinc-900/20">
+          <div className="w-full h-[60px] mb-4 rounded-lg overflow-hidden bg-gray-100/40 dark:bg-zinc-900/20">
             <div ref={chartContainerRef} className="w-full h-full" />
           </div>
           
           {/* Stats */}
-          {(marketCap || volume24h) && (
+          {(marketCap || totalVolume) && (
             <div className="flex justify-between gap-4 text-xs">
               {marketCap && (
                 <div>
-                  <span className="text-zinc-400 block mb-1">Market Cap</span>
-                  <p className="font-mono text-white">${formatLargeNumber(marketCap)}</p>
+                  <span className="text-gray-500 dark:text-zinc-400 block mb-1">Market Cap</span>
+                  <p className="font-mono text-gray-900 dark:text-white">${formatLargeNumber(marketCap)}</p>
                 </div>
               )}
-              {volume24h && (
+              {totalVolume && (
                 <div>
-                  <span className="text-zinc-400 block mb-1">Volume 24h</span>
-                  <p className="font-mono text-white">${formatLargeNumber(volume24h)}</p>
+                  <span className="text-gray-500 dark:text-zinc-400 block mb-1">Volume 24h</span>
+                  <p className="font-mono text-gray-900 dark:text-white">${formatLargeNumber(totalVolume)}</p>
                 </div>
               )}
             </div>

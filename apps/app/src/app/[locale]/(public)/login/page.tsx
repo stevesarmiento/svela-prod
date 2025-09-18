@@ -1,7 +1,8 @@
 import { GoogleSignin } from "@/components/google-signin";
 import { cn } from "@v1/ui/cn";
-import AuthNav from "./_components/auth-nav";
-import FooterOnboarding from "./_components/auth-footer";
+// import AuthNav from "./_components/auth-nav";
+// import FooterOnboarding from "./_components/auth-footer";
+import { SvelaLogo } from "@v1/ui/svela-logo";
 
 export const metadata = {
   title: "Login",
@@ -14,14 +15,24 @@ export default function Page() {
         'w-[100%] h-screen overflow-hidden flex flex-row bg-background',
         )}
     >
-      <div className="h-screen w-[50%] flex flex-col justify-between items-center">
-          <AuthNav />
-        <div className="animate-fade-in-up transition-spring">
+      <div className="h-screen w-full flex flex-col justify-center items-center">
+          {/* <AuthNav /> */}
+        <div className="flex flex-col items-center justify-center gap-4">
+              <SvelaLogo 
+                width={62.5} 
+                height={62.5}
+                adaptive={true}
+                className="opacity-50"
+              />
+          <div className="flex flex-col items-center justify-center text-center">
+            <h1 className="text-4xl font-semibold bg-gradient-to-br from-primary to-primary/40 bg-clip-text text-transparent">Hello World</h1>
+            <p className="text-xl text-muted-foreground text-center mt-2">
+            Svela is the feeling you get in the moments where clarity meets action. <br />Track tokens and get meaningful insights.
+            </p>
+          </div>
           <GoogleSignin />
         </div>
-        <FooterOnboarding />
-      </div>
-      <div className="w-[50%] items-center h-[calc(100vh-30px)] bg-primary/10 m-4 rounded-xl">
+        {/* <FooterOnboarding /> */}
       </div>
     </div>
   );

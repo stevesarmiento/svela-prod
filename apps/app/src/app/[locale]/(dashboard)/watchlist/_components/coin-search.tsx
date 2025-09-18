@@ -279,7 +279,7 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                             )}
                           </TableCell>
                           <TableCell className="font-mono rounded-r-xl text-[11px]">
-                            {coin.quote.USD.price > 0 ? (
+                            {coin.quote.USD.price > 0 && coin.quote.USD.percent_change_24h !== null ? (
                               <span className={`${coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'}`}>
                                 {coin.quote.USD.percent_change_24h.toFixed(2)}%
                               </span>

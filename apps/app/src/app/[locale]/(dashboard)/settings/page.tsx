@@ -1,6 +1,7 @@
 'use client';
 
-import { MemorySettings, ProfileCard } from './_components';
+import { ApiKeysManagement } from './_components/api-keys-management';
+import { MemorySettings, ProfileCard, ThemeSettings } from './_components';
 import { ScrollArea } from '@v1/ui/scroll-area';
 
 export default function SettingsPage() {
@@ -20,14 +21,20 @@ export default function SettingsPage() {
               <div className="space-y-6">
                 {/* Header */}
                 <div className="mb-8">
-                  <h1 className="text-2xl font-bold text-white mb-2">Memory &amp; Data Settings</h1>
-                  <p className="text-zinc-400 text-sm">
-                    Each chat session is stored in memory for better context and performance, <br />you have control over that data and can export it or clear it as needed.
+                  <h1 className="text-2xl font-bold dark:text-white text-zinc-950 mb-2">Settings &amp; Preferences</h1>
+                  <p className="text-zinc-700 dark:text-zinc-400 text-sm">
+                    Manage your account settings, data preferences, and customize your experience.
                   </p>
                 </div>
 
+                {/* Theme Settings */}
+                <ThemeSettings />
+
                 {/* Memory Settings */}
                 <MemorySettings />
+
+                {/* API Keys Management */}
+                <ApiKeysManagement />
               
               </div>
             </ScrollArea>

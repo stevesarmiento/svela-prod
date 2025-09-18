@@ -23,12 +23,13 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 import { SignOutButton, useClerk } from "@clerk/nextjs";
 import { Fingerprint, LogOut } from "lucide-react";
-import { IconChevronBackward } from 'symbols-react';
+import { IconChevronBackward, IconGearshapeFill } from 'symbols-react';
 import { SvelaLogo } from "@v1/ui/svela-logo";
 import { useTokenHeader } from "@/hooks/use-token-header";
 import { WatchlistButton } from "./watchlist-button";
 import { AnalysisDialog } from "./analysis-dialog";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 
 
 // const menuItems = [
@@ -89,6 +90,7 @@ function getRouteGreeting(pathname: string): string {
 }
 
 export function TopNav() {
+  const router = useRouter();
   const { user } = useAuth();
   const { user: clerkUser, isLoaded } = useUser();
   const { openUserProfile } = useClerk();
@@ -137,7 +139,7 @@ export function TopNav() {
           {isChartDetailPage ? (
             // Token Header with cached data
             <div className="flex items-center gap-4">
-              <Link href={backToChartsUrl} className="flex text-white/70 hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150">
+              <Link href={backToChartsUrl} className="flex text-gray-600 hover:text-gray-900 dark:text-white/70 dark:hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150">
                 <IconChevronBackward className="h-3 w-3 fill-current" />
               </Link>
               <div className="flex items-center gap-2">
@@ -145,7 +147,7 @@ export function TopNav() {
                   <Image
                     src={tokenData.logoUrl?.startsWith('http') || tokenData.logoUrl?.startsWith('/') ? tokenData.logoUrl : '/favicon.ico'}
                     alt={tokenData.name}
-                    className="w-8 h-8 rounded-full ring-1 ring-white/10"
+                    className="w-8 h-8 rounded-full ring-1 ring-gray-200 dark:ring-white/10"
                     width={32}
                     height={32}
                     onError={(e) => {
@@ -159,15 +161,15 @@ export function TopNav() {
                   />
                 )}
                 <div className="flex flex-col gap-0">
-                  <h1 className="text-sm font-semibold text-white">
+                  <h1 className="text-sm font-semibold text-gray-900 dark:text-white">
                     {isLoading ? (
-                      <div className="h-4 w-16 bg-white/10 rounded animate-pulse" />
+                      <div className="h-4 w-16 bg-gray-200 dark:bg-white/10 rounded animate-pulse" />
                     ) : (
                       tokenData?.symbol || 'Token Details'
                     )}
                   </h1>
-                  <p className="text-xs text-white">
-                    <span className="text-xs text-white/60">Today is </span> 
+                  <p className="text-xs text-gray-900 dark:text-white">
+                    <span className="text-xs text-gray-500 dark:text-white/60">Today is </span> 
                     {new Date().toLocaleDateString('en-US', { 
                       weekday: 'long', 
                       month: 'long', 
@@ -180,16 +182,14 @@ export function TopNav() {
           ) : (
             // Default Logo and Greeting
             <>
-              <Link href="/watchlist">
+              <Link href="/watchlist" className="opacity-50 hover:opacity-100 transition-opacity duration-150">
                 <SvelaLogo 
-                  width={22} 
-                  height={22} 
-                  className="text-white/30"
-                  fillColor="currentColor"
-                  strokeOpacity={0.3}
+                  width={25} 
+                  height={25}
+                  adaptive={true}
                 />
               </Link>
-              <span className="text-lg font-bold text-white">
+              <span className="text-xl font-bold text-zinc-950 dark:text-white">
                 {isMounted 
                   ? isOverviewRoute 
                     ? showPersonalizedGreeting 
@@ -262,7 +262,7 @@ export function TopNav() {
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56 bg-zinc-900 rounded-xl z-[101]" align="end" forceMount>
+              <DropdownMenuContent className="w-56 bg-white dark:bg-zinc-900 rounded-xl z-[101]" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">
@@ -274,6 +274,10 @@ export function TopNav() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.push('/settings')} className="cursor-pointer rounded-xl">
+                  <IconGearshapeFill className="mr-2 h-4 w-4 fill-primary/50" />
+                  Settings
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleProfileClick} className="cursor-pointer rounded-xl">
                   <Fingerprint className="mr-2 h-4 w-4 text-primary/50" />
                   Authentication

@@ -55,20 +55,24 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
               <button
                 onClick={handleItemClick(item, isActive)}
                 className={`group p-3 rounded-[14px] transition-colors duration-200 hover:bg-transparent ${
-                  isActive ? "bg-white/10 hover:bg-white/5" : ""
+                  isActive 
+                    ? "bg-black/10 hover:bg-black/5 dark:bg-white/10 dark:hover:bg-white/5" 
+                    : ""
                 }`}
               >
                 <item.icon className={`size-4 ${
-                  isActive ? 'fill-white' : 'fill-white/40 group-hover:fill-white'
+                  isActive 
+                    ? 'fill-gray-900 dark:fill-white' 
+                    : 'fill-gray-500 group-hover:fill-gray-900 dark:fill-white/40 dark:group-hover:fill-white'
                 }`} />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={15} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-zinc-800 border bg-none shadow-none">
-              <span className="text-xs text-zinc-400">
+            <TooltipContent side="top" sideOffset={15} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-gray-200 dark:border-zinc-800 border bg-white/95 dark:bg-zinc-900/95 shadow-sm">
+              <span className="text-xs text-gray-600 dark:text-zinc-400">
                 {isActive ? `Search ${item.title}` : item.title}
               </span>
               {shortcut && (
-                <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-zinc-300 uppercase">
+                <kbd className="rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
                   {shortcut}
                 </kbd>
               )}

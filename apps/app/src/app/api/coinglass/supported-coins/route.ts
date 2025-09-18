@@ -1,9 +1,10 @@
 import { ratelimit } from "@v1/kv/ratelimit";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { auth } from "@clerk/nextjs/server";
+import { getUserApiKey } from "@/lib/user-api-keys";
 
 const BASE_URL = "https://open-api-v4.coinglass.com/api";
-const API_KEY = process.env.CG_API_KEY;
 
 // Validation schema for CoinGlass supported coins response
 const CoinglassResponseSchema = z.object({
@@ -12,24 +13,11 @@ const CoinglassResponseSchema = z.object({
   data: z.array(z.string()),
 });
 
-async function fetchWithErrorHandling(url: string) {
-  if (!API_KEY) {
-    return {
-      ok: false,
-      status: 503,
-      statusText: 'CoinGlass API key not configured',
-      json: async () => ({
-        success: false,
-        error: 'CoinGlass API key is not configured. Please set CG_API_KEY or CG-API-KEY in your environment.',
-        data: []
-      })
-    };
-  }
-
+async function fetchWithErrorHandling(url: string, apiKey: string) {
   try {
     const response = await fetch(url, {
       headers: {
-        'CG_API_KEY': API_KEY,
+        'CG_API_KEY': apiKey,
         'Content-Type': 'application/json',
       },
       next: {
@@ -66,9 +54,34 @@ export async function GET(request: Request) {
       );
     }
 
+    // Get user authentication (optional for API key resolution)
+    // Note: auth() may fail in API routes due to middleware config, so we handle it gracefully
+    let clerkId: string | null = null;
+    try {
+      const authResult = await auth();
+      clerkId = authResult.userId;
+    } catch (error) {
+      // Auth failed, will use environment fallback
+      console.log('Auth not available in API route, using environment fallback:', error instanceof Error ? error.message : 'Unknown error');
+    }
+    
+    // Get API key - user's key takes precedence over environment variable
+    const apiKeyResult = await getUserApiKey(clerkId, 'coinglass', 'CG_API_KEY');
+    
+    if (!apiKeyResult.key) {
+      return NextResponse.json({
+        success: false,
+        error: 'CoinGlass API key not available. Please add your API key in settings or configure CG_API_KEY environment variable.',
+        data: [],
+        count: 0,
+        lastUpdated: new Date().toISOString(),
+      }, { status: 503 });
+    }
+
     // Fetch supported coins from CoinGlass
     const response = await fetchWithErrorHandling(
-      `${BASE_URL}/futures/supported-coins`
+      `${BASE_URL}/futures/supported-coins`,
+      apiKeyResult.key
     );
     
     // Handle missing API key case

@@ -394,7 +394,7 @@ export class EnhancedDataOrchestrator {
                      // Transform OHLC data to technical analysis format
            if (data.data && Array.isArray(data.data)) {
              const technicalData: TechnicalAnalysisData = {
-               coinId: parseInt(target.coinId, 10) || 0, // Convert string to number for interface compatibility
+               coingeckoId: target.coinId, // Use string coingeckoId
                indicators: {
                  rsi: { value: 50, signal: 'neutral' },
                  macd: { value: 0, signal: 0, histogram: 0 },
@@ -437,7 +437,7 @@ export class EnhancedDataOrchestrator {
     try {
     const promises = marketTargets.map(async (target) => {
         const marketData: Partial<MarketStructureData> = {
-          coinId: parseInt(target.coinId, 10) || 0,
+          coingeckoId: target.coinId, // Use string coingeckoId
           liquidations: undefined,
           openInterest: undefined,
           fundingRate: undefined,
@@ -490,23 +490,24 @@ export class EnhancedDataOrchestrator {
         const data = await response.json();
         // Transform to comparison format
         const coinPriceData = (data.data || []).map((coinData: CoinGeckoMarketData) => ({
-          id: parseInt(coinData.id, 10) || 0,
+          coingeckoId: coinData.id, // Use string coingeckoId
           name: coinData.id,
           symbol: coinData.id,
-          price: coinData.current_price,
-          priceChange24h: coinData.price_change_percentage_24h,
-          volume24h: coinData.total_volume,
+          currentPrice: coinData.current_price,
+          priceChangePercentage24h: coinData.price_change_percentage_24h,
+          totalVolume: coinData.total_volume,
           marketCap: coinData.market_cap,
-          rank: coinData.market_cap_rank,
-          lastUpdated: new Date().toISOString()
+          marketCapRank: coinData.market_cap_rank,
+          lastUpdated: new Date().toISOString(),
+          image: coinData.image
         }));
         
         results.comparisonData = {
           coins: coinPriceData,
           metrics: {
             performance: coinPriceData.map((coin: CoinPriceData) => ({
-              coinId: coin.id,
-              change24h: coin.priceChange24h || 0,
+              coingeckoId: coin.coingeckoId, // Use string coingeckoId
+              change24h: coin.priceChangePercentage24h || 0,
               change7d: 0
             }))
           }
@@ -539,19 +540,66 @@ export class EnhancedDataOrchestrator {
     apiData: Record<string, unknown>, 
     target: { coinId: string; name: string; symbol: string }
   ): CoinPriceData {
-    return {
-      id: parseInt(target.coinId, 10) || 0,
+    // Add extensive logging for debugging
+    console.log('🔧 Transforming CoinGecko data for', target.coinId, ':', {
+      id: apiData.id,
+      name: apiData.name,
+      symbol: apiData.symbol,
+      current_price: apiData.current_price,
+      price_change_percentage_24h: apiData.price_change_percentage_24h,
+      market_cap: apiData.market_cap,
+      total_volume: apiData.total_volume,
+      market_cap_rank: apiData.market_cap_rank,
+      image: apiData.image
+    });
+
+    // Helper function to safely convert to number
+    const safeNumber = (value: unknown, fallback: number = 0): number => {
+      if (value === null || value === undefined) return fallback;
+      const num = Number(value);
+      return isNaN(num) ? fallback : num;
+    };
+
+    // Helper function to safely convert to string
+    const safeString = (value: unknown, fallback: string = ''): string => {
+      if (value === null || value === undefined) return fallback;
+      return String(value);
+    };
+
+    const transformedData: CoinPriceData = {
+      coingeckoId: target.coinId, // Keep as string, don't convert to number
       name: target.name,
       symbol: target.symbol,
-      price: Number(apiData.current_price) || 0,
-      volume24h: Number(apiData.total_volume) || 0,
-      marketCap: Number(apiData.market_cap) || 0,
-      priceChange24h: Number(apiData.price_change_percentage_24h) || 0,
-      priceChange7d: Number(apiData.price_change_percentage_7d) || 0,
-      rank: Number(apiData.market_cap_rank) || 0,
+      currentPrice: safeNumber(apiData.current_price, 0),
+      totalVolume: safeNumber(apiData.total_volume, 0),
+      marketCap: safeNumber(apiData.market_cap, 0),
+      priceChangePercentage24h: safeNumber(apiData.price_change_percentage_24h, 0),
+      priceChange7d: safeNumber(apiData.price_change_percentage_7d, 0),
+      marketCapRank: safeNumber(apiData.market_cap_rank, 0),
       lastUpdated: new Date().toISOString(),
-      image: apiData.image as string || '' // Add image field
+      image: safeString(apiData.image, '') // Keep image URL
     };
+
+    // Validate transformed data
+    console.log('✅ Transformed data for', target.coinId, ':', {
+      coingeckoId: transformedData.coingeckoId,
+      name: transformedData.name,
+      currentPrice: transformedData.currentPrice,
+      priceChangePercentage24h: transformedData.priceChangePercentage24h,
+      image: transformedData.image,
+      hasValidPrice: transformedData.currentPrice > 0,
+      hasValidImage: !!transformedData.image
+    });
+
+    // Check for potential issues
+    if (transformedData.currentPrice === 0) {
+      console.warn('⚠️ Price is 0 or invalid for', target.coinId);
+    }
+    if (!transformedData.image) {
+      console.warn('⚠️ No image URL for', target.coinId);
+    }
+
+    return transformedData;
   }
 
   /**
@@ -579,7 +627,7 @@ export class EnhancedDataOrchestrator {
       });
       
       return {
-        coinId: parseInt(target.coinId, 10) || 0,
+        coingeckoId: target.coinId, // Use string coingeckoId
         timeframe: target.timeframe,
         prices: dataPoints.map(point => ({
           timestamp: point.timestamp || 0,

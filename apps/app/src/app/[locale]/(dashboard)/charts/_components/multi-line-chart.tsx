@@ -2,18 +2,17 @@
 
 import { useMemo } from 'react'
 import { 
-  LineChart, 
-  Line, 
+  BarChart, 
+  Bar, 
   XAxis, 
   YAxis,
   CartesianGrid,
-  Legend
+  Cell
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
 import { 
   ChartContainer, 
-  ChartTooltip, 
-  ChartTooltipContent,
+  ChartTooltip,
   ChartConfig
 } from "@v1/ui/chart"
 import type { CoinMarketData } from '@/types/coins'
@@ -26,14 +25,16 @@ interface MultiPriceChartProps {
 
 interface ChartDataPoint {
     time: number;
-    [key: string]: number;
+    name: string;
+    value: number;
+    coinId: string;
   }
 
   function ChartSkeleton() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="font-medium font-mono">Percentage Change</CardTitle>
+          <CardTitle className="font-medium font-mono">24h Percentage Change</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -56,70 +57,31 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
  // const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const { isLoading } = useWatchlist()
   
-  const chartConfig = useMemo((): ChartConfig => {
-    return coins.reduce((acc, coin) => ({
-      ...acc,
-      [coin.id.toString()]: {
-        theme: {
-          light: getRandomColor(),
-          dark: getRandomColor()
-        },
-        label: coin.name
-      }
-    }), {})
-  }, [coins])
+  // Simple chart config for bar chart
+  const chartConfig = {
+    value: {
+      label: "24h Change %",
+    },
+  } satisfies ChartConfig
 
   const chartData = useMemo(() => {
     if (!coins.length) return []
 
-    const timePoints = new Set<number>()
-    const priceMap: Record<string, Record<number, number>> = {}
-    const initialPrices: Record<string, number> = {}
-
-    // Collect all timestamps and organize prices by coin
+    // Create individual data points for bar chart representation
+    const dataPoints: ChartDataPoint[] = []
+    
     coins.forEach(coin => {
-      if (coin.historical?.data?.quotes) {
-        const quotes = coin.historical.data.quotes.sort((a, b) => 
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        )
-        
-        coin.historical.data.quotes.forEach(quote => {
-          const timestamp = new Date(quote.timestamp).getTime()
-          timePoints.add(timestamp)
-          
-          const coinId = coin.id.toString()
-          if (!priceMap[coinId]) {
-            priceMap[coinId] = {}
-            // Set initial price from the first quote for this coin
-            initialPrices[coinId] = quotes[0]?.quote?.USD?.price || coin.quote.USD.price
-          }
-          
-          priceMap[coinId][timestamp] = quote.quote?.USD?.price || 0
-        })
-      }
-    })
-
-    // Convert to array and sort timestamps
-    const sortedTimePoints = Array.from(timePoints).sort()
-
-    // Create data points with percentage changes
-    return sortedTimePoints.map(time => {
-      const dataPoint: ChartDataPoint = { time }
-      
-      coins.forEach(coin => {
-        const coinId = coin.id.toString()
-        const initialPrice = initialPrices[coinId] || coin.quote.USD.price
-        const currentPrice = priceMap[coinId]?.[time] || coin.quote.USD.price
-        
-        if (initialPrice > 0) {
-          dataPoint[coinId] = ((currentPrice - initialPrice) / initialPrice) * 100
-        } else {
-          dataPoint[coinId] = 0
-        }
+      const changeValue = coin.quote.USD.percent_change_24h || 0
+      dataPoints.push({
+        time: Date.now(),
+        name: coin.symbol.toUpperCase(), // Use symbol for cleaner labels
+        value: changeValue,
+        coinId: coin.id.toString()
       })
-
-      return dataPoint
     })
+
+    // Sort by value descending for better visualization
+    return dataPoints.sort((a, b) => b.value - a.value)
   }, [coins])
 
   if (isLoading || !coins.length) {
@@ -129,19 +91,13 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-medium font-mono">Percentage Change</CardTitle>
+        <CardTitle className="font-medium font-mono">24h Percentage Change</CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig}>
-          <LineChart 
+          <BarChart 
             data={chartData}
             margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-            // onMouseMove={(e) => {
-            //   setActiveIndex(e.activeTooltipIndex ?? null)
-            // }}
-            // onMouseLeave={() => {
-            //   setActiveIndex(null)
-            // }}
           >
             <CartesianGrid 
               strokeDasharray="3 3" 
@@ -150,105 +106,62 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
               opacity={0.5}
             />
             <XAxis 
-              dataKey="time"
-              type="number"
-              domain={['dataMin', 'dataMax']}
-              tickFormatter={(time) => {
-                const date = new Date(time)
-                return date.toLocaleDateString(undefined, { 
-                  month: 'short', 
-                  day: 'numeric' 
-                })
-              }}
-              scale="time"
+              dataKey="name"
               axisLine={false}
               tickLine={false}
-              tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+              tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+              interval={0}
+              angle={-45}
+              textAnchor="end"
+              height={60}
             />
             <YAxis 
               axisLine={false}
               tickLine={false}
-              hide={true}
               tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-              tickFormatter={(value) => `${value.toFixed(2)}%`}
+              tickFormatter={(value) => `${value.toFixed(1)}%`}
             />
             <ChartTooltip
-              content={({ active, payload }) => {
+              content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null
+                const value = payload[0]?.value as number
+                const isPositive = value >= 0
+                
                 return (
-                  <ChartTooltipContent
-                    active={active}
-                    payload={payload}
-                    labelFormatter={() => {
-                      if (!payload?.[0]) return ''
-                      const date = new Date(payload[0].payload.time).toLocaleString(undefined, {
-                        dateStyle: 'medium'
-                      })
-                      return <span className="text-muted-foreground text-xs">{date}</span>
-                    }}
-                    formatter={(value, name) => {
-                      const coin = coins.find(c => c.id.toString() === name)
-                      return [
-                        <span key={`value-${name}`} className="font-semibold text-foreground">
-                          {(value as number).toFixed(2)}%
-                        </span>,
-                        <div key={`name-${name}`} className="flex items-center gap-2">
-                          <div 
-                            className="w-2 h-2 rounded-full"
-                            style={{ 
-                              backgroundColor: chartConfig[name]?.theme?.light || 'currentColor'
-                            }} 
-                          />
-                          <span>{coin?.name || name}</span>
-                        </div>
-                      ]
-                    }}
-                    className="text-sm font-mono border-none shadow-none bg-background/5 backdrop-blur-xl p-3"
-                  />
+                  <div className="rounded-lg border bg-background p-3 shadow-md">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div 
+                        className="w-3 h-3 rounded-full"
+                        style={{ 
+                          backgroundColor: isPositive ? '#10b981' : '#ef4444'
+                        }} 
+                      />
+                      <span className="font-semibold text-sm">{label}</span>
+                    </div>
+                    <div className="text-sm">
+                      <span className={`font-mono font-semibold ${isPositive ? 'text-emerald-500' : 'text-red-500'}`}>
+                        {isPositive ? '+' : ''}{value.toFixed(2)}%
+                      </span>
+                      <span className="text-muted-foreground ml-2">24h change</span>
+                    </div>
+                  </div>
                 )
               }}
             />
-            <Legend 
-              content={({ payload }) => (
-                <div className="flex flex-wrap gap-4 mt-4">
-                  {payload?.map((entry) => {
-                    const coin = coins.find(c => c.id.toString() === entry.dataKey)
-                    return (
-                        <div key={String(entry.dataKey)} className="flex items-center gap-2">
-                          <div 
-                            className="w-3 h-3" 
-                          style={{ backgroundColor: entry.color }}
-                        />
-                        <span>{coin?.name || entry.value}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            />
-            {coins.map((coin) => (
-              <Line
-                key={coin.id}
-                type="monotone"
-                dataKey={coin.id.toString()}
-                name={coin.name}
-                dot={false}
-                strokeWidth={2}
-                stroke={chartConfig[coin.id.toString()]?.theme?.light ?? getRandomColor()}
-                activeDot={{
-                  r: 4,
-                  strokeWidth: 2
-                }}
-              />
-            ))}
-          </LineChart>
+            <Bar
+              dataKey="value"
+              radius={[2, 2, 0, 0]}
+            >
+              {chartData.map((entry, index) => (
+                <Cell 
+                  key={`cell-${index}`} 
+                  fill={entry.value >= 0 ? '#10b981' : '#ef4444'}
+                />
+              ))}
+            </Bar>
+          </BarChart>
         </ChartContainer>
       </CardContent>
     </Card>
   )
-}
-
-function getRandomColor() {
-  const hue = Math.floor(Math.random() * 360)
-  return `hsl(${hue}, 70%, 50%)`
 }

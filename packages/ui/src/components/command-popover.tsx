@@ -55,18 +55,27 @@ const CommandPopover = ({
         </PopoverTrigger>
         <PopoverContent
           ref={contentRef}
-          className="relative rounded-[20px] bg-zinc-900 overflow-hidden p-1 w-[499px] z-[1000] data-[state=open]:slide-in-from-bottom-24 data-[state=closed]:slide-out-to-bottom-24
-                     shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
+          className="relative rounded-[20px] bg-white/95 backdrop-blur-md border border-gray-200/50 dark:bg-zinc-900 dark:border-transparent overflow-hidden p-1 w-[499px] z-[1000] data-[state=open]:slide-in-from-bottom-24 data-[state=closed]:slide-out-to-bottom-24
+                     shadow-[0_4px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
                      dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]"
           side="bottom"
           sideOffset={12}
         >
           {/* Background Pattern - FIRST (behind everything) */}
-          <div className="absolute inset-0 opacity-5 z-0"
+          <div className="absolute inset-0 opacity-5 dark:opacity-5 z-0"
             style={{
               backgroundImage: `
-                radial-gradient(circle at 25% 25%, white 1px, transparent 1px),
-                radial-gradient(circle at 75% 75%, white 1px, transparent 1px)
+                radial-gradient(circle at 25% 25%, rgb(0 0 0) 1px, transparent 1px),
+                radial-gradient(circle at 75% 75%, rgb(0 0 0) 1px, transparent 1px)
+              `,
+              backgroundSize: "24px 24px",
+            }}
+          />
+          <div className="absolute inset-0 opacity-5 dark:opacity-0 z-0"
+            style={{
+              backgroundImage: `
+                radial-gradient(circle at 25% 25%, rgb(255 255 255) 1px, transparent 1px),
+                radial-gradient(circle at 75% 75%, rgb(255 255 255) 1px, transparent 1px)
               `,
               backgroundSize: "24px 24px",
             }}
@@ -156,7 +165,7 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-pointer select-none items-center px-2 py-1.5 text-sm outline-none aria-selected:bg-zinc-800/30 rounded-2xl aria-selected:text-white",
+      "relative flex cursor-pointer select-none items-center px-2 py-1.5 text-sm outline-none aria-selected:bg-gray-100/80 dark:aria-selected:bg-zinc-800/30 rounded-2xl aria-selected:text-gray-900 dark:aria-selected:text-white",
       className,
     )}
     {...props}

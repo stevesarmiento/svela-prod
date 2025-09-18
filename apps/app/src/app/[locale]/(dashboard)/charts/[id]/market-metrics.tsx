@@ -1,6 +1,6 @@
 import { cn } from "@v1/ui/cn"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
-import { Fragment } from "react"
+import { Fragment, memo, useMemo, useDeferredValue } from "react"
 import { IconLaurelLeading, IconLaurelTrailing } from "symbols-react"
 
 interface MarketMetricsProps {
@@ -15,64 +15,70 @@ interface MarketMetricsProps {
     max_supply: number | null
     symbol: string
   }
+  isPending?: boolean
 }
 
-export function MarketMetrics({ data }: MarketMetricsProps) {
-  // Debug logging for market metrics data
-  console.log('📊 MarketMetrics received data:', {
-    raw_data: data,
-    data_keys: Object.keys(data),
-    current_price: data.current_price,
-    total_volume: data.total_volume,
-    market_cap: data.market_cap,
-    price_change_percentage_24h: data.price_change_percentage_24h,
-    market_cap_rank: data.market_cap_rank,
-    circulating_supply: data.circulating_supply,
-    max_supply: data.max_supply,
-    symbol: data.symbol
-  })
-  
-  console.log('📊 MarketMetrics data types:', {
-    current_price_type: typeof data.current_price,
-    total_volume_type: typeof data.total_volume,
-    market_cap_type: typeof data.market_cap,
-    price_change_24h_type: typeof data.price_change_percentage_24h,
-    market_cap_rank_type: typeof data.market_cap_rank
-  })
+export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: MarketMetricsProps) {
+  // React 19: Defer expensive data processing
+  const deferredData = useDeferredValue(data)
+  // React 19: Memoized debug logging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('📊 MarketMetrics received data:', {
+      raw_data: deferredData,
+      data_keys: Object.keys(deferredData),
+      current_price: deferredData.current_price,
+      total_volume: deferredData.total_volume,
+      market_cap: deferredData.market_cap,
+      price_change_percentage_24h: deferredData.price_change_percentage_24h,
+      market_cap_rank: deferredData.market_cap_rank,
+      circulating_supply: deferredData.circulating_supply,
+      max_supply: deferredData.max_supply,
+      symbol: deferredData.symbol
+    })
+  }
 
-  const metrics: { label: string; value: string; className?: string; }[] = [
+  // React 19: Memoized metrics calculation using deferred data
+  const metrics: { label: string; value: string; className?: string; }[] = useMemo(() => [
     { 
       label: 'Market Cap', 
-      value: data.market_cap ? `$${formatLargeNumber(data.market_cap)}` : 'N/A',
+      value: deferredData.market_cap ? `$${formatLargeNumber(deferredData.market_cap)}` : 'N/A',
     },
     { 
       label: '24h Volume', 
-      value: data.total_volume ? `$${formatLargeNumber(data.total_volume)}` : 'N/A',
+      value: deferredData.total_volume ? `$${formatLargeNumber(deferredData.total_volume)}` : 'N/A',
     },
     { 
       label: '24h Change', 
-      value: data.price_change_percentage_24h ? `${data.price_change_percentage_24h.toFixed(2)}%` : 'N/A',
-      className: data.price_change_percentage_24h && data.price_change_percentage_24h > 0 ? 'text-emerald-500' : 'text-rose-500',
+      value: deferredData.price_change_percentage_24h ? `${deferredData.price_change_percentage_24h.toFixed(2)}%` : 'N/A',
+      className: deferredData.price_change_percentage_24h && deferredData.price_change_percentage_24h > 0 ? 'text-emerald-500' : 'text-rose-500',
     },
     { 
       label: 'Circulating Supply', 
-      value: data.circulating_supply ? `${data.circulating_supply.toLocaleString()}` : 'N/A',
+      value: deferredData.circulating_supply ? `${deferredData.circulating_supply.toLocaleString()}` : 'N/A',
     },
     { 
       label: 'Max Supply', 
-      value: data.max_supply ? `${data.max_supply.toLocaleString()}` : 'Unlimited',
+      value: deferredData.max_supply ? `${deferredData.max_supply.toLocaleString()}` : 'Unlimited',
     },
-  ]
+  ], [deferredData])
 
-  // Log the calculated metrics before rendering
-  console.log('📊 Calculated metrics for display:', metrics.map(metric => ({
-    label: metric.label,
-    value: metric.value,
-    className: metric.className
-  })))
+  // React 19: Memoized development logging
+  if (process.env.NODE_ENV === 'development') {
+    console.log('📊 Calculated metrics for display:', metrics.map(metric => ({
+      label: metric.label,
+      value: metric.value,
+      className: metric.className
+    })))
+  }
+
+  // React 19: Show pending states
+  const showPending = isPending
 
   return (
-    <div className="space-y-6">
+    <div className={cn(
+      "space-y-6",
+      showPending && "opacity-80 transition-opacity duration-200"
+    )}>
       {/* Global Rank Section */}
       <div className="relative flex items-center justify-center py-4">
         {/* Background separator line */}
@@ -80,16 +86,30 @@ export function MarketMetrics({ data }: MarketMetricsProps) {
           <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-foreground/10 to-transparent" />
         </div>
         
-        {/* Rank content */}
-        <div className="relative flex items-center gap-3 bg-background px-0 rounded-full">
-          <IconLaurelLeading className="w-10 h-10 fill-foreground/20" />
+        {/* React 19: Enhanced Rank content with pending states */}
+        <div className={cn(
+          "relative flex items-center gap-3 bg-background px-0 rounded-full",
+          showPending && "animate-pulse"
+        )}>
+          <IconLaurelLeading className={cn(
+            "w-10 h-10 fill-foreground/20",
+            showPending && "opacity-60"
+          )} />
           
           <div className="flex flex-col items-center">
             <span className="text-[11px] uppercase text-muted-foreground font-medium">Rank</span>
-            <span className="text-2xl font-mono text-white">{data.market_cap_rank || 'N/A'}</span>
+            <span className={cn(
+              "text-2xl font-mono text-white",
+              showPending && "animate-pulse"
+            )}>
+              {deferredData.market_cap_rank || 'N/A'}
+            </span>
           </div>
           
-          <IconLaurelTrailing className="w-10 h-10 fill-foreground/20" />
+          <IconLaurelTrailing className={cn(
+            "w-10 h-10 fill-foreground/20",
+            showPending && "opacity-60"
+          )} />
         </div>
       </div>
 
@@ -100,6 +120,7 @@ export function MarketMetrics({ data }: MarketMetricsProps) {
             <div 
               className={cn(
                 "flex flex-col items-center py-4 col-span-1",
+                showPending && "opacity-80"
               )}
             >
               {/* Icon and Label */}
@@ -109,10 +130,11 @@ export function MarketMetrics({ data }: MarketMetricsProps) {
                 </span>
               </div>
               
-              {/* Value - Centered */}
+              {/* Value - Centered with pending animation */}
               <div className={cn(
                 "text-md font-mono text-center",
-                metric.className || "text-foreground"
+                metric.className || "text-foreground",
+                showPending && "animate-pulse"
               )}>
                 {metric.value}
               </div>
@@ -129,4 +151,4 @@ export function MarketMetrics({ data }: MarketMetricsProps) {
       </div>
     </div>
   )
-}
+})

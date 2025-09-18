@@ -2,10 +2,13 @@
 
 import { useMemo } from 'react'
 import { LineChart, Line, YAxis } from 'recharts'
-import type { HistoricalData } from '@/types/coins'
+interface HistoricalDataPoint {
+  time: number
+  value: number
+}
 
 interface MiniChartProps {
-  historical?: HistoricalData
+  historical?: HistoricalDataPoint[]
   currentPrice: number
   className?: string
 }
@@ -16,7 +19,7 @@ export function MiniChart({ historical, currentPrice, className = "w-[120px] h-[
     console.log('MiniChart historical data:', historical);
     console.log('MiniChart current price:', currentPrice);
 
-    if (!historical?.data?.quotes?.length) {
+    if (!historical?.length) {
       // Fallback data
       const fallbackData = Array.from({ length: 30 }, (_, i) => ({
         time: Date.now() - (30 - i) * 24 * 60 * 60 * 1000,
@@ -33,9 +36,9 @@ export function MiniChart({ historical, currentPrice, className = "w-[120px] h-[
     }
     
     // Transform historical data
-    const historicalPoints = historical.data.quotes.map(quote => ({
-      time: new Date(quote.timestamp).getTime(),
-      price: quote.quote.USD.price
+    const historicalPoints = historical.map(point => ({
+      time: point.time,
+      price: point.value
     }));
   
     // Add current price point

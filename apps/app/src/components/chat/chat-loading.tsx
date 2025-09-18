@@ -2,23 +2,21 @@
 
 import { Avatar, AvatarFallback } from "@v1/ui/avatar";
 import { SpinnerEllipsis } from "@v1/ui/spinner-ellipsis";
-import Image from "next/image";
+import { SvelaLogo } from "@v1/ui/svela-logo";
 
 export function ChatLoading() {
   return (
     <div className="flex gap-3 justify-start items-center">
       <Avatar className="size-8">
-        <AvatarFallback>
-          <Image 
-            src="/svela-logo.svg" 
-            alt="Svela" 
-            width={16} 
-            height={16}
-            className="opacity-70"
-          />
+      <AvatarFallback className="bg-gray-100 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700/50 p-1.5">
+            <SvelaLogo
+              width={20} 
+              height={20}
+              adaptive={true}
+            />
         </AvatarFallback>
       </Avatar>
-      <SpinnerEllipsis className="fill-zinc-800/50" />
+      <SpinnerEllipsis className="fill-gray-400 dark:fill-zinc-800/50" />
     </div>
   );
 } 

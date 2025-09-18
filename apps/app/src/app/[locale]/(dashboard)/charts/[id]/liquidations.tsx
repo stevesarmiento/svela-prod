@@ -1,6 +1,6 @@
 "use client";
 
-import { useLiquidations } from "@/hooks/use-liquidations";
+import { useLiquidationHistory } from "@/hooks/use-liquidation-history";
 import { Skeleton } from "@v1/ui/skeleton";
 import { formatLargeNumber } from "@v1/ui/format-numbers";
 import { TrendingDown, TrendingUp } from "lucide-react";
@@ -39,7 +39,7 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 export function Liquidations({ cmcId }: LiquidationsProps) {
-  const { data, isLoading, error } = useLiquidations(cmcId);
+  const { data, isLoading, error } = useLiquidationHistory({ symbol: cmcId });
 
   if (isLoading) {
     return (
@@ -55,7 +55,7 @@ export function Liquidations({ cmcId }: LiquidationsProps) {
     );
   }
 
-  if (error || !data || !data.historical?.length) {
+  if (error || !data || !data.data?.length) {
     return (
       <Card className="w-full">
         <CardHeader>
@@ -72,8 +72,8 @@ export function Liquidations({ cmcId }: LiquidationsProps) {
   }
 
   // Transform data for stacked bar chart
-  const chartData = data.historical.map((item) => {
-    const date = new Date(item.t * 1000);
+  const chartData = data.data.map((item) => {
+    const date = new Date(item.timestamp * 1000);
     const timeLabel = date.toLocaleTimeString('en-US', { 
       hour: '2-digit', 
       minute: '2-digit',
@@ -82,18 +82,18 @@ export function Liquidations({ cmcId }: LiquidationsProps) {
     
     return {
       time: timeLabel,
-      timestamp: item.t,
-      longLiquidations: Math.round((item.l || 0) / 1000), // Convert to thousands
-      shortLiquidations: Math.round((item.s || 0) / 1000),
+      timestamp: item.timestamp,
+      longLiquidations: Math.round(item.longLiquidations / 1000), // Convert to thousands
+      shortLiquidations: Math.round(item.shortLiquidations / 1000),
       // Keep original values for calculations
-      longOriginal: item.l || 0,
-      shortOriginal: item.s || 0,
+      longOriginal: item.longLiquidations,
+      shortOriginal: item.shortLiquidations,
     };
   });
 
   // Calculate totals and trends
-  const totalLongs = data.historical.reduce((sum, item) => sum + (item.l || 0), 0);
-  const totalShorts = data.historical.reduce((sum, item) => sum + (item.s || 0), 0);
+  const totalLongs = data.data.reduce((sum, item) => sum + item.longLiquidations, 0);
+  const totalShorts = data.data.reduce((sum, item) => sum + item.shortLiquidations, 0);
   const grandTotal = totalLongs + totalShorts;
   const dominantSide = totalLongs > totalShorts ? "Longs" : "Shorts";
   const dominantPercentage = totalLongs > totalShorts 

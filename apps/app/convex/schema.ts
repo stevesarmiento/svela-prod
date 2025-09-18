@@ -118,7 +118,7 @@ export default defineSchema({
     retentionDays: v.string(), // '7', '30', '90', '365', 'never'
     
     // UI/UX Settings (for future use)
-    theme: v.optional(v.string()), // 'light', 'dark', 'system'
+    theme: v.optional(v.string()), // 'light', 'dark', 'system', 'sunrise', 'cherry', 'blueberry'
     currency: v.optional(v.string()), // 'USD', 'EUR', 'BTC', etc.
     dateFormat: v.optional(v.string()), // 'MM/DD/YYYY', 'DD/MM/YYYY', etc.
     
@@ -136,6 +136,25 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"]),
+
+  userApiKeys: defineTable({
+    userId: v.id("users"),
+    provider: v.string(), // 'coingecko', 'coinglass', 'openai', 'gemini'
+    keyName: v.string(), // Display name for the key (e.g., "My CoinGecko Pro Key")
+    encryptedKey: v.string(), // Encrypted API key using AES-256-GCM
+    displayKey: v.optional(v.string()), // Truncated key for display (e.g., "CG-7c6G...HmU8")
+    isActive: v.boolean(), // Whether this key should be used
+    lastValidated: v.optional(v.number()), // Timestamp of last successful validation
+    validationError: v.optional(v.string()), // Last validation error message
+    usageCount: v.optional(v.number()), // Track API usage for user insights
+    rateLimitRemaining: v.optional(v.number()), // Track rate limits if available
+    rateLimitReset: v.optional(v.number()), // When rate limit resets
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_provider", ["userId", "provider"])
+    .index("by_user_active", ["userId", "isActive"]),
 
   // Historical price data - optimized for chart rendering (CoinGecko only)
   priceHistory: defineTable({

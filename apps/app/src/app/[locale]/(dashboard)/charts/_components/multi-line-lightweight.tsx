@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useRef, useMemo, useState } from 'react'
+import React, { useEffect, useRef, useMemo, useState, useTransition, useDeferredValue, useCallback, memo } from 'react'
+import { useTheme } from 'next-themes'
 import {
   createChart,
   ColorType,
@@ -35,6 +36,7 @@ interface MultiPriceChartLightweightProps {
   coins: OptimisticCoinMarketData[]
   activeTimeScale: string
   setActiveTimeScale: (scale: string) => void
+  isPending?: boolean
 }
 
 interface PriceDataPoint {
@@ -73,13 +75,13 @@ const TooltipContent = ({
   return (
     <div className="flex flex-col gap-1 overflow-hidden">
       <div className="px-4 py-3">
-        <div className="mb-3 text-[11px] text-zinc-400 font-medium">
+        <div className="mb-3 text-[11px] text-gray-600 dark:text-zinc-400 font-medium">
           {new Date(timestamp).toLocaleDateString(undefined, {
             month: 'long',
             day: 'numeric'
           })}
         </div>
-        <div className="w-full h-[1px] mb-3 bg-zinc-700/50 scale-125" />
+        <div className="w-full h-[1px] mb-3 bg-gray-300 dark:bg-zinc-700/50 scale-125" />
         <div className="flex flex-col gap-2">
           {coinData.map((coin) => (
             <div key={coin.id} className="flex items-center justify-between">
@@ -88,11 +90,11 @@ const TooltipContent = ({
                   className="h-3 w-1 rounded-full"
                   style={{ backgroundColor: coin.color }}
                 />
-                <span className="text-[11px] text-zinc-400 truncate max-w-[80px]">
-                  {coin.symbol.toUpperCase()} <span className="text-zinc-500">{coin.name}</span>
+                <span className="text-[11px] text-gray-600 dark:text-zinc-400 truncate max-w-[80px]">
+                  {coin.symbol.toUpperCase()} <span className="text-gray-500 dark:text-zinc-500">{coin.name}</span>
                 </span>
               </div>
-              <span className="text-[11px] font-mono text-white font-bold">
+              <span className="text-[11px] font-mono text-gray-900 dark:text-white font-bold">
                 {coin.value > 0 ? '+' : ''}{coin.value.toFixed(2)}%
               </span>
             </div>
@@ -121,7 +123,7 @@ const TimeScaleSelector = ({
   ]
 
   return (
-    <div className="flex gap-1 bg-zinc-950/10 backdrop-blur-xl border border-zinc-800/30 rounded-[12px] p-1">
+    <div className="flex gap-1 bg-white/95 dark:bg-zinc-950/10 backdrop-blur-xl border border-gray-200/50 dark:border-zinc-800/30 rounded-[12px] p-1">
       {scales.map((scale) => (
         <button
           key={scale.value}
@@ -129,7 +131,7 @@ const TimeScaleSelector = ({
           className={cn(
             "px-2 py-1 text-xs rounded-lg",
             activeTimeScale === scale.value
-              ? "bg-zinc-800/50 border border-zinc-800/50  shadow-md shadow-zinc-950/50 text-white"
+              ? "bg-gray-200 border border-gray-300 shadow-md shadow-gray-500/20 text-gray-900 dark:bg-zinc-800/50 dark:border-zinc-800/50 dark:shadow-zinc-950/50 dark:text-white"
               : "bg-transparent text-muted-foreground hover:bg-muted/80"
           )}
         >
@@ -140,10 +142,11 @@ const TimeScaleSelector = ({
   )
 }
 
-export function MultiPriceChartLightweight({ 
+export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweight({ 
   coins, 
   activeTimeScale, 
-  setActiveTimeScale 
+  setActiveTimeScale,
+  isPending 
 }: MultiPriceChartLightweightProps) {
   const { removeFromWatchlist } = useWatchlist()
   const chartContainerRef = useRef<HTMLDivElement>(null)
@@ -151,11 +154,31 @@ export function MultiPriceChartLightweight({
   const [hoveredRemoveId, setHoveredRemoveId] = useState<string | null>(null)
   const lineSeriesMapRef = useRef<Map<string, LineSeriesData>>(new Map())
   
+  // React 19: Add concurrent features
+  const [isChartPending, startChartTransition] = useTransition()
+  
+  // React 19: Defer expensive computations
+  const deferredCoins = useDeferredValue(coins)
+  const deferredTimeScale = useDeferredValue(activeTimeScale)
+  
+  // Use next-themes for proper theme detection (handles manual overrides correctly)
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  
+  // Prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+  
+  // Get theme state from next-themes (this respects manual theme selection)
+  const isDarkMode = mounted ? resolvedTheme === 'dark' : true
+  
+  
   // Use the bottom nav context to trigger contextual command search
   const { openContextualCommandSearch } = useBottomNav()
 
   // 🚀 OPTIMIZED: Use CoinGecko BULK multi-chart data hook with intelligent caching
-  const { series: coinSeriesData, isLoading: chartDataLoading, performance } = useCoinGeckoBulkChartData(coins, activeTimeScale)
+  const { series: coinSeriesData, isLoading: chartDataLoading, performance } = useCoinGeckoBulkChartData(deferredCoins, deferredTimeScale)
 
   // 🔍 DEBUG: Log bulk performance
   console.log('📊 Bulk multi-line chart:', {
@@ -165,17 +188,28 @@ export function MultiPriceChartLightweight({
     cacheHitRate: performance.cacheHitRate.toFixed(1) + '%'
   })
 
-  // Generate colors for the series data
+  // React 19: Memoize expensive color generation with deferred data
   const coinSeriesWithColors = useMemo(() => {
     if (!coinSeriesData.length) return []
     
     const colors = generatePastelColors(coinSeriesData.length)
     
-    return coinSeriesData.map((series, index) => ({
-      ...series,
-      color: colors[index] || `hsl(${Math.random() * 360}, 40%, 75%)`,
-    }))
-  }, [coinSeriesData])
+    return coinSeriesData.map((series, index) => {
+      const baseColor = colors[index] || `hsl(${Math.random() * 360}, 40%, 75%)`
+      // For light mode, make colors darker and more saturated
+      const themeAwareColor = isDarkMode 
+        ? baseColor 
+        : baseColor.replace(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/, (_, h, s, l) => {
+            // Increase saturation and decrease lightness for light mode
+            return `hsl(${h}, ${Math.min(100, parseInt(s) + 20)}%, ${Math.max(30, parseInt(l) - 40)}%)`
+          })
+      
+      return {
+        ...series,
+        color: themeAwareColor,
+      }
+    })
+  }, [coinSeriesData, isDarkMode])
 
   const latestValues = useMemo(() => {
     return coinSeriesWithColors.map(series => ({
@@ -184,34 +218,47 @@ export function MultiPriceChartLightweight({
     }))
   }, [coinSeriesWithColors])
 
-  // Create avatar data for coin logos (filter out optimistic coins)
+  // React 19: Use callback for hover handlers
+  const handleCoinHover = useCallback((coinId: string | null) => {
+    startChartTransition(() => {
+      setHoveredCoin(coinId)
+    })
+  }, [])
+
+  const handleRemoveHover = useCallback((coinId: string | null) => {
+    setHoveredRemoveId(coinId)
+  }, [])
+
+  // Create avatar data for coin logos (filter out optimistic coins) - using deferred coins
   const avatarData = useMemo(() => {
-    return coins.filter(coin => !coin.isOptimistic && coin.image).map((coin) => ({
+    return deferredCoins.filter(coin => !coin.isOptimistic && coin.image).map((coin) => ({
       imageUrl: coin.image!, // Only use CoinGecko images, skip coins without images
       profileUrl: `/charts/${coin.id}`,
     }))
-  }, [coins])
+  }, [deferredCoins])
 
+  // React 19: Optimize chart creation with transition
   useEffect(() => {
     if (!chartContainerRef.current || !coinSeriesWithColors.length) return
+
 
     const chart = createChart(chartContainerRef.current, {
       handleScale: false,
       handleScroll: false,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#ffffff50",
+        textColor: isDarkMode ? "#ffffff50" : "#00000050",
         attributionLogo: false,
       },
       grid: {
         vertLines: { 
           visible: false,
-          color: "#e5e7eb0",
+          color: isDarkMode ? "#e5e7eb0" : "#00000020",
           style: LineStyle.Dotted,
         },
         horzLines: { 
           visible: false, // Hide default lines, we'll create gradient ones
-          color: "#ffffff10",
+          color: isDarkMode ? "#ffffff10" : "#00000010",
           style: LineStyle.Solid,
         },
       },
@@ -226,7 +273,7 @@ export function MultiPriceChartLightweight({
         vertLine: {
           labelVisible: true,
           width: 1,
-          color: "#d1d5db40",
+          color: isDarkMode ? "#d1d5db40" : "#00000040",
           visible: true,
           style: LineStyle.Solid,
         },
@@ -284,7 +331,11 @@ export function MultiPriceChartLightweight({
     // Add tooltip
     const tooltipEl = document.createElement("div")
     const tooltipRoot = createRoot(tooltipEl)
-    tooltipEl.className = "fixed hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
+    tooltipEl.className = `fixed hidden overflow-hidden text-[11px] rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-all duration-100 ease-in-out ${
+      isDarkMode 
+        ? 'text-white bg-zinc-900/95 border border-zinc-700/50' 
+        : 'text-gray-900 bg-white/95 border border-gray-200/50'
+    }`
     document.body.appendChild(tooltipEl)
 
     // Subscribe to crosshair move
@@ -395,7 +446,7 @@ export function MultiPriceChartLightweight({
       })
       chart.remove()
     }
-  }, [coinSeriesWithColors, activeTimeScale])
+  }, [coinSeriesWithColors, deferredTimeScale, isDarkMode, activeTimeScale, resolvedTheme, mounted])
 
   // Handle hover effects on chart lines
   useEffect(() => {
@@ -428,9 +479,15 @@ export function MultiPriceChartLightweight({
     })
   }, [hoveredCoin])
 
+  // React 19: Show pending states
+  const showPending = isPending || isChartPending || chartDataLoading
+
   // Always show the main UI structure
   return (
-    <div className="grid grid-cols-12 gap-0 rounded-[16px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
+    <div className={cn(
+      "grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/20 border-zinc-800/10 overflow-hidden p-1",
+      showPending && "opacity-60 transition-opacity duration-200"
+    )}>
       {/* Legend */}
       <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2">   
         <div className="flex flex-row items-center justify-between gap-2 mb-3"> 
@@ -439,10 +496,10 @@ export function MultiPriceChartLightweight({
           <Button
             variant="outline"
             onClick={() => openContextualCommandSearch('charts')}
-            className="group w-full border-zinc-800/0 hover:border-zinc-800/80 bg-transparent hover:bg-transparent flex items-center gap-2 justify-between p-3 rounded-lg"
+            className="group w-full border-zinc-800/0 dark:hover:border-zinc-800/80 bg-transparent hover:bg-transparent flex items-center gap-2 justify-between p-3 rounded-lg"
           >
-            <span className="text-muted-foreground font-normal text-sm group-hover:text-white">Add to comparison</span>
-            <IconPlus className="group-hover:fill-white group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
+            <span className="text-muted-foreground font-normal text-sm group-hover:text-primary">Add to comparison</span>
+            <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
           </Button>
         </div> 
         
@@ -474,9 +531,9 @@ export function MultiPriceChartLightweight({
                         hoveredCoin && hoveredCoin !== coin.id.toString() ? "opacity-40" : "opacity-100",
                         hoveredCoin === coin.id.toString() ? "bg-white/5" : ""
                       )}
-                      style={{ backgroundColor: addOpacityToColor(realCoin.color, 0.05) }}
-                      onMouseEnter={() => setHoveredCoin(coin.id.toString())}
-                      onMouseLeave={() => setHoveredCoin(null)}
+                      style={{ backgroundColor: addOpacityToColor(realCoin.color, 0.1) }}
+                      onMouseEnter={() => handleCoinHover(coin.id.toString())}
+                      onMouseLeave={() => handleCoinHover(null)}
                     >
                       <div 
                         className="w-1 h-9 rounded-full transition-transform duration-200"
@@ -495,11 +552,11 @@ export function MultiPriceChartLightweight({
                         )}
                         onMouseEnter={(e) => {
                           e.stopPropagation()
-                          setHoveredRemoveId(coin.id.toString())
+                          handleRemoveHover(coin.id.toString())
                         }}
                         onMouseLeave={(e) => {
                           e.stopPropagation()
-                          setHoveredRemoveId(null)
+                          handleRemoveHover(null)
                         }}
                         onClick={async (e) => {
                           e.preventDefault()
@@ -537,7 +594,7 @@ export function MultiPriceChartLightweight({
         </div>
       </div>
       
-      <div className="col-span-9 border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+      <div className="col-span-9 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
         {/* Chart Content */}
         <div className="p-0 relative">
           <div
@@ -610,4 +667,4 @@ export function MultiPriceChartLightweight({
       </div>
     </div>
   )
-}
+})

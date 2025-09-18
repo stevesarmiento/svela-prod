@@ -19,28 +19,28 @@ interface ColorPickerProps {
 // Predefined color palette
 export const COLORS = [
   // Row 1: Grays and Blues
-  { name: 'Default', value: 'default', bg: 'bg-zinc-700/80', border: 'border-zinc-600' },
-  { name: 'Slate', value: 'slate', bg: 'bg-slate-700/80', border: 'border-slate-600' },
-  { name: 'Blue', value: 'blue', bg: 'bg-blue-700/80', border: 'border-blue-600' },
-  { name: 'Sky', value: 'sky', bg: 'bg-sky-700/80', border: 'border-sky-600' },
-  { name: 'Cyan', value: 'cyan', bg: 'bg-cyan-700/80', border: 'border-cyan-600' },
-  { name: 'Teal', value: 'teal', bg: 'bg-teal-700/80', border: 'border-teal-600' },
+  { name: 'Default', value: 'default', bg: 'bg-zinc-700', border: 'border-zinc-600' },
+  { name: 'Slate', value: 'slate', bg: 'bg-slate-700', border: 'border-slate-600' },
+  { name: 'Blue', value: 'blue', bg: 'bg-blue-700', border: 'border-blue-600' },
+  { name: 'Sky', value: 'sky', bg: 'bg-sky-700', border: 'border-sky-600' },
+  { name: 'Cyan', value: 'cyan', bg: 'bg-cyan-700', border: 'border-cyan-600' },
+  { name: 'Teal', value: 'teal', bg: 'bg-teal-700', border: 'border-teal-600' },
 
   // Row 2: Purples and Pinks
-  { name: 'Indigo', value: 'indigo', bg: 'bg-indigo-700/80', border: 'border-indigo-600' },
-  { name: 'Purple', value: 'purple', bg: 'bg-purple-700/80', border: 'border-purple-600' },
-  { name: 'Violet', value: 'violet', bg: 'bg-violet-700/80', border: 'border-violet-600' },
-  { name: 'Pink', value: 'pink', bg: 'bg-pink-700/80', border: 'border-pink-600' },
-  { name: 'Rose', value: 'rose', bg: 'bg-rose-700/80', border: 'border-rose-600' },
-  { name: 'Red', value: 'red', bg: 'bg-red-700/80', border: 'border-red-600' },
+  { name: 'Indigo', value: 'indigo', bg: 'bg-indigo-700', border: 'border-indigo-600' },
+  { name: 'Purple', value: 'purple', bg: 'bg-purple-700', border: 'border-purple-600' },
+  { name: 'Violet', value: 'violet', bg: 'bg-violet-700', border: 'border-violet-600' },
+  { name: 'Pink', value: 'pink', bg: 'bg-pink-700', border: 'border-pink-600' },
+  { name: 'Rose', value: 'rose', bg: 'bg-rose-700', border: 'border-rose-600' },
+  { name: 'Red', value: 'red', bg: 'bg-red-700', border: 'border-red-600' },
 
   // Row 3: Greens and Warm Colors
-  { name: 'Emerald', value: 'emerald', bg: 'bg-emerald-700/80', border: 'border-emerald-600' },
-  { name: 'Green', value: 'green', bg: 'bg-green-700/80', border: 'border-green-600' },
-  { name: 'Lime', value: 'lime', bg: 'bg-lime-700/80', border: 'border-lime-600' },
-  { name: 'Yellow', value: 'yellow', bg: 'bg-yellow-700/80', border: 'border-yellow-600' },
-  { name: 'Amber', value: 'amber', bg: 'bg-amber-700/80', border: 'border-amber-600' },
-  { name: 'Orange', value: 'orange', bg: 'bg-orange-700/80', border: 'border-orange-600' },
+  { name: 'Emerald', value: 'emerald', bg: 'bg-emerald-700', border: 'border-emerald-600' },
+  { name: 'Green', value: 'green', bg: 'bg-green-700', border: 'border-green-600' },
+  { name: 'Lime', value: 'lime', bg: 'bg-lime-700', border: 'border-lime-600' },
+  { name: 'Yellow', value: 'yellow', bg: 'bg-yellow-700', border: 'border-yellow-600' },
+  { name: 'Amber', value: 'amber', bg: 'bg-amber-700', border: 'border-amber-600' },
+  { name: 'Orange', value: 'orange', bg: 'bg-orange-700', border: 'border-orange-600' },
 ]
 
 export function ColorPicker({ value = 'default', onSelect, className }: ColorPickerProps) {
@@ -110,26 +110,26 @@ export function ColorPicker({ value = 'default', onSelect, className }: ColorPic
 // Export color mappings for use in components
 export const COLOR_THEMES = {
   // Grays and Blues
-  default: { bg: 'bg-zinc-700/80', border: 'border-zinc-600' },
-  slate: { bg: 'bg-slate-700/80', border: 'border-slate-600' },
-  blue: { bg: 'bg-blue-700/80', border: 'border-blue-600' },
-  sky: { bg: 'bg-sky-700/80', border: 'border-sky-600' },
-  cyan: { bg: 'bg-cyan-700/80', border: 'border-cyan-600' },
-  teal: { bg: 'bg-teal-700/80', border: 'border-teal-600' },
+  default: { bg: 'bg-zinc-700', border: 'border-zinc-600' },
+  slate: { bg: 'bg-slate-700', border: 'border-slate-600' },
+  blue: { bg: 'bg-blue-700', border: 'border-blue-600' },
+  sky: { bg: 'bg-sky-700', border: 'border-sky-600' },
+  cyan: { bg: 'bg-cyan-700', border: 'border-cyan-600' },
+  teal: { bg: 'bg-teal-700', border: 'border-teal-600' },
 
   // Purples and Pinks
-  indigo: { bg: 'bg-indigo-700/80', border: 'border-indigo-600' },
-  purple: { bg: 'bg-purple-700/80', border: 'border-purple-600' },
-  violet: { bg: 'bg-violet-700/80', border: 'border-violet-600' },
-  pink: { bg: 'bg-pink-700/80', border: 'border-pink-600' },
-  rose: { bg: 'bg-rose-700/80', border: 'border-rose-600' },
-  red: { bg: 'bg-red-700/80', border: 'border-red-600' },
+  indigo: { bg: 'bg-indigo-700', border: 'border-indigo-600' },
+  purple: { bg: 'bg-purple-700', border: 'border-purple-600' },
+  violet: { bg: 'bg-violet-700', border: 'border-violet-600' },
+  pink: { bg: 'bg-pink-700', border: 'border-pink-600' },
+  rose: { bg: 'bg-rose-700', border: 'border-rose-600' },
+  red: { bg: 'bg-red-700', border: 'border-red-600' },
 
   // Greens and Warm Colors
-  emerald: { bg: 'bg-emerald-700/80', border: 'border-emerald-600' },
-  green: { bg: 'bg-green-700/80', border: 'border-green-600' },
-  lime: { bg: 'bg-lime-700/80', border: 'border-lime-600' },
-  yellow: { bg: 'bg-yellow-700/80', border: 'border-yellow-600' },
-  amber: { bg: 'bg-amber-700/80', border: 'border-amber-600' },
-  orange: { bg: 'bg-orange-700/80', border: 'border-orange-600' },
+  emerald: { bg: 'bg-emerald-700', border: 'border-emerald-600' },
+  green: { bg: 'bg-green-700', border: 'border-green-600' },
+  lime: { bg: 'bg-lime-700', border: 'border-lime-600' },
+  yellow: { bg: 'bg-yellow-700', border: 'border-yellow-600' },
+  amber: { bg: 'bg-amber-700', border: 'border-amber-600' },
+  orange: { bg: 'bg-orange-700', border: 'border-orange-600' },
 } 

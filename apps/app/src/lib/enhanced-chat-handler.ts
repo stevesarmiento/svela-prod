@@ -48,10 +48,10 @@ export class EnhancedChatHandler {
         console.log('  • Price Data:', {
           name: dataContext.priceData.name,
           symbol: dataContext.priceData.symbol,
-          price: dataContext.priceData.price,
-          change24h: dataContext.priceData.priceChange24h,
+          currentPrice: dataContext.priceData.currentPrice,
+          priceChangePercentage24h: dataContext.priceData.priceChangePercentage24h,
           marketCap: dataContext.priceData.marketCap,
-          volume24h: dataContext.priceData.volume24h
+          totalVolume: dataContext.priceData.totalVolume
         });
       }
       if (dataContext.historicalData) {
@@ -178,24 +178,25 @@ export class EnhancedChatHandler {
    */
   private createPriceCard(priceData: NonNullable<EnhancedDataContext['priceData']>): ChatComponent {
     return {
-      id: `price-card-${priceData.id}`,
+      id: `price-card-${priceData.coingeckoId}`,
       type: 'price_card',
       priority: 1,
       size: 'medium',
       title: `${priceData.name} Price`,
       subtitle: priceData.symbol.toUpperCase(),
       data: {
-        id: priceData.id,
+        coingeckoId: priceData.coingeckoId,
         name: priceData.name,
         symbol: priceData.symbol,
-        price: priceData.price,
-        change24h: priceData.priceChange24h,
+        currentPrice: priceData.currentPrice,
+        priceChangePercentage24h: priceData.priceChangePercentage24h,
         marketCap: priceData.marketCap,
-        volume24h: priceData.volume24h,
-        rank: priceData.rank
+        totalVolume: priceData.totalVolume,
+        marketCapRank: priceData.marketCapRank,
+        image: priceData.image
       },
       metadata: {
-        dataSource: 'CoinMarketCap',
+        dataSource: 'CoinGecko',
         lastUpdated: Date.now(),
         reliability: 'high'
       }
@@ -210,19 +211,19 @@ export class EnhancedChatHandler {
     chartType: VisualizationType
   ): ChatComponent {
     return {
-      id: `chart-${historicalData.coinId}-${historicalData.timeframe}`,
+      id: `chart-${historicalData.coingeckoId}-${historicalData.timeframe}`,
       type: chartType,
       priority: 2,
       size: 'large',
       title: `Price History (${historicalData.timeframe})`,
       data: {
-        coinId: historicalData.coinId,
+        coingeckoId: historicalData.coingeckoId,
         timeframe: historicalData.timeframe,
         prices: historicalData.prices,
         volumes: historicalData.volumes
       },
       metadata: {
-        dataSource: 'CoinMarketCap',
+        dataSource: 'CoinGecko',
         lastUpdated: Date.now(),
         reliability: 'high'
       }
@@ -236,13 +237,13 @@ export class EnhancedChatHandler {
     marketData: NonNullable<EnhancedDataContext['marketStructureData']>
   ): ChatComponent {
     return {
-      id: `market-structure-${marketData.coinId}`,
+      id: `market-structure-${marketData.coingeckoId}`,
       type: 'market_structure',
       priority: 3,
       size: 'medium',
       title: 'Market Structure Analysis',
       data: {
-        coinId: marketData.coinId,
+        coingeckoId: marketData.coingeckoId,
         fundingRate: marketData.fundingRate,
         openInterest: marketData.openInterest,
         liquidations: marketData.liquidations,
@@ -297,14 +298,15 @@ export class EnhancedChatHandler {
       subtitle: `Performance over ${timeframe}`,
       data: {
         coins: multiCoinData.priceData.map((priceData, index) => ({
-          id: priceData.id,
+          coingeckoId: priceData.coingeckoId,
           name: priceData.name,
           symbol: priceData.symbol,
-          price: priceData.price,
-          change24h: priceData.priceChange24h,
+          currentPrice: priceData.currentPrice,
+          priceChangePercentage24h: priceData.priceChangePercentage24h,
           marketCap: priceData.marketCap,
-          volume24h: priceData.volume24h,
-          rank: priceData.rank,
+          totalVolume: priceData.totalVolume,
+          marketCapRank: priceData.marketCapRank,
+          image: priceData.image,
           historical: multiCoinData.historicalData[index] ? {
             timeframe: multiCoinData.historicalData[index].timeframe,
             prices: multiCoinData.historicalData[index].prices,
@@ -315,7 +317,7 @@ export class EnhancedChatHandler {
         chartType
       },
       metadata: {
-        dataSource: 'CoinMarketCap',
+        dataSource: 'CoinGecko',
         lastUpdated: Date.now(),
         reliability: 'high'
       }
@@ -329,8 +331,8 @@ export class EnhancedChatHandler {
     marketStructureData: MarketStructureData[]
   ): ChatComponent {
     const coinNames = marketStructureData.map(data => 
-      // We don't have symbol in MarketStructureData, so we'll use coinId
-      `Coin ${data.coinId}`
+      // We don't have symbol in MarketStructureData, so we'll use coingeckoId
+      `Coin ${data.coingeckoId}`
     ).join(' vs ');
     
     return {
@@ -342,7 +344,7 @@ export class EnhancedChatHandler {
       subtitle: coinNames,
       data: {
         comparison: marketStructureData.map(data => ({
-          coinId: data.coinId,
+          coingeckoId: data.coingeckoId,
           fundingRate: data.fundingRate,
           openInterest: data.openInterest,
           liquidations: data.liquidations,
@@ -550,11 +552,11 @@ Since visual components will also be shown, focus your text response on insights
     if (priceData) {
       console.log('📊 Adding basic price data to context');
       context += `\n**${priceData.name} (${priceData.symbol}) - CURRENT LIVE DATA:**\n`;
-      context += `- 🔥 CURRENT PRICE: $${priceData.price.toLocaleString()} (THIS IS THE REAL CURRENT PRICE - USE THIS EXACT VALUE)\n`;
-      context += `- 📈 24h Change: ${priceData.priceChange24h >= 0 ? '+' : ''}${priceData.priceChange24h.toFixed(2)}% (USE THIS EXACT PERCENTAGE)\n`;
+      context += `- 🔥 CURRENT PRICE: $${priceData.currentPrice.toLocaleString()} (THIS IS THE REAL CURRENT PRICE - USE THIS EXACT VALUE)\n`;
+      context += `- 📈 24h Change: ${priceData.priceChangePercentage24h >= 0 ? '+' : ''}${priceData.priceChangePercentage24h.toFixed(2)}% (USE THIS EXACT PERCENTAGE)\n`;
       context += `- 💰 Market Cap: $${formatLargeNumber(priceData.marketCap)}\n`;
-      context += `- 📊 24h Volume: $${formatLargeNumber(priceData.volume24h)}\n`;
-      context += `- 🏆 Rank: #${priceData.rank}\n`;
+      context += `- 📊 24h Volume: $${formatLargeNumber(priceData.totalVolume)}\n`;
+      context += `- 🏆 Rank: #${priceData.marketCapRank}\n`;
       context += `- ⏰ Data Timestamp: ${new Date().toISOString()} (LIVE DATA - NOT HISTORICAL)\n`;
     }
     
@@ -623,11 +625,11 @@ Since visual components will also be shown, focus your text response on insights
       context += `\n**Price Comparison:**\n`;
       priceData.forEach((coin, index) => {
         context += `\n**${coin.name} (${coin.symbol})**\n`;
-        context += `- Current Price: $${coin.price.toLocaleString()}\n`;
-        context += `- 24h Change: ${coin.priceChange24h.toFixed(2)}%\n`;
+        context += `- Current Price: $${coin.currentPrice.toLocaleString()}\n`;
+        context += `- 24h Change: ${coin.priceChangePercentage24h.toFixed(2)}%\n`;
         context += `- Market Cap: $${formatLargeNumber(coin.marketCap)}\n`;
-        context += `- 24h Volume: $${formatLargeNumber(coin.volume24h)}\n`;
-        context += `- Rank: #${coin.rank}\n`;
+        context += `- 24h Volume: $${formatLargeNumber(coin.totalVolume)}\n`;
+        context += `- Rank: #${coin.marketCapRank}\n`;
         
         // Add historical performance if available
         if (historicalData[index] && historicalData[index].prices.length > 0) {
@@ -687,10 +689,10 @@ Since visual components will also be shown, focus your text response on insights
       symbol: priceData.symbol,
       quote: {
         USD: {
-          price: priceData.price,
-          percent_change_24h: priceData.priceChange24h,
+          price: priceData.currentPrice,
+          percent_change_24h: priceData.priceChangePercentage24h,
           market_cap: priceData.marketCap,
-          volume_24h: priceData.volume24h,
+          volume_24h: priceData.totalVolume,
           volume_change_24h: 0, // Would need to calculate
           market_cap_dominance: 0, // Would need to calculate
         }
@@ -701,7 +703,7 @@ Since visual components will also be shown, focus your text response on insights
     // Add enhanced data if available
     if (historicalData && historicalData.prices.length > 0) {
       const prices = historicalData.prices.map(p => p.price);
-      const currentPrice = priceData.price;
+      const currentPrice = priceData.currentPrice;
       const recentPrices = prices.slice(-21);
       const recentAvg = prices.slice(-7).reduce((a, b) => a + b, 0) / 7;
       const previousAvg = prices.slice(-14, -7).reduce((a, b) => a + b, 0) / 7;
@@ -711,8 +713,8 @@ Since visual components will also be shown, focus your text response on insights
         currentPrice: currentPrice,
         priceHistory: prices,
         momentum: recentAvg > previousAvg ? 'bullish' : 'bearish',
-        volatility: Math.abs(priceData.priceChange24h) > 5 ? 'high' : 
-                   Math.abs(priceData.priceChange24h) > 2 ? 'moderate' : 'low',
+        volatility: Math.abs(priceData.priceChangePercentage24h) > 5 ? 'high' : 
+                   Math.abs(priceData.priceChangePercentage24h) > 2 ? 'moderate' : 'low',
         support: Math.min(...recentPrices),
         resistance: Math.max(...recentPrices)
       };
@@ -724,7 +726,7 @@ Since visual components will also be shown, focus your text response on insights
         const previousVolume = volumes.slice(-14, -7).reduce((a, b) => a + b, 0) / 7;
         
         comprehensiveData.volumeAnalysis = {
-          currentVolume: priceData.volume24h,
+          currentVolume: priceData.totalVolume,
           volumeHistory: volumes,
           volumeTrend: recentVolume > previousVolume * 1.2 ? 'increasing' : 
                       recentVolume < previousVolume * 0.8 ? 'decreasing' : 'stable',
@@ -763,20 +765,20 @@ Since visual components will also be shown, focus your text response on insights
 
     // Basic technical indicators (placeholder - would need actual calculation)
     comprehensiveData.hullSuite = {
-      trendDirection: priceData.priceChange24h > 0 ? 'bullish' : 'bearish',
+      trendDirection: priceData.priceChangePercentage24h > 0 ? 'bullish' : 'bearish',
       crossoverSignal: 'none',
-      strength: Math.abs(priceData.priceChange24h) > 3 ? 'strong' : 'moderate'
+      strength: Math.abs(priceData.priceChangePercentage24h) > 3 ? 'strong' : 'moderate'
     };
 
     // Price action
     comprehensiveData.priceAction = {
-      trend: priceData.priceChange24h > 2 ? 'uptrend' : 
-             priceData.priceChange24h < -2 ? 'downtrend' : 'sideways',
-      volatility: Math.abs(priceData.priceChange24h) > 5 ? 'high' : 
-                 Math.abs(priceData.priceChange24h) > 2 ? 'moderate' : 'low',
+      trend: priceData.priceChangePercentage24h > 2 ? 'uptrend' : 
+             priceData.priceChangePercentage24h < -2 ? 'downtrend' : 'sideways',
+      volatility: Math.abs(priceData.priceChangePercentage24h) > 5 ? 'high' : 
+                 Math.abs(priceData.priceChangePercentage24h) > 2 ? 'moderate' : 'low',
       volume_profile: 'stable', // Would need calculation
       priceLevel: 'neutral',
-      momentum: priceData.priceChange24h > 0 ? 'bullish' : 'bearish'
+      momentum: priceData.priceChangePercentage24h > 0 ? 'bullish' : 'bearish'
     };
 
     return comprehensiveData;
@@ -882,13 +884,13 @@ ${volumeAnalysis['volumeSpike'] ? 'VOLUME SPIKE DETECTED' : 'Normal volume activ
     const { intent, priceData } = dataContext;
     
     if (priceData) {
-      const changeEmoji = priceData.priceChange24h >= 0 ? '📈' : '📉';
-      const fallbackResponse = `${changeEmoji} ${priceData.name} is currently trading at $${priceData.price.toLocaleString()} with a 24h change of ${priceData.priceChange24h.toFixed(2)}%. Market cap: $${formatLargeNumber(priceData.marketCap)}.`;
+      const changeEmoji = priceData.priceChangePercentage24h >= 0 ? '📈' : '📉';
+      const fallbackResponse = `${changeEmoji} ${priceData.name} is currently trading at $${priceData.currentPrice.toLocaleString()} with a 24h change of ${priceData.priceChangePercentage24h.toFixed(2)}%. Market cap: $${formatLargeNumber(priceData.marketCap)}.`;
       
       console.log('📊 Fallback response with price data:', {
         coin: priceData.name,
-        price: priceData.price,
-        change: priceData.priceChange24h,
+        price: priceData.currentPrice,
+        change: priceData.priceChangePercentage24h,
         responseLength: fallbackResponse.length
       });
       
