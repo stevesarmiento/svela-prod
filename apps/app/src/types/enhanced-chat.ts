@@ -1,6 +1,6 @@
 // Enhanced Chat Intent Detection Types
 export interface EnhancedChatIntent {
-  type: 'coin' | 'market' | 'comparison' | 'analysis' | 'portfolio' | 'news' | 'none'
+  type: 'coin' | 'market' | 'comparison' | 'analysis' | 'portfolio' | 'news' | 'trade' | 'none'
   coins: string[]
   timeframe: '1h' | '4h' | '1d' | '7d' | '30d' | '90d' | '1y' | 'max' | null
   dataTypes: DataType[]
@@ -9,6 +9,7 @@ export interface EnhancedChatIntent {
   visualizationType?: VisualizationType[]
   keywords: string[]
   confidence: number
+  tradeAction?: TradeAction
 }
 
 export type DataType = 
@@ -34,6 +35,7 @@ export type VisualizationType =
   | 'comparison_chart'  // Add this new type
   | 'heatmap'
   | 'comprehensive_analysis'
+  | 'trade_preview'
 
 // Enhanced Data Context
 export interface EnhancedDataContext {
@@ -159,6 +161,27 @@ export interface ComparisonData {
   }
 }
 
+// Trading Action Types
+export interface TradeAction {
+  type: 'swap' | 'buy' | 'sell'
+  inputToken?: string
+  outputToken?: string
+  amount?: number
+  amountType: 'exact_in' | 'exact_out'
+  slippage?: number
+  confidence: number
+  destinationAddress?: string
+}
+
+export interface TradingPreference {
+  preferredSlippage: number
+  preferredDEXs: string[]
+  riskTolerance: 'low' | 'medium' | 'high'
+  defaultTradeSize: number
+  autoApprove?: boolean
+  maxTradeValue?: number
+}
+
 // Intent Detection Patterns
 export interface IntentPattern {
   keywords: string[]
@@ -218,6 +241,16 @@ export const INTENT_PATTERNS: Record<string, IntentPattern[]> = {
       analysisDepthHints: ['detailed'],
       visualizationHints: ['comparison_table', 'line_chart'],
       confidence: 0.9
+    }
+  ],
+  trading: [
+    {
+      keywords: ['swap', 'trade', 'buy', 'sell', 'exchange', 'convert', 'purchase', 'get', 'acquire'],
+      dataTypes: ['price'],
+      timeframeHints: ['now', 'current'],
+      analysisDepthHints: ['quick'],
+      visualizationHints: ['trade_preview'],
+      confidence: 0.95
     }
   ]
 }

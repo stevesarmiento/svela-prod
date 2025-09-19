@@ -2,9 +2,21 @@ import { openai, isOpenAIAvailable } from '@/lib/openai';
 import type { 
   EnhancedChatIntent, 
   DataType, 
-  VisualizationType
+  VisualizationType,
+  TradeAction
 } from '@/types/enhanced-chat';
 import { INTENT_PATTERNS, TIMEFRAME_PATTERNS } from '@/types/enhanced-chat';
+import { normalizeTokenSymbol, getTokenInfo } from '@/lib/token-mappings';
+
+// Debug helper - expose to window for testing
+if (typeof window !== 'undefined') {
+  (window as any).testTradeDetection = (message: string) => {
+    const detector = new EnhancedIntentDetector();
+    const result = (detector as any).detectTradeAction(message);
+    console.log('🧪 Trade detection test result:', result);
+    return result;
+  };
+}
 
 export class EnhancedIntentDetector {
   
@@ -49,8 +61,13 @@ export class EnhancedIntentDetector {
     // Determine analysis depth from keywords
     const analysisDepth = this.determineAnalysisDepth(message);
     
+    // Check for trading actions first
+    const tradeAction = this.detectTradeAction(message);
+    console.log('🔍 Trade action detection result:', tradeAction);
+    
     // Determine query type
-    const type = this.determineQueryType(message, coins, patternMatches);
+    const type = tradeAction ? 'trade' : this.determineQueryType(message, coins, patternMatches);
+    console.log('🎯 Final intent type determined:', type);
     
     return {
       type,
@@ -61,7 +78,8 @@ export class EnhancedIntentDetector {
       keywords,
       visualizationType: patternMatches.visualizations,
       confidence: patternMatches.confidence,
-      intent: `Pattern-based detection: ${type} query for ${coins.length} coins`
+      intent: `Pattern-based detection: ${type} query for ${coins.length} coins`,
+      tradeAction
     };
   }
 
@@ -204,6 +222,132 @@ export class EnhancedIntentDetector {
   }
 
   /**
+   * Detect trading actions in the message
+   */
+  private detectTradeAction(message: string): TradeAction | undefined {
+    const msg = message.toLowerCase().trim();
+    console.log('🔍 Detecting trade action for message:', msg);
+    
+    // Pattern: "swap X Y for Z" or "buy X SOL with USDC"
+    const swapPatterns = [
+      /swap\s+(\d+(?:\.\d+)?)\s+(\w+)\s+for\s+(\w+)/i,
+      /buy\s+(\d+(?:\.\d+)?)\s+(\w+)\s+with\s+(\w+)/i,
+      /sell\s+(\d+(?:\.\d+)?)\s+(\w+)\s+for\s+(\w+)/i,
+      /exchange\s+(\d+(?:\.\d+)?)\s+(\w+)\s+for\s+(\w+)/i,
+      /convert\s+(\d+(?:\.\d+)?)\s+(\w+)\s+to\s+(\w+)/i,
+      /trade\s+(\d+(?:\.\d+)?)\s+(\w+)\s+for\s+(\w+)/i,
+    ];
+    
+    console.log('🔍 Testing patterns against message:', msg);
+
+    for (const pattern of swapPatterns) {
+      const match = msg.match(pattern);
+      if (match) {
+        console.log('🎯 Pattern matched:', match);
+        const [, amount, inputToken, outputToken] = match;
+        if (!inputToken || !outputToken) {
+          console.log('❌ Missing token in match');
+          continue;
+        }
+        
+        console.log('📝 Extracted tokens:', { amount, inputToken, outputToken });
+        
+        const inputMint = normalizeTokenSymbol(inputToken);
+        const outputMint = normalizeTokenSymbol(outputToken);
+        
+        console.log('🔗 Normalized mints:', { inputMint, outputMint });
+        
+        // Verify tokens exist
+        const inputInfo = getTokenInfo(inputToken);
+        const outputInfo = getTokenInfo(outputToken);
+        
+        console.log('ℹ️ Token info lookup:', { 
+          inputInfo: !!inputInfo, 
+          outputInfo: !!outputInfo,
+          inputSymbol: inputInfo?.symbol,
+          outputSymbol: outputInfo?.symbol
+        });
+        
+        if (inputInfo && outputInfo && amount) {
+          const tradeAction = {
+            type: 'swap' as const,
+            amount: parseFloat(amount),
+            inputToken: inputMint,
+            outputToken: outputMint,
+            amountType: 'exact_in' as const,
+            confidence: 0.9,
+            slippage: this.extractSlippage(msg)
+          };
+          console.log('✅ Trade action detected:', tradeAction);
+          return tradeAction;
+        }
+      }
+    }
+
+    // Pattern: "get X SOL" (exact out)
+    const exactOutPattern = /(?:get|receive|want)\s+(\d+(?:\.\d+)?)\s+(\w+)/i;
+    const exactOutMatch = msg.match(exactOutPattern);
+    if (exactOutMatch) {
+      const [, amount, outputToken] = exactOutMatch;
+      if (!outputToken || !amount) return undefined;
+      
+      const outputMint = normalizeTokenSymbol(outputToken);
+      const outputInfo = getTokenInfo(outputToken);
+      
+      if (outputInfo) {
+        return {
+          type: 'swap',
+          amount: parseFloat(amount),
+          outputToken: outputMint,
+          amountType: 'exact_out',
+          confidence: 0.85,
+          slippage: this.extractSlippage(msg)
+        };
+      }
+    }
+
+    // Pattern: "swap my X for Y" (without amount)
+    const swapMyPattern = /swap\s+my\s+(\w+)\s+for\s+(\w+)/i;
+    const swapMyMatch = msg.match(swapMyPattern);
+    if (swapMyMatch) {
+      const [, inputToken, outputToken] = swapMyMatch;
+      if (!inputToken || !outputToken) return undefined;
+      
+      const inputMint = normalizeTokenSymbol(inputToken);
+      const outputMint = normalizeTokenSymbol(outputToken);
+      
+      const inputInfo = getTokenInfo(inputToken);
+      const outputInfo = getTokenInfo(outputToken);
+      
+      if (inputInfo && outputInfo) {
+        return {
+          type: 'swap',
+          inputToken: inputMint,
+          outputToken: outputMint,
+          amountType: 'exact_in',
+          confidence: 0.8,
+          slippage: this.extractSlippage(msg)
+        };
+      }
+    }
+
+    console.log('❌ No trade action detected for message:', msg);
+    return undefined;
+  }
+
+  /**
+   * Extract slippage tolerance from message
+   */
+  private extractSlippage(message: string): number | undefined {
+    const slippagePattern = /(?:slippage|slip)\s*(?:of\s*)?(\d+(?:\.\d+)?)\s*%/i;
+    const match = message.match(slippagePattern);
+    if (match && match[1]) {
+      return parseFloat(match[1]);
+    }
+    return undefined;
+  }
+
+  /**
    * Determine the main query type
    */
   private determineQueryType(
@@ -253,21 +397,32 @@ CONTEXT: The user is asking about cryptocurrency data and analysis.
 
 Your task: Parse the query and return ONLY valid JSON with this exact structure:
 {
-  "type": "coin" | "market" | "comparison" | "analysis" | "portfolio" | "news" | "none",
+  "type": "coin" | "market" | "comparison" | "analysis" | "portfolio" | "news" | "trade" | "none",
   "coins": ["array of coin names/symbols"],
   "timeframe": "1h" | "4h" | "1d" | "7d" | "30d" | "90d" | "1y" | "max" | null,
   "dataTypes": ["array from: price, volume, technical, market_structure, liquidations, funding, open_interest, historical, news, social"],
   "analysisDepth": "quick" | "detailed" | "comprehensive",
   "intent": "brief description of what user wants",
-  "visualizationType": ["array from: price_card, line_chart, candlestick_chart, volume_chart, technical_analysis, market_structure, comparison_table, heatmap, comprehensive_analysis"],
+  "visualizationType": ["array from: price_card, line_chart, candlestick_chart, volume_chart, technical_analysis, market_structure, comparison_table, heatmap, comprehensive_analysis, trade_preview"],
   "keywords": ["relevant keywords from the query"],
-  "confidence": 0.0-1.0
+  "confidence": 0.0-1.0,
+  "tradeAction": {
+    "type": "swap" | "buy" | "sell",
+    "inputToken": "mint address or null",
+    "outputToken": "mint address or null", 
+    "amount": number | null,
+    "amountType": "exact_in" | "exact_out",
+    "confidence": 0.0-1.0,
+    "slippage": number | null
+  } | null
 }
 
 EXAMPLES:
-"How is Bitcoin doing the last 7 days?" → {"type": "coin", "coins": ["bitcoin"], "timeframe": "7d", "dataTypes": ["price", "volume", "historical"], "analysisDepth": "detailed", "intent": "Bitcoin performance over 7 days", "visualizationType": ["price_card", "line_chart"], "keywords": ["bitcoin", "performance", "7 days"], "confidence": 0.9}
+"How is Bitcoin doing the last 7 days?" → {"type": "coin", "coins": ["bitcoin"], "timeframe": "7d", "dataTypes": ["price", "volume", "historical"], "analysisDepth": "detailed", "intent": "Bitcoin performance over 7 days", "visualizationType": ["price_card", "line_chart"], "keywords": ["bitcoin", "performance", "7 days"], "confidence": 0.9, "tradeAction": null}
 
-"Give me a detailed technical analysis of ETH" → {"type": "analysis", "coins": ["ethereum"], "timeframe": "30d", "dataTypes": ["technical", "price", "historical"], "analysisDepth": "comprehensive", "intent": "Technical analysis of Ethereum", "visualizationType": ["technical_analysis", "candlestick_chart"], "keywords": ["technical", "analysis", "ethereum"], "confidence": 0.95}
+"Give me a detailed technical analysis of ETH" → {"type": "analysis", "coins": ["ethereum"], "timeframe": "30d", "dataTypes": ["technical", "price", "historical"], "analysisDepth": "comprehensive", "intent": "Technical analysis of Ethereum", "visualizationType": ["technical_analysis", "candlestick_chart"], "keywords": ["technical", "analysis", "ethereum"], "confidence": 0.95, "tradeAction": null}
+
+"swap 10 usdc for sol" → {"type": "trade", "coins": ["usdc", "sol"], "timeframe": null, "dataTypes": ["price"], "analysisDepth": "quick", "intent": "Swap 10 USDC for SOL", "visualizationType": ["trade_preview"], "keywords": ["swap", "usdc", "sol"], "confidence": 0.95, "tradeAction": {"type": "swap", "inputToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "outputToken": "So11111111111111111111111111111111111111112", "amount": 10, "amountType": "exact_in", "confidence": 0.9, "slippage": null}}
 
 Pattern-based detection found: ${JSON.stringify(patternIntent, null, 2)}
 
@@ -299,7 +454,8 @@ Now analyze this query: "${userMessage}"`;
         intent: aiResult.intent || patternIntent.intent || 'User query analysis',
         visualizationType: this.mergeArrays(aiResult.visualizationType, patternIntent.visualizationType),
         keywords: this.mergeArrays(aiResult.keywords, patternIntent.keywords),
-        confidence: Math.max(aiResult.confidence || 0, patternIntent.confidence || 0)
+        confidence: Math.max(aiResult.confidence || 0, patternIntent.confidence || 0),
+        tradeAction: aiResult.tradeAction || patternIntent.tradeAction
       };
       
     } catch (error) {
@@ -324,7 +480,8 @@ Now analyze this query: "${userMessage}"`;
       intent: patternIntent.intent || `Analysis of: ${userMessage.slice(0, 50)}...`,
       visualizationType: patternIntent.visualizationType || ['price_card'],
       keywords: patternIntent.keywords || [],
-      confidence: patternIntent.confidence || 0.5
+      confidence: patternIntent.confidence || 0.5,
+      tradeAction: patternIntent.tradeAction
     };
   }
 

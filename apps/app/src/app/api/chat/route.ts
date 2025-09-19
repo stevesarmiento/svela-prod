@@ -56,7 +56,9 @@ export async function POST(req: Request) {
       console.log('✅ Enhanced response generated:', {
         hasTextResponse: !!enhancedResponse.textResponse,
         componentsCount: enhancedResponse.components.length,
-        processingTime: enhancedResponse.processingTime
+        processingTime: enhancedResponse.processingTime,
+        intentType: enhancedResponse.dataContext.intent.type,
+        firstComponentType: enhancedResponse.components[0]?.type
       });
       
       // Create component data for the first component (if any)
@@ -76,6 +78,12 @@ export async function POST(req: Request) {
             data: firstComponent.data
           };
           console.log('📦 Comparison chart data to send:', { type: firstComponent.type, data: firstComponent.data });
+        } else if (firstComponent && firstComponent.type === 'trade_preview') {
+          componentData = {
+            type: 'trade_preview',
+            data: firstComponent.data
+          };
+          console.log('📦 Trade preview data to send:', { type: firstComponent.type, data: firstComponent.data });
         }
       }
       
@@ -119,7 +127,7 @@ ${enhancedResponse.textResponse}${memoryContext}`;
           'Content-Type': 'text/plain; charset=utf-8',
           'Cache-Control': 'no-cache, no-transform',
           'X-Content-Type-Options': 'nosniff',
-          'X-Enhanced-Response': 'true',
+          'X-Enhanced-Chat': 'true',
         },
       });
 

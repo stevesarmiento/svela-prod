@@ -360,6 +360,7 @@ export function useChatState() {
         if (componentDataHeader && lastDataQueryRef.current) {
           try {
             const componentData = JSON.parse(componentDataHeader);
+            console.log('📦 Enhanced component data received:', componentData);
             
             setMessageComponents(prev => {
               const newComponents = {
@@ -367,14 +368,8 @@ export function useChatState() {
                 [`temp_${lastDataQueryRef.current}`]: componentData
               };
               
-              // Update chat state directly - React will batch these updates
-              chatManager.setChatState({
-                messages,
-                isLoading,
-                isDataLoading,
-                messageComponents: newComponents,
-              });
-              
+              console.log('📦 Storing component data with temp key:', `temp_${lastDataQueryRef.current}`);
+              // Note: chatManager.setChatState will be called via useEffect when messageComponents updates
               return newComponents;
             });
           } catch (err) {
@@ -394,14 +389,7 @@ export function useChatState() {
               [`temp_${lastDataQueryRef.current}`]: parsedComponentData
             };
             
-            // Update chat state directly - React will batch these updates
-            chatManager.setChatState({
-              messages,
-              isLoading,
-              isDataLoading,
-              messageComponents: newComponents,
-            });
-            
+            // Note: chatManager.setChatState will be called via useEffect when messageComponents updates
             return newComponents;
           });
         } catch (err) {
@@ -418,15 +406,19 @@ export function useChatState() {
       // Move component data from temp key to actual message ID
       if (message.role === 'assistant' && lastDataQueryRef.current) {
         const tempKey = `temp_${lastDataQueryRef.current}`;
+        console.log('🔄 Moving component data from temp key to message ID:', { tempKey, messageId: message.id });
         
         setMessageComponents(prev => {
           const componentData = prev[tempKey];
+          console.log('📦 Component data found for temp key:', !!componentData, componentData?.type);
           if (componentData) {
             const newComponents = { ...prev };
             delete newComponents[tempKey];
             newComponents[message.id] = componentData;
+            console.log('✅ Component data moved to message ID:', message.id);
             return newComponents;
           }
+          console.log('❌ No component data found for temp key:', tempKey);
           return prev;
         });
         lastDataQueryRef.current = null;
@@ -461,6 +453,8 @@ Respond with JSON only:
 
 Examples:
 "How is Solana doing today?" → {"isDataQuery": true, "intent": "asking for Solana price/performance"}
+"swap 10 usdc for sol" → {"isDataQuery": true, "intent": "requesting a cryptocurrency trade"}
+"buy 5 sol with usdc" → {"isDataQuery": true, "intent": "requesting a cryptocurrency purchase"}
 "What's the weather like?" → {"isDataQuery": false, "intent": "asking about weather"}
 "Tell me about DeFi trends" → {"isDataQuery": true, "intent": "asking about cryptocurrency trends"}
 "How are you?" → {"isDataQuery": false, "intent": "general greeting"}`
@@ -471,7 +465,7 @@ Examples:
       return result.isDataQuery || false;
     } catch (error) {
       console.error('Failed to detect data query:', error);
-      const dataKeywords = ['price', 'bitcoin', 'ethereum', 'crypto', 'coin', 'market'];
+      const dataKeywords = ['price', 'bitcoin', 'ethereum', 'crypto', 'coin', 'market', 'swap', 'trade', 'buy', 'sell', 'exchange', 'convert'];
       return dataKeywords.some(keyword => message.toLowerCase().includes(keyword));
     }
   };

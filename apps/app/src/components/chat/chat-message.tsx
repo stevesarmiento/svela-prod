@@ -5,8 +5,9 @@ import ReactMarkdown from "react-markdown";
 import { useAuth } from "@v1/convex/hooks";
 import { PriceCard } from "./price-card";
 import { ComparisonChart } from "./comparison-chart";
+import { TradePreview } from "./trade-preview";
 import { SvelaLogo } from "@v1/ui/svela-logo";
-import type { ComponentData, PriceCardData, ComparisonChartData } from "./types";
+import type { ComponentData, PriceCardData, ComparisonChartData, TradePreviewData } from "./types";
 
 
 interface ChatMessageProps {
@@ -70,6 +71,20 @@ export function ChatMessage({
         {role === 'assistant' && componentData?.type === 'comparison_chart' && (
           <ComparisonChart {...(componentData.data as ComparisonChartData)} />
         )}
+        {role === 'assistant' && componentData?.type === 'trade_preview' && (() => {
+          const data = componentData.data as TradePreviewData;
+          return <TradePreview 
+            tradeAction={data.tradeAction}
+            onExecute={(signature) => {
+              console.log('Trade executed with signature:', signature);
+              // TODO: Add success notification or redirect to explorer
+            }}
+            onCancel={() => {
+              console.log('Trade cancelled');
+              // TODO: Maybe hide the component or show a cancelled state
+            }}
+          />;
+        })()}
         
         <div
           className={`rounded-lg ${
