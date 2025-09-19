@@ -3,7 +3,7 @@
 import { createContext, use, useState, useCallback, useMemo, ReactNode, Dispatch, SetStateAction, useTransition, useDeferredValue } from 'react'
 
 export type BottomNavMode = 'navigation' | 'selection'
-export type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings'
+export type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio'
 
 export interface SelectionState {
   selectedCoins: Set<string>

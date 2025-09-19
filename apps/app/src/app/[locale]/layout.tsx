@@ -1,16 +1,10 @@
 import "@v1/ui/globals.css";
 import { cn } from "@v1/ui/cn";
-import { ThemeProvider } from "@/components/providers/theme-provider";
+import { Providers } from "@/components/providers/providers";
 import Script from "next/script";
-import { ClerkProvider } from "@clerk/nextjs";
-import { ConvexProvider } from "@v1/convex/provider";
-import { QueryProvider } from "@/components/providers/query-provider";
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
-import { WatchlistProvider } from "./(dashboard)/watchlist/_components/watchlist-context";
-import { NotifToaster } from "@v1/ui/sonner-notif";
-import { ChatToast } from "@/components/chat/chat-toast";
 //import localFont from "next/font/local";
 
 // const geistSans = localFont({
@@ -56,31 +50,9 @@ export default function RootLayout({
           "antialiased",
         )}
       >
-        <ClerkProvider
-          publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!}
-          appearance={{
-            variables: {
-              colorPrimary: "#000000",
-            },
-          }}
-        >
-          <ConvexProvider>
-            <QueryProvider>
-              <WatchlistProvider>
-              <ThemeProvider>
-                {children}
-
-                <ChatToast />
-                <NotifToaster 
-                  position="top-center" 
-                  offset={-10}
-                />
-              </ThemeProvider>
-              </WatchlistProvider>
-
-            </QueryProvider>
-          </ConvexProvider>
-        </ClerkProvider>
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

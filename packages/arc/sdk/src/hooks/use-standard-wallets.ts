@@ -85,6 +85,7 @@ export class WalletStandardKitSigner {
             while (++byteCount) {
               const byteIndex = byteCount - 1
               const currentByte = signedTransactionBytes[offset + byteIndex]
+              if (currentByte === undefined) break
               const nextSevenBits = 0b1111111 & currentByte
               signatureCount |= nextSevenBits << (byteIndex * 7)
               if ((currentByte & 0b10000000) === 0) {

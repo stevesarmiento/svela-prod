@@ -1,12 +1,9 @@
 import { 
     IconDistributeHorizontalCenterFill,  
-    IconGear,
     IconChartLineUptrendXyaxis,
-    IconStarFill,
+    IconWalletBifoldFill,
     IconCaptionsBubbleFill,
     IconBinocularsFill,
-    IconGearshapeFill,
-   // IconCompassDrawing,
   } from "symbols-react";
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
 
@@ -15,7 +12,7 @@ export const BASE_ROUTES = {
   overview: "/watchlist",
   watchlist: "/watchlist", 
   charts: "/charts",
-  settings: "/settings"
+  portfolio: "/portfolio"
 } as const;
   
   export const MENU_ITEMS = [
@@ -35,9 +32,9 @@ export const BASE_ROUTES = {
       icon: IconDistributeHorizontalCenterFill,
     },
     {
-      title: "Settings",
-      href: "/settings",
-      icon: IconGearshapeFill,
+      title: "Portfolio",
+      href: "/portfolio",
+      icon: IconWalletBifoldFill,
     },
   ] as const;
   
@@ -67,11 +64,11 @@ export const BASE_ROUTES = {
           shortcut: getShortcutForRoute("/charts"),
         },
         {
-          title: "Settings",
-          subtitle: "App preferences and configuration",
-          href: "/settings",
-          icon: IconGear,
-          shortcut: getShortcutForRoute("/settings"),
+          title: "Portfolio",
+          subtitle: "Your cryptocurrency portfolio",
+          href: "/portfolio",
+          icon: IconWalletBifoldFill,
+          shortcut: getShortcutForRoute("/portfolio"),
         },
       ]
     },
@@ -94,7 +91,7 @@ export const BASE_ROUTES = {
           title: "Market Overview",
           subtitle: "Top 10 cryptocurrencies",
           action: "market-overview", 
-          icon: IconStarFill,
+          icon: IconWalletBifoldFill,
         },
       ]
     }

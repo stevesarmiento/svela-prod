@@ -98,7 +98,10 @@ export function createJupiter(config: JupiterConfig = {}): SwapProvider {
       const entries = Array.from(quoteCache.entries())
       entries.sort((a, b) => a[1].timestamp - b[1].timestamp)
       for (let i = 0; i < entries.length - MAX_CACHE_SIZE; i++) {
-        quoteCache.delete(entries[i][0])
+        const entry = entries[i]
+        if (entry) {
+          quoteCache.delete(entry[0])
+        }
       }
     }
   }
@@ -151,14 +154,14 @@ export function createJupiter(config: JupiterConfig = {}): SwapProvider {
   }
 
   function sumFees(route?: JupiterQuoteResponse['routePlan']): bigint {
-    if (!route) return 0n
+    if (!route) return BigInt(0)
     try {
       return route.reduce((acc, step) => {
         const v = step?.swapInfo?.feeAmount
-        return acc + (v ? BigInt(v) : 0n)
-      }, 0n)
+        return acc + (v ? BigInt(v) : BigInt(0))
+      }, BigInt(0))
     } catch {
-      return 0n
+      return BigInt(0)
     }
   }
   

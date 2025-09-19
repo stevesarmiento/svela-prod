@@ -23,7 +23,7 @@ import { useAddCoinToWatchlist } from '@/hooks/use-add-coin-to-watchlist';
 import { useDebounce } from '@/hooks/use-debounce';
 import { BackgroundPattern } from './background-pattern';
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
 
 interface CommandSearchProps {
   isOpen: boolean;
@@ -182,7 +182,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   const getPlaceholder = () => {
     if (context === 'watchlist') return "Search tokens or manage watchlist...";
     if (context === 'charts') return "Search charts or add tokens...";
-    if (context === 'settings') return "Search settings...";
+    if (context === 'portfolio') return "Search portfolio...";
     if (context === 'overview') return "Search market data and insights...";
     return "Navigate or search tokens...";
   };

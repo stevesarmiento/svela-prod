@@ -110,6 +110,7 @@ export function useAirdrop(
           
           for (let i = 0; i < maxRetries; i++) {
             const rpcUrl = rpcEndpoints[i % rpcEndpoints.length]
+            if (!rpcUrl) continue
             const currentRpc = getSharedRpc(rpcUrl) as any // Cast to any for airdrop method access
             
             try {

@@ -83,6 +83,10 @@ export function useSwap(options: UseSwapOptions = {}): UseSwapReturn {
   })
 
   const selectBestQuote = (quotes: SwapQuote[], strategy: string): SwapQuote => {
+    if (quotes.length === 0) {
+      throw new Error('No quotes available for selection')
+    }
+    
     switch (strategy) {
       case 'best-price':
         return quotes.reduce((best, current) => 
@@ -97,7 +101,7 @@ export function useSwap(options: UseSwapOptions = {}): UseSwapReturn {
           current.fees < best.fees ? current : best
         )
       default:
-        return quotes[0]
+        return quotes[0]!
     }
   }
 

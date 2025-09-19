@@ -10,7 +10,7 @@ import { CommandSearch } from "./command-search";
 import { ChatContainer } from "./chat-container";
 import { ChatStateManager } from "../chat/chat-toast";
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
 
 export function BottomNav() {
   // React 19: Use selective context hooks for better performance
