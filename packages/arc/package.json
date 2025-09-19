@@ -1,0 +1,30 @@
+{
+  "name": "@v1/arc",
+  "version": "0.1.0",
+  "private": true,
+  "sideEffects": false,
+  "description": "Arc Web3 components and utilities for Solana development",
+  "scripts": {
+    "clean": "rm -rf .turbo node_modules && turbo clean --filter=@v1/arc-*",
+    "lint": "turbo lint --filter=@v1/arc-*",
+    "format": "turbo format --filter=@v1/arc-*",
+    "typecheck": "turbo typecheck --filter=@v1/arc-*"
+  },
+  "exports": {
+    "./connector": "./connector/src/index.ts",
+    "./sdk": "./sdk/src/index.ts",
+    "./jupiter": "./jupiter/src/index.ts",
+    "./providers": "./providers/src/index.ts",
+    "./ui-primitives": "./ui-primitives/src/index.ts"
+  },
+  "dependencies": {
+    "@v1/arc-connector": "workspace:*",
+    "@v1/arc-sdk": "workspace:*",
+    "@v1/arc-jupiter": "workspace:*", 
+    "@v1/arc-providers": "workspace:*",
+    "@v1/arc-ui-primitives": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
