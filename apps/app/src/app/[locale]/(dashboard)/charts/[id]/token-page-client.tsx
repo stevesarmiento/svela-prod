@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useTransition, useDeferredValue, useCallback, memo, useRef } from 'react'
+import React, { useState, useTransition, useDeferredValue, useCallback, memo } from 'react'
 import { PriceChart } from "./price-chart"
 import { MarketMetrics } from "./market-metrics"
 import { CoinMarketData } from '@/types/coins'
@@ -14,6 +14,7 @@ import { BollingerBandsChart } from './bollinger-bands-chart'
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { useCoinGeckoMarketData } from '@/hooks/use-coingecko-market-data'
 import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
+import { useScrollThreshold } from '@/hooks/use-scroll-effect'
 
 
 interface TokenPageClientProps {
@@ -23,54 +24,19 @@ interface TokenPageClientProps {
 }
 
 export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, isPending }: TokenPageClientProps) {
-  const [activeTimeScale, setActiveTimeScale] = useState<string>("30d")
-  const [isSticky, setIsSticky] = useState(false)
-  
   // React 19: Add concurrent features
   const [isTransitionPending, startTransition] = useTransition()
   
   // React 19: Defer expensive computations
   const deferredId = useDeferredValue(id)
-  const deferredTimeScale = useDeferredValue(activeTimeScale)
   const deferredTokenData = useDeferredValue(tokenData)
 
-  // React 19: High-performance scroll handler with RAF and state change detection
-  const rafIdRef = useRef<number | undefined>(undefined)
-  const lastStickyStateRef = useRef(false)
+  // Use optimized scroll hook - eliminates useState/useEffect pattern
+  const isSticky = useScrollThreshold(100)
   
-  const handleScroll = useCallback(() => {
-    if (rafIdRef.current) {
-      return // Already scheduled
-    }
-    
-    rafIdRef.current = requestAnimationFrame(() => {
-      const scrollThreshold = 100
-      const shouldBeSticky = window.scrollY > scrollThreshold
-      
-      // Only update state if it actually changed
-      if (shouldBeSticky !== lastStickyStateRef.current) {
-        lastStickyStateRef.current = shouldBeSticky
-        setIsSticky(shouldBeSticky)
-      }
-      
-      rafIdRef.current = undefined
-    })
-  }, [])
-
-  useEffect(() => {
-    // Set initial state
-    const initialSticky = window.scrollY > 100
-    setIsSticky(initialSticky)
-    lastStickyStateRef.current = initialSticky
-    
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => {
-      window.removeEventListener('scroll', handleScroll)
-      if (rafIdRef.current) {
-        cancelAnimationFrame(rafIdRef.current)
-      }
-    }
-  }, [handleScroll])
+  // Local state for active time scale (this is fine - it's not derived from props)
+  const [activeTimeScale, setActiveTimeScale] = useState<string>("30d")
+  const deferredTimeScale = useDeferredValue(activeTimeScale)
 
   // React 19: Use deferred values for data fetching
   const { volumeData, ohlcData, isLoading } = useCoinGeckoChartData(

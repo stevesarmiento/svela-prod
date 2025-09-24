@@ -6,6 +6,7 @@ import { useAuth } from '@v1/convex/hooks'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import { autoCleanupSessionMemories, bulkCleanupMemories } from '@/lib/client-memory-utils'
+import { useChatStateSync } from './hooks/use-chat-state-sync'
 import { Button } from '@v1/ui/button'
 import { ScrollArea } from '@v1/ui/scroll-area'
 import { IconXmarkCircleFill } from 'symbols-react'
@@ -79,25 +80,14 @@ function EnhancedIndicator() {
 
 // React 19: Optimized chat toast component with concurrent features
 function ChatToastContent({ toastId, onClose }: { toastId: string | number; onClose?: () => void }) {
-  const [chatState, setChatState] = useState<ChatState | null>(null);
   const { user } = useAuth();
-  const chatManager = ChatStateManager.getInstance();
-  // React 19: Transition hook removed - not needed in this context
+  
+  // ✅ OPTIMIZED: Using useSyncExternalStore instead of manual useEffect subscription
+  // Eliminates manual state synchronization anti-pattern
+  const chatState = useChatStateSync();
   
   // React 19: Defer expensive chat state updates
   const deferredChatState = useDeferredValue(chatState);
-
-  useEffect(() => {
-    // Get initial state without transition (not needed in useEffect)
-    setChatState(chatManager.getChatState());
-    
-    // Subscribe to updates with direct state changes (React will batch automatically)
-    const unsubscribe = chatManager.subscribe((state: ChatState | null) => {
-      setChatState(state);
-    });
-
-    return unsubscribe;
-  }, [chatManager]);
 
   // Auto-cleanup session memories if enabled
   const autoCleanupSession = React.useCallback(async () => {
@@ -426,8 +416,9 @@ export function useChatState() {
     },
   });
 
-  // React 19: Update shared state with deferred values for better performance
-  useEffect(() => {
+  // ✅ OPTIMIZED: Direct state updates instead of useEffect synchronization
+  // React batches these automatically for better performance
+  React.useLayoutEffect(() => {
     chatManager.setChatState({
       messages,
       isLoading,

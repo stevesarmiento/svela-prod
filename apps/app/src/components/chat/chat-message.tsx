@@ -52,40 +52,6 @@ export function ChatMessage({
       )}
       
       <div className={`max-w-[66%] space-y-3 ${role === 'user' ? 'items-end' : 'items-start'} flex flex-col`}>
-        {/* Render component first if it's an assistant message and we have component data */}
-        {role === 'assistant' && componentData?.type === 'price_card' && (() => {
-          const data = componentData.data as PriceCardData;
-          return <PriceCard 
-            coingeckoId={data.coingeckoId}
-            name={data.name}
-            symbol={data.symbol}
-            currentPrice={data.currentPrice}
-            priceChangePercentage24h={data.priceChangePercentage24h}
-            marketCap={data.marketCap}
-            totalVolume={data.totalVolume}
-            marketCapRank={data.marketCapRank}
-            image={data.image}
-            historical={data.historical}
-          />;
-        })()}
-        {role === 'assistant' && componentData?.type === 'comparison_chart' && (
-          <ComparisonChart {...(componentData.data as ComparisonChartData)} />
-        )}
-        {role === 'assistant' && componentData?.type === 'trade_preview' && (() => {
-          const data = componentData.data as TradePreviewData;
-          return <TradePreview 
-            tradeAction={data.tradeAction}
-            onExecute={(signature) => {
-              console.log('Trade executed with signature:', signature);
-              // TODO: Add success notification or redirect to explorer
-            }}
-            onCancel={() => {
-              console.log('Trade cancelled');
-              // TODO: Maybe hide the component or show a cancelled state
-            }}
-          />;
-        })()}
-        
         <div
           className={`rounded-lg ${
             role === 'user'
@@ -176,6 +142,40 @@ export function ChatMessage({
             <p className="text-sm whitespace-pre-wrap">{content}</p>
           )}
         </div>
+
+        {/* Render components after the markdown message */}
+        {role === 'assistant' && componentData?.type === 'price_card' && (() => {
+          const data = componentData.data as PriceCardData;
+          return <PriceCard 
+            coingeckoId={data.coingeckoId}
+            name={data.name}
+            symbol={data.symbol}
+            currentPrice={data.currentPrice}
+            priceChangePercentage24h={data.priceChangePercentage24h}
+            marketCap={data.marketCap}
+            totalVolume={data.totalVolume}
+            marketCapRank={data.marketCapRank}
+            image={data.image}
+            historical={data.historical}
+          />;
+        })()}
+        {role === 'assistant' && componentData?.type === 'comparison_chart' && (
+          <ComparisonChart {...(componentData.data as ComparisonChartData)} />
+        )}
+        {role === 'assistant' && componentData?.type === 'trade_preview' && (() => {
+          const data = componentData.data as TradePreviewData;
+          return <TradePreview 
+            tradeAction={data.tradeAction}
+            onExecute={(signature) => {
+              console.log('Trade executed with signature:', signature);
+              // TODO: Add success notification or redirect to explorer
+            }}
+            onCancel={() => {
+              console.log('Trade cancelled');
+              // TODO: Maybe hide the component or show a cancelled state
+            }}
+          />;
+        })()}
       </div>
       
       {role === 'user' && (

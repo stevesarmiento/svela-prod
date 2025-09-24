@@ -80,6 +80,7 @@
     "./sonner": "./src/components/sonner.tsx",
     "./sonner-notif": "./src/components/sonner-notif.tsx",
     "./toaster": "./src/components/toaster.tsx",
+    "./glare-hover": "./src/components/glare-hover.tsx",
     "./tooltip": "./src/components/tooltip.tsx",
     "./progressive-blur": "./src/components/progressive-blur.tsx",
     "./time-range-input": "./src/components/time-range-input.tsx",

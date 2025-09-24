@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useTransition, useDeferredValue, useCallback, memo, useState, useEffect } from 'react'
-import { useTheme } from 'next-themes'
+import React, { useTransition, useDeferredValue, useCallback, memo } from 'react'
+import { useIsomorphicTheme } from '@/hooks/use-isomorphic-theme'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { motion } from 'framer-motion'
 import { cn } from "@v1/ui/cn"
@@ -104,17 +104,8 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   const { chartData, volumeData, ohlcData, isLoading, tokenData } = useCoinGeckoChartData(deferredCoinId, deferredTimeScale, deferredInitialData)
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, deferredInitialData, deferredTimeScale)
   
-  // Use next-themes for proper theme detection (handles manual overrides correctly)
-  const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  
-  // Prevent hydration mismatch
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-  
-  // Get theme state from next-themes (this respects manual theme selection)
-  const isDarkMode = mounted ? resolvedTheme === 'dark' : true
+  // Use isomorphic theme hook - eliminates hydration mismatch
+  const { isDarkMode, resolvedTheme } = useIsomorphicTheme()
   
 
   // Generate Hull Suite colors - theme-aware

@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useRef, useMemo, useState } from 'react'
+import React from 'react'
+import { useRef, useEffect, useMemo, useState } from 'react'
 import { Card, CardContent } from "@v1/ui/card"
 import { Skeleton } from "@v1/ui/skeleton"
 import { formatLargeNumber } from "@v1/ui/format-numbers"

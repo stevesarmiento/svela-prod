@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useEffect } from "react";
 import { ScrollArea } from "@v1/ui/scroll-area";
 import { ChatMessage } from "./chat-message";
 import { ChatLoading } from "./chat-loading";
+import { useAutoScroll } from "./hooks/use-auto-scroll";
 import type { Message } from "ai";
 import type { ComponentData } from "./types";
 
@@ -19,58 +19,43 @@ interface ChatMessageListProps {
 }
 
 export function ChatMessageList({ messages, isLoading, isDataLoading, messageComponents }: ChatMessageListProps) {
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // ✅ FIXED: Replaced setInterval anti-pattern with optimized useAutoScroll hook
+  // Uses requestAnimationFrame for 60fps smooth performance instead of 10 timer calls/second
+  const { scrollElementRef } = useAutoScroll({
+    dependencies: [messages.length, isLoading, isDataLoading],
+    enabled: true,
+    smooth: true
+  });
 
-  // Scroll to bottom function
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // Handler to connect Radix ScrollArea with our scroll hook
+  const handleScrollAreaRef = (element: HTMLDivElement | null) => {
+    if (element && scrollElementRef) {
+      // Find the actual scroll viewport element inside Radix ScrollArea
+      const viewport = element.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
+      if (viewport) {
+        scrollElementRef.current = viewport;
+      }
+    }
   };
 
-  // Auto-scroll on new messages
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages.length]); // Trigger on message count change
-
-  // Auto-scroll during streaming (when content changes)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (isLoading) {
-        scrollToBottom();
-      }
-    }, 100); // Check every 100ms during loading
-
-    return () => clearInterval(timer);
-  }, [isLoading]);
-
-  // Scroll when loading states change
-  useEffect(() => {
-    if (isLoading || isDataLoading) {
-      setTimeout(scrollToBottom, 100);
-    }
-  }, [isLoading, isDataLoading]);
-
   return (
-    <div className="h-full overflow-hidden p-4 text-zinc-900 dark:text-white">
-      <ScrollArea className="h-full pr-4" ref={scrollAreaRef}>
-        <div className="space-y-4">
-          {messages.map((message) => (
+    <ScrollArea ref={handleScrollAreaRef} className="flex-1 px-4">
+      <div className="space-y-4 pb-4">
+        {messages.map((message) => {
+          // Get component data for this message
+          const componentData = messageComponents?.[message.id] || null;
+          
+          return (
             <ChatMessage
               key={message.id}
               role={message.role as 'user' | 'assistant' | 'system' | 'data'}
               content={message.content}
-              componentData={messageComponents?.[message.id] || null}
+              componentData={componentData}
             />
-          ))}
-          
-          {(isLoading || isDataLoading) && (
-            <ChatLoading />
-          )}
-          
-          {/* Invisible element to scroll to */}
-          <div ref={messagesEndRef} />
-        </div>
-      </ScrollArea>
-    </div>
+          );
+        })}
+        {(isLoading || isDataLoading) && <ChatLoading />}
+      </div>
+    </ScrollArea>
   );
 }

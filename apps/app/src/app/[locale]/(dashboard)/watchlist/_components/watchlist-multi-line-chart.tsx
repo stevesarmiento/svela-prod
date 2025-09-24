@@ -67,16 +67,7 @@ interface WatchlistGroup {
   color?: string
 }
 
-// Component to fetch data for a single watchlist
-function WatchlistDataFetcher({ 
-  group, 
-  onDataReady,
-  activeTimeScale
-}: { 
-  group: WatchlistGroup
-  onDataReady: (data: WatchlistSeries | null) => void 
-  activeTimeScale: string
-}) {
+function useWatchlistSeriesData(group: WatchlistGroup, activeTimeScale: string): WatchlistSeries | null {
   // Get watchlist coins for this group
   const groupWatchlist = useWatchlistByGroup(group._id)
   
@@ -95,14 +86,12 @@ function WatchlistDataFetcher({
     timeScale: activeTimeScale
   })
 
-  // Update parent when data changes
-  useEffect(() => {
+  const watchlistSeries = useMemo((): WatchlistSeries | null => {
     if (!coins?.length || !aggregateData?.length) {
-      onDataReady(null)
-      return
+      return null
     }
 
-    const watchlistSeries: WatchlistSeries = {
+    return {
       id: group._id,
       name: group.name,
       icon: group.icon,
@@ -111,11 +100,29 @@ function WatchlistDataFetcher({
       coinsCount: coins.length,
       latestValue: aggregateData[aggregateData.length - 1]?.value || 0
     }
+  }, [group._id, group.name, group.icon, coins, aggregateData])
 
-    onDataReady(watchlistSeries)
-  }, [group._id, group.name, group.icon, coins, aggregateData, onDataReady])
+  return watchlistSeries
+}
 
-  return null // This component doesn't render anything
+function WatchlistSeriesProvider({ 
+  group, 
+  activeTimeScale,
+  onDataUpdate 
+}: { 
+  group: WatchlistGroup
+  activeTimeScale: string
+  onDataUpdate: (groupId: string, data: WatchlistSeries | null) => void
+}) {
+  // Use our custom hook to get series data
+  const seriesData = useWatchlistSeriesData(group, activeTimeScale)
+  
+  // Update parent when data changes
+  React.useEffect(() => {
+    onDataUpdate(group._id, seriesData)
+  }, [group._id, seriesData, onDataUpdate])
+  
+  return null
 }
 
 const TooltipContent = ({
@@ -208,17 +215,13 @@ export function WatchlistMultiLineChart({
   const lineSeriesMapRef = useRef<Map<string, LineSeriesData>>(new Map())
   const [watchlistData, setWatchlistData] = useState<Map<string, WatchlistSeries>>(new Map())
   
+  // ✅ IMPROVED: Handle theme directly without hydration flag
   // Use next-themes for proper theme detection (handles manual overrides correctly)
   const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  
-  // Prevent hydration mismatch
-  useEffect(() => {
-    setMounted(true)
-  }, [])
   
   // Get theme state from next-themes (this respects manual theme selection)
-  const isDarkMode = mounted ? resolvedTheme === 'dark' : true
+  // No need for hydration flag - React will handle SSR/CSR differences
+  const isDarkMode = resolvedTheme === 'dark'
   
   
   const watchlistGroupsData = useWatchlistGroups()
@@ -229,26 +232,18 @@ export function WatchlistMultiLineChart({
     return groups.filter(group => selectedWatchlists.has(group._id))
   }, [watchlistGroupsData, selectedWatchlists])
 
-  // Handle data updates from individual fetchers
-  const handleDataUpdate = useMemo(() => {
-    const handlers = new Map<string, (data: WatchlistSeries | null) => void>()
-    
-    activeWatchlists.forEach(group => {
-      handlers.set(group._id, (data: WatchlistSeries | null) => {
-        setWatchlistData(prev => {
-          const newMap = new Map(prev)
-          if (data) {
-            newMap.set(group._id, data)
-          } else {
-            newMap.delete(group._id)
-          }
-          return newMap
-        })
-      })
+  // ✅ IMPROVED: Simplified data update handler
+  const handleDataUpdate = React.useCallback((groupId: string, data: WatchlistSeries | null) => {
+    setWatchlistData(prev => {
+      const newMap = new Map(prev)
+      if (data) {
+        newMap.set(groupId, data)
+      } else {
+        newMap.delete(groupId)
+      }
+      return newMap
     })
-    
-    return handlers
-  }, [activeWatchlists])
+  }, [])
 
   // Create final series data with colors
   const watchlistSeriesData = useMemo((): WatchlistSeries[] => {
@@ -455,7 +450,7 @@ export function WatchlistMultiLineChart({
       })
       chart.remove()
     }
-  }, [watchlistSeriesData, isDarkMode, resolvedTheme, mounted])
+  }, [watchlistSeriesData, isDarkMode, resolvedTheme])
 
   // Handle hover effects on chart lines
   useEffect(() => {
@@ -490,13 +485,13 @@ export function WatchlistMultiLineChart({
 
   return (
     <div className="grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/20 border-zinc-800/10 overflow-hidden p-1">
-      {/* Data fetchers - render components that fetch data for each watchlist */}
+      {/* ✅ IMPROVED: Data providers using custom hook */}
       {activeWatchlists.map(group => (
-        <WatchlistDataFetcher
+        <WatchlistSeriesProvider
           key={group._id}
           group={group}
-          onDataReady={handleDataUpdate.get(group._id) || (() => {})}
           activeTimeScale={activeTimeScale}
+          onDataUpdate={handleDataUpdate}
         />
       ))}
       

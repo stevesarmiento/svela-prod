@@ -145,7 +145,7 @@ export function WatchlistCard({
   return (
     <Card 
       className={cn(
-        "relative w-full h-auto min-h-[200px] mx-auto hover:shadow-lg shadow-md transition-all duration-150 ease-in-out cursor-pointer overflow-hidden rounded-[20px] group active:scale-[0.98]",
+        "relative w-full min-h-[200px] mx-auto hover:shadow-lg shadow-md transition-all duration-150 ease-in-out cursor-pointer overflow-hidden rounded-[20px] group active:scale-[0.98]",
         "hover:ring-4 dark:hover:ring-white/20 hover:ring-zinc-800/20 hover:ring-offset-4 hover:ring-offset-background",
         colorTheme.bg,
         colorTheme.border,
