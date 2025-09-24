@@ -14,7 +14,7 @@ import {
   getFilteredRowModel,
   type SortingState,
 } from '@tanstack/react-table'
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from "next/navigation"
 import { Spinner } from "@v1/ui/spinner"
 import { WatchlistsGrid } from "./watchlists-grid"
@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@v1/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@v1/ui/tooltip'
 import { IconStarFill, IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill } from 'symbols-react'
 import { CreateWatchlist, CreateWatchlistTrigger } from './create-watchlist'
+import { Kbd } from "@v1/ui/kbd"
 
 interface WatchlistProps {
   activeTimeScale?: string;
@@ -56,7 +57,8 @@ export function Watchlist({
     selectedGroupCoins,
     selectWatchlistGroup,
     removeFromSelectedGroup,
-    removeBulkFromSelectedGroup
+    removeBulkFromSelectedGroup,
+    watchlistGroups
   } = useWatchlist()
   
   const searchParams = useSearchParams()
@@ -95,12 +97,10 @@ export function Watchlist({
     removeFromWatchlist,
     removeBulkFromSelectedGroup,
     removeBulkFromWatchlist,
-    filteredCoins,
   });
 
-  // Keyboard shortcuts handler
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
+  // Keyboard shortcuts handler - Memoize the handler to avoid recreating the event listener
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
       // Ignore if typing in an input or textarea
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
         return;
@@ -112,24 +112,73 @@ export function Watchlist({
       if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
         event.preventDefault()
         coinSearchRef.current?.open()
-      }
+      return;
     }
 
+    if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault()
+      onContentModeChange?.('cards')
+      return;
+    }
+
+    // "]" key for Table mode  
+    if (event.key === ']' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault()
+      onContentModeChange?.('table')
+      return;
+    }
+
+    // Watchlist mode shortcuts (only work in cards mode)
+    if (contentMode === 'cards') {
+      // "w" key for Watchlist mode
+      if (event.key.toLowerCase() === 'w' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault()
+        onGridViewModeChange?.('grid')
+        return;
+      }
+
+      // "c" key for Comparison mode  
+      if (event.key.toLowerCase() === 'e' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault()
+        onGridViewModeChange?.('chart')
+        return;
+      }
+    }
+  }, [contentMode, onGridViewModeChange, onContentModeChange])
+
+  useEffect(() => {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [handleKeyDown])
 
-  // Memoize columns with hover state
+  // Create a stable handleSelectAll wrapper to avoid column recreations
+  const handleSelectAllWrapper = useCallback((checked: boolean) => {
+    const coinIds = checked ? filteredCoins.map(coin => coin.id.toString()) : [];
+    handleSelectAll(checked, coinIds);
+  }, [filteredCoins, handleSelectAll]);
+
+  // Calculate counter for toggle button
+  const toggleCounter = useMemo(() => {
+    if (contentMode === 'table') {
+      // Show number of available watchlists
+      return watchlistGroups.length;
+    } else {
+      // Show number of tokens in selected watchlist
+      return filteredCoins.length;
+    }
+  }, [contentMode, watchlistGroups.length, filteredCoins.length]);
+
+  // Memoize columns with hover state - Split dependencies to reduce recalculations
   const columns = useMemo(() => createWatchlistColumns({
     handleRemove, 
     selectedCoins, 
     onCoinSelect: handleCoinSelect, 
-    onSelectAll: handleSelectAll, 
+    onSelectAll: handleSelectAllWrapper, 
     totalCoins: filteredCoins.length,
     removingCoins,
     hoveredRowId,
     hasSelectedCoins
-  }), [handleRemove, selectedCoins, handleCoinSelect, handleSelectAll, filteredCoins.length, removingCoins, hoveredRowId, hasSelectedCoins]);
+  }), [handleRemove, selectedCoins, handleCoinSelect, handleSelectAllWrapper, filteredCoins.length, removingCoins, hoveredRowId, hasSelectedCoins]);
 
   const table = useReactTable({
     data: filteredCoins,
@@ -160,27 +209,38 @@ export function Watchlist({
   }
 
   return (
+    <TooltipProvider>
     <div className="space-y-6 px-4">
-      {/* Unified Header */}
-      <div className="flex items-center justify-between">
-        {/* Left side - Tabs in cards mode, Filters in table mode */}
-        {contentMode === 'cards' ? (
-          <div className="flex items-center gap-4">          
-            <Tabs value={gridViewMode} onValueChange={(value) => {
-              const newMode = value as 'grid' | 'chart'
-              onGridViewModeChange?.(newMode)
-            }}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="grid" className="flex items-center gap-2">
-                  <IconStarFill className="h-4 w-4 fill-muted-foreground" />
-                  Watchlists
-                </TabsTrigger>
-                <TabsTrigger value="chart" className="flex items-center gap-2">
-                  <IconCircleDottedAndCircle className="h-4 w-4 fill-muted-foreground" />
-                  Comparison
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+        {/* Unified Header */}
+        <div className="flex items-center justify-between">
+          {/* Left side - Tabs in cards mode, Filters in table mode */}
+          {contentMode === 'cards' ? (
+            <div className="flex items-center gap-4">          
+              <Tabs value={gridViewMode} onValueChange={(value) => {
+                const newMode = value as 'grid' | 'chart'
+                onGridViewModeChange?.(newMode)
+              }}>
+                <Tooltip>
+                <TooltipTrigger asChild>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="grid" className="flex items-center gap-2" title="Switch to Watchlists (W)">
+                    <IconStarFill className="h-4 w-4 fill-muted-foreground" />
+                    Watchlists
+                  </TabsTrigger>
+                  <TabsTrigger value="chart" className="flex items-center gap-2" title="Switch to Comparison (C)">
+                    <IconCircleDottedAndCircle className="h-4 w-4 fill-muted-foreground" />
+                    Comparison
+                  </TabsTrigger>
+                </TabsList>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+                  <span>Switch between Watchlists and Comparison</span>
+                  <Kbd>W</Kbd>
+                  <span>+</span>
+                  <Kbd>E</Kbd>
+                </TooltipContent>
+              </Tooltip>
+              </Tabs>
         </div>
       ) : (
           /* Table mode - Show filters on the left */
@@ -203,7 +263,7 @@ export function Watchlist({
             onSortByChange={(value) => setFilters(prev => ({ ...prev, sortBy: value }))}
             onSortOrderChange={(value) => setFilters(prev => ({ ...prev, sortOrder: value }))}
             onClearAllFilters={handleClearAllFilters}
-            onSelectAll={handleSelectAll}
+            onSelectAll={handleSelectAllWrapper}
             onRemoveSelected={handleRemoveSelected}
             isRemoving={removingCoins.size > 0}
           />
@@ -224,18 +284,32 @@ export function Watchlist({
           
           {/* Content Mode Toggle - Always show when not in comparison mode, icon only, rightmost */}
           {gridViewMode !== 'chart' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onContentModeChange?.(contentMode === 'cards' ? 'table' : 'cards')}
-              className="h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80 hover:ring-1 hover:ring-primary/5"
-            >
-              {contentMode === 'cards' ? (
-                <IconRectangleGrid2x2Fill className="h-4 w-4 fill-muted-foreground" />
-              ) : (
-                <IconRectangleGrid1x2Fill className="h-4 w-4 fill-muted-foreground" />
-              )}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onContentModeChange?.(contentMode === 'cards' ? 'table' : 'cards')}
+                  className="h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80 hover:ring-1 hover:ring-primary/5 relative"
+                >
+                  {contentMode === 'cards' ? (
+                    <IconRectangleGrid2x2Fill className="h-4 w-4 fill-muted-foreground" />
+                  ) : (
+                    <IconRectangleGrid1x2Fill className="h-4 w-4 fill-muted-foreground" />
+                  )}
+                  {/* Counter Badge */}
+                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] font-medium flex items-center justify-center leading-none font-mono">
+                    {toggleCounter}
+                  </span>
+                </Button>
+                </TooltipTrigger>
+              <TooltipContent side="bottom" align="end" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+                <span>Switch between Grid and List</span>
+                  <Kbd>[</Kbd>
+                  <span>+</span>
+                  <Kbd>]</Kbd>
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
       </div>
@@ -289,11 +363,12 @@ export function Watchlist({
         </div>
       )}
 
-      {/* Create Watchlist Modal */}
-      <CreateWatchlist 
-        isOpen={isCreatingWatchlist} 
-        onClose={() => setIsCreatingWatchlist(false)} 
-      />
+        {/* Create Watchlist Modal */}
+        <CreateWatchlist 
+          isOpen={isCreatingWatchlist} 
+          onClose={() => setIsCreatingWatchlist(false)} 
+        />
     </div>
+    </TooltipProvider>
   )
 }

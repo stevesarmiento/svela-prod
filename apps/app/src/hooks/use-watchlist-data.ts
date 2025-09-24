@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import type { CoinMarketData } from '@/types/coins'
 
@@ -31,23 +31,18 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     sortOrder: "asc",
   })
 
-  const stableWatchlist = useMemo(() => watchlist, [watchlist]);
-  
   const { 
     data: coins, 
     isLoading: isCoinsLoading, 
     error,
     performance
-  } = useCoinGeckoWatchlistCoins(stableWatchlist);
-
-  // Log performance metrics for monitoring
-  console.log('🚀 Watchlist performance:', performance)
+  } = useCoinGeckoWatchlistCoins(watchlist);
 
   // Create optimistic loading coins while data is being fetched
   const optimisticCoins = useMemo(() => {
     if (isCoinsLoading && !coins) {
       // Show skeleton rows during initial load
-      return stableWatchlist.map(coinId => ({
+      return watchlist.map(coinId => ({
         id: coinId,
         name: 'Loading...',
         symbol: 'Loading...',
@@ -67,14 +62,11 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       } as CoinMarketData))
     }
     return coins || []
-  }, [isCoinsLoading, coins, stableWatchlist])
+  }, [isCoinsLoading, coins, watchlist])
 
   // Filter and sort coins based on filter state
   const filteredCoins = useMemo(() => {
     if (!optimisticCoins.length) return [];
-    
-    console.log('Raw coins data:', optimisticCoins);
-    console.log('Current filters:', filters);
     
     const filtered = optimisticCoins.filter(coin => {
       // Search filter
@@ -89,14 +81,12 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       // Price range filter
       if (coin.quote.USD.price < filters.priceRange[0] || 
           coin.quote.USD.price > filters.priceRange[1]) {
-        console.log(`Filtering out ${coin.name} due to price: ${coin.quote.USD.price}`);
         return false;
       }
       
       // Market cap range filter
       if (coin.quote.USD.market_cap < filters.marketCapRange[0] || 
           coin.quote.USD.market_cap > filters.marketCapRange[1]) {
-        console.log(`Filtering out ${coin.name} due to market cap: ${coin.quote.USD.market_cap}`);
         return false;
       }
       
@@ -110,8 +100,6 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       
       return true;
     });
-    
-    console.log('Filtered coins:', filtered);
     
     // Sort coins
     filtered.sort((a, b) => {
@@ -150,7 +138,7 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
   }, [optimisticCoins, filters]);
 
   // Filter handlers
-  const handleClearAllFilters = () => {
+  const handleClearAllFilters = useCallback(() => {
     setFilters({
       searchText: "",
       priceRange: [0, 1000000],
@@ -160,7 +148,7 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       sortBy: "name",
       sortOrder: "asc",
     });
-  };
+  }, []);
 
   return {
     filters,

@@ -2,15 +2,13 @@
 
 import { useState, useCallback } from 'react'
 import { toast } from "@v1/ui/use-toast"
-import type { CoinMarketData } from '@/types/coins'
 
 interface UseWatchlistSelectionProps {
-  selectedGroup: any;
+  selectedGroup: unknown;
   removeFromSelectedGroup: (coinId: string) => Promise<void>;
   removeFromWatchlist: (coinId: string) => Promise<void>;
   removeBulkFromSelectedGroup: (coinIds: string[]) => Promise<void>;
   removeBulkFromWatchlist: (coinIds: string[]) => Promise<void>;
-  filteredCoins: CoinMarketData[];
 }
 
 export function useWatchlistSelection({
@@ -19,7 +17,6 @@ export function useWatchlistSelection({
   removeFromWatchlist,
   removeBulkFromSelectedGroup,
   removeBulkFromWatchlist,
-  filteredCoins,
 }: UseWatchlistSelectionProps) {
   const [selectedCoins, setSelectedCoins] = useState<Set<string>>(new Set())
   const [removingCoins, setRemovingCoins] = useState<Set<string>>(new Set())
@@ -28,7 +25,11 @@ export function useWatchlistSelection({
   // Create stable remove handler with optimistic updates
   const handleRemove = useCallback(async (coinId: number | string) => {
     const coinIdStr = coinId.toString();
-    setRemovingCoins(prev => new Set([...prev, coinIdStr]));
+    setRemovingCoins(prev => {
+      const newSet = new Set(prev);
+      newSet.add(coinIdStr);
+      return newSet;
+    });
     
     try {
       // Use group-specific remove function if a group is selected
@@ -64,13 +65,13 @@ export function useWatchlistSelection({
     });
   }, []);
 
-  const handleSelectAll = useCallback((checked: boolean) => {
-    if (checked) {
-      setSelectedCoins(new Set(filteredCoins.map(coin => coin.id.toString())));
+  const handleSelectAll = useCallback((checked: boolean, coinIds?: string[]) => {
+    if (checked && coinIds) {
+      setSelectedCoins(new Set(coinIds));
     } else {
       setSelectedCoins(new Set());
     }
-  }, [filteredCoins]);
+  }, []);
 
   const handleRemoveSelected = useCallback(async () => {
     const coinIdsToRemove = Array.from(selectedCoins);

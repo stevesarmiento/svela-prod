@@ -5,18 +5,48 @@ import Script from "next/script";
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
-//import localFont from "next/font/local";
+import localFont from "next/font/local";
 
-// const geistSans = localFont({
-//   src: "./fonts/GeistVF.woff",
-//   variable: "--font-geist-sans",
-//   weight: "100 900",
-// });
-// const geistMono = localFont({
-//   src: "./fonts/GeistMonoVF.woff",
-//   variable: "--font-geist-mono",
-//   weight: "100 900",
-// });
+// ABC Diatype Font Family
+const abcDiatype = localFont({
+  src: [
+    {
+      path: "../../fonts/ABCDiatype-Regular.woff2",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../../fonts/ABCDiatype-Medium.woff2", 
+      weight: "500",
+      style: "normal",
+    },
+    {
+      path: "../../fonts/ABCDiatype-Bold.woff2",
+      weight: "700", 
+      style: "normal",
+    },
+  ],
+  variable: "--font-abc-diatype",
+  display: "swap",
+});
+
+// ABC Diatype Mono Font Family  
+const abcDiatypeMono = localFont({
+  src: [
+    {
+      path: "../../fonts/ABCDiatypeMono-Regular.woff2",
+      weight: "400",
+      style: "normal", 
+    },
+    {
+      path: "../../fonts/ABCDiatypeMono-RegularItalic.woff2",
+      weight: "400",
+      style: "italic",
+    },
+  ],
+  variable: "--font-abc-diatype-mono",
+  display: "swap", 
+});
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -46,7 +76,7 @@ export default function RootLayout({
       </head>
       <body
         className={cn(
-          `${GeistSans.variable} ${GeistMono.variable}`,
+          `${GeistSans.variable} ${GeistMono.variable} ${abcDiatype.variable} ${abcDiatypeMono.variable}`,
           "antialiased",
         )}
       >
