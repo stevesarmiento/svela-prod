@@ -25,8 +25,13 @@ import { useWatchlistSelection } from "@/hooks/use-watchlist-selection"
 import { Button } from "@v1/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@v1/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@v1/ui/tooltip'
-import { IconStarFill, IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill } from 'symbols-react'
-import { CreateWatchlist, CreateWatchlistTrigger } from './create-watchlist'
+import { 
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@v1/ui/popover'
+import { IconStarFill, IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmarkFill } from 'symbols-react'
+import { CreateWatchlist } from './create-watchlist'
 import { Kbd } from "@v1/ui/kbd"
 import { COLOR_THEMES } from "@/components/color-picker"
 
@@ -281,48 +286,89 @@ export function Watchlist({
           </div>
         )}
         
-        {/* Right side - Action buttons */}
-        <div className="flex items-center gap-2">
-          {/* Show create watchlist only in cards mode */}
-          {contentMode === 'cards' && gridViewMode === 'grid' && (
-            <CreateWatchlistTrigger onClick={() => setIsCreatingWatchlist(true)} />
-          )}
-          
-          {/* Add token (CoinSearch) - show only in table mode */}
-          {contentMode === 'table' && (
-          <CoinSearch ref={coinSearchRef} />
-          )}
-          
-          {/* Content Mode Toggle - Always show when not in comparison mode, icon only, rightmost */}
-          {gridViewMode !== 'chart' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
+        {/* Right side - Action buttons and shortcuts */}
+        <div className="flex items-center justify-between gap-4 flex-1">
+          <div className="flex items-center gap-2"></div>
+          {/* Action buttons - right side */}
+          <div className="flex items-center gap-2">
+                        {/* Content Mode Toggle */}
+                        {gridViewMode !== 'chart' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onContentModeChange?.(contentMode === 'cards' ? 'table' : 'cards')}
+                    className={`group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80 relative border-2 border-opacity-50 ${selectedGroupColorTheme.border}`}
+                  >
+                    {contentMode === 'cards' ? (
+                      <IconRectangleGrid2x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
+                    ) : (
+                      <IconRectangleGrid1x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
+                    )}
+                    {/* Counter Badge */}
+                    <span className={`absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full text-[10px] font-bold flex items-center justify-center leading-none font-diatype-mono shadow-md text-white
+                    ${selectedGroupColorTheme.bg}`}>
+                      {toggleCounter}
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+                  <span>Switch between Grid and List</span>
+                    <Kbd>[</Kbd>
+                    <span>/</span>
+                    <Kbd>]</Kbd>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {/* Actions Menu */}
+            <Popover>
+              <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => onContentModeChange?.(contentMode === 'cards' ? 'table' : 'cards')}
-                  className={`group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80 relative border-2 border-opacity-50 ${selectedGroupColorTheme.border}`}
+                  className="h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
                 >
-                  {contentMode === 'cards' ? (
-                    <IconRectangleGrid2x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
-                  ) : (
-                    <IconRectangleGrid1x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
-                  )}
-                  {/* Counter Badge */}
-                  <span className={`absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full text-[10px] font-bold flex items-center justify-center leading-none font-diatype-mono shadow-md text-white
-                  ${selectedGroupColorTheme.bg}`}>
-                    {toggleCounter}
-                  </span>
+                  <IconEllipsis className="h-4 w-4 fill-muted-foreground rotate-90" />
                 </Button>
-                </TooltipTrigger>
-              <TooltipContent side="bottom" align="end" className="flex items-center gap-2 p-1 pl-2 rounded-md">
-                <span>Switch between Grid and List</span>
-                  <Kbd>[</Kbd>
-                  <span>or</span>
-                  <Kbd>]</Kbd>
-              </TooltipContent>
-            </Tooltip>
-          )}
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-1 rounded-xl bg-white dark:bg-zinc-900" align="end" side="bottom">
+                <div className="space-y-1">
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={() => {
+                       setIsCreatingWatchlist(true)
+                     }}
+                     className="w-full justify-start gap-2 rounded-md"
+                   >
+                     <IconWidgetSmallBadgePlus className="h-3.5 w-3.5 fill-muted-foreground" />
+                     <span>Create Watchlist</span>
+                     <div className="ml-auto flex items-center gap-1">
+                       <Kbd className="text-xs">Shift</Kbd>
+                       <Kbd className="text-xs">N</Kbd>
+                     </div>
+                   </Button>
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={() => {
+                       coinSearchRef.current?.open()
+                     }}
+                     className="w-full justify-start gap-2 rounded-md"
+                   >
+                     <IconBookmarkFill className="h-3.5 w-3.5 fill-muted-foreground" />
+                     <span>Add Token</span>
+                     <div className="ml-auto flex items-center gap-1">
+                       <Kbd className="text-xs">Shift</Kbd>
+                       <Kbd className="text-xs">A</Kbd>
+                     </div>
+                   </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          
+          </div>
         </div>
       </div>
 
@@ -380,6 +426,11 @@ export function Watchlist({
           isOpen={isCreatingWatchlist} 
           onClose={() => setIsCreatingWatchlist(false)} 
         />
+
+        {/* Hidden CoinSearch for ref access */}
+        <div className="sr-only">
+          <CoinSearch ref={coinSearchRef} />
+        </div>
     </div>
     </TooltipProvider>
   )
