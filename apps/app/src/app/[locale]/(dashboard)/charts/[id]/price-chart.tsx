@@ -236,7 +236,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                       )}
                     </div>
 
-                  <div className={`text-xs font-bold font-mono ${isNaN(priceChange24h) ? 'text-muted-foreground' : priceChange24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  <div className={`text-xs font-bold font-diatype-mono ${isNaN(priceChange24h) ? 'text-muted-foreground' : priceChange24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                     {isNaN(priceChange24h) ? (
                       <span>N/A</span>
                     ) : (

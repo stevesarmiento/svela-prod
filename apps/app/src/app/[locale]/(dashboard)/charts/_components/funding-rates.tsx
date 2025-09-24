@@ -25,7 +25,7 @@ export function FundingRates({ coins }: FundingRatesProps) {
               >
                 <span className="text-sm font-medium">{coin.symbol}</span>
                 <span className={cn(
-                  "text-lg font-mono",
+                  "text-lg font-diatype-mono",
                   {
                     'text-emerald-500': coin.fundingRate && coin.fundingRate > 0,
                     'text-rose-500': coin.fundingRate && coin.fundingRate < 0,

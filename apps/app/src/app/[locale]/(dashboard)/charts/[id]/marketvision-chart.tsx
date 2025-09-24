@@ -58,7 +58,7 @@ const TooltipContent = ({
                   {indicator.name}
                 </span>
               </div>
-              <span className="text-[11px] font-mono text-white font-bold">
+              <span className="text-[11px] font-diatype-mono text-white font-bold">
                 {indicator.value.toFixed(2)}
               </span>
             </div>

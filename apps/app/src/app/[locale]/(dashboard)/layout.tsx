@@ -15,7 +15,7 @@ export default function DashboardLayout({
     <BottomNavProvider>
       <WatchlistProvider>
         <SidebarProvider defaultOpen>
-          <div className="flex w-screen">
+          <div className="flex w-screen font-diatype">
             <div className="flex flex-grow flex-col max-w-7xl mx-auto">
               <TopNav />
               <main className="flex flex-grow w-full pb-20">

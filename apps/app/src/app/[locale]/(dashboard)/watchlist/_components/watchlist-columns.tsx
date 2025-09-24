@@ -142,7 +142,7 @@ export function createWatchlistColumns({
                 </div>
                 <div className="">
                   {row.original.quote.USD.price > 0 ? (
-                    <span className="text-muted-foreground font-mono text-xs">{row.original.name}</span>
+                    <span className="text-muted-foreground font-diatype-mono text-xs">{row.original.name}</span>
                   ) : (
                     <Skeleton className="h-3 w-16 rounded" />
                   )}
@@ -204,7 +204,7 @@ export function createWatchlistColumns({
                   </div>
                   <div className="">
                     {row.original.quote.USD.price > 0 ? (
-                      <span className="text-muted-foreground font-mono text-xs">{row.original.name}</span>
+                      <span className="text-muted-foreground font-diatype-mono text-xs">{row.original.name}</span>
                     ) : (
                       <Skeleton className="h-3 w-16 rounded" />
                     )}
@@ -238,7 +238,7 @@ export function createWatchlistColumns({
         </div>
       ),
       cell: ({ row }) => (
-        <span className="font-mono text-xs">
+        <span className="font-diatype-mono text-xs">
           {row.original.quote.USD.price > 0 ? (
             `$${row.original.quote.USD.price.toLocaleString()}`
           ) : (
@@ -259,7 +259,7 @@ export function createWatchlistColumns({
       cell: ({ row }) => (
         row.original.quote.USD.price > 0 ? (
           <span className={cn(
-            "font-mono text-xs",
+            "font-diatype-mono text-xs",
             row.original.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'
           )}>
             {row.original.quote.USD.percent_change_24h.toFixed(2)}%
@@ -279,7 +279,7 @@ export function createWatchlistColumns({
         </div>
       ),
       cell: ({ row }) => (
-        <span className="font-mono text-xs">
+        <span className="font-diatype-mono text-xs">
           {row.original.quote.USD.price > 0 ? (
             `$${formatLargeNumber(row.original.quote.USD.volume_24h || 0)}`
           ) : (

@@ -322,25 +322,25 @@ export function OpenInterestChart({
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-zinc-400">Open Interest</span>
-                      <span className="text-[11px] font-mono text-white font-bold">
+                      <span className="text-[11px] font-diatype-mono text-white font-bold">
                         {unit === 'usd' ? '$' : ''}{formatLargeNumber(tooltip.value)}{unit === 'coin' ? ' BTC' : ''}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-green-400">High</span>
-                      <span className="text-[11px] font-mono text-green-400">
+                      <span className="text-[11px] font-diatype-mono text-green-400">
                         {unit === 'usd' ? '$' : ''}{formatLargeNumber(tooltip.high)}{unit === 'coin' ? ' BTC' : ''}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-red-400">Low</span>
-                      <span className="text-[11px] font-mono text-red-400">
+                      <span className="text-[11px] font-diatype-mono text-red-400">
                         {unit === 'usd' ? '$' : ''}{formatLargeNumber(tooltip.low)}{unit === 'coin' ? ' BTC' : ''}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-zinc-400">Change</span>
-                      <span className={`text-[10px] font-mono px-1.5 h-4 rounded ${tooltip.changePercent >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{tooltip.changePercent >= 0 ? '+' : ''}{tooltip.changePercent.toFixed(2)}%</span>
+                      <span className={`text-[10px] font-diatype-mono px-1.5 h-4 rounded ${tooltip.changePercent >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{tooltip.changePercent >= 0 ? '+' : ''}{tooltip.changePercent.toFixed(2)}%</span>
                     </div>
                   </div>
                 </div>

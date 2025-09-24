@@ -152,7 +152,7 @@ export function PriceCard({
             </div>
             
             <div className="flex flex-col items-end">
-              <span className="text-sm font-mono font-semibold text-gray-900 dark:text-white">
+              <span className="text-sm font-diatype-mono font-semibold text-gray-900 dark:text-white">
                 <NumberFlow
                   value={currentPrice}
                   format={{
@@ -203,13 +203,13 @@ export function PriceCard({
               {marketCap && (
                 <div>
                   <span className="text-gray-500 dark:text-zinc-400 block mb-1">Market Cap</span>
-                  <p className="font-mono text-gray-900 dark:text-white">${formatLargeNumber(marketCap)}</p>
+                  <p className="font-diatype-mono text-gray-900 dark:text-white">${formatLargeNumber(marketCap)}</p>
                 </div>
               )}
               {totalVolume && (
                 <div>
                   <span className="text-gray-500 dark:text-zinc-400 block mb-1">Volume 24h</span>
-                  <p className="font-mono text-gray-900 dark:text-white">${formatLargeNumber(totalVolume)}</p>
+                  <p className="font-diatype-mono text-gray-900 dark:text-white">${formatLargeNumber(totalVolume)}</p>
                 </div>
               )}
             </div>

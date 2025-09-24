@@ -156,7 +156,7 @@ export function WatchlistCard({
       <div
         className="absolute inset-0 z-0 size-full opacity-40 dark:opacity-30"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='5' cy='5' r='1' fill='rgba(255,250,250,0.1)'/%3E%3C/svg%3E")`,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='5' cy='5' r='1' fill='rgba(255,250,250,0.2)'/%3E%3C/svg%3E")`,
           backgroundRepeat: "repeat",
         }}
       />
@@ -191,14 +191,14 @@ export function WatchlistCard({
                 <div className="flex text-[10px] flex-row items-center gap-2">
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                      <span className="text-white font-mono">
+                      <span className="text-white font-diatype-mono">
                         {stats.positiveCount} 
                       </span>
                       <span className="text-white/50">up</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
-                      <span className="text-white font-mono">
+                      <span className="text-white font-diatype-mono">
                         {stats.negativeCount} 
                       </span>
                       <span className="text-white/50">down</span>
@@ -287,7 +287,7 @@ export function WatchlistCard({
               
               <div className="flex items-center gap-2 mr-2">
                 <div className={cn(
-                  "flex items-center gap-1 text-sm font-bold font-mono",
+                  "flex items-center gap-1 text-sm font-bold font-diatype-mono",
                   // Use darker version of the theme color
                   displayColor === 'blue' ? "text-blue-300" :
                   displayColor === 'sky' ? "text-sky-300" :

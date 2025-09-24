@@ -55,7 +55,7 @@ export function Liquidations({ symbols }: LiquidationsProps) {
   return (
       <Card>
       <CardHeader>
-        <CardTitle className="font-medium font-mono">24h Liquidations</CardTitle>
+        <CardTitle className="font-medium font-diatype-mono">24h Liquidations</CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -66,27 +66,27 @@ export function Liquidations({ symbols }: LiquidationsProps) {
         ) : (
             <Card>
             <CardHeader>
-              <CardTitle className="font-medium font-mono">24h Liquidations</CardTitle>
+              <CardTitle className="font-medium font-diatype-mono">24h Liquidations</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 rounded-lg border bg-card">
                   <div className="text-sm text-muted-foreground">Total</div>
-                  <div className="text-2xl font-mono font-semibold">
+                  <div className="text-2xl font-diatype-mono font-semibold">
                     ${formatLargeNumber(totalLiquidations)}
                   </div>
                 </div>
                 
                 <div className="p-4 rounded-lg border bg-card">
                   <div className="text-sm text-muted-foreground">Longs</div>
-                  <div className="text-2xl font-mono font-semibold text-rose-500">
+                  <div className="text-2xl font-diatype-mono font-semibold text-rose-500">
                     ${formatLargeNumber(longLiquidations.reduce((sum, liq) => sum + (liq.usd_value || 0), 0))}
                   </div>
                 </div>
                 
                 <div className="p-4 rounded-lg border bg-card">
                   <div className="text-sm text-muted-foreground">Shorts</div>
-                  <div className="text-2xl font-mono font-semibold text-emerald-500">
+                  <div className="text-2xl font-diatype-mono font-semibold text-emerald-500">
                     ${formatLargeNumber(shortLiquidations.reduce((sum, liq) => sum + (liq.usd_value || 0), 0))}
                   </div>
                 </div>
@@ -99,7 +99,7 @@ export function Liquidations({ symbols }: LiquidationsProps) {
                     className="flex justify-between items-center p-2 rounded-lg border bg-card"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="font-mono">{liq.symbol}</span>
+                      <span className="font-diatype-mono">{liq.symbol}</span>
                       <span className={cn(
                         "text-xs px-2 py-0.5 rounded-full font-medium",
                         liq.side === 'long' ? 'bg-red-500/10 text-rose-500' : 'bg-green-500/10 text-emerald-500'
@@ -108,7 +108,7 @@ export function Liquidations({ symbols }: LiquidationsProps) {
                       </span>
                     </div>
                     <div className="text-right">
-                      <div className="font-mono">${formatLargeNumber(liq.usd_value || 0)}</div>
+                      <div className="font-diatype-mono">${formatLargeNumber(liq.usd_value || 0)}</div>
                       <div className="text-xs text-muted-foreground">
                         {new Date(liq.time * 1000).toLocaleTimeString()}
                       </div>

@@ -235,7 +235,7 @@ export function ApiKeysManagement() {
                     {/* Existing Key Display */}
                     {existingKey && (
                       <div className="text-[10px] text-primary/30">
-                        <div className="font-mono mb-1">{'displayKey' in existingKey ? (existingKey.displayKey || 'key...hidden') : 'key...hidden'}</div>
+                        <div className="font-diatype-mono mb-1">{'displayKey' in existingKey ? (existingKey.displayKey || 'key...hidden') : 'key...hidden'}</div>
                         {'validationError' in existingKey && existingKey.validationError && (
                           <div className="text-red-400">Error: {existingKey.validationError}</div>
                         )}

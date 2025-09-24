@@ -95,7 +95,7 @@ const TooltipContent = ({
                   {coin.symbol.toUpperCase()} <span className="text-gray-500 dark:text-zinc-500">{coin.name}</span>
                 </span>
               </div>
-              <span className="text-[11px] font-mono text-gray-900 dark:text-white font-bold">
+              <span className="text-[11px] font-diatype-mono text-gray-900 dark:text-white font-bold">
                 {coin.value > 0 ? '+' : ''}{coin.value.toFixed(2)}%
               </span>
             </div>
@@ -516,7 +516,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                     <div className="w-1 h-9 rounded-full bg-muted animate-pulse" />
                     <div className="flex flex-row items-center gap-2 flex-1 ml-2">
                       <span className="text-xs font-medium">...</span>
-                      <span className="text-xs font-mono text-muted-foreground">Loading...</span>
+                      <span className="text-xs font-diatype-mono text-muted-foreground">Loading...</span>
                     </div>
                   </div>
                 ) : realCoin ? (
@@ -541,7 +541,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                       />
                       <div className="flex flex-row items-center gap-2 flex-1 ml-2">
                         <span className="text-xs font-medium">{realCoin.symbol.toUpperCase()}</span>
-                        <span className="text-xs font-mono text-muted-foreground">{realCoin.name}</span>
+                        <span className="text-xs font-diatype-mono text-muted-foreground">{realCoin.name}</span>
                       </div>
                       
                       {/* Remove Icon - appears on hover */}

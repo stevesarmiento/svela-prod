@@ -32,7 +32,7 @@ export function LongShortRatio({ cmcId }: LongShortRatioProps) {
         <span className="text-[11px] text-muted-foreground font-medium mb-2">
           Long/Short Ratio
         </span>
-        <span className="text-md font-mono text-muted-foreground">
+        <span className="text-md font-diatype-mono text-muted-foreground">
           N/A
         </span>
       </div>
@@ -46,7 +46,7 @@ export function LongShortRatio({ cmcId }: LongShortRatioProps) {
         <span className="text-[11px] text-muted-foreground font-medium mb-2">
           Long/Short Ratio
         </span>
-        <span className="text-md font-mono text-muted-foreground">
+        <span className="text-md font-diatype-mono text-muted-foreground">
           No Data
         </span>
       </div>

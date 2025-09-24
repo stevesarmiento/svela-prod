@@ -42,7 +42,7 @@ const createColumns = (): ColumnDef<FlatFundingRate>[] => [
       <div className="flex items-center gap-2">
         <div className="font-medium">{row.original.exchange}</div>
         <div className={cn(
-          "px-1.5 py-0.5 rounded text-xs font-mono",
+          "px-1.5 py-0.5 rounded text-xs font-diatype-mono",
           row.original.marginType === 'stablecoin' 
             ? "bg-blue-500/10 text-blue-400"
             : "bg-orange-500/10 text-orange-400"
@@ -68,7 +68,7 @@ const createColumns = (): ColumnDef<FlatFundingRate>[] => [
       return (
         <div className="text-right">
           <div className={cn(
-            "font-mono text-sm font-medium",
+            "font-diatype-mono text-sm font-medium",
             rate > 0 ? 'text-green-500' : rate < 0 ? 'text-red-500' : 'text-muted-foreground'
           )}>
             {rate > 0 ? '+' : ''}{percentage}%
@@ -88,7 +88,7 @@ const createColumns = (): ColumnDef<FlatFundingRate>[] => [
       </div>
     ),
     cell: ({ row }) => (
-      <div className="text-center font-mono text-sm">
+      <div className="text-center font-diatype-mono text-sm">
         {row.original.fundingRateInterval}h
       </div>
     ),
@@ -111,14 +111,14 @@ const createColumns = (): ColumnDef<FlatFundingRate>[] => [
       
       return (
         <div className="text-right">
-          <div className="font-mono text-xs text-muted-foreground">
+          <div className="font-diatype-mono text-xs text-muted-foreground">
             {nextTime.toLocaleTimeString([], { 
               hour: '2-digit', 
               minute: '2-digit',
               hour12: false 
             })}
           </div>
-          <div className="font-mono text-xs">
+          <div className="font-diatype-mono text-xs">
             {timeDiff > 0 ? `${hoursRemaining}h ${minutesRemaining}m` : 'Now'}
           </div>
         </div>
@@ -240,7 +240,7 @@ export function FundingRateExchanges({ coinId, className }: FundingRateExchanges
           <CardHeader className="p-6 pt-4 pr-5">
             <CardTitle className="flex flex-col items-left">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg font-mono">
+                <span className="text-lg font-diatype-mono">
                   Funding Rates - {data.coinInfo?.name || data.symbol}
                 </span>
               </div>
@@ -254,20 +254,20 @@ export function FundingRateExchanges({ coinId, className }: FundingRateExchanges
                 </div>
                 <div className="flex items-center gap-2">
                   <TrendingUp className="h-3 w-3 text-green-500" />
-                  <span className="font-medium font-mono">
+                  <span className="font-medium font-diatype-mono">
                     {(stats.highestRate * 100).toFixed(4)}%
                   </span>
                   <span className="text-muted-foreground">Highest</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <TrendingDown className="h-3 w-3 text-red-500" />
-                  <span className="font-medium font-mono">
+                  <span className="font-medium font-diatype-mono">
                     {(stats.lowestRate * 100).toFixed(4)}%
                   </span>
                   <span className="text-muted-foreground">Lowest</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="font-medium font-mono">
+                  <span className="font-medium font-diatype-mono">
                     {(stats.avgRate * 100).toFixed(4)}%
                   </span>
                   <span className="text-muted-foreground">Average</span>

@@ -72,7 +72,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
                 {isActive ? `Search ${item.title}` : item.title}
               </span>
               {shortcut && (
-                <kbd className="rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
+                <kbd className="rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-gray-700 dark:text-zinc-300 uppercase">
                   {shortcut}
                 </kbd>
               )}

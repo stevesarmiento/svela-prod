@@ -199,7 +199,7 @@ function WatchlistCard({
             <div className="flex items-center gap-2">
               <span className="font-bold text-xs">{watchlist.name}</span>
               <span className="text-primary/40 text-xs">watchlist has</span>
-              <span className="font-mono text-xs font-semibold bg-primary/5 border border-primary/10 px-1.5 py-0.5 rounded-md">
+              <span className="font-diatype-mono text-xs font-semibold bg-primary/5 border border-primary/10 px-1.5 py-0.5 rounded-md">
                 {watchlist.coinsCount}
               </span>
               <span className="text-primary/40 text-xs">{watchlist.coinsCount === 1 ? 'token' : 'tokens'}</span>
@@ -215,7 +215,7 @@ function WatchlistCard({
             {/* Aggregate Change */}
             <div className="flex items-center justify-end">
               <span className={cn(
-                "font-mono text-xs",
+                "font-diatype-mono text-xs",
                 watchlist.aggregateChange > 0 ? 'text-green-600' : 'text-red-600'
               )}>
                 {watchlist.aggregateChange > 0 ? '+' : ''}{watchlist.aggregateChange.toFixed(2)}%

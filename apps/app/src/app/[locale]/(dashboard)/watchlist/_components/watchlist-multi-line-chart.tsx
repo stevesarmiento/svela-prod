@@ -159,7 +159,7 @@ const TooltipContent = ({
                   {watchlist.name}
                 </span>
               </div>
-              <span className="text-[11px] font-mono text-foreground font-bold">
+              <span className="text-[11px] font-diatype-mono text-foreground font-bold">
                 {watchlist.value > 0 ? '+' : ''}{watchlist.value.toFixed(2)}%
               </span>
             </div>
@@ -522,12 +522,12 @@ export function WatchlistMultiLineChart({
                     size={16}
                   />
                   <span className="text-xs font-medium text-foreground">{watchlist.name}</span>
-                  <span className="text-xs font-mono text-muted-foreground">({watchlist.coinsCount})</span>
+                  <span className="text-xs font-diatype-mono text-muted-foreground">({watchlist.coinsCount})</span>
                 </div>
                 
                 {/* Performance */}
                 <div className={cn(
-                  "text-xs font-mono mr-2",
+                  "text-xs font-diatype-mono mr-2",
                   watchlist.latestValue > 0 ? 'text-green-500' : 'text-red-500'
                 )}>
                   {watchlist.latestValue > 0 ? '+' : ''}{watchlist.latestValue.toFixed(2)}%

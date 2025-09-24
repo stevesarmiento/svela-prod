@@ -201,11 +201,11 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
         </p>
         {toggleShortcut && (
           <>
-          <kbd className="rounded-sm bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
+          <kbd className="rounded-sm bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-gray-700 dark:text-zinc-300 uppercase">
             shift
           </kbd>
           <span className="text-gray-500 dark:text-zinc-400 text-xs">+</span>
-          <kbd className="rounded-sm bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
+          <kbd className="rounded-sm bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-gray-700 dark:text-zinc-300 uppercase">
             W
           </kbd>
           </>

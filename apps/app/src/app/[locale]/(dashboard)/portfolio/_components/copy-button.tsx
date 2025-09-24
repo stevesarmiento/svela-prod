@@ -47,7 +47,7 @@ export function CopyButton({
       )}
     >
       {showText && (
-        <span className="font-mono font-medium text-primary-50">
+        <span className="font-diatype-mono font-medium text-primary-50">
           {displayText || textToCopy}
         </span>
       )}

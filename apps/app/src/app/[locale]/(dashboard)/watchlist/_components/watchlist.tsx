@@ -28,6 +28,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@v1/ui
 import { IconStarFill, IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill } from 'symbols-react'
 import { CreateWatchlist, CreateWatchlistTrigger } from './create-watchlist'
 import { Kbd } from "@v1/ui/kbd"
+import { COLOR_THEMES } from "@/components/color-picker"
 
 interface WatchlistProps {
   activeTimeScale?: string;
@@ -168,6 +169,16 @@ export function Watchlist({
     }
   }, [contentMode, watchlistGroups.length, filteredCoins.length]);
 
+  // Get the selected group's color theme for the counter badge
+  const selectedGroupColorTheme = useMemo(() => {
+    const groupWithColor = selectedGroup as { color?: string } | null;
+    const groupColor = groupWithColor?.color;
+    if (!groupColor) {
+      return COLOR_THEMES.default;
+    }
+    return COLOR_THEMES[groupColor as keyof typeof COLOR_THEMES] || COLOR_THEMES.default;
+  }, [selectedGroup]);
+
   // Memoize columns with hover state - Split dependencies to reduce recalculations
   const columns = useMemo(() => createWatchlistColumns({
     handleRemove, 
@@ -236,7 +247,7 @@ export function Watchlist({
                 <TooltipContent side="bottom" align="start" className="flex items-center gap-2 p-1 pl-2 rounded-md">
                   <span>Switch between Watchlists and Comparison</span>
                   <Kbd>W</Kbd>
-                  <span>+</span>
+                  <span>or</span>
                   <Kbd>E</Kbd>
                 </TooltipContent>
               </Tooltip>
@@ -290,15 +301,16 @@ export function Watchlist({
                   variant="ghost"
                   size="sm"
                   onClick={() => onContentModeChange?.(contentMode === 'cards' ? 'table' : 'cards')}
-                  className="h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80 hover:ring-1 hover:ring-primary/5 relative"
+                  className={`group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80 relative border-2 border-opacity-50 ${selectedGroupColorTheme.border}`}
                 >
                   {contentMode === 'cards' ? (
-                    <IconRectangleGrid2x2Fill className="h-4 w-4 fill-muted-foreground" />
+                    <IconRectangleGrid2x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
                   ) : (
-                    <IconRectangleGrid1x2Fill className="h-4 w-4 fill-muted-foreground" />
+                    <IconRectangleGrid1x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
                   )}
                   {/* Counter Badge */}
-                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] font-medium flex items-center justify-center leading-none font-mono">
+                  <span className={`absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full text-[10px] font-bold flex items-center justify-center leading-none font-diatype-mono shadow-md text-white
+                  ${selectedGroupColorTheme.bg}`}>
                     {toggleCounter}
                   </span>
                 </Button>
@@ -306,7 +318,7 @@ export function Watchlist({
               <TooltipContent side="bottom" align="end" className="flex items-center gap-2 p-1 pl-2 rounded-md">
                 <span>Switch between Grid and List</span>
                   <Kbd>[</Kbd>
-                  <span>+</span>
+                  <span>or</span>
                   <Kbd>]</Kbd>
               </TooltipContent>
             </Tooltip>

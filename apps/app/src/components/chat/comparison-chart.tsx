@@ -170,7 +170,7 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
                 style={{ backgroundColor: series.color }}
               />
               <span className="text-xs text-gray-700 dark:text-zinc-300">{series.symbol.toUpperCase()}</span>
-              <span className="text-xs font-mono text-gray-900 dark:text-white">
+              <span className="text-xs font-diatype-mono text-gray-900 dark:text-white">
                 {series.latestValue > 0 ? '+' : ''}{series.latestValue.toFixed(2)}%
               </span>
             </div>

@@ -98,7 +98,7 @@ export function FundingRate({ cmcId }: FundingRateProps) {
           </div>
           <div className="text-right space-y-1">
             <div className={cn(
-              "text-sm font-mono font-semibold",
+              "text-sm font-diatype-mono font-semibold",
               isActualPositive ? "text-emerald-500" : "text-rose-500"
             )}>
               {actualRate ? `${isActualPositive ? '+' : ''}${(actualRate * 100).toFixed(4)}%` : 'N/A'}

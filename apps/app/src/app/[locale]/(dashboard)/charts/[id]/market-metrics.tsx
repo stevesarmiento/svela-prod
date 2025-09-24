@@ -99,7 +99,7 @@ export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: Ma
           <div className="flex flex-col items-center">
             <span className="text-[11px] uppercase text-muted-foreground font-medium">Rank</span>
             <span className={cn(
-              "text-2xl font-mono text-white",
+              "text-2xl font-diatype-mono text-white",
               showPending && "animate-pulse"
             )}>
               {deferredData.market_cap_rank || 'N/A'}
@@ -132,7 +132,7 @@ export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: Ma
               
               {/* Value - Centered with pending animation */}
               <div className={cn(
-                "text-md font-mono text-center",
+                "text-md font-diatype-mono text-center",
                 metric.className || "text-foreground",
                 showPending && "animate-pulse"
               )}>
