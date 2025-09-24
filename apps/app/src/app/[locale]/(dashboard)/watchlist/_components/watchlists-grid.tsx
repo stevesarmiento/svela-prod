@@ -16,10 +16,8 @@ import { IconPicker } from '@/components/icon-picker'
 import { COLORS } from '@/components/color-picker'
 import { useWatchlist } from './watchlist-context'
 import { cn } from '@v1/ui/cn'
-import { CreateWatchlist, CreateWatchlistTrigger } from './create-watchlist'
 import { Input } from '@v1/ui/input'
-import { IconCircleDottedAndCircle, IconStarFill } from 'symbols-react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@v1/ui/tabs'
+import { Tabs, TabsContent } from '@v1/ui/tabs'
 import { WatchlistMultiLineChart } from './watchlist-multi-line-chart'
 
 interface WatchlistGroup {
@@ -166,7 +164,6 @@ export function WatchlistsGrid({
   onTimeScaleChange,
   onViewModeChange
 }: WatchlistsGridProps) {
-  const [isCreating, setIsCreating] = useState(false)
   const [editingGroup, setEditingGroup] = useState<WatchlistGroup | null>(null)
   const editCardRef = useRef<HTMLDivElement>(null)
   
@@ -255,23 +252,6 @@ export function WatchlistsGrid({
     return new Set(watchlistGroups?.map(group => group._id) || [])
   }, [watchlistGroups])
 
-  // Add keyboard shortcut handler
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in an input or textarea
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-
-      if (e.shiftKey && e.key === 'W') {
-        e.preventDefault()
-        setIsCreating(true)
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [])
 
   if (!watchlistGroups) {
     return (
@@ -282,30 +262,7 @@ export function WatchlistsGrid({
   }
 
   return (
-    <div className="space-y-6 mb-24">
-
-      {/* Header with tabs and create button */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">          
-          <Tabs value={viewMode} onValueChange={(value) => {
-            const newMode = value as 'grid' | 'chart'
-            onViewModeChange?.(newMode)
-          }}>
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="grid" className="flex items-center gap-2">
-                <IconStarFill className="h-4 w-4 fill-muted-foreground" />
-                Watchlists
-              </TabsTrigger>
-              <TabsTrigger value="chart" className="flex items-center gap-2">
-                <IconCircleDottedAndCircle className="h-4 w-4 fill-muted-foreground" />
-                Comparison
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-        <CreateWatchlistTrigger onClick={() => setIsCreating(true)} />
-      </div>
-
+    <div className="space-y-6">
       <Tabs value={viewMode}>
         <TabsContent value="grid" className="mt-0">
           {/* Empty State */}
@@ -318,19 +275,11 @@ export function WatchlistsGrid({
               <p className="text-sm text-muted-foreground mb-4">
                 Create your first watchlist to start tracking coins
               </p>
-              <Button onClick={() => setIsCreating(true)} variant="outline">
-                Create Watchlist
-              </Button>
             </div>
           ) : (
             <>
               {/* Watchlists Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 relative">
-                <CreateWatchlist 
-                  isOpen={isCreating} 
-                  onClose={() => setIsCreating(false)} 
-                />
-
                 {/* Existing Watchlists */}
                 {watchlistGroups
                   .slice()
@@ -340,8 +289,8 @@ export function WatchlistsGrid({
                     key={group._id}
                     className={cn(
                       "transition-all duration-200",
-                      (editingGroup && editingGroup._id === group._id || isCreating) && "relative z-50",
-                      (editingGroup && editingGroup._id !== group._id || isCreating) && "opacity-20"
+                      editingGroup && editingGroup._id === group._id && "relative z-50",
+                      editingGroup && editingGroup._id !== group._id && "opacity-20"
                     )}
                   >
                     <WatchlistGroupWithCoins

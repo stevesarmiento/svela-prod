@@ -22,21 +22,28 @@ import { WatchlistTable } from "./watchlist-table"
 import { matchesShortcut, GLOBAL_SHORTCUTS } from "@/lib/keyboard-shortcuts"
 import { useWatchlistData } from "@/hooks/use-watchlist-data"
 import { useWatchlistSelection } from "@/hooks/use-watchlist-selection"
+import { Button } from "@v1/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@v1/ui/tabs'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@v1/ui/tooltip'
+import { IconStarFill, IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill } from 'symbols-react'
+import { CreateWatchlist, CreateWatchlistTrigger } from './create-watchlist'
 
 interface WatchlistProps {
-  viewMode?: 'comparison' | 'watchlist';
   activeTimeScale?: string;
   onTimeScaleChange?: (scale: string) => void;
   gridViewMode?: 'grid' | 'chart';
   onGridViewModeChange?: (mode: 'grid' | 'chart') => void;
+  contentMode?: 'cards' | 'table';
+  onContentModeChange?: (mode: 'cards' | 'table') => void;
 }
 
 export function Watchlist({ 
-  viewMode = 'watchlist',
   activeTimeScale = '7d',
   onTimeScaleChange,
   gridViewMode = 'grid',
-  onGridViewModeChange
+  onGridViewModeChange,
+  contentMode = 'cards',
+  onContentModeChange
 }: WatchlistProps) {
   const { 
     // Legacy for backward compatibility
@@ -54,8 +61,9 @@ export function Watchlist({
   
   const searchParams = useSearchParams()
   const [sorting, setSorting] = useState<SortingState>([])
+  const [isCreatingWatchlist, setIsCreatingWatchlist] = useState(false)
   const coinSearchRef = useRef<CoinSearchRef>(null)
-  
+
   // Get current watchlist group parameter to preserve it in navigation (same as chart-table and top-nav)
   const watchlistGroup = searchParams.get('wg')
   
@@ -63,7 +71,7 @@ export function Watchlist({
   const currentWatchlist = selectedGroup ? selectedGroupCoins : watchlist;
   
   // Use extracted data and selection hooks
-  const {
+  const { 
     filters,
     setFilters,
     filteredCoins,
@@ -153,52 +161,116 @@ export function Watchlist({
 
   return (
     <div className="space-y-6 px-4">
-      {/* Watchlists Grid - Always show */}
-      <WatchlistsGrid 
-        onSelectWatchlist={selectWatchlistGroup}
-        viewMode={gridViewMode}
-        activeTimeScale={activeTimeScale}
-        onTimeScaleChange={onTimeScaleChange}
-        onViewModeChange={onGridViewModeChange}
-      />
-      
-      {/* Conditional Content Based on View Mode */}
-      {viewMode === 'comparison' ? (
-        // Comparison mode shows the watchlist table
-        <div className="space-y-4">
-          <WatchlistTable activeTimeScale={activeTimeScale} />
+      {/* Unified Header */}
+      <div className="flex items-center justify-between">
+        {/* Left side - Tabs in cards mode, Filters in table mode */}
+        {contentMode === 'cards' ? (
+          <div className="flex items-center gap-4">          
+            <Tabs value={gridViewMode} onValueChange={(value) => {
+              const newMode = value as 'grid' | 'chart'
+              onGridViewModeChange?.(newMode)
+            }}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="grid" className="flex items-center gap-2">
+                  <IconStarFill className="h-4 w-4 fill-muted-foreground" />
+                  Watchlists
+                </TabsTrigger>
+                <TabsTrigger value="chart" className="flex items-center gap-2">
+                  <IconCircleDottedAndCircle className="h-4 w-4 fill-muted-foreground" />
+                  Comparison
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
         </div>
       ) : (
-        // Watchlist mode shows individual coins
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex justify-start items-center gap-2">
-              <WatchlistFilters
-                searchText={filters.searchText}
-                priceRange={filters.priceRange}
-                marketCapRange={filters.marketCapRange}
-                volumeRange={filters.volumeRange}
-                changeFilter={filters.changeFilter}
-                sortBy={filters.sortBy}
-                sortOrder={filters.sortOrder}
-                selectedCoins={selectedCoins}
-                totalCoins={filteredCoins.length}
-                onSearchTextChange={(value) => setFilters(prev => ({ ...prev, searchText: value }))}
-                onPriceRangeChange={(range) => setFilters(prev => ({ ...prev, priceRange: range }))}
-                onMarketCapRangeChange={(range) => setFilters(prev => ({ ...prev, marketCapRange: range }))}
-                onVolumeRangeChange={(range) => setFilters(prev => ({ ...prev, volumeRange: range }))}
-                onChangeFilterChange={(value) => setFilters(prev => ({ ...prev, changeFilter: value }))}
-                onSortByChange={(value) => setFilters(prev => ({ ...prev, sortBy: value }))}
-                onSortOrderChange={(value) => setFilters(prev => ({ ...prev, sortOrder: value }))}
-                onClearAllFilters={handleClearAllFilters}
-                onSelectAll={handleSelectAll}
-                onRemoveSelected={handleRemoveSelected}
-                isRemoving={removingCoins.size > 0}
-              />
-            </div>
-            <CoinSearch ref={coinSearchRef} />
+          /* Table mode - Show filters on the left */
+          <div className="flex items-center gap-2">
+          <WatchlistFilters
+            searchText={filters.searchText}
+            priceRange={filters.priceRange}
+            marketCapRange={filters.marketCapRange}
+            volumeRange={filters.volumeRange}
+            changeFilter={filters.changeFilter}
+            sortBy={filters.sortBy}
+            sortOrder={filters.sortOrder}
+            selectedCoins={selectedCoins}
+            totalCoins={filteredCoins.length}
+            onSearchTextChange={(value) => setFilters(prev => ({ ...prev, searchText: value }))}
+            onPriceRangeChange={(range) => setFilters(prev => ({ ...prev, priceRange: range }))}
+            onMarketCapRangeChange={(range) => setFilters(prev => ({ ...prev, marketCapRange: range }))}
+            onVolumeRangeChange={(range) => setFilters(prev => ({ ...prev, volumeRange: range }))}
+            onChangeFilterChange={(value) => setFilters(prev => ({ ...prev, changeFilter: value }))}
+            onSortByChange={(value) => setFilters(prev => ({ ...prev, sortBy: value }))}
+            onSortOrderChange={(value) => setFilters(prev => ({ ...prev, sortOrder: value }))}
+            onClearAllFilters={handleClearAllFilters}
+            onSelectAll={handleSelectAll}
+            onRemoveSelected={handleRemoveSelected}
+            isRemoving={removingCoins.size > 0}
+          />
           </div>
+        )}
+        
+        {/* Right side - Action buttons */}
+        <div className="flex items-center gap-2">
+          {/* Show create watchlist only in cards mode */}
+          {contentMode === 'cards' && gridViewMode === 'grid' && (
+            <CreateWatchlistTrigger onClick={() => setIsCreatingWatchlist(true)} />
+          )}
+          
+          {/* Add token (CoinSearch) - show only in table mode */}
+          {contentMode === 'table' && (
+          <CoinSearch ref={coinSearchRef} />
+          )}
+          
+          {/* Content Mode Toggle - Always show when not in comparison mode, icon only, rightmost */}
+          {gridViewMode !== 'chart' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onContentModeChange?.(contentMode === 'cards' ? 'table' : 'cards')}
+              className="h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80 hover:ring-1 hover:ring-primary/5"
+            >
+              {contentMode === 'cards' ? (
+                <IconRectangleGrid2x2Fill className="h-4 w-4 fill-muted-foreground" />
+              ) : (
+                <IconRectangleGrid1x2Fill className="h-4 w-4 fill-muted-foreground" />
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
 
+      {/* Main Content */}
+      {contentMode === 'cards' ? (
+        /* Cards Mode - Use Tabs */
+        <Tabs value={gridViewMode}>
+          <TabsContent value="grid" className="mt-0">
+            <WatchlistsGrid 
+              onSelectWatchlist={selectWatchlistGroup}
+              viewMode="grid"
+              activeTimeScale={activeTimeScale}
+              onTimeScaleChange={onTimeScaleChange}
+              onViewModeChange={onGridViewModeChange}
+            />
+          </TabsContent>
+
+          <TabsContent value="chart" className="mt-0">
+            {/* Comparison Mode */}
+            <div className="space-y-4">
+              <WatchlistsGrid 
+                onSelectWatchlist={selectWatchlistGroup}
+                viewMode="chart"
+                activeTimeScale={activeTimeScale}
+                onTimeScaleChange={onTimeScaleChange}
+                onViewModeChange={onGridViewModeChange}
+              />
+              <WatchlistTable activeTimeScale={activeTimeScale} />
+            </div>
+          </TabsContent>
+        </Tabs>
+      ) : (
+        /* Table Mode - Direct render without tabs, filters now in header */
+        <div className="space-y-4">
           {/* Show empty state if no coins after filtering */}
           {!watchlist.length ? (
             <WatchlistEmptyState type="no-coins" />
@@ -216,6 +288,12 @@ export function Watchlist({
           )}
         </div>
       )}
+
+      {/* Create Watchlist Modal */}
+      <CreateWatchlist 
+        isOpen={isCreatingWatchlist} 
+        onClose={() => setIsCreatingWatchlist(false)} 
+      />
     </div>
   )
 }
