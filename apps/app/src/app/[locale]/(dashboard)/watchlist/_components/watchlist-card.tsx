@@ -17,6 +17,25 @@ import { AvatarCircles } from "@v1/ui/token-stacks"
 import { useCoinGeckoWatchlistAggregateChartIsolated } from "@/hooks/use-coingecko-watchlist-aggregate-chart-isolated"
 import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
 import { Spinner } from "@v1/ui/spinner"
+
+// Loading shine CSS
+const loadingShineStyle = `
+  .ck-qr-shine {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 500%;
+    height: 500%;
+    background: linear-gradient(135deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0) 100%);
+    animation: ck-qr-slide-diagonal 0.5s infinite;
+    z-index: 1;
+    pointer-events: none;
+  }
+  @keyframes ck-qr-slide-diagonal {
+    0% { transform: translate(-100%, -100%); }
+    100% { transform: translate(100%, 100%); }
+  }
+`;
 import { WatchlistGroupIcon } from "@/components/watchlist-group-icon"
 import { COLOR_THEMES } from "@/components/color-picker"
 import { Kbd } from "@v1/ui/kbd"
@@ -153,6 +172,12 @@ export function WatchlistCard({
       )}
       onClick={() => onSelect?.(group)}
     >
+      {/* Inject loading shine CSS only once per card */}
+      <style>{loadingShineStyle}</style>
+      {/* Loading shine overlay */}
+      {isChartLoading && (
+        <div className="ck-qr-shine" />
+      )}
       <div
         className="absolute inset-0 z-0 size-full opacity-40 dark:opacity-30"
         style={{
@@ -253,10 +278,9 @@ export function WatchlistCard({
                 </p>
               </div>
             ) : isChartLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="flex items-center gap-2">
-                  <Spinner className="w-4 h-4" />
-                  <span className="text-white/50 text-xs">
+              <div className="flex items-center justify-center h-full relative">
+                <div className="flex items-center gap-2 z-10 h-[80px]">
+                  <span className="text-white/50 text-xs sr-only">
                     Cache: {performance.cacheHitRate.toFixed(0)}%
                   </span>
                 </div>
