@@ -26,7 +26,7 @@ const loadingShineStyle = `
     left: 0;
     width: 500%;
     height: 500%;
-    background: linear-gradient(135deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0) 100%);
+    background: linear-gradient(135deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0) 100%);
     animation: ck-qr-slide-diagonal 0.5s infinite;
     z-index: 1;
     pointer-events: none;
@@ -279,7 +279,7 @@ export function WatchlistCard({
               </div>
             ) : isChartLoading ? (
               <div className="flex items-center justify-center h-full relative">
-                <div className="flex items-center gap-2 z-10 h-[80px]">
+                <div className="flex items-center gap-2 z-10 h-[70px]">
                   <span className="text-white/50 text-xs sr-only">
                     Cache: {performance.cacheHitRate.toFixed(0)}%
                   </span>
