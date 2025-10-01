@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@arma/sdk": "*"
+    "@arma/sdk": "workspace:*"
   },
   "devDependencies": {
     "@arma/sdk": "workspace:*",

@@ -1,6 +1,6 @@
 {
   "name": "@arma",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "sideEffects": false,
   "description": "Arma Web3 components and utilities for Solana development",
