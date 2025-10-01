@@ -18,11 +18,8 @@ export type ArmaProviderProps = {
 /**
  * The primary ArmaProvider.
  *
- * This component now wraps the ArmaClientProvider, which contains the new
- * performant state management logic. The hooks exported from this file
- * are now compatibility wrappers around the new useArmaClient hook.
- * 
- * @param useConnector - Hook that returns a connector client (e.g., useConnectorClient from @armadura/connector or @connector-kit/connector)
+ * Requires a connector hook (e.g., useConnectorClient from @connector-kit/connector).
+ * The connector is the source of truth for wallet state.
  */
 export function ArmaProvider({ children, config, queryClient, useConnector }: ArmaProviderProps) {
   const connector = useConnector()

@@ -40,12 +40,15 @@ export interface GenericConnectorState {
 
 /**
  * Generic connector client interface that any connector implementation should satisfy
+ * Supports both getState() and getSnapshot() patterns
  */
 export interface GenericConnectorClient {
-  getState(): GenericConnectorState
+  getState?(): GenericConnectorState
+  getSnapshot?(): GenericConnectorState
   subscribe(callback: (state: GenericConnectorState) => void): () => void
   connect?(wallet?: GenericWallet): Promise<void>
   disconnect?(): Promise<void>
+  select?(walletName: string): Promise<void>
   [key: string]: any
 }
 
@@ -54,6 +57,19 @@ export interface GenericConnectorClient {
  */
 export function hasDisconnect(connector: GenericConnectorClient): connector is GenericConnectorClient & { disconnect(): Promise<void> } {
   return typeof connector.disconnect === 'function'
+}
+
+/**
+ * Get state from connector using either getState() or getSnapshot()
+ */
+export function getConnectorState(connector: GenericConnectorClient): GenericConnectorState {
+  if (connector.getState) {
+    return connector.getState()
+  }
+  if (connector.getSnapshot) {
+    return connector.getSnapshot()
+  }
+  throw new Error('Connector must implement either getState() or getSnapshot()')
 }
 
 /**

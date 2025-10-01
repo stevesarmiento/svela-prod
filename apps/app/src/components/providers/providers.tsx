@@ -28,8 +28,8 @@ export function Providers({ children }: ProvidersProps) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            staleTime: 5 * 60 * 1000, // 5 minutes (Arc recommended)
-            refetchInterval: 60 * 1000, // 1 minute
+            staleTime: 5 * 60 * 1000,
+            refetchInterval: 60 * 1000,
             refetchOnWindowFocus: true,
             retry: 3,
           },
@@ -94,7 +94,7 @@ export function Providers({ children }: ProvidersProps) {
     >
       <QueryClientProvider client={queryClient}>
         <AppProvider connectorConfig={connectorConfig} mobile={mobile}>
-          <ArmaProvider config={arcConfig} queryClient={queryClient} useConnector={useConnectorClient} >
+          <ArmaProvider config={arcConfig} queryClient={queryClient} useConnector={useConnectorClient}>
             <ConvexProvider>
               <WatchlistProvider>
                 <ThemeProvider>

@@ -17,12 +17,12 @@
     "./providers": "./providers/src/index.ts"
   },
   "dependencies": {
-    "@armadura/sdk": "0.1.2",
-    "@armadura/jupiter": "0.1.2", 
-    "@armadura/providers": "0.1.2"
+    "@armadura/sdk": "0.1.5",
+    "@armadura/jupiter": "0.1.5", 
+    "@armadura/providers": "0.1.5"
   },
   "peerDependencies": {
-    "@armadura/connector": "0.1.2"
+    "@armadura/connector": "0.1.5"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

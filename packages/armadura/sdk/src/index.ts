@@ -26,10 +26,13 @@ export type {
   GenericAccount,
   ConnectorHook
 } from './types/connector'
-export { hasDisconnect } from './types/connector'
+export { hasDisconnect, getConnectorState } from './types/connector'
 
 // ===== COMPATIBILITY (DEPRECATED) =====
 export { ArmaturaProvider } from './compat/armadura-provider'
+
+// ===== ADAPTERS =====
+export { ConnectorKitAdapter, createConnectorKitAdapter } from './adapters/connector-kit-adapter'
 
 // ===== ESSENTIAL HOOKS (MVP) =====
 export { useBalance } from './hooks/use-balance'

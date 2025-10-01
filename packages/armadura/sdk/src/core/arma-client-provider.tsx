@@ -31,7 +31,7 @@ export interface ArmaClientProviderProps {
 
 /**
  * Provides an instance of ArmaWebClient to its children.
- * This is the root of the new, performant provider Armahitecture.
+ * This is the root of the new, performant provider architecture.
  */
 export function ArmaClientProvider({ children, config, queryClient }: ArmaClientProviderProps) {
   const qc = useMemo(() => queryClient ?? new QueryClient(), [queryClient])
@@ -40,8 +40,6 @@ export function ArmaClientProvider({ children, config, queryClient }: ArmaClient
   if (clientRef.current == null) {
     clientRef.current = new ArmaWebClient(config)
   }
-
-  // Config is applied during client initialization
 
   // Cleanup wallet listeners on unmount
   useEffect(() => {

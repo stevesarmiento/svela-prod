@@ -10,13 +10,10 @@ import {
   type StandardWalletInfo,
 } from '../hooks/use-standard-wallets'
 import type { GenericConnectorClient, GenericConnectorState } from '../types/connector'
-import { hasDisconnect } from '../types/connector'
-
-// Connector is the single source of truth; no Arma-managed persistence
+import { hasDisconnect, getConnectorState } from '../types/connector'
 
 /**
  * Configuration for the ArmaWebClient.
- * This extends the configuration available in the ArmaProvider.
  */
 export interface ArmaWebClientConfig {
   providers?: Provider[]
@@ -30,16 +27,10 @@ export interface ArmaWebClientConfig {
     setItem: (key: string, value: string) => void
     removeItem: (key: string) => void
   }
-  /** Pluggable transport for all RPC requests used by hooks/components */
   transport?: Transport
-  /** Optional shared connector instance to unify wallet state with external providers */
   connector?: GenericConnectorClient | null
 }
 
-/**
- * The state managed by the ArmaWebClient.
- * This is the single source of truth for the UI.
- */
 export interface ArmaWebClientState {
   config: ArmaWebClientConfig
   cluster: ClusterInfo
@@ -57,29 +48,23 @@ export interface ArmaWebClientState {
 type Listener = (state: ArmaWebClientState) => void
 
 /**
- * The ArmaWebClient is the core client that manages wallet connections, RPC connections, and other low-level state.
- * It is initialized once per app and used by the ArmaProvider to provide a React context.
- *
- * This class provides subscription support, configuration, and all the essential methods
- * needed by the Arma hooks ecosystem.
- *
- * Key Features:
- * - **Subscription-based state management**: Efficient re-rendering via useSyncExternalStore
- * - **Connector integration**: Works with any connector implementation via generic interfaces
- * - **Transport abstraction**: Pluggable RPC transport layer
- * - **Automatic wallet discovery and account management**
- * - **Persistent storage integration for user preferences**
+ * Core client for Arma SDK - manages wallet connections and state.
+ * Connector is the single source of truth.
  */
 export class ArmaWebClient {
   private listeners: Set<Listener> = new Set()
   private state: ArmaWebClientState
   private walletUnsubscribers: Array<() => void> = []
   private connector: GenericConnectorClient | null = null
+  private cachedSnapshot: (ArmaWebClientState & {
+    select: (walletName: string) => Promise<void>
+    disconnect: () => Promise<void>
+    selectAccount: (accountAddress: Address) => Promise<void>
+  }) | null = null
 
   constructor(config: ArmaWebClientConfig) {
     const rpcUrl = config.rpcUrl || `https://api.${config.network || 'devnet'}.solana.com`
     const clusterInfo = getClusterInfo(rpcUrl)
-    // Default transport if none provided
     const transport = config.transport || createHttpTransport({ url: rpcUrl })
     
     this.state = {
@@ -104,17 +89,16 @@ export class ArmaWebClient {
   }
 
   private initializeWallets() {
-    // Skip wallet initialization during SSR to prevent hydration mismatches
-    if (typeof window === 'undefined') {
-      return;
-    }
+    if (typeof window === 'undefined') return
 
     try {
-      // Prefer externally provided connector (from app-level provider) when available
       const providedConnector = this.state.config.connector
+        
       if (!providedConnector) {
-        throw new Error('ArmaProvider requires a connector implementation. Pass a useConnector hook that returns a connector client (e.g., useConnectorClient from @armadura/connector or @connector-kit/connector).')
+        console.warn('No connector provided to ArmaProvider')
+        return
       }
+      
       this.connector = providedConnector
 
       const syncFromConnector = (s: GenericConnectorState) => {
@@ -129,7 +113,6 @@ export class ArmaWebClient {
         if (connected && selectedWallet && selectedAccount) {
           const rawAccount = (accounts as Array<{ address: string; raw: any }>).find((a) => a.address === selectedAccount)?.raw
           if (rawAccount) {
-            // Type assertion: GenericWallet is compatible with Wallet Standard format
             signer = new WalletStandardKitSigner(rawAccount, selectedWallet as any)
             address = rawAccount.address as Address
           }
@@ -149,38 +132,33 @@ export class ArmaWebClient {
         this.notify()
       }
 
-      // Initial sync
-      syncFromConnector(this.connector.getState())
-
-      // Subscribe to changes
+      syncFromConnector(getConnectorState(this.connector))
       const unsubscribe = this.connector.subscribe(syncFromConnector)
       this.walletUnsubscribers.push(unsubscribe)
 
     } catch (error) {
       console.error('Failed to initialize wallets:', error)
-      // Continue without wallet functionality
     }
   }
 
-  /**
-   * Get a snapshot of the current state for React components.
-   */
   getSnapshot(): ArmaWebClientState & {
     select: (walletName: string) => Promise<void>
     disconnect: () => Promise<void>
     selectAccount: (accountAddress: Address) => Promise<void>
   } {
-    return {
+    if (this.cachedSnapshot) {
+      return this.cachedSnapshot
+    }
+    
+    this.cachedSnapshot = {
       ...this.state,
       select: this.select.bind(this),
       disconnect: this.disconnect.bind(this),
       selectAccount: this.selectAccount.bind(this),
     }
+    return this.cachedSnapshot
   }
 
-  /**
-   * Subscribe to state changes.
-   */
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener)
     return () => {
@@ -188,28 +166,25 @@ export class ArmaWebClient {
     }
   }
 
-  /**
-   * Select and connect to a wallet.
-   */
   async select(walletName: string): Promise<void> {
     if (!this.connector) {
       throw new Error('No connector available')
     }
 
     try {
-      const connectorState = this.connector.getState()
+      const connectorState = getConnectorState(this.connector)
       const wallet = connectorState.selectedWallet
       
       if (wallet && wallet.name === walletName) {
-        // Already selected, just connect if needed
         if (this.connector.connect) {
           await this.connector.connect(wallet)
         }
         return
       }
 
-      // Find wallet and connect
-      if (this.connector.connect) {
+      if (this.connector.select) {
+        await this.connector.select(walletName)
+      } else if (this.connector.connect) {
         await this.connector.connect({ name: walletName } as any)
       }
     } catch (error) {
@@ -218,13 +193,8 @@ export class ArmaWebClient {
     }
   }
 
-  /**
-   * Select a specific account from the connected wallet.
-   */
   async selectAccount(accountAddress: Address): Promise<void> {
     try {
-      // Account selection logic would depend on connector implementation
-      // This is a placeholder for the interface
       console.log('Selecting account:', accountAddress)
     } catch (error) {
       console.error('Failed to select account:', error)
@@ -232,9 +202,6 @@ export class ArmaWebClient {
     }
   }
 
-  /**
-   * Disconnect from the current wallet.
-   */
   async disconnect(): Promise<void> {
     if (this.connector && hasDisconnect(this.connector)) {
       await this.connector.disconnect()
@@ -242,6 +209,7 @@ export class ArmaWebClient {
   }
 
   private notify(): void {
+    this.cachedSnapshot = null
     this.listeners.forEach((listener) => listener(this.state))
   }
 
@@ -257,11 +225,7 @@ export class ArmaWebClient {
     return null
   }
 
-  /**
-   * Destroy the client and clean up resources.
-   */
   destroy(): void {
-    // Clean up wallet subscriptions
     for (const unsubscribe of this.walletUnsubscribers) {
       try {
         unsubscribe()
@@ -270,11 +234,8 @@ export class ArmaWebClient {
       }
     }
     this.walletUnsubscribers = []
-
-    // Clear listeners
     this.listeners.clear()
-
-    // Reset state
     this.connector = null
+    this.cachedSnapshot = null
   }
 }
