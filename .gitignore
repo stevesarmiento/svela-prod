@@ -61,3 +61,6 @@ tailwind.css
 .trigger
 
 /connector/
+/providers/
+/sdk/
+/jupiter/

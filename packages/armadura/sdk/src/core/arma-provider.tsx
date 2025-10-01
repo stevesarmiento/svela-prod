@@ -7,12 +7,15 @@ import type { ConnectorHook } from '../types/connector'
 import type { ArmaWebClientConfig } from './arma-web-client'
 import type { SolanaConfig } from '../config/create-config'
 import type { QueryClient } from '@tanstack/react-query'
+import { EnhancedClusterProvider, type EnhancedClusterConfig } from '../context/enhanced-cluster-provider'
 
 export type ArmaProviderProps = {
   children: ReactNode
   config: ArmaWebClientConfig | SolanaConfig
   queryClient?: QueryClient
   useConnector: ConnectorHook
+  /** Enhanced cluster configuration using wallet-ui */
+  enhancedCluster?: EnhancedClusterConfig
 }
 
 /**
@@ -21,9 +24,26 @@ export type ArmaProviderProps = {
  * Requires a connector hook (e.g., useConnectorClient from @connector-kit/connector).
  * The connector is the source of truth for wallet state.
  */
-export function ArmaProvider({ children, config, queryClient, useConnector }: ArmaProviderProps) {
+export function ArmaProvider({ children, config, queryClient, useConnector, enhancedCluster }: ArmaProviderProps) {
   const connector = useConnector()
   const merged: ArmaWebClientConfig = { ...config, connector } as ArmaWebClientConfig
+  
+  if (enhancedCluster) {
+    const enhancedConfig = {
+      ...enhancedCluster,
+      network: enhancedCluster.network || merged.network || 'mainnet',
+      rpcUrl: enhancedCluster.rpcUrl || merged.rpcUrl
+    }
+    
+    return (
+      <EnhancedClusterProvider config={enhancedConfig}>
+        <ArmaClientProvider config={merged} queryClient={queryClient}>
+          {children}
+        </ArmaClientProvider>
+      </EnhancedClusterProvider>
+    )
+  }
+  
   return (
     <ArmaClientProvider config={merged} queryClient={queryClient}>
       {children}

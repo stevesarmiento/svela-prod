@@ -208,6 +208,39 @@ export class ArmaWebClient {
     }
   }
 
+  /** Update configuration without recreating the client */
+  updateConfig(next: ArmaWebClientConfig): void {
+    const rpcUrl = next.rpcUrl || `https://api.${next.network || 'mainnet'}.solana.com`
+    const clusterInfo = getClusterInfo(rpcUrl)
+    const prevRpcUrl = this.state.cluster.rpcUrl
+    const prevConnector = this.state.config.connector
+    
+    const transport =
+      next.transport ||
+      this.state.config.transport ||
+      createHttpTransport({ url: rpcUrl, timeoutMs: 15000, retry: { attempts: 2, strategy: 'exponential', baseDelayMs: 300, jitter: true } })
+
+    this.state = {
+      ...this.state,
+      cluster: {
+        ...clusterInfo,
+        rpcUrl
+      },
+      config: {
+        ...this.state.config,
+        ...next,
+        transport
+      }
+    }
+
+    if (next.connector !== prevConnector) {
+      this.connector = next.connector || null
+      this.notify()
+    } else if (rpcUrl !== prevRpcUrl) {
+      this.notify()
+    }
+  }
+
   private notify(): void {
     this.cachedSnapshot = null
     this.listeners.forEach((listener) => listener(this.state))

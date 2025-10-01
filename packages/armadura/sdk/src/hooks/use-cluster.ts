@@ -11,6 +11,7 @@ import {
   type Cluster, 
   type ClusterInfo 
 } from '../utils/cluster'
+import { useEnhancedCluster } from './use-enhanced-cluster'
 
 export interface UseClusterReturn extends ClusterInfo {
   getAddressUrl: (address: string) => string
@@ -20,6 +21,12 @@ export interface UseClusterReturn extends ClusterInfo {
   canAirdrop: boolean
   supportsTransactions: boolean
   getAlternativeRpcs: () => string[]
+  
+  // Enhanced features (available when using wallet-ui integration)
+  canSwitch?: boolean
+  setCluster?: (clusterId: string) => void
+  clusters?: any[]
+  isAutoDetected?: boolean
 }
 
 /**
@@ -53,18 +60,44 @@ export interface UseClusterReturn extends ClusterInfo {
 export function useCluster(): UseClusterReturn {
   const { config } = useArmaClient()
   
+  // Try to use enhanced cluster if available (when ArmaProvider has enhancedCluster config)
+  let enhanced: ReturnType<typeof useEnhancedCluster> | null = null
+  try {
+    enhanced = useEnhancedCluster()
+  } catch {
+    // Enhanced cluster not available, fall back to original implementation
+  }
+  
   const clusterInfo = useMemo(() => {
+    // Use enhanced cluster info if available
+    if (enhanced) {
+      // Re-compute cluster info from enhanced cluster's URL to get all properties
+      const enhancedClusterInfo = getClusterInfo(enhanced.urlOrMoniker)
+      return {
+        ...enhancedClusterInfo,
+        name: enhanced.label, // Use wallet-ui label
+        rpcUrl: enhanced.urlOrMoniker
+      }
+    }
+    
+    // Fall back to original implementation
     return getClusterInfo(config.rpcUrl)
-  }, [config.rpcUrl])
+  }, [config.rpcUrl, enhanced])
   
   const helpers = useMemo(() => {
-    const rpcUrl = config.rpcUrl || OFFICIAL_RPC_URLS.devnet
+    const rpcUrl = enhanced?.urlOrMoniker || config.rpcUrl || OFFICIAL_RPC_URLS.devnet
     
     return {
-      getAddressUrl: (address: string) => getExplorerUrl(address, rpcUrl, 'address'),
-      getTransactionUrl: (signature: string) => getExplorerUrl(signature, rpcUrl, 'tx'),
+      getAddressUrl: (address: string) => {
+        // Use enhanced version if available, otherwise original
+        return enhanced?.getAddressUrl(address) || getExplorerUrl(address, rpcUrl, 'address')
+      },
+      getTransactionUrl: (signature: string) => {
+        // Use enhanced version if available, otherwise original  
+        return enhanced?.getTransactionUrl(signature) || getExplorerUrl(signature, rpcUrl, 'tx')
+      },
       getFaucetUrl: () => getFaucetUrl(clusterInfo.cluster),
-      isOfficialRpc: isOfficialRpc(rpcUrl),
+      isOfficialRpc: enhanced?.isOfficialRpc || isOfficialRpc(rpcUrl),
       canAirdrop: clusterInfo.isDevnet || clusterInfo.isTestnet || clusterInfo.isLocal,
       supportsTransactions: true,
       
@@ -97,9 +130,21 @@ export function useCluster(): UseClusterReturn {
           default:
             return [rpcUrl]
         }
-      }
+      },
+      
+      // NEW: Enhanced features when available
+      ...(enhanced ? {
+        canSwitch: enhanced.canSwitch,
+        setCluster: (clusterId: string) => {
+          // Wrapper to handle different ID formats
+          const walletUiId = clusterId.startsWith('solana:') ? clusterId : `solana:${clusterId}`
+          enhanced.setCluster(walletUiId as any)
+        },
+        clusters: enhanced.clusters,
+        isAutoDetected: enhanced.isAutoDetected
+      } : {})
     }
-  }, [config.rpcUrl, clusterInfo])
+  }, [config.rpcUrl, clusterInfo, enhanced])
   
   return {
     ...clusterInfo,

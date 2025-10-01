@@ -41,6 +41,11 @@ export function ArmaClientProvider({ children, config, queryClient }: ArmaClient
     clientRef.current = new ArmaWebClient(config)
   }
 
+  // Apply config updates without recreating the client instance
+  useEffect(() => {
+    clientRef.current?.updateConfig?.(config)
+  }, [config, config.connector])
+
   // Cleanup wallet listeners on unmount
   useEffect(() => {
     return () => {

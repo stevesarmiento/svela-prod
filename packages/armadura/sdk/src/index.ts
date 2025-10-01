@@ -39,14 +39,35 @@ export { useBalance } from './hooks/use-balance'
 export type { UseBalanceOptions, UseBalanceReturn } from './hooks/use-balance'
 
 export { useAirdrop } from './hooks/use-airdrop'
+export type { UseAirdropReturn } from './hooks/use-airdrop'
 
 export { useCluster } from './hooks/use-cluster'
+export type { UseClusterReturn } from './hooks/use-cluster'
+
+export { useEnhancedCluster } from './hooks/use-enhanced-cluster'
+
+export { 
+  EnhancedClusterProvider,
+  createSolanaDevnet,
+  createSolanaMainnet,
+  createSolanaTestnet
+} from './context/enhanced-cluster-provider'
+export type { EnhancedClusterConfig } from './context/enhanced-cluster-provider'
+
+export { 
+  WalletUiClusterDropdown,
+  useWalletUiCluster,
+  type SolanaCluster
+} from '@wallet-ui/react'
 
 export { useWalletAddress } from './hooks/use-wallet-address'
+export type { UseWalletAddressReturn } from './hooks/use-wallet-address'
 
 export { useTransaction } from './hooks/use-transaction'
+export type { UseTransactionOptions, UseTransactionReturn } from './hooks/use-transaction'
 
 export { useSwap } from './hooks/use-swap'
+export type { UseSwapOptions, UseSwapReturn } from './hooks/use-swap'
 
 // ===== STANDARD WALLETS =====
 export { useStandardWallets } from './hooks/use-standard-wallets'
@@ -54,7 +75,14 @@ export type { UseStandardWalletsOptions, UseStandardWalletsReturn, StandardWalle
 
 // ===== PROVIDER SYSTEM =====
 export { createProvider } from './core/provider'
-export type { Provider } from './core/provider'
+export type { 
+  Provider,
+  SwapProvider, 
+  SwapParams, 
+  SwapQuote, 
+  SwapBuild,
+  PrebuiltTransaction 
+} from './core/provider'
 
 // ===== CONFIGURATION =====
 export type { SolanaConfig } from './config/create-config'
@@ -69,3 +97,7 @@ export {
   useArmaWallet,
   useArmaConnection
 } from './core/arma-provider'
+
+// ===== UTILITIES =====
+export { address } from '@solana/kit'
+export type { Address } from '@solana/kit'
