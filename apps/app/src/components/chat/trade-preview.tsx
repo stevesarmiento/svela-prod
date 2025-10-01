@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { useArcClient, useSwap, useBalance } from '@v1/arc/sdk'
+import { useArmaClient, useSwap, useBalance } from '@arma/sdk'
 import { Button } from '@v1/ui/button'
 import { Card } from '@v1/ui/card'
 import { Badge } from '@v1/ui/badge'
@@ -19,7 +19,7 @@ interface TradePreviewProps {
 }
 
 export function TradePreview({ tradeAction, onExecute, onCancel }: TradePreviewProps) {
-  const { wallet } = useArcClient()
+  const { wallet } = useArmaClient()
   const { balance, isLoading: balanceLoading, refetch: refetchBalance } = useBalance({ 
     address: wallet.address || undefined 
   })

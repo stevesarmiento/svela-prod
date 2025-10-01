@@ -105,7 +105,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, deferredInitialData, deferredTimeScale)
   
   // Use isomorphic theme hook - eliminates hydration mismatch
-  const { isDarkMode, resolvedTheme } = useIsomorphicTheme()
+  const { isDarkMode } = useIsomorphicTheme()
   
 
   // Generate Hull Suite colors - theme-aware

@@ -26,8 +26,12 @@ interface BottomNavContextType {
   openContextualCommandSearch: (context: CommandContext) => void
   isChatOpen: boolean
   setIsChatOpen: Dispatch<SetStateAction<boolean>>
+  isChatDialogOpen: boolean
+  setIsChatDialogOpen: Dispatch<SetStateAction<boolean>>
   openChat: () => void
   closeChat: () => void
+  openChatDialog: () => void
+  closeChatDialog: () => void
   isPending: boolean
 }
 
@@ -39,6 +43,7 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
   const [isCommandOpen, setIsCommandOpen] = useState(false)
   const [commandContext, setCommandContext] = useState<CommandContext | null>(null)
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [isChatDialogOpen, setIsChatDialogOpen] = useState(false)
   
   // React 19: Enhanced concurrent features
   const [isPending, startTransitionHook] = useTransition()
@@ -91,6 +96,20 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
     })
   }, [startTransitionHook])
 
+  const openChatDialog = useCallback(() => {
+    startTransitionHook(() => {
+      setIsChatDialogOpen(true)
+      setIsCommandOpen(false) // Close command search when opening chat dialog
+      setCommandContext(null)
+    })
+  }, [startTransitionHook])
+
+  const closeChatDialog = useCallback(() => {
+    startTransitionHook(() => {
+      setIsChatDialogOpen(false)
+    })
+  }, [startTransitionHook])
+
   const contextValue = useMemo(() => ({
     mode: deferredMode, // React 19: Use deferred values for better performance
     selectionState: deferredSelectionState,
@@ -104,8 +123,12 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
     openContextualCommandSearch,
     isChatOpen,
     setIsChatOpen,
+    isChatDialogOpen,
+    setIsChatDialogOpen,
     openChat,
     closeChat,
+    openChatDialog,
+    closeChatDialog,
     isPending, // React 19: Expose pending state for UI feedback
   }), [
     deferredMode, 
@@ -117,8 +140,11 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
     openCommandSearch, 
     openContextualCommandSearch, 
     isChatOpen, 
+    isChatDialogOpen,
     openChat, 
     closeChat,
+    openChatDialog,
+    closeChatDialog,
     isPending
   ])
 
@@ -198,8 +224,11 @@ export function useChatContext() {
   }
   return {
     isChatOpen: context.isChatOpen,
+    isChatDialogOpen: context.isChatDialogOpen,
     openChat: context.openChat,
     closeChat: context.closeChat,
+    openChatDialog: context.openChatDialog,
+    closeChatDialog: context.closeChatDialog,
     isPending: context.isPending
   }
 }

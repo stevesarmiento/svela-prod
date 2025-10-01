@@ -3,13 +3,13 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useMemo, useState } from "react";
-import { createProvider, ArcProvider } from "@v1/arc/sdk";
-import { createJupiter } from "@v1/arc/jupiter";
+import { createProvider, ArmaProvider } from "@arma/sdk";
+import { createJupiter } from "@arma/jupiter";
 import { 
   AppProvider, 
   getDefaultConfig, 
   getDefaultMobileConfig 
-} from "@v1/arc/connector";
+} from "@arma/connector";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexProvider } from "@v1/convex/provider";
 import { WatchlistProvider } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context";
@@ -93,7 +93,7 @@ export function Providers({ children }: ProvidersProps) {
     >
       <QueryClientProvider client={queryClient}>
         <AppProvider connectorConfig={connectorConfig} mobile={mobile}>
-          <ArcProvider config={arcConfig} queryClient={queryClient}>
+          <ArmaProvider config={arcConfig} queryClient={queryClient}>
             <ConvexProvider>
               <WatchlistProvider>
                 <ThemeProvider>
@@ -108,7 +108,7 @@ export function Providers({ children }: ProvidersProps) {
                 </ThemeProvider>
               </WatchlistProvider>
             </ConvexProvider>
-          </ArcProvider>
+          </ArmaProvider>
         </AppProvider>
       </QueryClientProvider>
     </ClerkProvider>

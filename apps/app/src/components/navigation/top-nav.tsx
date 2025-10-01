@@ -133,7 +133,7 @@ export function TopNav() {
   const showPersonalizedGreeting = isLoaded && firstName;
 
   return (
-    <div className="py-12 px-4 z-50">
+    <div className="py-12 px-4">
       <div className="flex h-16 items-center px-4 gap-4">
         {/* Conditional Logo/Token Header */}
         <div className="flex items-center gap-3">

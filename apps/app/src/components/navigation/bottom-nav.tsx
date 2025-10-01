@@ -48,7 +48,7 @@ export function BottomNav() {
   }, [setIsCommandOpen, setCommandContext]);
 
   return (
-    <div className="fixed z-50 bottom-8 left-0 right-0">
+    <div className="fixed z-[9999] bottom-8 left-0 right-0" data-bottom-nav="true">
       <div className="max-w-fit mx-auto flex items-center gap-2 relative">
         {/* Chat Container - Single expandable container */}
         <AnimatePresence mode="popLayout">

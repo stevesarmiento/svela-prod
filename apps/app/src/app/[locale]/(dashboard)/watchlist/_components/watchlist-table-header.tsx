@@ -13,7 +13,7 @@ export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
     <div className="px-3 py-1">
       <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
         {table.getHeaderGroups().map(headerGroup => (
-          <div key={headerGroup.id} className="grid grid-cols-5 gap-4">
+          <div key={headerGroup.id} className="grid gap-4" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1.5fr 0.5fr' }}>
             {headerGroup.headers.slice(0, 1).map(header => ( // Show first header (select/token merged)
               <div 
                 key={header.id}

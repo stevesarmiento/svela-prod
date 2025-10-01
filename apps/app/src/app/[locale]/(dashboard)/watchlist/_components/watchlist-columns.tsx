@@ -11,6 +11,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { motion, AnimatePresence } from "framer-motion"
 import { Spinner } from "@v1/ui/spinner"
 import type { CoinMarketData } from '@/types/coins'
+import { InlinePriceChart } from "@/components/charts/inline-price-chart"
 
 interface WatchlistColumnsProps {
   handleRemove: (coinId: number | string) => void;
@@ -288,6 +289,29 @@ export function createWatchlistColumns({
         </span>
       ),
       enableSorting: true,
+    },
+    {
+      id: 'chart',
+      header: () => (
+        <div className="text-center flex items-center justify-center gap-1">
+          24h Chart
+        </div>
+      ),
+      cell: ({ row }) => (
+        <div className="flex items-center justify-center">
+          {row.original.quote.USD.price > 0 ? (
+            <InlinePriceChart 
+              coingeckoId={row.original.id}
+              percentChange24h={row.original.quote.USD.percent_change_24h}
+              symbol={row.original.symbol}
+              initialData={row.original.quote.USD}
+            />
+          ) : (
+            <Skeleton className="h-8 w-56 rounded-sm" />
+          )}
+        </div>
+      ),
+      enableSorting: false,
     },
     {
       id: 'actions',

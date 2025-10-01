@@ -1,7 +1,7 @@
 {
   "name": "v1",
   "private": true,
-  "workspaces": ["packages/*", "packages/arc/*", "apps/*", "tooling/*"],
+  "workspaces": ["packages/*", "packages/arma/*", "apps/*", "tooling/*"],
   "scripts": {
     "build": "turbo build",
     "clean": "git clean -xdf node_modules",
@@ -25,7 +25,7 @@
     "@biomejs/biome": "1.8.3",
     "@t3-oss/env-nextjs": "^0.11.1",
     "turbo": "^2.5.8",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   },
   "packageManager": "bun@1.1.26",
   "engines": {
