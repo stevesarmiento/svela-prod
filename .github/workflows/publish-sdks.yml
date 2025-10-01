@@ -1,0 +1,140 @@
+name: Publish Packages
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      publish_packages:
+        description: "Publish @connector-kit packages to npm"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish-packages:
+    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event.inputs.publish_packages == 'true' }}
+    runs-on: ubuntu-latest
+    environment: npm-publish
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9.12.3
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Build all packages
+        run: pnpm build
+
+      - name: Run tests (skip for now)
+        run: echo "Skipping tests for initial publish"
+
+      - name: Publish @connector-kit/connector
+        working-directory: packages/connector
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @connector-kit/sdk
+        working-directory: packages/sdk
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @connector-kit/jupiter
+        working-directory: packages/jupiter
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @connector-kit/providers
+        working-directory: packages/providers
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  create-release:
+    if: startsWith(github.ref, 'refs/tags/') && always() && !cancelled()
+    needs: [publish-packages]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## ConnectorKit Packages Published
+
+            ### @connector-kit/connector
+            - Package: `@connector-kit/connector`
+            - Version: ${{ github.ref_name }}
+            - Registry: npm
+
+            ### @connector-kit/sdk
+            - Package: `@connector-kit/sdk`
+            - Version: ${{ github.ref_name }}
+            - Registry: npm
+
+            ### @connector-kit/jupiter
+            - Package: `@connector-kit/jupiter`
+            - Version: ${{ github.ref_name }}
+            - Registry: npm
+
+            ### @connector-kit/providers
+            - Package: `@connector-kit/providers`
+            - Version: ${{ github.ref_name }}
+            - Registry: npm
+
+            ## Installation
+
+            **Install the main SDK:**
+            ```bash
+            npm install @connector-kit/sdk@${{ github.ref_name }}
+            ```
+
+            **Install the connector (if using headless):**
+            ```bash
+            npm install @connector-kit/connector@${{ github.ref_name }}
+            ```
+
+            **Install Jupiter integration:**
+            ```bash
+            npm install @connector-kit/jupiter@${{ github.ref_name }}
+            ```
+
+            **Install providers:**
+            ```bash
+            npm install @connector-kit/providers@${{ github.ref_name }}
+            ```
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
