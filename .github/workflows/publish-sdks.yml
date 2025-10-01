@@ -30,24 +30,24 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          version: 9.12.3
+          bun-version: 1.1.26
 
-      - name: Setup pnpm cache
+      - name: Setup Bun cache
         uses: actions/cache@v4
         with:
-          path: ~/.pnpm-store
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
           restore-keys: |
-            ${{ runner.os }}-pnpm-
+            ${{ runner.os }}-bun-
 
       - name: Install dependencies
-        run: pnpm install
+        run: bun install
 
       - name: Build all packages
-        run: pnpm build
+        run: bun run build
 
       - name: Run tests (skip for now)
         run: echo "Skipping tests for initial publish"
@@ -124,7 +124,7 @@ jobs:
 
             **Install the connector (if using headless):**
             ```bash
-            npm install @connector-kit/connector@${{ github.ref_name }}
+            npm install @arma/connector@${{ github.ref_name }}
             ```
 
             **Install Jupiter integration:**
