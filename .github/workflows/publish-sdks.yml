@@ -33,29 +33,31 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.1.26
+          bun-version: 1.2.19
 
-      - name: Setup Bun cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
+      # Temporarily disable Bun cache to avoid workspace linking issues
+      # - name: Setup Bun cache
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: ~/.bun/install/cache
+      #     key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-bun-
 
-      - name: Clean workspace completely  
+      - name: Clean workspace and Bun cache
         run: |
-          echo "Cleaning workspace..."
+          echo "Cleaning workspace thoroughly..."
           rm -rf node_modules 2>/dev/null || true
           rm -rf bun.lockb 2>/dev/null || true
+          rm -rf ~/.bun/install/cache 2>/dev/null || true
           find packages/arma -name "node_modules" -type d -exec rm -rf {} + 2>/dev/null || true
           find packages/arma -name "dist" -type d -exec rm -rf {} + 2>/dev/null || true
           echo "Workspace cleaned completely"
 
-      - name: Install dependencies (with retry)
+      - name: Install dependencies with fresh lockfile
         run: |
-          echo "Installing dependencies..."
-          bun install || (echo "First install failed, cleaning and retrying..." && rm -rf node_modules && bun install)
+          echo "Installing with fresh resolution..."
+          bun install --no-cache
 
       - name: Build all packages
         run: bun run build
