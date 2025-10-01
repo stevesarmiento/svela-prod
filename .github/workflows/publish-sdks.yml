@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       publish_packages:
-        description: "Publish @connector-kit packages to npm"
+        description: "Publish @arma packages to npm"
         type: boolean
         default: true
 
@@ -52,26 +52,26 @@ jobs:
       - name: Run tests (skip for now)
         run: echo "Skipping tests for initial publish"
 
-      - name: Publish @connector-kit/connector
-        working-directory: packages/connector
+      - name: Publish @arma/connector
+        working-directory: packages/arma/connector
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @connector-kit/sdk
-        working-directory: packages/sdk
+      - name: Publish @arma/sdk
+        working-directory: packages/arma/sdk
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @connector-kit/jupiter
-        working-directory: packages/jupiter
+      - name: Publish @arma/jupiter
+        working-directory: packages/arma/jupiter
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @connector-kit/providers
-        working-directory: packages/providers
+      - name: Publish @arma/providers
+        working-directory: packages/arma/providers
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -93,25 +93,25 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           body: |
-            ## ConnectorKit Packages Published
+            ## Arma Packages Published
 
-            ### @connector-kit/connector
-            - Package: `@connector-kit/connector`
+            ### @arma/connector
+            - Package: `@arma/connector`
             - Version: ${{ github.ref_name }}
             - Registry: npm
 
-            ### @connector-kit/sdk
-            - Package: `@connector-kit/sdk`
+            ### @arma/sdk
+            - Package: `@arma/sdk`
             - Version: ${{ github.ref_name }}
             - Registry: npm
 
-            ### @connector-kit/jupiter
-            - Package: `@connector-kit/jupiter`
+            ### @arma/jupiter
+            - Package: `@arma/jupiter`
             - Version: ${{ github.ref_name }}
             - Registry: npm
 
-            ### @connector-kit/providers
-            - Package: `@connector-kit/providers`
+            ### @arma/providers
+            - Package: `@arma/providers`
             - Version: ${{ github.ref_name }}
             - Registry: npm
 
@@ -119,7 +119,7 @@ jobs:
 
             **Install the main SDK:**
             ```bash
-            npm install @connector-kit/sdk@${{ github.ref_name }}
+            npm install @arma/sdk@${{ github.ref_name }}
             ```
 
             **Install the connector (if using headless):**
@@ -129,12 +129,12 @@ jobs:
 
             **Install Jupiter integration:**
             ```bash
-            npm install @connector-kit/jupiter@${{ github.ref_name }}
+            npm install @arma/jupiter@${{ github.ref_name }}
             ```
 
             **Install providers:**
             ```bash
-            npm install @connector-kit/providers@${{ github.ref_name }}
+            npm install @arma/providers@${{ github.ref_name }}
             ```
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
