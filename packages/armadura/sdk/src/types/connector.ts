@@ -11,7 +11,7 @@ export interface GenericWallet {
   name: string
   version: string
   icon?: string
-  chains?: string[]
+  chains?: readonly string[]
   features?: Record<string, any>
   accounts?: any[]
   [key: string]: any

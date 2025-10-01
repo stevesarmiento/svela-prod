@@ -23,9 +23,9 @@
         "@ai-sdk/google": "^1.2.19",
         "@ai-sdk/openai": "^1.3.22",
         "@armadura/jupiter": "0.1.5",
-        "@armadura/sdk": "0.1.7",
+        "@armadura/sdk": "0.1.9",
         "@clerk/nextjs": "^6.22.0",
-        "@connector-kit/connector": "0.0.1",
+        "@connector-kit/connector": "0.0.2",
         "@convex-dev/auth": "^0.0.87",
         "@number-flow/react": "^0.3.5",
         "@tanstack/react-query": "^5.81.2",
@@ -170,7 +170,7 @@
     },
     "packages/armadura/sdk": {
       "name": "@armadura/sdk",
-      "version": "0.1.8",
+      "version": "0.1.9",
       "dependencies": {
         "@solana-program/compute-budget": "^0.3.0",
         "@solana-program/system": "^0.7.0",
@@ -460,7 +460,7 @@
 
     "@clerk/types": ["@clerk/types@4.90.0", "", { "dependencies": { "csstype": "3.1.3" } }, "sha512-AnXeCkyFdM+3icdeKElajVKV73IvlQ6eeWTaLG700CzL+Zw9iD2YV4t8qAhNhwo0FFtkcI9EKDblw6G9Rn1Onw=="],
 
-    "@connector-kit/connector": ["@connector-kit/connector@0.0.1", "", { "dependencies": { "@solana-mobile/wallet-standard-mobile": "^0.3.0", "@wallet-standard/app": "^1.0.0", "@wallet-standard/base": "^1.0.0", "@wallet-ui/core": "^1.1.1", "motion": "^12.23.12" }, "peerDependencies": { "react": ">=18.0.0" }, "optionalPeers": ["react"] }, "sha512-HdQEdyuR9iJnqChni1J9C6PoIC2SlVGNUQwpmzgAZlQNIO5xeeERzVn15BtnfmQu6f1n875oFbxkMr2IVfZ5Mw=="],
+    "@connector-kit/connector": ["@connector-kit/connector@0.0.2", "", { "dependencies": { "@solana-mobile/wallet-standard-mobile": "^0.3.0", "@wallet-standard/app": "^1.0.0", "@wallet-standard/base": "^1.0.0", "@wallet-ui/core": "^1.1.1", "motion": "^12.23.12" }, "peerDependencies": { "react": ">=18.0.0" }, "optionalPeers": ["react"] }, "sha512-PD350mPwZ37u2qk0b1ug8Llsmaiw3/OUwta3bR05fGpgcTkXpyJIIPNR83i9SfmU/cralOQD/CB4xyoBTCwmCQ=="],
 
     "@convex-dev/auth": ["@convex-dev/auth@0.0.87", "", { "dependencies": { "cookie": "^1.0.1", "is-network-error": "^1.1.0", "jose": "^5.2.2", "jwt-decode": "^4.0.0", "lucia": "^3.2.0", "oauth4webapi": "^3.1.2", "oslo": "^1.1.2", "path-to-regexp": "^6.3.0", "server-only": "^0.0.1" }, "peerDependencies": { "@auth/core": "^0.37.0", "convex": "^1.17.0", "react": "^18.2.0 || ^19.0.0-0" }, "optionalPeers": ["react"], "bin": { "auth": "dist/bin.cjs" } }, "sha512-aE5LOLytcvZR6/1D3tKugm7zVVErWtGZoOZVCA5TGJk9GiYj4bqWZgsmiipqrm2TZJD4sn3Fk1eCIlr76jlnwA=="],
 
