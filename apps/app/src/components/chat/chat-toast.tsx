@@ -6,6 +6,7 @@ import { useAuth } from '@v1/convex/hooks'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import { autoCleanupSessionMemories, bulkCleanupMemories } from '@/lib/client-memory-utils'
+import { useChatStateSync } from './hooks/use-chat-state-sync'
 import { Button } from '@v1/ui/button'
 import { ScrollArea } from '@v1/ui/scroll-area'
 import { IconXmarkCircleFill } from 'symbols-react'
@@ -79,25 +80,14 @@ function EnhancedIndicator() {
 
 // React 19: Optimized chat toast component with concurrent features
 function ChatToastContent({ toastId, onClose }: { toastId: string | number; onClose?: () => void }) {
-  const [chatState, setChatState] = useState<ChatState | null>(null);
   const { user } = useAuth();
-  const chatManager = ChatStateManager.getInstance();
-  // React 19: Transition hook removed - not needed in this context
+  
+  // ✅ OPTIMIZED: Using useSyncExternalStore instead of manual useEffect subscription
+  // Eliminates manual state synchronization anti-pattern
+  const chatState = useChatStateSync();
   
   // React 19: Defer expensive chat state updates
   const deferredChatState = useDeferredValue(chatState);
-
-  useEffect(() => {
-    // Get initial state without transition (not needed in useEffect)
-    setChatState(chatManager.getChatState());
-    
-    // Subscribe to updates with direct state changes (React will batch automatically)
-    const unsubscribe = chatManager.subscribe((state: ChatState | null) => {
-      setChatState(state);
-    });
-
-    return unsubscribe;
-  }, [chatManager]);
 
   // Auto-cleanup session memories if enabled
   const autoCleanupSession = React.useCallback(async () => {
@@ -360,6 +350,7 @@ export function useChatState() {
         if (componentDataHeader && lastDataQueryRef.current) {
           try {
             const componentData = JSON.parse(componentDataHeader);
+            console.log('📦 Enhanced component data received:', componentData);
             
             setMessageComponents(prev => {
               const newComponents = {
@@ -367,14 +358,8 @@ export function useChatState() {
                 [`temp_${lastDataQueryRef.current}`]: componentData
               };
               
-              // Update chat state directly - React will batch these updates
-              chatManager.setChatState({
-                messages,
-                isLoading,
-                isDataLoading,
-                messageComponents: newComponents,
-              });
-              
+              console.log('📦 Storing component data with temp key:', `temp_${lastDataQueryRef.current}`);
+              // Note: chatManager.setChatState will be called via useEffect when messageComponents updates
               return newComponents;
             });
           } catch (err) {
@@ -394,14 +379,7 @@ export function useChatState() {
               [`temp_${lastDataQueryRef.current}`]: parsedComponentData
             };
             
-            // Update chat state directly - React will batch these updates
-            chatManager.setChatState({
-              messages,
-              isLoading,
-              isDataLoading,
-              messageComponents: newComponents,
-            });
-            
+            // Note: chatManager.setChatState will be called via useEffect when messageComponents updates
             return newComponents;
           });
         } catch (err) {
@@ -418,15 +396,19 @@ export function useChatState() {
       // Move component data from temp key to actual message ID
       if (message.role === 'assistant' && lastDataQueryRef.current) {
         const tempKey = `temp_${lastDataQueryRef.current}`;
+        console.log('🔄 Moving component data from temp key to message ID:', { tempKey, messageId: message.id });
         
         setMessageComponents(prev => {
           const componentData = prev[tempKey];
+          console.log('📦 Component data found for temp key:', !!componentData, componentData?.type);
           if (componentData) {
             const newComponents = { ...prev };
             delete newComponents[tempKey];
             newComponents[message.id] = componentData;
+            console.log('✅ Component data moved to message ID:', message.id);
             return newComponents;
           }
+          console.log('❌ No component data found for temp key:', tempKey);
           return prev;
         });
         lastDataQueryRef.current = null;
@@ -434,8 +416,9 @@ export function useChatState() {
     },
   });
 
-  // React 19: Update shared state with deferred values for better performance
-  useEffect(() => {
+  // ✅ OPTIMIZED: Direct state updates instead of useEffect synchronization
+  // React batches these automatically for better performance
+  React.useLayoutEffect(() => {
     chatManager.setChatState({
       messages,
       isLoading,
@@ -461,6 +444,8 @@ Respond with JSON only:
 
 Examples:
 "How is Solana doing today?" → {"isDataQuery": true, "intent": "asking for Solana price/performance"}
+"swap 10 usdc for sol" → {"isDataQuery": true, "intent": "requesting a cryptocurrency trade"}
+"buy 5 sol with usdc" → {"isDataQuery": true, "intent": "requesting a cryptocurrency purchase"}
 "What's the weather like?" → {"isDataQuery": false, "intent": "asking about weather"}
 "Tell me about DeFi trends" → {"isDataQuery": true, "intent": "asking about cryptocurrency trends"}
 "How are you?" → {"isDataQuery": false, "intent": "general greeting"}`
@@ -471,7 +456,7 @@ Examples:
       return result.isDataQuery || false;
     } catch (error) {
       console.error('Failed to detect data query:', error);
-      const dataKeywords = ['price', 'bitcoin', 'ethereum', 'crypto', 'coin', 'market'];
+      const dataKeywords = ['price', 'bitcoin', 'ethereum', 'crypto', 'coin', 'market', 'swap', 'trade', 'buy', 'sell', 'exchange', 'convert'];
       return dataKeywords.some(keyword => message.toLowerCase().includes(keyword));
     }
   };

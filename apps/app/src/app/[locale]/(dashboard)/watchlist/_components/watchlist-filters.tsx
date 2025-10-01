@@ -122,7 +122,8 @@ export function WatchlistFilters({
     }
   }, [isFilterPopoverOpen]);
 
-  // Update the selection mode when coins are selected/deselected
+  // ✅ LEGITIMATE: Synchronize with external system (bottom navigation context)
+  // This useEffect is correct because it syncs React state with external navigation system
   useEffect(() => {
     if (selectedCoins.size > 0) {
       setSelectionMode({

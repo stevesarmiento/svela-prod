@@ -31,7 +31,7 @@ interface ContextualCommandGroup {
   items: ContextualCommand[];
 }
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
 
 export function useContextualCommands(searchQuery: string, context: CommandContext = null) {
   const contextualCommands = useMemo((): ContextualCommandGroup[] => {
@@ -129,7 +129,7 @@ export function useContextualCommands(searchQuery: string, context: CommandConte
           }
         ];
 
-      case 'settings':
+      case 'portfolio':
         return [
           {
             group: "Settings",

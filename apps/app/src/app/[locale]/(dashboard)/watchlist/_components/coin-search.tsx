@@ -249,7 +249,7 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                       coinsToDisplay.map((coin) => (
                         <TableRow 
                           key={coin.id}
-                          className="cursor-pointer border-none hover:bg-zinc-800/50 border-zinc-700/30 font-mono transition-colors group"
+                          className="cursor-pointer border-none hover:bg-zinc-800/50 border-zinc-700/30 font-diatype-mono transition-colors group"
                           onClick={() => handleAddCoin(coin)}
                         >
                           <TableCell className="text-white rounded-l-xl">
@@ -271,14 +271,14 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="font-mono text-xs text-white/90">
+                          <TableCell className="font-diatype-mono text-xs text-white/90">
                             {coin.quote.USD.price > 0 ? (
                               `$${coin.quote.USD.price.toLocaleString()}`
                             ) : (
                               <Skeleton className="h-4 w-16 bg-zinc-700/50" />
                             )}
                           </TableCell>
-                          <TableCell className="font-mono rounded-r-xl text-[11px]">
+                          <TableCell className="font-diatype-mono rounded-r-xl text-[11px]">
                             {coin.quote.USD.price > 0 && coin.quote.USD.percent_change_24h !== null ? (
                               <span className={`${coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'}`}>
                                 {coin.quote.USD.percent_change_24h.toFixed(2)}%

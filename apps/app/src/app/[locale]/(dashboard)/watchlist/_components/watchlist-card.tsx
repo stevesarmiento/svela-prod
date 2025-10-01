@@ -17,6 +17,25 @@ import { AvatarCircles } from "@v1/ui/token-stacks"
 import { useCoinGeckoWatchlistAggregateChartIsolated } from "@/hooks/use-coingecko-watchlist-aggregate-chart-isolated"
 import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
 import { Spinner } from "@v1/ui/spinner"
+
+// Loading shine CSS
+const loadingShineStyle = `
+  .ck-qr-shine {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 500%;
+    height: 500%;
+    background: linear-gradient(135deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0) 100%);
+    animation: ck-qr-slide-diagonal 0.5s infinite;
+    z-index: 1;
+    pointer-events: none;
+  }
+  @keyframes ck-qr-slide-diagonal {
+    0% { transform: translate(-100%, -100%); }
+    100% { transform: translate(100%, 100%); }
+  }
+`;
 import { WatchlistGroupIcon } from "@/components/watchlist-group-icon"
 import { COLOR_THEMES } from "@/components/color-picker"
 import { Kbd } from "@v1/ui/kbd"
@@ -145,7 +164,7 @@ export function WatchlistCard({
   return (
     <Card 
       className={cn(
-        "relative w-full h-auto min-h-[200px] mx-auto hover:shadow-lg shadow-md transition-all duration-150 ease-in-out cursor-pointer overflow-hidden rounded-[20px] group active:scale-[0.98]",
+        "relative w-full min-h-[200px] mx-auto hover:shadow-lg shadow-md transition-all duration-150 ease-in-out cursor-pointer overflow-hidden rounded-[20px] group active:scale-[0.98]",
         "hover:ring-4 dark:hover:ring-white/20 hover:ring-zinc-800/20 hover:ring-offset-4 hover:ring-offset-background",
         colorTheme.bg,
         colorTheme.border,
@@ -153,10 +172,16 @@ export function WatchlistCard({
       )}
       onClick={() => onSelect?.(group)}
     >
+      {/* Inject loading shine CSS only once per card */}
+      <style>{loadingShineStyle}</style>
+      {/* Loading shine overlay */}
+      {isChartLoading && (
+        <div className="ck-qr-shine" />
+      )}
       <div
         className="absolute inset-0 z-0 size-full opacity-40 dark:opacity-30"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='5' cy='5' r='1' fill='rgba(255,250,250,0.1)'/%3E%3C/svg%3E")`,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='5' cy='5' r='1' fill='rgba(255,250,250,0.2)'/%3E%3C/svg%3E")`,
           backgroundRepeat: "repeat",
         }}
       />
@@ -191,14 +216,14 @@ export function WatchlistCard({
                 <div className="flex text-[10px] flex-row items-center gap-2">
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                      <span className="text-white font-mono">
+                      <span className="text-white font-diatype-mono">
                         {stats.positiveCount} 
                       </span>
                       <span className="text-white/50">up</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
-                      <span className="text-white font-mono">
+                      <span className="text-white font-diatype-mono">
                         {stats.negativeCount} 
                       </span>
                       <span className="text-white/50">down</span>
@@ -253,10 +278,9 @@ export function WatchlistCard({
                 </p>
               </div>
             ) : isChartLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="flex items-center gap-2">
-                  <Spinner className="w-4 h-4" />
-                  <span className="text-white/50 text-xs">
+              <div className="flex items-center justify-center h-full relative">
+                <div className="flex items-center gap-2 z-10 h-[70px]">
+                  <span className="text-white/50 text-xs sr-only">
                     Cache: {performance.cacheHitRate.toFixed(0)}%
                   </span>
                 </div>
@@ -287,7 +311,7 @@ export function WatchlistCard({
               
               <div className="flex items-center gap-2 mr-2">
                 <div className={cn(
-                  "flex items-center gap-1 text-sm font-bold font-mono",
+                  "flex items-center gap-1 text-sm font-bold font-diatype-mono",
                   // Use darker version of the theme color
                   displayColor === 'blue' ? "text-blue-300" :
                   displayColor === 'sky' ? "text-sky-300" :

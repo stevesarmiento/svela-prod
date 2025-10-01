@@ -176,19 +176,19 @@ export function Liquidations({ cmcId }: LiquidationsProps) {
         <div className="mt-4 grid grid-cols-3 gap-4 text-center w-full">
           <div className="space-y-1">
             <div className="text-xs text-muted-foreground">Total 24h</div>
-            <div className="font-mono text-sm font-semibold">
+            <div className="font-diatype-mono text-sm font-semibold">
               ${formatLargeNumber(grandTotal)}
             </div>
           </div>
           <div className="space-y-1">
             <div className="text-xs text-muted-foreground">Longs Rekt</div>
-            <div className="font-mono text-sm font-semibold text-rose-500">
+            <div className="font-diatype-mono text-sm font-semibold text-rose-500">
               ${formatLargeNumber(totalLongs)}
             </div>
           </div>
           <div className="space-y-1">
             <div className="text-xs text-muted-foreground">Shorts Rekt</div>
-            <div className="font-mono text-sm font-semibold text-emerald-500">
+            <div className="font-diatype-mono text-sm font-semibold text-emerald-500">
               ${formatLargeNumber(totalShorts)}
             </div>
           </div>

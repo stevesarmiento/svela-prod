@@ -95,11 +95,11 @@ function createTooltipContent(price: number, percentageChange: number, timestamp
       React.createElement(
         'span',
         { 
-          className: `text-[10px] font-mono px-1.5 h-4 rounded ${percentageChange >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`
+          className: `text-[10px] font-diatype-mono px-1.5 h-4 rounded ${percentageChange >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`
         },
         (percentageChange > 0 ? '+' : '') + percentageChange.toFixed(2) + '%'
       ),
-      React.createElement('span', { className: 'text-[11px] font-mono font-bold' }, formatPrice(price))
+      React.createElement('span', { className: 'text-[11px] font-diatype-mono font-bold' }, formatPrice(price))
     )
   )
 
@@ -108,7 +108,7 @@ function createTooltipContent(price: number, percentageChange: number, timestamp
     'div',
     { className: 'flex items-center justify-between' },
     React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'Hull MA'),
-    React.createElement('span', { className: 'text-[11px] font-mono text-blue-300' }, formatPrice(hullData.mhull))
+    React.createElement('span', { className: 'text-[11px] font-diatype-mono text-blue-300' }, formatPrice(hullData.mhull))
   ) : null
 
   // Volume row (conditional)
@@ -116,7 +116,7 @@ function createTooltipContent(price: number, percentageChange: number, timestamp
     'div',
     { className: 'flex items-center justify-between' },
     React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'Volume'),
-    React.createElement('span', { className: 'text-[11px] font-mono text-zinc-300' }, formatVolume(volume))
+    React.createElement('span', { className: 'text-[11px] font-diatype-mono text-zinc-300' }, formatVolume(volume))
   ) : null
 
   // OHLC rows (conditional)
@@ -125,25 +125,25 @@ function createTooltipContent(price: number, percentageChange: number, timestamp
       'div',
       { className: 'flex items-center justify-between' },
       React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'Open'),
-      React.createElement('span', { className: 'text-[11px] font-mono text-zinc-300' }, formatPrice(ohlcData.open))
+      React.createElement('span', { className: 'text-[11px] font-diatype-mono text-zinc-300' }, formatPrice(ohlcData.open))
     ),
     React.createElement(
       'div',
       { className: 'flex items-center justify-between' },
       React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'High'),
-      React.createElement('span', { className: 'text-[11px] font-mono text-emerald-400' }, formatPrice(ohlcData.high))
+      React.createElement('span', { className: 'text-[11px] font-diatype-mono text-emerald-400' }, formatPrice(ohlcData.high))
     ),
     React.createElement(
       'div',
       { className: 'flex items-center justify-between' },
       React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'Low'),
-      React.createElement('span', { className: 'text-[11px] font-mono text-rose-400' }, formatPrice(ohlcData.low))
+      React.createElement('span', { className: 'text-[11px] font-diatype-mono text-rose-400' }, formatPrice(ohlcData.low))
     ),
     React.createElement(
       'div',
       { className: 'flex items-center justify-between' },
       React.createElement('span', { className: 'text-[11px] text-zinc-400' }, 'Close'),
-      React.createElement('span', { className: 'text-[11px] font-mono text-zinc-300' }, formatPrice(ohlcData.close))
+      React.createElement('span', { className: 'text-[11px] font-diatype-mono text-zinc-300' }, formatPrice(ohlcData.close))
     )
   ] : []
 

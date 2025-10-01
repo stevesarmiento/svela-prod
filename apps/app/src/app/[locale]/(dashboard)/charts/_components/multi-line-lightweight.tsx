@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useEffect, useRef, useMemo, useState, useTransition, useDeferredValue, useCallback, memo } from 'react'
-import { useTheme } from 'next-themes'
+import React, { useRef, useMemo, useTransition, useDeferredValue, useCallback, memo, useEffect, useState } from 'react'
+import { useIsomorphicTheme } from '@/hooks/use-isomorphic-theme'
 import {
   createChart,
   ColorType,
   CrosshairMode,
   LineStyle,
+  LineWidth,
   Time,
   LastPriceAnimationMode,
   LineSeries,
@@ -94,7 +95,7 @@ const TooltipContent = ({
                   {coin.symbol.toUpperCase()} <span className="text-gray-500 dark:text-zinc-500">{coin.name}</span>
                 </span>
               </div>
-              <span className="text-[11px] font-mono text-gray-900 dark:text-white font-bold">
+              <span className="text-[11px] font-diatype-mono text-gray-900 dark:text-white font-bold">
                 {coin.value > 0 ? '+' : ''}{coin.value.toFixed(2)}%
               </span>
             </div>
@@ -161,17 +162,8 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   const deferredCoins = useDeferredValue(coins)
   const deferredTimeScale = useDeferredValue(activeTimeScale)
   
-  // Use next-themes for proper theme detection (handles manual overrides correctly)
-  const { resolvedTheme } = useTheme()
-  const [mounted, setMounted] = useState(false)
-  
-  // Prevent hydration mismatch
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-  
-  // Get theme state from next-themes (this respects manual theme selection)
-  const isDarkMode = mounted ? resolvedTheme === 'dark' : true
+  // Use isomorphic theme hook - eliminates hydration mismatch
+  const { isDarkMode } = useIsomorphicTheme()
   
   
   // Use the bottom nav context to trigger contextual command search
@@ -237,58 +229,70 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
     }))
   }, [deferredCoins])
 
+  // Memoize chart configuration to prevent unnecessary recreations
+  const chartConfig = useMemo(() => ({
+    handleScale: false,
+    handleScroll: false,
+    layout: {
+      background: { type: ColorType.Solid, color: "transparent" },
+      textColor: isDarkMode ? "#ffffff50" : "#00000050",
+      attributionLogo: false,
+    },
+    grid: {
+      vertLines: { 
+        visible: false,
+        color: isDarkMode ? "#e5e7eb00" : "#00000020",
+        style: LineStyle.Dotted,
+      },
+      horzLines: { 
+        visible: false, // Hide default lines, we'll create gradient ones
+        color: isDarkMode ? "#ffffff10" : "#00000010",
+        style: LineStyle.Solid,
+      },
+    },
+    rightPriceScale: {
+      borderVisible: false,
+      autoScale: true,
+      visible: true,
+      entireTextOnly: true,
+    },
+    crosshair: {
+      mode: CrosshairMode.Magnet,
+      vertLine: {
+        labelVisible: true,
+        width: 1 as LineWidth,
+        color: isDarkMode ? "#d1d5db40" : "#00000040",
+        visible: true,
+        style: LineStyle.Solid,
+      },
+      horzLine: {
+        visible: false,
+        labelVisible: false,
+      },
+    },
+    timeScale: {
+      visible: false,
+      timeVisible: true,
+      secondsVisible: false,
+      borderVisible: false,
+    },
+  }), [isDarkMode])
+
+
+  // Memoize tooltip configuration
+  const tooltipConfig = useMemo(() => ({
+    className: `fixed hidden overflow-hidden text-[11px] rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-all duration-100 ease-in-out ${
+      isDarkMode 
+        ? 'text-white bg-zinc-900/95 border border-zinc-700/50' 
+        : 'text-gray-900 bg-white/95 border border-gray-200/50'
+    }`
+  }), [isDarkMode])
+
   // React 19: Optimize chart creation with transition
   useEffect(() => {
     if (!chartContainerRef.current || !coinSeriesWithColors.length) return
 
-
-    const chart = createChart(chartContainerRef.current, {
-      handleScale: false,
-      handleScroll: false,
-      layout: {
-        background: { type: ColorType.Solid, color: "transparent" },
-        textColor: isDarkMode ? "#ffffff50" : "#00000050",
-        attributionLogo: false,
-      },
-      grid: {
-        vertLines: { 
-          visible: false,
-          color: isDarkMode ? "#e5e7eb0" : "#00000020",
-          style: LineStyle.Dotted,
-        },
-        horzLines: { 
-          visible: false, // Hide default lines, we'll create gradient ones
-          color: isDarkMode ? "#ffffff10" : "#00000010",
-          style: LineStyle.Solid,
-        },
-      },
-      rightPriceScale: {
-        borderVisible: false,
-        autoScale: true,
-        visible: true,
-        entireTextOnly: true,
-      },
-      crosshair: {
-        mode: CrosshairMode.Magnet,
-        vertLine: {
-          labelVisible: true,
-          width: 1,
-          color: isDarkMode ? "#d1d5db40" : "#00000040",
-          visible: true,
-          style: LineStyle.Solid,
-        },
-        horzLine: {
-          visible: false,
-          labelVisible: false,
-        },
-      },
-      timeScale: {
-        visible: false,
-        timeVisible: true,
-        secondsVisible: false,
-        borderVisible: false,
-      },
-    })
+    const chart = createChart(chartContainerRef.current, chartConfig)
 
     // Create line series for each coin
     const lineSeriesMap = new Map()
@@ -316,7 +320,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
 
     chart.timeScale().fitContent()
 
-    const handleResize = () => {
+    const resizeHandler = () => {
       if (chartContainerRef.current) {
         chart.applyOptions({
           width: chartContainerRef.current.clientWidth,
@@ -325,17 +329,13 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
       }
     }
 
-    window.addEventListener("resize", handleResize)
-    handleResize()
+    window.addEventListener("resize", resizeHandler)
+    resizeHandler()
 
-    // Add tooltip
+    // Add tooltip using memoized config
     const tooltipEl = document.createElement("div")
     const tooltipRoot = createRoot(tooltipEl)
-    tooltipEl.className = `fixed hidden overflow-hidden text-[11px] rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-all duration-100 ease-in-out ${
-      isDarkMode 
-        ? 'text-white bg-zinc-900/95 border border-zinc-700/50' 
-        : 'text-gray-900 bg-white/95 border border-gray-200/50'
-    }`
+    tooltipEl.className = tooltipConfig.className
     document.body.appendChild(tooltipEl)
 
     // Subscribe to crosshair move
@@ -439,14 +439,14 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
     })
 
     return () => {
-      window.removeEventListener("resize", handleResize)
+      window.removeEventListener("resize", resizeHandler)
       requestAnimationFrame(() => {
         tooltipRoot.unmount()
         document.body.removeChild(tooltipEl)
       })
       chart.remove()
     }
-  }, [coinSeriesWithColors, deferredTimeScale, isDarkMode, activeTimeScale, resolvedTheme, mounted])
+  }, [coinSeriesWithColors, chartConfig, tooltipConfig, deferredTimeScale, activeTimeScale])
 
   // Handle hover effects on chart lines
   useEffect(() => {
@@ -516,7 +516,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                     <div className="w-1 h-9 rounded-full bg-muted animate-pulse" />
                     <div className="flex flex-row items-center gap-2 flex-1 ml-2">
                       <span className="text-xs font-medium">...</span>
-                      <span className="text-xs font-mono text-muted-foreground">Loading...</span>
+                      <span className="text-xs font-diatype-mono text-muted-foreground">Loading...</span>
                     </div>
                   </div>
                 ) : realCoin ? (
@@ -541,7 +541,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                       />
                       <div className="flex flex-row items-center gap-2 flex-1 ml-2">
                         <span className="text-xs font-medium">{realCoin.symbol.toUpperCase()}</span>
-                        <span className="text-xs font-mono text-muted-foreground">{realCoin.name}</span>
+                        <span className="text-xs font-diatype-mono text-muted-foreground">{realCoin.name}</span>
                       </div>
                       
                       {/* Remove Icon - appears on hover */}

@@ -291,15 +291,15 @@ export function LiquidationHistoryChart({
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-green-400">Long</span>
-                      <span className="text-[11px] font-mono text-green-400 font-bold">${formatLargeNumber(tooltip.longValue)}</span>
+                      <span className="text-[11px] font-diatype-mono text-green-400 font-bold">${formatLargeNumber(tooltip.longValue)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-red-400">Short</span>
-                      <span className="text-[11px] font-mono text-red-400 font-bold">${formatLargeNumber(tooltip.shortValue)}</span>
+                      <span className="text-[11px] font-diatype-mono text-red-400 font-bold">${formatLargeNumber(tooltip.shortValue)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-zinc-400">Total</span>
-                      <span className="text-[11px] font-mono text-white font-bold">${formatLargeNumber(tooltip.total)}</span>
+                      <span className="text-[11px] font-diatype-mono text-white font-bold">${formatLargeNumber(tooltip.total)}</span>
                     </div>
                   </div>
                 </div>

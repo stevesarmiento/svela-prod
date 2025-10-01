@@ -10,6 +10,7 @@ import type {
   MarketStructureData
 } from '@/types/enhanced-chat';
 import { formatLargeNumber } from '@v1/ui/format-numbers';
+import { getTokenDisplayName } from '@/lib/token-mappings';
 
 export class EnhancedChatHandler {
   
@@ -30,8 +31,21 @@ export class EnhancedChatHandler {
         timeframe: intent.timeframe,
         dataTypes: intent.dataTypes,
         analysisDepth: intent.analysisDepth,
-        confidence: intent.confidence
+        confidence: intent.confidence,
+        tradeAction: intent.tradeAction
       });
+      
+      // Handle trading intents immediately
+      if (intent.type === 'trade' && intent.tradeAction) {
+        console.log('💱 Processing trade intent:', intent.tradeAction);
+        const tradeResponse = this.generateTradeResponse(intent.tradeAction, userMessage, startTime);
+        console.log('💱 Generated trade response:', {
+          componentsCount: tradeResponse.components.length,
+          componentType: tradeResponse.components[0]?.type,
+          textLength: tradeResponse.textResponse.length
+        });
+        return tradeResponse;
+      }
       
       // Stage 2: Data Orchestration
       const dataContext = await enhancedDataOrchestrator.orchestrateDataFetch(intent);
@@ -954,6 +968,145 @@ ${volumeAnalysis['volumeSpike'] ? 'VOLUME SPIKE DETECTED' : 'Normal volume activ
     }
     
     return suggestions.slice(0, 3); // Limit to 3 suggestions
+  }
+
+  /**
+   * Generate trading response
+   */
+  private generateTradeResponse(
+    tradeAction: import('@/types/enhanced-chat').TradeAction,
+    userMessage: string,
+    startTime: number
+  ): import('@/types/enhanced-chat').EnhancedChatResponse {
+    
+    const inputTokenDisplay = tradeAction.inputToken ? getTokenDisplayName(tradeAction.inputToken) : 'Unknown';
+    const outputTokenDisplay = tradeAction.outputToken ? getTokenDisplayName(tradeAction.outputToken) : 'Unknown';
+    
+    // Create trade preview component
+    const components: import('@/types/enhanced-chat').ChatComponent[] = [{
+      id: `trade_${Date.now()}`,
+      type: 'trade_preview',
+      priority: 1,
+      size: 'large',
+      title: 'Trade Preview',
+      subtitle: `${tradeAction.type.toUpperCase()}: ${inputTokenDisplay} → ${outputTokenDisplay}`,
+      data: {
+        tradeAction,
+        timestamp: Date.now()
+      },
+      metadata: {
+        dataSource: 'jupiter_aggregator',
+        lastUpdated: Date.now(),
+        reliability: 'high'
+      }
+    }];
+
+    // Generate response text
+    const textResponse = this.generateTradeResponseText(tradeAction, inputTokenDisplay, outputTokenDisplay);
+    
+    // Generate follow-up suggestions for trading
+    const followUpSuggestions = this.generateTradeFollowUpSuggestions(tradeAction, inputTokenDisplay, outputTokenDisplay);
+
+    return {
+      textResponse,
+      components,
+      followUpSuggestions,
+      dataContext: {
+        intent: {
+          type: 'trade',
+          coins: [inputTokenDisplay.toLowerCase(), outputTokenDisplay.toLowerCase()],
+          timeframe: null,
+          dataTypes: ['price'],
+          analysisDepth: 'quick',
+          intent: `Trade ${tradeAction.amount || '?'} ${inputTokenDisplay} for ${outputTokenDisplay}`,
+          keywords: ['swap', 'trade', inputTokenDisplay.toLowerCase(), outputTokenDisplay.toLowerCase()],
+          confidence: tradeAction.confidence,
+          tradeAction
+        },
+        metadata: {
+          sources: ['jupiter_aggregator'],
+          fetchTime: Date.now() - startTime,
+          quality: 'high',
+          coverage: 1.0
+        }
+      },
+      processingTime: Date.now() - startTime
+    };
+  }
+
+  /**
+   * Generate trade response text
+   */
+  private generateTradeResponseText(
+    tradeAction: import('@/types/enhanced-chat').TradeAction,
+    inputTokenDisplay: string,
+    outputTokenDisplay: string
+  ): string {
+    const { type, amount, confidence, slippage } = tradeAction;
+    const confidencePercent = Math.round(confidence * 100);
+    
+    let responseText = `I understand you want to ${type} `;
+    
+    if (amount) {
+      responseText += `${amount} ${inputTokenDisplay} for ${outputTokenDisplay}. `;
+    } else {
+      responseText += `${inputTokenDisplay} for ${outputTokenDisplay}. `;
+    }
+    
+    responseText += `\n\nI'm ${confidencePercent}% confident about this trade. `;
+    
+    if (confidencePercent >= 90) {
+      responseText += "This looks like a clear trading instruction! ";
+    } else if (confidencePercent >= 70) {
+      responseText += "This seems like a trading request, though some details might need clarification. ";
+    } else {
+      responseText += "This might be a trading request, but I'd like to confirm the details. ";
+    }
+    
+    responseText += `Let me get you the best quote from Jupiter and other DEXs.\n\n⚡ **Trade Details:**\n`;
+    responseText += `- Action: ${type.toUpperCase()}\n`;
+    responseText += `- Amount: ${amount || 'To be specified'} ${inputTokenDisplay}\n`;
+    responseText += `- Target: ${outputTokenDisplay}\n`;
+    responseText += `- Slippage: ${slippage || 0.5}%\n\n`;
+    
+    if (!amount) {
+      responseText += "💡 **Note:** You didn't specify an amount. The trade preview will help you enter the exact amount you want to swap.\n\n";
+    }
+    
+    responseText += "Review the details above and click **\"Execute Trade\"** when ready! The transaction will be signed with your connected wallet.";
+    
+    return responseText;
+  }
+
+  /**
+   * Generate follow-up suggestions for trading
+   */
+  private generateTradeFollowUpSuggestions(
+    tradeAction: import('@/types/enhanced-chat').TradeAction,
+    inputTokenDisplay: string,
+    outputTokenDisplay: string
+  ): string[] {
+    const suggestions: string[] = [];
+    
+    // Suggest price check
+    suggestions.push(`What's the current price of ${outputTokenDisplay}?`);
+    
+    // Suggest different amounts
+    if (tradeAction.amount) {
+      const amount = tradeAction.amount;
+      if (amount >= 10) {
+        suggestions.push(`Swap ${amount / 2} ${inputTokenDisplay} for ${outputTokenDisplay}`);
+      } else {
+        suggestions.push(`Swap ${amount * 2} ${inputTokenDisplay} for ${outputTokenDisplay}`);
+      }
+    } else {
+      suggestions.push(`Swap 10 ${inputTokenDisplay} for ${outputTokenDisplay}`);
+    }
+    
+    // Suggest reverse trade
+    suggestions.push(`Swap ${outputTokenDisplay} for ${inputTokenDisplay}`);
+    
+    return suggestions.slice(0, 3);
   }
 
   /**

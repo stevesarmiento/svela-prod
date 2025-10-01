@@ -36,7 +36,7 @@ function TreemapSkeleton() {
   return (
     <Card className="col-span-1">
     <CardHeader>
-      <CardTitle className="font-medium font-mono">Market Overview</CardTitle>
+      <CardTitle className="font-medium font-diatype-mono">Market Overview</CardTitle>
     </CardHeader>
     <CardContent>
         <div className="space-y-3 p-1">
@@ -93,7 +93,7 @@ const CustomContent = memo(function CustomContent({
           fill="white"
           fontSize={10}
           stroke="none"
-          className="select-none pointer-events-none font-mono"
+          className="select-none pointer-events-none font-diatype-mono"
         >
           <tspan x={x + width / 2} dy="-0.5em" fontWeight="bold">
             {name}
@@ -139,7 +139,7 @@ export function CoinTreemap({ coins }: CoinTreemapProps) {
   return (
     <Card className="col-span-1">
       <CardHeader>
-        <CardTitle className="font-medium font-mono">Market Overview</CardTitle>
+        <CardTitle className="font-medium font-diatype-mono">Market Overview</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-[400px] w-full">
@@ -186,7 +186,7 @@ export function CoinTreemap({ coins }: CoinTreemapProps) {
                   ]
 
                   return (
-                    <div className="text-sm font-mono border-none shadow-none bg-background backdrop-blur-xl p-3 rounded-lg">
+                    <div className="text-sm font-diatype-mono border-none shadow-none bg-background backdrop-blur-xl p-3 rounded-lg">
                       {formattedValues.map(({ label, value, className }) => (
                         <div key={label} className="flex items-center justify-between gap-4">
                           <span className="text-muted-foreground">{label}:</span>

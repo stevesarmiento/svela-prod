@@ -1,17 +1,14 @@
 'use client'
 
-import React, { useEffect, useRef, useMemo } from 'react'
+import React, { useMemo } from 'react'
 import {
-  createChart,
-  ColorType,
-  CrosshairMode,
-  LineStyle,
   Time,
   LastPriceAnimationMode,
   LineSeries,
 } from 'lightweight-charts'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { generatePastelColors } from '@/lib/chart-colors'
+import { useOptimizedChart } from '@/hooks/use-optimized-chart'
 
 interface ComparisonChartProps {
   coins: Array<{
@@ -55,7 +52,6 @@ interface CoinSeries {
 }
 
 export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
-  const chartContainerRef = useRef<HTMLDivElement>(null)
 
   const coinSeriesData = useMemo((): CoinSeries[] => {
     if (!coins.length) return []
@@ -121,92 +117,37 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
     }).filter(series => series.data.length > 0)
   }, [coins])
 
-  useEffect(() => {
-    if (!chartContainerRef.current || !coinSeriesData.length) return
-
-    const chart = createChart(chartContainerRef.current, {
-      handleScale: false,
-      handleScroll: false,
-      layout: {
-        background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#ffffff50",
-        attributionLogo: false,
-      },
-      grid: {
-        vertLines: { 
-          visible: false,
-          color: "#e5e7eb0",
-          style: LineStyle.Dotted,
-        },
-        horzLines: { 
-          visible: false,
-          color: "#f5f5f50",
-          style: LineStyle.Dotted,
-        },
-      },
-      rightPriceScale: {
-        borderVisible: false,
-        autoScale: true,
-      },
-      crosshair: {
-        mode: CrosshairMode.Magnet,
-        vertLine: {
-          labelVisible: false,
-          width: 1,
-          color: "#d1d5db40",
-          visible: true,
-          style: LineStyle.Solid,
-        },
-        horzLine: {
-          visible: false,
-          labelVisible: false,
-        },
-      },
-      timeScale: {
-        visible: false,
-        timeVisible: true,
-        secondsVisible: false,
-        borderVisible: false,
-      },
-    })
-
-    // Create line series for each coin
-    coinSeriesData.forEach((coinSeries) => {
-      const lineSeries = chart.addSeries(LineSeries, {
-        lineWidth: 2,
-        lastValueVisible: false,
-        visible: true,
-        priceLineVisible: false,
-        color: coinSeries.color,
-        lastPriceAnimation: LastPriceAnimationMode.Continuous,
-        priceFormat: {
-          type: "custom",
-          formatter: (price: number) => `${price > 0 ? '+' : ''}${price.toFixed(2)}%`,
-        },
-      })
-      
-      lineSeries.setData(coinSeries.data)
-    })
-
-    chart.timeScale().fitContent()
-
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: 200,
+  // ✅ OPTIMIZED: Using useOptimizedChart hook instead of manual useEffect chart creation
+  // Eliminates code duplication and provides consistent chart behavior
+  const { chartContainerRef } = useOptimizedChart({
+    height: 200,
+    showGrid: false,
+    showTimeScale: false,
+    showCrosshair: true,
+    onChartReady: (chart) => {
+      if (coinSeriesData.length > 0) {
+        // Create line series for each coin
+        coinSeriesData.forEach((coinSeries) => {
+          const lineSeries = chart.addSeries(LineSeries, {
+            lineWidth: 2,
+            lastValueVisible: false,
+            visible: true,
+            priceLineVisible: false,
+            color: coinSeries.color,
+            lastPriceAnimation: LastPriceAnimationMode.Continuous,
+            priceFormat: {
+              type: "custom",
+              formatter: (price: number) => `${price > 0 ? '+' : ''}${price.toFixed(2)}%`,
+            },
+          })
+          
+          lineSeries.setData(coinSeries.data)
         })
+
+        chart.timeScale().fitContent()
       }
     }
-
-    window.addEventListener("resize", handleResize)
-    handleResize()
-
-    return () => {
-      window.removeEventListener("resize", handleResize)
-      chart.remove()
-    }
-  }, [coinSeriesData])
+  })
 
   const coinNames = coins.map(coin => coin.symbol.toUpperCase()).join(' vs ')
 
@@ -229,7 +170,7 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
                 style={{ backgroundColor: series.color }}
               />
               <span className="text-xs text-gray-700 dark:text-zinc-300">{series.symbol.toUpperCase()}</span>
-              <span className="text-xs font-mono text-gray-900 dark:text-white">
+              <span className="text-xs font-diatype-mono text-gray-900 dark:text-white">
                 {series.latestValue > 0 ? '+' : ''}{series.latestValue.toFixed(2)}%
               </span>
             </div>

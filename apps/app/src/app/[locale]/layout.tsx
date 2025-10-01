@@ -1,28 +1,52 @@
 import "@v1/ui/globals.css";
 import { cn } from "@v1/ui/cn";
-import { ThemeProvider } from "@/components/providers/theme-provider";
+import { Providers } from "@/components/providers/providers";
 import Script from "next/script";
-import { ClerkProvider } from "@clerk/nextjs";
-import { ConvexProvider } from "@v1/convex/provider";
-import { QueryProvider } from "@/components/providers/query-provider";
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
-import { WatchlistProvider } from "./(dashboard)/watchlist/_components/watchlist-context";
-import { NotifToaster } from "@v1/ui/sonner-notif";
-import { ChatToast } from "@/components/chat/chat-toast";
-//import localFont from "next/font/local";
+import localFont from "next/font/local";
 
-// const geistSans = localFont({
-//   src: "./fonts/GeistVF.woff",
-//   variable: "--font-geist-sans",
-//   weight: "100 900",
-// });
-// const geistMono = localFont({
-//   src: "./fonts/GeistMonoVF.woff",
-//   variable: "--font-geist-mono",
-//   weight: "100 900",
-// });
+// ABC Diatype Font Family
+const abcDiatype = localFont({
+  src: [
+    {
+      path: "../../fonts/ABCDiatype-Regular.woff2",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "../../fonts/ABCDiatype-Medium.woff2", 
+      weight: "500",
+      style: "normal",
+    },
+    {
+      path: "../../fonts/ABCDiatype-Bold.woff2",
+      weight: "700", 
+      style: "normal",
+    },
+  ],
+  variable: "--font-abc-diatype",
+  display: "swap",
+});
+
+// ABC Diatype Mono Font Family  
+const abcDiatypeMono = localFont({
+  src: [
+    {
+      path: "../../fonts/ABCDiatypeMono-Regular.woff2",
+      weight: "400",
+      style: "normal", 
+    },
+    {
+      path: "../../fonts/ABCDiatypeMono-RegularItalic.woff2",
+      weight: "400",
+      style: "italic",
+    },
+  ],
+  variable: "--font-abc-diatype-mono",
+  display: "swap", 
+});
 
 export const metadata: Metadata = {
   title: "Create Next App",
@@ -52,35 +76,13 @@ export default function RootLayout({
       </head>
       <body
         className={cn(
-          `${GeistSans.variable} ${GeistMono.variable}`,
+          `${GeistSans.variable} ${GeistMono.variable} ${abcDiatype.variable} ${abcDiatypeMono.variable}`,
           "antialiased",
         )}
       >
-        <ClerkProvider
-          publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!}
-          appearance={{
-            variables: {
-              colorPrimary: "#000000",
-            },
-          }}
-        >
-          <ConvexProvider>
-            <QueryProvider>
-              <WatchlistProvider>
-              <ThemeProvider>
-                {children}
-
-                <ChatToast />
-                <NotifToaster 
-                  position="top-center" 
-                  offset={-10}
-                />
-              </ThemeProvider>
-              </WatchlistProvider>
-
-            </QueryProvider>
-          </ConvexProvider>
-        </ClerkProvider>
+        <Providers>
+          {children}
+        </Providers>
       </body>
     </html>
   );

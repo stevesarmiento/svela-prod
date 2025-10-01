@@ -23,7 +23,7 @@ import { useAddCoinToWatchlist } from '@/hooks/use-add-coin-to-watchlist';
 import { useDebounce } from '@/hooks/use-debounce';
 import { BackgroundPattern } from './background-pattern';
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
 
 interface CommandSearchProps {
   isOpen: boolean;
@@ -182,7 +182,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   const getPlaceholder = () => {
     if (context === 'watchlist') return "Search tokens or manage watchlist...";
     if (context === 'charts') return "Search charts or add tokens...";
-    if (context === 'settings') return "Search settings...";
+    if (context === 'portfolio') return "Search portfolio...";
     if (context === 'overview') return "Search market data and insights...";
     return "Navigate or search tokens...";
   };
@@ -215,7 +215,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                   </TooltipTrigger>
                   <TooltipContent side="top" sideOffset={25} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-gray-200 dark:border-zinc-800 border bg-white/95 dark:bg-zinc-900/95 shadow-sm">
                     <span className="text-xs text-gray-600 dark:text-zinc-400">Quick Actions</span>
-                        <kbd className="flex items-center gap-1 rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
+                        <kbd className="flex items-center gap-1 rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-gray-700 dark:text-zinc-300 uppercase">
                             <IconCommand className="h-2.5 w-2.5 fill-gray-700 dark:fill-zinc-300" />
                             <span>+ K</span>
                         </kbd>
@@ -269,7 +269,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                       </div>
                       <div className="flex items-center gap-1">
                         {item.shortcut ? (
-                          <kbd className="rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
+                          <kbd className="rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-gray-700 dark:text-zinc-300 uppercase">
                             {item.shortcut}
                           </kbd>
                         ) : item.href ? (
@@ -331,10 +331,10 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="text-right">
-                            <div className="text-sm font-mono">
+                            <div className="text-sm font-diatype-mono">
                               ${coin.quote.USD.price.toLocaleString()}
                             </div>
-                            <div className={`text-xs font-mono ${
+                            <div className={`text-xs font-diatype-mono ${
                               coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'
                             }`}>
                               {coin.quote.USD.percent_change_24h.toFixed(2)}%
@@ -394,10 +394,10 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="text-right">
-                            <div className="text-sm font-mono">
+                            <div className="text-sm font-diatype-mono">
                               ${coin.quote.USD.price.toLocaleString()}
                             </div>
-                            <div className={`text-xs font-mono ${
+                            <div className={`text-xs font-diatype-mono ${
                               coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'
                             }`}>
                               {coin.quote.USD.percent_change_24h.toFixed(2)}%
@@ -433,7 +433,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                       </div>
                       <div className="flex items-center gap-1">
                         {'href' in item && item.shortcut ? (
-                          <kbd className="rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
+                          <kbd className="rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-gray-700 dark:text-zinc-300 uppercase">
                             {item.shortcut}
                           </kbd>
                         ) : 'href' in item ? (
@@ -454,16 +454,16 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
             <div className="flex items-center justify-between gap-4 px-2 text-xs text-gray-600 dark:text-muted-foreground">
               <div className="flex items-center gap-1">
                 <span>navigate</span>
-                <kbd className="rounded border border-gray-300 dark:border-border bg-gray-100 dark:bg-muted px-1.5 font-mono text-gray-700 dark:text-muted-foreground">↑</kbd>
-                <kbd className="rounded border border-gray-300 dark:border-border bg-gray-100 dark:bg-muted px-1.5 font-mono text-gray-700 dark:text-muted-foreground">↓</kbd>
+                <kbd className="rounded border border-gray-300 dark:border-border bg-gray-100 dark:bg-muted px-1.5 font-diatype-mono text-gray-700 dark:text-muted-foreground">↑</kbd>
+                <kbd className="rounded border border-gray-300 dark:border-border bg-gray-100 dark:bg-muted px-1.5 font-diatype-mono text-gray-700 dark:text-muted-foreground">↓</kbd>
               </div>
               <div className="flex items-center gap-1">
                 <span>select</span>
-                <kbd className="rounded border border-gray-300 dark:border-border bg-gray-100 dark:bg-muted px-1.5 font-mono text-gray-700 dark:text-muted-foreground">enter</kbd>
+                <kbd className="rounded border border-gray-300 dark:border-border bg-gray-100 dark:bg-muted px-1.5 font-diatype-mono text-gray-700 dark:text-muted-foreground">enter</kbd>
               </div>
               <div className="flex items-center gap-1">
                 <span>close</span>
-                <kbd className="rounded border border-gray-300 dark:border-border bg-gray-100 dark:bg-muted px-1.5 font-mono text-gray-700 dark:text-muted-foreground">esc</kbd>
+                <kbd className="rounded border border-gray-300 dark:border-border bg-gray-100 dark:bg-muted px-1.5 font-diatype-mono text-gray-700 dark:text-muted-foreground">esc</kbd>
               </div>
             </div>
           </div>

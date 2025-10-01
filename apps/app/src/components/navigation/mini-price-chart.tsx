@@ -39,24 +39,24 @@ const TooltipContent = ({ data, tokenSymbol }: { data: { time: number; price: nu
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-zinc-400">Price</span>
             <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-mono px-1.5 h-4 rounded ${data.change >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{data.change > 0 ? '+' : ''}{data.change.toFixed(2)}%</span>
-              <span className="text-[11px] font-mono font-bold">{formatPrice(data.price)}</span>
+              <span className={`text-[10px] font-diatype-mono px-1.5 h-4 rounded ${data.change >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{data.change > 0 ? '+' : ''}{data.change.toFixed(2)}%</span>
+              <span className="text-[11px] font-diatype-mono font-bold">{formatPrice(data.price)}</span>
             </div>
           </div>
           {typeof data.hull === 'number' && (
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-zinc-400">Hull MA</span>
-              <span className="text-[11px] font-mono text-blue-300">{formatPrice(data.hull)}</span>
+              <span className="text-[11px] font-diatype-mono text-blue-300">{formatPrice(data.hull)}</span>
             </div>
           )}
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-zinc-400">Volume</span>
-            <span className="text-[11px] font-mono text-zinc-300">{formatVolume(data.volume)}</span>
+            <span className="text-[11px] font-diatype-mono text-zinc-300">{formatVolume(data.volume)}</span>
           </div>
           {tokenSymbol && (
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-zinc-400">Token</span>
-              <span className="text-[11px] font-mono text-zinc-300">{tokenSymbol.toUpperCase()}</span>
+              <span className="text-[11px] font-diatype-mono text-zinc-300">{tokenSymbol.toUpperCase()}</span>
             </div>
           )}
         </div>

@@ -8,13 +8,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@v1/ui/tooltip'
 import { IconCaptionsBubbleFill, IconCommand, IconPaperplaneFill, IconXmark} from 'symbols-react'
 import { useOverlayState, useChatContext } from './bottom-nav-context'
 import { useClickOutside } from '@v1/ui/hooks'
-import { useChatToast, useChatState } from '../chat/chat-toast'
+import { useChatState } from '../chat/chat-toast'
+import { ChatDialog } from '../chat/chat-dialog'
 import { BackgroundPattern } from './background-pattern'
 
 export function ChatContainer() {
   const { isChatOpen, setIsChatOpen } = useOverlayState()
-  const { openChat } = useChatContext()
-  const { showChatToast } = useChatToast()
+  const { openChat, isChatDialogOpen, openChatDialog, closeChatDialog } = useChatContext()
   const {
     input,
     handleInputChange,
@@ -29,43 +29,51 @@ export function ChatContainer() {
   const containerRef = useRef<HTMLDivElement>(null)
   const isRequestActive = isLoading || isDataLoading
 
-  // Only close on click outside if not actively typing or processing
+  // Only close on click outside if not actively typing or processing, and dialog is not open
   useClickOutside(containerRef as React.RefObject<HTMLElement>, (event) => {
     const target = event.target as Element
     const isToastClick = target.closest('[data-sonner-toast]') || 
                         target.closest('[data-toast]') ||
                         target.closest('.toaster') ||
                         target.closest('[class*="toast"]')
+    const isDialogClick = target.closest('[data-radix-dialog-content]') ||
+                         target.closest('[data-radix-dialog-overlay]')
     
-    if (isChatOpen && !isRequestActive && !input.trim() && !isToastClick) {
+    // Don't close chat input if dialog is open, or if clicking on dialog/toast elements
+    if (isChatOpen && !isChatDialogOpen && !isRequestActive && !input.trim() && !isToastClick && !isDialogClick) {
       setIsChatOpen(false)
     }
   })
 
   useEffect(() => {
     if (isChatOpen && inputRef.current) {
-      inputRef.current.focus()
+      // Small delay to ensure dialog animations don't interfere
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus()
+        }
+      }, 100)
     }
-  }, [isChatOpen])
+  }, [isChatOpen, isChatDialogOpen])
 
-  // Handle escape key to close chat
+  // Handle escape key to close chat (but not when dialog is open)
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isChatOpen) {
+      if (e.key === 'Escape' && isChatOpen && !isChatDialogOpen) {
         setIsChatOpen(false)
       }
     }
 
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
-  }, [isChatOpen, setIsChatOpen])
+  }, [isChatOpen, isChatDialogOpen, setIsChatOpen])
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (isRequestActive && stop) {
       stop()
     } else if (!isRequestActive && input.trim()) {
-      showChatToast()
+      openChatDialog()
       handleSubmit(e)
     }
   }
@@ -81,9 +89,11 @@ export function ChatContainer() {
     <motion.div
       ref={containerRef}
       layout
-      className="relative rounded-[20px] bg-white/95 backdrop-blur-md border border-gray-200/50 dark:bg-zinc-900 dark:border-transparent overflow-hidden transition-all duration-300 ease-out
+      data-chat-container="true"
+      className={`relative rounded-[20px] bg-white/95 backdrop-blur-md border border-gray-200/50 dark:bg-zinc-900 dark:border-transparent overflow-hidden transition-all duration-300 ease-out
                  shadow-[0_4px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
-                 dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]"
+                 dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]
+                 ${isChatDialogOpen ? 'z-[10000]' : ''}`}
       animate={{ 
         width: isChatOpen ? '460px' : '54px',
         height: isChatOpen ? '54px' : '54px'
@@ -124,7 +134,7 @@ export function ChatContainer() {
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={5} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-gray-200 dark:border-zinc-800 border bg-white/95 dark:bg-zinc-900/95 shadow-sm">
                   <span className="text-xs text-gray-600 dark:text-zinc-400">Quick Chat</span>
-                  <kbd className="flex items-center gap-1 rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-mono text-gray-700 dark:text-zinc-300 uppercase">
+                  <kbd className="flex items-center gap-1 rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-gray-700 dark:text-zinc-300 uppercase">
                     <IconCommand className="h-2.5 w-2.5 fill-gray-700 dark:fill-zinc-300" />
                     <span>+ J</span>
                   </kbd>
@@ -203,6 +213,16 @@ export function ChatContainer() {
           </motion.div>
         )}
       </AnimatePresence>
+      
+      {/* Chat Dialog */}
+      <ChatDialog 
+        open={isChatDialogOpen} 
+        onOpenChange={(open) => {
+          if (!open) {
+            closeChatDialog()
+          }
+        }}
+      />
     </motion.div>
   )
 } 

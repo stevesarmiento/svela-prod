@@ -75,9 +75,9 @@ export function ThemeSettings() {
       case 'blueberry':
         return <div className="h-4 w-4 rounded-full bg-gradient-to-r from-blue-400 to-purple-400"></div>;
       case 'system':
-        return <span className="text-gray-400 text-xs font-mono">SYS</span>;
+        return <span className="text-gray-400 text-xs font-diatype-mono">SYS</span>;
       default:
-        return <span className="text-gray-400 text-xs font-mono">SYS</span>;
+        return <span className="text-gray-400 text-xs font-diatype-mono">SYS</span>;
     }
   };
 
@@ -139,7 +139,7 @@ export function ThemeSettings() {
       tabColors: ['bg-slate-300', 'bg-slate-400', 'bg-slate-300'],
       profileColor: 'bg-slate-400',
       fadeColor: 'from-slate-200',
-      icon: <span className="text-slate-700 text-[6px] font-mono font-semibold">SYS</span>
+      icon: <span className="text-slate-700 text-[6px] font-diatype-mono font-semibold">SYS</span>
     }
   ];
 

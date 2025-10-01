@@ -44,7 +44,12 @@ export interface ComparisonChartData {
   chartType?: string;
 }
 
+export interface TradePreviewData {
+  tradeAction: import('@/types/enhanced-chat').TradeAction;
+  timestamp: number;
+}
+
 export interface ComponentData {
-  type: 'price_card' | 'comparison_chart';
-  data: PriceCardData | ComparisonChartData;
+  type: 'price_card' | 'comparison_chart' | 'trade_preview';
+  data: PriceCardData | ComparisonChartData | TradePreviewData;
 }

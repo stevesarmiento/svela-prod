@@ -20,6 +20,8 @@ const config = {
     extend: {
       fontFamily: {
         departure: ["var(--font-departure-mono)"],
+        diatype: ["var(--font-abc-diatype)", "sans-serif"],
+        "diatype-mono": ["var(--font-abc-diatype-mono)", "monospace"],
       },
       colors: {
         border: "hsl(var(--border))",

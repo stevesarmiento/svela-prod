@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react'
+import { createContext, useContext, useEffect, useCallback, useMemo } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { useQueryState } from 'nuqs'
 import { 
@@ -57,10 +57,21 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   // New hooks for multiple groups
   const watchlistGroups = useWatchlistGroups()
   
-  // State - MIGRATED TO COINGECKO: Now using string arrays for CoinGecko IDs
-  const [watchlist, setWatchlist] = useState<string[]>([]) // CoinGecko string IDs (e.g., ["bitcoin", "ethereum"])
-  const [isInitialized, setIsInitialized] = useState(false)
-  const [selectedGroupCoins, setSelectedGroupCoins] = useState<string[]>([])
+  // ✅ IMPROVED: Derive state instead of using useState + useEffect
+  // MIGRATED TO COINGECKO: Convert Convex watchlist data to CoinGecko string array
+  const watchlist = useMemo(() => {
+    if (convexWatchlist && isLoaded) {
+      const coinIds = convexWatchlist.map(item => item.coinId) // Keep as CoinGecko string IDs
+      return coinIds
+    } else if (isLoaded && !user) {
+      // User not logged in
+      return []
+    }
+    return []
+  }, [convexWatchlist, isLoaded, user])
+  
+  // ✅ IMPROVED: Derive initialization state directly
+  const isInitialized = useMemo(() => isLoaded, [isLoaded])
   
   // URL state for selected group using nuqs (now using slug)
   const [selectedGroupSlug, setSelectedGroupSlug] = useQueryState('wg', {
@@ -74,17 +85,28 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     return watchlistGroups.find(g => g.slug === selectedGroupSlug) || null
   }, [selectedGroupSlug, watchlistGroups])
   
-  // Get coins for selected group using slug
   const selectedGroupData = useWatchlistBySlug(selectedGroupSlug)
   const selectedGroupWatchlist = selectedGroupData?.items
 
-  // Fallback: Also get coins by ID as backup in case slug query fails
   const selectedGroupWatchlistById = useWatchlistByGroup(selectedGroup?._id)
   
-  // Use slug-based data if available, otherwise fall back to ID-based
   const effectiveWatchlist = selectedGroupWatchlist || selectedGroupWatchlistById
+  
+  const selectedGroupCoins = useMemo(() => {
+    
+    if (effectiveWatchlist && Array.isArray(effectiveWatchlist)) {
+      const coinIds = effectiveWatchlist.map(item => item.coinId) // Keep as CoinGecko string IDs
+      console.log('Calculated selectedGroupCoins:', coinIds)
+      return coinIds
+    } else if (selectedGroup) {
+      console.log('Setting selectedGroupCoins to empty array for group:', selectedGroup.name)
+      return []
+    } else {
+      console.log('No selectedGroup, returning empty array')
+      return []
+    }
+  }, [effectiveWatchlist, selectedGroup])
 
-  // Debug logging for slug-based watchlist
   useEffect(() => {
     console.log('WatchlistContext Debug:', {
       selectedGroupSlug,
@@ -94,20 +116,6 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     })
   }, [selectedGroupSlug, selectedGroupData, selectedGroupWatchlist, selectedGroup])
 
-  // MIGRATED TO COINGECKO: Convert Convex watchlist data to CoinGecko string array
-  useEffect(() => {
-    if (convexWatchlist && isLoaded) {
-      console.log('Convex watchlist data:', convexWatchlist)
-      const coinIds = convexWatchlist.map(item => item.coinId) // Keep as CoinGecko string IDs
-      console.log('Parsed CoinGecko IDs:', coinIds)
-      setWatchlist(coinIds)
-      setIsInitialized(true)
-    } else if (isLoaded && !user) {
-      // User not logged in
-      setWatchlist([])
-      setIsInitialized(true)
-    }
-  }, [convexWatchlist, isLoaded, user])
 
   // Auto-select default group when groups load and no group is selected via URL
   useEffect(() => {
@@ -133,28 +141,6 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     }
   }, [watchlistGroups, selectedGroupSlug, setSelectedGroupSlug])
 
-  // MIGRATED TO COINGECKO: Update selected group coins when selection changes
-  useEffect(() => {
-    console.log('Updating selectedGroupCoins:', {
-      hasWatchlist: !!effectiveWatchlist,
-      watchlistLength: effectiveWatchlist?.length,
-      hasGroup: !!selectedGroup,
-      groupName: selectedGroup?.name,
-      usingSlugData: !!selectedGroupWatchlist,
-      usingIdData: !!selectedGroupWatchlistById
-    })
-    
-    if (effectiveWatchlist && Array.isArray(effectiveWatchlist)) {
-      const coinIds = effectiveWatchlist.map(item => item.coinId) // Keep as CoinGecko string IDs
-      console.log('Setting selectedGroupCoins to:', coinIds)
-      setSelectedGroupCoins(coinIds)
-    } else if (selectedGroup) {
-      console.log('Setting selectedGroupCoins to empty array for group:', selectedGroup.name)
-      setSelectedGroupCoins([])
-    } else {
-      console.log('No selectedGroup, keeping selectedGroupCoins as is')
-    }
-  }, [effectiveWatchlist, selectedGroup, selectedGroupWatchlist, selectedGroupWatchlistById])
 
   // MIGRATED TO COINGECKO: Legacy functions (for backward compatibility)
   const addToWatchlist = useCallback(async (coinId: string) => {
@@ -163,8 +149,6 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('Adding CoinGecko coin to default watchlist:', coinId)
       await addToConvexWatchlistGroup(coinId) // Adds to default group - no conversion needed
-      // Optimistically update local state
-      setWatchlist(prev => [...prev, coinId])
     } catch (error) {
       console.error('Error adding to watchlist:', error)
       throw error
@@ -173,35 +157,27 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
 
   const removeFromWatchlist = useCallback(async (coinId: string) => {
     if (!user) return
-
-    // Optimistic update
-    setWatchlist(prev => prev.filter(id => id !== coinId));
     
     try {
       await removeFromConvexWatchlistGroup(coinId) // Removes from default group - no conversion needed
     } catch (error) {
-      // Revert on error
-      setWatchlist(prev => [...prev, coinId]);
+      console.error('Error removing from watchlist:', error)
       throw error;
     }
   }, [user, removeFromConvexWatchlistGroup])
 
   const removeBulkFromWatchlist = useCallback(async (coinIds: string[]) => {
     if (!user) return
-
-    // Optimistic update
-    setWatchlist(prev => prev.filter(id => !coinIds.includes(id)));
     
     try {
       await removeBulkFromConvexWatchlist(coinIds) // No conversion needed for CoinGecko string IDs
+      // State will update automatically via derived watchlist from convexWatchlist
     } catch (error) {
-      // Revert on error
-      setWatchlist(prev => [...prev, ...coinIds]);
+      console.error('Error bulk removing from watchlist:', error)
       throw error;
     }
   }, [user, removeBulkFromConvexWatchlist])
 
-  // MIGRATED TO COINGECKO: Group-specific functions
   const selectWatchlistGroup = useCallback((group: WatchlistGroup | null) => {
     console.log('Selecting watchlist group:', group?.name);
     setSelectedGroupSlug(group?.slug || '');
@@ -213,8 +189,6 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log('Adding CoinGecko coin to selected group:', coinId, selectedGroup._id)
       await addToConvexWatchlistGroup(coinId, selectedGroup._id) // No conversion needed
-      // Optimistically update local state
-      setSelectedGroupCoins(prev => [...prev, coinId])
     } catch (error) {
       console.error('Error adding to selected group:', error)
       throw error
@@ -223,24 +197,17 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
 
   const removeFromSelectedGroup = useCallback(async (coinId: string) => {
     if (!user || !selectedGroup) return
-
-    // Optimistic update
-    setSelectedGroupCoins(prev => prev.filter(id => id !== coinId));
     
     try {
       await removeFromConvexWatchlistGroup(coinId, selectedGroup._id) // No conversion needed
     } catch (error) {
-      // Revert on error
-      setSelectedGroupCoins(prev => [...prev, coinId]);
+      console.error('Error removing from selected group:', error)
       throw error;
     }
   }, [user, selectedGroup, removeFromConvexWatchlistGroup])
 
   const removeBulkFromSelectedGroup = useCallback(async (coinIds: string[]) => {
     if (!user || !selectedGroup) return
-
-    // Optimistic update
-    setSelectedGroupCoins(prev => prev.filter(id => !coinIds.includes(id)));
     
     try {
       // Remove each CoinGecko coin individually from the selected group
@@ -249,9 +216,9 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
           removeFromConvexWatchlistGroup(coinId, selectedGroup._id) // No conversion needed
         )
       )
+      // State will update automatically via derived selectedGroupCoins from effectiveWatchlist
     } catch (error) {
-      // Revert on error
-      setSelectedGroupCoins(prev => [...prev, ...coinIds]);
+      console.error('Error bulk removing from selected group:', error)
       throw error;
     }
   }, [user, selectedGroup, removeFromConvexWatchlistGroup])

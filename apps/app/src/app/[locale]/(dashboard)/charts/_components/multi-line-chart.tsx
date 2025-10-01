@@ -34,7 +34,7 @@ interface ChartDataPoint {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="font-medium font-mono">24h Percentage Change</CardTitle>
+          <CardTitle className="font-medium font-diatype-mono">24h Percentage Change</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -91,7 +91,7 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="font-medium font-mono">24h Percentage Change</CardTitle>
+        <CardTitle className="font-medium font-diatype-mono">24h Percentage Change</CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig}>
@@ -139,7 +139,7 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
                       <span className="font-semibold text-sm">{label}</span>
                     </div>
                     <div className="text-sm">
-                      <span className={`font-mono font-semibold ${isPositive ? 'text-emerald-500' : 'text-red-500'}`}>
+                      <span className={`font-diatype-mono font-semibold ${isPositive ? 'text-emerald-500' : 'text-red-500'}`}>
                         {isPositive ? '+' : ''}{value.toFixed(2)}%
                       </span>
                       <span className="text-muted-foreground ml-2">24h change</span>

@@ -1,0 +1,30 @@
+{
+  "name": "@arma",
+  "version": "0.1.0",
+  "private": true,
+  "sideEffects": false,
+  "description": "Arma Web3 components and utilities for Solana development",
+  "scripts": {
+    "clean": "rm -rf .turbo node_modules && turbo clean --filter=@arma/*",
+    "lint": "turbo lint --filter=@arma/*",
+    "format": "turbo format --filter=@arma/*",
+    "typecheck": "turbo typecheck --filter=@arma/*"
+  },
+  "exports": {
+    "./connector": "./connector/src/index.ts",
+    "./sdk": "./sdk/src/index.ts",
+    "./jupiter": "./jupiter/src/index.ts",
+    "./providers": "./providers/src/index.ts",
+    "./ui-primitives": "./ui-primitives/src/index.ts"
+  },
+  "dependencies": {
+    "@arma/connector": "workspace:*",
+    "@arma/sdk": "workspace:*",
+    "@arma/jupiter": "workspace:*", 
+    "@arma/providers": "workspace:*",
+    "@arma/ui-primitives": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

@@ -5,7 +5,7 @@ import { SelectionContent } from './selection-content';
 import type { SelectionState } from './bottom-nav-context';
 import { BackgroundPattern } from './background-pattern';
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'settings' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
 
 interface NavigationDockProps {
   mode: 'navigation' | 'selection';

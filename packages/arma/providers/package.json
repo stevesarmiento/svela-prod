@@ -1,0 +1,26 @@
+{
+  "name": "@arma/providers",
+  "version": "0.0.1",
+  "private": false,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "clean": "rm -rf .turbo node_modules",
+    "lint": "biome check .",
+    "format": "biome --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@arma/sdk": "*"
+  },
+  "dependencies": {
+    "@arma/jupiter": "workspace:*"
+  },
+  "devDependencies": {
+    "@arma/sdk": "workspace:*",
+    "typescript": "^5.6.3"
+  }
+}

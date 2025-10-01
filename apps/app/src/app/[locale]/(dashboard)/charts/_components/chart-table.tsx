@@ -275,14 +275,14 @@ export const ChartTable = memo(function ChartTable({
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-xs">{coin.symbol.toUpperCase()}</span>
                   <span className="text-primary/40 text-xs">price is currently</span>
-                  <span className="font-mono text-xs font-semibold">
+                  <span className="font-diatype-mono text-xs font-semibold">
                     ${coin.quote.USD.price.toLocaleString()}
                   </span>
                 </div>
 
                 {/* 24h Volume */}
                 <div className="flex items-center justify-end">
-                  <span className="font-mono text-xs">
+                  <span className="font-diatype-mono text-xs">
                     ${formatLargeNumber(coin.quote.USD.volume_24h || 0)}
                   </span>
                 </div>
@@ -290,12 +290,12 @@ export const ChartTable = memo(function ChartTable({
                 {/* Interval Change */}
                 <div className="flex items-center justify-end">
                   {isNaN(coin.intervalChange) ? (
-                    <span className="font-mono text-xs text-muted-foreground">
+                    <span className="font-diatype-mono text-xs text-muted-foreground">
                       N/A
                     </span>
                   ) : (
                     <span className={cn(
-                      "font-mono text-xs",
+                      "font-diatype-mono text-xs",
                       coin.intervalChange > 0 ? 'text-green-600' : 'text-red-600'
                     )}>
                       {coin.intervalChange > 0 ? '+' : ''}{coin.intervalChange.toFixed(2)}%

@@ -121,7 +121,7 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
   render() {
     if (this.state.hasError) {
       return (
-        <div className="space-y-6 w-full z-0 p-8">
+        <div className="space-y-6 w-full z-08">
           <div className="flex flex-col items-center justify-center py-12">
             <div className="text-center">
               <h3 className="text-lg font-medium mb-2">Something went wrong</h3>
@@ -141,7 +141,7 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
     }
 
     return (
-      <div className="space-y-6 w-full z-0 p-8">
+      <div className="space-y-6 w-full z-0">
         {this.props.children}
       </div>
     );

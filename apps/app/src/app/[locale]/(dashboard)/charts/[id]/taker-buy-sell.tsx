@@ -181,15 +181,15 @@ export function TakerBuySell({
                 <div class="flex flex-col gap-2">
                   <div class="flex items-center justify-between">
                     <span class="text-[11px] text-emerald-400">Buy</span>
-                    <span class="text-[11px] font-mono text-emerald-400 font-bold">${exchange.buyRatio.toFixed(1)}% ($${formatLargeNumber(exchange.buyVolumeUsd)})</span>
+                    <span class="text-[11px] font-diatype-mono text-emerald-400 font-bold">${exchange.buyRatio.toFixed(1)}% ($${formatLargeNumber(exchange.buyVolumeUsd)})</span>
                   </div>
                   <div class="flex items-center justify-between">
                     <span class="text-[11px] text-rose-400">Sell</span>
-                    <span class="text-[11px] font-mono text-rose-400 font-bold">${exchange.sellRatio.toFixed(1)}% ($${formatLargeNumber(exchange.sellVolumeUsd)})</span>
+                    <span class="text-[11px] font-diatype-mono text-rose-400 font-bold">${exchange.sellRatio.toFixed(1)}% ($${formatLargeNumber(exchange.sellVolumeUsd)})</span>
                   </div>
                   <div class="flex items-center justify-between">
                     <span class="text-[11px] text-zinc-400">Total Volume</span>
-                    <span class="text-[11px] font-mono text-white font-bold">$${formatLargeNumber(exchange.totalVolumeUsd)}</span>
+                    <span class="text-[11px] font-diatype-mono text-white font-bold">$${formatLargeNumber(exchange.totalVolumeUsd)}</span>
                   </div>
                 </div>
               </div>

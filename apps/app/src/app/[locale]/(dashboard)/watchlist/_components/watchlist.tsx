@@ -1,361 +1,56 @@
 'use client'
 
-import { formatLargeNumber } from "@v1/ui/format-numbers";
-import { Button } from "@v1/ui/button"
-import { X } from "lucide-react"
 import { useWatchlist } from "./watchlist-context"
-import { useCoinGeckoWatchlistCoins } from "@/hooks/use-coingecko-watchlist-coins"
-import Link from "next/link"
-import Image from "next/image"
-import { cn } from "@v1/ui/cn"
-import { Skeleton } from "@v1/ui/skeleton"
 import { CoinSearch, type CoinSearchRef } from "./coin-search"
 import { WatchlistFilters } from "./watchlist-filters"
+import { WatchlistEmptyState } from "./watchlist-empty-states"
+import { WatchlistTableBody } from "./watchlist-table-body"
+import { createWatchlistColumns } from "./watchlist-columns"
 import { toast } from "@v1/ui/use-toast"
-import { Checkbox } from "@v1/ui/checkbox"
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
-  flexRender,
   type SortingState,
-  type ColumnDef,
 } from '@tanstack/react-table'
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from "next/navigation"
 import { Spinner } from "@v1/ui/spinner"
-import { motion, AnimatePresence } from "framer-motion"
 import { WatchlistsGrid } from "./watchlists-grid"
 import { WatchlistTable } from "./watchlist-table"
 import { matchesShortcut, GLOBAL_SHORTCUTS } from "@/lib/keyboard-shortcuts"
-//import { AvatarCircles } from '@v1/ui/token-stacks'
-
-// Use CoinMarketData from types - the optimized hook returns this interface
-import type { CoinMarketData } from '@/types/coins'
-
-// Filter interface
-interface FilterState {
-  searchText: string;
-  priceRange: [number, number];
-  marketCapRange: [number, number];
-  volumeRange: [number, number];
-  changeFilter: "all" | "positive" | "negative";
-  sortBy: "name" | "price" | "change" | "marketCap" | "volume";
-  sortOrder: "asc" | "desc";
-}
+import { useWatchlistData } from "@/hooks/use-watchlist-data"
+import { useWatchlistSelection } from "@/hooks/use-watchlist-selection"
+import { Button } from "@v1/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@v1/ui/tabs'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@v1/ui/tooltip'
+import { 
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@v1/ui/popover'
+import { IconStarFill, IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmarkFill } from 'symbols-react'
+import { CreateWatchlist } from './create-watchlist'
+import { Kbd } from "@v1/ui/kbd"
+import { COLOR_THEMES } from "@/components/color-picker"
 
 interface WatchlistProps {
-  viewMode?: 'comparison' | 'watchlist';
   activeTimeScale?: string;
   onTimeScaleChange?: (scale: string) => void;
   gridViewMode?: 'grid' | 'chart';
   onGridViewModeChange?: (mode: 'grid' | 'chart') => void;
+  contentMode?: 'cards' | 'table';
+  onContentModeChange?: (mode: 'cards' | 'table') => void;
 }
 
-// Update the columns definition
-const createColumns = (
-  handleRemove: (coinId: number | string) => void,
-  selectedCoins: Set<string>,
-  onCoinSelect: (coinId: string, selected: boolean) => void,
-  onSelectAll: (checked: boolean) => void,
-  totalCoins: number,
-  removingCoins: Set<string>,
-  hoveredRowId: string | null,
-  hasSelectedCoins: boolean
-): ColumnDef<CoinMarketData>[] => [
-  {
-    id: 'select',
-    header: () => (
-      <div className={cn(
-        "transition-opacity duration-200",
-        hasSelectedCoins ? "opacity-100" : "opacity-0"
-      )}>
-        <Checkbox
-          checked={selectedCoins.size === totalCoins && totalCoins > 0}
-          onCheckedChange={onSelectAll}
-          aria-label="Select all"
-        />
-      </div>
-    ),
-    cell: ({ row }) => {
-      const isHovered = hoveredRowId === row.id;
-      
-      return (
-        <div className="relative w-full h-full flex items-center justify-start overflow-hidden ">
-          {/* Checkbox - animate only when no selections exist */}
-          {hasSelectedCoins ? (
-            // Static checkbox when selections exist
-            <div className="absolute left-0 z-10 px-1">
-              <Checkbox
-                checked={selectedCoins.has(row.original.id.toString())}
-                onCheckedChange={(value) => onCoinSelect(row.original.id.toString(), !!value)}
-                aria-label="Select row"
-                className="mt-[6px] data-[state=checked]:mt-[2px]"
-              />
-            </div>
-          ) : (
-            // Animated checkbox when no selections exist - restructured to allow exit animations
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={isHovered ? 'hovered' : 'normal'}
-                className="absolute left-0 z-10 px-1"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ 
-                  opacity: isHovered ? 1 : 0, 
-                  x: isHovered ? 0 : -20 
-                }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{
-                  type: "spring",
-                  stiffness: 400,
-                  damping: 25,
-                  mass: 0.5,
-                  duration: 0.2,
-                }}
-                style={{ 
-                  pointerEvents: isHovered ? 'auto' : 'none'
-                }}
-              >
-                {isHovered && (
-                  <Checkbox
-                    checked={selectedCoins.has(row.original.id.toString())}
-                    onCheckedChange={(value) => onCoinSelect(row.original.id.toString(), !!value)}
-                    aria-label="Select row"
-                    className="mt-[6px] data-[state=checked]:mt-[2px]"
-                  />
-                )}
-              </motion.div>
-            </AnimatePresence>
-          )}
-          
-          {/* Token content - no link here, entire row will be linked */}
-          {hasSelectedCoins ? (
-            // Static position when selections exist
-            <div className="translate-x-10 opacity-90 flex items-center gap-2">
-              <div className="relative">
-                {row.original.quote.USD.price > 0 ? (
-                  // Use CoinGecko image if available, otherwise fallback to letter
-                  row.original.image ? (
-                    <Image
-                      src={row.original.image?.startsWith('http') || row.original.image?.startsWith('/') ? row.original.image : '/favicon.ico'}
-                      alt={row.original.name}
-                      className="w-[20px] h-[20px] rounded-full"
-                      width={24}
-                      height={24}
-                      onError={(e) => {
-                        // Fallback to letter-based avatar on image error
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        const parent = target.parentElement;
-                        if (parent) {
-                          parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
-                        }
-                      }}
-                    />
-                  ) : (
-                    // Fallback for missing image
-                    <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
-                      {row.original.symbol.charAt(0).toUpperCase()}
-                    </div>
-                  )
-                ) : (
-                  <Skeleton className="w-[20px] h-[20px] rounded-full" />
-                )}
-              </div>
-              <div className="font-bold text-sm">
-                {row.original.quote.USD.price > 0 ? (
-                  <span className="text-primary">{row.original.symbol.toUpperCase()}</span>
-                ) : (
-                  <Skeleton className="h-4 w-8 rounded" />
-                )}
-              </div>
-              <div className="">
-                {row.original.quote.USD.price > 0 ? (
-                  <span className="text-muted-foreground font-mono text-xs">{row.original.name}</span>
-                ) : (
-                  <Skeleton className="h-3 w-16 rounded" />
-                )}
-              </div>
-            </div>
-          ) : (
-            // Animated content when no selections exist
-            <motion.div
-              className="flex items-center gap-2"
-              animate={{ 
-                x: isHovered ? 40 : 0,
-                opacity: isHovered ? 0.9 : 1 
-              }}
-              transition={{
-                type: "spring",
-                stiffness: 400,
-                damping: 25,
-                mass: 0.5,
-                duration: 0.2,
-              }}
-            >
-              <div className="relative">
-                {row.original.quote.USD.price > 0 ? (
-                  // Use CoinGecko image if available, otherwise fallback to letter
-                  row.original.image ? (
-                    <Image
-                      src={row.original.image?.startsWith('http') || row.original.image?.startsWith('/') ? row.original.image : '/favicon.ico'}
-                      alt={row.original.name}
-                      className="w-[20px] h-[20px] rounded-full"
-                      width={24}
-                      height={24}
-                      onError={(e) => {
-                        // Fallback to letter-based avatar on image error
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        const parent = target.parentElement;
-                        if (parent) {
-                          parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
-                        }
-                      }}
-                    />
-                  ) : (
-                    // Fallback for missing image
-                    <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
-                      {row.original.symbol.charAt(0).toUpperCase()}
-                    </div>
-                  )
-                ) : (
-                  <Skeleton className="w-[20px] h-[20px] rounded-full" />
-                )}
-              </div>
-              <div className="flex flex-row items-center gap-2">
-                <div className="font-bold text-sm">
-                  {row.original.quote.USD.price > 0 ? (
-                    <span className="text-zinc-950 dark:text-white">{row.original.symbol.toUpperCase()}</span>
-                  ) : (
-                    <Skeleton className="h-4 w-8 rounded" />
-                  )}
-                </div>
-                <div className="">
-                  {row.original.quote.USD.price > 0 ? (
-                    <span className="text-muted-foreground font-mono text-xs">{row.original.name}</span>
-                  ) : (
-                    <Skeleton className="h-3 w-16 rounded" />
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </div>
-      );
-    },
-    enableSorting: false,
-    enableHiding: false,
-  },
-  {
-    id: 'token-sort',
-    accessorKey: 'name',
-    header: () => (
-      <div className="text-left flex items-center gap-1">
-        Token
-      </div>
-    ),
-    cell: () => null,
-    enableSorting: true,
-  },
-  {
-    id: 'price',
-    accessorKey: 'quote.USD.price',
-    header: () => (
-      <div className="text-left flex items-center justify-end gap-1">
-        Price
-      </div>
-    ),
-    cell: ({ row }) => (
-      <span className="font-mono text-xs">
-        {row.original.quote.USD.price > 0 ? (
-          `$${row.original.quote.USD.price.toLocaleString()}`
-        ) : (
-          <Skeleton className="h-4 w-16 rounded-full" />
-        )}
-      </span>
-    ),
-    enableSorting: true,
-  },
-  {
-    id: 'change24h',
-    accessorKey: 'quote.USD.percent_change_24h',
-    header: () => (
-      <div className="text-left flex items-center justify-end gap-1">
-        24h Change
-      </div>
-    ),
-    cell: ({ row }) => (
-      row.original.quote.USD.price > 0 ? (
-        <span className={cn(
-          "font-mono text-xs",
-          row.original.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'
-        )}>
-          {row.original.quote.USD.percent_change_24h.toFixed(2)}%
-        </span>
-      ) : (
-        <Skeleton className="h-4 w-12 rounded-full" />
-      )
-    ),
-    enableSorting: true,
-  },
-  {
-    id: 'volume',
-    accessorKey: 'quote.USD.volume_24h',
-    header: () => (
-      <div className="text-left flex items-center justify-end gap-1">
-        Volume 24h
-      </div>
-    ),
-    cell: ({ row }) => (
-      <span className="font-mono text-xs">
-        {row.original.quote.USD.price > 0 ? (
-          `$${formatLargeNumber(row.original.quote.USD.volume_24h || 0)}`
-        ) : (
-          <Skeleton className="h-4 w-16 rounded-full" />
-        )}
-      </span>
-    ),
-    enableSorting: true,
-  },
-  {
-    id: 'actions',
-    header: () => (
-      <div className="flex items-center justify-end gap-1">
-        Action
-      </div>
-    ),
-    cell: ({ row }) => (
-      <div className="flex items-center justify-end">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(e) => {
-            e.preventDefault(); // Prevent row link navigation
-            e.stopPropagation();
-            handleRemove(row.original.id);
-          }}
-          disabled={removingCoins.has(row.original.id.toString())}
-          className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
-          >
-          {removingCoins.has(row.original.id.toString()) ? (
-            <Spinner size={16} />
-          ) : (
-            <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
-          )}
-        </Button>
-      </div>
-    ),
-  },
-];
-
 export function Watchlist({ 
-  viewMode = 'watchlist',
   activeTimeScale = '7d',
   onTimeScaleChange,
   gridViewMode = 'grid',
-  onGridViewModeChange
+  onGridViewModeChange,
+  contentMode = 'cards',
+  onContentModeChange
 }: WatchlistProps) {
   const { 
     // Legacy for backward compatibility
@@ -368,75 +63,50 @@ export function Watchlist({
     selectedGroupCoins,
     selectWatchlistGroup,
     removeFromSelectedGroup,
-    removeBulkFromSelectedGroup
+    removeBulkFromSelectedGroup,
+    watchlistGroups
   } = useWatchlist()
   
   const searchParams = useSearchParams()
   const [sorting, setSorting] = useState<SortingState>([])
-  const [selectedCoins, setSelectedCoins] = useState<Set<string>>(new Set())
-  const [removingCoins, setRemovingCoins] = useState<Set<string>>(new Set())
-  const [hoveredRowId, setHoveredRowId] = useState<string | null>(null)
+  const [isCreatingWatchlist, setIsCreatingWatchlist] = useState(false)
   const coinSearchRef = useRef<CoinSearchRef>(null)
-  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  
-  // Add debounced hover clear mechanism to prevent stuck states
-  const clearHoverWithDelay = useCallback(() => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current)
-    }
-    hoverTimeoutRef.current = setTimeout(() => {
-      setHoveredRowId(null)
-    }, 150) // Small delay to prevent flickering but clear stuck states
-  }, [])
-
-  const setHoverState = useCallback((rowId: string | null) => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current)
-      hoverTimeoutRef.current = null
-    }
-    setHoveredRowId(rowId)
-  }, [])
-
-  // Clean up timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current)
-      }
-    }
-  }, [])
 
   // Get current watchlist group parameter to preserve it in navigation (same as chart-table and top-nav)
   const watchlistGroup = searchParams.get('wg')
   
-  // Filter state - increase market cap range to accommodate large coins
-  const [filters, setFilters] = useState<FilterState>({
-    searchText: "",
-    priceRange: [0, 1000000],
-    marketCapRange: [0, 10000000000000], // Updated here too
-    volumeRange: [0, 1000000000],
-    changeFilter: "all",
-    sortBy: "name",
-    sortOrder: "asc",
-  })
-  
   // Use selected group coins if available, otherwise fall back to legacy watchlist
   const currentWatchlist = selectedGroup ? selectedGroupCoins : watchlist;
-  const stableWatchlist = useMemo(() => currentWatchlist, [currentWatchlist]);
   
+  // Use extracted data and selection hooks
   const { 
-    data: coins, 
-    isLoading: isCoinsLoading, 
+    filters,
+    setFilters,
+    filteredCoins,
     error,
-    performance
-  } = useCoinGeckoWatchlistCoins(stableWatchlist);
+    handleClearAllFilters,
+  } = useWatchlistData({ watchlist: currentWatchlist });
 
-  // Log performance metrics for monitoring
-  console.log('🚀 Watchlist performance:', performance)
+  const {
+    selectedCoins,
+    removingCoins,
+    hoveredRowId,
+    setHoveredRowId,
+    handleRemove,
+    handleCoinSelect,
+    handleSelectAll,
+    handleRemoveSelected,
+    hasSelectedCoins,
+  } = useWatchlistSelection({
+    selectedGroup,
+    removeFromSelectedGroup,
+    removeFromWatchlist,
+    removeBulkFromSelectedGroup,
+    removeBulkFromWatchlist,
+  });
 
-  // Keyboard shortcuts handler
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
+  // Keyboard shortcuts handler - Memoize the handler to avoid recreating the event listener
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
       // Ignore if typing in an input or textarea
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
         return;
@@ -448,230 +118,83 @@ export function Watchlist({
       if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
         event.preventDefault()
         coinSearchRef.current?.open()
-      }
+      return;
     }
 
+    if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault()
+      onContentModeChange?.('cards')
+      return;
+    }
+
+    // "]" key for Table mode  
+    if (event.key === ']' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault()
+      onContentModeChange?.('table')
+      return;
+    }
+
+    // Watchlist mode shortcuts (only work in cards mode)
+    if (contentMode === 'cards') {
+      // "w" key for Watchlist mode
+      if (event.key.toLowerCase() === 'w' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault()
+        onGridViewModeChange?.('grid')
+        return;
+      }
+
+      // "c" key for Comparison mode  
+      if (event.key.toLowerCase() === 'e' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault()
+        onGridViewModeChange?.('chart')
+        return;
+      }
+    }
+  }, [contentMode, onGridViewModeChange, onContentModeChange])
+
+  useEffect(() => {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [handleKeyDown])
 
-  // Create optimistic loading coins while data is being fetched
-  const optimisticCoins = useMemo(() => {
-    if (isCoinsLoading && !coins) {
-      // Show skeleton rows during initial load
-      return stableWatchlist.map(coinId => ({
-        id: coinId,
-        name: 'Loading...',
-        symbol: 'Loading...',
-        image: '', // Empty image triggers skeleton loading
-        slug: `coin-${coinId}`,
-        cmc_rank: 0,
-        circulating_supply: 0,
-        max_supply: null,
-        quote: {
-          USD: {
-            price: 0, // 0 price triggers skeleton loading
-            volume_24h: 0,
-            market_cap: 0,
-            percent_change_24h: 0,
-          }
-        }
-      } as CoinMarketData))
-    }
-    return coins || []
-  }, [isCoinsLoading, coins, stableWatchlist])
+  // Create a stable handleSelectAll wrapper to avoid column recreations
+  const handleSelectAllWrapper = useCallback((checked: boolean) => {
+    const coinIds = checked ? filteredCoins.map(coin => coin.id.toString()) : [];
+    handleSelectAll(checked, coinIds);
+  }, [filteredCoins, handleSelectAll]);
 
-  // Filter and sort coins based on filter state
-  const filteredCoins = useMemo(() => {
-    if (!optimisticCoins.length) return [];
-    
-    console.log('Raw coins data:', optimisticCoins);
-    console.log('Current filters:', filters);
-    
-    const filtered = optimisticCoins.filter(coin => {
-      // Search filter
-      if (filters.searchText) {
-        const searchLower = filters.searchText.toLowerCase();
-        if (!coin.name.toLowerCase().includes(searchLower) && 
-            !coin.symbol.toLowerCase().includes(searchLower)) {
-          return false;
-        }
-      }
-      
-      // Price range filter
-      if (coin.quote.USD.price < filters.priceRange[0] || 
-          coin.quote.USD.price > filters.priceRange[1]) {
-        console.log(`Filtering out ${coin.name} due to price: ${coin.quote.USD.price}`);
-        return false;
-      }
-      
-      // Market cap range filter
-      if (coin.quote.USD.market_cap < filters.marketCapRange[0] || 
-          coin.quote.USD.market_cap > filters.marketCapRange[1]) {
-        console.log(`Filtering out ${coin.name} due to market cap: ${coin.quote.USD.market_cap}`);
-        return false;
-      }
-      
-      // 24h change filter
-      if (filters.changeFilter === "positive" && coin.quote.USD.percent_change_24h <= 0) {
-        return false;
-      }
-      if (filters.changeFilter === "negative" && coin.quote.USD.percent_change_24h >= 0) {
-        return false;
-      }
-      
-      return true;
-    });
-    
-    console.log('Filtered coins:', filtered);
-    
-    // Sort coins
-    filtered.sort((a, b) => {
-      let aValue, bValue;
-      
-      switch (filters.sortBy) {
-        case "price":
-          aValue = a.quote.USD.price;
-          bValue = b.quote.USD.price;
-          break;
-        case "change":
-          aValue = a.quote.USD.percent_change_24h;
-          bValue = b.quote.USD.percent_change_24h;
-          break;
-        case "marketCap":
-          aValue = a.quote.USD.market_cap;
-          bValue = b.quote.USD.market_cap;
-          break;
-        case "volume":
-          aValue = a.quote.USD.volume_24h;
-          bValue = b.quote.USD.volume_24h;
-          break;
-        default: // "name"
-          aValue = a.name.toLowerCase();
-          bValue = b.name.toLowerCase();
-      }
-      
-      if (filters.sortOrder === "desc") {
-        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
-      } else {
-        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
-      }
-    });
-    
-    return filtered;
-  }, [optimisticCoins, filters]);
-
-  // Create coin images array for token stacks
-  // const coinImages = useMemo(() => {
-  //   return filteredCoins
-  //     .filter(coin => coin.image && (coin.image.startsWith('http') || coin.image.startsWith('/')))
-  //     .slice(0, 5) // Limit to first 5 coins
-  //     .map(coin => ({
-  //       imageUrl: coin.image!, // Add non-null assertion since we filtered for truthy values
-  //       profileUrl: `/charts/${coin.id}`
-  //     }))
-  // }, [filteredCoins])
-
-  // Create stable remove handler with optimistic updates
-  const handleRemove = useCallback(async (coinId: number | string) => {
-    const coinIdStr = coinId.toString();
-    setRemovingCoins(prev => new Set([...prev, coinIdStr]));
-    
-    try {
-      // Use group-specific remove function if a group is selected
-      if (selectedGroup) {
-        await removeFromSelectedGroup(coinIdStr);
-      } else {
-        await removeFromWatchlist(coinIdStr);
-      }
-      
-      toast({
-        title: "Removed",
-        description: "Coin removed from watchlist",
-      });
-    } finally {
-      setRemovingCoins(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(coinIdStr);
-        return newSet;
-      });
-    }
-  }, [selectedGroup, removeFromSelectedGroup, removeFromWatchlist]);
-
-  // Selection handlers
-  const handleCoinSelect = useCallback((coinId: string, selected: boolean) => {
-    setSelectedCoins(prev => {
-      const newSet = new Set(prev);
-      if (selected) {
-        newSet.add(coinId);
-      } else {
-        newSet.delete(coinId);
-      }
-      return newSet;
-    });
-  }, []);
-
-  const handleSelectAll = useCallback((checked: boolean) => {
-    if (checked) {
-      setSelectedCoins(new Set(filteredCoins.map(coin => coin.id.toString())));
+  // Calculate counter for toggle button
+  const toggleCounter = useMemo(() => {
+    if (contentMode === 'table') {
+      // Show number of available watchlists
+      return watchlistGroups.length;
     } else {
-      setSelectedCoins(new Set());
+      // Show number of tokens in selected watchlist
+      return filteredCoins.length;
     }
-  }, [filteredCoins]);
+  }, [contentMode, watchlistGroups.length, filteredCoins.length]);
 
-  const handleRemoveSelected = useCallback(async () => {
-    const coinIdsToRemove = Array.from(selectedCoins);
-    setRemovingCoins(new Set(coinIdsToRemove));
-    
-    try {
-      // Use group-specific bulk remove function if a group is selected
-      if (selectedGroup) {
-        await removeBulkFromSelectedGroup(coinIdsToRemove);
-      } else {
-        await removeBulkFromWatchlist(coinIdsToRemove);
-      }
-      setSelectedCoins(new Set());
-      toast({
-        title: "Success",
-        description: `Removed ${selectedCoins.size} coins from watchlist`,
-      });
-    } catch {
-      toast({
-        title: "Error",
-        description: "Failed to remove selected coins",
-        variant: "destructive",
-      });
-    } finally {
-      setRemovingCoins(new Set());
+  // Get the selected group's color theme for the counter badge
+  const selectedGroupColorTheme = useMemo(() => {
+    const groupWithColor = selectedGroup as { color?: string } | null;
+    const groupColor = groupWithColor?.color;
+    if (!groupColor) {
+      return COLOR_THEMES.default;
     }
-  }, [selectedCoins, selectedGroup, removeBulkFromSelectedGroup, removeBulkFromWatchlist]);
+    return COLOR_THEMES[groupColor as keyof typeof COLOR_THEMES] || COLOR_THEMES.default;
+  }, [selectedGroup]);
 
-  // Filter handlers
-  const handleClearAllFilters = useCallback(() => {
-    setFilters({
-      searchText: "",
-      priceRange: [0, 1000000],
-      marketCapRange: [0, 10000000000000], // Updated here too
-      volumeRange: [0, 1000000000],
-      changeFilter: "all",
-      sortBy: "name",
-      sortOrder: "asc",
-    });
-  }, []);
-
-  const hasSelectedCoins = selectedCoins.size > 0;
-
-  // Memoize columns with hover state
-  const columns = useMemo(() => createColumns(
+  // Memoize columns with hover state - Split dependencies to reduce recalculations
+  const columns = useMemo(() => createWatchlistColumns({
     handleRemove, 
     selectedCoins, 
-    handleCoinSelect, 
-    handleSelectAll, 
-    filteredCoins.length,
+    onCoinSelect: handleCoinSelect, 
+    onSelectAll: handleSelectAllWrapper, 
+    totalCoins: filteredCoins.length,
     removingCoins,
     hoveredRowId,
     hasSelectedCoins
-  ), [handleRemove, selectedCoins, handleCoinSelect, handleSelectAll, filteredCoins.length, removingCoins, hoveredRowId, hasSelectedCoins]);
+  }), [handleRemove, selectedCoins, handleCoinSelect, handleSelectAllWrapper, filteredCoins.length, removingCoins, hoveredRowId, hasSelectedCoins]);
 
   const table = useReactTable({
     data: filteredCoins,
@@ -702,28 +225,42 @@ export function Watchlist({
   }
 
   return (
+    <TooltipProvider>
     <div className="space-y-6 px-4">
-      {/* Watchlists Grid - Always show */}
-      <WatchlistsGrid 
-        onSelectWatchlist={selectWatchlistGroup}
-        viewMode={gridViewMode}
-        activeTimeScale={activeTimeScale}
-        onTimeScaleChange={onTimeScaleChange}
-        onViewModeChange={onGridViewModeChange}
-      />
-      
-      {/* Conditional Content Based on View Mode */}
-      {viewMode === 'comparison' ? (
-        // Comparison mode shows the watchlist table
-        <div className="space-y-4">
-          <WatchlistTable activeTimeScale={activeTimeScale} />
+        {/* Unified Header */}
+        <div className="flex items-center justify-between">
+          {/* Left side - Tabs in cards mode, Filters in table mode */}
+          {contentMode === 'cards' ? (
+            <div className="flex items-center gap-4">          
+              <Tabs value={gridViewMode} onValueChange={(value) => {
+                const newMode = value as 'grid' | 'chart'
+                onGridViewModeChange?.(newMode)
+              }}>
+                <Tooltip>
+                <TooltipTrigger asChild>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="grid" className="flex items-center gap-2" title="Switch to Watchlists (W)">
+                    <IconStarFill className="h-4 w-4 fill-muted-foreground" />
+                    Watchlists
+                  </TabsTrigger>
+                  <TabsTrigger value="chart" className="flex items-center gap-2" title="Switch to Comparison (C)">
+                    <IconCircleDottedAndCircle className="h-4 w-4 fill-muted-foreground" />
+                    Comparison
+                  </TabsTrigger>
+                </TabsList>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="start" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+                  <span>Switch between Watchlists and Comparison</span>
+                  <Kbd>W</Kbd>
+                  <span>or</span>
+                  <Kbd>E</Kbd>
+                </TooltipContent>
+              </Tooltip>
+              </Tabs>
         </div>
       ) : (
-        // Watchlist mode shows individual coins
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-2">
-
-          <div className="flex justify-start items-center gap-2">
+          /* Table mode - Show filters on the left */
+          <div className="flex items-center gap-2">
           <WatchlistFilters
             searchText={filters.searchText}
             priceRange={filters.priceRange}
@@ -742,162 +279,159 @@ export function Watchlist({
             onSortByChange={(value) => setFilters(prev => ({ ...prev, sortBy: value }))}
             onSortOrderChange={(value) => setFilters(prev => ({ ...prev, sortOrder: value }))}
             onClearAllFilters={handleClearAllFilters}
-            onSelectAll={handleSelectAll}
+            onSelectAll={handleSelectAllWrapper}
             onRemoveSelected={handleRemoveSelected}
             isRemoving={removingCoins.size > 0}
           />
-            {/* {coinImages.length > 0 && (
-              <AvatarCircles 
-                avatarUrls={coinImages}
-                numPeople={Math.max(0, filteredCoins.length - coinImages.length)}
-                className="scale-[0.6]"
-              />
-            )} */}
           </div>
-          <CoinSearch ref={coinSearchRef} />
-          </div>
-
+        )}
+        
+        {/* Right side - Action buttons and shortcuts */}
+        <div className="flex items-center justify-between gap-4 flex-1">
+          <div className="flex items-center gap-2"></div>
+          {/* Action buttons - right side */}
+          <div className="flex items-center gap-2">
+                        {/* Content Mode Toggle */}
+                        {gridViewMode !== 'chart' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onContentModeChange?.(contentMode === 'cards' ? 'table' : 'cards')}
+                    className={`group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80 relative border-2 border-opacity-50 ${selectedGroupColorTheme.border}`}
+                  >
+                    {contentMode === 'cards' ? (
+                      <IconRectangleGrid2x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
+                    ) : (
+                      <IconRectangleGrid1x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
+                    )}
+                    {/* Counter Badge */}
+                    <span className={`absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full text-[10px] font-bold flex items-center justify-center leading-none font-diatype-mono shadow-md text-white
+                    ${selectedGroupColorTheme.bg}`}>
+                      {toggleCounter}
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+                  <span>Switch between Grid and List</span>
+                    <Kbd>[</Kbd>
+                    <span>/</span>
+                    <Kbd>]</Kbd>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {/* Actions Menu */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
+                >
+                  <IconEllipsis className="h-4 w-4 fill-muted-foreground rotate-90" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-1 rounded-xl bg-white dark:bg-zinc-900" align="end" side="bottom">
+                <div className="space-y-1">
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={() => {
+                       setIsCreatingWatchlist(true)
+                     }}
+                     className="w-full justify-start gap-2 rounded-md"
+                   >
+                     <IconWidgetSmallBadgePlus className="h-3.5 w-3.5 fill-muted-foreground" />
+                     <span>Create Watchlist</span>
+                     <div className="ml-auto flex items-center gap-1">
+                       <Kbd className="text-xs">Shift</Kbd>
+                       <Kbd className="text-xs">N</Kbd>
+                     </div>
+                   </Button>
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={() => {
+                       coinSearchRef.current?.open()
+                     }}
+                     className="w-full justify-start gap-2 rounded-md"
+                   >
+                     <IconBookmarkFill className="h-3.5 w-3.5 fill-muted-foreground" />
+                     <span>Add Token</span>
+                     <div className="ml-auto flex items-center gap-1">
+                       <Kbd className="text-xs">Shift</Kbd>
+                       <Kbd className="text-xs">A</Kbd>
+                     </div>
+                   </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
           
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      {contentMode === 'cards' ? (
+        /* Cards Mode - Use Tabs */
+        <Tabs value={gridViewMode}>
+          <TabsContent value="grid" className="mt-0">
+            <WatchlistsGrid 
+              onSelectWatchlist={selectWatchlistGroup}
+              viewMode="grid"
+              activeTimeScale={activeTimeScale}
+              onTimeScaleChange={onTimeScaleChange}
+              onViewModeChange={onGridViewModeChange}
+            />
+          </TabsContent>
+
+          <TabsContent value="chart" className="mt-0">
+            {/* Comparison Mode */}
+            <div className="space-y-4">
+              <WatchlistsGrid 
+                onSelectWatchlist={selectWatchlistGroup}
+                viewMode="chart"
+                activeTimeScale={activeTimeScale}
+                onTimeScaleChange={onTimeScaleChange}
+                onViewModeChange={onGridViewModeChange}
+              />
+              <WatchlistTable activeTimeScale={activeTimeScale} />
+            </div>
+          </TabsContent>
+        </Tabs>
+      ) : (
+        /* Table Mode - Direct render without tabs, filters now in header */
+        <div className="space-y-4">
           {/* Show empty state if no coins after filtering */}
           {!watchlist.length ? (
-            <div className="py-6 border border-dashed border-border rounded-lg">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <div className="text-center">
-                  <h3 className="font-medium">No coins in watchlist</h3>
-                  <p className="text-sm text-muted-foreground">Add coins to track their performance</p>
-                </div>
-              </div>
-            </div>
+            <WatchlistEmptyState type="no-coins" />
           ) : filteredCoins.length === 0 ? (
-            <div className="py-6 border border-dashed border-border rounded-lg">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <div className="text-center">
-                  <h3 className="font-medium">No coins match your filters</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Try adjusting your search or filter criteria
-                  </p>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleClearAllFilters}
-                    className="mt-2"
-                  >
-                    Clear all filters
-                  </Button>
-                </div>
-              </div>
-            </div>
+            <WatchlistEmptyState type="no-filtered-coins" onClearFilters={handleClearAllFilters} />
           ) : (
-            <div className="rounded-[10px] bg-primary/5 overflow-hidden p-0.5">
-              {/* Header - adjust grid to account for merged columns */}
-              <div className="px-3 py-1">
-                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  {table.getHeaderGroups().map(headerGroup => (
-                    <div key={headerGroup.id} className="grid grid-cols-5 gap-4">
-                      {headerGroup.headers.slice(0, 1).map(header => ( // Show first header (select/token merged)
-                        <div 
-                          key={header.id}
-                          className="flex items-center gap-2 cursor-pointer select-none hover:text-foreground"
-                          onClick={() => table.getColumn('token-sort')?.toggleSorting()} // Sort by token
-                        >
-                          <span>Token</span>
-                          {{
-                            asc: ' ↑',
-                            desc: ' ↓',
-                          }[table.getColumn('token-sort')?.getIsSorted() as string] ?? null}
-                        </div>
-                      ))}
-                      {headerGroup.headers.slice(2).map(header => ( // Skip the hidden token-sort column
-                        <div 
-                          key={header.id}
-                          className={cn(
-                            "flex items-center gap-1",
-                            header.column.getCanSort() ? "cursor-pointer select-none hover:text-foreground" : "",
-                            header.id === 'actions' ? "justify-end" : "justify-start"
-                          )}
-                          onClick={header.column.getToggleSortingHandler()}
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          {{
-                            asc: ' ↑',
-                            desc: ' ↓',
-                          }[header.column.getIsSorted() as string] ?? null}
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Table Body */}
-              <div 
-                className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden"
-                onMouseLeave={() => clearHoverWithDelay()}
-              >
-                {table.getRowModel().rows.map(row => {
-                  const isSelected = selectedCoins.has(row.original.id.toString());
-                  const hasAnySelections = selectedCoins.size > 0;
-                  
-                  return (
-                    <Link 
-                      key={row.id}
-                      href={watchlistGroup ? `/charts/${row.original.id}?wg=${watchlistGroup}` : `/charts/${row.original.id}`}
-                      className={cn(
-                        "grid grid-cols-5 gap-4 px-4 py-2.5 border-b last:border-b-0 hover:bg-primary/[0.02] transition-opacity duration-200 cursor-pointer",
-                        hasAnySelections ? (isSelected ? "opacity-100" : "opacity-40") : "opacity-100"
-                      )}
-                    >
-                      {/* First cell - merged select + token with specific hover */}
-                      <div 
-                        className="flex items-center"
-                        onMouseEnter={() => setHoverState(row.id)}
-                        onMouseLeave={() => clearHoverWithDelay()}
-                        onClick={(e) => {
-                          e.preventDefault(); // Always prevent navigation for first cell
-                          e.stopPropagation();
-                          
-                          // Toggle checkbox selection when clicking anywhere in first cell
-                          const isCurrentlySelected = selectedCoins.has(row.original.id.toString());
-                          handleCoinSelect(row.original.id.toString(), !isCurrentlySelected);
-                        }}
-                      >
-                        {(() => {
-                          const firstCell = row.getVisibleCells()[0];
-                          return firstCell && flexRender(firstCell.column.columnDef.cell, firstCell.getContext());
-                        })()}
-                      </div>
-                      
-                      {/* Rest of the cells (skip the hidden token-sort column and removed market cap) */}
-                      {row.getVisibleCells().slice(2, -1).map(cell => ( // Exclude last cell (actions)
-                        <div 
-                          key={cell.id}
-                          className="flex items-center justify-start"
-                        >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </div>
-                      ))}
-                      
-                      {/* Actions cell - prevent navigation */}
-                      <div 
-                        className="flex items-center justify-end"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                      >
-                        {(() => {
-                          const lastCell = row.getVisibleCells()[row.getVisibleCells().length - 1];
-                          return lastCell && flexRender(lastCell.column.columnDef.cell, lastCell.getContext());
-                        })()}
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
+            <WatchlistTableBody
+              table={table}
+              selectedCoins={selectedCoins}
+              watchlistGroup={watchlistGroup}
+              hoveredRowId={hoveredRowId}
+              onCoinSelect={handleCoinSelect}
+              onSetHover={setHoveredRowId}
+            />
           )}
         </div>
       )}
+
+        {/* Create Watchlist Modal */}
+        <CreateWatchlist 
+          isOpen={isCreatingWatchlist} 
+          onClose={() => setIsCreatingWatchlist(false)} 
+        />
+
+        {/* Hidden CoinSearch for ref access */}
+        <div className="sr-only">
+          <CoinSearch ref={coinSearchRef} />
+        </div>
     </div>
+    </TooltipProvider>
   )
 }

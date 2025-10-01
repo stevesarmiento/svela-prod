@@ -6,7 +6,7 @@ import { cn } from "@v1/ui/cn"
 import Image from "next/image"
 import Link from "next/link"
 import NumberFlow from '@number-flow/react'
-import { useMemo, useEffect, useRef } from 'react'
+import { useMemo } from 'react'
 import { 
   IconLaurelLeading, 
   IconLaurelTrailing 
@@ -14,12 +14,11 @@ import {
 import { buildWatchlistUrl } from '@/lib/navigation-utils'
 import { useQueryState } from 'nuqs'
 import {
-  createChart,
-  ColorType,
   Time,
   LastPriceAnimationMode,
   LineSeries,
 } from 'lightweight-charts'
+import { useOptimizedChart } from '@/hooks/use-optimized-chart'
 
 interface PriceCardProps {
   coingeckoId: string // CoinGecko ID (e.g., "bitcoin", "ethereum")
@@ -52,7 +51,6 @@ export function PriceCard({
 }: PriceCardProps) {
   const [selectedGroupSlug] = useQueryState('wg', { defaultValue: '' })
   const isPositive = priceChangePercentage24h >= 0
-  const chartContainerRef = useRef<HTMLDivElement>(null)
 
   const chartData = useMemo(() => {
     // Validate currentPrice to prevent NaN values
@@ -92,60 +90,29 @@ export function PriceCard({
     return historicalPoints.sort((a, b) => (a.time as number) - (b.time as number));
   }, [historical, currentPrice]);
 
-  useEffect(() => {
-    if (!chartContainerRef.current || !chartData.length) return
-
-    const chart = createChart(chartContainerRef.current, {
-      handleScale: false,
-      handleScroll: false,
-      layout: {
-        background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "transparent",
-        attributionLogo: false,
-      },
-      grid: {
-        vertLines: { visible: false },
-        horzLines: { visible: false },
-      },
-      rightPriceScale: {
-        borderVisible: false,
-        visible: false,
-      },
-      timeScale: {
-        visible: false,
-        borderVisible: false,
-      },
-    })
-
-    const lineSeries = chart.addSeries(LineSeries, {
-      lineWidth: 2,
-      lastValueVisible: false,
-      visible: true,
-      priceLineVisible: false,
-      color: isPositive ? "#10b981" : "#ef4444",
-      lastPriceAnimation: LastPriceAnimationMode.Continuous,
-    })
-    
-    lineSeries.setData(chartData)
-    chart.timeScale().fitContent()
-
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: 60,
+  // ✅ OPTIMIZED: Using useOptimizedChart hook instead of manual useEffect chart creation
+  // Eliminates code duplication and follows React best practices
+  const { chartContainerRef } = useOptimizedChart({
+    height: 60,
+    showGrid: false,
+    showTimeScale: false,
+    showRightPriceScale: false,
+    onChartReady: (chart) => {
+      if (chartData.length > 0) {
+        const lineSeries = chart.addSeries(LineSeries, {
+          lineWidth: 2,
+          lastValueVisible: false,
+          visible: true,
+          priceLineVisible: false,
+          color: isPositive ? "#10b981" : "#ef4444",
+          lastPriceAnimation: LastPriceAnimationMode.Continuous,
         })
+        
+        lineSeries.setData(chartData)
+        chart.timeScale().fitContent()
       }
     }
-
-    window.addEventListener("resize", handleResize)
-    handleResize()
-
-    return () => {
-      window.removeEventListener("resize", handleResize)
-      chart.remove()
-    }
-  }, [chartData, isPositive]);
+  })
 
   return (
     <Link href={buildWatchlistUrl(`/charts/${coingeckoId}`, selectedGroupSlug)} className="block">
@@ -185,7 +152,7 @@ export function PriceCard({
             </div>
             
             <div className="flex flex-col items-end">
-              <span className="text-sm font-mono font-semibold text-gray-900 dark:text-white">
+              <span className="text-sm font-diatype-mono font-semibold text-gray-900 dark:text-white">
                 <NumberFlow
                   value={currentPrice}
                   format={{
@@ -236,13 +203,13 @@ export function PriceCard({
               {marketCap && (
                 <div>
                   <span className="text-gray-500 dark:text-zinc-400 block mb-1">Market Cap</span>
-                  <p className="font-mono text-gray-900 dark:text-white">${formatLargeNumber(marketCap)}</p>
+                  <p className="font-diatype-mono text-gray-900 dark:text-white">${formatLargeNumber(marketCap)}</p>
                 </div>
               )}
               {totalVolume && (
                 <div>
                   <span className="text-gray-500 dark:text-zinc-400 block mb-1">Volume 24h</span>
-                  <p className="font-mono text-gray-900 dark:text-white">${formatLargeNumber(totalVolume)}</p>
+                  <p className="font-diatype-mono text-gray-900 dark:text-white">${formatLargeNumber(totalVolume)}</p>
                 </div>
               )}
             </div>

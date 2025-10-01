@@ -41,7 +41,7 @@ export const AvatarCircles = ({
       ))}
       {(numPeople ?? 0) > 0 && (
         <div
-          className="flex h-8 w-8 items-center justify-center rounded-full border dark:border-white/10 border-zinc-800/10 dark:bg-background bg-zinc-950/5 backdrop-blur-xl text-center text-sm font-bold text-white font-mono"
+          className="flex h-8 w-8 items-center justify-center rounded-full border dark:border-white/10 border-zinc-800/10 dark:bg-background bg-zinc-950/5 backdrop-blur-xl text-center text-sm font-bold text-white font-diatype-mono"
         >
           <span className="opacity-50 text-xs">+</span>
           {numPeople}

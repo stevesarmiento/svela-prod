@@ -199,7 +199,7 @@ export function ComparisonCard({
                     </div>
                     
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-mono">
+                      <span className="text-sm font-diatype-mono">
                         <NumberFlow
                           value={coin.currentPrice}
                           format={{
@@ -237,13 +237,13 @@ export function ComparisonCard({
             <div className="mt-4 grid grid-cols-2 gap-4 text-xs">
               <div>
                 <span className="text-zinc-700">Total Market Cap</span>
-                <p className="font-mono text-sm">
+                <p className="font-diatype-mono text-sm">
                   ${formatLargeNumber(coins.reduce((sum, coin) => sum + (coin.marketCap || 0), 0))}
                 </p>
               </div>
               <div>
                 <span className="text-zinc-700">Total Volume 24h</span>
-                <p className="font-mono text-sm">
+                <p className="font-diatype-mono text-sm">
                   ${formatLargeNumber(coins.reduce((sum, coin) => sum + (coin.totalVolume || 0), 0))}
                 </p>
               </div>
