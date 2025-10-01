@@ -43,13 +43,19 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
-      - name: Clean workspace links
+      - name: Clean workspace completely  
         run: |
-          rm -rf node_modules/@arma 2>/dev/null || true
-          find packages/arma -name node_modules -type d -exec rm -rf {} + 2>/dev/null || true
+          echo "Cleaning workspace..."
+          rm -rf node_modules 2>/dev/null || true
+          rm -rf bun.lockb 2>/dev/null || true
+          find packages/arma -name "node_modules" -type d -exec rm -rf {} + 2>/dev/null || true
+          find packages/arma -name "dist" -type d -exec rm -rf {} + 2>/dev/null || true
+          echo "Workspace cleaned completely"
 
-      - name: Install dependencies
-        run: bun install
+      - name: Install dependencies (with retry)
+        run: |
+          echo "Installing dependencies..."
+          bun install || (echo "First install failed, cleaning and retrying..." && rm -rf node_modules && bun install)
 
       - name: Build all packages
         run: bun run build
