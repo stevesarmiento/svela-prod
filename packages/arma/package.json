@@ -14,15 +14,13 @@
     "./connector": "./connector/src/index.ts",
     "./sdk": "./sdk/src/index.ts",
     "./jupiter": "./jupiter/src/index.ts",
-    "./providers": "./providers/src/index.ts",
-    "./ui-primitives": "./ui-primitives/src/index.ts"
+    "./providers": "./providers/src/index.ts"
   },
   "dependencies": {
     "@arma/connector": "workspace:*",
     "@arma/sdk": "workspace:*",
     "@arma/jupiter": "workspace:*", 
-    "@arma/providers": "workspace:*",
-    "@arma/ui-primitives": "workspace:*"
+    "@arma/providers": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

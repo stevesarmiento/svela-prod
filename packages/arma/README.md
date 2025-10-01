@@ -4,11 +4,10 @@ This package contains Web3 and Solana development tools imported and configured 
 
 ## Sub-packages
 
-- **connector** (`@arma/connector`) - Headless wallet connector client and React provider built on Wallet Standard
+- **connector** (`@arma/connector`) - Headless wallet connector client and React provider with built-in UI primitives
 - **sdk** (`@arma/sdk`) - React hooks for Solana development with essential hooks for balance, transactions, swaps, etc.
 - **jupiter** (`@arma/jupiter`) - Jupiter aggregator integration for token swaps  
 - **providers** (`@arma/providers`) - Centralized provider registry (Jupiter and future providers)
-- **ui-primitives** (`@arma/ui-primitives`) - Framework-agnostic, SSR-safe UI primitive components
 
 ## Usage
 
@@ -28,7 +27,7 @@ import { createJupiter } from '@arma/jupiter'
 import { createJupiter, createProviders } from '@arma/providers'
 
 // UI components
-import { Dialog, DropdownRoot, TabsRoot } from '@arma/ui-primitives'
+// UI primitives are now included directly in @arma/connector
 ```
 
 ### Via individual sub-packages:

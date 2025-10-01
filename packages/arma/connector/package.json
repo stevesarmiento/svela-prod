@@ -2,13 +2,21 @@
   "name": "@arma/connector",
   "version": "0.0.0",
   "description": "Headless wallet connector client and React provider built on Wallet Standard",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
   },
+  "files": ["dist"],
   "scripts": {
-    "clean": "rm -rf .turbo node_modules",
+    "build": "tsup",
+    "clean": "rm -rf .turbo node_modules dist",
     "lint": "biome check .",
     "format": "biome --write .",
     "typecheck": "tsc --noEmit"
@@ -22,7 +30,9 @@
     }
   },
   "dependencies": {
-    "@arma/ui-primitives": "workspace:*",
+    "@radix-ui/react-dialog": "^1.0.5",
+    "@radix-ui/react-dropdown-menu": "^2.0.6",
+    "@radix-ui/react-slot": "^1.0.2",
     "@solana-mobile/wallet-standard-mobile": "^0.3.0",
     "@wallet-standard/app": "^1.0.0",
     "@wallet-standard/base": "^1.0.0",
@@ -30,6 +40,7 @@
   },
   "devDependencies": {
     "@types/react": "^18.0.0",
+    "tsup": "^8.0.0",
     "typescript": "^5.6.3"
   },
   "license": "MIT"
