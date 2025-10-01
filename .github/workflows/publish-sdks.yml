@@ -43,6 +43,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
+      - name: Clean workspace links
+        run: |
+          rm -rf node_modules/@arma 2>/dev/null || true
+          find packages/arma -name node_modules -type d -exec rm -rf {} + 2>/dev/null || true
+
       - name: Install dependencies
         run: bun install
 
