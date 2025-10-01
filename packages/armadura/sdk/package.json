@@ -1,6 +1,6 @@
 {
-  "name": "@arma/sdk",
-  "version": "0.0.0",
+  "name": "@armadura/sdk",
+  "version": "0.1.2",
   "description": "React hooks for Solana development - MVP with essential hooks only",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -40,7 +40,6 @@
     "@tanstack/react-query": { "optional": true }
   },
   "dependencies": {
-    "@arma/connector": "workspace:*",
     "@solana-program/compute-budget": "^0.3.0",
     "@solana-program/system": "^0.7.0",
     "@solana-program/token": "^0.5.1",
@@ -50,9 +49,7 @@
     "@solana/kit": "^2.0.0",
     "@wallet-standard/app": "^1.0.0",
     "@wallet-standard/base": "^1.0.0",
-    "@wallet-standard/features": "^1.0.0",
-    "bs58": "^6.0.0",
-    "zod": "^3.22.4"
+    "@wallet-standard/features": "^1.0.0"
   },
   "devDependencies": {
     "@testing-library/react": "^14.0.0",

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { useArmaClient, useSwap, useBalance } from '@arma/sdk'
+import { useArmaClient, useSwap, useBalance } from '@armadura/sdk'
 import { Button } from '@v1/ui/button'
 import { Card } from '@v1/ui/card'
 import { Badge } from '@v1/ui/badge'

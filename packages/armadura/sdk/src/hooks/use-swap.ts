@@ -59,8 +59,8 @@ export function useSwap(options: UseSwapOptions = {}): UseSwapReturn {
       
       const build = await provider.build({ 
         quote, 
-        userPublicKey: wallet.address as string,
-        capabilities: wallet.capabilities
+        userPublicKey: wallet.selectedAccount as string,
+        capabilities: {}
       }) as SwapBuild
       let result
       if (build.kind === 'instructions') {

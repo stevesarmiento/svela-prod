@@ -4,10 +4,10 @@ This package contains Web3 and Solana development tools imported and configured 
 
 ## Sub-packages
 
-- **connector** (`@arma/connector`) - Headless wallet connector client and React provider with built-in UI primitives
-- **sdk** (`@arma/sdk`) - React hooks for Solana development with essential hooks for balance, transactions, swaps, etc.
-- **jupiter** (`@arma/jupiter`) - Jupiter aggregator integration for token swaps  
-- **providers** (`@arma/providers`) - Centralized provider registry (Jupiter and future providers)
+- **connector** (`@armadura/connector`) - Headless wallet connector client and React provider with built-in UI primitives
+- **sdk** (`@armadura/sdk`) - React hooks for Solana development with essential hooks for balance, transactions, swaps, etc.
+- **jupiter** (`@armadura/jupiter`) - Jupiter aggregator integration for token swaps  
+- **providers** (`@armadura/providers`) - Centralized provider registry (Jupiter and future providers)
 
 ## Usage
 
@@ -15,27 +15,27 @@ This package contains Web3 and Solana development tools imported and configured 
 
 ```typescript
 // Wallet connection
-import { ConnectorProvider, useConnector, ConnectButton } from '@arma/connector'
+import { ConnectorProvider, useConnector, ConnectButton } from '@armadura/connector'
 
 // Solana hooks  
-import { ArmaProvider, useBalance, useTransaction, useSwap } from '@arma/sdk'
+import { ArmaProvider, useBalance, useTransaction, useSwap } from '@armadura/sdk'
 
 // Jupiter swaps
-import { createJupiter } from '@arma/jupiter'
+import { createJupiter } from '@armadura/jupiter'
 
 // All providers
-import { createJupiter, createProviders } from '@arma/providers'
+import { createJupiter, createProviders } from '@armadura/providers'
 
 // UI components
-// UI primitives are now included directly in @arma/connector
+// UI primitives are now included directly in @armadura/connector
 ```
 
 ### Via individual sub-packages:
 
 ```typescript
-import { ConnectorProvider, useConnector } from '@arma/connector'
-import { useBalance, useSwap } from '@arma/sdk' 
-import { createJupiter } from '@arma/jupiter'
+import { ConnectorProvider, useConnector } from '@armadura/connector'
+import { useBalance, useSwap } from '@armadura/sdk' 
+import { createJupiter } from '@armadura/jupiter'
 ```
 
 ## Development

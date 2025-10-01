@@ -14,7 +14,7 @@ export interface UseWalletAddressReturn {
 export function useWalletAddress(): UseWalletAddressReturn {
   const { wallet } = useArmaClient()
 
-  const addressString = wallet.address ?? null
+  const addressString = wallet.selectedAccount ?? null
   const addressParsed = useMemo(() => {
     if (!addressString) return null
     try {

@@ -2,7 +2,7 @@
 
 import { useMutation } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
-import { useWallet, useNetwork } from '../core/arma-provider'
+import { useArmaClient } from '../core/arma-provider'
 import { getSharedRpc, releaseRpcConnection } from '../core/rpc-manager'
 import { type Address, type Lamports } from '@solana/kit'
 
@@ -66,23 +66,22 @@ export function useAirdrop(
   initialAddressInput: string = '',
   initialAmountInput: string = '1'
 ): UseAirdropReturn {
-  const wallet = useWallet()
-  const network = useNetwork()
+  const { wallet, cluster } = useArmaClient()
   
-  const [addressInput, setAddressInput] = useState(initialAddressInput || wallet.address || '')
+  const [addressInput, setAddressInput] = useState(initialAddressInput || wallet.selectedAccount || '')
   const [amountInput, setAmountInput] = useState(initialAmountInput)
   
   useEffect(() => {
-    if (!addressInput && wallet.address) {
-      setAddressInput(wallet.address)
+    if (!addressInput && wallet.selectedAccount) {
+      setAddressInput(wallet.selectedAccount)
     }
-  }, [wallet.address, addressInput])
+  }, [wallet.selectedAccount, addressInput])
 
   useEffect(() => {
     return () => {
-      releaseRpcConnection(network.rpcUrl)
+      releaseRpcConnection(cluster.rpcUrl)
     }
-  }, [network.rpcUrl])
+  }, [cluster.rpcUrl])
 
   const mutation = useMutation({
     mutationKey: ['airdrop'],
@@ -93,13 +92,12 @@ export function useAirdrop(
       try {
         const normalizedAddress = normalizeAddress(address)
         
-        if (network.isMainnet) {
+        if (cluster.cluster === 'mainnet-beta') {
           throw new Error('Airdrops are not available on mainnet')
         }
         
         const rpcEndpoints = [
-          network.rpcUrl,
-          'https://devnet.helius-rpc.com/?api-key=5cfda7df-93e4-495e-918b-7e880a0dad7f',
+          cluster.rpcUrl,
           'https://rpc.ankr.com/solana_devnet',
           'https://solana-devnet.g.alchemy.com/v2/demo',
           'https://api.testnet.solana.com'

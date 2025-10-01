@@ -1,6 +1,6 @@
 'use client'
 
-import React, {
+import {
   createContext,
   useContext,
   useEffect,
@@ -41,10 +41,7 @@ export function ArmaClientProvider({ children, config, queryClient }: ArmaClient
     clientRef.current = new ArmaWebClient(config)
   }
 
-  // Apply config updates without recreating the client instance
-  useEffect(() => {
-    clientRef.current?.updateConfig?.(config)
-  }, [config])
+  // Config is applied during client initialization
 
   // Cleanup wallet listeners on unmount
   useEffect(() => {

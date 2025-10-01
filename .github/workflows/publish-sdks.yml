@@ -30,60 +30,53 @@ jobs:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup npm cache
+        uses: actions/cache@v4
         with:
-          bun-version: 1.2.19
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
 
-      # Temporarily disable Bun cache to avoid workspace linking issues
-      # - name: Setup Bun cache
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: ~/.bun/install/cache
-      #     key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-bun-
-
-      - name: Clean workspace and Bun cache
+      - name: Clean workspace completely
         run: |
-          echo "Cleaning workspace thoroughly..."
+          echo "Cleaning workspace..."
           rm -rf node_modules 2>/dev/null || true
-          rm -rf bun.lockb 2>/dev/null || true
-          rm -rf ~/.bun/install/cache 2>/dev/null || true
+          rm -rf package-lock.json 2>/dev/null || true
           find packages/arma -name "node_modules" -type d -exec rm -rf {} + 2>/dev/null || true
           find packages/arma -name "dist" -type d -exec rm -rf {} + 2>/dev/null || true
-          echo "Workspace cleaned completely"
+          echo "Workspace cleaned"
 
-      - name: Install dependencies with fresh lockfile
+      - name: Install dependencies with npm
         run: |
-          echo "Installing with fresh resolution..."
-          bun install --no-cache
+          echo "Installing dependencies with npm..."
+          npm install
 
       - name: Build all packages
-        run: bun run build
+        run: npm run build
 
       - name: Run tests (skip for now)
         run: echo "Skipping tests for initial publish"
 
-      - name: Publish @arma/connector
+      - name: Publish @armadura/connector
         working-directory: packages/arma/connector
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @arma/sdk
+      - name: Publish @armadura/sdk
         working-directory: packages/arma/sdk
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @arma/jupiter
+      - name: Publish @armadura/jupiter
         working-directory: packages/arma/jupiter
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish @arma/providers
+      - name: Publish @armadura/providers
         working-directory: packages/arma/providers
         run: npm publish --access public
         env:
@@ -108,23 +101,23 @@ jobs:
           body: |
             ## Arma Packages Published
 
-            ### @arma/connector
-            - Package: `@arma/connector`
+            ### @armadura/connector
+            - Package: `@armadura/connector`
             - Version: ${{ github.ref_name }}
             - Registry: npm
 
-            ### @arma/sdk
-            - Package: `@arma/sdk`
+            ### @armadura/sdk
+            - Package: `@armadura/sdk`
             - Version: ${{ github.ref_name }}
             - Registry: npm
 
-            ### @arma/jupiter
-            - Package: `@arma/jupiter`
+            ### @armadura/jupiter
+            - Package: `@armadura/jupiter`
             - Version: ${{ github.ref_name }}
             - Registry: npm
 
-            ### @arma/providers
-            - Package: `@arma/providers`
+            ### @armadura/providers
+            - Package: `@armadura/providers`
             - Version: ${{ github.ref_name }}
             - Registry: npm
 
@@ -132,22 +125,22 @@ jobs:
 
             **Install the main SDK:**
             ```bash
-            npm install @arma/sdk@${{ github.ref_name }}
+            npm install @armadura/sdk@${{ github.ref_name }}
             ```
 
             **Install the connector (if using headless):**
             ```bash
-            npm install @arma/connector@${{ github.ref_name }}
+            npm install @armadura/connector@${{ github.ref_name }}
             ```
 
             **Install Jupiter integration:**
             ```bash
-            npm install @arma/jupiter@${{ github.ref_name }}
+            npm install @armadura/jupiter@${{ github.ref_name }}
             ```
 
             **Install providers:**
             ```bash
-            npm install @arma/providers@${{ github.ref_name }}
+            npm install @armadura/providers@${{ github.ref_name }}
             ```
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}

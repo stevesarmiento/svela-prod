@@ -3,13 +3,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useMemo, useState } from "react";
-import { createProvider, ArmaProvider } from "@arma/sdk";
-import { createJupiter } from "@arma/jupiter";
+import { createProvider, ArmaProvider } from "@armadura/sdk";
+import { createJupiter } from "@armadura/jupiter";
 import { 
   AppProvider, 
   getDefaultConfig, 
-  getDefaultMobileConfig 
-} from "@arma/connector";
+  getDefaultMobileConfig,
+  useConnectorClient
+} from "@connector-kit/connector";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ConvexProvider } from "@v1/convex/provider";
 import { WatchlistProvider } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context";
@@ -93,7 +94,7 @@ export function Providers({ children }: ProvidersProps) {
     >
       <QueryClientProvider client={queryClient}>
         <AppProvider connectorConfig={connectorConfig} mobile={mobile}>
-          <ArmaProvider config={arcConfig} queryClient={queryClient}>
+          <ArmaProvider config={arcConfig} queryClient={queryClient} useConnector={useConnectorClient} >
             <ConvexProvider>
               <WatchlistProvider>
                 <ThemeProvider>

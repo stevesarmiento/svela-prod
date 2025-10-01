@@ -1,6 +1,6 @@
 {
-  "name": "@arma/connector",
-  "version": "0.0.0",
+  "name": "@armadura/connector",
+  "version": "0.1.2",
   "description": "Headless wallet connector client and React provider built on Wallet Standard",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

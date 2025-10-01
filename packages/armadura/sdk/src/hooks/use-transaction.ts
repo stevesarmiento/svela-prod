@@ -85,17 +85,17 @@ export class TransactionConfirmationError extends ArmaTransactionError {
 }
 
 export function useTransaction(options: UseTransactionOptions = {}): UseTransactionReturn {
-  const { wallet, network, config } = useArmaClient()
+  const { wallet, cluster, config } = useArmaClient()
   const queryClient = useQueryClient()
 
   useEffect(() => {
     return () => {
-      releaseRpcConnection(network.rpcUrl)
+      releaseRpcConnection(cluster.rpcUrl)
     }
-  }, [network.rpcUrl])
+  }, [cluster.rpcUrl])
 
   const getRpcClient = useCallback(() => {
-    const { rpcUrl } = network
+    const { rpcUrl } = cluster
     
     const rpc = getSharedRpc(rpcUrl)
     const rpcSubscriptions = getSharedWebSocket(rpcUrl)
@@ -106,7 +106,7 @@ export function useTransaction(options: UseTransactionOptions = {}): UseTransact
     })
     
     return { rpc, rpcSubscriptions, sendAndConfirmTransaction, rpcUrl }
-  }, [network])
+  }, [cluster])
 
   const buildTransaction = useCallback(async (
     instructions: Instruction[], 

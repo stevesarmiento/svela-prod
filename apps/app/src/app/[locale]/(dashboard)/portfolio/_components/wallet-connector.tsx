@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react'
 import { AnimatePresence, motion } from "motion/react"
-import { useBalance, useAirdrop, useCluster, useWalletAddress } from '@arma/sdk'
-import { useConnector, type WalletInfo } from '@arma/connector'
+import { useBalance, useAirdrop, useCluster, useWalletAddress } from '@armadura/sdk'
+import { useConnector, type WalletInfo } from '@armadura/connector'
 import { Button } from '@v1/ui/button'
 import Image from 'next/image'
 import { Alert, AlertDescription } from '@v1/ui/alert'

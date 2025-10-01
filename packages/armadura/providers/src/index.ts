@@ -1,5 +1,5 @@
 // Re-export all providers for centralized access
-// This allows: import { createJupiter, createKamino } from '@arma/providers'
+// This allows: import { createJupiter, createKamino } from '@armadura/providers'
 
 // Jupiter provider
 export { 
@@ -8,7 +8,7 @@ export {
   type JupiterQuoteResponse,
   type JupiterSwapResponse,
   getJupiterTokens 
-} from '@arma/jupiter'
+} from '@armadura/jupiter'
 
 // Future providers will be added here:
 // export { createKamino, type KaminoConfig } from '@arma/kamino'
@@ -16,7 +16,7 @@ export {
 // export { createOrcaWhirlpools, type OrcaConfig } from '@arma/orca'
 
 // Import locally for internal use
-import { createJupiter } from '@arma/jupiter'
+import { createJupiter } from '@armadura/jupiter'
 
 // Provider registry type for future extensibility
 export interface ProviderRegistry {

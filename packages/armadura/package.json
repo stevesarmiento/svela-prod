@@ -1,14 +1,14 @@
 {
-  "name": "@arma",
+  "name": "@armadura",
   "version": "0.0.0",
   "private": true,
   "sideEffects": false,
   "description": "Arma Web3 components and utilities for Solana development",
   "scripts": {
-    "clean": "rm -rf .turbo node_modules && turbo clean --filter=@arma/*",
-    "lint": "turbo lint --filter=@arma/*",
-    "format": "turbo format --filter=@arma/*",
-    "typecheck": "turbo typecheck --filter=@arma/*"
+    "clean": "rm -rf .turbo node_modules && turbo clean --filter=@armadura/*",
+    "lint": "turbo lint --filter=@armadura/*",
+    "format": "turbo format --filter=@armadura/*",
+    "typecheck": "turbo typecheck --filter=@armadura/*"
   },
   "exports": {
     "./connector": "./connector/src/index.ts",
@@ -17,10 +17,12 @@
     "./providers": "./providers/src/index.ts"
   },
   "dependencies": {
-    "@arma/connector": "workspace:*",
-    "@arma/sdk": "workspace:*",
-    "@arma/jupiter": "workspace:*", 
-    "@arma/providers": "workspace:*"
+    "@armadura/sdk": "0.1.2",
+    "@armadura/jupiter": "0.1.2", 
+    "@armadura/providers": "0.1.2"
+  },
+  "peerDependencies": {
+    "@armadura/connector": "0.1.2"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

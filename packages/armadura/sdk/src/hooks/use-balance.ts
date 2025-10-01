@@ -38,7 +38,7 @@ export interface UseBalanceReturn {
 }
 
 export function useBalance(options: UseBalanceOptions = {}): UseBalanceReturn {
-  const { wallet, network, config } = useArmaClient()
+  const { wallet, cluster, config } = useArmaClient()
   const queryClient = useQueryClient()
   
   const {
@@ -48,23 +48,23 @@ export function useBalance(options: UseBalanceOptions = {}): UseBalanceReturn {
     onUpdate,
   } = options
 
-  const targetAddress = optionsAddress || wallet.address
+  const targetAddress = optionsAddress || wallet.selectedAccount
   
   useEffect(() => {
     return () => {
-      releaseRpcConnection(network.rpcUrl)
+      releaseRpcConnection(cluster.rpcUrl)
     }
-  }, [network.rpcUrl])
+  }, [cluster.rpcUrl])
 
   const query = useQuery<bigint, ArmaError>({
     networkMode: "offlineFirst", // 🚀 BETTER UX: Work with cached data when offline
-    queryKey: queryKeys.balance(targetAddress || undefined, network.rpcUrl),
+    queryKey: queryKeys.balance(targetAddress || undefined, cluster.rpcUrl),
     queryFn: async ({ signal }): Promise<bigint> => {
       const context: ArmaErrorContext = {
         operation: 'getBalance',
         address: targetAddress || 'none',
         timestamp: Date.now(),
-        rpcUrl: network.rpcUrl
+        rpcUrl: cluster.rpcUrl
       }
 
       if (!targetAddress) {
@@ -162,12 +162,12 @@ export function useBalance(options: UseBalanceOptions = {}): UseBalanceReturn {
   }, [query])
 
   const clear = useCallback(() => {
-    const key = queryKeys.balance(targetAddress || undefined, network.rpcUrl)
+    const key = queryKeys.balance(targetAddress || undefined, cluster.rpcUrl)
     // Cancel any in-flight fetches for this key, then remove cached data
     queryClient.cancelQueries({ queryKey: key, exact: true }).finally(() => {
       queryClient.removeQueries({ queryKey: key, exact: true })
     })
-  }, [network.rpcUrl, queryClient, targetAddress])
+  }, [cluster.rpcUrl, queryClient, targetAddress])
 
   return {
     balance,

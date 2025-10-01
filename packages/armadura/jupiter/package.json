@@ -1,6 +1,6 @@
 {
-  "name": "@arma/providers",
-  "version": "0.0.1",
+  "name": "@armadura/jupiter",
+  "version": "0.1.2",
   "private": false,
   "type": "module",
   "main": "./dist/index.js",
@@ -22,13 +22,11 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@arma/sdk": "workspace:*"
-  },
-  "dependencies": {
-    "@arma/jupiter": "workspace:*"
+    "@armadura/sdk": "workspace:*"
   },
   "devDependencies": {
-    "@arma/sdk": "workspace:*",
+    "@armadura/sdk": "workspace:*",
+    "@solana/kit": "^2.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.6.3"
   }

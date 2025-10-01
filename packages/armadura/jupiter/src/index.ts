@@ -1,4 +1,4 @@
-import type { SwapProvider, SwapParams, SwapQuote, SwapBuild } from '@arma/sdk'
+import type { SwapProvider, SwapParams, SwapQuote, SwapBuild } from '@armadura/sdk'
 
 export interface JupiterQuoteResponse {
   outAmount: string
