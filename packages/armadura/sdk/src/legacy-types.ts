@@ -12,14 +12,10 @@
  */
 
 import type { TransactionSigner } from '@solana/kit'
+import type { WalletAccount } from './types/connector'
 
-// Wallet Standard types - simplified for backward compatibility
-export interface WalletAccount {
-  address: string
-  publicKey: Uint8Array
-  chains: string[]
-  features: string[]
-}
+// Re-export WalletAccount for backward compatibility
+export type { WalletAccount }
 
 export interface WalletProperties {
   name: string

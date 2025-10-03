@@ -7,7 +7,7 @@ import { ReactNode, useMemo } from 'react'
 
 export interface EnhancedClusterConfig {
   rpcUrl?: string
-  network?: 'mainnet' | 'devnet' | 'testnet'
+  network?: 'mainnet' | 'devnet' | 'testnet' | 'localnet'
   
   clusters?: SolanaCluster[]
   
@@ -126,6 +126,12 @@ function getOfficialUrl(clusterId: string): string {
 }
 
 export { createSolanaDevnet, createSolanaMainnet, createSolanaTestnet } from '@wallet-ui/core'
+
+
+
+
+
+
 
 
 

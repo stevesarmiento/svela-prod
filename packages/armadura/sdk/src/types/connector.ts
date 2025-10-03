@@ -3,9 +3,17 @@
  * This allows the SDK to work with different connector packages (e.g., @armadura/connector, @connector-kit/connector, etc.)
  */
 
+import type { WalletAccount as WalletStandardAccount } from '@wallet-standard/base'
+
+/**
+ * Wallet account interface compatible with Wallet Standard
+ * Re-exported from @wallet-standard/base for full compatibility
+ */
+export type WalletAccount = WalletStandardAccount
+
 /**
  * Generic wallet interface that any wallet implementation should satisfy
- * Compatible with Wallet Standard format
+ * Compatible with Wallet Standard format and @wallet-standard/base
  */
 export interface GenericWallet {
   name: string
@@ -13,7 +21,7 @@ export interface GenericWallet {
   icon?: string
   chains?: readonly string[]
   features?: Record<string, any>
-  accounts?: any[]
+  accounts?: readonly WalletAccount[]
   [key: string]: any
 }
 
@@ -34,7 +42,7 @@ export interface GenericConnectorState {
   connecting: boolean
   selectedWallet: GenericWallet | null
   selectedAccount: string | null
-  accounts: GenericAccount[]
+  accounts: readonly GenericAccount[]
   [key: string]: any
 }
 

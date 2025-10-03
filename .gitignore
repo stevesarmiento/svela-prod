@@ -60,7 +60,7 @@ tailwind.css
 # Trigger
 .trigger
 
-/connector/
+connector-external/
 /providers/
 /sdk/
 /jupiter/

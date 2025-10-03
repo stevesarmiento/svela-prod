@@ -18,12 +18,21 @@
 export { ArmaProvider } from './core/arma-provider'
 export { useArmaClient } from './core/arma-client-provider'
 
+// ===== UNIFIED PROVIDER (RECOMMENDED) =====
+export { 
+  UnifiedArmaProvider,
+  ArmaduraProvider,
+  SolanaProvider
+} from './react/unified-provider'
+export type { UnifiedProviderProps } from './react/unified-provider'
+
 // ===== TYPES =====
 export type { 
   GenericConnectorClient, 
   GenericConnectorState, 
   GenericWallet, 
   GenericAccount,
+  WalletAccount,
   ConnectorHook
 } from './types/connector'
 export { hasDisconnect, getConnectorState } from './types/connector'
@@ -33,6 +42,13 @@ export { ArmaturaProvider } from './compat/armadura-provider'
 
 // ===== ADAPTERS =====
 export { ConnectorKitAdapter, createConnectorKitAdapter } from './adapters/connector-kit-adapter'
+
+// ===== AUTO-DETECTION =====
+export { 
+  detectConnectorKit,
+  createAutoConnectorHook,
+  isConnectorKitAvailable
+} from './compat/connector-detection'
 
 // ===== ESSENTIAL HOOKS (MVP) =====
 export { useBalance } from './hooks/use-balance'
@@ -86,6 +102,36 @@ export type {
 
 // ===== CONFIGURATION =====
 export type { SolanaConfig } from './config/create-config'
+
+// ===== UNIFIED CONFIGURATION =====
+export { 
+  createUnifiedConfig,
+  createArmaConfig
+} from './config/unified-config'
+export type {
+  ArmaConfigOptions,
+  ConnectorConfigOptions,
+  MobileConfigOptions,
+  UnifiedConfig,
+  CreateUnifiedConfigOptions
+} from './config/unified-config'
+
+// ===== NETWORK UTILITIES =====
+export {
+  normalizeNetwork,
+  toRpcNetwork,
+  toClusterId,
+  getDefaultRpcUrl,
+  isMainnet,
+  isDevnet,
+  isTestnet,
+  isLocalnet
+} from './utils/network'
+export type {
+  SolanaNetwork,
+  SolanaNetworkRpc,
+  SolanaClusterId
+} from './utils/network'
 
 // ===== WEB CLIENT (ADVANCED) =====
 export { ArmaWebClient } from './core/arma-web-client'

@@ -8,12 +8,19 @@ import type { ArmaWebClientConfig } from './arma-web-client'
 import type { SolanaConfig } from '../config/create-config'
 import type { QueryClient } from '@tanstack/react-query'
 import { EnhancedClusterProvider, type EnhancedClusterConfig } from '../context/enhanced-cluster-provider'
+import { createAutoConnectorHook, isConnectorKitAvailable } from '../compat/connector-detection'
 
 export type ArmaProviderProps = {
   children: ReactNode
   config: ArmaWebClientConfig | SolanaConfig
   queryClient?: QueryClient
-  useConnector: ConnectorHook
+  /** 
+   * Connector hook for wallet integration
+   * - Pass a hook (e.g., useConnectorClient) to use specific connector
+   * - Set to 'auto' to auto-detect ConnectorKit
+   * - Set to null or undefined to run standalone (no wallet UI)
+   */
+  useConnector?: ConnectorHook | 'auto' | null
   /** Enhanced cluster configuration using wallet-ui */
   enhancedCluster?: EnhancedClusterConfig
 }
@@ -21,11 +28,38 @@ export type ArmaProviderProps = {
 /**
  * The primary ArmaProvider.
  *
- * Requires a connector hook (e.g., useConnectorClient from @connector-kit/connector).
- * The connector is the source of truth for wallet state.
+ * Supports three modes:
+ * 1. Manual connector: Pass useConnector hook (e.g., useConnectorClient)
+ * 2. Auto-detect: Set useConnector='auto' to auto-detect ConnectorKit
+ * 3. Standalone: Set useConnector=null or undefined for custom wallet UI
  */
 export function ArmaProvider({ children, config, queryClient, useConnector, enhancedCluster }: ArmaProviderProps) {
-  const connector = useConnector()
+  // Determine which connector hook to use
+  const actualConnectorHook = React.useMemo(() => {
+    if (useConnector === 'auto') {
+      // Auto-detect mode
+      return createAutoConnectorHook()
+    }
+    if (useConnector === null || useConnector === undefined) {
+      // Standalone mode - no connector
+      return () => null
+    }
+    // Manual mode - use provided hook
+    return useConnector
+  }, [useConnector])
+  
+  const connector = actualConnectorHook()
+  
+  // Warn if auto-detect mode is requested but ConnectorKit is not available
+  React.useEffect(() => {
+    if (useConnector === 'auto' && !isConnectorKitAvailable()) {
+      console.warn(
+        '[Armadura] Auto-detect mode requested but ConnectorKit is not available. ' +
+        'Make sure to wrap your app with ConnectorProvider from @connector-kit/connector.'
+      )
+    }
+  }, [useConnector])
+  
   const merged: ArmaWebClientConfig = { ...config, connector } as ArmaWebClientConfig
   
   if (enhancedCluster) {

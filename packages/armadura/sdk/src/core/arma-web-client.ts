@@ -17,7 +17,7 @@ import { hasDisconnect, getConnectorState } from '../types/connector'
  */
 export interface ArmaWebClientConfig {
   providers?: Provider[]
-  network?: 'mainnet' | 'devnet' | 'testnet'
+  network?: 'mainnet' | 'devnet' | 'testnet' | 'localnet'
   rpcUrl?: string
   commitment?: 'processed' | 'confirmed' | 'finalized'
   autoConnect?: boolean

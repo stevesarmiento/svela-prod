@@ -170,7 +170,7 @@
     },
     "packages/armadura/sdk": {
       "name": "@armadura/sdk",
-      "version": "0.1.13",
+      "version": "0.1.16",
       "dependencies": {
         "@nanostores/react": "^1.0.0",
         "@solana-program/compute-budget": "^0.3.0",
