@@ -1,6 +1,6 @@
 {
   "name": "@armadura/sdk",
-  "version": "0.1.17",
+  "version": "0.1.23",
   "description": "React hooks for Solana development - MVP with essential hooks only",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

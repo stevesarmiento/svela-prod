@@ -17,7 +17,7 @@ export type WalletAccount = WalletStandardAccount
  */
 export interface GenericWallet {
   name: string
-  version: string
+  version?: string
   icon?: string
   chains?: readonly string[]
   features?: Record<string, any>

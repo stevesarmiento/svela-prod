@@ -37,51 +37,46 @@ export function Providers({ children }: ProvidersProps) {
       })
   );
 
-  const arcConfig = useMemo(() => ({
-    network: (process.env.NEXT_PUBLIC_SOLANA_NETWORK as 'mainnet' | 'devnet' | 'testnet' | undefined) || 'mainnet',
-    rpcUrl:
-      (process.env.NEXT_PUBLIC_SOLANA_RPC_URL && process.env.NEXT_PUBLIC_SOLANA_RPC_URL.trim()) ||
-      ((process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'devnet')
-        ? 'https://api.devnet.solana.com'
-        : (process.env.NEXT_PUBLIC_SOLANA_NETWORK === 'testnet')
-          ? 'https://api.testnet.solana.com'
-          : 'https://api.mainnet-beta.solana.com'),
-    autoConnect: true,
-    providers: [
-      createProvider({
-        swap: [
-          createJupiter({
-            slippageBps: 50,
-            onlyDirectRoutes: false,
-            excludeDexes: [],
-            maxAccounts: 64,
-            asLegacyTransaction: 'auto',
-            walletSupportsVersioned: true,
-            dynamicComputeUnitLimit: true,
-            computeUnitPriceMicroLamports: 10_000,
-            dynamicSlippage: true,
-            timeoutMs: 15_000,
-            retries: 2,
-            debug: process.env.NODE_ENV === 'development',
-            corsProxy: true,
-          }),
-        ],
-      }),
-    ],
-  }), []);
+  // Single network config (accepts both 'mainnet' and 'mainnet-beta' formats)
+  const network = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'mainnet-beta';
+  const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL;
 
+  // ConnectorKit config (handles wallet UI)
   const connectorConfig = useMemo(() => getDefaultConfig({
     appName: 'Svela',
     appUrl: 'https://svela.so',
-    network: (process.env.NEXT_PUBLIC_SOLANA_NETWORK as 'mainnet-beta' | 'devnet' | 'testnet') || 'mainnet-beta',
+    network: network as 'mainnet-beta' | 'devnet' | 'testnet',
     enableMobile: true,
-  }), []);
+  }), [network]);
 
   const mobile = useMemo(() => getDefaultMobileConfig({
     appName: 'Svela',
     appUrl: 'https://svela.so',
-    network: (process.env.NEXT_PUBLIC_SOLANA_NETWORK as 'mainnet-beta' | 'devnet' | 'testnet') || 'mainnet-beta',
-  }), []);
+    network: network as 'mainnet-beta' | 'devnet' | 'testnet',
+  }), [network]);
+
+  // Armadura protocol providers
+  const providers = useMemo(() => [
+    createProvider({
+      swap: [
+        createJupiter({
+          slippageBps: 50,
+          onlyDirectRoutes: false,
+          excludeDexes: [],
+          maxAccounts: 64,
+          asLegacyTransaction: 'auto',
+          walletSupportsVersioned: true,
+          dynamicComputeUnitLimit: true,
+          computeUnitPriceMicroLamports: 10_000,
+          dynamicSlippage: true,
+          timeoutMs: 15_000,
+          retries: 2,
+          debug: process.env.NODE_ENV === 'development',
+          corsProxy: true,
+        }),
+      ],
+    }),
+  ], []);
 
   return (
     <ClerkProvider
@@ -94,7 +89,18 @@ export function Providers({ children }: ProvidersProps) {
     >
       <QueryClientProvider client={queryClient}>
         <AppProvider connectorConfig={connectorConfig} mobile={mobile}>
-          <ArmaProvider config={arcConfig} queryClient={queryClient} useConnector={useConnectorClient}>
+          {/* Armadura uses ConnectorKit via manual hook (more reliable than auto-detection) */}
+          <ArmaProvider 
+            config={{
+              network: network as 'mainnet' | 'devnet' | 'testnet',
+              rpcUrl,
+              autoConnect: true,
+              providers,
+              debug: process.env.NODE_ENV === 'development',
+            }}
+            queryClient={queryClient}
+            useConnector={useConnectorClient}
+          >
             <ConvexProvider>
               <WatchlistProvider>
                 <ThemeProvider>
