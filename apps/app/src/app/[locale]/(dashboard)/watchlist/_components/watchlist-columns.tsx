@@ -300,12 +300,20 @@ export function createWatchlistColumns({
       cell: ({ row }) => (
         <div className="flex items-center justify-center">
           {row.original.quote.USD.price > 0 ? (
-            <InlinePriceChart 
-              coingeckoId={row.original.id}
-              percentChange24h={row.original.quote.USD.percent_change_24h}
-              symbol={row.original.symbol}
-              initialData={row.original.quote.USD}
-            />
+            <div 
+              className="[mask-image:linear-gradient(to_right,transparent_0%,black_50%,black_100%)]"
+              style={{
+                WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 50%, black 100%)',
+                maskImage: 'linear-gradient(to right, transparent 0%, black 50%, black 100%)'
+              }}
+            >
+              <InlinePriceChart 
+                coingeckoId={row.original.id}
+                percentChange24h={row.original.quote.USD.percent_change_24h}
+                symbol={row.original.symbol}
+                initialData={row.original.quote.USD}
+              />
+            </div>
           ) : (
             <Skeleton className="h-8 w-56 rounded-sm" />
           )}

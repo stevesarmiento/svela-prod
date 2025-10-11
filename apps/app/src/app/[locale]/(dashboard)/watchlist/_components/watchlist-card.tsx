@@ -16,7 +16,6 @@ import { IconEllipsis, IconPencilTipCropCircle, IconTrashFill } from "symbols-re
 import { AvatarCircles } from "@v1/ui/token-stacks"
 import { useCoinGeckoWatchlistAggregateChartIsolated } from "@/hooks/use-coingecko-watchlist-aggregate-chart-isolated"
 import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
-import { Spinner } from "@v1/ui/spinner"
 
 // Loading shine CSS
 const loadingShineStyle = `
@@ -286,12 +285,21 @@ export function WatchlistCard({
                 </div>
               </div>
             ) : (
+              <div
+              className="[mask-image:linear-gradient(to_right,transparent_0%,black_30%,black_100%)]"
+              style={{
+                WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 30%, black 100%)',
+                maskImage: 'linear-gradient(to right, transparent 0%, black 30%, black 100%)'
+              }}
+              >
               <WatchlistAggregateChart
                 data={aggregateData}
                 isPositive={isPositive}
                 width={0}
                 height={70}
               />
+              </div>
+
             )}
           </div>
           
