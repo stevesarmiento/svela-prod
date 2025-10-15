@@ -4,6 +4,7 @@
     { "path": "./connector" },
     { "path": "./sdk" },
     { "path": "./jupiter" },
+    { "path": "./titan" },
     { "path": "./providers" }
   ],
   "include": [],

@@ -2,13 +2,22 @@
 // This allows: import { createJupiter, createKamino } from '@armadura/providers'
 
 // Jupiter provider
-export { 
+export {
   createJupiter,
   type JupiterConfig,
   type JupiterQuoteResponse,
   type JupiterSwapResponse,
-  getJupiterTokens 
+  getJupiterTokens
 } from '@armadura/jupiter'
+
+// Titan provider
+export {
+  createTitan,
+  type TitanConfig,
+  TitanClient,
+  getTitanVenues,
+  getTitanProviders
+} from '@armadura/titan'
 
 // Future providers will be added here:
 // export { createKamino, type KaminoConfig } from '@arma/kamino'
@@ -17,10 +26,12 @@ export {
 
 // Import locally for internal use
 import { createJupiter } from '@armadura/jupiter'
+import { createTitan } from '@armadura/titan'
 
 // Provider registry type for future extensibility
 export interface ProviderRegistry {
   jupiter: ReturnType<typeof createJupiter>
+  titan: ReturnType<typeof createTitan>
   // kamino: ReturnType<typeof createKamino>
   // raydium: ReturnType<typeof createRaydium>
   // orca: ReturnType<typeof createOrcaWhirlpools>
@@ -32,6 +43,7 @@ export type ProviderName = keyof ProviderRegistry
 // Helper to create multiple providers at once (future enhancement)
 export interface CreateProvidersConfig {
   jupiter?: Parameters<typeof createJupiter>[0]
+  titan?: Parameters<typeof createTitan>[0]
   // kamino?: Parameters<typeof createKamino>[0]
   // raydium?: Parameters<typeof createRaydium>[0]
   // orca?: Parameters<typeof createOrcaWhirlpools>[0]
@@ -39,15 +51,19 @@ export interface CreateProvidersConfig {
 
 export function createProviders(config: CreateProvidersConfig): Partial<ProviderRegistry> {
   const providers: Partial<ProviderRegistry> = {}
-  
+
   if (config.jupiter) {
     providers.jupiter = createJupiter(config.jupiter)
   }
-  
+
+  if (config.titan) {
+    providers.titan = createTitan(config.titan)
+  }
+
   // Future providers:
   // if (config.kamino) {
   //   providers.kamino = createKamino(config.kamino)
   // }
-  
+
   return providers
 }

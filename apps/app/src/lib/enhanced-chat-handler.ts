@@ -995,7 +995,7 @@ ${volumeAnalysis['volumeSpike'] ? 'VOLUME SPIKE DETECTED' : 'Normal volume activ
         timestamp: Date.now()
       },
       metadata: {
-        dataSource: 'jupiter_aggregator',
+        dataSource: 'titan_aggregator',
         lastUpdated: Date.now(),
         reliability: 'high'
       }
@@ -1024,7 +1024,7 @@ ${volumeAnalysis['volumeSpike'] ? 'VOLUME SPIKE DETECTED' : 'Normal volume activ
           tradeAction
         },
         metadata: {
-          sources: ['jupiter_aggregator'],
+          sources: ['titan_aggregator'],
           fetchTime: Date.now() - startTime,
           quality: 'high',
           coverage: 1.0
@@ -1063,7 +1063,7 @@ ${volumeAnalysis['volumeSpike'] ? 'VOLUME SPIKE DETECTED' : 'Normal volume activ
       responseText += "This might be a trading request, but I'd like to confirm the details. ";
     }
     
-    responseText += `Let me get you the best quote from Jupiter and other DEXs.\n\n⚡ **Trade Details:**\n`;
+    responseText += `Let me get you the best quote from multiple DEX aggregators.\n\n⚡ **Trade Details:**\n`;
     responseText += `- Action: ${type.toUpperCase()}\n`;
     responseText += `- Amount: ${amount || 'To be specified'} ${inputTokenDisplay}\n`;
     responseText += `- Target: ${outputTokenDisplay}\n`;

@@ -245,7 +245,7 @@ export function TradePreview({ tradeAction, onExecute, onCancel }: TradePreviewP
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Route:</span>
-                  <span className="text-xs text-gray-500">Via Jupiter</span>
+                  <span className="text-xs text-gray-500">Via {bestQuote.provider.includes(':') ? bestQuote.provider.split(':')[1] : bestQuote.provider}</span>
                 </div>
               </div>
             )}

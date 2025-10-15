@@ -14,11 +14,13 @@
     "./connector": "./connector/src/index.ts",
     "./sdk": "./sdk/src/index.ts",
     "./jupiter": "./jupiter/src/index.ts",
+    "./titan": "./titan/src/index.ts",
     "./providers": "./providers/src/index.ts"
   },
   "dependencies": {
     "@armadura/sdk": "0.1.5",
-    "@armadura/jupiter": "0.1.5", 
+    "@armadura/jupiter": "0.1.5",
+    "@armadura/titan": "0.1.0",
     "@armadura/providers": "0.1.5"
   },
   "peerDependencies": {

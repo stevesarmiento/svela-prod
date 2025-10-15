@@ -1,6 +1,6 @@
 {
-  "name": "@armadura/providers",
-  "version": "0.1.5",
+  "name": "@armadura/titan",
+  "version": "0.1.0",
   "private": false,
   "type": "module",
   "main": "./dist/index.cjs",
@@ -25,11 +25,11 @@
     "@armadura/sdk": "workspace:*"
   },
   "dependencies": {
-    "@armadura/jupiter": "workspace:*",
-    "@armadura/titan": "workspace:*"
+    "@msgpack/msgpack": "^3.0.0-beta2"
   },
   "devDependencies": {
     "@armadura/sdk": "workspace:*",
+    "@solana/kit": "^2.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.6.3"
   }

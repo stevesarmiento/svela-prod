@@ -37,10 +37,12 @@ export async function POST(req: Request) {
     
   } catch (error) {
     console.error('Intent parsing error:', error);
-    return Response.json({ 
-      type: 'none', 
-      coins: [], 
-      intent: 'failed to parse' 
-    });
+    // Return error status so caller can fallback to pattern-based detection
+    return Response.json({
+      error: 'Failed to parse intent',
+      type: 'none',
+      coins: [],
+      intent: 'failed to parse'
+    }, { status: 500 });
   }
 }

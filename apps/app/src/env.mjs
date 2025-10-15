@@ -30,6 +30,7 @@ export const env = createEnv({
     NEXT_PUBLIC_SOLANA_NETWORK: z.string().optional(),
     NEXT_PUBLIC_SOLANA_RPC_URL: z.string().optional(),
     NEXT_PUBLIC_HELIUS_API_KEY: z.string().optional(),
+    NEXT_PUBLIC_TITAN_API_KEY: z.string().optional(),
   },
   runtimeEnv: {
     NEXT_PUBLIC_OPENPANEL_CLIENT_ID:
@@ -53,6 +54,7 @@ export const env = createEnv({
     X_CAPI_API_KEY: process.env.X_CAPI_API_KEY,
     'CG-API-KEY': process.env['CG-API-KEY'],
     API_ENCRYPTION_KEY: process.env.API_ENCRYPTION_KEY,
+    NEXT_PUBLIC_TITAN_API_KEY: process.env.NEXT_PUBLIC_TITAN_API_KEY,
   },
   skipValidation: !!process.env.CI || !!process.env.SKIP_ENV_VALIDATION,
 });

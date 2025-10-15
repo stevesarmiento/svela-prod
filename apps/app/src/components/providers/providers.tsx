@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useMemo, useState } from "react";
 import { createProvider, ArmaProvider } from "@armadura/sdk";
-import { createJupiter } from "@armadura/jupiter";
+import { createTitan } from "@armadura/titan";
 import { 
   AppProvider, 
   getDefaultConfig, 
@@ -59,20 +59,17 @@ export function Providers({ children }: ProvidersProps) {
   const providers = useMemo(() => [
     createProvider({
       swap: [
-        createJupiter({
+        createTitan({
+          // apiKey automatically loaded from NEXT_PUBLIC_TITAN_API_KEY env var
           slippageBps: 50,
+          strategy: 'best-price',
           onlyDirectRoutes: false,
           excludeDexes: [],
-          maxAccounts: 64,
-          asLegacyTransaction: 'auto',
-          walletSupportsVersioned: true,
-          dynamicComputeUnitLimit: true,
-          computeUnitPriceMicroLamports: 10_000,
-          dynamicSlippage: true,
-          timeoutMs: 15_000,
-          retries: 2,
+          accountsLimitTotal: 64,
+          quoteTimeoutMs: 15_000,
+          intervalMs: 1000,
+          numQuotes: 5,
           debug: process.env.NODE_ENV === 'development',
-          corsProxy: true,
         }),
       ],
     }),
@@ -89,7 +86,6 @@ export function Providers({ children }: ProvidersProps) {
     >
       <QueryClientProvider client={queryClient}>
         <AppProvider connectorConfig={connectorConfig} mobile={mobile}>
-          {/* Armadura uses ConnectorKit via manual hook (more reliable than auto-detection) */}
           <ArmaProvider 
             config={{
               network: network as 'mainnet' | 'devnet' | 'testnet',

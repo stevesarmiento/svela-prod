@@ -441,9 +441,15 @@ Now analyze this query: "${userMessage}"`;
       if (!response.ok) {
         throw new Error('AI parsing failed');
       }
-      
+
       const aiResult = await response.json();
-      
+
+      // If API returned an error, fallback to pattern-based detection
+      if (aiResult.error) {
+        console.log('AI parsing returned error, using pattern-based detection');
+        return this.fallbackToPatternIntent(userMessage, patternIntent);
+      }
+
       // Merge AI results with pattern-based results
       return {
         type: aiResult.type || patternIntent.type || 'none',
