@@ -1,17 +1,17 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { Effect, Exit, Cause } from "effect"
 import { WatchlistCard } from './watchlist-card'
 import { Button } from '@v1/ui/button'
 import { Plus, Grid3X3 } from 'lucide-react'
 import { toast } from '@v1/ui/use-toast'
 import { 
   useWatchlistGroups,
-  useUpdateWatchlistGroup,
-  useDeleteWatchlistGroup,
   useWatchlistByGroup
 } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
+import { useWatchlistOperations } from '@/hooks/use-watchlist-effect'
 import { IconPicker } from '@/components/icon-picker'
 import { COLORS } from '@/components/color-picker'
 import { useWatchlist } from './watchlist-context'
@@ -140,8 +140,8 @@ function WatchlistGroupWithCoins({
     })
   }
   
-  return (
-    <div ref={isEditing ? editCardRef : undefined}>
+  return isEditing ? (
+    <div ref={editCardRef as React.RefObject<HTMLDivElement>}>
       <WatchlistCard
         group={group}
         coins={stableCoins}
@@ -149,9 +149,20 @@ function WatchlistGroupWithCoins({
         onDelete={onDelete}
         onSelect={onSelect}
         selected={selected}
-        nameOverride={isEditing ? editingName : undefined}
-        iconOverride={isEditing ? editingIcon : undefined}
-        colorOverride={isEditing ? editingColor : undefined}
+        nameOverride={editingName}
+        iconOverride={editingIcon}
+        colorOverride={editingColor}
+      />
+    </div>
+  ) : (
+    <div>
+      <WatchlistCard
+        group={group}
+        coins={stableCoins}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onSelect={onSelect}
+        selected={selected}
       />
     </div>
   )
@@ -165,7 +176,7 @@ export function WatchlistsGrid({
   onViewModeChange
 }: WatchlistsGridProps) {
   const [editingGroup, setEditingGroup] = useState<WatchlistGroup | null>(null)
-  const editCardRef = useRef<HTMLDivElement>(null)
+  const editCardRef = useRef<HTMLDivElement | null>(null)
   
   // Current editing values for real-time preview
   const [editingName, setEditingName] = useState('')
@@ -174,38 +185,54 @@ export function WatchlistsGrid({
 
   // Hooks
   const watchlistGroups = useWatchlistGroups()
-  const updateWatchlistGroup = useUpdateWatchlistGroup()
-  const deleteWatchlistGroup = useDeleteWatchlistGroup()
+  const { updateGroup, deleteGroup } = useWatchlistOperations()
   const { selectedGroup } = useWatchlist()
 
   const handleEditSave = useCallback(async (name: string, icon: string, color: string) => {
     if (!editingGroup) return
 
-    try {
-      await updateWatchlistGroup(
-        editingGroup._id,
-        name,
-        undefined, // No description
-        icon,
-        color
-      )
-      toast({
-        title: "Success",
-        description: "Watchlist updated successfully",
-      })
-      setEditingGroup(null)
-      setEditingName('')
-      setEditingIcon('')
-      setEditingColor('')
-    } catch (error) {
-      console.error('Failed to update watchlist:', error)
-      toast({
-        title: "Error",
-        description: "Failed to update watchlist",
-        variant: "destructive",
-      })
+    const program = updateGroup(editingGroup._id, name, undefined, icon, color).pipe(
+      Effect.catchTags({
+        WatchlistValidationError: (e) => Effect.sync(() => {
+          toast({ 
+            title: "Validation Error", 
+            description: `${e.field}: ${e.reason}`, 
+            variant: "destructive" 
+          })
+        }),
+        WatchlistAuthError: (e) => Effect.sync(() => {
+          toast({ 
+            title: "Authentication Error", 
+            description: e.message, 
+            variant: "destructive" 
+          })
+        })
+      }),
+      Effect.tap(() => Effect.sync(() => {
+        toast({
+          title: "Success",
+          description: "Watchlist updated successfully",
+        })
+        setEditingGroup(null)
+        setEditingName('')
+        setEditingIcon('')
+        setEditingColor('')
+      })),
+      Effect.tapError(() => Effect.sync(() => {
+        toast({
+          title: "Error",
+          description: "Failed to update watchlist",
+          variant: "destructive",
+        })
+      }))
+    )
+
+    const exit = await Effect.runPromiseExit(program)
+    
+    if (Exit.isFailure(exit)) {
+      console.error("Failed to update watchlist:", Cause.pretty(exit.cause))
     }
-  }, [editingGroup, updateWatchlistGroup])
+  }, [editingGroup, updateGroup])
 
   const handleEditCancel = useCallback(() => {
     setEditingGroup(null)
@@ -224,21 +251,28 @@ export function WatchlistsGrid({
       return
     }
 
-    try {
-      await deleteWatchlistGroup(group._id)
-      toast({
-        title: "Success",
-        description: "Watchlist deleted successfully",
-      })
-    } catch (error) {
-      console.error('Failed to delete watchlist:', error)
-      toast({
-        title: "Error",
-        description: "Failed to delete watchlist",
-        variant: "destructive",
-      })
+    const program = deleteGroup(group._id).pipe(
+      Effect.tap(() => Effect.sync(() => {
+        toast({
+          title: "Success",
+          description: "Watchlist deleted successfully",
+        })
+      })),
+      Effect.catchAll(() => Effect.sync(() => {
+        toast({
+          title: "Error",
+          description: "Failed to delete watchlist",
+          variant: "destructive",
+        })
+      }))
+    )
+
+    const exit = await Effect.runPromiseExit(program)
+    
+    if (Exit.isFailure(exit)) {
+      console.error("Failed to delete watchlist:", Cause.pretty(exit.cause))
     }
-  }, [deleteWatchlistGroup])
+  }, [deleteGroup])
 
   const openEditDialog = useCallback((group: WatchlistGroup) => {
     setEditingGroup(group)

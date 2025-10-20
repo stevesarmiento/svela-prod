@@ -3,6 +3,8 @@
 import { useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
+import { Effect, Schedule } from "effect"
+import { ApiRequestError } from "@/lib/effect/watchlist-models"
 
 // Map time scales to optimal CoinGecko parameters
 // Strategy: ≤90 days = prefer OHLC+volume for real candlesticks, >90 days = prefer market-chart for better granularity
@@ -274,34 +276,60 @@ export function useCoinGeckoChartData(
         let ohlcResult: OHLCAPIResponse | null = null
         let marketResult: MarketChartAPIResponse | null = null
         
-        // Fetch both endpoints in parallel
-        const [ohlcResponse, marketResponse] = await Promise.allSettled([
-          fetch(`/api/coingecko/ohlc?id=${coinId}&days=${config.days}&vs_currency=usd`),
-          fetch(`/api/coingecko/market-chart?id=${coinId}&days=${config.days}&vs_currency=usd`)
-        ])
+        // Create Effects for both data sources
+        const ohlcEffect = Effect.tryPromise({
+          try: async () => {
+            const response = await fetch(`/api/coingecko/ohlc?id=${coinId}&days=${config.days}&vs_currency=usd`)
+            if (!response.ok) throw new Error(`HTTP ${response.status}`)
+            return await response.json()
+          },
+          catch: (error) => new ApiRequestError({
+            endpoint: `/api/coingecko/ohlc`,
+            status: 500,
+            message: String(error)
+          })
+        }).pipe(
+          Effect.retry(Schedule.exponential("500 millis", 2)),
+          Effect.timeout("8 seconds"),
+          Effect.catchAll((e) => {
+            console.warn('⚠️ OHLC request failed:', e)
+            return Effect.succeed(null)
+          })
+        )
         
-        // Process OHLC response
-        if (ohlcResponse.status === 'fulfilled' && ohlcResponse.value.ok) {
-          try {
-            ohlcResult = await ohlcResponse.value.json()
-            console.log('✅ OHLC data fetched successfully')
-          } catch (error) {
-            console.warn('⚠️ Failed to parse OHLC data:', error)
-          }
-        } else {
-          console.warn('⚠️ OHLC request failed:', ohlcResponse.status === 'rejected' ? ohlcResponse.reason : ohlcResponse.value.status)
+        const marketEffect = Effect.tryPromise({
+          try: async () => {
+            const response = await fetch(`/api/coingecko/market-chart?id=${coinId}&days=${config.days}&vs_currency=usd`)
+            if (!response.ok) throw new Error(`HTTP ${response.status}`)
+            return await response.json()
+          },
+          catch: (error) => new ApiRequestError({
+            endpoint: `/api/coingecko/market-chart`,
+            status: 500,
+            message: String(error)
+          })
+        }).pipe(
+          Effect.retry(Schedule.exponential("500 millis", 2)),
+          Effect.timeout("8 seconds"),
+          Effect.catchAll((e) => {
+            console.warn('⚠️ Market-chart request failed:', e)
+            return Effect.succeed(null)
+          })
+        )
+        
+        // Fetch both endpoints in parallel with Effect.all
+        const [ohlcData, marketData] = await Effect.runPromise(
+          Effect.all([ohlcEffect, marketEffect], { concurrency: "unbounded" })
+        )
+        
+        if (ohlcData) {
+          ohlcResult = ohlcData
+          console.log('✅ OHLC data fetched successfully')
         }
         
-        // Process market-chart response
-        if (marketResponse.status === 'fulfilled' && marketResponse.value.ok) {
-          try {
-            marketResult = await marketResponse.value.json()
-            console.log('✅ Market-chart data fetched successfully')
-          } catch (error) {
-            console.warn('⚠️ Failed to parse market-chart data:', error)
-          }
-        } else {
-          console.warn('⚠️ Market-chart request failed:', marketResponse.status === 'rejected' ? marketResponse.reason : marketResponse.value.status)
+        if (marketData) {
+          marketResult = marketData
+          console.log('✅ Market-chart data fetched successfully')
         }
         
         // Combine data intelligently based on what we got and timeframe

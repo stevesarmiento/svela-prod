@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
+import { Effect, Schedule } from "effect"
+import { ApiRequestError } from "@/lib/effect/watchlist-models"
 
 interface CoinGeckoWatchlistCoin {
   id: string; // CoinGecko string ID
@@ -95,18 +97,46 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
       try {
         console.log('🔍 Fetching historical data for watchlist aggregate...', { coinIds, timeScale, days })
         
-        // Fetch historical data for each coin in parallel
-        const promises = coinIds.map(async (coinId) => {
-          const response = await fetch(`/api/coingecko/market-chart?id=${coinId}&days=${days}`)
-          if (!response.ok) {
-            console.warn(`Failed to fetch historical data for ${coinId}:`, response.status)
-            return { coinId, data: null }
-          }
-          const result = await response.json()
-          return { coinId, data: result.data || null }
-        })
-
-        const results = await Promise.all(promises)
+        // Create Effect for each coin fetch
+        const fetchEffects = coinIds.map((coinId) =>
+          Effect.tryPromise({
+            try: async () => {
+              const response = await fetch(`/api/coingecko/market-chart?id=${coinId}&days=${days}`)
+              if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`)
+              }
+              const result = await response.json()
+              return { coinId, data: result.data || null }
+            },
+            catch: (error) => new ApiRequestError({
+              endpoint: `/api/coingecko/market-chart`,
+              status: 500,
+              message: `Failed to fetch ${coinId}: ${String(error)}`
+            })
+          }).pipe(
+            // Retry failed requests with exponential backoff
+            Effect.retry(Schedule.exponential("500 millis", 2)),
+            // Timeout individual requests after 8 seconds
+            Effect.timeout("8 seconds"),
+            // On timeout, return null data instead of failing
+            Effect.catchTag("TimeoutException", () => 
+              Effect.succeed({ coinId, data: null })
+            ),
+            // On API errors, return null data instead of failing entire batch
+            Effect.catchTag("ApiRequestError", (e) => {
+              console.warn(`Failed to fetch ${coinId}:`, e.message)
+              return Effect.succeed({ coinId, data: null })
+            })
+          )
+        )
+        
+        // Execute all fetches with concurrency limit
+        const results = await Effect.runPromise(
+          Effect.all(fetchEffects, { 
+            concurrency: 5,  // Max 5 concurrent requests
+            batching: false  // Don't batch requests
+          })
+        )
         
         // Process results into a map of historical data
         const historicalDataMap: Record<string, CoinHistoricalData[]> = {}

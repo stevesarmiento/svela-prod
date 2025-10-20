@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { Effect, Exit, Cause } from "effect"
 import { Button } from "@v1/ui/button"
 import { X } from "lucide-react"
 import Link from "next/link"
@@ -10,9 +11,10 @@ import { Skeleton } from "@v1/ui/skeleton"
 import { Spinner } from "@v1/ui/spinner"
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { AvatarCircles } from '@v1/ui/token-stacks'
-import { useWatchlistGroups, useDeleteWatchlistGroup, useWatchlistByGroup } from '@/lib/convex-hooks'
+import { useWatchlistGroups, useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
+import { useWatchlistOperations } from '@/hooks/use-watchlist-effect'
 
 interface WatchlistData {
   id: string
@@ -256,7 +258,7 @@ function WatchlistCard({
 }
 
 export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
-  const deleteWatchlistGroup = useDeleteWatchlistGroup()
+  const { deleteGroup } = useWatchlistOperations()
   const [removingWatchlists, setRemovingWatchlists] = useState<Set<string>>(new Set())
   
   const watchlistGroupsData = useWatchlistGroups()
@@ -264,24 +266,33 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
   const handleRemove = async (watchlistId: string) => {
     setRemovingWatchlists(prev => new Set([...prev, watchlistId]))
     
-    try {
-      await deleteWatchlistGroup(watchlistId)
-      toast({
-        title: "Removed",
-        description: "Watchlist removed successfully",
-      })
-    } catch {
-      toast({
-        title: "Error",
-        description: "Failed to remove watchlist",
-        variant: "destructive",
-      })
-    } finally {
-      setRemovingWatchlists(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(watchlistId)
-        return newSet
-      })
+    const program = deleteGroup(watchlistId).pipe(
+      Effect.tap(() => Effect.sync(() => {
+        toast({
+          title: "Removed",
+          description: "Watchlist removed successfully",
+        })
+      })),
+      Effect.catchAll(() => Effect.sync(() => {
+        toast({
+          title: "Error",
+          description: "Failed to remove watchlist",
+          variant: "destructive",
+        })
+      }))
+    )
+
+    const exit = await Effect.runPromiseExit(program)
+    
+    // Clean up removing state
+    setRemovingWatchlists(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(watchlistId)
+      return newSet
+    })
+    
+    if (Exit.isFailure(exit)) {
+      console.error("Failed to remove watchlist:", Cause.pretty(exit.cause))
     }
   }
 

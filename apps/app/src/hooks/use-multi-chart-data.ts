@@ -1,9 +1,11 @@
 'use client'
 
 import { useMemo } from 'react'
-import { useQueries } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import type { CoinMarketData } from '@/types/coins'
 import type { Time } from 'lightweight-charts'
+import { Effect, Schedule } from "effect"
+import { ApiRequestError } from "@/lib/effect/watchlist-models"
 
 interface MultiChartDataPoint {
   time: Time
@@ -50,43 +52,68 @@ export function useMultiChartData(
     [coins]
   )
 
-  // Use React Query to fetch optimized chart data for each coin
-  const queries = useQueries({
-    queries: realCoins.map((coin) => ({
-      queryKey: ['multi-chart-data', coin.id, activeTimeScale],
-      queryFn: async () => {
-        try {
-          // Use the same optimized API endpoint as the main chart
-          const response = await fetch(`/api/coins/${coin.id}?timeScale=${activeTimeScale}`)
-          if (!response.ok) {
-            console.warn(`API request failed for coin ${coin.id}:`, response.status)
-            throw new Error('API request failed')
-          }
-          
-          const data = await response.json()
-          return {
-            coinId: coin.id,
-            data,
-            cached: false, // API handles caching internally
-            stale: false,
-            dataPoints: data.ohlcv?.data?.quotes?.length || data.historical?.data?.quotes?.length || 0,
-          }
-        } catch (error) {
-          console.error(`Failed to fetch data for coin ${coin.id}:`, error)
-          return {
-            coinId: coin.id,
-            data: null,
-            cached: false,
-            stale: false,
-            dataPoints: 0,
-          }
-        }
-      },
-      staleTime: getStaleTime(activeTimeScale), // Dynamic cache time
-      gcTime: 10 * 60 * 1000, // 10 minutes
-      refetchOnWindowFocus: false,
-      retry: 1,
-    })),
+  // Use single query with Effect.all for better concurrency control
+  const { data: queryResults = [], isLoading } = useQuery({
+    queryKey: ['multi-chart-data', realCoins.map(c => c.id).join(','), activeTimeScale],
+    queryFn: async () => {
+      if (realCoins.length === 0) return []
+      
+      // Create Effect for each coin fetch
+      const fetchEffects = realCoins.map((coin) =>
+        Effect.tryPromise({
+          try: async () => {
+            const response = await fetch(`/api/coins/${coin.id}?timeScale=${activeTimeScale}`)
+            if (!response.ok) {
+              throw new Error(`API request failed: ${response.status}`)
+            }
+            
+            const data = await response.json()
+            return {
+              coinId: coin.id,
+              data,
+              cached: false,
+              stale: false,
+              dataPoints: data.ohlcv?.data?.quotes?.length || data.historical?.data?.quotes?.length || 0,
+            }
+          },
+          catch: (error) => new ApiRequestError({
+            endpoint: `/api/coins/${coin.id}`,
+            status: 500,
+            message: `Failed to fetch ${coin.id}: ${String(error)}`
+          })
+        }).pipe(
+          // Retry failed requests with exponential backoff
+          Effect.retry(Schedule.exponential("500 millis", 2)),
+          // Timeout individual requests after 10 seconds
+          Effect.timeout("10 seconds"),
+          // On error, return null data instead of failing entire batch
+          Effect.catchAll((e) => {
+            console.warn(`Failed to fetch ${coin.id}:`, e)
+            return Effect.succeed({
+              coinId: coin.id,
+              data: null,
+              cached: false,
+              stale: false,
+              dataPoints: 0,
+            })
+          })
+        )
+      )
+      
+      // Execute all fetches with concurrency limit
+      const results = await Effect.runPromise(
+        Effect.all(fetchEffects, { 
+          concurrency: 5,
+          batching: false
+        })
+      )
+      
+      return results
+    },
+    staleTime: getStaleTime(activeTimeScale),
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    enabled: realCoins.length > 0,
   })
 
 // Helper function for dynamic cache timing (same as main chart)
@@ -105,13 +132,13 @@ function getStaleTime(timeScale: string): number {
   // Process the data for chart rendering
   const processedData = useMemo((): MultiChartData => {
     const series: CoinChartSeries[] = []
-    const totalQueries = queries.length
+    const totalQueries = realCoins.length
 
-    queries.forEach((query, index) => {
+    queryResults.forEach((queryResult, index) => {
       const coin = realCoins[index]
-      if (!coin || !query.data?.data) return
+      if (!coin || !queryResult?.data) return
 
-      const apiData = query.data.data
+      const apiData = queryResult.data
       const chartData: MultiChartDataPoint[] = []
       
       // Process OHLCV data first (better quality)
@@ -188,7 +215,6 @@ function getStaleTime(timeScale: string): number {
       }
     })
 
-    const isLoading = queries.some(query => query.isLoading)
     const hasData = series.length > 0
 
     return {
@@ -201,7 +227,7 @@ function getStaleTime(timeScale: string): number {
         totalQueries,
       }
     }
-  }, [queries, realCoins])
+  }, [queryResults, realCoins, isLoading])
 
   return processedData
 } 
