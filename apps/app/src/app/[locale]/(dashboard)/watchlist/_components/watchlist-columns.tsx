@@ -22,6 +22,7 @@ interface WatchlistColumnsProps {
   removingCoins: Set<string>;
   hoveredRowId: string | null;
   hasSelectedCoins: boolean;
+  onInlineChartError?: () => void;
 }
 
 export function createWatchlistColumns({
@@ -32,7 +33,8 @@ export function createWatchlistColumns({
   totalCoins,
   removingCoins,
   hoveredRowId,
-  hasSelectedCoins
+  hasSelectedCoins,
+  onInlineChartError,
 }: WatchlistColumnsProps): ColumnDef<CoinMarketData>[] {
   return [
     {
@@ -312,6 +314,7 @@ export function createWatchlistColumns({
                 percentChange24h={row.original.quote.USD.percent_change_24h}
                 symbol={row.original.symbol}
                 initialData={row.original.quote.USD}
+                onError={onInlineChartError}
               />
             </div>
           ) : (

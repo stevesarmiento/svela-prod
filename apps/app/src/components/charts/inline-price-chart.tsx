@@ -2,7 +2,7 @@
 
 import { useMemo, useEffect, useRef } from 'react'
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
-import { LineSeries, LastPriceAnimationMode, ColorType, type IChartApi } from 'lightweight-charts'
+import { LastPriceAnimationMode, ColorType, type IChartApi } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
 
 interface InlinePriceChartProps {
@@ -10,13 +10,15 @@ interface InlinePriceChartProps {
   percentChange24h: number // For color determination
   symbol?: string // For debugging
   initialData: CoinMarketData['quote']['USD'] // Required for useCoinGeckoChartData
+  onError?: () => void
 }
 
 export function InlinePriceChart({ 
   coingeckoId,
   percentChange24h,
   symbol = '',
-  initialData
+  initialData,
+  onError,
 }: InlinePriceChartProps) {
   const isPositive = percentChange24h >= 0
 
@@ -80,15 +82,22 @@ export function InlinePriceChart({
     })
 
     // Import createChart dynamically to avoid SSR issues
-    import('lightweight-charts').then(({ createChart }) => {
+    import('lightweight-charts').then(({ createChart, LineSeries }) => {
       try {
+        const container = chartContainerRef.current
+        if (!container || !container.isConnected) {
+          console.warn(`❕ InlineChart (${symbol}): Container disappeared before chart creation`)
+          onError?.()
+          return
+        }
+
         // Clean up existing chart
         if (chartRef.current) {
           chartRef.current.remove()
           chartRef.current = null
         }
 
-        const chart = createChart(chartContainerRef.current!, {
+        const chart = createChart(container, {
           height: 32,
           layout: {
             background: { type: ColorType.Solid, color: 'transparent' },
@@ -121,12 +130,15 @@ export function InlinePriceChart({
           lastPriceAnimation: LastPriceAnimationMode.Continuous,
         })
         
-        lineSeries.setData(validChartData)
-        chart.timeScale().fitContent()
-        
+        if (validChartData.length > 0) {
+          lineSeries.setData(validChartData)
+          chart.timeScale().fitContent()
+        }
+
         console.log(`✅ InlineChart (${symbol}): Chart created and data set successfully`)
-      } catch {
-        console.error(`❌ InlineChart (${symbol}): Error creating chart`)
+      } catch (error) {
+        console.error(`❌ InlineChart (${symbol}): Error creating chart`, error)
+        onError?.()
       }
     })
 

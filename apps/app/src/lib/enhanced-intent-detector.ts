@@ -10,9 +10,9 @@ import { normalizeTokenSymbol, getTokenInfo } from '@/lib/token-mappings';
 
 // Debug helper - expose to window for testing
 if (typeof window !== 'undefined') {
-  (window as any).testTradeDetection = (message: string) => {
+  (window as unknown as { testTradeDetection: (message: string) => unknown }).testTradeDetection = (message: string) => {
     const detector = new EnhancedIntentDetector();
-    const result = (detector as any).detectTradeAction(message);
+    const result = (detector as unknown as { detectTradeAction: (message: string) => unknown }).detectTradeAction(message);
     console.log('🧪 Trade detection test result:', result);
     return result;
   };

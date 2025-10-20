@@ -10,13 +10,16 @@
       "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-      "convex": "^1.14.2",
-      "@convex-dev/auth": "^0.0.55",
-      "@v1/logger": "workspace:*",
-      "react": "19"
+      "@v1/logger": "workspace:*"
+    },
+    "peerDependencies": {
+      "convex": ">=1.28.0",
+      "react": ">=18.0.0"
     },
     "devDependencies": {
-      "typescript": "^5.5.4"
+      "typescript": "^5.5.4",
+      "convex": "^1.28.0",
+      "react": "^19.0.0-rc.0"
     },
     "exports": {
       "./client": "./src/client.ts",

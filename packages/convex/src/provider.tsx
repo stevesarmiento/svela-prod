@@ -5,7 +5,6 @@ import { ConvexReactClient } from "convex/react";
 import { ConvexProvider as BaseConvexProvider } from "convex/react";
 import { useUser } from "@clerk/nextjs";
 import { useMutation } from "convex/react";
-import { api } from "../../../apps/app/convex/_generated/api.js";
 
 if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
   throw new Error("Missing NEXT_PUBLIC_CONVEX_URL in your .env file");

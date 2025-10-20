@@ -36,5 +36,8 @@
     "@biomejs/biome",
     "@sentry/cli",
     "protobufjs"
-  ]
+  ],
+  "dependencies": {
+    "latest": "^0.2.0"
+  }
 }

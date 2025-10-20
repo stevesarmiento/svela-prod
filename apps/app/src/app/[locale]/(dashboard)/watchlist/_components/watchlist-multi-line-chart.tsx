@@ -19,8 +19,8 @@ import { cn } from "@v1/ui/cn"
 import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
-import { useWatchlistGroups } from '@v1/convex/hooks'
-import { useWatchlistByGroup } from '@v1/convex/hooks'
+import { useWatchlistGroups } from '@/lib/convex-hooks'
+import { useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
 

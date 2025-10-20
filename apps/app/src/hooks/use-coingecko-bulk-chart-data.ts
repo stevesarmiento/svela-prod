@@ -40,8 +40,8 @@ export function useCoinGeckoBulkChartData(
 ): BulkChartDataResult {
   const days = TIME_SCALE_DAYS[activeTimeScale as keyof typeof TIME_SCALE_DAYS] || '7'
   
-  // Filter out optimistic (loading) coins and get real coin IDs
-  const realCoins = coins.filter(coin => !coin.isOptimistic)
+  // Filter out optimistic (loading) coins and coins without valid IDs
+  const realCoins = coins.filter(coin => !coin.isOptimistic && coin.id != null)
   const coinIds = realCoins.map(coin => coin.id.toString())
   
   const { data: seriesData = [], isLoading } = useQuery({

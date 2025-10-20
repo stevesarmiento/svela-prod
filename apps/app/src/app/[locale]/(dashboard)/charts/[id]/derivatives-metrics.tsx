@@ -1,4 +1,3 @@
-import { Fragment } from "react"
 import { FundingRate } from "./funding-rate"
 import { OpenInterest } from "./open-interest"
 import { LongShortRatio } from "./long-short-ratio"
@@ -34,7 +33,7 @@ export function DerivativesMetrics({ data }: DerivativesMetricsProps) {
   return (
     <div className="grid grid-cols-1 items-center">
       {derivativesComponents.map((item, index) => (
-        <Fragment key={item.key}>
+        <div key={item.key} className="contents">
           <div className="col-span-1">
             {item.component}
           </div>
@@ -45,7 +44,7 @@ export function DerivativesMetrics({ data }: DerivativesMetricsProps) {
               <div className="h-[77px] w-[1px] bg-gradient-to-b from-transparent via-foreground/20 to-transparent" />
             </div>
           )}
-        </Fragment>
+        </div>
       ))}
     </div>
   )

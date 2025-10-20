@@ -1,6 +1,6 @@
 import { cn } from "@v1/ui/cn"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
-import { Fragment, memo, useMemo, useDeferredValue } from "react"
+import { memo, useMemo, useDeferredValue } from "react"
 import { IconLaurelLeading, IconLaurelTrailing } from "symbols-react"
 
 interface MarketMetricsProps {
@@ -116,7 +116,7 @@ export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: Ma
       {/* Metrics Grid */}
       <div className="grid grid-cols-9 items-center">
         {metrics.map((metric, index) => (
-          <Fragment key={metric.label}>
+          <div key={metric.label} className="contents">
             <div 
               className={cn(
                 "flex flex-col items-center py-4 col-span-1",
@@ -146,7 +146,7 @@ export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: Ma
                 <div className="h-[77px] w-[1px] bg-gradient-to-b from-transparent via-foreground/20 to-transparent" />
               </div>
             )}
-          </Fragment>
+          </div>
         ))}
       </div>
     </div>

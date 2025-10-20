@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useDeferredValue } from 'react'
 import { useChat } from 'ai/react'
-import { useAuth } from '@v1/convex/hooks'
+import { useAuth } from '@/lib/convex-hooks'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import { autoCleanupSessionMemories, bulkCleanupMemories } from '@/lib/client-memory-utils'

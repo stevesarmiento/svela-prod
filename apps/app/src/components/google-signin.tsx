@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuth } from "@v1/convex/hooks";
+import { useAuth } from "@/lib/convex-hooks";
 import { Button } from "@v1/ui/button";
 import { IconGoogleLogo } from "symbols-react";
 

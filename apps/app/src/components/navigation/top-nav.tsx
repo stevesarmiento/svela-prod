@@ -10,7 +10,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 //   IconGearshapeFill,
 // } from "symbols-react";
 import { Button } from "@v1/ui/button";
-import { useAuth } from "@v1/convex/hooks";
+import { useAuth } from "@/lib/convex-hooks";
 import { useUser } from "@clerk/nextjs";
 import { 
   DropdownMenu,

@@ -10,7 +10,7 @@ import {
   useUpdateWatchlistGroup,
   useDeleteWatchlistGroup,
   useWatchlistByGroup
-} from '@v1/convex/hooks'
+} from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { IconPicker } from '@/components/icon-picker'
 import { COLORS } from '@/components/color-picker'

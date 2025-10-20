@@ -20,7 +20,7 @@ import {
 } from "@v1/ui/sidebar";
 import { Button } from "@v1/ui/button";
 import { SignOut } from "@/components/sign-out";
-import { useAuth } from "@v1/convex/hooks";
+import { useAuth } from "@/lib/convex-hooks";
 import { 
   DropdownMenu,
   DropdownMenuContent,

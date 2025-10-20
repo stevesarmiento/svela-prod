@@ -10,7 +10,7 @@ import { Skeleton } from "@v1/ui/skeleton"
 import { Spinner } from "@v1/ui/spinner"
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { AvatarCircles } from '@v1/ui/token-stacks'
-import { useWatchlistGroups, useDeleteWatchlistGroup, useWatchlistByGroup } from '@v1/convex/hooks'
+import { useWatchlistGroups, useDeleteWatchlistGroup, useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
 

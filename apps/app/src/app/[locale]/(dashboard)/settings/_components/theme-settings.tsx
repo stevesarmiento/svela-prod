@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 
 import { Separator } from '@v1/ui/separator';
 import { IconSunMaxFill, IconMoonStarsFill } from 'symbols-react';
-import { useAuth } from '@v1/convex/hooks';
+import { useAuth } from '@/lib/convex-hooks';
 import { toast } from 'sonner';
 import { useUserSettings } from '@/hooks/use-user-settings';
 import { useTheme } from 'next-themes';

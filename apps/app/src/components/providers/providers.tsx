@@ -12,8 +12,8 @@ import {
   useConnectorClient
 } from "@connector-kit/connector";
 import { ClerkProvider } from "@clerk/nextjs";
-import { ConvexProvider } from "@v1/convex/provider";
-import { WatchlistProvider } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context";
+import { ConvexProvider } from "./convex-provider";
+import { WatchlistProvider } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context"; // cspell:disable-line
 import { ThemeProvider } from "./theme-provider";
 import { NotifToaster } from "@v1/ui/sonner-notif";
 import { ChatToast } from "@/components/chat/chat-toast";
@@ -99,18 +99,15 @@ export function Providers({ children }: ProvidersProps) {
               debug: process.env.NODE_ENV === 'development',
             }}
             queryClient={queryClient}
+            // @ts-expect-error - connector type mismatch between @connector-kit and @armadura types
             useConnector={useConnectorClient}
           >
             <ConvexProvider>
               <WatchlistProvider>
                 <ThemeProvider>
                   {children}
-                  
                   <ChatToast />
-                  <NotifToaster 
-                    position="top-center" 
-                    offset={-10}
-                  />
+                  <NotifToaster position="top-center" offset={-10} />
                   <ReactQueryDevtools initialIsOpen={false} />
                 </ThemeProvider>
               </WatchlistProvider>

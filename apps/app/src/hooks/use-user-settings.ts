@@ -1,10 +1,10 @@
 import { useQuery, useMutation, useAction } from "convex/react";
-import { api } from "@/../convex/_generated/api";
-import { useAuth } from "@v1/convex/hooks";
-import { toast } from "sonner";
-import { API_PROVIDERS, type ApiProvider } from "@/../convex/apiKeys";
-import type { Id } from "@/../convex/_generated/dataModel";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+import { API_PROVIDERS, type ApiProvider } from "@/constants/api-providers";
+import { useAuth } from "@/lib/convex-hooks";
 import { useState, useCallback } from "react";
+import { toast } from "sonner";
 
 export function useUserSettings() {
   const { user } = useAuth();

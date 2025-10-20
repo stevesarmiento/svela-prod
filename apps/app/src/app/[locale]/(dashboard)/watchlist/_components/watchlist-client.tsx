@@ -7,6 +7,7 @@ function WatchlistContent() {
   const [viewMode, setViewMode] = useState<'grid' | 'chart'>('grid')
   const [activeTimeScale, setActiveTimeScale] = useState<string>('7d')
   const [contentMode, setContentMode] = useState<'cards' | 'table'>('cards')
+  const [pendingInlineChartError, setPendingInlineChartError] = useState(false)
 
   // Handle view mode changes from the WatchlistsGrid tabs
   const handleViewModeChange = (mode: 'grid' | 'chart') => {
@@ -19,14 +20,19 @@ function WatchlistContent() {
   }
 
   return (
-    <div className="w-full px-4">      
-      <Watchlist 
+    <div className="w-full px-4">
+      <Watchlist
         activeTimeScale={activeTimeScale}
         onTimeScaleChange={setActiveTimeScale}
         gridViewMode={viewMode}
         onGridViewModeChange={handleViewModeChange}
         contentMode={contentMode}
         onContentModeChange={handleContentModeChange}
+        pendingInlineChartError={pendingInlineChartError}
+        onInlineChartError={() => {
+          setPendingInlineChartError(true)
+          setContentMode('cards')
+        }}
       />
     </div>
   )

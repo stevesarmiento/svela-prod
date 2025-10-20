@@ -1,9 +1,9 @@
 'use client'
 
-import { createContext, useContext, useEffect, useCallback, useMemo } from 'react'
+import React, { createContext, useContext, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { useQueryState } from 'nuqs'
-import { 
+import {
   useWatchlist as useConvexWatchlist, 
   useWatchlistGroups,
   useWatchlistByGroup,
@@ -11,7 +11,7 @@ import {
   useAddToWatchlistGroup, 
   useRemoveFromWatchlistGroup, 
   useRemoveBulkFromWatchlist 
-} from '@v1/convex/hooks'
+} from '@/lib/convex-hooks'
 
 interface WatchlistGroup {
   _id: string
@@ -262,10 +262,11 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     selectWatchlistGroup, addToSelectedGroup, removeFromSelectedGroup, removeBulkFromSelectedGroup
   ])
 
+  const Provider = WatchlistContext.Provider as React.FC<{ value: WatchlistContextType; children: ReactNode }>;
   return (
-    <WatchlistContext.Provider value={contextValue}>
+    <Provider value={contextValue}>
       {children}
-    </WatchlistContext.Provider>
+    </Provider>
   )
 }
 

@@ -14,11 +14,11 @@ import {
   getFilteredRowModel,
   type SortingState,
 } from '@tanstack/react-table'
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from "next/navigation"
 import { Spinner } from "@v1/ui/spinner"
 import { WatchlistsGrid } from "./watchlists-grid"
-import { WatchlistTable } from "./watchlist-table"
+import { ChartsClient } from "../../charts/_components/chart-client"
 import { matchesShortcut, GLOBAL_SHORTCUTS } from "@/lib/keyboard-shortcuts"
 import { useWatchlistData } from "@/hooks/use-watchlist-data"
 import { useWatchlistSelection } from "@/hooks/use-watchlist-selection"
@@ -42,21 +42,23 @@ interface WatchlistProps {
   onGridViewModeChange?: (mode: 'grid' | 'chart') => void;
   contentMode?: 'cards' | 'table';
   onContentModeChange?: (mode: 'cards' | 'table') => void;
+  onInlineChartError?: () => void;
 }
 
-export function Watchlist({ 
+export function Watchlist({
   activeTimeScale = '7d',
   onTimeScaleChange,
   gridViewMode = 'grid',
   onGridViewModeChange,
   contentMode = 'cards',
-  onContentModeChange
+  onContentModeChange,
+  onInlineChartError,
 }: WatchlistProps) {
-  const { 
+  const {
     // Legacy for backward compatibility
-    watchlist, 
-    removeFromWatchlist, 
-    removeBulkFromWatchlist, 
+    watchlist,
+    removeFromWatchlist,
+    removeBulkFromWatchlist,
     isInitialized,
     // New group functionality
     selectedGroup,
@@ -66,6 +68,7 @@ export function Watchlist({
     removeBulkFromSelectedGroup,
     watchlistGroups
   } = useWatchlist()
+
   
   const searchParams = useSearchParams()
   const [sorting, setSorting] = useState<SortingState>([])
@@ -193,8 +196,9 @@ export function Watchlist({
     totalCoins: filteredCoins.length,
     removingCoins,
     hoveredRowId,
-    hasSelectedCoins
-  }), [handleRemove, selectedCoins, handleCoinSelect, handleSelectAllWrapper, filteredCoins.length, removingCoins, hoveredRowId, hasSelectedCoins]);
+    hasSelectedCoins,
+    onInlineChartError,
+  }), [handleRemove, selectedCoins, handleCoinSelect, handleSelectAllWrapper, filteredCoins.length, removingCoins, hoveredRowId, hasSelectedCoins, onInlineChartError]);
 
   const table = useReactTable({
     data: filteredCoins,
@@ -387,17 +391,8 @@ export function Watchlist({
           </TabsContent>
 
           <TabsContent value="chart" className="mt-0">
-            {/* Comparison Mode */}
-            <div className="space-y-4">
-              <WatchlistsGrid 
-                onSelectWatchlist={selectWatchlistGroup}
-                viewMode="chart"
-                activeTimeScale={activeTimeScale}
-                onTimeScaleChange={onTimeScaleChange}
-                onViewModeChange={onGridViewModeChange}
-              />
-              <WatchlistTable activeTimeScale={activeTimeScale} />
-            </div>
+            {/* Comparison Mode - Shows individual coin charts for selected watchlist */}
+            <ChartsClient />
           </TabsContent>
         </Tabs>
       ) : (

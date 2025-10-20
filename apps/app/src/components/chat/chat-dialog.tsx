@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useDeferredValue } from 'react'
-import { useAuth } from '@v1/convex/hooks'
+import { useAuth } from '@/lib/convex-hooks'
 import { autoCleanupSessionMemories } from '@/lib/client-memory-utils'
 import { useChatStateSync } from './hooks/use-chat-state-sync'
 import { Button } from '@v1/ui/button'

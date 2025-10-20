@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@v1/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@v1/ui/avatar';
 import { IconSparkle } from 'symbols-react';
-import { useAuth } from '@v1/convex/hooks';
+import { useAuth } from '@/lib/convex-hooks';
 
 
 // Noise/texture overlay component

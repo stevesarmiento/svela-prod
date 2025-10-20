@@ -1,40 +1,9 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { API_PROVIDERS } from "../src/constants/api-providers";
 
-// API Provider types and configurations
-export const API_PROVIDERS = {
-  coingecko: {
-    name: "CoinGecko Pro",
-    description: "Premium cryptocurrency market data and pricing",
-    keyPattern: /^.{10,}$/, // Just check minimum length - let the API validate
-    testEndpoint: "https://pro-api.coingecko.com/api/v3/ping",
-    rateLimit: { requests: 500, window: 60000 }, // 500 requests per minute
-  },
-  coinglass: {
-    name: "CoinGlass",
-    description: "Derivatives and futures market data",
-    keyPattern: /^.{10,}$/, // Just check minimum length - let the API validate
-    testEndpoint: "https://fapi.coinglass.com/api/futures/supported-coins",
-    rateLimit: { requests: 1000, window: 60000 }, // 1000 requests per minute
-  },
-  openai: {
-    name: "OpenAI",
-    description: "AI-powered analysis and chat features",
-    keyPattern: /^.{10,}$/, // Just check minimum length - let the API validate
-    testEndpoint: "https://api.openai.com/v1/models",
-    rateLimit: { requests: 3500, window: 60000 }, // Varies by tier
-  },
-  gemini: {
-    name: "Google Gemini",
-    description: "Google's AI model for analysis and chat",
-    keyPattern: /^.{10,}$/, // Just check minimum length - let the API validate
-    testEndpoint: "https://generativelanguage.googleapis.com/v1beta/models",
-    rateLimit: { requests: 60, window: 60000 }, // 60 requests per minute
-  },
-  // coinmarketcap removed - no longer used
-} as const;
-
-export type ApiProvider = keyof typeof API_PROVIDERS;
+// Re-export for use in convex functions
+export { API_PROVIDERS };
 
 // Get all API keys for a user
 export const getUserApiKeys = query({
@@ -134,9 +103,9 @@ export const upsertApiKey = mutation({
       throw new Error("User not found");
     }
 
-    // Validate provider
-    if (!(args.provider in API_PROVIDERS)) {
-      throw new Error(`Invalid API provider: ${args.provider}`);
+    const providerConfig = API_PROVIDERS[args.provider as keyof typeof API_PROVIDERS]
+    if (!providerConfig) {
+      throw new Error(`Invalid API provider: ${args.provider}`)
     }
 
     const now = Date.now();
@@ -296,6 +265,10 @@ export const getApiKeyStats = query({
 
     // Build provider-specific stats
     Object.keys(API_PROVIDERS).forEach(provider => {
+      const providerConfig = API_PROVIDERS[provider as keyof typeof API_PROVIDERS]
+      if (!providerConfig) {
+        return
+      }
       const providerKey = apiKeys.find(key => key.provider === provider);
       stats.providerStats[provider] = {
         hasKey: !!providerKey,
