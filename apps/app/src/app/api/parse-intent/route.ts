@@ -1,7 +1,12 @@
 import { streamText } from 'ai';
 import { openai, isOpenAIAvailable } from '@/lib/openai';
+import { NextResponse } from 'next/server';
+import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
 
 export async function POST(req: Request) {
+  if (!isAlphaFeaturesEnabled()) {
+    return NextResponse.json({ error: 'Feature not available' }, { status: 403 });
+  }
   try {
     // Check if OpenAI is available
     if (!isOpenAIAvailable || !openai) {

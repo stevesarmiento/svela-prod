@@ -9,6 +9,7 @@ import { BackButton } from "./back-button";
 import { CommandSearch } from "./command-search";
 import { ChatContainer } from "./chat-container";
 import { ChatStateManager } from "../chat/chat-toast";
+import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
 
@@ -52,7 +53,7 @@ export function BottomNav() {
       <div className="max-w-fit mx-auto flex items-center gap-2 relative">
         {/* Chat Container - Single expandable container */}
         <AnimatePresence mode="popLayout">
-          {mode === 'navigation' && !isCommandOpen && (
+          {mode === 'navigation' && !isCommandOpen && isAlphaFeaturesEnabled() && (
             <motion.div
               key="chat-container"
               layoutId="chat-container"

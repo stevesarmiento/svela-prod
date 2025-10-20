@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { capxMemoryService } from '@/lib/capx-memory';
+import { convex } from '@/lib/convex-client';
+import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
 
 export async function POST(request: NextRequest) {
+  if (!isAlphaFeaturesEnabled()) {
+    return NextResponse.json({ error: 'Feature not available' }, { status: 403 });
+  }
   try {
     console.log('🔄 Session cleanup API called');
     
@@ -15,7 +19,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
 
-    if (!capxMemoryService.isAvailable()) {
+    if (!convex.isAvailable()) {
       console.error('❌ Cap.X memory service not available');
       return NextResponse.json({ error: 'Memory service not available' }, { status: 503 });
     }
@@ -29,14 +33,14 @@ export async function POST(request: NextRequest) {
     
     try {
       console.log('🎯 Cleaning recent chat query memories...');
-      const queryResult = await capxMemoryService.forgetMemory(userId, { 
+      const queryResult = await convex.forgetMemory(userId, { 
         metadataFilter: { source: 'chat_query' } 
       });
       deletedCount += queryResult.count;
       console.log(`📊 Deleted ${queryResult.count} chat query memories`);
       
       console.log('🎯 Cleaning recent chat response memories...');
-      const responseResult = await capxMemoryService.forgetMemory(userId, { 
+      const responseResult = await convex.forgetMemory(userId, { 
         metadataFilter: { source: 'chat_response' } 
       });
       deletedCount += responseResult.count;
@@ -44,7 +48,7 @@ export async function POST(request: NextRequest) {
       
       // Also clean fallback memories that might not have metadata
       console.log('🎯 Cleaning fallback chat memories...');
-      const fallbackResult = await capxMemoryService.forgetMemory(userId, { 
+      const fallbackResult = await convex.forgetMemory(userId, { 
         metadataFilter: { source: 'chat_query_fallback' } 
       });
       deletedCount += fallbackResult.count;
@@ -56,7 +60,7 @@ export async function POST(request: NextRequest) {
       // Graceful fallback - try a very short time period (1 hour)
       try {
         console.log('🔄 Trying 1-hour cleanup as fallback...');
-        const timeResult = await capxMemoryService.forgetMemory(userId, { 
+        const timeResult = await convex.forgetMemory(userId, { 
           olderThanDays: 0 // Delete everything (last resort)
         });
         deletedCount = Math.min(timeResult.count, 10); // Limit to 10 for safety

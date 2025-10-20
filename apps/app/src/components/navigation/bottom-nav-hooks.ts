@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { COMMAND_ITEMS, type NavigationItem, type ActionItem } from './bottom-nav-constants';
 import { SEQUENTIAL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
 import { useChatContext } from './bottom-nav-context';
+import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
 
 // React 19: Inline type definition for better maintainability
 
@@ -93,7 +94,9 @@ export function useKeyboardShortcuts(
             setIsOpen(prev => !prev);
             break;
           case 'j':
-            openChat();
+            if (isAlphaFeaturesEnabled()) {
+              openChat();
+            }
             break;
         }
       }

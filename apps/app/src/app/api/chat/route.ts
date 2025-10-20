@@ -3,10 +3,14 @@ import { gemini } from '@/lib/gemini';
 import { capxMemoryService, type CapxMemory } from '@/lib/capx-memory';
 // Removed storeMemoryWithMetadata import - using direct service instead
 import { NextResponse } from "next/server";
+import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
 
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
+  if (!isAlphaFeaturesEnabled()) {
+    return NextResponse.json({ error: 'Feature not available' }, { status: 403 });
+  }
   try {
     const { messages, userId } = await req.json();
     

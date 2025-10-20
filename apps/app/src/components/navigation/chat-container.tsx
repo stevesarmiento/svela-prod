@@ -11,10 +11,12 @@ import { useClickOutside } from '@v1/ui/hooks'
 import { useChatState } from '../chat/chat-toast'
 import { ChatDialog } from '../chat/chat-dialog'
 import { BackgroundPattern } from './background-pattern'
+import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
 
 export function ChatContainer() {
   const { isChatOpen, setIsChatOpen } = useOverlayState()
   const { openChat, isChatDialogOpen, openChatDialog, closeChatDialog } = useChatContext()
+  
   const {
     input,
     handleInputChange,
@@ -85,7 +87,7 @@ export function ChatContainer() {
     return null
   }
 
-  return (
+  return !isAlphaFeaturesEnabled() && (
     <motion.div
       ref={containerRef}
       layout

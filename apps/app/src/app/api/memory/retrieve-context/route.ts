@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { capxMemoryService } from '@/lib/capx-memory';
+import { convex } from '@/lib/convex-client';
+import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
 
 export async function POST(request: NextRequest) {
+  if (!isAlphaFeaturesEnabled()) {
+    return NextResponse.json({ error: 'Feature not available' }, { status: 403 });
+  }
+
   try {
     const { 
       userId, 
@@ -18,10 +23,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User ID and query are required' }, { status: 400 });
     }
 
-    if (!capxMemoryService.isAvailable()) {
-      return NextResponse.json({ error: 'Memory service not available' }, { status: 503 });
-    }
-
     // Build metadata filter from structured parameters
     const metadataFilter: Record<string, unknown> = {};
     
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
     if (namespace) metadataFilter.namespace = namespace;
 
     // Retrieve context with advanced filtering
-    const result = await capxMemoryService.retrieveContext(
+    const result = await convex.memory.retrieveContext(
       userId,
       query,
       limit,

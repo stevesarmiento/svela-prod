@@ -30,6 +30,7 @@ export const env = createEnv({
     NEXT_PUBLIC_SOLANA_NETWORK: z.string().optional(),
     NEXT_PUBLIC_SOLANA_RPC_URL: z.string().optional(),
     NEXT_PUBLIC_HELIUS_API_KEY: z.string().optional(),
+    NEXT_PUBLIC_DISABLE_ALPHA_FEATURES: z.string().optional().default('true'),
   },
   runtimeEnv: {
     NEXT_PUBLIC_OPENPANEL_CLIENT_ID:
@@ -39,6 +40,7 @@ export const env = createEnv({
     NEXT_PUBLIC_SOLANA_NETWORK: process.env.NEXT_PUBLIC_SOLANA_NETWORK,
     NEXT_PUBLIC_SOLANA_RPC_URL: process.env.NEXT_PUBLIC_SOLANA_RPC_URL,
     NEXT_PUBLIC_HELIUS_API_KEY: process.env.NEXT_PUBLIC_HELIUS_API_KEY,
+    NEXT_PUBLIC_DISABLE_ALPHA_FEATURES: process.env.NEXT_PUBLIC_DISABLE_ALPHA_FEATURES,
     OPENPANEL_SECRET_KEY: process.env.OPENPANEL_SECRET_KEY,
     PORT: process.env.PORT,
     RESEND_API_KEY: process.env.RESEND_API_KEY,

@@ -17,6 +17,7 @@ import { WatchlistProvider } from "@/app/[locale]/(dashboard)/watchlist/_compone
 import { ThemeProvider } from "./theme-provider";
 import { NotifToaster } from "@v1/ui/sonner-notif";
 import { ChatToast } from "@/components/chat/chat-toast";
+import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -106,7 +107,7 @@ export function Providers({ children }: ProvidersProps) {
               <WatchlistProvider>
                 <ThemeProvider>
                   {children}
-                  <ChatToast />
+                  {isAlphaFeaturesEnabled() && <ChatToast />}
                   <NotifToaster position="top-center" offset={-10} />
                   <ReactQueryDevtools initialIsOpen={false} />
                 </ThemeProvider>

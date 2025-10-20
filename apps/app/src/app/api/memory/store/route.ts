@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { capxMemoryService } from '@/lib/capx-memory';
+import { convex } from '@/lib/convex-client';
+import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
 
 export async function POST(request: NextRequest) {
+  if (!isAlphaFeaturesEnabled()) {
+    return NextResponse.json({ error: 'Feature not available' }, { status: 403 });
+  }
+
   try {
     const { userId, text, metadata, strategy } = await request.json();
 
@@ -9,17 +14,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'User ID and text are required' }, { status: 400 });
     }
 
-    if (!capxMemoryService.isAvailable()) {
-      return NextResponse.json({ error: 'Memory service not available' }, { status: 503 });
-    }
-
     // Store the memory with enhanced metadata and strategy
-    const result = await capxMemoryService.addMemory(
+    const result = await convex.memory.addMemory.mutate({
       userId,
       text,
-      metadata || {},
-      strategy || 'raw'
-    );
+      metadata: metadata || {},
+      strategy: strategy || 'raw'
+    });
 
     return NextResponse.json({ 
       success: true, 
