@@ -4,6 +4,7 @@ import { useRef, useEffect, useCallback } from 'react'
 import type { IChartApi, MouseEventParams } from 'lightweight-charts'
 import { useIsomorphicTheme } from './use-isomorphic-theme'
 import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
+import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 
 export interface ChartConfig {
   height?: number
@@ -63,6 +64,9 @@ export function useOptimizedChart(options: UseOptimizedChartOptions = {}) {
 
     let isCancelled = false
     let chart: IChartApi | null = null
+    let resizeObserver: ResizeObserver | null = null
+    let resizeRafId: number | null = null
+    let unsubscribeWindowResize: (() => void) | null = null
 
     void (async () => {
       const { createChart, ColorType, CrosshairMode, LineStyle } =
@@ -124,8 +128,16 @@ export function useOptimizedChart(options: UseOptimizedChartOptions = {}) {
       // Initial resize
       resizeHandler()
 
-      // Set up resize listener
-      window.addEventListener("resize", resizeHandler)
+      // Prefer observing the actual container size (avoids per-chart global resize listeners).
+      if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeRafId) cancelAnimationFrame(resizeRafId)
+          resizeRafId = requestAnimationFrame(() => resizeHandler())
+        })
+        resizeObserver.observe(chartContainerRef.current)
+      } else {
+        unsubscribeWindowResize = subscribeToWindowResize(resizeHandler)
+      }
       
       // Set up crosshair move handler
       if (onCrosshairMoveRef.current) {
@@ -143,7 +155,9 @@ export function useOptimizedChart(options: UseOptimizedChartOptions = {}) {
 
     return () => {
       isCancelled = true
-      window.removeEventListener("resize", resizeHandler)
+      if (resizeRafId) cancelAnimationFrame(resizeRafId)
+      resizeObserver?.disconnect()
+      unsubscribeWindowResize?.()
       chart?.remove()
       chartRef.current = null
     }

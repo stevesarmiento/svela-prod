@@ -104,6 +104,40 @@ function getRouteGreeting(pathname: string): string {
   return "Welcome";
 }
 
+function getStaticRouteGreeting(pathname: string): string | null {
+  // Remove locale prefix if present (e.g., /en/charts -> /charts)
+  const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
+
+  // Overview/watchlist uses time-based greeting (handled client-side to avoid hydration mismatch)
+  if (
+    cleanPath === '/watchlist' ||
+    cleanPath.startsWith('/watchlist/') ||
+    cleanPath === '/' ||
+    cleanPath === '/overview' ||
+    cleanPath.startsWith('/overview/')
+  ) {
+    return null;
+  }
+
+  const routeGreetings: Record<string, string> = {
+    '/charts': 'Charts & Graphs',
+    '/settings': 'Settings',
+    '/portfolio': 'Portfolio',
+  };
+
+  if (routeGreetings[cleanPath]) {
+    return routeGreetings[cleanPath];
+  }
+
+  for (const [route, greeting] of Object.entries(routeGreetings)) {
+    if (cleanPath.startsWith(route + '/')) {
+      return greeting;
+    }
+  }
+
+  return null;
+}
+
 export function TopNav() {
   const router = useRouter();
   const { user } = useAuth();
@@ -111,8 +145,7 @@ export function TopNav() {
   const { openUserProfile } = useClerk();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [greeting, setGreeting] = useState("Dashboard");
-  const [isMounted, setIsMounted] = useState(false);
+  const [overviewGreeting, setOverviewGreeting] = useState<string | null>(null);
   const { isChartDetailPage, tokenData, isLoading } = useTokenHeader();
 
   // Extract coin ID from pathname for watchlist button
@@ -122,11 +155,22 @@ export function TopNav() {
   const watchlistGroup = searchParams.get('wg');
   const backToChartsUrl = watchlistGroup ? `/charts?wg=${watchlistGroup}` : '/charts';
 
-  // Update greeting based on route after component mounts
+  // Check if current route is overview (now watchlist is the default overview)
+  const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
+  const isOverviewRoute = cleanPath === '/watchlist' || cleanPath.startsWith('/watchlist/') || cleanPath === '/' || cleanPath === '/overview' || cleanPath.startsWith('/overview/');
+
+  // Static route greeting (safe to render during SSR without time-based mismatch)
+  const staticGreeting = getStaticRouteGreeting(pathname);
+
+  // Update time-based greeting client-side for overview routes (avoids hydration mismatch).
   useEffect(() => {
-    setIsMounted(true);
-    setGreeting(getRouteGreeting(pathname));
-  }, [pathname]);
+    if (!isOverviewRoute) {
+      setOverviewGreeting(null);
+      return;
+    }
+
+    setOverviewGreeting(getRouteGreeting(pathname));
+  }, [isOverviewRoute, pathname]);
 
   const handleProfileClick = () => {
     openUserProfile();
@@ -138,10 +182,6 @@ export function TopNav() {
   const firstName = name?.split(' ')[0] || (clerkUser?.primaryEmailAddress?.emailAddress || user?.email)?.split('@')[0];
   const email = clerkUser?.primaryEmailAddress?.emailAddress || user?.email;
   const avatarUrl = clerkUser?.imageUrl || user?.avatarUrl;
-
-  // Check if current route is overview (now watchlist is the default overview)
-  const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
-  const isOverviewRoute = cleanPath === '/watchlist' || cleanPath.startsWith('/watchlist/') || cleanPath === '/' || cleanPath === '/overview' || cleanPath.startsWith('/overview/');
 
   // Don't show greeting with name until user data is loaded
   const showPersonalizedGreeting = isLoaded && firstName;
@@ -205,18 +245,11 @@ export function TopNav() {
                 />
               </Link>
               <span className="text-xl font-bold text-zinc-950 dark:text-white">
-                {isMounted 
-                  ? isOverviewRoute 
-                    ? showPersonalizedGreeting 
-                      ? `${greeting}, ${firstName}` 
-                      : greeting
-                    : greeting
-                  : isOverviewRoute 
-                    ? showPersonalizedGreeting
-                      ? `Good morning, ${firstName}` 
-                      : "Good morning"
-                    : "Watchlist"
-                }
+                {isOverviewRoute
+                  ? showPersonalizedGreeting
+                    ? `${overviewGreeting ?? "Good morning"}, ${firstName}`
+                    : overviewGreeting ?? "Good morning"
+                  : staticGreeting ?? "Watchlist"}
               </span>
             </>
           )}

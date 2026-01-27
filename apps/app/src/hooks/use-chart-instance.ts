@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client'
 import type { ISeriesApi, Time } from 'lightweight-charts'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
+import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 
 interface PriceDataPoint {
   time: Time
@@ -386,7 +387,21 @@ export function useChartInstance(
         }
       }
 
-      window.addEventListener("resize", handleResize)
+      // Prefer observing the actual container size (avoids per-chart global resize listeners).
+      let resizeObserver: ResizeObserver | null = null
+      let resizeRafId: number | null = null
+      let unsubscribeWindowResize: (() => void) | null = null
+
+      if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeRafId) cancelAnimationFrame(resizeRafId)
+          resizeRafId = requestAnimationFrame(() => handleResize())
+        })
+        resizeObserver.observe(chartContainerRef.current)
+      } else {
+        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
+      }
+
       handleResize()
 
       // Add tooltip
@@ -507,7 +522,9 @@ export function useChartInstance(
       })
 
       cleanup = () => {
-        window.removeEventListener("resize", handleResize)
+        if (resizeRafId) cancelAnimationFrame(resizeRafId)
+        resizeObserver?.disconnect()
+        unsubscribeWindowResize?.()
         requestAnimationFrame(() => {
           try {
             tooltipRoot.unmount()

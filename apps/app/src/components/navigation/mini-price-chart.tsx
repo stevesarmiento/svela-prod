@@ -9,6 +9,7 @@ import { useHullSuite } from '@/hooks/use-hull-suite'
 import { RateLimitErrorBoundary } from '@/components/error-boundary/rate-limit-error-boundary'
 import { AlertTriangle } from 'lucide-react'
 import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
+import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 
 interface MiniPriceChartProps {
   coinId: string
@@ -197,6 +198,9 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
     if (!chartContainerRef.current || chartData.length === 0) return
 
     let isCancelled = false
+    let resizeObserver: ResizeObserver | null = null
+    let resizeRafId: number | null = null
+    let unsubscribeWindowResize: (() => void) | null = null
 
     // Clean up previous chart instance
     cleanupChart()
@@ -395,13 +399,25 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
         tooltipEl.style.transform = `translate3d(${left}px, ${top}px, 0)`
       })
 
-      // Use optimized resize handler
-      window.addEventListener('resize', handleResize)
+      // Prefer observing the actual container size (avoids per-chart global resize listeners).
+      if (typeof ResizeObserver !== 'undefined' && chartContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeRafId) cancelAnimationFrame(resizeRafId)
+          resizeRafId = requestAnimationFrame(() => handleResize())
+        })
+        resizeObserver.observe(chartContainerRef.current)
+      } else {
+        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
+      }
+
+      handleResize()
     })()
 
     return () => {
       isCancelled = true
-      window.removeEventListener('resize', handleResize)
+      if (resizeRafId) cancelAnimationFrame(resizeRafId)
+      resizeObserver?.disconnect()
+      unsubscribeWindowResize?.()
       // Use centralized cleanup
       cleanupChart()
     }

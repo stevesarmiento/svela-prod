@@ -9,6 +9,7 @@ import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { coinGeckoIdToSymbolFallback } from '@/lib/coingecko-to-symbol'
 import type { IChartApi, Time } from 'lightweight-charts'
 import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
+import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 
 interface LiquidationHistoryChartProps {
   coinId: string
@@ -231,11 +232,27 @@ export function LiquidationHistoryChart({
         }
       }
 
-      window.addEventListener('resize', handleResize)
+      // Prefer observing the actual container size (avoids per-chart global resize listeners).
+      let resizeObserver: ResizeObserver | null = null
+      let resizeRafId: number | null = null
+      let unsubscribeWindowResize: (() => void) | null = null
+
+      if (typeof ResizeObserver !== 'undefined' && chartContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeRafId) cancelAnimationFrame(resizeRafId)
+          resizeRafId = requestAnimationFrame(() => handleResize())
+        })
+        resizeObserver.observe(chartContainerRef.current)
+      } else {
+        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
+      }
+
       handleResize()
 
       cleanup = () => {
-        window.removeEventListener('resize', handleResize)
+        if (resizeRafId) cancelAnimationFrame(resizeRafId)
+        resizeObserver?.disconnect()
+        unsubscribeWindowResize?.()
         chart.remove()
         chartRef.current = null
       }

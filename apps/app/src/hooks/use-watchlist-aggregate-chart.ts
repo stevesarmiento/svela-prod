@@ -165,7 +165,7 @@ function getStaleTime(timeScale: string): number {
             }))
             .filter((quote: { timestamp: string; price: number }) => quote.price > 0)
             .sort((a: { timestamp: string; price: number }, b: { timestamp: string; price: number }) => 
-              new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+              Date.parse(a.timestamp) - Date.parse(b.timestamp)
             )
 
           console.log(`${coin.symbol}: Processed ${quotes.length} valid quotes`)

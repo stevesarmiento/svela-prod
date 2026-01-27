@@ -18,6 +18,7 @@ import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { AvatarCircles } from "@v1/ui/token-stacks"
 import { useCoinGeckoBulkChartData } from '@/hooks/use-coingecko-bulk-chart-data'
 import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
+import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -331,7 +332,21 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
         }
       }
 
-      window.addEventListener("resize", resizeHandler)
+      // Prefer observing the actual container size (avoids per-chart global resize listeners).
+      let resizeObserver: ResizeObserver | null = null
+      let resizeRafId: number | null = null
+      let unsubscribeWindowResize: (() => void) | null = null
+
+      if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeRafId) cancelAnimationFrame(resizeRafId)
+          resizeRafId = requestAnimationFrame(() => resizeHandler())
+        })
+        resizeObserver.observe(chartContainerRef.current)
+      } else {
+        unsubscribeWindowResize = subscribeToWindowResize(resizeHandler)
+      }
+
       resizeHandler()
 
       // Add tooltip using memoized config
@@ -441,7 +456,9 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
       })
 
       cleanup = () => {
-        window.removeEventListener("resize", resizeHandler)
+        if (resizeRafId) cancelAnimationFrame(resizeRafId)
+        resizeObserver?.disconnect()
+        unsubscribeWindowResize?.()
         requestAnimationFrame(() => {
           try {
             tooltipRoot.unmount()

@@ -15,6 +15,7 @@ import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coin
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
 import type { WatchlistGroup } from './watchlist-context'
 import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
+import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 
 type WatchlistGroupId = WatchlistGroup["_id"]
 
@@ -360,7 +361,21 @@ export function WatchlistMultiLineChart({
         }
       }
 
-      window.addEventListener("resize", handleResize)
+      // Prefer observing the actual container size (avoids per-chart global resize listeners).
+      let resizeObserver: ResizeObserver | null = null
+      let resizeRafId: number | null = null
+      let unsubscribeWindowResize: (() => void) | null = null
+
+      if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeRafId) cancelAnimationFrame(resizeRafId)
+          resizeRafId = requestAnimationFrame(() => handleResize())
+        })
+        resizeObserver.observe(chartContainerRef.current)
+      } else {
+        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
+      }
+
       handleResize()
 
       // Add tooltip
@@ -442,7 +457,9 @@ export function WatchlistMultiLineChart({
       })
 
       cleanup = () => {
-        window.removeEventListener("resize", handleResize)
+        if (resizeRafId) cancelAnimationFrame(resizeRafId)
+        resizeObserver?.disconnect()
+        unsubscribeWindowResize?.()
         requestAnimationFrame(() => {
           try {
             tooltipRoot.unmount()

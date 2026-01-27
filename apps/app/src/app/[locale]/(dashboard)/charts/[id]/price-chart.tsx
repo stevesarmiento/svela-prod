@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useTransition, useDeferredValue, useCallback, memo } from 'react'
+import React, { useTransition, useDeferredValue, useCallback, useMemo, memo } from 'react'
 import { useIsomorphicTheme } from '@/hooks/use-isomorphic-theme'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { motion } from 'framer-motion'
@@ -32,6 +32,30 @@ interface IndicatorSettings {
   showRSI: boolean
   showStochRSI: boolean
   showHullSuite: boolean
+}
+
+// Stable settings objects to avoid chart re-creation from changing identity.
+const PRICE_CHART_INDICATORS: IndicatorSettings = {
+  showWaveTrend: false,
+  showFastMoneyFlow: false,
+  showSlowMoneyFlow: false,
+  showRSI: false,
+  showStochRSI: false,
+  showHullSuite: true,
+}
+
+const HULL_SUITE_CONFIG: Parameters<typeof useHullSuite>[1] = {
+  src: 'close',
+  modeSwitch: 'Ehma',
+  length: 55,
+  lengthMult: 1.0,
+  useHtf: false,
+  htf: '240',
+  switchColor: true,
+  candleCol: false,
+  visualSwitch: true,
+  thicknesSwitch: 1,
+  transpSwitch: 40,
 }
 
 // React 19: Memoized time scale selector
@@ -115,55 +139,32 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   
   // Always use line chart - simplified approach
 
-  const indicators: IndicatorSettings = {
-    showWaveTrend: false,
-    showFastMoneyFlow: false,
-    showSlowMoneyFlow: false,
-    showRSI: false,
-    showStochRSI: false,
-    showHullSuite: true,
-  }
+  // Use OHLC data for Hull Suite (add volume=0 for compatibility).
+  const ohlcvDataForHull = useMemo(() => {
+    return ohlcData.map((point) => ({ ...point, volume: 0 }))
+  }, [ohlcData])
 
-  // Hardcoded Hull Suite settings (EHMA-55)
-  const hullSettings = {
-    modeSwitch: 'Ehma' as const,
-    length: 55,
-    visualSwitch: true,
-  }
+  const hullSuiteData = useHullSuite(ohlcvDataForHull, HULL_SUITE_CONFIG)
 
-  // Use OHLC data for Hull Suite (add volume=0 for compatibility)
-  const ohlcvDataForHull = ohlcData.map(point => ({ ...point, volume: 0 }))
-  const hullSuiteData = useHullSuite(ohlcvDataForHull || [], {
-    src: 'close',
-    modeSwitch: hullSettings.modeSwitch,
-    length: hullSettings.length,
-    lengthMult: 1.0,
-    useHtf: false,
-    htf: '240',
-    switchColor: true,
-    candleCol: false,
-    visualSwitch: hullSettings.visualSwitch,
-    thicknesSwitch: 1,
-    transpSwitch: 40,
-  })
-
-  // Convert Hull Suite data for chart instance
-  const legacyHullSuiteData = {
-    mhull: hullSuiteData.MHULL,
-    shull: hullSuiteData.SHULL,
-    trend: hullSuiteData.hullColor.map(item => ({ 
-      time: item.time, 
-      isUp: true, // Always use same color as requested
-      color: primaryHullColor // Use consistent pastel color with 70% opacity
-    }))
-  }
+  // Convert Hull Suite data for the legacy chart instance format (stable identity).
+  const legacyHullSuiteData = useMemo(() => {
+    return {
+      mhull: hullSuiteData.MHULL,
+      shull: hullSuiteData.SHULL,
+      trend: hullSuiteData.hullColor.map((item) => ({
+        time: item.time,
+        isUp: true, // Always use same color as requested
+        color: primaryHullColor, // Use consistent pastel color with opacity
+      })),
+    }
+  }, [hullSuiteData, primaryHullColor])
 
   // React 19: Memoized chart instance creation
   const chartContainerRef = useChartInstance(
     chartData, 
     volumeData, 
     undefined, // No Market Cipher indicators
-    indicators, // Hull Suite indicator settings
+    PRICE_CHART_INDICATORS, // Hull Suite indicator settings (stable object)
     legacyHullSuiteData,
     undefined, // No callback - tooltip handles dynamic updates
     'line', // Always use line chart
