@@ -1,4 +1,4 @@
-import { streamText } from 'ai';
+import { generateText } from 'ai';
 import { openai, isOpenAIAvailable } from '@/lib/openai';
 import { NextResponse } from 'next/server';
 import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 
     const { message, systemPrompt } = await req.json();
     
-    const result = await streamText({
+    const result = await generateText({
       model: openai.chat('gpt-4o-mini'),
       messages: [
         { role: 'system', content: systemPrompt },
@@ -30,19 +30,13 @@ export async function POST(req: Request) {
       maxTokens: 200,
     });
 
-    // Get the complete response
-    let fullResponse = '';
-    for await (const chunk of result.textStream) {
-      fullResponse += chunk;
-    }
-    
     // Parse the JSON response
-    const parsed = JSON.parse(fullResponse);
-    return Response.json(parsed);
+    const parsed = JSON.parse(result.text);
+    return NextResponse.json(parsed);
     
   } catch (error) {
     console.error('Intent parsing error:', error);
-    return Response.json({ 
+    return NextResponse.json({ 
       type: 'none', 
       coins: [], 
       intent: 'failed to parse' 

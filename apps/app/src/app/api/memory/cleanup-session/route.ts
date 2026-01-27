@@ -32,26 +32,25 @@ export async function POST(request: NextRequest) {
     let deletedCount = 0;
     
     try {
-      console.log('🎯 Cleaning recent chat query memories...');
-      const queryResult = await capxMemoryService.forgetMemory(userId, { 
-        metadataFilter: { source: 'chat_query' } 
-      });
-      deletedCount += queryResult.count;
+      console.log('🎯 Cleaning recent chat memories...');
+
+      const [queryResult, responseResult, fallbackResult] = await Promise.all([
+        capxMemoryService.forgetMemory(userId, {
+          metadataFilter: { source: 'chat_query' },
+        }),
+        capxMemoryService.forgetMemory(userId, {
+          metadataFilter: { source: 'chat_response' },
+        }),
+        capxMemoryService.forgetMemory(userId, {
+          metadataFilter: { source: 'chat_query_fallback' },
+        }),
+      ]);
+
+      deletedCount =
+        queryResult.count + responseResult.count + fallbackResult.count;
+
       console.log(`📊 Deleted ${queryResult.count} chat query memories`);
-      
-      console.log('🎯 Cleaning recent chat response memories...');
-      const responseResult = await capxMemoryService.forgetMemory(userId, { 
-        metadataFilter: { source: 'chat_response' } 
-      });
-      deletedCount += responseResult.count;
       console.log(`📊 Deleted ${responseResult.count} chat response memories`);
-      
-      // Also clean fallback memories that might not have metadata
-      console.log('🎯 Cleaning fallback chat memories...');
-      const fallbackResult = await capxMemoryService.forgetMemory(userId, { 
-        metadataFilter: { source: 'chat_query_fallback' } 
-      });
-      deletedCount += fallbackResult.count;
       console.log(`📊 Deleted ${fallbackResult.count} fallback memories`);
       
     } catch (error) {

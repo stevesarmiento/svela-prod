@@ -3,6 +3,7 @@
 //import Link from "next/link";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 // import { 
 //   IconHouseFill, 
@@ -27,9 +28,22 @@ import { IconChevronBackward, IconGearshapeFill } from 'symbols-react';
 import { SvelaLogo } from "@v1/ui/svela-logo";
 import { useTokenHeader } from "@/hooks/use-token-header";
 import { WatchlistButton } from "./watchlist-button";
-import { AnalysisDialog } from "./analysis-dialog";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+
+function loadAnalysisDialog() {
+  return import("./analysis-dialog");
+}
+
+const AnalysisDialog = dynamic(
+  () => loadAnalysisDialog().then((module) => module.AnalysisDialog),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-8 w-[92px] rounded-xl bg-zinc-950/10 dark:bg-white/10" />
+    ),
+  },
+);
 
 
 // const menuItems = [

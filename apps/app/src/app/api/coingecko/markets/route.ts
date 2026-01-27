@@ -182,44 +182,45 @@ export async function GET(request: NextRequest) {
 
     // Store in Convex database
     if (process.env.NEXT_PUBLIC_CONVEX_URL && rawData.length > 0) {
-      try {
-        console.log('💾 Storing market data in Convex...')
-        
-        for (const coinData of rawData) {
-          await convex.mutation(api.coingeckoMarkets.upsertMarketData, {
-            coingeckoId: coinData.id,
-            symbol: coinData.symbol,
-            name: coinData.name,
-            image: coinData.image,
-            currentPrice: coinData.current_price ?? undefined,
-            marketCap: coinData.market_cap ?? undefined,
-            marketCapRank: coinData.market_cap_rank ?? undefined,
-            fullyDilutedValuation: coinData.fully_diluted_valuation ?? undefined,
-            totalVolume: coinData.total_volume ?? undefined,
-            high24h: coinData.high_24h ?? undefined,
-            low24h: coinData.low_24h ?? undefined,
-            priceChange24h: coinData.price_change_24h ?? undefined,
-            priceChangePercentage24h: coinData.price_change_percentage_24h ?? undefined,
-            marketCapChange24h: coinData.market_cap_change_24h ?? undefined,
-            marketCapChangePercentage24h: coinData.market_cap_change_percentage_24h ?? undefined,
-            circulatingSupply: coinData.circulating_supply ?? undefined,
-            totalSupply: coinData.total_supply ?? undefined,
-            maxSupply: coinData.max_supply ?? undefined,
-            ath: coinData.ath ?? undefined,
-            athChangePercentage: coinData.ath_change_percentage ?? undefined,
-            athDate: coinData.ath_date ?? undefined,
-            atl: coinData.atl ?? undefined,
-            atlChangePercentage: coinData.atl_change_percentage ?? undefined,
-            atlDate: coinData.atl_date ?? undefined,
-            lastUpdated: coinData.last_updated,
-          })
-        }
-        
-        console.log('✅ Successfully stored market data in Convex')
-      } catch (convexError) {
-        console.error('❌ Failed to store in Convex:', convexError)
-        // Don't fail the API request if Convex storage fails
-      }
+      console.log('💾 Storing market data in Convex (batch)...')
+
+      const items = rawData.map((coinData) => ({
+        coingeckoId: coinData.id,
+        symbol: coinData.symbol,
+        name: coinData.name,
+        image: coinData.image,
+        currentPrice: coinData.current_price ?? undefined,
+        marketCap: coinData.market_cap ?? undefined,
+        marketCapRank: coinData.market_cap_rank ?? undefined,
+        fullyDilutedValuation: coinData.fully_diluted_valuation ?? undefined,
+        totalVolume: coinData.total_volume ?? undefined,
+        high24h: coinData.high_24h ?? undefined,
+        low24h: coinData.low_24h ?? undefined,
+        priceChange24h: coinData.price_change_24h ?? undefined,
+        priceChangePercentage24h: coinData.price_change_percentage_24h ?? undefined,
+        marketCapChange24h: coinData.market_cap_change_24h ?? undefined,
+        marketCapChangePercentage24h: coinData.market_cap_change_percentage_24h ?? undefined,
+        circulatingSupply: coinData.circulating_supply ?? undefined,
+        totalSupply: coinData.total_supply ?? undefined,
+        maxSupply: coinData.max_supply ?? undefined,
+        ath: coinData.ath ?? undefined,
+        athChangePercentage: coinData.ath_change_percentage ?? undefined,
+        athDate: coinData.ath_date ?? undefined,
+        atl: coinData.atl ?? undefined,
+        atlChangePercentage: coinData.atl_change_percentage ?? undefined,
+        atlDate: coinData.atl_date ?? undefined,
+        lastUpdated: coinData.last_updated,
+      }))
+
+      // Fire-and-forget: don't block the HTTP response on caching.
+      void convex
+        .mutation(api.coingeckoMarkets.upsertMarketDataBatch, { items })
+        .then(() => {
+          console.log('✅ Successfully stored market data in Convex (batch)')
+        })
+        .catch((convexError) => {
+          console.error('❌ Failed to store in Convex (batch):', convexError)
+        })
     }
 
     // Prepare response data

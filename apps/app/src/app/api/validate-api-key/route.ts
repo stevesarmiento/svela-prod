@@ -12,8 +12,14 @@ export async function POST(request: NextRequest) {
   try {
     // Rate limiting check
     const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
-    const rateLimitResult = await ratelimit.limit(`${ip}-validate-api-key`);
-    
+    const rateLimitPromise = ratelimit.limit(`${ip}-validate-api-key`);
+    const authPromise = auth();
+
+    const [rateLimitResult, authResult] = await Promise.all([
+      rateLimitPromise,
+      authPromise,
+    ]);
+
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { error: "Too many requests" }, 
@@ -21,7 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { userId: clerkId } = await auth();
+    const { userId: clerkId } = authResult;
     
     if (!clerkId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
