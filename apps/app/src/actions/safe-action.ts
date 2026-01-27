@@ -46,8 +46,6 @@ export const authActionClient = actionClientWithMeta
       logger.info(`Input -> ${JSON.stringify(clientInput)}`);
       logger.info(`Result -> ${JSON.stringify(result.data)}`);
       logger.info(`Metadata -> ${JSON.stringify(metadata)}`);
-
-      return result;
     }
 
     return result;
@@ -75,21 +73,19 @@ export const authActionClient = actionClientWithMeta
   .use(async ({ next, metadata }) => {
     const user = { id: "temp-user-id" };
 
-    if (metadata) {
+    if (metadata?.track) {
       const analytics = await setupAnalytics({
         userId: user.id,
       });
 
-      if (metadata.track) {
-        analytics.track(metadata.track);
-      }
+      analytics.track(metadata.track);
     }
 
     return Sentry.withServerActionInstrumentation(metadata.name, async () => {
-    return next({
-      ctx: {
-        user,
-      },
-    });
+      return next({
+        ctx: {
+          user,
+        },
+      });
     });
   });

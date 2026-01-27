@@ -2,19 +2,9 @@
 
 import React, { useRef, useMemo, useTransition, useDeferredValue, useCallback, memo, useEffect, useState } from 'react'
 import { useIsomorphicTheme } from '@/hooks/use-isomorphic-theme'
-import {
-  createChart,
-  ColorType,
-  CrosshairMode,
-  LineStyle,
-  LineWidth,
-  Time,
-  LastPriceAnimationMode,
-  LineSeries,
-  ISeriesApi,
-} from 'lightweight-charts'
+import type { ISeriesApi, Time } from 'lightweight-charts'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
-import { createRoot } from "react-dom/client"
+import { createRoot } from 'react-dom/client'
 import type { CoinMarketData } from '@/types/coins'
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import { cn } from "@v1/ui/cn";
@@ -27,6 +17,7 @@ import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { AvatarCircles } from "@v1/ui/token-stacks"
 import { useCoinGeckoBulkChartData } from '@/hooks/use-coingecko-bulk-chart-data'
+import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -229,56 +220,6 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
     }))
   }, [deferredCoins])
 
-  // Memoize chart configuration to prevent unnecessary recreations
-  const chartConfig = useMemo(() => ({
-    handleScale: false,
-    handleScroll: false,
-    layout: {
-      background: { type: ColorType.Solid, color: "transparent" },
-      textColor: isDarkMode ? "#ffffff50" : "#00000050",
-      attributionLogo: false,
-    },
-    grid: {
-      vertLines: { 
-        visible: false,
-        color: isDarkMode ? "#e5e7eb00" : "#00000020",
-        style: LineStyle.Dotted,
-      },
-      horzLines: { 
-        visible: false, // Hide default lines, we'll create gradient ones
-        color: isDarkMode ? "#ffffff10" : "#00000010",
-        style: LineStyle.Solid,
-      },
-    },
-    rightPriceScale: {
-      borderVisible: false,
-      autoScale: true,
-      visible: true,
-      entireTextOnly: true,
-    },
-    crosshair: {
-      mode: CrosshairMode.Magnet,
-      vertLine: {
-        labelVisible: true,
-        width: 1 as LineWidth,
-        color: isDarkMode ? "#d1d5db40" : "#00000040",
-        visible: true,
-        style: LineStyle.Solid,
-      },
-      horzLine: {
-        visible: false,
-        labelVisible: false,
-      },
-    },
-    timeScale: {
-      visible: false,
-      timeVisible: true,
-      secondsVisible: false,
-      borderVisible: false,
-    },
-  }), [isDarkMode])
-
-
   // Memoize tooltip configuration
   const tooltipConfig = useMemo(() => ({
     className: `fixed hidden overflow-hidden text-[11px] rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-all duration-100 ease-in-out ${
@@ -292,161 +233,235 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   useEffect(() => {
     if (!chartContainerRef.current || !coinSeriesWithColors.length) return
 
-    const chart = createChart(chartContainerRef.current, chartConfig)
+    let isCancelled = false
+    let cleanup: (() => void) | null = null
 
-    // Create line series for each coin
-    const lineSeriesMap = new Map()
-    
-    coinSeriesWithColors.forEach((coinSeries) => {
-      const lineSeries = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        lastValueVisible: true,
-        visible: true,
-        priceLineVisible: false,
-        color: coinSeries.color,
-        lastPriceAnimation: LastPriceAnimationMode.Continuous,
-        priceFormat: {
-          type: "custom",
-          formatter: (price: number) => `${price > 0 ? '+' : ''}${price.toFixed(2)}%`,
+    void (async () => {
+      const {
+        createChart,
+        ColorType,
+        CrosshairMode,
+        LineStyle,
+        LineSeries,
+        LastPriceAnimationMode,
+      } = await loadLightweightCharts()
+
+      if (isCancelled || !chartContainerRef.current || !coinSeriesWithColors.length) return
+
+      const chart = createChart(chartContainerRef.current, {
+        handleScale: false,
+        handleScroll: false,
+        layout: {
+          background: { type: ColorType.Solid, color: "transparent" },
+          textColor: isDarkMode ? "#ffffff50" : "#00000050",
+          attributionLogo: false,
+        },
+        grid: {
+          vertLines: { 
+            visible: false,
+            color: isDarkMode ? "#e5e7eb00" : "#00000020",
+            style: LineStyle.Dotted,
+          },
+          horzLines: { 
+            visible: false, // Hide default lines, we'll create gradient ones
+            color: isDarkMode ? "#ffffff10" : "#00000010",
+            style: LineStyle.Solid,
+          },
+        },
+        rightPriceScale: {
+          borderVisible: false,
+          autoScale: true,
+          visible: true,
+          entireTextOnly: true,
+        },
+        crosshair: {
+          mode: CrosshairMode.Magnet,
+          vertLine: {
+            labelVisible: true,
+            width: 1 as const,
+            color: isDarkMode ? "#d1d5db40" : "#00000040",
+            visible: true,
+            style: LineStyle.Solid,
+          },
+          horzLine: {
+            visible: false,
+            labelVisible: false,
+          },
+        },
+        timeScale: {
+          visible: false,
+          timeVisible: true,
+          secondsVisible: false,
+          borderVisible: false,
         },
       })
+
+      // Create line series for each coin
+      const lineSeriesMap = new Map()
       
-      lineSeries.setData(coinSeries.data)
-      lineSeriesMap.set(coinSeries.id, { series: lineSeries, coinData: coinSeries })
-    })
-
-    // Store the map in ref for hover effects
-    lineSeriesMapRef.current = lineSeriesMap
-
-    chart.timeScale().fitContent()
-
-    const resizeHandler = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: 400,
-        })
-      }
-    }
-
-    window.addEventListener("resize", resizeHandler)
-    resizeHandler()
-
-    // Add tooltip using memoized config
-    const tooltipEl = document.createElement("div")
-    const tooltipRoot = createRoot(tooltipEl)
-    tooltipEl.className = tooltipConfig.className
-    document.body.appendChild(tooltipEl)
-
-    // Subscribe to crosshair move
-    chart.subscribeCrosshairMove((param) => {
-      if (
-        param.point === undefined ||
-        !param.time ||
-        param.point.x < 0 ||
-        param.point.y < 0
-      ) {
-        tooltipEl.style.display = "none"
-        return
-      }
-
-      if (!chartContainerRef.current) return
-      const chartRect = chartContainerRef.current.getBoundingClientRect()
-
-      const coinData: TooltipCoinData[] = []
-      
-      // Use coinSeriesWithColors to maintain consistent order in tooltip
-      // Always show all coins by finding closest data point for each
       coinSeriesWithColors.forEach((coinSeries) => {
-        const lineData = lineSeriesMapRef.current.get(coinSeries.id)
-        if (lineData && coinSeries.data.length > 0 && param.time) { // Added param.time check
-          // Find the closest data point to the crosshair time
-          let closestPoint = coinSeries.data[0]!
-          let minDiff = Math.abs((closestPoint.time as number) - (param.time as number))
-          
-          for (const point of coinSeries.data) {
-            const diff = Math.abs((point.time as number) - (param.time as number))
-            if (diff < minDiff) {
-              minDiff = diff
-              closestPoint = point
-            }
-          }
-          
-          // DEBUG: Log why coin might be skipped
-          console.log(`Tooltip for ${coinSeries.symbol}:`, {
-            dataPoints: coinSeries.data.length,
-            minDiffSeconds: minDiff,
-            minDiffHours: (minDiff / 3600).toFixed(2),
-            timeframe: activeTimeScale,
-            hasData: coinSeries.data.length > 0,
-            closestTime: closestPoint.time,
-            crosshairTime: param.time
-          })
-          
-          coinData.push({
-            id: coinSeries.id,
-            name: coinSeries.name,
-            symbol: coinSeries.symbol,
-            color: coinSeries.color,
-            value: closestPoint.value,
-          })
-        } else {
-          // DEBUG: Log skipped coins
-          console.warn(`Skipped coin ${coinSeries.symbol}: no data available`, {
-            hasLineData: !!lineData,
-            dataLength: coinSeries.data.length
+        const lineSeries = chart.addSeries(LineSeries, {
+          lineWidth: 1,
+          lastValueVisible: true,
+          visible: true,
+          priceLineVisible: false,
+          color: coinSeries.color,
+          lastPriceAnimation: LastPriceAnimationMode.Continuous,
+          priceFormat: {
+            type: "custom",
+            formatter: (price: number) => `${price > 0 ? '+' : ''}${price.toFixed(2)}%`,
+          },
+        })
+        
+        lineSeries.setData(coinSeries.data)
+        lineSeriesMap.set(coinSeries.id, { series: lineSeries, coinData: coinSeries })
+      })
+
+      // Store the map in ref for hover effects
+      lineSeriesMapRef.current = lineSeriesMap
+
+      chart.timeScale().fitContent()
+
+      const resizeHandler = () => {
+        if (chartContainerRef.current) {
+          chart.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+            height: 400,
           })
         }
+      }
+
+      window.addEventListener("resize", resizeHandler)
+      resizeHandler()
+
+      // Add tooltip using memoized config
+      const tooltipEl = document.createElement("div")
+      const tooltipRoot = createRoot(tooltipEl)
+      tooltipEl.className = tooltipConfig.className
+      document.body.appendChild(tooltipEl)
+
+      // Subscribe to crosshair move
+      chart.subscribeCrosshairMove((param) => {
+        if (
+          param.point === undefined ||
+          !param.time ||
+          param.point.x < 0 ||
+          param.point.y < 0
+        ) {
+          tooltipEl.style.display = "none"
+          return
+        }
+
+        if (!chartContainerRef.current) return
+        const chartRect = chartContainerRef.current.getBoundingClientRect()
+
+        const coinData: TooltipCoinData[] = []
+        
+        // Use coinSeriesWithColors to maintain consistent order in tooltip
+        // Always show all coins by finding closest data point for each
+        coinSeriesWithColors.forEach((coinSeries) => {
+          const lineData = lineSeriesMapRef.current.get(coinSeries.id)
+          if (lineData && coinSeries.data.length > 0 && param.time) { // Added param.time check
+            // Find the closest data point to the crosshair time
+            let closestPoint = coinSeries.data[0]!
+            let minDiff = Math.abs((closestPoint.time as number) - (param.time as number))
+            
+            for (const point of coinSeries.data) {
+              const diff = Math.abs((point.time as number) - (param.time as number))
+              if (diff < minDiff) {
+                minDiff = diff
+                closestPoint = point
+              }
+            }
+            
+            // DEBUG: Log why coin might be skipped
+            console.log(`Tooltip for ${coinSeries.symbol}:`, {
+              dataPoints: coinSeries.data.length,
+              minDiffSeconds: minDiff,
+              minDiffHours: (minDiff / 3600).toFixed(2),
+              timeframe: activeTimeScale,
+              hasData: coinSeries.data.length > 0,
+              closestTime: closestPoint.time,
+              crosshairTime: param.time
+            })
+            
+            coinData.push({
+              id: coinSeries.id,
+              name: coinSeries.name,
+              symbol: coinSeries.symbol,
+              color: coinSeries.color,
+              value: closestPoint.value,
+            })
+          } else {
+            // DEBUG: Log skipped coins
+            console.warn(`Skipped coin ${coinSeries.symbol}: no data available`, {
+              hasLineData: !!lineData,
+              dataLength: coinSeries.data.length
+            })
+          }
+        })
+
+        if (coinData.length === 0) {
+          tooltipEl.style.display = "none"
+          return
+        }
+
+        tooltipEl.style.display = "block"
+        tooltipRoot.render(
+          <TooltipContent
+            coinData={coinData}
+            timestamp={Number(param.time) * 1000}
+          />
+        )
+
+        const tooltipWidth = tooltipEl.offsetWidth
+        const tooltipHeight = tooltipEl.offsetHeight
+
+        // Position tooltip
+        let left = chartRect.left + param.point.x + 15
+        let top = chartRect.top + param.point.y - tooltipHeight / 2
+
+        // Adjust if tooltip goes beyond right edge
+        if (left + tooltipWidth > window.innerWidth - 10) {
+          left = chartRect.left + param.point.x - tooltipWidth - 15
+        }
+
+        // Adjust if tooltip goes beyond bottom edge
+        if (top + tooltipHeight > window.innerHeight - 10) {
+          top = window.innerHeight - tooltipHeight - 10
+        }
+
+        // Adjust if tooltip goes beyond top edge
+        if (top < 10) {
+          top = 10
+        }
+
+        tooltipEl.style.left = `${left}px`
+        tooltipEl.style.top = `${top}px`
       })
 
-      if (coinData.length === 0) {
-        tooltipEl.style.display = "none"
-        return
+      cleanup = () => {
+        window.removeEventListener("resize", resizeHandler)
+        requestAnimationFrame(() => {
+          try {
+            tooltipRoot.unmount()
+          } catch {
+            // noop
+          }
+          if (document.body.contains(tooltipEl)) {
+            document.body.removeChild(tooltipEl)
+          }
+        })
+        chart.remove()
+        lineSeriesMapRef.current = new Map()
       }
-
-      tooltipEl.style.display = "block"
-      tooltipRoot.render(
-        <TooltipContent
-          coinData={coinData}
-          timestamp={Number(param.time) * 1000}
-        />
-      )
-
-      const tooltipWidth = tooltipEl.offsetWidth
-      const tooltipHeight = tooltipEl.offsetHeight
-
-      // Position tooltip
-      let left = chartRect.left + param.point.x + 15
-      let top = chartRect.top + param.point.y - tooltipHeight / 2
-
-      // Adjust if tooltip goes beyond right edge
-      if (left + tooltipWidth > window.innerWidth - 10) {
-        left = chartRect.left + param.point.x - tooltipWidth - 15
-      }
-
-      // Adjust if tooltip goes beyond bottom edge
-      if (top + tooltipHeight > window.innerHeight - 10) {
-        top = window.innerHeight - tooltipHeight - 10
-      }
-
-      // Adjust if tooltip goes beyond top edge
-      if (top < 10) {
-        top = 10
-      }
-
-      tooltipEl.style.left = `${left}px`
-      tooltipEl.style.top = `${top}px`
-    })
+    })()
 
     return () => {
-      window.removeEventListener("resize", resizeHandler)
-      requestAnimationFrame(() => {
-        tooltipRoot.unmount()
-        document.body.removeChild(tooltipEl)
-      })
-      chart.remove()
+      isCancelled = true
+      cleanup?.()
     }
-  }, [coinSeriesWithColors, chartConfig, tooltipConfig, deferredTimeScale, activeTimeScale])
+  }, [coinSeriesWithColors, tooltipConfig, deferredTimeScale, activeTimeScale, isDarkMode])
 
   // Handle hover effects on chart lines
   useEffect(() => {

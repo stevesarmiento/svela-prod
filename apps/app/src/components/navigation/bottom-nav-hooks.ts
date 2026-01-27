@@ -1,22 +1,27 @@
-import { useEffect, useCallback, useState, Dispatch, SetStateAction, useTransition } from 'react';
+import { useEffect, useCallback, useState, Dispatch, SetStateAction, useTransition, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { COMMAND_ITEMS, type NavigationItem, type ActionItem } from './bottom-nav-constants';
 import { SEQUENTIAL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
+import { useLatest } from '@/hooks/use-latest';
 
 // React 19: Inline type definition for better maintainability
 
 export function useSequentialShortcuts() {
   const [activeSequence, setActiveSequence] = useState<string | null>(null);
-  const [sequenceTimeout, setSequenceTimeout] = useState<NodeJS.Timeout | null>(null);
   const router = useRouter();
+  const sequenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const resetSequence = useCallback(() => {
     setActiveSequence(null);
-    if (sequenceTimeout) {
-      clearTimeout(sequenceTimeout);
-      setSequenceTimeout(null);
+    if (sequenceTimeoutRef.current) {
+      clearTimeout(sequenceTimeoutRef.current);
+      sequenceTimeoutRef.current = null;
     }
-  }, [sequenceTimeout]);
+  }, []);
+
+  const activeSequenceRef = useLatest(activeSequence);
+  const resetSequenceRef = useLatest(resetSequence);
+  const routerRef = useLatest(router);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -32,31 +37,33 @@ export function useSequentialShortcuts() {
 
       const key = event.key.toLowerCase();
 
-      if (!activeSequence) {
+      const currentSequence = activeSequenceRef.current;
+      if (!currentSequence) {
         // Check if this starts a sequence
         if (key in SEQUENTIAL_SHORTCUTS) {
           event.preventDefault();
           setActiveSequence(key);
           
           // Set timeout to reset sequence
-          const timeout = setTimeout(() => {
-            resetSequence();
+          if (sequenceTimeoutRef.current) {
+            clearTimeout(sequenceTimeoutRef.current);
+          }
+          sequenceTimeoutRef.current = setTimeout(() => {
+            resetSequenceRef.current();
           }, 2000); // 2 second timeout
-          
-          setSequenceTimeout(timeout);
         }
       } else {
         // We're in a sequence, check for completion
         event.preventDefault();
         
-        const shortcuts = SEQUENTIAL_SHORTCUTS[activeSequence as keyof typeof SEQUENTIAL_SHORTCUTS];
+        const shortcuts = SEQUENTIAL_SHORTCUTS[currentSequence as keyof typeof SEQUENTIAL_SHORTCUTS];
         if (shortcuts && key in shortcuts) {
           const route = shortcuts[key as keyof typeof shortcuts];
-          router.push(route);
-          resetSequence();
+          routerRef.current.push(route);
+          resetSequenceRef.current();
         } else {
           // Invalid sequence, reset
-          resetSequence();
+          resetSequenceRef.current();
         }
       }
     };
@@ -64,11 +71,12 @@ export function useSequentialShortcuts() {
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      if (sequenceTimeout) {
-        clearTimeout(sequenceTimeout);
+      if (sequenceTimeoutRef.current) {
+        clearTimeout(sequenceTimeoutRef.current);
+        sequenceTimeoutRef.current = null;
       }
     };
-  }, [activeSequence, router, resetSequence, sequenceTimeout]);
+  }, []);
 
   return { activeSequence, resetSequence };
 }
@@ -100,6 +108,9 @@ export function useKeyboardShortcuts(
     });
   }, [setIsOpen, setNavigationMode, startTransition]);
 
+  const modeRef = useLatest(mode);
+  const handleShortcutRef = useLatest(handleShortcut);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Ignore if typing in an input or textarea
@@ -114,19 +125,20 @@ export function useKeyboardShortcuts(
 
       // Only handle specific shortcuts to avoid unnecessary processing
       const key = event.key.toLowerCase();
+      const currentMode = modeRef.current;
       const isRelevantShortcut = 
         ((modifiers.includes('meta') || modifiers.includes('ctrl')) && key === 'k') ||
-        (key === 'escape' && mode === 'selection');
+        (key === 'escape' && currentMode === 'selection');
 
       if (isRelevantShortcut) {
         event.preventDefault();
-        handleShortcut(event.key, modifiers, mode);
+        handleShortcutRef.current(event.key, modifiers, currentMode);
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [mode, handleShortcut]);
+  }, []);
 
   return { isPending }; // Return pending state for UI feedback if needed
 }

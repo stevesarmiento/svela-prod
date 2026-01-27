@@ -2,19 +2,9 @@
 
 import React, { useEffect, useRef, useMemo, useState } from 'react'
 import { useTheme } from 'next-themes'
-import {
-  createChart,
-  ColorType,
-  CrosshairMode,
-  LineStyle,
-  LineData,
-  Time,
-  LastPriceAnimationMode,
-  LineSeries,
-  ISeriesApi,
-} from 'lightweight-charts'
+import type { ISeriesApi, LineData, Time } from 'lightweight-charts'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
-import { createRoot } from "react-dom/client"
+import { createRoot } from 'react-dom/client'
 import { cn } from "@v1/ui/cn"
 import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
@@ -24,6 +14,7 @@ import { useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
 import type { WatchlistGroup } from './watchlist-context'
+import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
 
 type WatchlistGroupId = WatchlistGroup["_id"]
 
@@ -273,176 +264,203 @@ export function WatchlistMultiLineChart({
   useEffect(() => {
     if (!chartContainerRef.current || !watchlistSeriesData.length) return
 
-    
-    const chart = createChart(chartContainerRef.current, {
-      handleScale: false,
-      handleScroll: false,
-      layout: {
-        background: { type: ColorType.Solid, color: "transparent" },
-        textColor: isDarkMode ? "#ffffff50" : "#00000050",
-        attributionLogo: false,
-      },
-      grid: {
-        vertLines: { 
-          visible: false,
-          color: isDarkMode ? "#e5e7eb20" : "#00000020",
-          style: LineStyle.Dotted,
-        },
-        horzLines: { 
-          visible: false,
-          color: isDarkMode ? "#ffffff10" : "#00000010",
-          style: LineStyle.Dotted,
-        },
-      },
-      rightPriceScale: {
-        borderVisible: false,
-        autoScale: true,
-      },
-      crosshair: {
-        mode: CrosshairMode.Magnet,
-        vertLine: {
-          labelVisible: true,
-          width: 1,
-          color: isDarkMode ? "#d1d5db40" : "#00000040",
-          visible: true,
-          style: LineStyle.Solid,
-        },
-        horzLine: {
-          visible: false,
-          labelVisible: false,
-        },
-      },
-      timeScale: {
-        visible: false,
-        timeVisible: true,
-        secondsVisible: false,
-        borderVisible: false,
-      },
-    })
+    let isCancelled = false
+    let cleanup: (() => void) | null = null
 
-    // Create line series for each watchlist
-    const lineSeriesMap = new Map<WatchlistGroupId, LineSeriesData>()
-    
-    watchlistSeriesData.forEach((watchlistSeries) => {
-      const lineSeries = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        lastValueVisible: true,
-        visible: true,
-        priceLineVisible: false,
-        color: watchlistSeries.color,
-        lastPriceAnimation: LastPriceAnimationMode.Continuous,
-        priceFormat: {
-          type: "custom",
-          formatter: (price: number) => `${price > 0 ? '+' : ''}${price.toFixed(2)}%`,
+    void (async () => {
+      const {
+        createChart,
+        ColorType,
+        CrosshairMode,
+        LineStyle,
+        LineSeries,
+        LastPriceAnimationMode,
+      } = await loadLightweightCharts()
+
+      if (isCancelled || !chartContainerRef.current || !watchlistSeriesData.length) return
+
+      const chart = createChart(chartContainerRef.current, {
+        handleScale: false,
+        handleScroll: false,
+        layout: {
+          background: { type: ColorType.Solid, color: "transparent" },
+          textColor: isDarkMode ? "#ffffff50" : "#00000050",
+          attributionLogo: false,
+        },
+        grid: {
+          vertLines: { 
+            visible: false,
+            color: isDarkMode ? "#e5e7eb20" : "#00000020",
+            style: LineStyle.Dotted,
+          },
+          horzLines: { 
+            visible: false,
+            color: isDarkMode ? "#ffffff10" : "#00000010",
+            style: LineStyle.Dotted,
+          },
+        },
+        rightPriceScale: {
+          borderVisible: false,
+          autoScale: true,
+        },
+        crosshair: {
+          mode: CrosshairMode.Magnet,
+          vertLine: {
+            labelVisible: true,
+            width: 1,
+            color: isDarkMode ? "#d1d5db40" : "#00000040",
+            visible: true,
+            style: LineStyle.Solid,
+          },
+          horzLine: {
+            visible: false,
+            labelVisible: false,
+          },
+        },
+        timeScale: {
+          visible: false,
+          timeVisible: true,
+          secondsVisible: false,
+          borderVisible: false,
         },
       })
+
+      // Create line series for each watchlist
+      const lineSeriesMap = new Map<WatchlistGroupId, LineSeriesData>()
       
-      lineSeries.setData(watchlistSeries.data)
-      lineSeriesMap.set(watchlistSeries.id, { series: lineSeries, watchlistData: watchlistSeries })
-    })
-
-    // Store the map in ref for hover effects
-    lineSeriesMapRef.current = lineSeriesMap
-
-    chart.timeScale().fitContent()
-
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: 400,
+      watchlistSeriesData.forEach((watchlistSeries) => {
+        const lineSeries = chart.addSeries(LineSeries, {
+          lineWidth: 1,
+          lastValueVisible: true,
+          visible: true,
+          priceLineVisible: false,
+          color: watchlistSeries.color,
+          lastPriceAnimation: LastPriceAnimationMode.Continuous,
+          priceFormat: {
+            type: "custom",
+            formatter: (price: number) => `${price > 0 ? '+' : ''}${price.toFixed(2)}%`,
+          },
         })
-      }
-    }
+        
+        lineSeries.setData(watchlistSeries.data)
+        lineSeriesMap.set(watchlistSeries.id, { series: lineSeries, watchlistData: watchlistSeries })
+      })
 
-    window.addEventListener("resize", handleResize)
-    handleResize()
+      // Store the map in ref for hover effects
+      lineSeriesMapRef.current = lineSeriesMap
 
-    // Add tooltip
-    const tooltipEl = document.createElement("div")
-    const tooltipRoot = createRoot(tooltipEl)
-    tooltipEl.className = `fixed hidden overflow-hidden text-[11px] rounded-xl w-[220px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-all duration-100 ease-in-out ${
-      isDarkMode 
-        ? 'text-white bg-zinc-900/95 border border-zinc-700/50' 
-        : 'text-gray-900 bg-white/95 border border-gray-200/50'
-    }`
-    document.body.appendChild(tooltipEl)
+      chart.timeScale().fitContent()
 
-    // Subscribe to crosshair move
-    chart.subscribeCrosshairMove((param) => {
-      if (
-        param.point === undefined ||
-        !param.time ||
-        param.point.x < 0 ||
-        param.point.y < 0
-      ) {
-        tooltipEl.style.display = "none"
-        return
-      }
-
-      if (!chartContainerRef.current) return
-      const chartRect = chartContainerRef.current.getBoundingClientRect()
-
-      const watchlistData: TooltipWatchlistData[] = []
-      
-      lineSeriesMap.forEach((lineData) => {
-        const seriesData = param.seriesData.get(lineData.series) as LineData<Time>
-        if (seriesData) {
-          watchlistData.push({
-            name: lineData.watchlistData.name,
-            color: lineData.watchlistData.color,
-            value: seriesData.value,
-            icon: lineData.watchlistData.icon,
+      const handleResize = () => {
+        if (chartContainerRef.current) {
+          chart.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+            height: 400,
           })
         }
+      }
+
+      window.addEventListener("resize", handleResize)
+      handleResize()
+
+      // Add tooltip
+      const tooltipEl = document.createElement("div")
+      const tooltipRoot = createRoot(tooltipEl)
+      tooltipEl.className = `fixed hidden overflow-hidden text-[11px] rounded-xl w-[220px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-all duration-100 ease-in-out ${
+        isDarkMode 
+          ? 'text-white bg-zinc-900/95 border border-zinc-700/50' 
+          : 'text-gray-900 bg-white/95 border border-gray-200/50'
+      }`
+      document.body.appendChild(tooltipEl)
+
+      // Subscribe to crosshair move
+      chart.subscribeCrosshairMove((param) => {
+        if (
+          param.point === undefined ||
+          !param.time ||
+          param.point.x < 0 ||
+          param.point.y < 0
+        ) {
+          tooltipEl.style.display = "none"
+          return
+        }
+
+        if (!chartContainerRef.current) return
+        const chartRect = chartContainerRef.current.getBoundingClientRect()
+
+        const watchlistData: TooltipWatchlistData[] = []
+        
+        lineSeriesMap.forEach((lineData) => {
+          const seriesData = param.seriesData.get(lineData.series) as LineData<Time>
+          if (seriesData) {
+            watchlistData.push({
+              name: lineData.watchlistData.name,
+              color: lineData.watchlistData.color,
+              value: seriesData.value,
+              icon: lineData.watchlistData.icon,
+            })
+          }
+        })
+
+        if (watchlistData.length === 0) {
+          tooltipEl.style.display = "none"
+          return
+        }
+
+        tooltipEl.style.display = "block"
+        tooltipRoot.render(
+          <TooltipContent
+            watchlistData={watchlistData}
+            timestamp={Number(param.time) * 1000}
+          />
+        )
+
+        const tooltipWidth = tooltipEl.offsetWidth
+        const tooltipHeight = tooltipEl.offsetHeight
+
+        // Position tooltip
+        let left = chartRect.left + param.point.x + 15
+        let top = chartRect.top + param.point.y - tooltipHeight / 2
+
+        // Adjust if tooltip goes beyond right edge
+        if (left + tooltipWidth > window.innerWidth - 10) {
+          left = chartRect.left + param.point.x - tooltipWidth - 15
+        }
+
+        // Adjust if tooltip goes beyond bottom edge
+        if (top + tooltipHeight > window.innerHeight - 10) {
+          top = window.innerHeight - tooltipHeight - 10
+        }
+
+        // Adjust if tooltip goes beyond top edge
+        if (top < 10) {
+          top = 10
+        }
+
+        tooltipEl.style.left = `${left}px`
+        tooltipEl.style.top = `${top}px`
       })
 
-      if (watchlistData.length === 0) {
-        tooltipEl.style.display = "none"
-        return
+      cleanup = () => {
+        window.removeEventListener("resize", handleResize)
+        requestAnimationFrame(() => {
+          try {
+            tooltipRoot.unmount()
+          } catch {
+            // noop
+          }
+          if (document.body.contains(tooltipEl)) {
+            document.body.removeChild(tooltipEl)
+          }
+        })
+        chart.remove()
+        lineSeriesMapRef.current = new Map<WatchlistGroupId, LineSeriesData>()
       }
-
-      tooltipEl.style.display = "block"
-      tooltipRoot.render(
-        <TooltipContent
-          watchlistData={watchlistData}
-          timestamp={Number(param.time) * 1000}
-        />
-      )
-
-      const tooltipWidth = tooltipEl.offsetWidth
-      const tooltipHeight = tooltipEl.offsetHeight
-
-      // Position tooltip
-      let left = chartRect.left + param.point.x + 15
-      let top = chartRect.top + param.point.y - tooltipHeight / 2
-
-      // Adjust if tooltip goes beyond right edge
-      if (left + tooltipWidth > window.innerWidth - 10) {
-        left = chartRect.left + param.point.x - tooltipWidth - 15
-      }
-
-      // Adjust if tooltip goes beyond bottom edge
-      if (top + tooltipHeight > window.innerHeight - 10) {
-        top = window.innerHeight - tooltipHeight - 10
-      }
-
-      // Adjust if tooltip goes beyond top edge
-      if (top < 10) {
-        top = 10
-      }
-
-      tooltipEl.style.left = `${left}px`
-      tooltipEl.style.top = `${top}px`
-    })
+    })()
 
     return () => {
-      window.removeEventListener("resize", handleResize)
-      requestAnimationFrame(() => {
-        tooltipRoot.unmount()
-        document.body.removeChild(tooltipEl)
-      })
-      chart.remove()
+      isCancelled = true
+      cleanup?.()
     }
   }, [watchlistSeriesData, isDarkMode, resolvedTheme])
 

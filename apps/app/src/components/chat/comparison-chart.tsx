@@ -1,14 +1,11 @@
 'use client'
 
 import React, { useMemo } from 'react'
-import {
-  Time,
-  LastPriceAnimationMode,
-  LineSeries,
-} from 'lightweight-charts'
+import type { Time } from 'lightweight-charts'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { generatePastelColors } from '@/lib/chart-colors'
 import { useOptimizedChart } from '@/hooks/use-optimized-chart'
+import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
 
 interface ComparisonChartProps {
   coins: Array<{
@@ -126,25 +123,30 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
     showCrosshair: true,
     onChartReady: (chart) => {
       if (coinSeriesData.length > 0) {
-        // Create line series for each coin
-        coinSeriesData.forEach((coinSeries) => {
-          const lineSeries = chart.addSeries(LineSeries, {
-            lineWidth: 2,
-            lastValueVisible: false,
-            visible: true,
-            priceLineVisible: false,
-            color: coinSeries.color,
-            lastPriceAnimation: LastPriceAnimationMode.Continuous,
-            priceFormat: {
-              type: "custom",
-              formatter: (price: number) => `${price > 0 ? '+' : ''}${price.toFixed(2)}%`,
-            },
-          })
-          
-          lineSeries.setData(coinSeries.data)
-        })
+        void (async () => {
+          const { LineSeries, LastPriceAnimationMode } =
+            await loadLightweightCharts()
 
-        chart.timeScale().fitContent()
+          // Create line series for each coin
+          coinSeriesData.forEach((coinSeries) => {
+            const lineSeries = chart.addSeries(LineSeries, {
+              lineWidth: 2,
+              lastValueVisible: false,
+              visible: true,
+              priceLineVisible: false,
+              color: coinSeries.color,
+              lastPriceAnimation: LastPriceAnimationMode.Continuous,
+              priceFormat: {
+                type: "custom",
+                formatter: (price: number) => `${price > 0 ? '+' : ''}${price.toFixed(2)}%`,
+              },
+            })
+            
+            lineSeries.setData(coinSeries.data)
+          })
+
+          chart.timeScale().fitContent()
+        })()
       }
     }
   })

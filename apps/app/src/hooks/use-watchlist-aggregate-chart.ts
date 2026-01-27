@@ -41,9 +41,13 @@ export function useWatchlistAggregateChart({
     return coins.map(coin => coin.id)
   }, [coins])
 
+  const coinIdsKey = useMemo(() => {
+    return [...coinIds].sort((a, b) => a - b).join(',')
+  }, [coinIds])
+
   // Optimized: Fetch data using individual coin endpoints for better caching
   const { data: historicalData, isLoading } = useQuery({
-    queryKey: ['optimized-watchlist-aggregate', coinIds.sort().join(','), timeScale],
+    queryKey: ['optimized-watchlist-aggregate', coinIdsKey, timeScale],
     queryFn: async () => {
       if (!coinIds.length) return null
 
@@ -138,10 +142,11 @@ function getStaleTime(timeScale: string): number {
       const coinHistories: Array<{
         coinId: number
         quotes: Array<{ timestamp: string; price: number }>
+        quoteByTimestamp: Map<string, number>
       }> = []
 
       // Process each coin's historical data
-      coins.forEach(coin => {
+      for (const coin of coins) {
         const coinData = historicalData.data[coin.id] || historicalData.data[coin.id.toString()]
         
         console.log(`Processing ${coin.symbol} (${coin.id}):`, {
@@ -166,15 +171,19 @@ function getStaleTime(timeScale: string): number {
           console.log(`${coin.symbol}: Processed ${quotes.length} valid quotes`)
 
           if (quotes.length > 0) {
+            const quoteByTimestamp = new Map<string, number>()
+            for (const quote of quotes) quoteByTimestamp.set(quote.timestamp, quote.price)
+
             coinHistories.push({
               coinId: coin.id,
-              quotes
+              quotes,
+              quoteByTimestamp,
             })
           }
         } else {
           console.log(`${coin.symbol}: No valid quotes found`)
         }
-      })
+      }
 
       if (coinHistories.length === 0) {
         setAggregateData([])
@@ -183,11 +192,9 @@ function getStaleTime(timeScale: string): number {
 
       // Find common time points across all coins
       const allTimestamps = new Set<string>()
-      coinHistories.forEach(history => {
-        history.quotes.forEach(quote => {
-          allTimestamps.add(quote.timestamp)
-        })
-      })
+      for (const history of coinHistories) {
+        for (const quote of history.quotes) allTimestamps.add(quote.timestamp)
+      }
 
       const sortedTimestamps = Array.from(allTimestamps).sort()
 
@@ -196,30 +203,29 @@ function getStaleTime(timeScale: string): number {
 
       // Get baseline prices (first available price for each coin)
       const baselines = new Map<number, number>()
-      coinHistories.forEach(history => {
-        if (history.quotes.length > 0 && history.quotes[0]) {
-          baselines.set(history.coinId, history.quotes[0].price)
-        }
-      })
+      for (const history of coinHistories) {
+        const firstQuote = history.quotes[0]
+        if (firstQuote) baselines.set(history.coinId, firstQuote.price)
+      }
 
-      sortedTimestamps.forEach(timestamp => {
-        const timestampMs = new Date(timestamp).getTime()
+      for (const timestamp of sortedTimestamps) {
+        const timestampMs = Date.parse(timestamp)
+        if (Number.isNaN(timestampMs)) continue
         let totalPercentChange = 0
         let validCoins = 0
 
         // For each coin, find the price at this timestamp and calculate % change
-        coinHistories.forEach(history => {
+        for (const history of coinHistories) {
           const baseline = baselines.get(history.coinId)
-          if (!baseline || baseline <= 0) return
+          if (!baseline || baseline <= 0) continue
 
-          // Find closest price to this timestamp
-          const quote = history.quotes.find(q => q.timestamp === timestamp)
-          if (quote && quote.price > 0) {
-            const percentChange = ((quote.price - baseline) / baseline) * 100
+          const price = history.quoteByTimestamp.get(timestamp)
+          if (price && price > 0) {
+            const percentChange = ((price - baseline) / baseline) * 100
             totalPercentChange += percentChange
             validCoins++
           }
-        })
+        }
 
         // Only add point if we have data for at least half the coins
         if (validCoins >= Math.ceil(coinHistories.length / 2)) {
@@ -230,11 +236,11 @@ function getStaleTime(timeScale: string): number {
             value: averagePercentChange
           })
         }
-      })
+      }
 
       // Sort by time and filter out invalid points
       const validAggregateData = aggregatePoints
-        .filter(point => !isNaN(point.value) && isFinite(point.value))
+        .filter(point => !Number.isNaN(point.value) && Number.isFinite(point.value))
         .sort((a, b) => (a.time as number) - (b.time as number))
 
       console.log(`Processed aggregate data: ${validAggregateData.length} points for ${coinHistories.length} coins`)

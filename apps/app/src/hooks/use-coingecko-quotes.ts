@@ -92,9 +92,9 @@ export function useCoinGeckoSearch(searchParams: CoinGeckoSearchParams) {
   // Create a stable cache key
   const cacheKey = [
     "coingecko-search",
-    ids?.sort().join(",") || "",
-    symbols?.sort().join(",") || "",
-    names?.sort().join(",") || "",
+    ids ? [...ids].sort().join(",") : "",
+    symbols ? [...symbols].sort().join(",") : "",
+    names ? [...names].sort().join(",") : "",
     category || "",
     limit.toString()
   ].filter(Boolean).join("|");

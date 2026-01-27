@@ -14,6 +14,7 @@ import { ChatMessageList } from './chat-message-list'
 import GradualBlur from '@v1/ui/progressive-blur'
 import type { ComponentData } from './types'
 import { ChatStateManager } from './chat-state-manager'
+import { useLatest } from '@/hooks/use-latest'
 
 // Export the ChatStateManager for use in other components
 export { ChatStateManager };
@@ -61,17 +62,19 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
     }
   }, [autoCleanupSession, onClose, toastId]);
 
+  const handleCloseRef = useLatest(handleClose);
+
   // Handle escape key to close toast
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        handleClose();
+        void handleCloseRef.current();
       }
     };
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [handleClose]);
+  }, []);
 
   if (!deferredChatState) {
     return (

@@ -40,7 +40,7 @@ export function ChatMessageList({ messages, isLoading, isDataLoading, messageCom
 
   return (
     <ScrollArea ref={handleScrollAreaRef} className="flex-1 px-4">
-      <div className="space-y-4 pb-4">
+      <div className="space-y-4 pb-4 cv-auto">
         {messages.map((message) => {
           // Get component data for this message
           const componentData = messageComponents?.[message.id] || null;

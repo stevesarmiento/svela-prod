@@ -1,8 +1,9 @@
 'use client'
 
-import { useRef, useEffect, useMemo, useCallback } from 'react'
-import { createChart, IChartApi, ColorType, CrosshairMode, LineStyle, MouseEventParams } from 'lightweight-charts'
+import { useRef, useEffect, useCallback } from 'react'
+import type { IChartApi, MouseEventParams } from 'lightweight-charts'
 import { useIsomorphicTheme } from './use-isomorphic-theme'
+import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
 
 export interface ChartConfig {
   height?: number
@@ -40,55 +41,6 @@ export function useOptimizedChart(options: UseOptimizedChartOptions = {}) {
     onChartReady
   } = options
 
-  // Memoize chart configuration to prevent unnecessary recreations
-  const chartConfig = useMemo(() => ({
-    handleScale: false,
-    handleScroll: false,
-    layout: {
-      background: { type: ColorType.Solid, color: "transparent" },
-      textColor: isDarkMode ? "#ffffff50" : "#00000050",
-      attributionLogo: false,
-    },
-    grid: {
-      vertLines: { 
-        visible: showGrid,
-        color: isDarkMode ? "#e5e7eb20" : "#00000020",
-        style: LineStyle.Dotted,
-      },
-      horzLines: { 
-        visible: showGrid,
-        color: isDarkMode ? "#ffffff10" : "#00000010",
-        style: LineStyle.Solid,
-      },
-    },
-    rightPriceScale: {
-      borderVisible: false,
-      autoScale: true,
-      visible: showRightPriceScale,
-      entireTextOnly: true,
-    },
-    crosshair: {
-      mode: showCrosshair ? CrosshairMode.Magnet : CrosshairMode.Hidden,
-      vertLine: {
-        labelVisible: showCrosshair,
-        width: 1 as const,
-        color: isDarkMode ? "#d1d5db40" : "#00000040",
-        visible: showCrosshair,
-        style: LineStyle.Solid,
-      },
-      horzLine: {
-        visible: false,
-        labelVisible: false,
-      },
-    },
-    timeScale: {
-      visible: showTimeScale,
-      timeVisible: showTimeScale,
-      secondsVisible: false,
-      borderVisible: false,
-    },
-  }), [isDarkMode, showTimeScale, showRightPriceScale, showGrid, showCrosshair])
-
   // Keep callback refs updated with latest values
   useEffect(() => {
     onCrosshairMoveRef.current = onCrosshairMove
@@ -109,34 +61,93 @@ export function useOptimizedChart(options: UseOptimizedChartOptions = {}) {
   useEffect(() => {
     if (!chartContainerRef.current) return
 
-    const chart = createChart(chartContainerRef.current, chartConfig)
-    chartRef.current = chart
+    let isCancelled = false
+    let chart: IChartApi | null = null
 
-    // Initial resize
-    resizeHandler()
+    void (async () => {
+      const { createChart, ColorType, CrosshairMode, LineStyle } =
+        await loadLightweightCharts()
 
-    // Set up resize listener
-    window.addEventListener("resize", resizeHandler)
-    
-    // Set up crosshair move handler
-    if (onCrosshairMoveRef.current) {
-      chart.subscribeCrosshairMove((param) => onCrosshairMoveRef.current?.(chart, param))
-    }
+      if (isCancelled || !chartContainerRef.current) return
 
-    // Fit content to chart
-    chart.timeScale().fitContent()
+      const createdChart = createChart(chartContainerRef.current, {
+        handleScale: false,
+        handleScroll: false,
+        layout: {
+          background: { type: ColorType.Solid, color: "transparent" },
+          textColor: isDarkMode ? "#ffffff50" : "#00000050",
+          attributionLogo: false,
+        },
+        grid: {
+          vertLines: { 
+            visible: showGrid,
+            color: isDarkMode ? "#e5e7eb20" : "#00000020",
+            style: LineStyle.Dotted,
+          },
+          horzLines: { 
+            visible: showGrid,
+            color: isDarkMode ? "#ffffff10" : "#00000010",
+            style: LineStyle.Solid,
+          },
+        },
+        rightPriceScale: {
+          borderVisible: false,
+          autoScale: true,
+          visible: showRightPriceScale,
+          entireTextOnly: true,
+        },
+        crosshair: {
+          mode: showCrosshair ? CrosshairMode.Magnet : CrosshairMode.Hidden,
+          vertLine: {
+            labelVisible: showCrosshair,
+            width: 1 as const,
+            color: isDarkMode ? "#d1d5db40" : "#00000040",
+            visible: showCrosshair,
+            style: LineStyle.Solid,
+          },
+          horzLine: {
+            visible: false,
+            labelVisible: false,
+          },
+        },
+        timeScale: {
+          visible: showTimeScale,
+          timeVisible: showTimeScale,
+          secondsVisible: false,
+          borderVisible: false,
+        },
+      })
 
-    // Call ready callback
-    if (onChartReadyRef.current) {
-      onChartReadyRef.current(chart)
-    }
+      chart = createdChart
+      chartRef.current = createdChart
+
+      // Initial resize
+      resizeHandler()
+
+      // Set up resize listener
+      window.addEventListener("resize", resizeHandler)
+      
+      // Set up crosshair move handler
+      if (onCrosshairMoveRef.current) {
+        createdChart.subscribeCrosshairMove((param) => onCrosshairMoveRef.current?.(createdChart, param))
+      }
+
+      // Fit content to chart
+      createdChart.timeScale().fitContent()
+
+      // Call ready callback
+      if (onChartReadyRef.current) {
+        onChartReadyRef.current(createdChart)
+      }
+    })()
 
     return () => {
+      isCancelled = true
       window.removeEventListener("resize", resizeHandler)
-      chart.remove()
+      chart?.remove()
       chartRef.current = null
     }
-  }, [chartConfig, resizeHandler])
+  }, [isDarkMode, showTimeScale, showRightPriceScale, showGrid, showCrosshair, resizeHandler])
 
   return {
     chartContainerRef,

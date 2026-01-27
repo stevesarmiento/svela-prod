@@ -116,7 +116,7 @@ export function useUserSettings() {
   };
 
   // Get memory settings with localStorage fallback for immediate access
-  const getMemorySettings = () => {
+  const getMemorySettings = useCallback(() => {
     // If settings are loaded from DB, use those
     if (settings) {
       return {
@@ -137,15 +137,18 @@ export function useUserSettings() {
     }
 
     // Fallback to localStorage while DB loads (client-side only)
+    const memoryEnabled = localStorage.getItem('memoryEnabled')
+    const autoCleanupEnabled = localStorage.getItem('autoCleanupEnabled')
+    const retentionDays = localStorage.getItem('retentionDays')
     return {
-      memoryEnabled: localStorage.getItem('memoryEnabled') !== 'false', // default true
-      autoCleanupEnabled: localStorage.getItem('autoCleanupEnabled') === 'true', // default false
-      retentionDays: localStorage.getItem('retentionDays') || '30', // default 30
+      memoryEnabled: memoryEnabled !== 'false', // default true
+      autoCleanupEnabled: autoCleanupEnabled === 'true', // default false
+      retentionDays: retentionDays || '30', // default 30
     };
-  };
+  }, [settings]);
 
   // API Key Management Functions
-  const addApiKey = async (provider: ApiProvider, keyName: string, apiKey: string, isActive: boolean = true) => {
+  const addApiKey = async (provider: ApiProvider, keyName: string, apiKey: string, isActive = true) => {
     if (!user?.id) {
       toast.error("Please sign in to manage API keys");
       return;

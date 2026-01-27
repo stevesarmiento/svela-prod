@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { Button } from "@v1/ui/button";
 import { toast } from "@v1/ui/use-toast";
 import { matchesShortcut, getShortcutsForComponent } from "@/lib/keyboard-shortcuts";
+import { useLatest } from "@/hooks/use-latest";
 
 interface WatchlistButtonProps {
   coinId: string | number;
@@ -39,61 +40,7 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
     }
   }, [isInWatchlist, showSlash]);
 
-  // Keyboard shortcut handler
-  useEffect(() => {
-    const handleClick = async () => {
-      if (isToggling || !selectedGroup) return;
-      
-      setIsToggling(true);
-      
-      try {
-        if (isInWatchlist) {
-          setShowSlash(true);
-          await removeFromSelectedGroup(coinIdString);
-          toast({
-            title: "Removed",
-            description: `${coinName || 'Coin'} removed from ${selectedGroup.name}`,
-          });
-        } else {
-          await addToSelectedGroup(coinIdString);
-          toast({
-            title: "Added",
-            description: `${coinName || 'Coin'} added to ${selectedGroup.name}`,
-          });
-        }
-      } catch (error) {
-        console.error('Watchlist toggle error:', error);
-        toast({
-          title: "Error",
-          description: isInWatchlist ? "Failed to remove from watchlist" : "Failed to add to watchlist",
-          variant: "destructive",
-        });
-      } finally {
-        setIsToggling(false);
-      }
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignore if typing in an input
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-
-      // Check if this matches our toggle watchlist shortcut
-      if (toggleShortcut && matchesShortcut(event, toggleShortcut)) {
-        event.preventDefault();
-        handleClick();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [toggleShortcut, isInWatchlist, isToggling, coinIdString, coinName, addToSelectedGroup, removeFromSelectedGroup, setShowSlash, selectedGroup]);
-
-  const handleButtonClick = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
+  const toggleWatchlist = async () => {
     if (isToggling || !selectedGroup) return;
     
     setIsToggling(true);
@@ -101,13 +48,13 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
     try {
       if (isInWatchlist) {
         setShowSlash(true);
-          await removeFromSelectedGroup(coinIdString);
+        await removeFromSelectedGroup(coinIdString);
         toast({
           title: "Removed",
           description: `${coinName || 'Coin'} removed from ${selectedGroup.name}`,
         });
       } else {
-          await addToSelectedGroup(coinIdString);
+        await addToSelectedGroup(coinIdString);
         toast({
           title: "Added",
           description: `${coinName || 'Coin'} added to ${selectedGroup.name}`,
@@ -123,6 +70,35 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
     } finally {
       setIsToggling(false);
     }
+  };
+
+  const toggleWatchlistRef = useLatest(toggleWatchlist);
+  const toggleShortcutRef = useLatest(toggleShortcut);
+
+  // Keyboard shortcut handler (stable subscription, latest handler via refs)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ignore if typing in an input
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      const shortcut = toggleShortcutRef.current;
+      if (shortcut && matchesShortcut(event, shortcut)) {
+        event.preventDefault();
+        void toggleWatchlistRef.current();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleButtonClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    await toggleWatchlist();
   };
 
   // Don't show button if no group is selected

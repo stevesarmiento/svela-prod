@@ -14,7 +14,8 @@ import {
   getFilteredRowModel,
   type SortingState,
 } from '@tanstack/react-table'
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import type React from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from "next/navigation"
 import { Spinner } from "@v1/ui/spinner"
 import { WatchlistsGrid } from "./watchlists-grid"
@@ -22,6 +23,7 @@ import { ChartsClient } from "../../charts/_components/chart-client"
 import { matchesShortcut, GLOBAL_SHORTCUTS } from "@/lib/keyboard-shortcuts"
 import { useWatchlistData } from "@/hooks/use-watchlist-data"
 import { useWatchlistSelection } from "@/hooks/use-watchlist-selection"
+import type { CoinMarketData } from "@/types/coins"
 import { Button } from "@v1/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@v1/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@v1/ui/tooltip'
@@ -34,6 +36,7 @@ import { IconStarFill, IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, Icon
 import { CreateWatchlist } from './create-watchlist'
 import { Kbd } from "@v1/ui/kbd"
 import { COLOR_THEMES } from "@/components/color-picker"
+import { useLatest } from "@/hooks/use-latest"
 
 interface WatchlistProps {
   activeTimeScale?: string;
@@ -43,6 +46,77 @@ interface WatchlistProps {
   contentMode?: 'cards' | 'table';
   onContentModeChange?: (mode: 'cards' | 'table') => void;
   onInlineChartError?: () => void;
+}
+
+interface WatchlistTableSectionProps {
+  coins: Array<CoinMarketData>;
+  sorting: SortingState;
+  onSortingChange: React.Dispatch<React.SetStateAction<SortingState>>;
+  selectedCoins: Set<string>;
+  watchlistGroup: string | null;
+  hoveredRowId: string | null;
+  removingCoins: Set<string>;
+  hasSelectedCoins: boolean;
+  onRemove: (coinId: number | string) => Promise<void>;
+  onCoinSelect: (coinId: string, selected: boolean) => void;
+  onSelectAll: (checked: boolean, coinIds?: string[]) => void;
+  onSetHover: (rowId: string | null) => void;
+  onInlineChartError?: () => void;
+}
+
+function WatchlistTableSection({
+  coins,
+  sorting,
+  onSortingChange,
+  selectedCoins,
+  watchlistGroup,
+  hoveredRowId,
+  removingCoins,
+  hasSelectedCoins,
+  onRemove,
+  onCoinSelect,
+  onSelectAll,
+  onSetHover,
+  onInlineChartError,
+}: WatchlistTableSectionProps) {
+  // Stable wrapper to keep column defs focused and avoid re-creating work in parent.
+  const handleSelectAllWrapper = useCallback((checked: boolean) => {
+    const coinIds = checked ? coins.map(coin => coin.id.toString()) : [];
+    onSelectAll(checked, coinIds);
+  }, [coins, onSelectAll]);
+
+  const columns = useMemo(() => createWatchlistColumns({
+    handleRemove: onRemove,
+    selectedCoins,
+    onCoinSelect,
+    onSelectAll: handleSelectAllWrapper,
+    totalCoins: coins.length,
+    removingCoins,
+    hoveredRowId,
+    hasSelectedCoins,
+    onInlineChartError,
+  }), [onRemove, selectedCoins, onCoinSelect, handleSelectAllWrapper, coins.length, removingCoins, hoveredRowId, hasSelectedCoins, onInlineChartError]);
+
+  const table = useReactTable({
+    data: coins,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    onSortingChange,
+    state: { sorting },
+  })
+
+  return (
+    <WatchlistTableBody
+      table={table}
+      selectedCoins={selectedCoins}
+      watchlistGroup={watchlistGroup}
+      hoveredRowId={hoveredRowId}
+      onCoinSelect={onCoinSelect}
+      onSetHover={onSetHover}
+    />
+  )
 }
 
 export function Watchlist({
@@ -108,59 +182,61 @@ export function Watchlist({
     removeBulkFromWatchlist,
   });
 
-  // Keyboard shortcuts handler - Memoize the handler to avoid recreating the event listener
-  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+  const contentModeRef = useLatest(contentMode)
+  const onGridViewModeChangeRef = useLatest(onGridViewModeChange)
+  const onContentModeChangeRef = useLatest(onContentModeChange)
+
+  // Keyboard shortcuts handler (stable subscription, latest state via refs)
+  useEffect(() => {
+    const addTokenShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'focusAddToken')
+
+    const handleKeyDown = (event: KeyboardEvent) => {
       // Ignore if typing in an input or textarea
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
         return;
       }
 
-      // Get the add token shortcut
-      const addTokenShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'focusAddToken')
-      
       if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
         event.preventDefault()
         coinSearchRef.current?.open()
-      return;
-    }
-
-    if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      event.preventDefault()
-      onContentModeChange?.('cards')
-      return;
-    }
-
-    // "]" key for Table mode  
-    if (event.key === ']' && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      event.preventDefault()
-      onContentModeChange?.('table')
-      return;
-    }
-
-    // Watchlist mode shortcuts (only work in cards mode)
-    if (contentMode === 'cards') {
-      // "w" key for Watchlist mode
-      if (event.key.toLowerCase() === 'w' && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        event.preventDefault()
-        onGridViewModeChange?.('grid')
         return;
       }
 
-      // "c" key for Comparison mode  
-      if (event.key.toLowerCase() === 'e' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault()
-        onGridViewModeChange?.('chart')
+        onContentModeChangeRef.current?.('cards')
         return;
       }
-    }
-  }, [contentMode, onGridViewModeChange, onContentModeChange])
 
-  useEffect(() => {
+      // "]" key for Table mode  
+      if (event.key === ']' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault()
+        onContentModeChangeRef.current?.('table')
+        return;
+      }
+
+      // Watchlist mode shortcuts (only work in cards mode)
+      if (contentModeRef.current === 'cards') {
+        // "w" key for Watchlist mode
+        if (event.key.toLowerCase() === 'w' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          event.preventDefault()
+          onGridViewModeChangeRef.current?.('grid')
+          return;
+        }
+
+        // "e" key for Comparison mode  
+        if (event.key.toLowerCase() === 'e' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          event.preventDefault()
+          onGridViewModeChangeRef.current?.('chart')
+          return;
+        }
+      }
+    }
+
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [handleKeyDown])
+  }, [])
 
-  // Create a stable handleSelectAll wrapper to avoid column recreations
   const handleSelectAllWrapper = useCallback((checked: boolean) => {
     const coinIds = checked ? filteredCoins.map(coin => coin.id.toString()) : [];
     handleSelectAll(checked, coinIds);
@@ -171,10 +247,9 @@ export function Watchlist({
     if (contentMode === 'table') {
       // Show number of available watchlists
       return watchlistGroups.length;
-    } else {
-      // Show number of tokens in selected watchlist
-      return filteredCoins.length;
     }
+    // Show number of tokens in selected watchlist
+    return filteredCoins.length;
   }, [contentMode, watchlistGroups.length, filteredCoins.length]);
 
   // Get the selected group's color theme for the counter badge
@@ -186,29 +261,6 @@ export function Watchlist({
     }
     return COLOR_THEMES[groupColor as keyof typeof COLOR_THEMES] || COLOR_THEMES.default;
   }, [selectedGroup]);
-
-  // Memoize columns with hover state - Split dependencies to reduce recalculations
-  const columns = useMemo(() => createWatchlistColumns({
-    handleRemove, 
-    selectedCoins, 
-    onCoinSelect: handleCoinSelect, 
-    onSelectAll: handleSelectAllWrapper, 
-    totalCoins: filteredCoins.length,
-    removingCoins,
-    hoveredRowId,
-    hasSelectedCoins,
-    onInlineChartError,
-  }), [handleRemove, selectedCoins, handleCoinSelect, handleSelectAllWrapper, filteredCoins.length, removingCoins, hoveredRowId, hasSelectedCoins, onInlineChartError]);
-
-  const table = useReactTable({
-    data: filteredCoins,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    onSortingChange: setSorting,
-    state: { sorting },
-  })
 
   // Handle errors
   if (error) {
@@ -292,7 +344,7 @@ export function Watchlist({
         
         {/* Right side - Action buttons and shortcuts */}
         <div className="flex items-center justify-between gap-4 flex-1">
-          <div className="flex items-center gap-2"></div>
+          <div className="flex items-center gap-2" />
           {/* Action buttons - right side */}
           <div className="flex items-center gap-2">
                         {/* Content Mode Toggle */}
@@ -404,13 +456,20 @@ export function Watchlist({
           ) : filteredCoins.length === 0 ? (
             <WatchlistEmptyState type="no-filtered-coins" onClearFilters={handleClearAllFilters} />
           ) : (
-            <WatchlistTableBody
-              table={table}
+            <WatchlistTableSection
+              coins={filteredCoins}
+              sorting={sorting}
+              onSortingChange={setSorting}
               selectedCoins={selectedCoins}
               watchlistGroup={watchlistGroup}
               hoveredRowId={hoveredRowId}
+              removingCoins={removingCoins}
+              hasSelectedCoins={hasSelectedCoins}
+              onRemove={handleRemove}
               onCoinSelect={handleCoinSelect}
+              onSelectAll={handleSelectAll}
               onSetHover={setHoveredRowId}
+              onInlineChartError={onInlineChartError}
             />
           )}
         </div>

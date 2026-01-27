@@ -82,9 +82,14 @@ export function useHybridCoinSearch(
     return dbSearchResults?.map(coin => coin.coingeckoId) || [];
   }, [dbSearchResults]);
 
+  const coingeckoIdsKey = useMemo(() => {
+    if (!coingeckoIds.length) return ""
+    return [...coingeckoIds].sort().join(",")
+  }, [coingeckoIds])
+
   // Step 2: Get pricing data from API for only the matched coins
   const { data: pricingData, isLoading: isPricingLoading, error: pricingError } = useQuery({
-    queryKey: ["hybrid-pricing", coingeckoIds.sort().join(",")],
+    queryKey: ["hybrid-pricing", coingeckoIdsKey],
     queryFn: async (): Promise<Record<string, CoinGeckoPricingData>> => {
       if (!coingeckoIds.length) return {};
 

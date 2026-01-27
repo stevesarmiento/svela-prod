@@ -1,9 +1,21 @@
 import { decryptValue } from "@/lib/encryption";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/../convex/_generated/api";
+import { cache } from "react";
 
 // Initialize Convex client for server-side usage
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+
+const getActiveApiKeyCached = cache(async (clerkId: string, provider: string) => {
+  return await convex.query(api.apiKeys.getActiveApiKey, {
+    clerkId,
+    provider,
+  });
+});
+
+const decryptValueCached = cache(async (encryptedKey: string) => {
+  return await decryptValue(encryptedKey);
+});
 
 export interface UserApiKeyResult {
   key: string | null;
@@ -26,14 +38,11 @@ export async function getUserApiKey(
   // Try to get user's API key if they're authenticated
   if (clerkId) {
     try {
-      const userApiKey = await convex.query(api.apiKeys.getActiveApiKey, {
-        clerkId,
-        provider,
-      });
+      const userApiKey = await getActiveApiKeyCached(clerkId, provider);
 
       if (userApiKey && userApiKey.encryptedKey) {
         try {
-          userKey = await decryptValue(userApiKey.encryptedKey);
+          userKey = await decryptValueCached(userApiKey.encryptedKey);
           isUserKey = true;
           
           // Update usage stats (fire and forget)
@@ -118,10 +127,7 @@ export async function updateUserApiKeyRateLimit(
   if (!clerkId) return;
   
   try {
-    const userApiKey = await convex.query(api.apiKeys.getActiveApiKey, {
-      clerkId,
-      provider,
-    });
+    const userApiKey = await getActiveApiKeyCached(clerkId, provider);
 
     if (userApiKey) {
       await convex.mutation(api.apiKeys.updateApiKeyStats, {
@@ -146,10 +152,7 @@ export async function reportApiKeyError(
   if (!clerkId) return;
   
   try {
-    const userApiKey = await convex.query(api.apiKeys.getActiveApiKey, {
-      clerkId,
-      provider,
-    });
+    const userApiKey = await getActiveApiKeyCached(clerkId, provider);
 
     if (userApiKey) {
       await convex.mutation(api.apiKeys.updateApiKeyStats, {

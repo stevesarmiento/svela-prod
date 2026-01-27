@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useRef, useEffect } from 'react'
-import { createChart, ColorType, LineStyle, IChartApi, LineSeries } from 'lightweight-charts'
-import type { Time as LightweightTime } from 'lightweight-charts'
+import type { IChartApi, Time as LightweightTime } from 'lightweight-charts'
+import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
 
 interface AggregateDataPoint {
   time: LightweightTime
@@ -30,6 +30,9 @@ export function WatchlistAggregateChart({
       return
     }
 
+    let isCancelled = false
+    let cleanup: (() => void) | null = null
+
     // Clean up existing chart
     if (chartRef.current) {
       try {
@@ -40,79 +43,91 @@ export function WatchlistAggregateChart({
       chartRef.current = null
     }
 
-    // Create optimized chart
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: 'transparent',
-        fontSize: 0,
-        attributionLogo: false,
-      },
-      width,
-      height,
-      rightPriceScale: {
-        visible: false,
-      },
-      leftPriceScale: {
-        visible: false,
-      },
-      timeScale: {
-        visible: false,
-        borderVisible: false,
-      },
-      grid: {
-        vertLines: { visible: false },
-        horzLines: { visible: false },
-      },
-      crosshair: {
-        mode: 0, // Disabled
-        vertLine: { visible: false },
-        horzLine: { visible: false },
-      },
-      handleScroll: false,
-      handleScale: false,
-    })
+    void (async () => {
+      const { createChart, ColorType, LineStyle, LineSeries } =
+        await loadLightweightCharts()
 
-    // Add line series with proper color based on performance
-    const lineSeries = chart.addSeries(LineSeries, {
-      //color: isPositive ? '#10B981' : '#EF4444', // Green for positive, red for negative
-      color: '#ffffff50',
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: false,
-      lineStyle: LineStyle.Solid,
-    })
+      if (isCancelled || !chartContainerRef.current || data.length === 0) return
 
-    // Set data
-    lineSeries.setData(data)
+      // Create optimized chart
+      const chart = createChart(chartContainerRef.current, {
+        layout: {
+          background: { type: ColorType.Solid, color: 'transparent' },
+          textColor: 'transparent',
+          fontSize: 0,
+          attributionLogo: false,
+        },
+        width,
+        height,
+        rightPriceScale: {
+          visible: false,
+        },
+        leftPriceScale: {
+          visible: false,
+        },
+        timeScale: {
+          visible: false,
+          borderVisible: false,
+        },
+        grid: {
+          vertLines: { visible: false },
+          horzLines: { visible: false },
+        },
+        crosshair: {
+          mode: 0, // Disabled
+          vertLine: { visible: false },
+          horzLine: { visible: false },
+        },
+        handleScroll: false,
+        handleScale: false,
+      })
 
-    // Auto-fit the content
-    chart.timeScale().fitContent()
+      // Add line series with proper color based on performance
+      const lineSeries = chart.addSeries(LineSeries, {
+        //color: isPositive ? '#10B981' : '#EF4444', // Green for positive, red for negative
+        color: '#ffffff50',
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        lineStyle: LineStyle.Solid,
+      })
 
-    chartRef.current = chart
+      // Set data
+      lineSeries.setData(data)
 
-    // Handle resize
-    const handleResize = () => {
-      if (chartContainerRef.current && chart) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height,
-        })
-      }
-    }
+      // Auto-fit the content
+      chart.timeScale().fitContent()
 
-    window.addEventListener('resize', handleResize)
+      chartRef.current = chart
 
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      if (chart) {
-        try {
-          chart.remove()
-        } catch (error) {
-          console.debug('Chart cleanup - already disposed:', error)
+      // Handle resize
+      const handleResize = () => {
+        if (chartContainerRef.current && chart) {
+          chart.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+            height,
+          })
         }
       }
-      chartRef.current = null
+
+      window.addEventListener('resize', handleResize)
+
+      cleanup = () => {
+        window.removeEventListener('resize', handleResize)
+        if (chart) {
+          try {
+            chart.remove()
+          } catch (error) {
+            console.debug('Chart cleanup - already disposed:', error)
+          }
+        }
+        chartRef.current = null
+      }
+    })()
+
+    return () => {
+      isCancelled = true
+      cleanup?.()
     }
   }, [data, isPositive, width, height])
 

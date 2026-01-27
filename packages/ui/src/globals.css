@@ -169,6 +169,12 @@
   padding-inline: 2rem;
 }
 
+/* Performance: skip rendering offscreen list content */
+@utility cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 600px;
+}
+
 @layer base {
   :root {
     --background: 0, 0%, 100%;

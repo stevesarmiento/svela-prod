@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useCallback, useEffect } from 'react'
-import { type Table } from '@tanstack/react-table'
+import type { Table } from '@tanstack/react-table'
 import { WatchlistTableHeader } from './watchlist-table-header'
 import { WatchlistTableRow } from './watchlist-table-row'
 import type { CoinMarketData } from '@/types/coins'
@@ -58,7 +58,7 @@ export function WatchlistTableBody({
 
       {/* Table Body */}
       <div 
-        className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden"
+        className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden cv-auto"
         onMouseLeave={() => clearHoverWithDelay()}
       >
         {table.getRowModel().rows.map(row => (

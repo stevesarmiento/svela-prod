@@ -75,6 +75,10 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
     return ids
   }, [coins])
 
+  const coinIdsKey = useMemo(() => {
+    return [...coinIds].sort().join(',')
+  }, [coinIds])
+
   // Convert timeScale to days for CoinGecko API
   const getDaysFromTimeScale = (scale: string): string => {
     switch (scale) {
@@ -90,7 +94,7 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
 
   // Fetch historical market chart data for all coins in the watchlist
   const { data: historicalData, isLoading } = useQuery({
-    queryKey: ['watchlist-aggregate-historical', coinIds.sort().join(','), timeScale],
+    queryKey: ['watchlist-aggregate-historical', coinIdsKey, timeScale],
     queryFn: async () => {
       if (!coinIds.length) return { data: {}, performance: { cacheHits: 0, cacheMisses: 0, totalQueries: 0 } }
 
@@ -109,7 +113,7 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
               return { coinId, data: result.data || null }
             },
             catch: (error) => new ApiRequestError({
-              endpoint: `/api/coingecko/market-chart`,
+              endpoint: "/api/coingecko/market-chart",
               status: 500,
               message: `Failed to fetch ${coinId}: ${String(error)}`
             })
@@ -142,15 +146,16 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
         const historicalDataMap: Record<string, CoinHistoricalData[]> = {}
         let successCount = 0
         
-        results.forEach(result => {
-          if (result.data && result.data.prices && Array.isArray(result.data.prices)) {
-            historicalDataMap[result.coinId] = result.data.prices.map((pricePoint: { time: number; value: number }) => ({
-              time: pricePoint.time,
-              value: pricePoint.value
-            }))
-            successCount++
-          }
-        })
+        for (const result of results) {
+          const prices = result.data?.prices
+          if (!Array.isArray(prices)) continue
+
+          historicalDataMap[result.coinId] = prices.map((pricePoint: { time: number; value: number }) => ({
+            time: pricePoint.time,
+            value: pricePoint.value
+          }))
+          successCount++
+        }
 
         console.log('🔍 Historical data fetched:', {
           requestedCoins: coinIds.length,
@@ -216,16 +221,16 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
         let timestamp = 0
         
         // Get price from each coin at this index
-        validCoinIds.forEach(coinId => {
+        for (const coinId of validCoinIds) {
           const coinData = coinDataMap[coinId]
-          if (coinData && coinData[dataIndex]) {
+          if (coinData?.[dataIndex]) {
             totalPrice += coinData[dataIndex].value
             validPriceCount++
             if (timestamp === 0) {
               timestamp = coinData[dataIndex].time
             }
           }
-        })
+        }
 
         // Calculate average price across all coins
         if (validPriceCount > 0) {
@@ -253,7 +258,7 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
           coinsCount: validCoinIds.length,
           dataPoints: percentageData.length,
           baselinePrice: baselinePrice.toFixed(6),
-          finalChange: percentageData[percentageData.length - 1]?.value.toFixed(2) + '%',
+          finalChange: `${percentageData[percentageData.length - 1]?.value.toFixed(2)}%`,
           priceRange: {
             min: Math.min(...aggregatedPoints.map(p => p.value)).toFixed(6),
             max: Math.max(...aggregatedPoints.map(p => p.value)).toFixed(6)

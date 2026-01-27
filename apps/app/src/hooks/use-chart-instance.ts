@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { createChart, ColorType, CrosshairMode, LineStyle, LineSeries, CandlestickSeries, HistogramSeries, LastPriceAnimationMode, Time, ISeriesApi } from 'lightweight-charts'
-import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
-import { createRoot } from "react-dom/client"
 import React from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import type { ISeriesApi, Time } from 'lightweight-charts'
+import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
+import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
 
 interface PriceDataPoint {
   time: Time
@@ -227,275 +228,303 @@ export function useChartInstance(
   useEffect(() => {
     if (!chartContainerRef.current || (!chartData.length && !ohlcvData?.length)) return
     
+    let isCancelled = false
+    let cleanup: (() => void) | null = null
 
-    const chart = createChart(chartContainerRef.current, {
-      handleScale: false,
-      handleScroll: false,
-      layout: {
-        background: { type: ColorType.Solid, color: "transparent" },
-        textColor: isDarkMode ? "#ffffff" : "#000000",
-        attributionLogo: false,
-      },
-      grid: {
-        vertLines: { visible: false, color: isDarkMode ? "#e5e7eb20" : "#00000020", style: LineStyle.Dotted },
-        horzLines: { visible: false, color: isDarkMode ? "#f5f5f510" : "#00000010", style: LineStyle.Dotted },
-      },
-      rightPriceScale: { 
-        borderVisible: false, 
-        autoScale: true,
-        scaleMargins: { top: 0.1, bottom: 0.1 }
-      },
-      crosshair: {
-        mode: CrosshairMode.Magnet,
-        vertLine: { labelVisible: true, width: 1, color: isDarkMode ? "#d1d5db40" : "#00000040", visible: true, style: LineStyle.Solid },
-        horzLine: { visible: false, labelVisible: false },
-      },
-      timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
-    })
+    void (async () => {
+      const {
+        createChart,
+        ColorType,
+        CrosshairMode,
+        LineStyle,
+        LineSeries,
+        CandlestickSeries,
+        HistogramSeries,
+        LastPriceAnimationMode,
+      } = await loadLightweightCharts()
 
-    let priceSeries: ISeriesApi<'Line'> | ISeriesApi<'Candlestick'>
+      if (isCancelled || !chartContainerRef.current) return
 
-    // Generate pastel colors for candlesticks
-    const pastelColors = generatePastelColors(4)
-    const upColorBase = pastelColors[2] || 'hsl(160, 42%, 72%)'
-    const downColorBase = pastelColors[1] || 'hsl(340, 45%, 78%)'
-    
-    const upColor = addOpacityToColor(upColorBase, 0.4)
-    const downColor = addOpacityToColor(downColorBase, 0.4)
-    
-    const upBorderColor = addOpacityToColor(upColorBase, 0.8)
-    const downBorderColor = addOpacityToColor(downColorBase, 0.8)
-
-    // Create price series based on chart type
-    if (chartType === 'candlestick' && ohlcvData?.length) {
-      priceSeries = chart.addSeries(CandlestickSeries, {
-        upColor: upColor,
-        downColor: downColor,
-        borderVisible: true,
-        borderUpColor: upBorderColor,
-        borderDownColor: downBorderColor,
-        wickUpColor: upBorderColor,
-        wickDownColor: downBorderColor,
-        lastValueVisible: true,
-        priceLineVisible: false,
-        priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+      const chart = createChart(chartContainerRef.current, {
+        handleScale: false,
+        handleScroll: false,
+        layout: {
+          background: { type: ColorType.Solid, color: "transparent" },
+          textColor: isDarkMode ? "#ffffff" : "#000000",
+          attributionLogo: false,
+        },
+        grid: {
+          vertLines: { visible: false, color: isDarkMode ? "#e5e7eb20" : "#00000020", style: LineStyle.Dotted },
+          horzLines: { visible: false, color: isDarkMode ? "#f5f5f510" : "#00000010", style: LineStyle.Dotted },
+        },
+        rightPriceScale: { 
+          borderVisible: false, 
+          autoScale: true,
+          scaleMargins: { top: 0.1, bottom: 0.1 }
+        },
+        crosshair: {
+          mode: CrosshairMode.Magnet,
+          vertLine: { labelVisible: true, width: 1, color: isDarkMode ? "#d1d5db40" : "#00000040", visible: true, style: LineStyle.Solid },
+          horzLine: { visible: false, labelVisible: false },
+        },
+        timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
       })
-      priceSeries.setData(ohlcvData)
-    } else {
-      const priceLineColor = isDarkMode ? '#ffffff' : '#000000'
+
+      let priceSeries: ISeriesApi<'Line'> | ISeriesApi<'Candlestick'>
+
+      // Generate pastel colors for candlesticks
+      const pastelColors = generatePastelColors(4)
+      const upColorBase = pastelColors[2] || 'hsl(160, 42%, 72%)'
+      const downColorBase = pastelColors[1] || 'hsl(340, 45%, 78%)'
       
-      priceSeries = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        lastValueVisible: true,
-        visible: true,
-        priceLineVisible: false,
-        color: priceLineColor,
-        lastPriceAnimation: LastPriceAnimationMode.Continuous,
-        priceFormat: { type: "price", precision: 2, minMove: 0.01 },
-      })
-      priceSeries.setData(chartData)
-    }
-
-    const volumeSeries = chart.addSeries(HistogramSeries, {
-      color: isDarkMode ? '#ffffff50' : '#00000050',
-      priceFormat: { type: 'volume' },
-      priceScaleId: 'volume',
-    })
-
-    chart.priceScale('volume').applyOptions({
-      scaleMargins: { top: 0.8, bottom: 0 },
-    })
-    
-    volumeSeries.setData(volumeData)
-
-    chart.timeScale().fitContent()
-
-    // Add Hull Suite overlay if enabled
-    if (displaySettings?.showHullSuite && hullSuiteData) {
-      // Use theme-aware colors for Hull Suite
-      const baseHullColor = isDarkMode ? 'hsl(210, 40%, 75%)' : 'hsl(210, 60%, 35%)'
-      const hullPastelColor = addOpacityToColor(pastelColors[0] || baseHullColor, isDarkMode ? 0.4 : 0.8)
+      const upColor = addOpacityToColor(upColorBase, 0.4)
+      const downColor = addOpacityToColor(downColorBase, 0.4)
       
-      
-      if (hullSuiteData.mhull.length > 0) {
-        const validMhullData = hullSuiteData.mhull.filter(point => 
-          !isNaN(point.value) && 
-          isFinite(point.value) && 
-          point.time !== undefined
-        )
+      const upBorderColor = addOpacityToColor(upColorBase, 0.8)
+      const downBorderColor = addOpacityToColor(downColorBase, 0.8)
 
-        if (validMhullData.length > 0) {
-          const mhullSeries = chart.addSeries(LineSeries, {
-            lineWidth: 1,
-            color: hullPastelColor,
-            lineStyle: LineStyle.Dotted,
-            lastValueVisible: true,
-            priceLineVisible: false,
-          })
-          
-          mhullSeries.setData(validMhullData)
-          seriesRefs.current.set('mhull', mhullSeries)
-        }
-      }
-
-      if (hullSuiteData.shull.length > 0) {
-        const validShullData = hullSuiteData.shull.filter(point => 
-          !isNaN(point.value) && 
-          isFinite(point.value) && 
-          point.time !== undefined
-        )
-
-        if (validShullData.length > 0) {
-          const shullSeries = chart.addSeries(LineSeries, {
-            lineWidth: 1,
-            color: hullPastelColor,
-            lineStyle: LineStyle.Dotted,
-            lastValueVisible: true,
-            priceLineVisible: false,
-          })
-          
-          shullSeries.setData(validShullData)
-          seriesRefs.current.set('shull', shullSeries)
-        }
-      }
-    }
-
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: 400,
+      // Create price series based on chart type
+      if (chartType === 'candlestick' && ohlcvData?.length) {
+        priceSeries = chart.addSeries(CandlestickSeries, {
+          upColor: upColor,
+          downColor: downColor,
+          borderVisible: true,
+          borderUpColor: upBorderColor,
+          borderDownColor: downBorderColor,
+          wickUpColor: upBorderColor,
+          wickDownColor: downBorderColor,
+          lastValueVisible: true,
+          priceLineVisible: false,
+          priceFormat: { type: "price", precision: 2, minMove: 0.01 },
         })
-      }
-    }
-
-    window.addEventListener("resize", handleResize)
-    handleResize()
-
-    // Add tooltip
-    const tooltipEl = document.createElement("div")
-    const tooltipRoot = createRoot(tooltipEl)
-    tooltipEl.className = "fixed hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
-    document.body.appendChild(tooltipEl)
-
-    // Crosshair handling with tooltip
-    chart.subscribeCrosshairMove((param) => {
-      if (param.point === undefined || !param.time || param.point.x < 0 || param.point.y < 0) {
-        tooltipEl.style.display = "none"
-        if (onCrosshairMove) {
-          onCrosshairMove(null)
-        }
-        return
-      }
-
-      const priceData = param.seriesData.get(priceSeries)
-      const volumeData = param.seriesData.get(volumeSeries)
-      let currentPrice: number | null = null
-      let currentVolume: number | undefined = undefined
-      
-      if (priceData) {
-        if (chartType === 'candlestick' && 'close' in priceData) {
-          currentPrice = priceData.close
-        } else if ('value' in priceData) {
-          currentPrice = priceData.value
-        }
-      }
-
-      if (volumeData && 'value' in volumeData) {
-        currentVolume = volumeData.value
-      }
-
-      // Get Hull Suite data for current time
-      let currentHullData: { mhull?: number; shull?: number } | undefined = undefined
-      if (hullSuiteData && displaySettings?.showHullSuite) {
-        const currentTime = param.time
-        
-        // Find matching Hull MA data
-        const mhullPoint = hullSuiteData.mhull.find(point => point.time === currentTime)
-        const shullPoint = hullSuiteData.shull.find(point => point.time === currentTime)
-        
-        if (mhullPoint || shullPoint) {
-          currentHullData = {
-            mhull: mhullPoint?.value,
-            shull: shullPoint?.value
-          }
-        }
-      }
-
-      // Get OHLC data for current time (find closest match)
-      let currentOHLCData: { open: number; high: number; low: number; close: number } | undefined = undefined
-      if (ohlcvData && ohlcvData.length > 0) {
-        const currentTime = param.time as number
-        
-        // Find the closest OHLC data point by timestamp
-        let closestPoint = ohlcvData[0]!
-        let minDiff = Math.abs((closestPoint.time as number) - currentTime)
-        
-        for (const point of ohlcvData) {
-          const diff = Math.abs((point.time as number) - currentTime)
-          if (diff < minDiff) {
-            minDiff = diff
-            closestPoint = point
-          }
-        }
-        
-        // Use the closest point if it's within a reasonable range (e.g., 2 hours = 7200 seconds)
-        if (minDiff <= 7200) {
-          currentOHLCData = {
-            open: closestPoint.open,
-            high: closestPoint.high,
-            low: closestPoint.low,
-            close: closestPoint.close
-          }
-        }
-      }
-
-      if (currentPrice && onCrosshairMove) {
-        onCrosshairMove(currentPrice)
-      }
-
-      // Show tooltip with price info
-      if (currentPrice && chartContainerRef.current) {
-        const chartRect = chartContainerRef.current.getBoundingClientRect()
-        
-        const startPrice = chartData.length > 0 ? chartData[0]?.value : (ohlcvData && ohlcvData.length > 0 ? ohlcvData[0]?.close : currentPrice)
-        const percentageChange = startPrice ? ((currentPrice - startPrice) / startPrice) * 100 : 0
-
-        tooltipEl.style.display = "block"
-        tooltipRoot.render(createTooltipContent(currentPrice, percentageChange, Number(param.time) * 1000, currentVolume, currentHullData, currentOHLCData))
-
-        const tooltipWidth = tooltipEl.offsetWidth
-        const tooltipHeight = tooltipEl.offsetHeight
-
-        let left = chartRect.left + param.point.x + 15
-        let top = chartRect.top + param.point.y - tooltipHeight / 2
-
-        if (left + tooltipWidth > window.innerWidth - 10) {
-          left = chartRect.left + param.point.x - tooltipWidth - 15
-        }
-
-        if (top + tooltipHeight > window.innerHeight - 10) {
-          top = window.innerHeight - tooltipHeight - 10
-        }
-
-        if (top < 10) {
-          top = 10
-        }
-
-        tooltipEl.style.left = `${left}px`
-        tooltipEl.style.top = `${top}px`
+        priceSeries.setData(ohlcvData)
       } else {
-        tooltipEl.style.display = "none"
+        const priceLineColor = isDarkMode ? '#ffffff' : '#000000'
+        
+        priceSeries = chart.addSeries(LineSeries, {
+          lineWidth: 1,
+          lastValueVisible: true,
+          visible: true,
+          priceLineVisible: false,
+          color: priceLineColor,
+          lastPriceAnimation: LastPriceAnimationMode.Continuous,
+          priceFormat: { type: "price", precision: 2, minMove: 0.01 },
+        })
+        priceSeries.setData(chartData)
       }
-    })
+
+      const volumeSeries = chart.addSeries(HistogramSeries, {
+        color: isDarkMode ? '#ffffff50' : '#00000050',
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'volume',
+      })
+
+      chart.priceScale('volume').applyOptions({
+        scaleMargins: { top: 0.8, bottom: 0 },
+      })
+      
+      volumeSeries.setData(volumeData)
+
+      chart.timeScale().fitContent()
+
+      // Add Hull Suite overlay if enabled
+      if (displaySettings?.showHullSuite && hullSuiteData) {
+        // Use theme-aware colors for Hull Suite
+        const baseHullColor = isDarkMode ? 'hsl(210, 40%, 75%)' : 'hsl(210, 60%, 35%)'
+        const hullPastelColor = addOpacityToColor(pastelColors[0] || baseHullColor, isDarkMode ? 0.4 : 0.8)
+        
+        
+        if (hullSuiteData.mhull.length > 0) {
+          const validMhullData = hullSuiteData.mhull.filter(point => 
+            !isNaN(point.value) && 
+            isFinite(point.value) && 
+            point.time !== undefined
+          )
+
+          if (validMhullData.length > 0) {
+            const mhullSeries = chart.addSeries(LineSeries, {
+              lineWidth: 1,
+              color: hullPastelColor,
+              lineStyle: LineStyle.Dotted,
+              lastValueVisible: true,
+              priceLineVisible: false,
+            })
+            
+            mhullSeries.setData(validMhullData)
+            seriesRefs.current.set('mhull', mhullSeries)
+          }
+        }
+
+        if (hullSuiteData.shull.length > 0) {
+          const validShullData = hullSuiteData.shull.filter(point => 
+            !isNaN(point.value) && 
+            isFinite(point.value) && 
+            point.time !== undefined
+          )
+
+          if (validShullData.length > 0) {
+            const shullSeries = chart.addSeries(LineSeries, {
+              lineWidth: 1,
+              color: hullPastelColor,
+              lineStyle: LineStyle.Dotted,
+              lastValueVisible: true,
+              priceLineVisible: false,
+            })
+            
+            shullSeries.setData(validShullData)
+            seriesRefs.current.set('shull', shullSeries)
+          }
+        }
+      }
+
+      const handleResize = () => {
+        if (chartContainerRef.current) {
+          chart.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+            height: 400,
+          })
+        }
+      }
+
+      window.addEventListener("resize", handleResize)
+      handleResize()
+
+      // Add tooltip
+      const tooltipEl = document.createElement("div")
+      const tooltipRoot = createRoot(tooltipEl)
+      tooltipEl.className = "fixed hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
+      document.body.appendChild(tooltipEl)
+
+      // Crosshair handling with tooltip
+      chart.subscribeCrosshairMove((param) => {
+        if (param.point === undefined || !param.time || param.point.x < 0 || param.point.y < 0) {
+          tooltipEl.style.display = "none"
+          if (onCrosshairMove) {
+            onCrosshairMove(null)
+          }
+          return
+        }
+
+        const priceData = param.seriesData.get(priceSeries)
+        const volumeData = param.seriesData.get(volumeSeries)
+        let currentPrice: number | null = null
+        let currentVolume: number | undefined = undefined
+        
+        if (priceData) {
+          if (chartType === 'candlestick' && 'close' in priceData) {
+            currentPrice = priceData.close
+          } else if ('value' in priceData) {
+            currentPrice = priceData.value
+          }
+        }
+
+        if (volumeData && 'value' in volumeData) {
+          currentVolume = volumeData.value
+        }
+
+        // Get Hull Suite data for current time
+        let currentHullData: { mhull?: number; shull?: number } | undefined = undefined
+        if (hullSuiteData && displaySettings?.showHullSuite) {
+          const currentTime = param.time
+          
+          // Find matching Hull MA data
+          const mhullPoint = hullSuiteData.mhull.find(point => point.time === currentTime)
+          const shullPoint = hullSuiteData.shull.find(point => point.time === currentTime)
+          
+          if (mhullPoint || shullPoint) {
+            currentHullData = {
+              mhull: mhullPoint?.value,
+              shull: shullPoint?.value
+            }
+          }
+        }
+
+        // Get OHLC data for current time (find closest match)
+        let currentOHLCData: { open: number; high: number; low: number; close: number } | undefined = undefined
+        if (ohlcvData && ohlcvData.length > 0) {
+          const currentTime = param.time as number
+          
+          // Find the closest OHLC data point by timestamp
+          let closestPoint = ohlcvData[0]!
+          let minDiff = Math.abs((closestPoint.time as number) - currentTime)
+          
+          for (const point of ohlcvData) {
+            const diff = Math.abs((point.time as number) - currentTime)
+            if (diff < minDiff) {
+              minDiff = diff
+              closestPoint = point
+            }
+          }
+          
+          // Use the closest point if it's within a reasonable range (e.g., 2 hours = 7200 seconds)
+          if (minDiff <= 7200) {
+            currentOHLCData = {
+              open: closestPoint.open,
+              high: closestPoint.high,
+              low: closestPoint.low,
+              close: closestPoint.close
+            }
+          }
+        }
+
+        if (currentPrice && onCrosshairMove) {
+          onCrosshairMove(currentPrice)
+        }
+
+        // Show tooltip with price info
+        if (currentPrice && chartContainerRef.current) {
+          const chartRect = chartContainerRef.current.getBoundingClientRect()
+          
+          const startPrice = chartData.length > 0 ? chartData[0]?.value : (ohlcvData && ohlcvData.length > 0 ? ohlcvData[0]?.close : currentPrice)
+          const percentageChange = startPrice ? ((currentPrice - startPrice) / startPrice) * 100 : 0
+
+          tooltipEl.style.display = "block"
+          tooltipRoot.render(createTooltipContent(currentPrice, percentageChange, Number(param.time) * 1000, currentVolume, currentHullData, currentOHLCData))
+
+          const tooltipWidth = tooltipEl.offsetWidth
+          const tooltipHeight = tooltipEl.offsetHeight
+
+          let left = chartRect.left + param.point.x + 15
+          let top = chartRect.top + param.point.y - tooltipHeight / 2
+
+          if (left + tooltipWidth > window.innerWidth - 10) {
+            left = chartRect.left + param.point.x - tooltipWidth - 15
+          }
+
+          if (top + tooltipHeight > window.innerHeight - 10) {
+            top = window.innerHeight - tooltipHeight - 10
+          }
+
+          if (top < 10) {
+            top = 10
+          }
+
+          tooltipEl.style.left = `${left}px`
+          tooltipEl.style.top = `${top}px`
+        } else {
+          tooltipEl.style.display = "none"
+        }
+      })
+
+      cleanup = () => {
+        window.removeEventListener("resize", handleResize)
+        requestAnimationFrame(() => {
+          try {
+            tooltipRoot.unmount()
+          } catch {
+            // noop
+          }
+          if (document.body.contains(tooltipEl)) {
+            document.body.removeChild(tooltipEl)
+          }
+        })
+        chart.remove()
+      }
+    })()
 
     return () => {
-      window.removeEventListener("resize", handleResize)
-      requestAnimationFrame(() => {
-        tooltipRoot.unmount()
-        document.body.removeChild(tooltipEl)
-      })
-      chart.remove()
+      isCancelled = true
+      cleanup?.()
     }
   }, [chartData, volumeData, indicators, displaySettings, hullSuiteData, onCrosshairMove, chartType, ohlcvData, isDarkMode, externalIsDarkMode])
 

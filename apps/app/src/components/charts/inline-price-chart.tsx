@@ -2,8 +2,9 @@
 
 import { useMemo, useEffect, useRef } from 'react'
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
-import { LastPriceAnimationMode, ColorType, type IChartApi } from 'lightweight-charts'
+import type { IChartApi } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
+import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
 
 interface InlinePriceChartProps {
   coingeckoId: string // CoinGecko ID to fetch real data
@@ -81,8 +82,14 @@ export function InlinePriceChart({
       dataLength: validChartData.length 
     })
 
-    // Import createChart dynamically to avoid SSR issues
-    import('lightweight-charts').then(({ createChart, LineSeries }) => {
+    let isCancelled = false
+
+    void (async () => {
+      const { createChart, LineSeries, ColorType, LastPriceAnimationMode } =
+        await loadLightweightCharts()
+
+      if (isCancelled) return
+
       try {
         const container = chartContainerRef.current
         if (!container || !container.isConnected) {
@@ -140,10 +147,11 @@ export function InlinePriceChart({
         console.error(`❌ InlineChart (${symbol}): Error creating chart`, error)
         onError?.()
       }
-    })
+    })()
 
     // Cleanup function
     return () => {
+      isCancelled = true
       if (chartRef.current) {
         try {
           chartRef.current.remove()

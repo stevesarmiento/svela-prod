@@ -1,13 +1,14 @@
 'use client'
 
 import React, { useRef, useEffect, useCallback, useMemo } from 'react'
-import { createChart, ColorType, LineStyle, IChartApi, LineSeries, HistogramSeries, Time, LineData } from 'lightweight-charts'
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { Spinner } from '@v1/ui/spinner'
-import { createRoot } from "react-dom/client"
+import { createRoot } from 'react-dom/client'
+import type { IChartApi, LineData, Time } from 'lightweight-charts'
 import { useHullSuite } from '@/hooks/use-hull-suite'
 import { RateLimitErrorBoundary } from '@/components/error-boundary/rate-limit-error-boundary'
 import { AlertTriangle } from 'lucide-react'
+import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
 
 interface MiniPriceChartProps {
   coinId: string
@@ -23,10 +24,10 @@ const TooltipContent = ({ data, tokenSymbol }: { data: { time: number; price: nu
     return `$${vol.toFixed(2)}`
   }
   const formatPrice = (price: number) => {
-    return '$' + price.toLocaleString('en-US', {
+    return `$${price.toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
-    })
+    })}`
   }
   return (
     <div className="flex flex-col gap-1 overflow-hidden">
@@ -195,190 +196,211 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
   useEffect(() => {
     if (!chartContainerRef.current || chartData.length === 0) return
 
+    let isCancelled = false
+
     // Clean up previous chart instance
     cleanupChart()
 
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: 'transparent' },
-        textColor: '#9CA3AF',
-        fontSize: 10,
-        attributionLogo: false,
-      },
-      width: chartContainerRef.current.clientWidth,
-      height: 160,
-      rightPriceScale: {
-        visible: false,
-      },
-      leftPriceScale: {
-        visible: false,
-      },
-      timeScale: {
-        visible: false,
-        borderVisible: false,
-      },
-      grid: {
-        vertLines: { visible: false },
-        horzLines: { visible: false },
-      },
-      crosshair: {
-        mode: 1,
-        vertLine: {
-          width: 1,
-          color: '#374151',
-          style: LineStyle.Solid,
-          visible: true,
+    void (async () => {
+      const { createChart, ColorType, LineStyle, LineSeries, HistogramSeries } =
+        await loadLightweightCharts()
+
+      if (isCancelled || !chartContainerRef.current || chartData.length === 0) return
+
+      const chart = createChart(chartContainerRef.current, {
+        layout: {
+          background: { type: ColorType.Solid, color: 'transparent' },
+          textColor: '#9CA3AF',
+          fontSize: 10,
+          attributionLogo: false,
         },
-        horzLine: {
+        width: chartContainerRef.current.clientWidth,
+        height: 160,
+        rightPriceScale: {
           visible: false,
         },
-      },
-      handleScroll: true,
-      handleScale: true,
-    })
+        leftPriceScale: {
+          visible: false,
+        },
+        timeScale: {
+          visible: false,
+          borderVisible: false,
+        },
+        grid: {
+          vertLines: { visible: false },
+          horzLines: { visible: false },
+        },
+        crosshair: {
+          mode: 1,
+          vertLine: {
+            width: 1,
+            color: '#374151',
+            style: LineStyle.Solid,
+            visible: true,
+          },
+          horzLine: {
+            visible: false,
+          },
+        },
+        handleScroll: true,
+        handleScale: true,
+      })
 
-    const volumeSeries = chart.addSeries(HistogramSeries, {
-      priceFormat: { type: 'volume' },
-      priceScaleId: 'volume',
-      color: '#ffffff30',
-      priceLineVisible: false,
-      lastValueVisible: false,
-    })
-
-    const lineSeries = chart.addSeries(LineSeries, {
-      color: priceChange24h >= 0 ? '#10B981' : '#EF4444',
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: false,
-    })
-
-    let hullSeries: ReturnType<typeof chart.addSeries> | null = null
-    if (hullSuite.MHULL.length > 0) {
-      hullSeries = chart.addSeries(LineSeries, {
-        color: 'rgba(59,130,246,0.7)',
-        lineWidth: 1,
-        lineStyle: LineStyle.Dotted,
+      const volumeSeries = chart.addSeries(HistogramSeries, {
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'volume',
+        color: '#ffffff30',
         priceLineVisible: false,
         lastValueVisible: false,
       })
-      hullSeries.setData(hullSuite.MHULL)
-    }
 
-    if (volumeData.length > 0) {
-      volumeSeries.setData(volumeData)
-    }
-
-    lineSeries.setData(chartData)
-
-    chart.priceScale('volume').applyOptions({
-      scaleMargins: {
-        top: 0.8,
-        bottom: 0,
-      },
-    })
-
-    chart.timeScale().fitContent()
-
-    chartRef.current = chart
-
-    // Create optimized tooltip with refs for cleanup
-    const tooltipEl = document.createElement("div")
-    const tooltipRoot = createRoot(tooltipEl)
-    tooltipElRef.current = tooltipEl
-    tooltipRootRef.current = tooltipRoot
-    
-    tooltipEl.className = "fixed z-[9999] hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
-    tooltipEl.style.cssText = ""
-    document.body.appendChild(tooltipEl)
-
-    chart.subscribeCrosshairMove((param) => {
-      console.log('Crosshair move:', param)
-      
-      if (
-        param.point === undefined ||
-        !param.time ||
-        param.point.x < 0 ||
-        param.point.y < 0
-      ) {
-        tooltipEl.style.display = "none"
-        return
-      }
-
-      if (!chartContainerRef.current) return
-      const chartRect = chartContainerRef.current.getBoundingClientRect()
-
-      const priceData = param.seriesData.get(lineSeries) as LineData<Time>
-      let volumeValue = 0
-
-      const volumeDataPoint = param.seriesData.get(volumeSeries)
-      if (volumeDataPoint && 'value' in volumeDataPoint) {
-        volumeValue = volumeDataPoint.value as number
-      }
-
-      let hullValue: number | undefined = undefined
-      if (hullSuite.MHULL.length > 0 && param.time) {
-        const hullPoint = hullSuite.MHULL.find(point => point.time === param.time)
-        if (hullPoint) hullValue = hullPoint.value
-      }
-
-      if (!priceData) {
-        console.log('No price data available')
-        tooltipEl.style.display = "none"
-        return
-      }
-
-      const firstPrice = chartData[0]?.value || priceData.value
-      const percentChange = firstPrice ? ((priceData.value - firstPrice) / firstPrice) * 100 : 0
-
-      console.log('Showing tooltip:', {
-        time: param.time,
-        price: priceData.value,
-        change: percentChange,
-        volume: volumeValue
+      const lineSeries = chart.addSeries(LineSeries, {
+        color: priceChange24h >= 0 ? '#10B981' : '#EF4444',
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
       })
 
-      tooltipEl.style.display = "block"
-      tooltipRoot.render(
-        <TooltipContent
-          data={{
-            time: Number(param.time),
-            price: priceData.value,
-            change: percentChange,
-            volume: volumeValue,
-            hull: hullValue,
-          }}
-          tokenSymbol={tokenSymbol}
-        />
-      )
-
-      const tooltipWidth = tooltipEl.offsetWidth
-      const tooltipHeight = tooltipEl.offsetHeight
-
-      let left = chartRect.left + param.point.x + 15
-      let top = chartRect.top + param.point.y - tooltipHeight / 2
-
-      if (left + tooltipWidth > window.innerWidth - 10) {
-        left = chartRect.left + param.point.x - tooltipWidth - 15
+      let hullSeries: ReturnType<typeof chart.addSeries> | null = null
+      if (hullSuite.MHULL.length > 0) {
+        hullSeries = chart.addSeries(LineSeries, {
+          color: 'rgba(59,130,246,0.7)',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+        hullSeries.setData(hullSuite.MHULL)
       }
 
-      if (top + tooltipHeight > window.innerHeight - 10) {
-        top = window.innerHeight - tooltipHeight - 10
+      if (volumeData.length > 0) {
+        volumeSeries.setData(volumeData)
       }
 
-      if (top < 10) {
-        top = 10
-      }
+      lineSeries.setData(chartData)
 
-      tooltipEl.style.left = `${left}px`
-      tooltipEl.style.top = `${top}px`
+      chart.priceScale('volume').applyOptions({
+        scaleMargins: {
+          top: 0.8,
+          bottom: 0,
+        },
+      })
+
+      chart.timeScale().fitContent()
+
+      chartRef.current = chart
+
+      // Create optimized tooltip with refs for cleanup
+      const tooltipEl = document.createElement("div")
+      const tooltipRoot = createRoot(tooltipEl)
+      tooltipElRef.current = tooltipEl
+      tooltipRootRef.current = tooltipRoot
       
-      console.log('Tooltip positioned at:', { left, top })
-    })
+      tooltipEl.className = "fixed z-[9999] hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
+      tooltipEl.style.cssText = ""
+      tooltipEl.style.left = "0px"
+      tooltipEl.style.top = "0px"
+      tooltipEl.style.transform = "translate3d(0px, 0px, 0)"
+      document.body.appendChild(tooltipEl)
 
-    // Use optimized resize handler
-    window.addEventListener('resize', handleResize)
+      const tooltipWidth = 200
+      let tooltipHeight = 120
+      let isTooltipVisible = false
+      let lastTooltipTime: Time | null = null
+
+      const hullValueByTime = new Map<Time, number>()
+      for (const point of hullSuite.MHULL) {
+        hullValueByTime.set(point.time, point.value)
+      }
+
+      chart.subscribeCrosshairMove((param) => {
+        if (
+          param.point === undefined ||
+          !param.time ||
+          param.point.x < 0 ||
+          param.point.y < 0
+        ) {
+          if (isTooltipVisible) {
+            tooltipEl.style.display = "none"
+            isTooltipVisible = false
+            lastTooltipTime = null
+          }
+          return
+        }
+
+        if (!chartContainerRef.current) return
+        const chartRect = chartContainerRef.current.getBoundingClientRect()
+
+        const priceData = param.seriesData.get(lineSeries) as LineData<Time>
+        let volumeValue = 0
+
+        const volumeDataPoint = param.seriesData.get(volumeSeries)
+        if (volumeDataPoint && 'value' in volumeDataPoint) {
+          volumeValue = volumeDataPoint.value as number
+        }
+
+        if (!priceData) {
+          if (isTooltipVisible) {
+            tooltipEl.style.display = "none"
+            isTooltipVisible = false
+            lastTooltipTime = null
+          }
+          return
+        }
+
+        const firstPrice = chartData[0]?.value || priceData.value
+        const percentChange = firstPrice ? ((priceData.value - firstPrice) / firstPrice) * 100 : 0
+
+        const hullValue = hullValueByTime.get(param.time)
+
+        if (!isTooltipVisible) {
+          tooltipEl.style.display = "block"
+          isTooltipVisible = true
+        }
+
+        if (param.time !== lastTooltipTime) {
+          lastTooltipTime = param.time
+          tooltipRoot.render(
+            <TooltipContent
+              data={{
+                time: Number(param.time),
+                price: priceData.value,
+                change: percentChange,
+                volume: volumeValue,
+                hull: hullValue,
+              }}
+              tokenSymbol={tokenSymbol}
+            />,
+          )
+
+          // Measure only when content changes (not on every mouse move).
+          tooltipHeight = tooltipEl.offsetHeight || tooltipHeight
+        }
+
+        let left = chartRect.left + param.point.x + 15
+        let top = chartRect.top + param.point.y - tooltipHeight / 2
+
+        if (left + tooltipWidth > window.innerWidth - 10) {
+          left = chartRect.left + param.point.x - tooltipWidth - 15
+        }
+
+        if (top + tooltipHeight > window.innerHeight - 10) {
+          top = window.innerHeight - tooltipHeight - 10
+        }
+
+        if (top < 10) {
+          top = 10
+        }
+
+        tooltipEl.style.transform = `translate3d(${left}px, ${top}px, 0)`
+      })
+
+      // Use optimized resize handler
+      window.addEventListener('resize', handleResize)
+    })()
 
     return () => {
+      isCancelled = true
       window.removeEventListener('resize', handleResize)
       // Use centralized cleanup
       cleanupChart()
