@@ -65,3 +65,6 @@ connector-external/
 /sdk/
 /jupiter/
 /effect-main/
+.agents
+.cursor
+.claude

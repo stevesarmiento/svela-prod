@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { useQueryState } from 'nuqs'
+import type { Doc } from '@/../convex/_generated/dataModel'
 import {
   useWatchlist as useConvexWatchlist, 
   useWatchlistGroups,
@@ -13,15 +14,7 @@ import {
   useRemoveBulkFromWatchlist 
 } from '@/lib/convex-hooks'
 
-interface WatchlistGroup {
-  _id: string
-  name: string
-  slug: string
-  description?: string
-  isDefault: boolean
-  createdAt: number
-  updatedAt: number
-}
+export type WatchlistGroup = Doc<"watchlistGroups">
 
 interface WatchlistContextType {
   // MIGRATED TO COINGECKO: Now uses string IDs instead of numeric IDs

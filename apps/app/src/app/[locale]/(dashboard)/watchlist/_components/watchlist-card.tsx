@@ -38,8 +38,9 @@ const loadingShineStyle = `
 import { WatchlistGroupIcon } from "@/components/watchlist-group-icon"
 import { COLOR_THEMES } from "@/components/color-picker"
 import { Kbd } from "@v1/ui/kbd"
+import type { WatchlistGroup } from "./watchlist-context"
 
-interface WatchlistGroup {
+interface WatchlistGroupPreview {
   _id: string
   name: string
   slug: string
@@ -49,6 +50,12 @@ interface WatchlistGroup {
   isDefault: boolean
   createdAt: number
   updatedAt: number
+}
+
+type WatchlistCardGroup = WatchlistGroup | WatchlistGroupPreview
+
+function isPersistedWatchlistGroup(group: WatchlistCardGroup): group is WatchlistGroup {
+  return "userId" in group
 }
 
 interface CoinGeckoWatchlistCoin {
@@ -74,7 +81,7 @@ interface CoinGeckoWatchlistCoin {
 }
 
 interface WatchlistCardProps {
-  group: WatchlistGroup
+  group: WatchlistCardGroup
   coins: CoinGeckoWatchlistCoin[]
   onEdit?: (group: WatchlistGroup) => void
   onDelete?: (group: WatchlistGroup) => void
@@ -169,7 +176,11 @@ export function WatchlistCard({
         colorTheme.border,
         selected && "ring-4 dark:ring-white/10 ring-zinc-800/10 ring-offset-4 ring-offset-background"
       )}
-      onClick={() => onSelect?.(group)}
+      onClick={() => {
+        if (!onSelect) return
+        if (!isPersistedWatchlistGroup(group)) return
+        onSelect(group)
+      }}
     >
       {/* Inject loading shine CSS only once per card */}
       <style>{loadingShineStyle}</style>
@@ -201,7 +212,11 @@ export function WatchlistCard({
           <div className="flex items-start justify-between mb-3">
             <div 
               className="flex items-center gap-3 flex-1 cursor-pointer"
-              onClick={() => onSelect?.(group)}
+              onClick={() => {
+                if (!onSelect) return
+                if (!isPersistedWatchlistGroup(group)) return
+                onSelect(group)
+              }}
             >
               <div className="w-10 h-10 rounded-full bg-zinc-50/5 flex items-center justify-center">
                 <WatchlistGroupIcon 
@@ -249,7 +264,11 @@ export function WatchlistCard({
                     className="w-[130px] p-2 rounded-xl bg-zinc-900 border-zinc-800"
                   >
                     <DropdownMenuItem 
-                      onClick={() => onEdit?.(group)}
+                      onClick={() => {
+                        if (!onEdit) return
+                        if (!isPersistedWatchlistGroup(group)) return
+                        onEdit(group)
+                      }}
                       className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-zinc-800 focus:bg-zinc-800"
                     >
                       <IconPencilTipCropCircle className="h-3.5 w-3.5 fill-muted-foreground group-hover:fill-foreground" />
@@ -257,7 +276,11 @@ export function WatchlistCard({
                     </DropdownMenuItem>
                     <DropdownMenuSeparator className="my-2 bg-zinc-800" />
                     <DropdownMenuItem 
-                      onClick={() => onDelete?.(group)}
+                      onClick={() => {
+                        if (!onDelete) return
+                        if (!isPersistedWatchlistGroup(group)) return
+                        onDelete(group)
+                      }}
                       className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-red-500/10 focus:bg-red-500/10"
                     >
                       <IconTrashFill className="h-3.5 w-3.5 fill-red-400 group-hover:fill-red-400" />

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { convex } from '@/lib/convex-client';
+import { capxMemoryService } from '@/lib/capx-memory';
 import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
 
 export async function POST(request: NextRequest) {
@@ -15,12 +15,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Store the memory with enhanced metadata and strategy
-    const result = await convex.memory.addMemory.mutate({
+    const result = await capxMemoryService.addMemory(
       userId,
       text,
-      metadata: metadata || {},
-      strategy: strategy || 'raw'
-    });
+      metadata || {},
+      strategy || 'raw',
+    );
 
     return NextResponse.json({ 
       success: true, 

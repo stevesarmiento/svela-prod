@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { convex } from '@/lib/convex-client';
+import { capxMemoryService } from '@/lib/capx-memory';
 import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
 
 export async function POST(request: NextRequest) {
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     if (namespace) metadataFilter.namespace = namespace;
 
     // Retrieve context with advanced filtering
-    const result = await convex.memory.retrieveContext(
+    const result = await capxMemoryService.retrieveContext(
       userId,
       query,
       limit,

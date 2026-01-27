@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { IconSunMaxFill, IconMoonStarsFill } from "symbols-react";
 import { useTheme } from "next-themes";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 
 import { Button } from "./button";
 

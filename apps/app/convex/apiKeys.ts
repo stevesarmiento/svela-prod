@@ -4,6 +4,7 @@ import { API_PROVIDERS } from "../src/constants/api-providers";
 
 // Re-export for use in convex functions
 export { API_PROVIDERS };
+export type ApiProvider = keyof typeof API_PROVIDERS;
 
 // Get all API keys for a user
 export const getUserApiKeys = query({

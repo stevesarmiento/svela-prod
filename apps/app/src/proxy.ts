@@ -10,14 +10,14 @@ const I18nMiddleware = createI18nMiddleware({
 
 // Define route matchers with locale prefixes
 const isPublicRoute = createRouteMatcher([
-  "/login", 
-  "/register", 
+  "/login",
+  "/register",
   "/forgot-password",
   "/sso-callback",
   "/(en|fr)/login",
-  "/(en|fr)/register", 
+  "/(en|fr)/register",
   "/(en|fr)/forgot-password",
-  "/(en|fr)/sso-callback"
+  "/(en|fr)/sso-callback",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
@@ -27,11 +27,9 @@ export default clerkMiddleware(async (auth, req) => {
 
   // Check if this is a public route
   const isPublic = isPublicRoute(req);
-  
+
   // Redirect authenticated users away from auth pages
-  if (isPublic && isAuthenticated) {
-    return NextResponse.redirect(new URL("/watchlist", req.url));
-  }
+  if (isPublic && isAuthenticated) return NextResponse.redirect(new URL("/watchlist", req.url));
 
   // Redirect unauthenticated users from protected routes to login
   if (!isPublic && !isAuthenticated) {
@@ -43,10 +41,10 @@ export default clerkMiddleware(async (auth, req) => {
   // Handle dashboard redirects to prevent flashing
   if (isAuthenticated) {
     const pathname = req.nextUrl.pathname;
-    const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
-    
+    const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, "") || "/";
+
     // Redirect dashboard routes to watchlist
-    if (cleanPath === '/' || cleanPath === '/dashboard') {
+    if (cleanPath === "/" || cleanPath === "/dashboard") {
       return NextResponse.redirect(new URL("/watchlist", req.url));
     }
   }
@@ -60,3 +58,4 @@ export const config = {
     "/((?!_next/static|api|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
+

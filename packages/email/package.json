@@ -7,15 +7,21 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
-    "dev": "email dev -p 3003",
-    "build": "email build",
-    "start": "email start"
+    "dev": "NODE_OPTIONS=\"--require $(pwd)/react-email-polyfills.cjs\" email dev -p 3003",
+    "build": "NODE_OPTIONS=\"--require $(pwd)/react-email-polyfills.cjs\" email build",
+    "start": "NODE_OPTIONS=\"--require $(pwd)/react-email-polyfills.cjs\" email start"
   },
   "dependencies": {
     "@react-email/components": "^0.0.24",
     "@react-email/tailwind": "^0.1.0"
   },
   "devDependencies": {
+    "@types/node": "^24.0.3",
+    "@types/react": "^19.2.9",
+    "@types/react-dom": "^19.2.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "typescript": "^5.9.3",
     "react-email": "^3.0.1"
   }
 }

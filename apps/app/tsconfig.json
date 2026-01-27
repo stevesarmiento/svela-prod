@@ -30,7 +30,6 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "tailwind.config.ts",
     ".cursorrules"
   ],
   "exclude": ["node_modules", ".turbo", ".next"]

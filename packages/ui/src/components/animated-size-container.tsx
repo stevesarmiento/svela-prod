@@ -1,11 +1,6 @@
-import { motion, type MotionProps } from "framer-motion";
-import { type HTMLMotionProps } from "framer-motion";
+import { motion, type HTMLMotionProps } from "motion/react";
 
-import {
-  type PropsWithChildren,
-  forwardRef,
-  useRef,
-} from "react";
+import { type ComponentType, type PropsWithChildren, forwardRef, useRef } from "react";
 import { useResizeObserver } from "../hooks";
 import { cn } from "../utils";
 
@@ -14,7 +9,7 @@ type AnimatedSizeContainerProps = PropsWithChildren<{
   height?: boolean;
 }> & Omit<HTMLMotionProps<"div">, "animate" | "children">;
 
-const MotionDiv = motion.div as React.ComponentType<HTMLMotionProps<"div">>;
+const MotionDiv = motion.div as ComponentType<HTMLMotionProps<"div">>;
 
 /**
  * A container with animated width and height (each optional) based on children dimensions

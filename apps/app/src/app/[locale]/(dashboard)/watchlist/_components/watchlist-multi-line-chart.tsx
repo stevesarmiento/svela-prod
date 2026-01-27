@@ -23,13 +23,15 @@ import { useWatchlistGroups } from '@/lib/convex-hooks'
 import { useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
+import type { WatchlistGroup } from './watchlist-context'
 
+type WatchlistGroupId = WatchlistGroup["_id"]
 
 interface WatchlistMultiLineChartProps {
   activeTimeScale: string
   setActiveTimeScale: (scale: string) => void
-  selectedWatchlists: Set<string>
-  onSelectWatchlist?: (watchlistId: string) => void
+  selectedWatchlists: Set<WatchlistGroupId>
+  onSelectWatchlist?: (watchlistId: WatchlistGroupId) => void
 }
 
 interface PriceDataPoint {
@@ -45,7 +47,7 @@ interface TooltipWatchlistData {
 }
 
 interface WatchlistSeries {
-  id: string
+  id: WatchlistGroupId
   name: string
   icon?: string
   color: string
@@ -57,14 +59,6 @@ interface WatchlistSeries {
 interface LineSeriesData {
   series: ISeriesApi<"Line">
   watchlistData: WatchlistSeries
-}
-
-
-interface WatchlistGroup {
-  _id: string
-  name: string
-  icon?: string
-  color?: string
 }
 
 function useWatchlistSeriesData(group: WatchlistGroup, activeTimeScale: string): WatchlistSeries | null {
@@ -112,7 +106,7 @@ function WatchlistSeriesProvider({
 }: { 
   group: WatchlistGroup
   activeTimeScale: string
-  onDataUpdate: (groupId: string, data: WatchlistSeries | null) => void
+  onDataUpdate: (groupId: WatchlistGroupId, data: WatchlistSeries | null) => void
 }) {
   // Use our custom hook to get series data
   const seriesData = useWatchlistSeriesData(group, activeTimeScale)
@@ -211,9 +205,9 @@ export function WatchlistMultiLineChart({
   onSelectWatchlist
 }: WatchlistMultiLineChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
-  const [hoveredWatchlist, setHoveredWatchlist] = useState<string | null>(null)
-  const lineSeriesMapRef = useRef<Map<string, LineSeriesData>>(new Map())
-  const [watchlistData, setWatchlistData] = useState<Map<string, WatchlistSeries>>(new Map())
+  const [hoveredWatchlist, setHoveredWatchlist] = useState<WatchlistGroupId | null>(null)
+  const lineSeriesMapRef = useRef<Map<WatchlistGroupId, LineSeriesData>>(new Map())
+  const [watchlistData, setWatchlistData] = useState<Map<WatchlistGroupId, WatchlistSeries>>(new Map())
   
   // ✅ IMPROVED: Handle theme directly without hydration flag
   // Use next-themes for proper theme detection (handles manual overrides correctly)
@@ -233,7 +227,7 @@ export function WatchlistMultiLineChart({
   }, [watchlistGroupsData, selectedWatchlists])
 
   // ✅ IMPROVED: Simplified data update handler
-  const handleDataUpdate = React.useCallback((groupId: string, data: WatchlistSeries | null) => {
+  const handleDataUpdate = React.useCallback((groupId: WatchlistGroupId, data: WatchlistSeries | null) => {
     setWatchlistData(prev => {
       const newMap = new Map(prev)
       if (data) {
@@ -327,7 +321,7 @@ export function WatchlistMultiLineChart({
     })
 
     // Create line series for each watchlist
-    const lineSeriesMap = new Map()
+    const lineSeriesMap = new Map<WatchlistGroupId, LineSeriesData>()
     
     watchlistSeriesData.forEach((watchlistSeries) => {
       const lineSeries = chart.addSeries(LineSeries, {

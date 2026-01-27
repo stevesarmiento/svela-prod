@@ -15,9 +15,12 @@ import { useWatchlistGroups, useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
 import { useWatchlistOperations } from '@/hooks/use-watchlist-effect'
+import type { WatchlistGroup } from './watchlist-context'
+
+type WatchlistGroupId = WatchlistGroup["_id"]
 
 interface WatchlistData {
-  id: string
+  id: WatchlistGroupId
   name: string
   icon?: string
   coinsCount: number
@@ -33,7 +36,7 @@ interface WatchlistTableProps {
 }
 
 // ✅ IMPROVED: Convert to custom hook that returns data instead of using callback pattern
-function useWatchlistData(groupId: string): WatchlistData | null {
+function useWatchlistData(groupId: WatchlistGroupId): WatchlistData | null {
   // Get watchlist coins for this group
   const groupWatchlist = useWatchlistByGroup(groupId)
   
@@ -93,9 +96,9 @@ function WatchlistCard({
   onRemove,
   isRemoving 
 }: { 
-  group: { _id: string; name: string; icon?: string; slug: string }
+  group: WatchlistGroup
   activeTimeScale: string
-  onRemove: (groupId: string) => void
+  onRemove: (groupId: WatchlistGroupId) => void
   isRemoving: boolean
 }) {
   // Use our custom hook to get watchlist data
@@ -259,11 +262,13 @@ function WatchlistCard({
 
 export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
   const { deleteGroup } = useWatchlistOperations()
-  const [removingWatchlists, setRemovingWatchlists] = useState<Set<string>>(new Set())
+  const [removingWatchlists, setRemovingWatchlists] = useState<Set<WatchlistGroupId>>(
+    new Set(),
+  )
   
   const watchlistGroupsData = useWatchlistGroups()
 
-  const handleRemove = async (watchlistId: string) => {
+  const handleRemove = async (watchlistId: WatchlistGroupId) => {
     setRemovingWatchlists(prev => new Set([...prev, watchlistId]))
     
     const program = deleteGroup(watchlistId).pipe(

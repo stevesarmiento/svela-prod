@@ -14,23 +14,11 @@ import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coin
 import { useWatchlistOperations } from '@/hooks/use-watchlist-effect'
 import { IconPicker } from '@/components/icon-picker'
 import { COLORS } from '@/components/color-picker'
-import { useWatchlist } from './watchlist-context'
+import { useWatchlist, type WatchlistGroup } from './watchlist-context'
 import { cn } from '@v1/ui/cn'
 import { Input } from '@v1/ui/input'
 import { Tabs, TabsContent } from '@v1/ui/tabs'
 import { WatchlistMultiLineChart } from './watchlist-multi-line-chart'
-
-interface WatchlistGroup {
-  _id: string
-  name: string
-  slug: string
-  description?: string
-  icon?: string
-  color?: string
-  isDefault: boolean
-  createdAt: number
-  updatedAt: number
-}
 
 interface CoinGeckoWatchlistCoin {
   id: string; // CoinGecko string ID

@@ -3,6 +3,7 @@
 import { useUser, useClerk, useSignIn } from "@clerk/nextjs";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 export { api } from "../../convex/_generated/api";
 
@@ -103,11 +104,11 @@ export function useWatchlistGroups() {
   );
 }
 
-export function useWatchlistByGroup(groupId?: string) {
+export function useWatchlistByGroup(groupId?: Id<"watchlistGroups">) {
   const { user } = useUser();
   return useQuery(
     api.watchlists.getWatchlistByGroup,
-    user?.id && groupId ? { clerkId: user.id, groupId: groupId as unknown as string } : "skip",
+    user?.id && groupId ? { clerkId: user.id, groupId } : "skip",
   );
 }
 
@@ -147,14 +148,14 @@ export function useUpdateWatchlistGroup() {
   const mutation = useMutation(api.watchlists.updateWatchlistGroup);
 
   return (
-    groupId: string,
+    groupId: Id<"watchlistGroups">,
     name?: string,
     description?: string,
     icon?: string,
     color?: string,
   ) => {
     if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, groupId: groupId as unknown as string, name, description, icon, color });
+    return mutation({ clerkId: user.id, groupId, name, description, icon, color });
   };
 }
 
@@ -162,9 +163,9 @@ export function useDeleteWatchlistGroup() {
   const { user } = useUser();
   const mutation = useMutation(api.watchlists.deleteWatchlistGroup);
 
-  return (groupId: string) => {
+  return (groupId: Id<"watchlistGroups">) => {
     if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, groupId: groupId as unknown as string });
+    return mutation({ clerkId: user.id, groupId });
   };
 }
 
@@ -172,9 +173,9 @@ export function useAddToWatchlistGroup() {
   const { user } = useUser();
   const mutation = useMutation(api.watchlists.addToWatchlist);
 
-  return (coinId: string, groupId?: string) => {
+  return (coinId: string, groupId?: Id<"watchlistGroups">) => {
     if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, coinId, groupId: groupId as unknown as string });
+    return mutation({ clerkId: user.id, coinId, groupId });
   };
 }
 
@@ -182,9 +183,9 @@ export function useRemoveFromWatchlistGroup() {
   const { user } = useUser();
   const mutation = useMutation(api.watchlists.removeFromWatchlist);
 
-  return (coinId: string, groupId?: string) => {
+  return (coinId: string, groupId?: Id<"watchlistGroups">) => {
     if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, coinId, groupId: groupId as unknown as string });
+    return mutation({ clerkId: user.id, coinId, groupId });
   };
 }
 
