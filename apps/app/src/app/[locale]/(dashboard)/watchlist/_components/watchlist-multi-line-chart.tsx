@@ -531,7 +531,7 @@ export function WatchlistMultiLineChart({
             <div key={watchlist.id}>
               <div 
                 className={cn(
-                  "flex overflow-hidden items-center gap-2 cursor-pointer transition-opacity duration-200 rounded-lg p-0 -m-2 relative group hover:bg-foreground/10",
+                  "flex overflow-hidden items-center gap-2 cursor-pointer rounded-lg p-0 -m-2 relative group hover:bg-foreground/10",
                   hoveredWatchlist && hoveredWatchlist !== watchlist.id ? "opacity-40" : "opacity-100",
                   hoveredWatchlist === watchlist.id ? "bg-foreground/5" : ""
                 )}
@@ -541,7 +541,7 @@ export function WatchlistMultiLineChart({
                 onClick={() => onSelectWatchlist?.(watchlist.id)}
               >
                 <div 
-                  className="w-1 h-9 rounded-full transition-transform duration-200"
+                  className="w-1 h-9 rounded-full"
                   style={{ backgroundColor: watchlist.color }}
                 />
                 <div className="flex flex-row items-center gap-2 flex-1 ml-2">

@@ -559,7 +559,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                   >
                     <div 
                       className={cn(
-                        "flex overflow-hidden items-center gap-2 cursor-pointer transition-opacity duration-200 rounded-lg p-0 -m-2 relative group hover:bg-white/10",
+                        "flex overflow-hidden items-center gap-2 cursor-pointer rounded-lg p-0 -m-2 relative group hover:bg-white/10",
                         hoveredCoin && hoveredCoin !== coin.id.toString() ? "opacity-40" : "opacity-100",
                         hoveredCoin === coin.id.toString() ? "bg-white/5" : ""
                       )}
@@ -568,7 +568,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                       onMouseLeave={() => handleCoinHover(null)}
                     >
                       <div 
-                        className="w-1 h-9 rounded-full transition-transform duration-200"
+                        className="w-1 h-9 rounded-full"
                         style={{ backgroundColor: realCoin.color }}
                       />
                       <div className="flex flex-row items-center gap-2 flex-1 ml-2">
