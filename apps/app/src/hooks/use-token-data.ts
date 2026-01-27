@@ -1,7 +1,6 @@
 'use client'
 
-import { useQuery as useConvexQuery } from "convex/react"
-import { api } from "../../convex/_generated/api"
+import { useQuery } from "@tanstack/react-query"
 import { useCoinGeckoMarketData } from "./use-coingecko-market-data"
 
 interface TokenData {
@@ -19,28 +18,25 @@ interface TokenData {
 }
 
 export function useTokenData(coinId?: string) {
-  // Get basic coin info from Convex (fast, cached)
-  const convexCoin = useConvexQuery(
-    api.coins.getCoinGeckoCoinById,
-    coinId ? { coingeckoId: coinId } : "skip"
-  )
+  const { data: coin, isLoading: isCoinLoading } = useQuery({
+    queryKey: ["coingecko-coin", coinId],
+    queryFn: async () => {
+      const response = await fetch(`/api/internal/coins/coingecko/${coinId}`)
+      if (!response.ok) throw new Error("Failed to load coin metadata")
+      return await response.json()
+    },
+    enabled: !!coinId,
+    staleTime: 10 * 60 * 1000,
+  })
 
   // Get detailed market data from CoinGecko API
   const { marketData, isLoading: isMarketDataLoading } = useCoinGeckoMarketData(coinId || "")
   
-  // Debug logging
-  console.log('🔍 Token Data Debug:', {
-    coinId,
-    convexCoin,
-    marketData,
-    isMarketDataLoading
-  })
-
-  const tokenData: TokenData | null = convexCoin && marketData ? {
+  const tokenData: TokenData | null = coin && marketData ? {
     id: coinId!,
-    name: convexCoin.name,
-    symbol: convexCoin.symbol,
-    logoUrl: convexCoin.logoUrl,
+    name: coin.name,
+    symbol: coin.symbol,
+    logoUrl: coin.logoUrl,
     marketData: {
       price: marketData.current_price || 0,
       percent_change_24h: marketData.price_change_percentage_24h || 0,
@@ -52,9 +48,9 @@ export function useTokenData(coinId?: string) {
 
   return {
     data: tokenData,
-    isLoading: !convexCoin && !!coinId,
+    isLoading: isCoinLoading,
     isMarketDataLoading,
-    hasBasicData: !!convexCoin,
+    hasBasicData: !!coin,
     hasMarketData: !!marketData
   }
 }

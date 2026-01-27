@@ -1,20 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, type ReactNode } from "react";
-import { ConvexReactClient } from "convex/react";
-import { ConvexProvider as BaseConvexProvider, useMutation } from "convex/react";
 import { useUser } from "@clerk/nextjs";
-import { api } from "../../../convex/_generated/api";
-
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-
-if (!convexUrl) {
-  throw new Error("NEXT_PUBLIC_CONVEX_URL is not configured");
-}
-
-const convexClient = new ConvexReactClient(convexUrl, {
-  unsavedChangesWarning: false,
-});
 
 interface ConvexProviderProps {
   children: ReactNode;
@@ -22,20 +9,28 @@ interface ConvexProviderProps {
 
 function AuthenticatedUserSync({ children }: ConvexProviderProps) {
   const { user, isLoaded } = useUser();
-  const createUser = useMutation(api.users.createUser);
   const [hasSynced, setHasSynced] = useState(false);
+
+  useEffect(() => {
+    // Reset sync state when the user changes.
+    setHasSynced(false);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!isLoaded || !user || hasSynced) return;
 
     const syncUser = async () => {
       try {
-        await createUser({
-          clerkId: user.id,
-          email: user.emailAddresses[0]?.emailAddress ?? "",
-          fullName: user.fullName ?? undefined,
-          avatarUrl: user.imageUrl ?? undefined,
+        const response = await fetch("/api/internal/users/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
         });
+        if (!response.ok) {
+          const body = await response.text().catch(() => "");
+          throw new Error(
+            `User sync failed (${response.status} ${response.statusText})${body ? `: ${body}` : ""}`,
+          );
+        }
         setHasSynced(true);
       } catch (error) {
         console.error("[Convex] Failed to sync user", error);
@@ -43,17 +38,14 @@ function AuthenticatedUserSync({ children }: ConvexProviderProps) {
     };
 
     void syncUser();
-  }, [user, isLoaded, hasSynced, createUser]);
+  }, [user?.id, isLoaded, hasSynced]);
 
   return <>{children}</>;
 }
 
 export function ConvexProvider({ children }: ConvexProviderProps) {
-  const Provider = BaseConvexProvider as React.FC<{ client: ConvexReactClient; children: ReactNode }>;
   return (
-    <Provider client={convexClient}>
-      <AuthenticatedUserSync>{children}</AuthenticatedUserSync>
-    </Provider>
+    <AuthenticatedUserSync>{children}</AuthenticatedUserSync>
   );
 }
 

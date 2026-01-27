@@ -1,15 +1,41 @@
 "use client";
 
-import { useQuery as useConvexQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { useQuery } from "@tanstack/react-query";
 import { useCoinGeckoQuotes } from "./use-coingecko-quotes";
 
-export function useCoinSearch(query: string) {
-  // Step 1: Get ALL CoinGecko coins from Convex (we'll filter in memory)
-  const allCoins = useConvexQuery(
-    api.coins.searchCoinGeckoCoins, 
-    query.trim() ? { query: query.trim(), limit: 100 } : "skip" // Increase limit for better results
+interface CoinSummary {
+  coingeckoId: string;
+  name: string;
+  symbol: string;
+}
+
+function isCoinSummary(value: unknown): value is CoinSummary {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.coingeckoId === "string" &&
+    typeof record.name === "string" &&
+    typeof record.symbol === "string"
   );
+}
+
+export function useCoinSearch(query: string) {
+  const { data: allCoins, isLoading: isCoinsLoading } = useQuery({
+    queryKey: ["coins", "search", query.trim()],
+    queryFn: async (): Promise<CoinSummary[]> => {
+      const response = await fetch(
+        `/api/internal/coins/search?query=${encodeURIComponent(query.trim())}&limit=100`,
+      );
+      if (!response.ok) throw new Error("Failed to search coins");
+      const json: unknown = await response.json();
+      if (!Array.isArray(json) || !json.every(isCoinSummary)) {
+        throw new Error("Invalid coin search response");
+      }
+      return json;
+    },
+    enabled: !!query.trim(),
+    staleTime: 10 * 60 * 1000,
+  });
 
   // Step 2: Get pricing data for matched coins using CoinGecko IDs
   const coingeckoIds = allCoins?.map(coin => coin.coingeckoId) || [];
@@ -36,14 +62,25 @@ export function useCoinSearch(query: string) {
 
   return {
     data: combinedData,
-    isLoading: allCoins === undefined || (coingeckoIds.length > 0 && isPricingLoading),
+    isLoading: isCoinsLoading || (coingeckoIds.length > 0 && isPricingLoading),
     error: null
   };
 }
 
 export function useTopCoins() {
-  // Get top 25 CoinGecko coins from Convex, then fetch their pricing
-  const topCoinsStatic = useConvexQuery(api.coins.getTopCoinGeckoCoins, { limit: 25 });
+  const { data: topCoinsStatic, isLoading: isTopCoinsLoading } = useQuery({
+    queryKey: ["coins", "top", 25],
+    queryFn: async (): Promise<CoinSummary[]> => {
+      const response = await fetch(`/api/internal/coins/top?limit=25`);
+      if (!response.ok) throw new Error("Failed to load top coins");
+      const json: unknown = await response.json();
+      if (!Array.isArray(json) || !json.every(isCoinSummary)) {
+        throw new Error("Invalid top coins response");
+      }
+      return json;
+    },
+    staleTime: 10 * 60 * 1000,
+  });
   
   const coingeckoIds = topCoinsStatic?.map(coin => coin.coingeckoId) || [];
   const { data: pricingData, isLoading: isPricingLoading } = useCoinGeckoQuotes(coingeckoIds);
@@ -68,7 +105,7 @@ export function useTopCoins() {
 
   return {
     data: combinedData,
-    isLoading: topCoinsStatic === undefined || (coingeckoIds.length > 0 && isPricingLoading),
+    isLoading: isTopCoinsLoading || (coingeckoIds.length > 0 && isPricingLoading),
     error: null
   };
 }

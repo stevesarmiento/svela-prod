@@ -1,18 +1,21 @@
 import { Effect } from "effect"
 import { useUser } from "@clerk/nextjs"
-import { useQuery, useMutation } from "convex/react"
-import { api } from "../../convex/_generated/api"
 import { makeWatchlistService } from "@/lib/effect/watchlist-service"
 import { useEffectResult } from "./use-effect-result"
+import { useDeleteWatchlistGroup, useUpdateWatchlistGroup } from "@/lib/convex-hooks"
 
 export function useWatchlistGroupsEffect() {
   const { user } = useUser()
-  const getGroupsQuery = useQuery(api.watchlists.getWatchlistGroups, user?.id ? { clerkId: user.id } : "skip")
+  // This hook is currently unused; keep behavior minimal and server-only.
   
   return useEffectResult(
     () => {
       const service = makeWatchlistService(user?.id, {
-        getGroups: async () => getGroupsQuery || [],
+        getGroups: async () => {
+          const response = await fetch("/api/internal/watchlists/groups")
+          if (!response.ok) return []
+          return await response.json()
+        },
         updateGroup: async () => {},
         deleteGroup: async () => {},
         getWatchlistByGroup: async () => []
@@ -22,34 +25,30 @@ export function useWatchlistGroupsEffect() {
         Effect.flatMap(s => s.getGroups())
       )
     },
-    [user?.id, getGroupsQuery]
+    [user?.id]
   )
 }
 
 export function useWatchlistOperations() {
   const { user } = useUser()
-  const updateMutation = useMutation(api.watchlists.updateWatchlistGroup)
-  const deleteMutation = useMutation(api.watchlists.deleteWatchlistGroup)
-  const getWatchlistByGroupQuery = useQuery(api.watchlists.getWatchlistByGroup, "skip")
+  const updateGroupMutation = useUpdateWatchlistGroup()
+  const deleteGroupMutation = useDeleteWatchlistGroup()
   
   const createService = (groupId?: string) => makeWatchlistService(user?.id, {
     getGroups: async () => [],
     updateGroup: async (id, updates) => {
       if (!user?.id) throw new Error("User not authenticated")
-      await updateMutation({ 
-        clerkId: user.id, 
-        groupId: id as any,
-        ...updates 
-      })
+      await updateGroupMutation(id as any, updates.name, updates.description, updates.icon, updates.color)
     },
     deleteGroup: async (id) => {
       if (!user?.id) throw new Error("User not authenticated")
-      await deleteMutation({ clerkId: user.id, groupId: id as any })
+      await deleteGroupMutation(id as any)
     },
     getWatchlistByGroup: async (id) => {
       if (!user?.id) return []
-      // Use the query result if it matches the groupId
-      return getWatchlistByGroupQuery || []
+      const response = await fetch(`/api/internal/watchlists/items?groupId=${encodeURIComponent(id)}`)
+      if (!response.ok) return []
+      return await response.json()
     }
   })
   

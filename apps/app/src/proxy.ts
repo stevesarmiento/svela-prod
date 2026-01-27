@@ -21,6 +21,14 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
+  // Ensure Clerk middleware runs for route handlers that call `auth()`.
+  // We skip redirects and i18n for API routes.
+  const pathname = req.nextUrl.pathname;
+  if (pathname.startsWith("/api/")) {
+    await auth();
+    return NextResponse.next();
+  }
+
   // Check authentication status using Clerk
   const { userId } = await auth();
   const isAuthenticated = !!userId;
@@ -56,6 +64,7 @@ export default clerkMiddleware(async (auth, req) => {
 export const config = {
   matcher: [
     "/((?!_next/static|api|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/api/(.*)",
   ],
 };
 

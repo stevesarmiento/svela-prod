@@ -51,7 +51,9 @@ export default defineSchema({
     logoUrl: v.string(),
     isActive: v.boolean(),
     lastUpdated: v.number(),
-  }).index("by_symbol", ["symbol"])
+  })
+    .index("by_coin_id", ["coinId"])
+    .index("by_symbol", ["symbol"])
     .index("by_name", ["name"])
     .index("by_rank", ["rank"])
     .index("search", ["name", "symbol"]),
@@ -71,7 +73,10 @@ export default defineSchema({
     .index("by_name", ["name"])
     .index("by_coingecko_id", ["coingeckoId"])
     .index("search", ["name", "symbol"])
-    .index("by_image_updated", ["imageUpdated"]), // Index for finding coins that need image updates
+    .index("by_image_updated", ["imageUpdated"])
+    .searchIndex("search_name", { searchField: "name" })
+    .searchIndex("search_symbol", { searchField: "symbol" })
+    .searchIndex("search_coingecko_id", { searchField: "coingeckoId" }),
 
 
 
@@ -171,6 +176,11 @@ export default defineSchema({
     lastUpdated: v.number(),
   })
     .index("by_coingecko_timeframe", ["coingeckoId", "timeframe"])
+    .index("by_coingecko_timeframe_and_last_updated", [
+      "coingeckoId",
+      "timeframe",
+      "lastUpdated",
+    ])
     .index("by_coingecko_timestamp", ["coingeckoId", "timestamp"])
     .index("by_timeframe_timestamp", ["timeframe", "timestamp"])
     .index("by_last_updated", ["lastUpdated"]),

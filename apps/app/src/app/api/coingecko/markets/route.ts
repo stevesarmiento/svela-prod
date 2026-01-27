@@ -16,6 +16,12 @@ const MarketsParamsSchema = z.object({
 // Initialize Convex client for caching
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
 
+function getServerToken(): string {
+  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN
+  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured")
+  return token
+}
+
 interface CoinGeckoMarketData {
   id: string
   symbol: string
@@ -214,7 +220,10 @@ export async function GET(request: NextRequest) {
 
       // Fire-and-forget: don't block the HTTP response on caching.
       void convex
-        .mutation(api.coingeckoMarkets.upsertMarketDataBatch, { items })
+        .mutation(api.coingeckoMarkets.upsertMarketDataBatch, {
+          serverToken: getServerToken(),
+          items,
+        })
         .then(() => {
           console.log('✅ Successfully stored market data in Convex (batch)')
         })

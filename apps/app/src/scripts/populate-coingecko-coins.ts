@@ -11,7 +11,12 @@ if (!process.env.X_CG_PRO_API_KEY) {
   throw new Error('X_CG_PRO_API_KEY is not configured. Please add it to your .env.local file');
 }
 
+if (!process.env.INTERNAL_CONVEX_SERVER_TOKEN) {
+  throw new Error('INTERNAL_CONVEX_SERVER_TOKEN is not configured.');
+}
+
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL);
+const serverToken = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
 
 interface CoinGeckoListItem {
   id: string;
@@ -116,7 +121,7 @@ async function populateCoinGeckoCoins() {
       // Insert into database
       try {
         console.log(`💾 Inserting ${transformedCoins.length} coins into database...`);
-        await convex.mutation(api.coins.bulkUpsertCoinGeckoCoins, { coins: transformedCoins });
+        await convex.mutation(api.coins.bulkUpsertCoinGeckoCoins, { serverToken, coins: transformedCoins });
         
         const realImagesCount = transformedCoins.filter(c => c.imageUpdated).length;
         console.log(`✅ Inserted chunk ${chunkIndex} - ${realImagesCount}/${transformedCoins.length} with real images`);
@@ -143,7 +148,7 @@ async function populateCoinGeckoCoins() {
     console.log('\n🎉 Population completed successfully!');
     
     // Print statistics
-    const allInsertedCoins = await convex.query(api.coins.getAllCoinGeckoCoins, { limit: 20000 });
+    const allInsertedCoins = await convex.query(api.coins.getAllCoinGeckoCoins, { serverToken, limit: 20000 });
     const totalCoins = allInsertedCoins?.length || 0;
     const uniqueSymbols = new Set(allInsertedCoins?.map(coin => coin.symbol) || []).size;
     const realImageCount = allInsertedCoins?.filter(coin => coin.imageUpdated).length || 0;

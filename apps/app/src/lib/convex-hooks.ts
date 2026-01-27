@@ -1,11 +1,17 @@
 "use client";
 
 import { useUser, useClerk, useSignIn } from "@clerk/nextjs";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Id } from "../../convex/_generated/dataModel";
 
-export { api } from "../../convex/_generated/api";
+async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, init);
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `Request failed: ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
 
 export function useAuth() {
   const { user, isLoaded } = useUser();
@@ -42,110 +48,117 @@ export function useAuth() {
   };
 }
 
-export function useCurrentUser() {
-  const { user } = useUser();
-  return useQuery(
-    api.users.getCurrentUser,
-    user?.id ? { clerkId: user.id } : "skip",
-  );
-}
-
-export function useUpdateUser() {
-  return useMutation(api.users.updateUser);
-}
-
-export function useCreateUser() {
-  return useMutation(api.users.createUser);
-}
-
 export function useWatchlist() {
-  const { user } = useUser();
-  return useQuery(
-    api.watchlists.getWatchlist,
-    user?.id ? { clerkId: user.id } : "skip",
-  );
-}
+  const { user, isLoaded } = useUser();
+  const enabled = Boolean(isLoaded && user?.id);
 
-export function useAddToWatchlist() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.addToWatchlist);
+  const { data } = useQuery({
+    queryKey: ["watchlists", "default"],
+    queryFn: async () =>
+      fetchJson<Array<{ coinId: string }>>("/api/internal/watchlists/items"),
+    enabled,
+  });
 
-  return (coinId: string) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, coinId });
-  };
-}
-
-export function useRemoveFromWatchlist() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.removeFromWatchlist);
-
-  return (coinId: string) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, coinId });
-  };
-}
-
-export function useRemoveBulkFromWatchlist() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.removeBulkFromWatchlist);
-
-  return (coinIds: string[]) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, coinIds });
-  };
+  return data;
 }
 
 export function useWatchlistGroups() {
-  const { user } = useUser();
-  return useQuery(
-    api.watchlists.getWatchlistGroups,
-    user?.id ? { clerkId: user.id } : "skip",
-  );
+  const { user, isLoaded } = useUser();
+  const enabled = Boolean(isLoaded && user?.id);
+
+  const { data } = useQuery({
+    queryKey: ["watchlists", "groups"],
+    queryFn: async () => fetchJson<Array<any>>("/api/internal/watchlists/groups"),
+    enabled,
+  });
+
+  return data;
 }
 
 export function useWatchlistByGroup(groupId?: Id<"watchlistGroups">) {
-  const { user } = useUser();
-  return useQuery(
-    api.watchlists.getWatchlistByGroup,
-    user?.id && groupId ? { clerkId: user.id, groupId } : "skip",
-  );
+  const { user, isLoaded } = useUser();
+  const enabled = Boolean(isLoaded && user?.id && groupId);
+
+  const { data } = useQuery({
+    queryKey: ["watchlists", "group", groupId],
+    queryFn: async () =>
+      fetchJson<Array<{ coinId: string }>>(
+        `/api/internal/watchlists/items?groupId=${encodeURIComponent(String(groupId))}`,
+      ),
+    enabled,
+  });
+
+  return data;
 }
 
 export function useWatchlistBySlug(slug?: string) {
-  const { user } = useUser();
-  return useQuery(
-    api.watchlists.getWatchlistBySlug,
-    user?.id && slug ? { clerkId: user.id, slug } : "skip",
-  );
-}
+  const { user, isLoaded } = useUser();
+  const enabled = Boolean(isLoaded && user?.id && slug);
 
-export function useWatchlistGroupBySlug(slug?: string) {
-  const { user } = useUser();
-  return useQuery(
-    api.watchlists.getWatchlistGroupBySlug,
-    user?.id && slug ? { clerkId: user.id, slug } : "skip",
-  );
+  const { data } = useQuery({
+    queryKey: ["watchlists", "slug", slug],
+    queryFn: async () =>
+      fetchJson<any>(
+        `/api/internal/watchlists/by-slug?slug=${encodeURIComponent(String(slug))}`,
+      ),
+    enabled,
+  });
+
+  return data;
 }
 
 export function useCreateWatchlistGroup() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.createWatchlistGroup);
+  const queryClient = useQueryClient();
 
-  return (
-    name: string,
-    description?: string,
-    icon?: string,
-    color?: string,
-  ) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, name, description, icon, color });
-  };
+  const mutation = useMutation({
+    mutationFn: async (input: {
+      name: string;
+      description?: string;
+      icon?: string;
+      color?: string;
+    }) =>
+      fetchJson<{ id: string }>("/api/internal/watchlists/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
+    },
+  });
+
+  return (name: string, description?: string, icon?: string, color?: string) =>
+    mutation.mutateAsync({ name, description, icon, color });
 }
 
 export function useUpdateWatchlistGroup() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.updateWatchlistGroup);
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async (input: {
+      groupId: Id<"watchlistGroups">;
+      name?: string;
+      description?: string;
+      icon?: string;
+      color?: string;
+    }) =>
+      fetchJson<{ success: true }>(
+        `/api/internal/watchlists/groups/${encodeURIComponent(String(input.groupId))}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: input.name,
+            description: input.description,
+            icon: input.icon,
+            color: input.color,
+          }),
+        },
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
+    },
+  });
 
   return (
     groupId: Id<"watchlistGroups">,
@@ -153,39 +166,89 @@ export function useUpdateWatchlistGroup() {
     description?: string,
     icon?: string,
     color?: string,
-  ) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, groupId, name, description, icon, color });
-  };
+  ) => mutation.mutateAsync({ groupId, name, description, icon, color });
 }
 
 export function useDeleteWatchlistGroup() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.deleteWatchlistGroup);
+  const queryClient = useQueryClient();
 
-  return (groupId: Id<"watchlistGroups">) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, groupId });
-  };
+  const mutation = useMutation({
+    mutationFn: async (input: { groupId: Id<"watchlistGroups"> }) =>
+      fetchJson<{ success: true }>(
+        `/api/internal/watchlists/groups/${encodeURIComponent(String(input.groupId))}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
+    },
+  });
+
+  return (groupId: Id<"watchlistGroups">) => mutation.mutateAsync({ groupId });
 }
 
 export function useAddToWatchlistGroup() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.addToWatchlist);
+  const queryClient = useQueryClient();
 
-  return (coinId: string, groupId?: Id<"watchlistGroups">) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, coinId, groupId });
-  };
+  const mutation = useMutation({
+    mutationFn: async (input: { coinId: string; groupId?: Id<"watchlistGroups"> }) =>
+      fetchJson<{ id: string }>("/api/internal/watchlists/items/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          coinId: input.coinId,
+          groupId: input.groupId,
+        }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
+    },
+  });
+
+  return (coinId: string, groupId?: Id<"watchlistGroups">) =>
+    mutation.mutateAsync({ coinId, groupId });
 }
 
 export function useRemoveFromWatchlistGroup() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.removeFromWatchlist);
+  const queryClient = useQueryClient();
 
-  return (coinId: string, groupId?: Id<"watchlistGroups">) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, coinId, groupId });
-  };
+  const mutation = useMutation({
+    mutationFn: async (input: { coinId: string; groupId?: Id<"watchlistGroups"> }) =>
+      fetchJson<{ success: true }>("/api/internal/watchlists/items/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          coinId: input.coinId,
+          groupId: input.groupId,
+        }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
+    },
+  });
+
+  return (coinId: string, groupId?: Id<"watchlistGroups">) =>
+    mutation.mutateAsync({ coinId, groupId });
+}
+
+export function useRemoveBulkFromWatchlist() {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async (input: { coinIds: string[]; groupId?: Id<"watchlistGroups"> }) =>
+      fetchJson<{ removedCount: number }>("/api/internal/watchlists/items/remove-bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          coinIds: input.coinIds,
+          groupId: input.groupId,
+        }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
+    },
+  });
+
+  return (coinIds: string[], groupId?: Id<"watchlistGroups">) =>
+    mutation.mutateAsync({ coinIds, groupId });
 }
 

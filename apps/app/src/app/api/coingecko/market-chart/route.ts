@@ -7,8 +7,16 @@ import { makeCacheQueueService } from '@/lib/effect/cache-queue'
 
 export const dynamic = 'force-dynamic'
 
+const isDebug = process.env.LOG_LEVEL === "debug"
+
 // Initialize Convex client for server-side operations
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
+
+function getServerToken(): string {
+  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN
+  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured")
+  return token
+}
 
 // Initialize cache queue service (singleton)
 let cacheQueueServiceInstance: Awaited<ReturnType<typeof makeCacheQueueService>> | null = null
@@ -51,20 +59,23 @@ export async function GET(request: NextRequest) {
 
   try {
 
-    console.log('🎯 CoinGecko market chart API request:', {
-      id: coinId,
-      days: timeframe,
-      interval: params.interval
-    })
+    if (isDebug) {
+      console.log('🎯 CoinGecko market chart API request:', {
+        id: coinId,
+        days: timeframe,
+        interval: params.interval
+      })
+    }
 
     // 1. Check Convex cache first (with Effect for resilience)
     const cachedDataEffect = Effect.tryPromise({
       try: () => convex.query(api.historicalData.getCoinGeckoHistoricalData, {
+        serverToken: getServerToken(),
         coingeckoId: coinId,
         timeframe: timeframe
       }),
       catch: (error) => {
-        console.warn('⚠️ Convex cache query failed:', error)
+        if (isDebug) console.warn('⚠️ Convex cache query failed:', error)
         return error
       }
     }).pipe(
@@ -73,7 +84,7 @@ export async function GET(request: NextRequest) {
       Effect.timeout("800 millis"),
       // If cache fails, return empty result (will fetch fresh data)
       Effect.catchAll(() => {
-        console.log('🔄 Cache unavailable, will fetch fresh data')
+        if (isDebug) console.log('🔄 Cache unavailable, will fetch fresh data')
         return Effect.succeed({ 
           cached: false, 
           stale: false, 
@@ -87,10 +98,12 @@ export async function GET(request: NextRequest) {
     const cachedData = await Effect.runPromise(cachedDataEffect)
 
     if (cachedData.cached && !cachedData.stale && cachedData.data.length > 0) {
-      console.log(`🚀 Cache hit for ${coinId} (${timeframe}):`, {
-        dataPoints: cachedData.dataPoints,
-        lastUpdated: new Date(cachedData.lastUpdated).toLocaleString()
-      })
+      if (isDebug) {
+        console.log(`🚀 Cache hit for ${coinId} (${timeframe}):`, {
+          dataPoints: cachedData.dataPoints,
+          lastUpdated: new Date(cachedData.lastUpdated).toLocaleString()
+        })
+      }
       
       // Return cached data in chart format
       return NextResponse.json({
@@ -125,7 +138,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Fetch fresh data from CoinGecko API
-    console.log(`💾 Cache miss for ${coinId}, fetching from CoinGecko...`)
+    if (isDebug) console.log(`💾 Cache miss for ${coinId}, fetching from CoinGecko...`)
     
     const marketData = await getCoinMarketChart(
       coinId,
@@ -153,7 +166,7 @@ export async function GET(request: NextRequest) {
         })
       )
     }).catch(error => {
-      console.warn(`⚠️ Failed to enqueue cache write for ${coinId}:`, error)
+      if (isDebug) console.warn(`⚠️ Failed to enqueue cache write for ${coinId}:`, error)
     })
 
     // 4. Return fresh data
@@ -185,11 +198,12 @@ export async function GET(request: NextRequest) {
     if (coinId) {
       const staleDataEffect = Effect.tryPromise({
         try: () => convex.query(api.historicalData.getCoinGeckoHistoricalData, {
+          serverToken: getServerToken(),
           coingeckoId: coinId,
           timeframe: timeframe
         }),
         catch: (error) => {
-          console.warn('⚠️ Fallback cache query also failed:', error)
+          if (isDebug) console.warn('⚠️ Fallback cache query also failed:', error)
           return error
         }
       }).pipe(
@@ -202,7 +216,7 @@ export async function GET(request: NextRequest) {
       const staleData = await Effect.runPromise(staleDataEffect)
 
       if (staleData.data.length > 0) {
-        console.log(`🔄 Returning stale data as fallback for ${coinId}`)
+        if (isDebug) console.log(`🔄 Returning stale data as fallback for ${coinId}`)
         
         return NextResponse.json({
           data: {

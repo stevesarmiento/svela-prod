@@ -13,8 +13,6 @@ import { useHullSuite } from '@/hooks/use-hull-suite'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { IconArrowUpRight } from 'symbols-react'
 import Image from 'next/image'
-import { useQuery } from 'convex/react'
-import { api } from '../../../../../../convex/_generated/api'
 import { useQuery as useTanStackQuery } from '@tanstack/react-query'
 
 interface PriceChartProps {
@@ -104,11 +102,16 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
     })
   }, [setActiveTimeScale])
 
-  // React 19: Use deferred values for data fetching
-  const coingeckoCoinData = useQuery(
-    api.coins.getCoinGeckoCoinById,
-    { coingeckoId: deferredCoinId }
-  )
+  const { data: coingeckoCoinData } = useTanStackQuery({
+    queryKey: ["coingecko-coin", deferredCoinId],
+    queryFn: async () => {
+      const response = await fetch(`/api/internal/coins/coingecko/${deferredCoinId}`)
+      if (!response.ok) throw new Error("Failed to load coin metadata")
+      return await response.json()
+    },
+    enabled: !!deferredCoinId,
+    staleTime: 10 * 60 * 1000,
+  })
   
   // Get live price data from CoinGecko API
   const { data: livePrice, isLoading: isPriceLoading } = useTanStackQuery({

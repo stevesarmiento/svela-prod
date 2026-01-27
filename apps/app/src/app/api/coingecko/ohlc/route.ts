@@ -15,12 +15,21 @@ const OHLCParamsSchema = z.object({
 // Initialize Convex client for caching
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
 
-// Test Convex connection
-console.log('🔗 Convex client initialized for OHLC route:', {
-  hasUrl: !!process.env.NEXT_PUBLIC_CONVEX_URL,
-  urlPrefix: process.env.NEXT_PUBLIC_CONVEX_URL?.substring(0, 20),
-  clientReady: !!convex
-})
+function getServerToken(): string {
+  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN
+  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured")
+  return token
+}
+
+const isDebug = process.env.LOG_LEVEL === "debug"
+
+if (isDebug) {
+  console.log('🔗 Convex client initialized for OHLC route:', {
+    hasUrl: !!process.env.NEXT_PUBLIC_CONVEX_URL,
+    urlPrefix: process.env.NEXT_PUBLIC_CONVEX_URL?.substring(0, 20),
+    clientReady: !!convex
+  })
+}
 
 export interface OHLCDataPoint {
   timestamp: number
@@ -50,17 +59,23 @@ export async function GET(request: NextRequest) {
   const { id: coinId, vs_currency, days, precision } = params.data
 
   try {
-    console.log('🎯 CoinGecko OHLC API request:', {
-      coinId,
-      vs_currency,
-      days
-    })
+    if (isDebug) {
+      console.log('🎯 CoinGecko OHLC API request:', {
+        coinId,
+        vs_currency,
+        days
+      })
+    }
 
     // Check Convex configuration
     if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
-      console.warn('⚠️ NEXT_PUBLIC_CONVEX_URL not configured - database storage will fail')
+      if (isDebug) {
+        console.warn('⚠️ NEXT_PUBLIC_CONVEX_URL not configured - database storage will fail')
+      }
     } else {
-      console.log('🔗 Convex URL configured:', process.env.NEXT_PUBLIC_CONVEX_URL.substring(0, 20) + '...')
+      if (isDebug) {
+        console.log('🔗 Convex URL configured:', process.env.NEXT_PUBLIC_CONVEX_URL.substring(0, 20) + '...')
+      }
     }
 
     // Get user authentication (optional for API key resolution)
@@ -71,7 +86,9 @@ export async function GET(request: NextRequest) {
       clerkId = authResult.userId;
     } catch (error) {
       // Auth failed, will use environment fallback
-      console.log('Auth not available in API route, using environment fallback:', error instanceof Error ? error.message : 'Unknown error');
+      if (isDebug) {
+        console.log('Auth not available in API route, using environment fallback:', error instanceof Error ? error.message : 'Unknown error');
+      }
     }
     
     // Get API key - user's key takes precedence over environment variable
@@ -87,7 +104,7 @@ export async function GET(request: NextRequest) {
     // Note: CoinGecko OHLC API does not accept 'interval' parameter - it auto-determines interval based on days
     if (precision && precision !== null) url.searchParams.set('precision', precision)
 
-    console.log('🌐 Fetching OHLC data from CoinGecko:', url.toString())
+    if (isDebug) console.log('🌐 Fetching OHLC data from CoinGecko:', url.toString())
 
     const response = await fetch(url.toString(), {
       headers: {
@@ -101,24 +118,26 @@ export async function GET(request: NextRequest) {
     }
 
     const rawData: number[][] = await response.json()
-    console.log(`📊 Received ${rawData.length} OHLC data points from CoinGecko`)
+    if (isDebug) console.log(`📊 Received ${rawData.length} OHLC data points from CoinGecko`)
     
     // 🔍 LOG RAW OHLC DATA FROM COINGECKO
-    console.log('🎯 RAW OHLC DATA FROM COINGECKO:')
-    console.log('📊 Total data points:', rawData.length)
-    console.log('📈 First 3 raw data points:', rawData.slice(0, 3))
-    console.log('📉 Last 3 raw data points:', rawData.slice(-3))
-    console.log('🔍 Raw data structure check:')
-    if (rawData.length > 0) {
-      const firstPoint = rawData[0]
-      console.log('   First point array:', firstPoint)
-      console.log('   Array length:', firstPoint?.length)
-      console.log('   Values: [timestamp, open, high, low, close]')
-      console.log('   [0] timestamp:', firstPoint?.[0], '(', firstPoint?.[0] ? new Date(firstPoint[0]).toISOString() : 'invalid', ')')
-      console.log('   [1] open:', firstPoint?.[1])
-      console.log('   [2] high:', firstPoint?.[2])
-      console.log('   [3] low:', firstPoint?.[3])
-      console.log('   [4] close:', firstPoint?.[4])
+    if (isDebug) {
+      console.log('🎯 RAW OHLC DATA FROM COINGECKO:')
+      console.log('📊 Total data points:', rawData.length)
+      console.log('📈 First 3 raw data points:', rawData.slice(0, 3))
+      console.log('📉 Last 3 raw data points:', rawData.slice(-3))
+      console.log('🔍 Raw data structure check:')
+      if (rawData.length > 0) {
+        const firstPoint = rawData[0]
+        console.log('   First point array:', firstPoint)
+        console.log('   Array length:', firstPoint?.length)
+        console.log('   Values: [timestamp, open, high, low, close]')
+        console.log('   [0] timestamp:', firstPoint?.[0], '(', firstPoint?.[0] ? new Date(firstPoint[0]).toISOString() : 'invalid', ')')
+        console.log('   [1] open:', firstPoint?.[1])
+        console.log('   [2] high:', firstPoint?.[2])
+        console.log('   [3] low:', firstPoint?.[3])
+        console.log('   [4] close:', firstPoint?.[4])
+      }
     }
 
     // Transform the data
@@ -126,7 +145,7 @@ export async function GET(request: NextRequest) {
       const [timestamp, open, high, low, close] = dataPoint
       
       // Log transformation for first few points
-      if (index < 3) {
+      if (isDebug && index < 3) {
         console.log(`🔄 Transforming point ${index}:`)
         console.log(`   Raw: [${timestamp}, ${open}, ${high}, ${low}, ${close}]`)
       }
@@ -141,15 +160,19 @@ export async function GET(request: NextRequest) {
     })
     
     // 🔍 LOG TRANSFORMED OHLC DATA
-    console.log('✅ TRANSFORMED OHLC DATA:')
-    console.log('📊 Total transformed points:', transformedData.length)
-    console.log('📈 First 3 transformed points:', transformedData.slice(0, 3))
-    console.log('📉 Last 3 transformed points:', transformedData.slice(-3))
+    if (isDebug) {
+      console.log('✅ TRANSFORMED OHLC DATA:')
+      console.log('📊 Total transformed points:', transformedData.length)
+      console.log('📈 First 3 transformed points:', transformedData.slice(0, 3))
+      console.log('📉 Last 3 transformed points:', transformedData.slice(-3))
+    }
 
     // 🆕 Store OHLC data in Convex for caching with full OHLC information
-    console.log(`💾 Starting OHLC data storage process for ${coinId}`)
-    console.log(`📊 Raw OHLC data received: ${transformedData.length} points`)
-    console.log(`📈 First OHLC point:`, transformedData[0])
+    if (isDebug) {
+      console.log(`💾 Starting OHLC data storage process for ${coinId}`)
+      console.log(`📊 Raw OHLC data received: ${transformedData.length} points`)
+      console.log(`📈 First OHLC point:`, transformedData[0])
+    }
     
     try {
       // Convert OHLC data with full OHLC fields for Convex storage
@@ -167,27 +190,32 @@ export async function GET(request: NextRequest) {
 
       const timeframe = `${days}_ohlc` // Add _ohlc suffix to distinguish from market-chart data
       
-      console.log(`🎯 Calling Convex mutation with:`, {
-        coingeckoId: coinId,
-        timeframe: timeframe,
-        dataPointsCount: dataPoints.length,
-        dataSource: 'coingecko-ohlc',
-        sampleDataPoint: dataPoints[0]
-      })
+      if (isDebug) {
+        console.log(`🎯 Calling Convex mutation with:`, {
+          coingeckoId: coinId,
+          timeframe: timeframe,
+          dataPointsCount: dataPoints.length,
+          dataSource: 'coingecko-ohlc',
+          sampleDataPoint: dataPoints[0]
+        })
+      }
       
       // Fire and forget - don't block the response
       convex.mutation(api.historicalData.upsertCoinGeckoHistoricalData, {
+        serverToken: getServerToken(),
         coingeckoId: coinId,
         timeframe: timeframe,
         dataPoints,
         dataSource: 'coingecko-ohlc'
       }).then((result) => {
-        console.log(`✅ CONVEX SUCCESS: OHLC data stored for ${coinId}:`, {
-          insertedCount: result.insertedCount,
-          skippedCount: result.skippedCount,
-          timeframe: result.timeframe,
-          totalSubmitted: dataPoints.length
-        })
+        if (isDebug) {
+          console.log(`✅ CONVEX SUCCESS: OHLC data stored for ${coinId}:`, {
+            insertedCount: result.insertedCount,
+            skippedCount: result.skippedCount,
+            timeframe: result.timeframe,
+            totalSubmitted: dataPoints.length
+          })
+        }
       }).catch(error => {
         console.error(`❌ CONVEX ERROR: Failed to store OHLC data for ${coinId}:`, {
           errorMessage: error?.message,

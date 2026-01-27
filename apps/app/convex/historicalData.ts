@@ -1,5 +1,42 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { requireServerToken } from "./_lib/server_token";
+
+const priceHistoryValidator = v.object({
+  _id: v.id("priceHistory"),
+  _creationTime: v.number(),
+  coingeckoId: v.string(),
+  timeframe: v.string(),
+  timestamp: v.number(),
+  price: v.number(),
+  volume: v.number(),
+  marketCap: v.optional(v.number()),
+  open: v.optional(v.number()),
+  high: v.optional(v.number()),
+  low: v.optional(v.number()),
+  close: v.optional(v.number()),
+  dataSource: v.string(),
+  lastUpdated: v.number(),
+});
+
+const currentMarketDataValidator = v.object({
+  _id: v.id("currentMarketData"),
+  _creationTime: v.number(),
+  coingeckoId: v.string(),
+  price: v.number(),
+  volume24h: v.number(),
+  marketCap: v.number(),
+  change1h: v.optional(v.number()),
+  change24h: v.number(),
+  change7d: v.optional(v.number()),
+  change30d: v.optional(v.number()),
+  rank: v.optional(v.number()),
+  circulatingSupply: v.optional(v.number()),
+  totalSupply: v.optional(v.number()),
+  maxSupply: v.optional(v.number()),
+  lastUpdated: v.number(),
+  dataSource: v.string(),
+});
 
 // Cache duration constants in milliseconds
 const CACHE_DURATIONS = {
@@ -12,59 +49,59 @@ const CACHE_DURATIONS = {
   '2y_ohlc': 60 * 60 * 1000,     // 1 hour for OHLC data
 } as const;
 
+const isDebug = process.env.LOG_LEVEL === "debug";
+
 // 🆕 NEW: Get CoinGecko historical data with intelligent caching
 export const getCoinGeckoHistoricalData = query({
   args: { 
+    serverToken: v.string(),
     coingeckoId: v.string(), 
     timeframe: v.string(),
   },
+  returns: v.object({
+    data: v.array(priceHistoryValidator),
+    cached: v.boolean(),
+    lastUpdated: v.number(),
+    dataPoints: v.number(),
+    stale: v.boolean(),
+  }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const now = Date.now();
     const cacheWindow = CACHE_DURATIONS[args.timeframe as keyof typeof CACHE_DURATIONS] || CACHE_DURATIONS['1d'];
     const cacheThreshold = now - cacheWindow;
 
-    // Try to get fresh cached data first
-    const cachedData = await ctx.db
+    const latest = await ctx.db
       .query("priceHistory")
-      .withIndex("by_coingecko_timeframe", (q) => 
-        q.eq("coingeckoId", args.coingeckoId).eq("timeframe", args.timeframe))
-      .filter((q) => q.gt(q.field("lastUpdated"), cacheThreshold))
-      .collect();
+      .withIndex("by_coingecko_timeframe_and_last_updated", (q) =>
+        q.eq("coingeckoId", args.coingeckoId).eq("timeframe", args.timeframe),
+      )
+      .order("desc")
+      .first();
 
-    if (cachedData.length > 0) {
+    if (!latest) {
+      // No data available - trigger refresh and return empty for now
       return {
-        data: cachedData.sort((a, b) => a.timestamp - b.timestamp),
-        cached: true,
-        lastUpdated: Math.max(...cachedData.map(d => d.lastUpdated)),
-        dataPoints: cachedData.length,
+        data: [],
+        cached: false,
+        lastUpdated: 0,
+        dataPoints: 0,
         stale: false,
       };
     }
 
-    // Check for stale data that we can return while refreshing
-    const staleData = await ctx.db
+    const data = await ctx.db
       .query("priceHistory")
       .withIndex("by_coingecko_timeframe", (q) => 
         q.eq("coingeckoId", args.coingeckoId).eq("timeframe", args.timeframe))
       .collect();
 
-    if (staleData.length > 0) {
-      return {
-        data: staleData.sort((a, b) => a.timestamp - b.timestamp),
-        cached: true,
-        stale: true,
-        lastUpdated: Math.max(...staleData.map(d => d.lastUpdated)),
-        dataPoints: staleData.length,
-      };
-    }
-
-    // No data available - trigger refresh and return empty for now
     return {
-      data: [],
-      cached: false,
-      lastUpdated: 0,
-      dataPoints: 0,
-      stale: false,
+      data: data.sort((a, b) => a.timestamp - b.timestamp),
+      cached: true,
+      lastUpdated: latest.lastUpdated,
+      dataPoints: data.length,
+      stale: latest.lastUpdated <= cacheThreshold,
     };
   },
 });
@@ -72,6 +109,7 @@ export const getCoinGeckoHistoricalData = query({
 // 🆕 NEW: Upsert CoinGecko historical data
 export const upsertCoinGeckoHistoricalData = mutation({
   args: {
+    serverToken: v.string(),
     coingeckoId: v.string(),
     timeframe: v.string(),
     dataPoints: v.array(v.object({
@@ -87,16 +125,28 @@ export const upsertCoinGeckoHistoricalData = mutation({
     })),
     dataSource: v.string(),
   },
+  returns: v.object({
+    success: v.boolean(),
+    insertedCount: v.number(),
+    skippedCount: v.number(),
+    coingeckoId: v.string(),
+    timeframe: v.string(),
+  }),
   handler: async (ctx, args) => {
-    console.log(`🎯 CoinGecko Convex mutation called for ${args.coingeckoId} (${args.timeframe}) with ${args.dataPoints.length} data points`);
-    console.log(`🔍 Mutation arguments:`, {
-      coingeckoId: args.coingeckoId,
-      timeframe: args.timeframe,
-      dataPointsCount: args.dataPoints.length,
-      dataSource: args.dataSource,
-      firstDataPoint: args.dataPoints[0],
-      hasOHLC: args.dataPoints[0]?.open !== undefined
-    });
+    requireServerToken(args.serverToken);
+    if (isDebug) {
+      console.log(
+        `🎯 CoinGecko Convex mutation called for ${args.coingeckoId} (${args.timeframe}) with ${args.dataPoints.length} data points`,
+      );
+      console.log(`🔍 Mutation arguments:`, {
+        coingeckoId: args.coingeckoId,
+        timeframe: args.timeframe,
+        dataPointsCount: args.dataPoints.length,
+        dataSource: args.dataSource,
+        firstDataPoint: args.dataPoints[0],
+        hasOHLC: args.dataPoints[0]?.open !== undefined,
+      });
+    }
     
     const now = Date.now();
     
@@ -107,7 +157,11 @@ export const upsertCoinGeckoHistoricalData = mutation({
         q.eq("coingeckoId", args.coingeckoId).eq("timeframe", args.timeframe))
       .collect();
 
-    console.log(`📊 Found ${existingData.length} existing data points for ${args.coingeckoId} (${args.timeframe})`);
+    if (isDebug) {
+      console.log(
+        `📊 Found ${existingData.length} existing data points for ${args.coingeckoId} (${args.timeframe})`,
+      );
+    }
 
     const existingTimestamps = new Set(existingData.map(d => d.timestamp));
     
@@ -116,13 +170,17 @@ export const upsertCoinGeckoHistoricalData = mutation({
       !existingTimestamps.has(point.timestamp)
     );
 
-    console.log(`🆕 Inserting ${newDataPoints.length} new data points (${args.dataPoints.length - newDataPoints.length} duplicates skipped)`)
+    if (isDebug) {
+      console.log(
+        `🆕 Inserting ${newDataPoints.length} new data points (${args.dataPoints.length - newDataPoints.length} duplicates skipped)`,
+      );
+    }
     
     // Log OHLC data if present
     const hasOHLCData = newDataPoints.some(point => 
       point.open !== undefined || point.high !== undefined || point.low !== undefined || point.close !== undefined
     )
-    if (hasOHLCData) {
+    if (isDebug && hasOHLCData) {
       console.log(`📊 OHLC data detected - storing full candlestick information`)
       console.log(`📈 Sample OHLC:`, {
         open: newDataPoints[0]?.open,
@@ -153,7 +211,11 @@ export const upsertCoinGeckoHistoricalData = mutation({
 
     await Promise.all(insertPromises);
 
-    console.log(`✅ CoinGecko: Successfully cached ${newDataPoints.length} data points for ${args.coingeckoId} (${args.timeframe})`);
+    if (isDebug) {
+      console.log(
+        `✅ CoinGecko: Successfully cached ${newDataPoints.length} data points for ${args.coingeckoId} (${args.timeframe})`,
+      );
+    }
 
     // Verify data was actually stored
     try {
@@ -163,10 +225,14 @@ export const upsertCoinGeckoHistoricalData = mutation({
           q.eq("coingeckoId", args.coingeckoId).eq("timeframe", args.timeframe))
         .take(5);
       
-      console.log(`🔍 Verification: Found ${verificationQuery.length} records in DB for ${args.coingeckoId}/${args.timeframe}`);
+      if (isDebug) {
+        console.log(
+          `🔍 Verification: Found ${verificationQuery.length} records in DB for ${args.coingeckoId}/${args.timeframe}`,
+        );
+      }
       if (verificationQuery.length > 0) {
         const firstRecord = verificationQuery[0];
-        if (firstRecord) {
+        if (isDebug && firstRecord) {
           console.log(`📊 Sample stored record:`, {
             id: firstRecord._id,
             timestamp: firstRecord.timestamp,
@@ -195,8 +261,14 @@ export const upsertCoinGeckoHistoricalData = mutation({
 
 // 🆕 NEW: Get CoinGecko current market data
 export const getCoinGeckoCurrentMarketData = query({
-  args: { coingeckoId: v.string() },
+  args: { serverToken: v.string(), coingeckoId: v.string() },
+  returns: v.object({
+    data: v.union(currentMarketDataValidator, v.null()),
+    cached: v.boolean(),
+    stale: v.boolean(),
+  }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const cacheWindow = 2 * 60 * 1000; // 2 minutes for current data
     const now = Date.now();
     const cacheThreshold = now - cacheWindow;
@@ -204,26 +276,28 @@ export const getCoinGeckoCurrentMarketData = query({
     const currentData = await ctx.db
       .query("currentMarketData")
       .withIndex("by_coingecko", (q) => q.eq("coingeckoId", args.coingeckoId))
-      .filter((q) => q.gt(q.field("lastUpdated"), cacheThreshold))
       .first();
 
-    if (currentData) {
+    if (!currentData) {
       return {
-        data: currentData,
-        cached: true,
+        data: null,
+        cached: false,
+        stale: false,
       };
     }
 
-    // Return stale data if available and indicate refresh needed
-    const staleData = await ctx.db
-      .query("currentMarketData")
-      .withIndex("by_coingecko", (q) => q.eq("coingeckoId", args.coingeckoId))
-      .first();
+    if (currentData.lastUpdated > cacheThreshold) {
+      return {
+        data: currentData,
+        cached: true,
+        stale: false,
+      };
+    }
 
     return {
-      data: staleData || null,
+      data: currentData,
       cached: true,
-      stale: !!staleData,
+      stale: true,
     };
   },
 });
@@ -231,6 +305,7 @@ export const getCoinGeckoCurrentMarketData = query({
 // 🆕 NEW: Upsert CoinGecko current market data
 export const upsertCoinGeckoCurrentMarketData = mutation({
   args: {
+    serverToken: v.string(),
     coingeckoId: v.string(),
     price: v.number(),
     volume24h: v.number(),
@@ -245,7 +320,13 @@ export const upsertCoinGeckoCurrentMarketData = mutation({
     maxSupply: v.optional(v.number()),
     dataSource: v.string(),
   },
+  returns: v.object({
+    success: v.boolean(),
+    coingeckoId: v.string(),
+    price: v.number(),
+  }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const now = Date.now();
 
     // Check if we already have data for this coin
@@ -288,12 +369,26 @@ export const upsertCoinGeckoCurrentMarketData = mutation({
 // Get or fetch historical price data with intelligent caching (LEGACY - CoinMarketCap - DEPRECATED)
 export const getHistoricalData = query({
   args: { 
+    serverToken: v.string(),
     coinId: v.number(), 
     timeframe: v.string(),
   },
+  returns: v.object({
+    data: v.array(v.any()),
+    cached: v.boolean(),
+    lastUpdated: v.number(),
+    dataPoints: v.number(),
+  }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     // LEGACY function - return empty data since priceHistory table uses coingeckoId, not coinId
-    console.log('⚠️ [LEGACY] getHistoricalData called with coinId:', args.coinId, '- returning empty data');
+    if (isDebug) {
+      console.log(
+        '⚠️ [LEGACY] getHistoricalData called with coinId:',
+        args.coinId,
+        '- returning empty data',
+      );
+    }
     return {
       data: [],
       cached: false,
@@ -305,10 +400,22 @@ export const getHistoricalData = query({
 
 // Get current market data with caching (LEGACY - DEPRECATED)
 export const getCurrentMarketData = query({
-  args: { coinId: v.number() },
+  args: { serverToken: v.string(), coinId: v.number() },
+  returns: v.object({
+    data: v.union(v.any(), v.null()),
+    cached: v.boolean(),
+    lastUpdated: v.number(),
+  }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     // LEGACY function - return empty data since currentMarketData table uses coingeckoId, not coinId
-    console.log('⚠️ [LEGACY] getCurrentMarketData called with coinId:', args.coinId, '- returning empty data');
+    if (isDebug) {
+      console.log(
+        '⚠️ [LEGACY] getCurrentMarketData called with coinId:',
+        args.coinId,
+        '- returning empty data',
+      );
+    }
     return {
       data: null,
       cached: false,
@@ -320,6 +427,7 @@ export const getCurrentMarketData = query({
 // Optimized incremental upsert - only update changed records (LEGACY - DEPRECATED)
 export const upsertHistoricalDataIncremental = mutation({
   args: {
+    serverToken: v.string(),
     coinId: v.number(),
     timeframe: v.string(),
     dataPoints: v.array(v.object({
@@ -334,9 +442,21 @@ export const upsertHistoricalDataIncremental = mutation({
     })),
     dataSource: v.string(),
   },
+  returns: v.object({
+    success: v.boolean(),
+    insertedCount: v.number(),
+    skippedCount: v.number(),
+    coinId: v.number(),
+    timeframe: v.string(),
+  }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     // LEGACY function - deprecated
-    console.log('⚠️ [LEGACY] upsertHistoricalDataIncremental called - function deprecated');
+    if (isDebug) {
+      console.log(
+        '⚠️ [LEGACY] upsertHistoricalDataIncremental called - function deprecated',
+      );
+    }
     return {
       success: true,
       insertedCount: 0,
@@ -350,6 +470,7 @@ export const upsertHistoricalDataIncremental = mutation({
 // Legacy upsert (DEPRECATED - schema mismatch with coinId vs coingeckoId)
 export const upsertHistoricalData = mutation({
   args: {
+    serverToken: v.string(),
     coinId: v.number(),
     timeframe: v.string(),
     dataPoints: v.array(v.object({
@@ -364,9 +485,18 @@ export const upsertHistoricalData = mutation({
     })),
     dataSource: v.string(),
   },
+  returns: v.object({
+    success: v.boolean(),
+    insertedCount: v.number(),
+    coinId: v.number(),
+    timeframe: v.string(),
+  }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     // LEGACY function - deprecated
-    console.log('⚠️ [LEGACY] upsertHistoricalData called - function deprecated');
+    if (isDebug) {
+      console.log('⚠️ [LEGACY] upsertHistoricalData called - function deprecated');
+    }
     return {
       success: true, 
       insertedCount: 0,
@@ -379,6 +509,7 @@ export const upsertHistoricalData = mutation({
 // Upsert current market data (LEGACY - DEPRECATED - schema mismatch)
 export const upsertCurrentMarketData = mutation({
   args: {
+    serverToken: v.string(),
     coinId: v.number(),
     price: v.number(),
     volume24h: v.number(),
@@ -393,9 +524,17 @@ export const upsertCurrentMarketData = mutation({
     maxSupply: v.optional(v.number()),
     dataSource: v.string(),
   },
+  returns: v.object({
+    success: v.boolean(),
+    coinId: v.number(),
+    price: v.number(),
+  }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     // LEGACY function - deprecated
-    console.log('⚠️ [LEGACY] upsertCurrentMarketData called - function deprecated');
+    if (isDebug) {
+      console.log('⚠️ [LEGACY] upsertCurrentMarketData called - function deprecated');
+    }
     return { 
       success: true, 
       coinId: args.coinId,
@@ -407,15 +546,22 @@ export const upsertCurrentMarketData = mutation({
 // Trigger background refresh (called from frontend)
 export const triggerDataRefresh = mutation({
   args: { 
+    serverToken: v.string(),
     coinId: v.number(), 
     timeframe: v.optional(v.string()),
     refreshCurrent: v.optional(v.boolean())
   },
+  returns: v.object({
+    success: v.boolean(),
+    message: v.string(),
+    coinId: v.number(),
+  }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     // For now, just mark that a refresh was requested
     // In the next phase, we'll implement actual background fetching
     
-    console.log(`🔄 Refresh requested for coin ${args.coinId}`);
+    if (isDebug) console.log(`🔄 Refresh requested for coin ${args.coinId}`);
     
     return { 
       success: true, 
@@ -428,15 +574,30 @@ export const triggerDataRefresh = mutation({
 // 🔥 OPTIMIZED: Get cache statistics using efficient aggregation queries
 export const getCacheStats = query({
   args: {
+    serverToken: v.string(),
     coinId: v.optional(v.number()), // Optional - get stats for specific coin
     sampleSize: v.optional(v.number()), // Limit sample size for large datasets
   },
+  returns: v.object({
+    historicalDataPoints: v.number(),
+    currentDataEntries: v.number(),
+    uniqueCoins: v.number(),
+    timeframes: v.number(),
+    sampleSize: v.number(),
+    limited: v.boolean(),
+    note: v.optional(v.string()),
+  }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const sampleSize = args.sampleSize || 1000; // Limit to 1K records max
     
     if (args.coinId) {
       // LEGACY: stats for specific coin - deprecated due to schema mismatch
-      console.log('⚠️ [LEGACY] getCacheStats called with coinId - returning empty stats');
+      if (isDebug) {
+        console.log(
+          '⚠️ [LEGACY] getCacheStats called with coinId - returning empty stats',
+        );
+      }
       return {
         historicalDataPoints: 0,
         currentDataEntries: 0,
@@ -474,23 +635,30 @@ export const getCacheStats = query({
 // Clean up old data efficiently
 export const cleanupOldData = mutation({
   args: { 
+    serverToken: v.string(),
     olderThanDays: v.number(),
     batchSize: v.optional(v.number()), // Process in batches to avoid timeouts
   },
+  returns: v.object({
+    success: v.boolean(),
+    deletedHistorical: v.number(),
+    deletedCache: v.number(),
+    hasMore: v.boolean(),
+    batchSize: v.number(),
+  }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const batchSize = args.batchSize || 100;
     const cutoffTime = Date.now() - (args.olderThanDays * 24 * 60 * 60 * 1000);
     
-    // Delete old historical data in batches using filter
     const oldHistoricalData = await ctx.db
       .query("priceHistory")
-      .filter((q) => q.lt(q.field("lastUpdated"), cutoffTime))
+      .withIndex("by_last_updated", (q) => q.lt("lastUpdated", cutoffTime))
       .take(batchSize);
     
-    // Delete old API cache in batches using filter
     const oldCacheData = await ctx.db
       .query("apiCache")
-      .filter((q) => q.lt(q.field("expiresAt"), Date.now()))
+      .withIndex("by_expiry", (q) => q.lt("expiresAt", Date.now()))
       .take(batchSize);
     
     // Delete in parallel

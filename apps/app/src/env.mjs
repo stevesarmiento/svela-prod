@@ -22,6 +22,7 @@ export const env = createEnv({
     GEMINI_API_KEY: z.string().optional(),
     X_CAPI_API_KEY: z.string().optional(),
     API_ENCRYPTION_KEY: z.string().optional(),
+    INTERNAL_CONVEX_SERVER_TOKEN: z.string().min(1),
   },
   client: {
     NEXT_PUBLIC_OPENPANEL_CLIENT_ID: z.string().optional(),
@@ -55,6 +56,7 @@ export const env = createEnv({
     X_CAPI_API_KEY: process.env.X_CAPI_API_KEY,
     'CG-API-KEY': process.env['CG-API-KEY'],
     API_ENCRYPTION_KEY: process.env.API_ENCRYPTION_KEY,
+    INTERNAL_CONVEX_SERVER_TOKEN: process.env.INTERNAL_CONVEX_SERVER_TOKEN,
   },
   skipValidation: !!process.env.CI || !!process.env.SKIP_ENV_VALIDATION,
 });

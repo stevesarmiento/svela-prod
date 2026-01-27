@@ -1,8 +1,6 @@
 "use client";
 
 import { useUser, useClerk, useSignIn } from "@clerk/nextjs";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../../apps/app/convex/_generated/api.js";
 
 // Auth hooks using Clerk
 export function useAuth() {
@@ -40,135 +38,60 @@ export function useAuth() {
   };
 }
 
-// User hooks - now passing clerkId manually
-export function useCurrentUser() {
-  const { user } = useUser();
-  return useQuery(api.users.getCurrentUser, 
-    user?.id ? { clerkId: user.id } : "skip"
+function throwServerOnly(name: string): never {
+  throw new Error(
+    `${name} is not available in server-only Convex mode. ` +
+      "Use your app's Next.js route handlers (e.g. /api/internal/*) instead.",
   );
 }
 
-export function useUpdateUser() {
-  return useMutation(api.users.updateUser);
+// The rest of the previous Convex React hooks have been intentionally removed.
+// This package is kept minimal since this repo now treats Convex as server-only.
+export function useCurrentUser(): never {
+  return throwServerOnly("useCurrentUser");
 }
-
-export function useCreateUser() {
-  return useMutation(api.users.createUser);
+export function useUpdateUser(): never {
+  return throwServerOnly("useUpdateUser");
 }
-
-// Watchlist hooks - now passing clerkId manually
-export function useWatchlist() {
-  const { user } = useUser();
-  return useQuery(api.watchlists.getWatchlist,
-    user?.id ? { clerkId: user.id } : "skip"
-  );
+export function useCreateUser(): never {
+  return throwServerOnly("useCreateUser");
 }
-
-export function useAddToWatchlist() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.addToWatchlist);
-  
-  return (coinId: string) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, coinId });
-  };
+export function useWatchlist(): never {
+  return throwServerOnly("useWatchlist");
 }
-
-export function useRemoveFromWatchlist() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.removeFromWatchlist);
-  
-  return (coinId: string) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, coinId });
-  };
+export function useAddToWatchlist(): never {
+  return throwServerOnly("useAddToWatchlist");
 }
-
-export function useRemoveBulkFromWatchlist() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.removeBulkFromWatchlist);
-  
-  return (coinIds: string[]) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, coinIds });
-  };
+export function useRemoveFromWatchlist(): never {
+  return throwServerOnly("useRemoveFromWatchlist");
 }
-
-// Watchlist Groups hooks
-export function useWatchlistGroups() {
-  const { user } = useUser();
-  return useQuery(api.watchlists.getWatchlistGroups,
-    user?.id ? { clerkId: user.id } : "skip"
-  );
+export function useRemoveBulkFromWatchlist(): never {
+  return throwServerOnly("useRemoveBulkFromWatchlist");
 }
-
-export function useWatchlistByGroup(groupId?: string) {
-  const { user } = useUser();
-  return useQuery(api.watchlists.getWatchlistByGroup,
-    user?.id && groupId ? { clerkId: user.id, groupId: groupId as any } : "skip"
-  );
+export function useWatchlistGroups(): never {
+  return throwServerOnly("useWatchlistGroups");
 }
-
-export function useWatchlistBySlug(slug?: string) {
-  const { user } = useUser();
-  return useQuery(api.watchlists.getWatchlistBySlug,
-    user?.id && slug ? { clerkId: user.id, slug } : "skip"
-  );
+export function useWatchlistByGroup(): never {
+  return throwServerOnly("useWatchlistByGroup");
 }
-
-export function useWatchlistGroupBySlug(slug?: string) {
-  const { user } = useUser();
-  return useQuery(api.watchlists.getWatchlistGroupBySlug,
-    user?.id && slug ? { clerkId: user.id, slug } : "skip"
-  );
+export function useWatchlistBySlug(): never {
+  return throwServerOnly("useWatchlistBySlug");
 }
-
-export function useCreateWatchlistGroup() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.createWatchlistGroup);
-  
-  return (name: string, description?: string, icon?: string, color?: string) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, name, description, icon, color });
-  };
+export function useWatchlistGroupBySlug(): never {
+  return throwServerOnly("useWatchlistGroupBySlug");
 }
-
-export function useUpdateWatchlistGroup() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.updateWatchlistGroup);
-  
-  return (groupId: string, name?: string, description?: string, icon?: string, color?: string) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, groupId: groupId as any, name, description, icon, color });
-  };
+export function useCreateWatchlistGroup(): never {
+  return throwServerOnly("useCreateWatchlistGroup");
 }
-
-export function useDeleteWatchlistGroup() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.deleteWatchlistGroup);
-  
-  return (groupId: string) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, groupId: groupId as any });
-  };
+export function useUpdateWatchlistGroup(): never {
+  return throwServerOnly("useUpdateWatchlistGroup");
 }
-
-export function useAddToWatchlistGroup() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.addToWatchlist);
-  
-  return (coinId: string, groupId?: string) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, coinId, groupId: groupId as any });
-  };
+export function useDeleteWatchlistGroup(): never {
+  return throwServerOnly("useDeleteWatchlistGroup");
 }
-
-export function useRemoveFromWatchlistGroup() {
-  const { user } = useUser();
-  const mutation = useMutation(api.watchlists.removeFromWatchlist);
-  
-  return (coinId: string, groupId?: string) => {
-    if (!user?.id) throw new Error("User not authenticated");
-    return mutation({ clerkId: user.id, coinId, groupId: groupId as any });
-  };
+export function useAddToWatchlistGroup(): never {
+  return throwServerOnly("useAddToWatchlistGroup");
+}
+export function useRemoveFromWatchlistGroup(): never {
+  return throwServerOnly("useRemoveFromWatchlistGroup");
 }

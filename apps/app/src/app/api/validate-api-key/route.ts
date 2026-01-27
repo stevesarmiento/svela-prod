@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { API_PROVIDERS, type ApiProvider } from "@/../convex/apiKeys";
+import { API_PROVIDERS, type ApiProvider } from "@/constants/api-providers";
 import { getApiHeaders } from "@/lib/user-api-keys";
 import { ratelimit } from "@v1/kv/ratelimit";
 

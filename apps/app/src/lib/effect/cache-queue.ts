@@ -21,6 +21,11 @@ export async function makeCacheQueueService(
   convexApi: typeof api
 ) {
   let processedCount = 0
+  const serverToken = process.env.INTERNAL_CONVEX_SERVER_TOKEN
+  if (!serverToken) {
+    throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured")
+  }
+  const isDebug = process.env.LOG_LEVEL === "debug"
   
   const setupQueue = Effect.gen(function* () {
     // Create bounded queue (max 100 pending writes)
@@ -33,6 +38,7 @@ export async function makeCacheQueueService(
           Effect.flatMap((job) =>
             Effect.tryPromise({
               try: () => convex.mutation(convexApi.historicalData.upsertCoinGeckoHistoricalData, {
+                serverToken,
                 coingeckoId: job.coinId,
                 timeframe: job.timeframe,
                 dataPoints: job.dataPoints,
@@ -44,13 +50,19 @@ export async function makeCacheQueueService(
               Effect.timeout("10 seconds"),
               Effect.tap(() => Effect.sync(() => {
                 processedCount++
-                console.log(`✅ Cached ${job.dataPoints.length} points for ${job.coinId} (total: ${processedCount})`)
+                if (isDebug) {
+                  console.log(
+                    `✅ Cached ${job.dataPoints.length} points for ${job.coinId} (total: ${processedCount})`,
+                  )
+                }
               })),
               Effect.catchAll((error) => Effect.sync(() => {
                 const errorMsg = error && typeof error === 'object' && '_tag' in error 
                   ? error._tag 
                   : String(error)
-                console.warn(`⚠️ Cache write failed for ${job.coinId}: ${errorMsg}`)
+                if (isDebug) {
+                  console.warn(`⚠️ Cache write failed for ${job.coinId}: ${errorMsg}`)
+                }
               }))
             )
           ),
@@ -64,10 +76,10 @@ export async function makeCacheQueueService(
       enqueue: (job: CacheWriteJob) =>
         Queue.offer(queue, job).pipe(
           Effect.tap(() => Effect.sync(() => 
-            console.log(`📥 Queued cache write for ${job.coinId}`)
+            isDebug ? console.log(`📥 Queued cache write for ${job.coinId}`) : undefined
           )),
           Effect.catchAll(() => Effect.sync(() =>
-            console.warn(`⚠️ Queue full, dropping cache write for ${job.coinId}`)
+            isDebug ? console.warn(`⚠️ Queue full, dropping cache write for ${job.coinId}`) : undefined
           ))
         ),
       

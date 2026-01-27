@@ -1,8 +1,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { useQuery } from 'convex/react'
-import { api } from '../../convex/_generated/api'
+import { useQuery } from '@tanstack/react-query'
 
 interface TokenHeaderData {
   id: string
@@ -29,11 +28,16 @@ export function useTokenHeader() {
     }
   }
 
-  // Use CoinGecko database query to get coin data
-  const coinData = useQuery(
-    api.coins.getCoinGeckoCoinById,
-    coingeckoId ? { coingeckoId } : "skip"
-  )
+  const { data: coinData, isLoading } = useQuery({
+    queryKey: ["coingecko-coin", coingeckoId],
+    queryFn: async () => {
+      const response = await fetch(`/api/internal/coins/coingecko/${coingeckoId}`)
+      if (!response.ok) throw new Error("Failed to load coin metadata")
+      return await response.json()
+    },
+    enabled: !!coingeckoId,
+    staleTime: 10 * 60 * 1000,
+  })
 
   // Transform CoinGecko data to match expected interface
   const tokenData: TokenHeaderData | null = coinData ? {
@@ -42,17 +46,6 @@ export function useTokenHeader() {
     symbol: coinData.symbol.toUpperCase(),
     logoUrl: coinData.logoUrl
   } : null
-
-  const isLoading = coingeckoId ? coinData === undefined : false
-
-  console.log('useTokenHeader Debug (CoinGecko):', { 
-    pathname, 
-    pathSegments, 
-    isChartDetailPage, 
-    coingeckoId,
-    tokenData,
-    isLoading
-  })
 
   return {
     isChartDetailPage,

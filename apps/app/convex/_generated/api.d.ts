@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as _lib_server_token from "../_lib/server_token.js";
 import type * as apiKeys from "../apiKeys.js";
 import type * as apiKeysActions from "../apiKeysActions.js";
 import type * as coingeckoMarkets from "../coingeckoMarkets.js";
@@ -23,15 +24,8 @@ import type {
   FunctionReference,
 } from "convex/server";
 
-/**
- * A utility for referencing Convex functions in your app's API.
- *
- * Usage:
- * ```js
- * const myFunctionReference = api.myModule.myFunction;
- * ```
- */
 declare const fullApi: ApiFromModules<{
+  "_lib/server_token": typeof _lib_server_token;
   apiKeys: typeof apiKeys;
   apiKeysActions: typeof apiKeysActions;
   coingeckoMarkets: typeof coingeckoMarkets;
@@ -41,14 +35,30 @@ declare const fullApi: ApiFromModules<{
   users: typeof users;
   watchlists: typeof watchlists;
 }>;
-declare const fullApiWithMounts: typeof fullApi;
 
+/**
+ * A utility for referencing Convex functions in your app's public API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
 export declare const api: FilterApi<
-  typeof fullApiWithMounts,
+  typeof fullApi,
   FunctionReference<any, "public">
 >;
+
+/**
+ * A utility for referencing Convex functions in your app's internal API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = internal.myModule.myFunction;
+ * ```
+ */
 export declare const internal: FilterApi<
-  typeof fullApiWithMounts,
+  typeof fullApi,
   FunctionReference<any, "internal">
 >;
 

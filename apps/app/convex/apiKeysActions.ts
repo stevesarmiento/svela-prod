@@ -2,10 +2,12 @@
 
 import { action } from "./_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { api } from "./_generated/api";
 import { API_PROVIDERS } from "./apiKeys";
+import type { Id } from "./_generated/dataModel";
 import { createCipheriv, randomBytes, scrypt } from 'crypto';
 import { promisify } from 'util';
+import { requireServerToken } from "./_lib/server_token";
 
 // Convert scrypt to promise-based
 const asyncScrypt = promisify(scrypt);
@@ -100,13 +102,16 @@ function createDisplayKey(apiKey: string): string {
 // Server-side action to encrypt and store API key
 export const addApiKeyWithEncryption = action({
   args: {
+    serverToken: v.string(),
     clerkId: v.string(),
     provider: v.string(),
     keyName: v.string(),
     apiKey: v.string(),
     isActive: v.boolean(),
   },
-  handler: async (ctx, args): Promise<string> => {
+  returns: v.id("userApiKeys"),
+  handler: async (ctx, args): Promise<Id<"userApiKeys">> => {
+    requireServerToken(args.serverToken);
     // Basic provider validation - just check it's one of the known providers
     if (!(args.provider in API_PROVIDERS)) {
       throw new Error(`Invalid API provider: ${args.provider}`);
@@ -120,8 +125,8 @@ export const addApiKeyWithEncryption = action({
     const encryptedKey = await encryptValue(args.apiKey);
     
     // Store in database via mutation
-    // @ts-expect-error - internal API types may not be fully generated yet
-    return await ctx.runMutation(internal.apiKeys.upsertApiKey, {
+    const keyId: Id<"userApiKeys"> = await ctx.runMutation(api.apiKeys.upsertApiKey, {
+      serverToken: args.serverToken,
       clerkId: args.clerkId,
       provider: args.provider,
       keyName: args.keyName,
@@ -129,5 +134,6 @@ export const addApiKeyWithEncryption = action({
       displayKey,
       isActive: args.isActive,
     });
+    return keyId;
   },
 });
