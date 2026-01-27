@@ -2,8 +2,6 @@ import { useEffect, useCallback, useState, Dispatch, SetStateAction, useTransiti
 import { useRouter } from 'next/navigation';
 import { COMMAND_ITEMS, type NavigationItem, type ActionItem } from './bottom-nav-constants';
 import { SEQUENTIAL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
-import { useChatContext } from './bottom-nav-context';
-import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
 
 // React 19: Inline type definition for better maintainability
 
@@ -81,7 +79,6 @@ export function useKeyboardShortcuts(
   setNavigationMode: () => void,
   setIsOpen: Dispatch<SetStateAction<boolean>>
 ) {
-  const { openChat } = useChatContext();
   const [isPending, startTransition] = useTransition();
 
   // React 19: Simplified handler - direct state changes with transition batching
@@ -93,11 +90,6 @@ export function useKeyboardShortcuts(
           case 'k':
             setIsOpen(prev => !prev);
             break;
-          case 'j':
-            if (isAlphaFeaturesEnabled()) {
-              openChat();
-            }
-            break;
         }
       }
       
@@ -106,7 +98,7 @@ export function useKeyboardShortcuts(
         setNavigationMode();
       }
     });
-  }, [setIsOpen, openChat, setNavigationMode, startTransition]);
+  }, [setIsOpen, setNavigationMode, startTransition]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -123,7 +115,7 @@ export function useKeyboardShortcuts(
       // Only handle specific shortcuts to avoid unnecessary processing
       const key = event.key.toLowerCase();
       const isRelevantShortcut = 
-        ((modifiers.includes('meta') || modifiers.includes('ctrl')) && (key === 'k' || key === 'j')) ||
+        ((modifiers.includes('meta') || modifiers.includes('ctrl')) && key === 'k') ||
         (key === 'escape' && mode === 'selection');
 
       if (isRelevantShortcut) {

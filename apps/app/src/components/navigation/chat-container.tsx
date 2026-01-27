@@ -87,7 +87,7 @@ export function ChatContainer() {
     return null
   }
 
-  return !isAlphaFeaturesEnabled() && (
+  return isAlphaFeaturesEnabled() && (
     <motion.div
       ref={containerRef}
       layout

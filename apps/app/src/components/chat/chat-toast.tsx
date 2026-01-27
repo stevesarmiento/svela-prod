@@ -12,58 +12,8 @@ import { ScrollArea } from '@v1/ui/scroll-area'
 import { IconXmarkCircleFill } from 'symbols-react'
 import { ChatMessageList } from './chat-message-list'
 import GradualBlur from '@v1/ui/progressive-blur'
-import type { Message } from 'ai'
 import type { ComponentData } from './types'
-
-// Use shared types from ./types to avoid duplicates
-
-interface ChatState {
-  messages: Message[];
-  isLoading: boolean;
-  isDataLoading: boolean;
-  messageComponents: Record<string, ComponentData>;
-}
-
-// Shared chat state manager
-class ChatStateManager {
-  private static instance: ChatStateManager;
-  private chatState: ChatState | null = null;
-  private listeners: Set<(state: ChatState | null) => void> = new Set();
-  private inputCloseCallback: (() => void) | null = null;
-
-  static getInstance(): ChatStateManager {
-    if (!ChatStateManager.instance) {
-      ChatStateManager.instance = new ChatStateManager();
-    }
-    return ChatStateManager.instance;
-  }
-
-  setChatState(state: ChatState) {
-    this.chatState = state;
-    this.listeners.forEach(listener => listener(state));
-  }
-
-  getChatState() {
-    return this.chatState;
-  }
-
-  subscribe(listener: (state: ChatState | null) => void) {
-    this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
-  }
-
-  setInputCloseCallback(callback: () => void) {
-    this.inputCloseCallback = callback;
-  }
-
-  closeInput() {
-    if (this.inputCloseCallback) {
-      this.inputCloseCallback();
-    }
-  }
-}
+import { ChatStateManager } from './chat-state-manager'
 
 // Export the ChatStateManager for use in other components
 export { ChatStateManager };

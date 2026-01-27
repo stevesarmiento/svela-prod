@@ -1,16 +1,25 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useState } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
+import dynamic from "next/dynamic";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import { ConvexProvider } from "./convex-provider";
 import { WatchlistProvider } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context"; // cspell:disable-line
 import { ThemeProvider } from "./theme-provider";
 import { NotifToaster } from "@v1/ui/sonner-notif";
-import { ChatToast } from "@/components/chat/chat-toast";
-import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
+
+const ReactQueryDevtools =
+  process.env.NODE_ENV === "development"
+    ? dynamic(
+        () =>
+          import("@tanstack/react-query-devtools").then(
+            (module) => module.ReactQueryDevtools,
+          ),
+        { ssr: false },
+      )
+    : null;
 
 interface ProvidersProps {
   children: React.ReactNode;
@@ -46,9 +55,10 @@ export function Providers({ children }: ProvidersProps) {
             <WatchlistProvider>
               <ThemeProvider>
                 {children}
-                {isAlphaFeaturesEnabled() && <ChatToast />}
                 <NotifToaster position="top-center" offset={-10} />
-                <ReactQueryDevtools initialIsOpen={false} />
+                {ReactQueryDevtools ? (
+                  <ReactQueryDevtools initialIsOpen={false} />
+                ) : null}
               </ThemeProvider>
             </WatchlistProvider>
           </ConvexProvider>

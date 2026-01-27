@@ -31,32 +31,46 @@ export async function POST(req: Request) {
     console.log('🔍 Processing user message:', latestUserMessage.content);
     
     // Retrieve relevant memories if userId is provided and API key is available
-    let relevantMemories: CapxMemory[] = [];
-    const hasMemoryEnabled = capxMemoryService.isAvailable() && userId;
-    
+    const memoryUserId =
+      typeof userId === "string" && userId.length > 0 ? userId : null;
+    const hasMemoryEnabled = capxMemoryService.isAvailable() && memoryUserId !== null;
+
     if (hasMemoryEnabled) {
-      try {
-        console.log('🧠 Retrieving relevant memories for user:', userId);
-        const memoryContext = await capxMemoryService.retrieveContext(
-          userId,
-          latestUserMessage.content,
-          5 // Get up to 5 relevant memories
-        );
-        relevantMemories = memoryContext.memories;
-        console.log('✅ Retrieved', relevantMemories.length, 'relevant memories');
-      } catch (error) {
-        console.error('⚠️ Failed to retrieve memories:', error);
-        // Continue without memories if retrieval fails
-      }
+      console.log('🧠 Retrieving relevant memories for user:', memoryUserId);
     }
+
+    const relevantMemoriesPromise: Promise<CapxMemory[]> = hasMemoryEnabled
+      ? capxMemoryService
+          .retrieveContext(
+            memoryUserId!,
+            latestUserMessage.content,
+            5, // Get up to 5 relevant memories
+          )
+          .then((memoryContext) => memoryContext.memories)
+          .catch((error) => {
+            console.error('⚠️ Failed to retrieve memories:', error);
+            return [];
+          })
+      : Promise.resolve([]);
     
     // Always use enhanced processing for better responses
     console.log('🚀 Using enhanced chat processing');
     
     try {
-      // Dynamically import the enhanced chat handler to avoid build-time serialization issues
-      const { enhancedChatHandler } = await import('@/lib/enhanced-chat-handler');
-      const enhancedResponse = await enhancedChatHandler.processChat(latestUserMessage.content);
+      const enhancedResponsePromise = import('@/lib/enhanced-chat-handler').then(
+        ({ enhancedChatHandler }) =>
+          enhancedChatHandler.processChat(latestUserMessage.content),
+      );
+
+      const [enhancedResponse, relevantMemories] = await Promise.all([
+        enhancedResponsePromise,
+        relevantMemoriesPromise,
+      ]);
+
+      if (hasMemoryEnabled) {
+        console.log('✅ Retrieved', relevantMemories.length, 'relevant memories');
+      }
+
       console.log('✅ Enhanced response generated:', {
         hasTextResponse: !!enhancedResponse.textResponse,
         componentsCount: enhancedResponse.components.length,
@@ -150,77 +164,80 @@ ${enhancedResponse.textResponse}${memoryContext}`;
       
       // Store the conversation in memory if enabled
       if (hasMemoryEnabled) {
-        try {
-          console.log('💾 Storing conversation in memory for userId:', userId);
-          console.log('🔑 Memory service available:', capxMemoryService.isAvailable());
-          
-          // Store the user's query with enhanced metadata
-          const userMemoryResult = await capxMemoryService.addMemory(
-            userId,
-            `User asked: "${latestUserMessage.content}"`,
-            {
-              category: 'chat',
-              source: 'chat',
-              tags: ['user_query', enhancedResponse.dataContext.intent.type],
-              priority: 6,
-              namespace: 'chat_conversations',
-              intentType: enhancedResponse.dataContext.intent.type,
-              processingType: 'enhanced',
-              timestamp: Date.now(),
-            },
-            'extract_facts'
-          );
-          
-          console.log('💾 User query storage result:', {
-            success: !!userMemoryResult.memoryId,
-            memoryId: userMemoryResult.memoryId,
-            strategy: userMemoryResult.strategyUsed
-          });
-          
-          // Store key insights from the response
-          const responseInsights = enhancedResponse.textResponse.length > 500 
-            ? enhancedResponse.textResponse.substring(0, 500) + '...'
-            : enhancedResponse.textResponse;
+        const userIdForMemory = memoryUserId!;
+        void (async () => {
+          try {
+            console.log('💾 Storing conversation in memory for userId:', userIdForMemory);
+            console.log('🔑 Memory service available:', capxMemoryService.isAvailable());
             
-          const responseMemoryResult = await capxMemoryService.addMemory(
-            userId,
-            `Analysis provided: ${responseInsights}`,
-            {
-              category: 'chat',
-              source: 'chat',
-              tags: ['ai_response', enhancedResponse.dataContext.intent.type],
-              priority: 7,
-              namespace: 'chat_conversations',
-              intentType: enhancedResponse.dataContext.intent.type,
-              dataQuality: enhancedResponse.dataContext.metadata.quality,
-              dataSources: enhancedResponse.dataContext.metadata.sources,
-              processingType: 'enhanced',
-              timestamp: Date.now(),
-            },
-            'summarize_if_long'
-          );
-          
-          console.log('💾 AI response storage result:', {
-            success: !!responseMemoryResult.memoryId,
-            memoryId: responseMemoryResult.memoryId,
-            strategy: responseMemoryResult.strategyUsed
-          });
-          
-          if (userMemoryResult.memoryId && responseMemoryResult.memoryId) {
-            console.log('✅ Both memories stored successfully:', {
-              userMemoryId: userMemoryResult.memoryId,
-              responseMemoryId: responseMemoryResult.memoryId
+            // Store key insights from the response
+            const responseInsights = enhancedResponse.textResponse.length > 500 
+              ? enhancedResponse.textResponse.substring(0, 500) + '...'
+              : enhancedResponse.textResponse;
+
+            const [userMemoryResult, responseMemoryResult] = await Promise.all([
+              capxMemoryService.addMemory(
+                userIdForMemory,
+                `User asked: "${latestUserMessage.content}"`,
+                {
+                  category: 'chat',
+                  source: 'chat',
+                  tags: ['user_query', enhancedResponse.dataContext.intent.type],
+                  priority: 6,
+                  namespace: 'chat_conversations',
+                  intentType: enhancedResponse.dataContext.intent.type,
+                  processingType: 'enhanced',
+                  timestamp: Date.now(),
+                },
+                'extract_facts'
+              ),
+              capxMemoryService.addMemory(
+                userIdForMemory,
+                `Analysis provided: ${responseInsights}`,
+                {
+                  category: 'chat',
+                  source: 'chat',
+                  tags: ['ai_response', enhancedResponse.dataContext.intent.type],
+                  priority: 7,
+                  namespace: 'chat_conversations',
+                  intentType: enhancedResponse.dataContext.intent.type,
+                  dataQuality: enhancedResponse.dataContext.metadata.quality,
+                  dataSources: enhancedResponse.dataContext.metadata.sources,
+                  processingType: 'enhanced',
+                  timestamp: Date.now(),
+                },
+                'summarize_if_long'
+              ),
+            ]);
+
+            console.log('💾 User query storage result:', {
+              success: !!userMemoryResult.memoryId,
+              memoryId: userMemoryResult.memoryId,
+              strategy: userMemoryResult.strategyUsed
             });
-          } else {
-            console.warn('⚠️ Some memories failed to store:', {
-              userQuery: !!userMemoryResult.memoryId,
-              aiResponse: !!responseMemoryResult.memoryId
+
+            console.log('💾 AI response storage result:', {
+              success: !!responseMemoryResult.memoryId,
+              memoryId: responseMemoryResult.memoryId,
+              strategy: responseMemoryResult.strategyUsed
             });
+            
+            if (userMemoryResult.memoryId && responseMemoryResult.memoryId) {
+              console.log('✅ Both memories stored successfully:', {
+                userMemoryId: userMemoryResult.memoryId,
+                responseMemoryId: responseMemoryResult.memoryId
+              });
+            } else {
+              console.warn('⚠️ Some memories failed to store:', {
+                userQuery: !!userMemoryResult.memoryId,
+                aiResponse: !!responseMemoryResult.memoryId
+              });
+            }
+          } catch (error) {
+            console.error('⚠️ Failed to store conversation in memory:', error);
+            // Continue without storing memory if it fails
           }
-        } catch (error) {
-          console.error('⚠️ Failed to store conversation in memory:', error);
-          // Continue without storing memory if it fails
-        }
+        })();
       } else {
         console.log('🔕 Memory not enabled - hasMemoryEnabled:', hasMemoryEnabled, {
           serviceAvailable: capxMemoryService.isAvailable(),
@@ -236,6 +253,8 @@ ${enhancedResponse.textResponse}${memoryContext}`;
       
       // Fallback to basic chat
       console.log('⬇️ Falling back to basic chat processing');
+
+      const relevantMemories = await relevantMemoriesPromise;
       
       // Prepare memory context for fallback
       let fallbackMemoryContext = '';
@@ -286,26 +305,29 @@ ${fallbackMemoryContext}Provide clear, concise, and helpful responses about cryp
 
       // Store the conversation in memory for fallback case
       if (hasMemoryEnabled) {
-        try {
-          console.log('💾 Storing fallback conversation in memory');
-          
-          // Store the user's query with fallback context
-          await capxMemoryService.addMemory(
-            userId,
-            `User asked: "${latestUserMessage.content}"`,
-            {
-              source: 'chat_query_fallback',
-              timestamp: Date.now(),
-              processingType: 'fallback',
-            },
-            'extract_facts'
-          );
-          
-          console.log('✅ Fallback conversation stored in memory');
-        } catch (error) {
-          console.error('⚠️ Failed to store fallback conversation in memory:', error);
-          // Continue without storing memory if it fails
-        }
+        const userIdForMemory = memoryUserId!;
+        void (async () => {
+          try {
+            console.log('💾 Storing fallback conversation in memory');
+            
+            // Store the user's query with fallback context
+            await capxMemoryService.addMemory(
+              userIdForMemory,
+              `User asked: "${latestUserMessage.content}"`,
+              {
+                source: 'chat_query_fallback',
+                timestamp: Date.now(),
+                processingType: 'fallback',
+              },
+              'extract_facts'
+            );
+            
+            console.log('✅ Fallback conversation stored in memory');
+          } catch (error) {
+            console.error('⚠️ Failed to store fallback conversation in memory:', error);
+            // Continue without storing memory if it fails
+          }
+        })();
       }
 
       return response;

@@ -43,11 +43,11 @@ const BlurredBackground = memo(function BlurredBackground({
   style: React.CSSProperties 
 }) {
   return (
-    <div className={cn(className, "will-change-transform")} style={style}>
+    <div className={cn(className)} style={style}>
       <Image
         src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${id}.png`}
         alt={`${tokenName} background`}
-        className="w-full h-full object-cover will-change-transform"
+        className="w-full h-full object-cover"
         width={700}
         height={700}
         priority={false}
@@ -76,7 +76,7 @@ const TokenPageContent = memo(function TokenPageContent({ id }: { id: string }) 
 
   return (
     <div className={cn(
-      "min-h-screen w-full px-4 relative will-change-auto",
+      "min-h-screen w-full px-4 relative",
       showPending ? 'opacity-90 transition-opacity duration-200' : ''
     )}>
       {/* React 19: Hardware-accelerated blurred background images */}
@@ -87,8 +87,7 @@ const TokenPageContent = memo(function TokenPageContent({ id }: { id: string }) 
         style={{
           width: '700px',
           height: '700px',
-          filter: 'blur(360px)',
-          willChange: 'transform',
+          filter: 'blur(240px)',
           opacity: 1,
           left: '-10vw',
           top: '-350px',
@@ -104,8 +103,7 @@ const TokenPageContent = memo(function TokenPageContent({ id }: { id: string }) 
         style={{
           width: '479px',
           height: '479px',
-          filter: 'blur(360px)',
-          willChange: 'transform',
+          filter: 'blur(240px)',
           opacity: 1,
           right: '-5vw',
           top: '236px',

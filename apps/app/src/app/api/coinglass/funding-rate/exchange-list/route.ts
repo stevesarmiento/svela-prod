@@ -100,9 +100,10 @@ export async function GET(request: Request) {
       actualSymbol = coinInfo.symbol;
     } else {
       // It's a symbol, check if it's supported
-      const isSupported = await convex.query(api.coins.isCoinglassSupported, { 
-        symbol: symbolOrId.toUpperCase() 
-      });
+      const symbol = symbolOrId.toUpperCase();
+      const isSupportedPromise = convex.query(api.coins.isCoinglassSupported, { symbol });
+      const coinPromise = convex.query(api.coins.getCoinBySymbol, { symbol });
+      const isSupported = await isSupportedPromise;
       
       if (!isSupported) {
         return NextResponse.json({
@@ -112,12 +113,10 @@ export async function GET(request: Request) {
         }, { status: 400 });
       }
       
-      actualSymbol = symbolOrId.toUpperCase();
+      actualSymbol = symbol;
       
       // Get coin info for response
-      const coin = await convex.query(api.coins.getCoinBySymbol, { 
-        symbol: actualSymbol 
-      });
+      const coin = await coinPromise;
       
       if (coin) {
         coinInfo = {
