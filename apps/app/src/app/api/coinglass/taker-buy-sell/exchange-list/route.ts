@@ -39,23 +39,18 @@ const CoinglassTakerBuySellResponseSchema = z.object({
 
 export async function GET(request: Request) {
   try {
-    console.log('=== Taker Buy/Sell API Route Start ===');
-    
     // Check API key first
     if (!API_KEY) {
-      console.error('❌ CoinGlass API key not configured');
+      console.error("CoinGlass API key not configured");
       return NextResponse.json(
         { error: 'CoinGlass API key not configured', success: false },
         { status: 500 }
       );
     }
-    console.log('✅ API key found, length:', API_KEY.length);
 
     const { searchParams } = new URL(request.url);
     const rawSymbol = searchParams.get('symbol');
     const range = searchParams.get('range') || '24h'; // Default to 24h for daily pressure
-
-    console.log('📊 Request params:', { rawSymbol, range });
 
     if (!rawSymbol) {
       return NextResponse.json(
@@ -79,9 +74,8 @@ export async function GET(request: Request) {
           name: 'Unknown',
           isSupported: true
         };
-        console.log('✅ Mapped coin ID', coinId, 'to symbol', mappedSymbol);
       } else {
-        console.error('❌ Coin ID not found in mapping:', coinId);
+        console.error("Coin ID not found in mapping:", coinId);
         return NextResponse.json(
           { 
             error: `Coin with ID ${coinId} not supported`,
@@ -95,7 +89,6 @@ export async function GET(request: Request) {
 
     // Build API URL
     const apiUrl = `${BASE_URL}/futures/taker-buy-sell-volume/exchange-list?symbol=${symbol}&range=${range}`;
-    console.log('🌐 Calling CoinGlass API:', apiUrl);
 
     // Make API request
     const response = await fetch(apiUrl, {
@@ -105,11 +98,9 @@ export async function GET(request: Request) {
       },
     });
 
-    console.log('📡 CoinGlass response status:', response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ CoinGlass API error:', response.status, errorText);
+      console.error("CoinGlass API error:", response.status, errorText);
       return NextResponse.json(
         { 
           error: `CoinGlass API error: ${response.status}`,
@@ -121,18 +112,12 @@ export async function GET(request: Request) {
     }
 
     const data = await response.json();
-    console.log('📊 CoinGlass response:', { 
-      code: data.code, 
-      msg: data.msg,
-      symbol: data.data?.symbol,
-      exchangeCount: data.data?.exchange_list?.length
-    });
 
     // Validate response
     const validatedData = CoinglassTakerBuySellResponseSchema.parse(data);
 
     if (validatedData.code !== "0") {
-      console.error('❌ CoinGlass API returned error:', validatedData.msg);
+      console.error("CoinGlass API returned error:", validatedData.msg);
       return NextResponse.json(
         { 
           error: `CoinGlass API error: ${validatedData.msg || 'Unknown error'}`,
@@ -162,8 +147,6 @@ export async function GET(request: Request) {
       })),
     };
 
-    console.log('✅ Successfully processed taker buy/sell data');
-
     return NextResponse.json({
       success: true,
       data: transformedData,
@@ -175,8 +158,7 @@ export async function GET(request: Request) {
     });
 
   } catch (error) {
-    console.error('❌ Taker Buy/Sell Route Error:', error);
-    console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error("Taker buy/sell route error:", error);
     
     return NextResponse.json(
       { 

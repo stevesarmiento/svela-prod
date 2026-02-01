@@ -6,6 +6,8 @@ import { Button } from '@v1/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@v1/ui/card'
 import { AlertTriangle, RefreshCw, Wifi, WifiOff } from 'lucide-react'
 import { toast } from '@v1/ui/use-toast'
+import { Effect } from "effect"
+import { useEffectScoped } from "@/lib/effect/react"
 
 interface RateLimitErrorBoundaryProps {
   children: React.ReactNode
@@ -135,24 +137,30 @@ function DefaultErrorFallback({
 }) {
   const [countdown, setCountdown] = useState(0)
 
-  useEffect(() => {
-    if (isRetrying && countdown === 0) {
-      const delay = Math.min(1000 * Math.pow(2, retryCount), 30000)
-      setCountdown(Math.ceil(delay / 1000))
-      
-      const interval = setInterval(() => {
-        setCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(interval)
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-      
-      return () => clearInterval(interval)
-    }
-  }, [isRetrying, retryCount, countdown])
+  useEffectScoped(
+    () =>
+      Effect.gen(function* () {
+        // Ensure this runs in a scope so it can be interrupted safely.
+        yield* Effect.addFinalizer(() => Effect.void)
+
+        if (!isRetrying) {
+          yield* Effect.sync(() => setCountdown(0))
+          return
+        }
+
+        const delayMs = Math.min(1000 * Math.pow(2, retryCount), 30000)
+        let remainingSeconds = Math.ceil(delayMs / 1000)
+
+        yield* Effect.sync(() => setCountdown(remainingSeconds))
+
+        while (remainingSeconds > 0) {
+          yield* Effect.sleep("1 second")
+          remainingSeconds -= 1
+          yield* Effect.sync(() => setCountdown(remainingSeconds))
+        }
+      }),
+    [isRetrying, retryCount],
+  )
 
   const getErrorConfig = () => {
     switch (errorType) {
@@ -213,7 +221,7 @@ function DefaultErrorFallback({
           >
             {isRetrying ? (
               <>
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin motion-reduce:animate-none" />
                 Retrying {countdown > 0 ? `in ${countdown}s` : '...'}
               </>
             ) : (

@@ -3,8 +3,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
-import { Effect, Schedule } from "effect"
-import { ApiRequestError } from "@/lib/effect/watchlist-models"
+import { Effect } from "effect"
+import { CoinGeckoApi } from "@/lib/effect/coingecko-api"
+import { runPromise } from "@/lib/effect/runtime-coingecko"
 
 interface CoinGeckoWatchlistCoin {
   id: string; // CoinGecko string ID
@@ -56,6 +57,15 @@ interface CoinGeckoWatchlistAggregateIsolatedResult {
   }
 }
 
+interface HistoricalDataResult {
+  data: Record<string, CoinHistoricalData[]>
+  performance: {
+    cacheHits: number
+    cacheMisses: number
+    totalQueries: number
+  }
+}
+
 /**
  * Isolated CoinGecko watchlist aggregate chart hook that:
  * 1. Fetches historical data for all coins in the watchlist  
@@ -71,7 +81,6 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
   // Get CoinGecko IDs for fetching historical data
   const coinIds = useMemo(() => {
     const ids = coins.map(coin => coin.id)
-    console.log('🎯 Isolated Watchlist Aggregate - Coin IDs:', ids)
     return ids
   }, [coins])
 
@@ -93,60 +102,47 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
   const days = getDaysFromTimeScale(timeScale)
 
   // Fetch historical market chart data for all coins in the watchlist
-  const { data: historicalData, isLoading } = useQuery({
+  const { data: historicalData, isLoading } = useQuery<HistoricalDataResult>({
     queryKey: ['watchlist-aggregate-historical', coinIdsKey, timeScale],
     queryFn: async () => {
-      if (!coinIds.length) return { data: {}, performance: { cacheHits: 0, cacheMisses: 0, totalQueries: 0 } }
+      const emptyData: Record<string, CoinHistoricalData[]> = {}
+      if (!coinIds.length) return { data: emptyData, performance: { cacheHits: 0, cacheMisses: 0, totalQueries: 0 } }
 
       try {
-        console.log('🔍 Fetching historical data for watchlist aggregate...', { coinIds, timeScale, days })
-        
-        // Create Effect for each coin fetch
+        const swallowToNull = (_: unknown) => Effect.succeed({ data: null, cached: false })
+
         const fetchEffects = coinIds.map((coinId) =>
-          Effect.tryPromise({
-            try: async () => {
-              const response = await fetch(`/api/coingecko/market-chart?id=${coinId}&days=${days}`)
-              if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`)
-              }
-              const result = await response.json()
-              return { coinId, data: result.data || null }
-            },
-            catch: (error) => new ApiRequestError({
-              endpoint: "/api/coingecko/market-chart",
-              status: 500,
-              message: `Failed to fetch ${coinId}: ${String(error)}`
-            })
-          }).pipe(
-            // Retry failed requests with exponential backoff
-            Effect.retry(Schedule.exponential("500 millis", 2)),
-            // Timeout individual requests after 8 seconds
-            Effect.timeout("8 seconds"),
-            // On timeout, return null data instead of failing
-            Effect.catchTag("TimeoutException", () => 
-              Effect.succeed({ coinId, data: null })
-            ),
-            // On API errors, return null data instead of failing entire batch
-            Effect.catchTag("ApiRequestError", (e) => {
-              console.warn(`Failed to fetch ${coinId}:`, e.message)
-              return Effect.succeed({ coinId, data: null })
-            })
-          )
+          CoinGeckoApi.getMarketChart({ coinId, days }).pipe(
+            Effect.map((response) => ({
+              data: response.data,
+              cached: response.status?.cached ?? false,
+            })),
+            Effect.catchTags({
+              CoinGeckoInvalidParamsError: swallowToNull,
+              CoinGeckoUnauthorizedError: swallowToNull,
+              CoinGeckoNotFoundError: swallowToNull,
+              CoinGeckoRateLimitedError: swallowToNull,
+              CoinGeckoApiError: swallowToNull,
+              CoinGeckoDecodeError: swallowToNull,
+            }),
+            Effect.map((result) => ({ coinId, ...result })),
+          ),
         )
-        
-        // Execute all fetches with concurrency limit
-        const results = await Effect.runPromise(
-          Effect.all(fetchEffects, { 
-            concurrency: 5,  // Max 5 concurrent requests
-            batching: false  // Don't batch requests
-          })
+
+        const results = await runPromise(
+          Effect.all(fetchEffects, {
+            concurrency: 5, // Max 5 concurrent requests
+            batching: false, // Don't batch requests
+          }),
         )
         
         // Process results into a map of historical data
         const historicalDataMap: Record<string, CoinHistoricalData[]> = {}
         let successCount = 0
+        let cacheHits = 0
         
         for (const result of results) {
+          if (result.cached) cacheHits++
           const prices = result.data?.prices
           if (!Array.isArray(prices)) continue
 
@@ -156,24 +152,17 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
           }))
           successCount++
         }
-
-        console.log('🔍 Historical data fetched:', {
-          requestedCoins: coinIds.length,
-          successfulCoins: successCount,
-          coinsWithData: Object.keys(historicalDataMap)
-        })
         
         return {
           data: historicalDataMap,
           performance: {
-            cacheHits: 0,
-            cacheMisses: coinIds.length,
-            totalQueries: coinIds.length
+            cacheHits,
+            cacheMisses: Math.max(0, coinIds.length - cacheHits),
+            totalQueries: coinIds.length,
           }
         }
       } catch (error) {
-        console.error('Error fetching watchlist aggregate historical data:', error)
-        return { data: {}, performance: { cacheHits: 0, cacheMisses: 0, totalQueries: 1 } }
+        return { data: emptyData, performance: { cacheHits: 0, cacheMisses: 0, totalQueries: 1 } }
       }
     },
     enabled: coinIds.length > 0,
@@ -184,7 +173,6 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
   // Aggregate historical data into a combined price line
   useEffect(() => {
     if (!historicalData?.data || !coins.length) {
-      console.log('No historical data or coins for watchlist aggregate')
       setAggregateData([])
       return
     }
@@ -196,16 +184,12 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
       )
 
       if (validCoinIds.length === 0) {
-        console.log('No valid coin data for aggregation')
         setAggregateData([])
         return
       }
 
-      console.log('🎯 Aggregating data for coins:', validCoinIds)
-
       // Find the shortest data series to ensure we have data for all coins at each point
       const minDataLength = Math.min(...validCoinIds.map(coinId => coinDataMap[coinId]?.length || 0))
-      console.log('📊 Using', minDataLength, 'data points for aggregation')
 
       // Create aggregated data points
       const aggregatedPoints: AggregateDataPoint[] = []
@@ -253,17 +237,6 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
           time: point.time,
           value: baselinePrice > 0 ? ((point.value - baselinePrice) / baselinePrice) * 100 : 0
         }))
-
-        console.log('🎯 Watchlist Aggregate Data Generated:', {
-          coinsCount: validCoinIds.length,
-          dataPoints: percentageData.length,
-          baselinePrice: baselinePrice.toFixed(6),
-          finalChange: `${percentageData[percentageData.length - 1]?.value.toFixed(2)}%`,
-          priceRange: {
-            min: Math.min(...aggregatedPoints.map(p => p.value)).toFixed(6),
-            max: Math.max(...aggregatedPoints.map(p => p.value)).toFixed(6)
-          }
-        })
 
         setAggregateData(percentageData)
       } else {

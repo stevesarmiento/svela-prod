@@ -253,6 +253,8 @@ export function WatchlistCard({
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="Watchlist actions"
+                      onClick={(event) => event.stopPropagation()}
                       className="h-7 w-7 p-0 rounded-lg bg-transparent hover:bg-white/5"
                     >
                       <IconEllipsis className="h-4 w-4 fill-white" />

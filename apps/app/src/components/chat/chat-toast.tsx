@@ -4,9 +4,10 @@ import React, { useState, useRef, useEffect, useDeferredValue } from 'react'
 import { useChat } from 'ai/react'
 import { useAuth } from '@/lib/convex-hooks'
 import { toast } from 'sonner'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'motion/react'
 import { autoCleanupSessionMemories, bulkCleanupMemories } from '@/lib/client-memory-utils'
 import { useChatStateSync } from './hooks/use-chat-state-sync'
+import { DURATION_MICRO_S, EASE_OUT_CUBIC, motionDuration } from '@/lib/motion-tokens'
 import { Button } from '@v1/ui/button'
 import { ScrollArea } from '@v1/ui/scroll-area'
 import { IconXmarkCircleFill } from 'symbols-react'
@@ -15,6 +16,8 @@ import GradualBlur from '@v1/ui/progressive-blur'
 import type { ComponentData } from './types'
 import { ChatStateManager } from './chat-state-manager'
 import { useLatest } from '@/hooks/use-latest'
+import { Effect, Fiber } from 'effect'
+import { useEffectScoped } from '@/lib/effect/react'
 
 // Export the ChatStateManager for use in other components
 export { ChatStateManager };
@@ -65,16 +68,25 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
   const handleCloseRef = useLatest(handleClose);
 
   // Handle escape key to close toast
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        void handleCloseRef.current();
-      }
-    };
+  useEffectScoped(
+    () =>
+      Effect.gen(function* () {
+        const handleEscape = (e: KeyboardEvent) => {
+          if (e.key !== 'Escape') return
+          void handleCloseRef.current()
+        }
 
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, []);
+        document.addEventListener('keydown', handleEscape)
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            document.removeEventListener('keydown', handleEscape)
+          }),
+        )
+
+        yield* Effect.never
+      }),
+    [],
+  )
 
   if (!deferredChatState) {
     return (
@@ -140,6 +152,7 @@ function ChatToastContent({ toastId, onClose }: { toastId: string | number; onCl
 export function useChatToast() {
   const toastIdRef = useRef<string | number | null>(null);
   const { user } = useAuth();
+  const shouldReduceMotion = useReducedMotion();
 
   // Bulk delete chat memories when dismissing chat
   const bulkDeleteChatMemories = React.useCallback(async () => {
@@ -194,13 +207,13 @@ export function useChatToast() {
           
           {/* Chat content with original positioning */}
           <motion.div
-            initial={{ y: -20, scale: 0.96 }}
+            initial={shouldReduceMotion ? false : { y: -20, scale: 0.96 }}
             animate={{ y: 0, scale: 1 }}
-            exit={{ y: -20, scale: 0.96 }}
+            exit={shouldReduceMotion ? undefined : { y: -20, scale: 0.96 }}
             transition={{
               type: "tween",
-              duration: 0.12,
-              ease: [0.4, 0, 0.2, 1], // Custom easing for smoothness
+              duration: motionDuration(shouldReduceMotion, DURATION_MICRO_S),
+              ease: EASE_OUT_CUBIC,
             }}
             className="w-[60%] relative z-[9999]"
             style={{ willChange: "transform" }}
@@ -271,6 +284,7 @@ export function useChatState() {
   const [isStopped, setIsStopped] = useState(false);
   const lastDataQueryRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const stopResetFiberRef = useRef<Fiber.RuntimeFiber<void, never> | null>(null)
   const chatManager = ChatStateManager.getInstance();
   const { user } = useAuth();
   
@@ -380,6 +394,15 @@ export function useChatState() {
     });
   }, [messages, isLoading, isDataLoading, deferredMessageComponents, chatManager]);
 
+  // Ensure the stop-reset timer never outlives the component.
+  useEffect(() => {
+    return () => {
+      if (!stopResetFiberRef.current) return
+      Effect.runFork(Fiber.interruptFork(stopResetFiberRef.current))
+      stopResetFiberRef.current = null
+    }
+  }, [])
+
   const detectDataQuery = async (message: string): Promise<boolean> => {
     try {
       const response = await fetch('/api/parse-intent', {
@@ -445,10 +468,19 @@ Examples:
     setIsDataLoading(false);
     setIsStopped(true);
     
-    // Reset stopped state after delay (no need for transition here)
-    setTimeout(() => {
-      setIsStopped(false);
-    }, 3000);
+    // Reset stopped state after delay (interruptible).
+    if (stopResetFiberRef.current) {
+      Effect.runFork(Fiber.interruptFork(stopResetFiberRef.current))
+      stopResetFiberRef.current = null
+    }
+
+    stopResetFiberRef.current = Effect.runFork(
+      Effect.sleep("3 seconds").pipe(
+        Effect.tap(() => Effect.sync(() => setIsStopped(false))),
+        Effect.catchAll(() => Effect.void),
+        Effect.asVoid,
+      ),
+    )
   };
 
   return {

@@ -3,7 +3,7 @@
 import React, { useTransition, useDeferredValue, useCallback, useMemo, memo } from 'react'
 import { useIsomorphicTheme } from '@/hooks/use-isomorphic-theme'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'motion/react'
 import { cn } from "@v1/ui/cn"
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { useChartInstance } from '@/hooks/use-chart-instance'
@@ -14,6 +14,8 @@ import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { IconArrowUpRight } from 'symbols-react'
 import Image from 'next/image'
 import { useQuery as useTanStackQuery } from '@tanstack/react-query'
+import { CoinsInternalApi } from '@/lib/effect/coins-internal-api'
+import { runPromise } from '@/lib/effect/runtime-coins-internal'
 
 interface PriceChartProps {
   coinId: string;
@@ -105,9 +107,8 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   const { data: coingeckoCoinData } = useTanStackQuery({
     queryKey: ["coingecko-coin", deferredCoinId],
     queryFn: async () => {
-      const response = await fetch(`/api/internal/coins/coingecko/${deferredCoinId}`)
-      if (!response.ok) throw new Error("Failed to load coin metadata")
-      return await response.json()
+      if (!deferredCoinId) return null
+      return await runPromise(CoinsInternalApi.getCoinGeckoCoinById({ id: deferredCoinId }))
     },
     enabled: !!deferredCoinId,
     staleTime: 10 * 60 * 1000,
@@ -184,6 +185,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   const priceChange24h = livePrice?.price_change_percentage_24h || calculatePercentageChange || 0
   const isLoadingPrice = isPriceLoading || isLoading
   const showPending = isPending || isDataPending || isLoadingPrice
+  const shouldReduceMotion = useReducedMotion()
 
   return (
     <div className={cn(
@@ -226,7 +228,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                     <div className="flex items-center">
                       <span className={cn(
                         "text-3xl font-bold font-sans text-gray-900 dark:text-white",
-                        showPending && "animate-pulse"
+                        showPending && "animate-pulse motion-reduce:animate-none"
                       )}>
                         ${currentPrice.toLocaleString('en-US', {
                           minimumFractionDigits: 2,
@@ -235,7 +237,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                       </span>
                       {showPending && (
                         <div className="inline-flex items-center ml-2">
-                          <div className="w-2 h-2 bg-gray-400 dark:bg-white/50 rounded-full animate-pulse" />
+                          <div className="w-2 h-2 bg-gray-400 dark:bg-white/50 rounded-full animate-pulse motion-reduce:animate-none" />
                         </div>
                       )}
                     </div>
@@ -249,7 +251,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                           key={priceChange24h >= 0 ? 'up' : 'down'}
                           initial={{ rotate: priceChange24h >= 0 ? 0 : 90 }}
                           animate={{ rotate: priceChange24h >= 0 ? 0 : 90 }}
-                          transition={{ type: "spring", bounce: 0.3, duration: 0.3 }}
+                          transition={shouldReduceMotion ? { duration: 0 } : { type: "spring", bounce: 0.3, duration: 0.3 }}
                           className="inline-block mr-2"
                           style={{ transformOrigin: 'center' }}
                         >

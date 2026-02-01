@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../../convex/_generated/api";
+import { convex, getServerToken } from "@/lib/convex-server";
 
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-if (!convexUrl) throw new Error("NEXT_PUBLIC_CONVEX_URL is not configured");
-
-const convex = new ConvexHttpClient(convexUrl);
-
-function getServerToken(): string {
-  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
-  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured");
-  return token;
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 export async function GET() {
@@ -22,12 +16,18 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const groups = await convex.query(api.watchlists.getWatchlistGroups, {
-    serverToken: getServerToken(),
-    clerkId,
-  });
-
-  return NextResponse.json(groups);
+  try {
+    const groups = await convex.query(api.watchlists.getWatchlistGroups, {
+      serverToken: getServerToken(),
+      clerkId,
+    });
+    return NextResponse.json(groups);
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Failed to load watchlist groups", details: getErrorMessage(error) },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -49,15 +49,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Name is required" }, { status: 400 });
   }
 
-  const id = await convex.mutation(api.watchlists.createWatchlistGroup, {
-    serverToken: getServerToken(),
-    clerkId,
-    name: body.name.trim(),
-    description: body.description,
-    icon: body.icon,
-    color: body.color,
-  });
+  try {
+    const id = await convex.mutation(api.watchlists.createWatchlistGroup, {
+      serverToken: getServerToken(),
+      clerkId,
+      name: body.name.trim(),
+      description: body.description,
+      icon: body.icon,
+      color: body.color,
+    });
 
-  return NextResponse.json({ id });
+    return NextResponse.json({ id });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    if (message === "User not found") {
+      return NextResponse.json({ error: message }, { status: 404 });
+    }
+
+    return NextResponse.json(
+      { error: "Failed to create watchlist group", details: message },
+      { status: 500 },
+    );
+  }
 }
 

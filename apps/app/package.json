@@ -39,7 +39,6 @@
     "convex": "^1.31.6",
     "dub": "^0.36.6",
     "effect": "^3.18.4",
-    "framer-motion": "^12.29.2",
     "geist": "^1.4.2",
     "lightweight-charts": "^5.0.7",
     "lodash.debounce": "^4.0.8",

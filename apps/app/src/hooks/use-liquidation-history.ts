@@ -1,6 +1,8 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { CoinGlassApi } from '@/lib/effect/coinglass-api'
+import { runPromise } from '@/lib/effect/runtime-coinglass'
 
 interface LiquidationHistoryItem {
   timestamp: number
@@ -15,6 +17,7 @@ interface LiquidationHistoryResponse {
   data: LiquidationHistoryItem[]
   count: number
   symbol: string
+  originalInput: string
   interval: string
   exchangeList: string
   lastUpdated: string
@@ -45,30 +48,39 @@ export function useLiquidationHistory(params: UseLiquidationHistoryParams = {}) 
     endTime
   } = params
 
+  function formatCoinGlassError(error: unknown): string {
+    if (error && typeof error === "object" && "_tag" in error) {
+      const tagged = error as { _tag: string; message?: unknown; status?: unknown }
+      if (typeof tagged.message === "string") return tagged.message
+      if (typeof tagged.status === "number") return `CoinGlass request failed (${tagged.status})`
+      return `CoinGlass request failed (${tagged._tag})`
+    }
+
+    return error instanceof Error ? error.message : String(error)
+  }
+
   return useQuery({
     queryKey: ['liquidation-history', symbol, interval, exchangeList, limit, startTime, endTime],
     queryFn: async (): Promise<LiquidationHistoryResponse> => {
-      const searchParams = new URLSearchParams({
-        symbol,
-        interval,
-        exchange_list: exchangeList,
-        limit: limit.toString(),
-      })
+      try {
+        const result = await runPromise(
+          CoinGlassApi.getLiquidationHistory({
+            symbol,
+            interval,
+            exchangeList,
+            limit,
+            startTime,
+            endTime,
+          }),
+        )
 
-      if (startTime) {
-        searchParams.append('start_time', startTime.toString())
+        return {
+          ...result,
+          data: result.data.map((row) => ({ ...row })),
+        }
+      } catch (error) {
+        throw new Error(formatCoinGlassError(error))
       }
-      if (endTime) {
-        searchParams.append('end_time', endTime.toString())
-      }
-
-      const response = await fetch(`/api/coinglass/liquidation/aggregated-history?${searchParams}`)
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch liquidation history')
-      }
-      
-      return response.json()
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes

@@ -13,7 +13,7 @@ export class WatchlistAuthError extends Schema.TaggedError<WatchlistAuthError>()
 
 export class WatchlistValidationError extends Schema.TaggedError<WatchlistValidationError>()(
   "WatchlistValidationError",
-  { field: Schema.String, reason: Schema.String }
+  { field: Schema.String, reason: Schema.String, message: Schema.String }
 ) {}
 
 export class ApiRequestError extends Schema.TaggedError<ApiRequestError>()(
@@ -24,6 +24,8 @@ export class ApiRequestError extends Schema.TaggedError<ApiRequestError>()(
 // Domain models with validation
 export class WatchlistGroup extends Schema.Class<WatchlistGroup>("WatchlistGroup")({
   _id: Schema.String,
+  _creationTime: Schema.Number,
+  userId: Schema.String,
   name: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(50)),
   slug: Schema.String,
   description: Schema.optional(Schema.String),
@@ -32,6 +34,14 @@ export class WatchlistGroup extends Schema.Class<WatchlistGroup>("WatchlistGroup
   isDefault: Schema.Boolean,
   createdAt: Schema.Number,
   updatedAt: Schema.Number,
+}) {}
+
+export class WatchlistItem extends Schema.Class<WatchlistItem>("WatchlistItem")({
+  _id: Schema.String,
+  _creationTime: Schema.Number,
+  userId: Schema.String,
+  watchlistGroupId: Schema.String,
+  coinId: Schema.String,
 }) {}
 
 export class CoinGeckoWatchlistCoin extends Schema.Class<CoinGeckoWatchlistCoin>("CoinGeckoWatchlistCoin")({

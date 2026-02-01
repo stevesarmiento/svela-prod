@@ -218,7 +218,7 @@ export function TopNav() {
                 <div className="flex flex-col gap-0">
                   <h1 className="text-sm font-semibold text-gray-900 dark:text-white">
                     {isLoading ? (
-                      <div className="h-4 w-16 bg-gray-200 dark:bg-white/10 rounded animate-pulse" />
+                      <div className="h-4 w-16 bg-gray-200 dark:bg-white/10 rounded animate-pulse motion-reduce:animate-none" />
                     ) : (
                       tokenData?.symbol || 'Token Details'
                     )}

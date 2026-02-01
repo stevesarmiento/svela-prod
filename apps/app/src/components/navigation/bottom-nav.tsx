@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import {
   useNavigationMode,
   useSelectionMode,
@@ -21,6 +21,7 @@ export function BottomNav() {
   const { selectionState } = useSelectionMode();
   const { isCommandOpen, setIsCommandOpen } = useOverlayState();
   const { commandContext, setCommandContext } = useCommandContext();
+  const shouldReduceMotion = useReducedMotion();
   
   // Initialize sequential shortcuts (still needed for functionality)
   useSequentialShortcuts();
@@ -54,7 +55,7 @@ export function BottomNav() {
               scale: isCommandOpen && mode === 'navigation' ? 0.8 : 1,
               pointerEvents: isCommandOpen && mode === 'navigation' ? 'none' : 'auto'
             }}
-            transition={{
+            transition={shouldReduceMotion ? { duration: 0 } : {
               type: "spring",
               stiffness: 280,
               damping: 18,
@@ -76,15 +77,15 @@ export function BottomNav() {
           {mode === 'navigation' && (
             <motion.div
               key="command-search"
-              layoutId="action-button"
-              initial={{ opacity: 0, scale: 0.95 }}
+              layoutId={shouldReduceMotion ? undefined : "action-button"}
+              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
               animate={{ 
                 opacity: 1, 
                 scale: 1,
                 pointerEvents: isCommandOpen ? 'auto' : 'none'
               }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{
+              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.95 }}
+              transition={shouldReduceMotion ? { duration: 0 } : {
                 type: "spring",
                 stiffness: 280,
                 damping: 18,
@@ -106,11 +107,11 @@ export function BottomNav() {
           {mode === 'selection' && selectionState && (
             <motion.div
               key="back-button"
-              layoutId="action-button"
-              initial={{ opacity: 0, scale: 0.95 }}
+              layoutId={shouldReduceMotion ? undefined : "action-button"}
+              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{
+              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.95 }}
+              transition={shouldReduceMotion ? { duration: 0 } : {
                 type: "spring",
                 stiffness: 280,
                 damping: 18,

@@ -76,7 +76,7 @@ export function ChatInput({
           error ? 'text-red-400' : 'text-white/70'
         }`}>
           <div className={`w-2 h-2 rounded-full ${
-            error ? 'bg-red-400' : 'bg-blue-400 animate-pulse'
+            error ? 'bg-red-400' : 'bg-blue-400 animate-pulse motion-reduce:animate-none'
           }`} />
           <span>{getStatusMessage()}</span>
         </div>

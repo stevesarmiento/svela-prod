@@ -210,7 +210,7 @@ export function WatchlistMultiLineChart({
   const isDarkMode = resolvedTheme === 'dark'
   
   
-  const watchlistGroupsData = useWatchlistGroups()
+  const watchlistGroupsData = useWatchlistGroups() as WatchlistGroup[] | undefined
   
   // Filter to only selected watchlists
   const activeWatchlists = useMemo(() => {
@@ -218,7 +218,6 @@ export function WatchlistMultiLineChart({
     return groups.filter(group => selectedWatchlists.has(group._id))
   }, [watchlistGroupsData, selectedWatchlists])
 
-  // ✅ IMPROVED: Simplified data update handler
   const handleDataUpdate = React.useCallback((groupId: WatchlistGroupId, data: WatchlistSeries | null) => {
     setWatchlistData(prev => {
       const newMap = new Map(prev)
@@ -381,12 +380,18 @@ export function WatchlistMultiLineChart({
       // Add tooltip
       const tooltipEl = document.createElement("div")
       const tooltipRoot = createRoot(tooltipEl)
-      tooltipEl.className = `fixed hidden overflow-hidden text-[11px] rounded-xl w-[220px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-all duration-100 ease-in-out ${
+      tooltipEl.className = `fixed overflow-hidden text-[11px] rounded-xl w-[220px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-opacity duration-100 ease-out will-change-transform ${
         isDarkMode 
           ? 'text-white bg-zinc-900/95 border border-zinc-700/50' 
           : 'text-gray-900 bg-white/95 border border-gray-200/50'
       }`
+      tooltipEl.style.left = "0px"
+      tooltipEl.style.top = "0px"
+      tooltipEl.style.opacity = "0"
+      tooltipEl.style.visibility = "hidden"
+      tooltipEl.style.transform = "translate3d(0px, 0px, 0)"
       document.body.appendChild(tooltipEl)
+      let isTooltipVisible = false
 
       // Subscribe to crosshair move
       chart.subscribeCrosshairMove((param) => {
@@ -396,7 +401,9 @@ export function WatchlistMultiLineChart({
           param.point.x < 0 ||
           param.point.y < 0
         ) {
-          tooltipEl.style.display = "none"
+          tooltipEl.style.opacity = "0"
+          tooltipEl.style.visibility = "hidden"
+          isTooltipVisible = false
           return
         }
 
@@ -418,11 +425,17 @@ export function WatchlistMultiLineChart({
         })
 
         if (watchlistData.length === 0) {
-          tooltipEl.style.display = "none"
+          tooltipEl.style.opacity = "0"
+          tooltipEl.style.visibility = "hidden"
+          isTooltipVisible = false
           return
         }
 
-        tooltipEl.style.display = "block"
+        if (!isTooltipVisible) {
+          tooltipEl.style.opacity = "1"
+          tooltipEl.style.visibility = "visible"
+          isTooltipVisible = true
+        }
         tooltipRoot.render(
           <TooltipContent
             watchlistData={watchlistData}
@@ -452,8 +465,7 @@ export function WatchlistMultiLineChart({
           top = 10
         }
 
-        tooltipEl.style.left = `${left}px`
-        tooltipEl.style.top = `${top}px`
+        tooltipEl.style.transform = `translate3d(${left}px, ${top}px, 0)`
       })
 
       cleanup = () => {

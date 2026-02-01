@@ -2,6 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { useCoinGeckoMarketData } from "./use-coingecko-market-data"
+import { CoinsInternalApi } from "@/lib/effect/coins-internal-api"
+import { runPromise } from "@/lib/effect/runtime-coins-internal"
 
 interface TokenData {
   id: string
@@ -21,9 +23,8 @@ export function useTokenData(coinId?: string) {
   const { data: coin, isLoading: isCoinLoading } = useQuery({
     queryKey: ["coingecko-coin", coinId],
     queryFn: async () => {
-      const response = await fetch(`/api/internal/coins/coingecko/${coinId}`)
-      if (!response.ok) throw new Error("Failed to load coin metadata")
-      return await response.json()
+      if (!coinId) return null
+      return await runPromise(CoinsInternalApi.getCoinGeckoCoinById({ id: coinId }))
     },
     enabled: !!coinId,
     staleTime: 10 * 60 * 1000,

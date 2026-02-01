@@ -1,26 +1,24 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { ConvexHttpClient } from "convex/browser"
 import { auth } from "@clerk/nextjs/server"
+import { Effect, Schedule, Schema } from "effect"
 import { api } from "../../../../../convex/_generated/api"
-import { getUserApiKey, getApiHeaders, updateUserApiKeyRateLimit, reportApiKeyError } from "@/lib/user-api-keys"
+import {
+  getApiHeaders,
+  getUserApiKey,
+  reportApiKeyError,
+  updateUserApiKeyRateLimit,
+} from "@/lib/user-api-keys"
+import { convex, getServerToken } from "@/lib/convex-server"
+import { runPromise } from "@/lib/effect/runtime-server"
 
 const MarketsParamsSchema = z.object({
   ids: z.string(), // Comma-separated CoinGecko IDs (e.g., "bitcoin,ethereum")
-  vs_currency: z.string().optional().default('usd'),
+  vs_currency: z.string().optional().default("usd"),
   include_24hr_change: z.boolean().optional().default(true),
   include_24hr_vol: z.boolean().optional().default(true),
   include_last_updated_at: z.boolean().optional().default(true),
 })
-
-// Initialize Convex client for caching
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
-
-function getServerToken(): string {
-  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN
-  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured")
-  return token
-}
 
 interface CoinGeckoMarketData {
   id: string
@@ -49,148 +47,233 @@ interface CoinGeckoMarketData {
   atl_date: string | null
   roi: {
     times: number
-    currency: string  
+    currency: string
     percentage: number
   } | null
   last_updated: string
 }
 
+class CoinGeckoMarketsFetchError extends Schema.TaggedError<CoinGeckoMarketsFetchError>()(
+  "CoinGeckoMarketsFetchError",
+  { endpoint: Schema.String, message: Schema.String },
+) {}
+
+class CoinGeckoMarketsUpstreamError extends Schema.TaggedError<CoinGeckoMarketsUpstreamError>()(
+  "CoinGeckoMarketsUpstreamError",
+  {
+    endpoint: Schema.String,
+    status: Schema.Number,
+    statusText: Schema.String,
+    message: Schema.String,
+  },
+) {}
+
+class CoinGeckoMarketsDecodeError extends Schema.TaggedError<CoinGeckoMarketsDecodeError>()(
+  "CoinGeckoMarketsDecodeError",
+  { endpoint: Schema.String, message: Schema.String },
+) {}
+
+class CoinGeckoMarketsTimeoutError extends Schema.TaggedError<CoinGeckoMarketsTimeoutError>()(
+  "CoinGeckoMarketsTimeoutError",
+  { endpoint: Schema.String, message: Schema.String },
+) {}
+
+interface MarketsRouteOk {
+  readonly _tag: "Ok"
+  readonly response: Response
+  readonly rawData: ReadonlyArray<CoinGeckoMarketData>
+}
+
+interface MarketsRouteErr {
+  readonly _tag: "Err"
+  readonly response: Response
+}
+
+type MarketsRouteResult = MarketsRouteOk | MarketsRouteErr
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
-  
+
   const params = MarketsParamsSchema.safeParse({
-    ids: searchParams.get('ids'),
-    vs_currency: searchParams.get('vs_currency') || undefined,
-    include_24hr_change: searchParams.get('include_24hr_change') === 'true',
-    include_24hr_vol: searchParams.get('include_24hr_vol') === 'true',
-    include_last_updated_at: searchParams.get('include_last_updated_at') === 'true',
+    ids: searchParams.get("ids"),
+    vs_currency: searchParams.get("vs_currency") || undefined,
+    include_24hr_change: searchParams.get("include_24hr_change") === "true",
+    include_24hr_vol: searchParams.get("include_24hr_vol") === "true",
+    include_last_updated_at: searchParams.get("include_last_updated_at") === "true",
   })
 
   if (!params.success) {
-    return NextResponse.json(
-      { error: "Invalid parameters", details: params.error.issues },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: "Invalid parameters", details: params.error.issues }, { status: 400 })
   }
 
   const { ids, vs_currency, include_24hr_change, include_24hr_vol, include_last_updated_at } = params.data
 
+  let clerkId: string | null = null
   try {
-    console.log('🎯 CoinGecko Markets API request:', {
-      ids,
-      vs_currency,
-      include_24hr_change,
-      include_24hr_vol,
-      include_last_updated_at
-    })
+    const authResult = await auth()
+    clerkId = authResult.userId
+  } catch {
+    // Ignore and fall back to env key.
+  }
 
-    // Get user authentication (optional for API key resolution)
-    // Note: auth() may fail in API routes due to middleware config, so we handle it gracefully
-    let clerkId: string | null = null;
-    try {
-      const authResult = await auth();
-      clerkId = authResult.userId;
-    } catch (error) {
-      // Auth failed, will use environment fallback
-      console.log('Auth not available in API route, using environment fallback:', error instanceof Error ? error.message : 'Unknown error');
-    }
-    
-    // Get API key - user's key takes precedence over environment variable
-    const apiKeyResult = await getUserApiKey(clerkId, 'coingecko', 'X_CG_PRO_API_KEY');
-    
-    if (!apiKeyResult.key) {
-      throw new Error('CoinGecko API key not available. Please add your API key in settings or configure X_CG_PRO_API_KEY environment variable.');
-    }
+  const apiKeyResult = await getUserApiKey(clerkId, "coingecko", "X_CG_PRO_API_KEY")
 
-    console.log('🔑 API Key check:', {
-      hasKey: !!apiKeyResult.key,
-      isUserKey: apiKeyResult.isUserKey,
-      keySource: apiKeyResult.isUserKey ? 'user' : 'environment',
-      keyLength: apiKeyResult.key?.length || 0,
-    })
-
-    // Check Convex configuration
-    if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
-      console.warn('⚠️ NEXT_PUBLIC_CONVEX_URL not configured - database storage will fail')
-    }
-
-    const url = new URL(`https://pro-api.coingecko.com/api/v3/coins/markets`)
-    url.searchParams.set('vs_currency', vs_currency)
-    url.searchParams.set('ids', ids)
-    if (include_24hr_change) url.searchParams.set('price_change_percentage', '24h')
-    url.searchParams.set('order', 'market_cap_desc')
-    url.searchParams.set('per_page', '250')
-    url.searchParams.set('page', '1')
-    url.searchParams.set('sparkline', 'false')
-
-    console.log('🌐 Fetching markets data from CoinGecko:', url.toString())
-
-    const headers = getApiHeaders('coingecko', apiKeyResult.key);
-    
-    const response = await fetch(url.toString(), {
-      headers: {
-        ...headers,
-        'Accept': 'application/json',
+  if (!apiKeyResult.key) {
+    return NextResponse.json(
+      {
+        error:
+          "CoinGecko API key not available. Please add your API key in settings or configure X_CG_PRO_API_KEY environment variable.",
       },
-    })
+      { status: 500 },
+    )
+  }
 
-    // Handle rate limiting and update user API key stats if applicable
-    const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
-    const rateLimitReset = response.headers.get('x-ratelimit-reset');
-    
-    if (apiKeyResult.isUserKey && rateLimitRemaining && rateLimitReset) {
-      updateUserApiKeyRateLimit(
-        clerkId,
-        'coingecko',
-        parseInt(rateLimitRemaining),
-        parseInt(rateLimitReset) * 1000 // Convert to milliseconds
-      ).catch(console.error);
-    }
+  const url = new URL("https://pro-api.coingecko.com/api/v3/coins/markets")
+  url.searchParams.set("vs_currency", vs_currency)
+  url.searchParams.set("ids", ids)
+  if (include_24hr_change) url.searchParams.set("price_change_percentage", "24h")
+  url.searchParams.set("order", "market_cap_desc")
+  url.searchParams.set("per_page", "250")
+  url.searchParams.set("page", "1")
+  url.searchParams.set("sparkline", "false")
 
-    if (!response.ok) {
-      const errorMessage = `CoinGecko API error: ${response.status} ${response.statusText}`;
-      
-      // Report error for user API keys
-      if (apiKeyResult.isUserKey) {
-        reportApiKeyError(clerkId, 'coingecko', errorMessage).catch(console.error);
+  const headers = getApiHeaders("coingecko", apiKeyResult.key)
+
+  const endpoint = url.toString()
+
+  const fetchMarketsEffect: Effect.Effect<
+    Array<CoinGeckoMarketData>,
+    | CoinGeckoMarketsFetchError
+    | CoinGeckoMarketsUpstreamError
+    | CoinGeckoMarketsDecodeError
+    | CoinGeckoMarketsTimeoutError
+  > = Effect.tryPromise({
+    try: () =>
+      fetch(endpoint, {
+        headers: {
+          ...headers,
+          Accept: "application/json",
+        },
+      }),
+    catch: (error) => new CoinGeckoMarketsFetchError({ endpoint, message: String(error) }),
+  }).pipe(
+    Effect.flatMap(
+      (response): Effect.Effect<Array<CoinGeckoMarketData>, CoinGeckoMarketsUpstreamError | CoinGeckoMarketsDecodeError> => {
+      const rateLimitRemaining = response.headers.get("x-ratelimit-remaining")
+      const rateLimitReset = response.headers.get("x-ratelimit-reset")
+
+      if (apiKeyResult.isUserKey && rateLimitRemaining && rateLimitReset) {
+        void updateUserApiKeyRateLimit(
+          clerkId,
+          "coingecko",
+          parseInt(rateLimitRemaining),
+          parseInt(rateLimitReset) * 1000,
+        ).catch(() => {
+          // Ignore metrics update errors.
+        })
       }
-      
-      throw new Error(errorMessage);
-    }
 
-    const rawData: CoinGeckoMarketData[] = await response.json()
-    console.log(`📊 Received ${rawData.length} market data points from CoinGecko`)
-    
-    // Log detailed data for debugging
-    if (rawData.length > 0 && rawData[0]) {
-      const sample = rawData[0]
-      console.log('🔍 Full market data structure:', {
-        id: sample.id,
-        symbol: sample.symbol,
-        name: sample.name,
-        image: sample.image,
-        current_price: sample.current_price,
-        market_cap: sample.market_cap,
-        market_cap_rank: sample.market_cap_rank,
-        total_volume: sample.total_volume,
-        price_change_24h: sample.price_change_24h,
-        price_change_percentage_24h: sample.price_change_percentage_24h,
-        circulating_supply: sample.circulating_supply,
-        max_supply: sample.max_supply,
-        last_updated: sample.last_updated
+      if (!response.ok) {
+        const errorMessage = `CoinGecko API error: ${response.status} ${response.statusText}`
+        if (apiKeyResult.isUserKey) {
+          void reportApiKeyError(clerkId, "coingecko", errorMessage).catch(() => {
+            // Ignore reporting errors.
+          })
+        }
+
+        return Effect.fail(
+          new CoinGeckoMarketsUpstreamError({
+            endpoint,
+            status: response.status,
+            statusText: response.statusText,
+            message: errorMessage,
+          }),
+        )
+      }
+
+      return Effect.tryPromise({
+        try: async () => (await response.json()) as Array<CoinGeckoMarketData>,
+        catch: (error) => new CoinGeckoMarketsDecodeError({ endpoint, message: String(error) }),
       })
-      
-      console.log('🔍 Raw API response (first item):', JSON.stringify(sample, null, 2))
-    }
-    
-    // Log all coin IDs we got back
-    console.log('🪙 Received coin IDs:', rawData.map(coin => coin.id))
+    }),
+    Effect.retry(Schedule.exponential("500 millis", 2)),
+    Effect.timeout("15 seconds"),
+    Effect.catchTag("TimeoutException", () =>
+      Effect.fail(new CoinGeckoMarketsTimeoutError({ endpoint, message: "Request timed out" })),
+    ),
+  )
 
-    // Store in Convex database
-    if (process.env.NEXT_PUBLIC_CONVEX_URL && rawData.length > 0) {
-      console.log('💾 Storing market data in Convex (batch)...')
+  const program: Effect.Effect<MarketsRouteResult, never> = fetchMarketsEffect.pipe(
+    Effect.map((rawData) => {
+      return {
+        _tag: "Ok" as const,
+        rawData,
+        response: NextResponse.json({
+          data: rawData,
+          cached: false,
+          timestamp: Date.now(),
+          apiKeySource: apiKeyResult.isUserKey ? "user" : "environment",
+        }),
+      }
+    }),
+    Effect.catchTags({
+      CoinGeckoMarketsFetchError: (e) => {
+        if (apiKeyResult.isUserKey) {
+          void reportApiKeyError(clerkId, "coingecko", e.message).catch(() => {
+            // Ignore reporting errors.
+          })
+        }
 
-      const items = rawData.map((coinData) => ({
+        return Effect.succeed({
+          _tag: "Err" as const,
+          response: NextResponse.json({ error: "Failed to fetch market data", details: e.message }, { status: 500 }),
+        })
+      },
+      CoinGeckoMarketsUpstreamError: (e) => {
+        if (apiKeyResult.isUserKey) {
+          void reportApiKeyError(clerkId, "coingecko", e.message).catch(() => {
+            // Ignore reporting errors.
+          })
+        }
+
+        return Effect.succeed({
+          _tag: "Err" as const,
+          response: NextResponse.json({ error: "Failed to fetch market data", details: e.message }, { status: 500 }),
+        })
+      },
+      CoinGeckoMarketsDecodeError: (e) => {
+        if (apiKeyResult.isUserKey) {
+          void reportApiKeyError(clerkId, "coingecko", e.message).catch(() => {
+            // Ignore reporting errors.
+          })
+        }
+
+        return Effect.succeed({
+          _tag: "Err" as const,
+          response: NextResponse.json({ error: "Failed to fetch market data", details: e.message }, { status: 500 }),
+        })
+      },
+      CoinGeckoMarketsTimeoutError: (e) => {
+        if (apiKeyResult.isUserKey) {
+          void reportApiKeyError(clerkId, "coingecko", e.message).catch(() => {
+            // Ignore reporting errors.
+          })
+        }
+
+        return Effect.succeed({
+          _tag: "Err" as const,
+          response: NextResponse.json({ error: "Failed to fetch market data", details: e.message }, { status: 500 }),
+        })
+      },
+    }),
+  )
+
+  const result = await runPromise(program)
+
+  if (result._tag === "Ok") {
+    // Fire-and-forget cache write to Convex (do not block the response).
+    if (result.rawData.length > 0) {
+      const items = result.rawData.map((coinData) => ({
         coingeckoId: coinData.id,
         symbol: coinData.symbol,
         name: coinData.name,
@@ -218,51 +301,16 @@ export async function GET(request: NextRequest) {
         lastUpdated: coinData.last_updated,
       }))
 
-      // Fire-and-forget: don't block the HTTP response on caching.
       void convex
         .mutation(api.coingeckoMarkets.upsertMarketDataBatch, {
           serverToken: getServerToken(),
           items,
         })
-        .then(() => {
-          console.log('✅ Successfully stored market data in Convex (batch)')
-        })
-        .catch((convexError) => {
-          console.error('❌ Failed to store in Convex (batch):', convexError)
+        .catch(() => {
+          // Don't fail the request if caching fails.
         })
     }
-
-    // Prepare response data
-    const responseData = {
-      data: rawData,
-      cached: false,
-      timestamp: Date.now(),
-      apiKeySource: apiKeyResult.isUserKey ? 'user' : 'environment'
-    }
-    
-    console.log('📤 Sending response:', {
-      data_count: rawData.length,
-      response_structure: {
-        data: 'array',
-        cached: responseData.cached,
-        timestamp: responseData.timestamp,
-        apiKeySource: responseData.apiKeySource
-      },
-      first_coin_id: rawData[0]?.id,
-      success: true
-    })
-
-    // Return the formatted data
-    return NextResponse.json(responseData)
-
-  } catch (error) {
-    console.error('❌ Markets API Error:', error)
-    return NextResponse.json(
-      { 
-        error: 'Failed to fetch market data',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    )
   }
-} 
+
+  return result.response
+}

@@ -135,7 +135,7 @@ const TokenPageSkeleton = memo(function TokenPageSkeleton() {
   return (
     <div className="min-h-screen w-full px-4 relative">
       <div className="mx-auto py-6 px-4 relative z-10">
-        <div className="animate-pulse">
+        <div className="animate-pulse motion-reduce:animate-none">
           <div className="h-96 bg-zinc-950/20 rounded-[20px] mb-6" />
           <div className="h-32 bg-zinc-950/20 rounded-[20px] mb-6" />
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">

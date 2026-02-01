@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { NavigationItems } from './navigation-items';
 import { SelectionContent } from './selection-content';
 import type { SelectionState } from './bottom-nav-context';
@@ -20,6 +20,8 @@ const NavigationDockComponent = ({
   isCommandOpen,
   onOpenCommandSearch
 }: NavigationDockProps) => {
+  const shouldReduceMotion = useReducedMotion()
+
   const dockClassName = React.useMemo(() => {
     return `relative rounded-[20px] overflow-hidden p-1 h-[56px] w-auto flex items-center justify-center
            shadow-[0_4px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
@@ -34,8 +36,8 @@ const NavigationDockComponent = ({
     <AnimatePresence mode="popLayout">
       <motion.div 
         className={dockClassName}
-        layout
-        transition={{
+        layout={!shouldReduceMotion}
+        transition={shouldReduceMotion ? { duration: 0 } : {
           type: "spring",
           stiffness: 280,
           damping: 18,
@@ -49,12 +51,12 @@ const NavigationDockComponent = ({
           {mode === 'navigation' && (
             <motion.div
               key="navigation"
-              layoutId="navigation"
-              initial={{ opacity: 0, scale: 0.9 }}
+              layoutId={shouldReduceMotion ? undefined : "navigation"}
+              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
               className="w-auto"
-              transition={{
+              transition={shouldReduceMotion ? { duration: 0 } : {
                 type: "spring",
                 stiffness: 280,
                 damping: 18,
@@ -68,11 +70,11 @@ const NavigationDockComponent = ({
           {mode === 'selection' && selectionState && (
             <motion.div
               key="selection"
-              layoutId="navigation"
-              initial={{ opacity: 0, scale: 0.9 }}
+              layoutId={shouldReduceMotion ? undefined : "navigation"}
+              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{
+              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
+              transition={shouldReduceMotion ? { duration: 0 } : {
                 type: "spring",
                 stiffness: 280,
                 damping: 18,

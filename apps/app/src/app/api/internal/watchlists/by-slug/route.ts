@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../../convex/_generated/api";
+import { convex, getServerToken } from "@/lib/convex-server";
 
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-if (!convexUrl) throw new Error("NEXT_PUBLIC_CONVEX_URL is not configured");
-
-const convex = new ConvexHttpClient(convexUrl);
-
-function getServerToken(): string {
-  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
-  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured");
-  return token;
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 export async function GET(req: NextRequest) {
@@ -27,12 +21,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "slug is required" }, { status: 400 });
   }
 
-  const result = await convex.query(api.watchlists.getWatchlistBySlug, {
-    serverToken: getServerToken(),
-    clerkId,
-    slug,
-  });
+  try {
+    const result = await convex.query(api.watchlists.getWatchlistBySlug, {
+      serverToken: getServerToken(),
+      clerkId,
+      slug,
+    });
 
-  return NextResponse.json(result);
+    return NextResponse.json(result);
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Failed to load watchlist by slug", details: getErrorMessage(error) },
+      { status: 500 },
+    );
+  }
 }
 

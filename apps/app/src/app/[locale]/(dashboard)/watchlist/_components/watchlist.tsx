@@ -37,6 +37,7 @@ import { CreateWatchlist } from './create-watchlist'
 import { Kbd } from "@v1/ui/kbd"
 import { COLOR_THEMES } from "@/components/color-picker"
 import { useLatest } from "@/hooks/use-latest"
+import { useReducedMotion } from "motion/react"
 
 interface WatchlistProps {
   activeTimeScale?: string;
@@ -79,6 +80,8 @@ function WatchlistTableSection({
   onSetHover,
   onInlineChartError,
 }: WatchlistTableSectionProps) {
+  const shouldReduceMotion = useReducedMotion()
+
   // Stable wrapper to keep column defs focused and avoid re-creating work in parent.
   const handleSelectAllWrapper = useCallback((checked: boolean) => {
     const coinIds = checked ? coins.map(coin => coin.id.toString()) : [];
@@ -94,8 +97,9 @@ function WatchlistTableSection({
     removingCoins,
     hoveredRowId,
     hasSelectedCoins,
+    shouldReduceMotion: shouldReduceMotion ?? false,
     onInlineChartError,
-  }), [onRemove, selectedCoins, onCoinSelect, handleSelectAllWrapper, coins.length, removingCoins, hoveredRowId, hasSelectedCoins, onInlineChartError]);
+  }), [onRemove, selectedCoins, onCoinSelect, handleSelectAllWrapper, coins.length, removingCoins, hoveredRowId, hasSelectedCoins, shouldReduceMotion, onInlineChartError]);
 
   const table = useReactTable({
     data: coins,
@@ -434,7 +438,10 @@ export function Watchlist({
         <Tabs value={gridViewMode}>
           <TabsContent value="grid" className="mt-0">
             <WatchlistsGrid 
-              onSelectWatchlist={selectWatchlistGroup}
+              onSelectWatchlist={(group) => {
+                selectWatchlistGroup(group)
+                onGridViewModeChange?.('chart')
+              }}
               viewMode="grid"
               activeTimeScale={activeTimeScale}
               onTimeScaleChange={onTimeScaleChange}

@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import { Effect, Exit, Cause } from "effect"
 import { WatchlistCard } from './watchlist-card'
 import { Button } from '@v1/ui/button'
 import { Plus, Grid3X3 } from 'lucide-react'
 import { toast } from '@v1/ui/use-toast'
+import { env } from '@/env.mjs'
 import { 
   useWatchlistGroups,
   useWatchlistByGroup
@@ -19,6 +20,9 @@ import { cn } from '@v1/ui/cn'
 import { Input } from '@v1/ui/input'
 import { Tabs, TabsContent } from '@v1/ui/tabs'
 import { WatchlistMultiLineChart } from './watchlist-multi-line-chart'
+import { runPromiseExit } from '@/lib/effect/runtime-watchlist'
+
+const isDebug = env.NODE_ENV === "development"
 
 interface CoinGeckoWatchlistCoin {
   id: string; // CoinGecko string ID
@@ -74,7 +78,7 @@ function WatchlistGroupWithCoins({
   editingIcon?: string
   editingColor?: string
 }) {
-  const groupWatchlist = useWatchlistByGroup(group._id)
+  const groupWatchlist = useWatchlistByGroup(group._id) as Array<{ coinId: string }> | undefined
   const prevCoinsRef = useRef<CoinGeckoWatchlistCoin[]>([])
   
   // For watchlist cards only: Convert to CoinGecko IDs for display
@@ -83,24 +87,9 @@ function WatchlistGroupWithCoins({
     const ids = groupWatchlist?.map(item => item.coinId) || []
     return ids
   }, [groupWatchlist])
-
-  // Debug logging for edit mode - separate useEffect to avoid dependency issues
-  useEffect(() => {
-    if (isEditing) {
-      console.log('🔍 WatchlistGroupWithCoins DEBUG (Edit Mode):', {
-        groupName: group.name,
-        groupId: group._id,
-        isEditing,
-        groupWatchlistLength: groupWatchlist?.length || 0,
-        groupWatchlistData: groupWatchlist,
-        coingeckoIdsLength: coingeckoIds.length,
-        coingeckoIds: coingeckoIds
-      })
-    }
-  }, [isEditing, group.name, group._id, groupWatchlist, coingeckoIds])
   
   // Use CoinGecko data only for watchlist card display
-  const { data: coins = [], isLoading, error } = useCoinGeckoWatchlistCoins(coingeckoIds)
+  const { data: coins = [] } = useCoinGeckoWatchlistCoins(coingeckoIds)
   
   // Maintain previous coin data during edit transitions to prevent empty state
   const stableCoins = useMemo(() => {
@@ -110,23 +99,10 @@ function WatchlistGroupWithCoins({
     }
     // If no coins and we're editing, use previous data to prevent flash of empty state
     if (isEditing && prevCoinsRef.current.length > 0) {
-      console.log('🔄 Using cached coin data during edit mode for:', group.name)
       return prevCoinsRef.current
     }
     return coins
   }, [coins, isEditing, group.name])
-  
-  // Debug logging for coin data in edit mode
-  if (isEditing) {
-    console.log('🪙 Coins data DEBUG (Edit Mode):', {
-      groupName: group.name,
-      originalCoinsLength: coins.length,
-      stableCoinsLength: stableCoins.length,
-      isLoading,
-      error,
-      usingCached: stableCoins.length > 0 && coins.length === 0
-    })
-  }
   
   return isEditing ? (
     <div ref={editCardRef as React.RefObject<HTMLDivElement>}>
@@ -172,7 +148,7 @@ export function WatchlistsGrid({
   const [editingColor, setEditingColor] = useState('')
 
   // Hooks
-  const watchlistGroups = useWatchlistGroups()
+  const watchlistGroups = useWatchlistGroups() as WatchlistGroup[] | undefined
   const { updateGroup, deleteGroup } = useWatchlistOperations()
   const { selectedGroup } = useWatchlist()
 
@@ -181,20 +157,38 @@ export function WatchlistsGrid({
 
     const program = updateGroup(editingGroup._id, name, undefined, icon, color).pipe(
       Effect.catchTags({
-        WatchlistValidationError: (e) => Effect.sync(() => {
-          toast({ 
-            title: "Validation Error", 
-            description: `${e.field}: ${e.reason}`, 
-            variant: "destructive" 
-          })
-        }),
-        WatchlistAuthError: (e) => Effect.sync(() => {
-          toast({ 
-            title: "Authentication Error", 
-            description: e.message, 
-            variant: "destructive" 
-          })
-        })
+        WatchlistValidationError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Validation Error",
+              description: `${e.field}: ${e.reason}`,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        WatchlistAuthError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Authentication Error",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        WatchlistNotFoundError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Not Found",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        ApiRequestError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Request Error",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
       }),
       Effect.tap(() => Effect.sync(() => {
         toast({
@@ -205,19 +199,12 @@ export function WatchlistsGrid({
         setEditingName('')
         setEditingIcon('')
         setEditingColor('')
-      })),
-      Effect.tapError(() => Effect.sync(() => {
-        toast({
-          title: "Error",
-          description: "Failed to update watchlist",
-          variant: "destructive",
-        })
       }))
     )
 
-    const exit = await Effect.runPromiseExit(program)
+    const exit = await runPromiseExit(program)
     
-    if (Exit.isFailure(exit)) {
+    if (isDebug && Exit.isFailure(exit)) {
       console.error("Failed to update watchlist:", Cause.pretty(exit.cause))
     }
   }, [editingGroup, updateGroup])
@@ -246,18 +233,37 @@ export function WatchlistsGrid({
           description: "Watchlist deleted successfully",
         })
       })),
-      Effect.catchAll(() => Effect.sync(() => {
-        toast({
-          title: "Error",
-          description: "Failed to delete watchlist",
-          variant: "destructive",
-        })
-      }))
+      Effect.catchTags({
+        WatchlistAuthError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Authentication Error",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        WatchlistNotFoundError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Not Found",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        ApiRequestError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Request Error",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+      })
     )
 
-    const exit = await Effect.runPromiseExit(program)
+    const exit = await runPromiseExit(program)
     
-    if (Exit.isFailure(exit)) {
+    if (isDebug && Exit.isFailure(exit)) {
       console.error("Failed to delete watchlist:", Cause.pretty(exit.cause))
     }
   }, [deleteGroup])
@@ -310,7 +316,7 @@ export function WatchlistsGrid({
                   <div 
                     key={group._id}
                     className={cn(
-                      "transition-all duration-200",
+                      "transition-opacity duration-200",
                       editingGroup && editingGroup._id === group._id && "relative z-50",
                       editingGroup && editingGroup._id !== group._id && "opacity-20"
                     )}
@@ -376,7 +382,7 @@ export function WatchlistsGrid({
                           <button
                             key={color.value}
                             className={cn(
-                              "h-8 w-8 rounded-md transition-all",
+                              "h-8 w-8 rounded-md transition-transform duration-150",
                               color.bg,
                               color.border,
                               editingColor === color.value && "ring-2 ring-white/20 ring-offset-2 ring-offset-zinc-900 scale-110"

@@ -8,6 +8,7 @@ export const env = createEnv({
       .optional()
       .transform((v) => (v ? `https://${v}` : undefined)),
     PORT: z.coerce.number().default(3000),
+    NODE_ENV: z.enum(["development", "production", "test"]),
   },
   server: {
     OPENPANEL_SECRET_KEY: z.string().optional(),
@@ -49,6 +50,7 @@ export const env = createEnv({
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
     VERCEL_URL: process.env.VERCEL_URL,
+    NODE_ENV: process.env.NODE_ENV,
     CG_API_KEY: process.env.CG_API_KEY,
     X_CG_PRO_API_KEY: process.env.X_CG_PRO_API_KEY,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,

@@ -2,36 +2,19 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useCoinGeckoQuotes } from "./use-coingecko-quotes";
-
-interface CoinSummary {
-  coingeckoId: string;
-  name: string;
-  symbol: string;
-}
-
-function isCoinSummary(value: unknown): value is CoinSummary {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.coingeckoId === "string" &&
-    typeof record.name === "string" &&
-    typeof record.symbol === "string"
-  );
-}
+import { CoinsInternalApi, type CoinSummary } from "@/lib/effect/coins-internal-api";
+import { runPromise } from "@/lib/effect/runtime-coins-internal";
 
 export function useCoinSearch(query: string) {
   const { data: allCoins, isLoading: isCoinsLoading } = useQuery({
     queryKey: ["coins", "search", query.trim()],
-    queryFn: async (): Promise<CoinSummary[]> => {
-      const response = await fetch(
-        `/api/internal/coins/search?query=${encodeURIComponent(query.trim())}&limit=100`,
+    queryFn: async (): Promise<ReadonlyArray<CoinSummary>> => {
+      return await runPromise(
+        CoinsInternalApi.search({
+          query,
+          limit: 100,
+        }),
       );
-      if (!response.ok) throw new Error("Failed to search coins");
-      const json: unknown = await response.json();
-      if (!Array.isArray(json) || !json.every(isCoinSummary)) {
-        throw new Error("Invalid coin search response");
-      }
-      return json;
     },
     enabled: !!query.trim(),
     staleTime: 10 * 60 * 1000,
@@ -70,14 +53,8 @@ export function useCoinSearch(query: string) {
 export function useTopCoins() {
   const { data: topCoinsStatic, isLoading: isTopCoinsLoading } = useQuery({
     queryKey: ["coins", "top", 25],
-    queryFn: async (): Promise<CoinSummary[]> => {
-      const response = await fetch(`/api/internal/coins/top?limit=25`);
-      if (!response.ok) throw new Error("Failed to load top coins");
-      const json: unknown = await response.json();
-      if (!Array.isArray(json) || !json.every(isCoinSummary)) {
-        throw new Error("Invalid top coins response");
-      }
-      return json;
+    queryFn: async (): Promise<ReadonlyArray<CoinSummary>> => {
+      return await runPromise(CoinsInternalApi.top({ limit: 25 }));
     },
     staleTime: 10 * 60 * 1000,
   });

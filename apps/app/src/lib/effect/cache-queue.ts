@@ -1,6 +1,6 @@
-import { Effect, Queue, Schedule } from "effect"
-import type { ConvexHttpClient } from 'convex/browser'
-import type { api } from '../../../convex/_generated/api'
+import { Effect, Queue, Ref, Schedule, Schema } from "effect"
+import { api } from "../../../convex/_generated/api"
+import { convex, getServerToken } from "@/lib/convex-server"
 
 // Define cache write job
 export interface CacheWriteJob {
@@ -15,84 +15,86 @@ export interface CacheWriteJob {
   dataSource: string
 }
 
-// Create the queue processor (returns service directly, not wrapped in Effect)
-export async function makeCacheQueueService(
-  convex: ConvexHttpClient,
-  convexApi: typeof api
-) {
-  let processedCount = 0
-  const serverToken = process.env.INTERNAL_CONVEX_SERVER_TOKEN
-  if (!serverToken) {
-    throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured")
-  }
-  const isDebug = process.env.LOG_LEVEL === "debug"
-  
-  const setupQueue = Effect.gen(function* () {
-    // Create bounded queue (max 100 pending writes)
+export interface CacheQueueStats {
+  pending: number
+  processed: number
+  failed: number
+}
+
+// Tagged error for write failures (enables catchTag/catchTags instead of catchAll).
+export class CacheQueueWriteError extends Schema.TaggedError<CacheQueueWriteError>()(
+  "CacheQueueWriteError",
+  {
+    message: Schema.String,
+    coinId: Schema.String,
+    timeframe: Schema.String,
+  },
+) {}
+
+export class CacheQueue extends Effect.Service<CacheQueue>()("CacheQueue", {
+  accessors: true,
+  effect: Effect.gen(function* () {
+    const serverToken = getServerToken()
+
+    // Create bounded queue (max 100 pending writes).
     const queue = yield* Queue.bounded<CacheWriteJob>(100)
-    
-    // Start background processor
+    const processedRef = yield* Ref.make(0)
+    const failedRef = yield* Ref.make(0)
+
+    const writeToConvex = Effect.fn("CacheQueue.writeToConvex")(function* (job: CacheWriteJob) {
+      yield* Effect.tryPromise({
+        try: () =>
+          convex.mutation(api.historicalData.upsertCoinGeckoHistoricalData, {
+            serverToken,
+            coingeckoId: job.coinId,
+            timeframe: job.timeframe,
+            dataPoints: job.dataPoints,
+            dataSource: job.dataSource,
+          }),
+        catch: (error) =>
+          new CacheQueueWriteError({
+            message: String(error),
+            coinId: job.coinId,
+            timeframe: job.timeframe,
+          }),
+      }).pipe(
+        Effect.retry(Schedule.exponential("1 second", 2)),
+        Effect.timeout("10 seconds"),
+        Effect.tap(() => Ref.update(processedRef, (n) => n + 1)),
+        Effect.catchTags({
+          CacheQueueWriteError: () => Ref.update(failedRef, (n) => n + 1),
+          TimeoutException: () => Ref.update(failedRef, (n) => n + 1),
+        }),
+        Effect.asVoid,
+      )
+
+      return null
+    })
+
+    // Start background processor.
     yield* Effect.forkDaemon(
       Effect.forever(
         Queue.take(queue).pipe(
-          Effect.flatMap((job) =>
-            Effect.tryPromise({
-              try: () => convex.mutation(convexApi.historicalData.upsertCoinGeckoHistoricalData, {
-                serverToken,
-                coingeckoId: job.coinId,
-                timeframe: job.timeframe,
-                dataPoints: job.dataPoints,
-                dataSource: job.dataSource
-              }),
-              catch: (error) => error
-            }).pipe(
-              Effect.retry(Schedule.exponential("1 second", 2)),
-              Effect.timeout("10 seconds"),
-              Effect.tap(() => Effect.sync(() => {
-                processedCount++
-                if (isDebug) {
-                  console.log(
-                    `✅ Cached ${job.dataPoints.length} points for ${job.coinId} (total: ${processedCount})`,
-                  )
-                }
-              })),
-              Effect.catchAll((error) => Effect.sync(() => {
-                const errorMsg = error && typeof error === 'object' && '_tag' in error 
-                  ? error._tag 
-                  : String(error)
-                if (isDebug) {
-                  console.warn(`⚠️ Cache write failed for ${job.coinId}: ${errorMsg}`)
-                }
-              }))
-            )
-          ),
-          // Process max 2 writes per second (500ms delay between writes)
-          Effect.delay("500 millis")
-        )
-      )
-    )
-    
-    return {
-      enqueue: (job: CacheWriteJob) =>
-        Queue.offer(queue, job).pipe(
-          Effect.tap(() => Effect.sync(() => 
-            isDebug ? console.log(`📥 Queued cache write for ${job.coinId}`) : undefined
-          )),
-          Effect.catchAll(() => Effect.sync(() =>
-            isDebug ? console.warn(`⚠️ Queue full, dropping cache write for ${job.coinId}`) : undefined
-          ))
+          Effect.flatMap(writeToConvex),
+          // Process max 2 writes per second (500ms delay between writes).
+          Effect.delay("500 millis"),
         ),
-      
-      getStats: async () => {
-        const size = await Effect.runPromise(Queue.size(queue))
-        return {
-          pending: size,
-          processed: processedCount
-        }
-      }
-    }
-  })
-  
-  return Effect.runPromise(setupQueue)
-}
+      ),
+    )
+
+    const enqueue = Effect.fn("CacheQueue.enqueue")(function* (job: CacheWriteJob) {
+      yield* Queue.offer(queue, job)
+      return null
+    })
+
+    const getStats = Effect.fn("CacheQueue.getStats")(function* () {
+      const pending = yield* Queue.size(queue)
+      const processed = yield* Ref.get(processedRef)
+      const failed = yield* Ref.get(failedRef)
+      return { pending, processed, failed }
+    })
+
+    return { enqueue, getStats } as const
+  }),
+}) {}
 

@@ -8,7 +8,7 @@ import { cn } from "@v1/ui/cn"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Checkbox } from "@v1/ui/checkbox"
 import { type ColumnDef } from '@tanstack/react-table'
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence } from "motion/react"
 import { Spinner } from "@v1/ui/spinner"
 import type { CoinMarketData } from '@/types/coins'
 import { InlinePriceChart } from "@/components/charts/inline-price-chart"
@@ -22,6 +22,7 @@ interface WatchlistColumnsProps {
   removingCoins: Set<string>;
   hoveredRowId: string | null;
   hasSelectedCoins: boolean;
+  shouldReduceMotion?: boolean;
   onInlineChartError?: () => void;
 }
 
@@ -34,6 +35,7 @@ export function createWatchlistColumns({
   removingCoins,
   hoveredRowId,
   hasSelectedCoins,
+  shouldReduceMotion = false,
   onInlineChartError,
 }: WatchlistColumnsProps): ColumnDef<CoinMarketData>[] {
   return [
@@ -73,13 +75,13 @@ export function createWatchlistColumns({
                 <motion.div
                   key={isHovered ? 'hovered' : 'normal'}
                   className="absolute left-0 z-10 px-1"
-                  initial={{ opacity: 0, x: -20 }}
+                  initial={shouldReduceMotion ? false : { opacity: 0, x: -20 }}
                   animate={{ 
                     opacity: isHovered ? 1 : 0, 
                     x: isHovered ? 0 : -20 
                   }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{
+                  exit={shouldReduceMotion ? undefined : { opacity: 0, x: -20 }}
+                  transition={shouldReduceMotion ? { duration: 0 } : {
                     type: "spring",
                     stiffness: 400,
                     damping: 25,
@@ -159,7 +161,7 @@ export function createWatchlistColumns({
                   x: isHovered ? 40 : 0,
                   opacity: isHovered ? 0.9 : 1 
                 }}
-                transition={{
+                transition={shouldReduceMotion ? { duration: 0 } : {
                   type: "spring",
                   stiffness: 400,
                   damping: 25,

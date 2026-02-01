@@ -1,10 +1,11 @@
 "use client"
 
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@v1/ui/button'
 import { AlertTriangle, RefreshCw, Clock } from 'lucide-react'
 import { toast } from '@v1/ui/use-toast'
+import { Effect, Fiber } from "effect"
 
 interface LoadingStateManagerProps {
   children: React.ReactNode
@@ -26,10 +27,10 @@ export function LoadingStateManager({
 }: LoadingStateManagerProps) {
   const queryClient = useQueryClient()
   const isFetching = useIsFetching()
+  const isLoading = isFetching > 0
 
   const stuckSinceRef = useRef<number | null>(null)
-  const timeoutIdRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const maxTimeoutIdRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const monitorFiberRef = useRef<Fiber.RuntimeFiber<void, never> | null>(null)
 
   const [loadingState, setLoadingState] = useState<LoadingState>({
     isStuck: false,
@@ -39,16 +40,9 @@ export function LoadingStateManager({
   })
 
   const handleForceRecovery = useCallback(() => {
-    console.log('🔧 Forcing loading state recovery...')
-
-    if (timeoutIdRef.current) {
-      clearTimeout(timeoutIdRef.current)
-      timeoutIdRef.current = null
-    }
-
-    if (maxTimeoutIdRef.current) {
-      clearTimeout(maxTimeoutIdRef.current)
-      maxTimeoutIdRef.current = null
+    if (monitorFiberRef.current) {
+      Effect.runFork(Fiber.interruptFork(monitorFiberRef.current))
+      monitorFiberRef.current = null
     }
 
     stuckSinceRef.current = null
@@ -80,16 +74,9 @@ export function LoadingStateManager({
   }, [queryClient])
 
   const handleRetry = useCallback(() => {
-    console.log('🔄 Retrying stuck requests...')
-
-    if (timeoutIdRef.current) {
-      clearTimeout(timeoutIdRef.current)
-      timeoutIdRef.current = null
-    }
-
-    if (maxTimeoutIdRef.current) {
-      clearTimeout(maxTimeoutIdRef.current)
-      maxTimeoutIdRef.current = null
+    if (monitorFiberRef.current) {
+      Effect.runFork(Fiber.interruptFork(monitorFiberRef.current))
+      monitorFiberRef.current = null
     }
 
     stuckSinceRef.current = null
@@ -118,60 +105,61 @@ export function LoadingStateManager({
 
   // Monitor for stuck loading states without polling.
   useEffect(() => {
-    if (isFetching > 0) {
-      if (stuckSinceRef.current !== null) return
+    // Start monitoring once when we transition into a loading state.
+    if (isLoading) {
+      if (stuckSinceRef.current !== null || monitorFiberRef.current !== null) return
 
       const startedAt = Date.now()
       stuckSinceRef.current = startedAt
-      setLoadingState(prev => ({
-        ...prev,
-        stuckSince: startedAt
-      }))
+      setLoadingState((prev) => ({ ...prev, stuckSince: startedAt }))
 
-      timeoutIdRef.current = setTimeout(() => {
-        setLoadingState(prev => ({
-          ...prev,
-          isStuck: true,
-          hasTimedOut: true,
-          timeoutCount: prev.timeoutCount + 1
-        }))
+      const remainingMs = Math.max(0, maxWaitMs - timeoutMs)
 
-        console.warn('🐌 Loading state appears stuck, offering recovery options')
+      const program = Effect.gen(function* () {
+        yield* Effect.sleep(`${timeoutMs} millis`)
 
-        toast({
-          title: "Slow loading detected",
-          description: "Some data is taking longer than expected to load",
-          variant: "default",
+        yield* Effect.sync(() => {
+          setLoadingState((prev) => ({
+            ...prev,
+            isStuck: true,
+            hasTimedOut: true,
+            timeoutCount: prev.timeoutCount + 1,
+          }))
+
+          toast({
+            title: "Slow loading detected",
+            description: "Some data is taking longer than expected to load",
+            variant: "default",
+          })
         })
-      }, timeoutMs)
 
-      maxTimeoutIdRef.current = setTimeout(() => {
-        console.error('🚨 Maximum wait time exceeded, forcing recovery')
-        handleForceRecovery()
-      }, maxWaitMs)
+        if (remainingMs > 0) {
+          yield* Effect.sleep(`${remainingMs} millis`)
+        }
 
+        yield* Effect.sync(() => {
+          handleForceRecovery()
+        })
+      })
+
+      monitorFiberRef.current = Effect.runFork(program)
       return
     }
 
-    // No active fetching: reset everything.
-    if (timeoutIdRef.current) {
-      clearTimeout(timeoutIdRef.current)
-      timeoutIdRef.current = null
-    }
-
-    if (maxTimeoutIdRef.current) {
-      clearTimeout(maxTimeoutIdRef.current)
-      maxTimeoutIdRef.current = null
+    // No active fetching: interrupt monitoring and reset stuck state.
+    if (monitorFiberRef.current) {
+      Effect.runFork(Fiber.interruptFork(monitorFiberRef.current))
+      monitorFiberRef.current = null
     }
 
     stuckSinceRef.current = null
-    setLoadingState(prev => ({
+    setLoadingState((prev) => ({
       ...prev,
       isStuck: false,
       hasTimedOut: false,
-      stuckSince: null
+      stuckSince: null,
     }))
-  }, [isFetching, timeoutMs, maxWaitMs, handleForceRecovery])
+  }, [isLoading, timeoutMs, maxWaitMs, handleForceRecovery])
 
   // Show stuck state overlay when detected
   if (loadingState.isStuck && loadingState.hasTimedOut) {

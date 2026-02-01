@@ -1,55 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-
-interface CoinGeckoQuoteResponse {
-  data: Record<string, CoinGeckoMarketData>;
-  status: {
-    timestamp: string;
-    error_code: number;
-    error_message: string;
-    elapsed: number;
-    credit_count: number;
-    search_type: 'direct_api' | 'ids';
-    total_results: number;
-  };
-}
-
-interface CoinGeckoMarketData {
-  id: string;
-  name: string;
-  symbol: string;
-  market_cap_rank: number;
-  image: string;
-  current_price: number;
-  market_cap: number;
-  fully_diluted_valuation: number | null;
-  total_volume: number;
-  high_24h: number;
-  low_24h: number;
-  price_change_24h: number;
-  price_change_percentage_24h: number;
-  price_change_percentage_7d_in_currency: number | null;
-  price_change_percentage_14d_in_currency: number | null;
-  price_change_percentage_30d_in_currency: number | null;
-  price_change_percentage_200d_in_currency: number | null;
-  price_change_percentage_1y_in_currency: number | null;
-  price_change_percentage_1h_in_currency: number | null;
-  market_cap_change_24h: number;
-  market_cap_change_percentage_24h: number;
-  circulating_supply: number;
-  total_supply: number | null;
-  max_supply: number | null;
-  ath: number;
-  ath_change_percentage: number;
-  ath_date: string;
-  atl: number;
-  atl_change_percentage: number;
-  atl_date: string;
-  roi: { times: number; currency: string; percentage: number } | null;
-  last_updated: string;
-  sparkline_in_7d: { price: number[] };
-}
+import { CoinGeckoApi, type CoinGeckoQuoteMarketData } from "@/lib/effect/coingecko-api";
+import { runPromise } from "@/lib/effect/runtime-coingecko";
 
 // Transformed data structure to match our app's expectations
 export interface CoinGeckoQuoteData {
@@ -80,6 +33,17 @@ export interface CoinGeckoSearchParams {
   limit?: number;
 }
 
+function formatCoinGeckoError(error: unknown): string {
+  if (error && typeof error === "object" && "_tag" in error) {
+    const tagged = error as { _tag: string; message?: unknown; status?: unknown }
+    if (typeof tagged.message === "string") return tagged.message
+    if (typeof tagged.status === "number") return `CoinGecko request failed (${tagged.status})`
+    return `CoinGecko request failed (${tagged._tag})`
+  }
+
+  return error instanceof Error ? error.message : String(error)
+}
+
 // Original hook for backward compatibility - searches by CoinGecko IDs
 export function useCoinGeckoQuotes(coingeckoIds: string[]) {
   return useCoinGeckoSearch({ ids: coingeckoIds });
@@ -107,61 +71,42 @@ export function useCoinGeckoSearch(searchParams: CoinGeckoSearchParams) {
         return [];
       }
 
-      // Build query parameters
-      const params = new URLSearchParams();
-      
-      if (ids?.length) {
-        params.append('ids', ids.join(','));
-      }
-      if (symbols?.length) {
-        params.append('symbols', symbols.join(','));
-      }
-      if (names?.length) {
-        params.append('names', names.join(','));
-      }
-      if (category) {
-        params.append('category', category);
-      }
-      if (limit) {
-        params.append('limit', limit.toString());
-      }
+      try {
+        const result = await runPromise(
+          CoinGeckoApi.getQuotes({
+            ids,
+            symbols,
+            names,
+            category,
+            limit,
+          }),
+        )
 
-      const response = await fetch(`/api/coingecko/quotes?${params}`);
-      
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const contentType = response.headers.get("content-type");
-      if (!contentType?.includes("application/json")) {
-        throw new Error("Invalid response format");
-      }
-
-      const data: CoinGeckoQuoteResponse = await response.json();
-      
-      if (data.status.error_code !== 0) {
-        throw new Error(data.status.error_message || "API error");
-      }
-
-      // Transform the data to match our app's expected format
-      return Object.values(data.data).map((coin: CoinGeckoMarketData): CoinGeckoQuoteData => ({
-        id: coin.id,
-        name: coin.name,
-        symbol: coin.symbol,
-        image: coin.image,
-        cmc_rank: coin.market_cap_rank || 0,
-        quote: {
-          USD: {
-            price: coin.current_price,
-            percent_change_24h: coin.price_change_percentage_24h || 0,
-            percent_change_1h: coin.price_change_percentage_1h_in_currency || undefined,
-            percent_change_7d: coin.price_change_percentage_7d_in_currency || undefined,
-            percent_change_30d: coin.price_change_percentage_30d_in_currency || undefined,
-            market_cap: coin.market_cap,
-            volume_24h: coin.total_volume,
-          }
+        if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
+          throw new Error(result.status.error_message || "API error")
         }
-      }));
+
+        return Object.values(result.data).map((coin: CoinGeckoQuoteMarketData): CoinGeckoQuoteData => ({
+          id: coin.id,
+          name: coin.name,
+          symbol: coin.symbol,
+          image: coin.image,
+          cmc_rank: coin.market_cap_rank ?? 0,
+          quote: {
+            USD: {
+              price: coin.current_price ?? 0,
+              percent_change_24h: coin.price_change_percentage_24h ?? 0,
+              percent_change_1h: coin.price_change_percentage_1h_in_currency ?? undefined,
+              percent_change_7d: coin.price_change_percentage_7d_in_currency ?? undefined,
+              percent_change_30d: coin.price_change_percentage_30d_in_currency ?? undefined,
+              market_cap: coin.market_cap ?? 0,
+              volume_24h: coin.total_volume ?? 0,
+            },
+          },
+        }))
+      } catch (error) {
+        throw new Error(formatCoinGeckoError(error))
+      }
     },
     enabled: true, // Always enabled - API handles the logic for top coins vs search
     staleTime: 30 * 1000, // 30 seconds

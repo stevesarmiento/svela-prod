@@ -2,7 +2,7 @@ import { ratelimit } from "@v1/kv/ratelimit";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@clerk/nextjs/server";
-import { getUserApiKey } from "@/lib/user-api-keys";
+import { getApiHeaders, getUserApiKey } from "@/lib/user-api-keys";
 
 const BASE_URL = "https://open-api-v4.coinglass.com/api";
 
@@ -17,8 +17,7 @@ async function fetchWithErrorHandling(url: string, apiKey: string) {
   try {
     const response = await fetch(url, {
       headers: {
-        'CG_API_KEY': apiKey,
-        'Content-Type': 'application/json',
+        ...getApiHeaders("coinglass", apiKey),
       },
       next: {
         revalidate: 60, // Cache for 1 minute as per CoinGlass docs
@@ -62,7 +61,6 @@ export async function GET(request: Request) {
       clerkId = authResult.userId;
     } catch (error) {
       // Auth failed, will use environment fallback
-      console.log('Auth not available in API route, using environment fallback:', error instanceof Error ? error.message : 'Unknown error');
     }
     
     // Get API key - user's key takes precedence over environment variable

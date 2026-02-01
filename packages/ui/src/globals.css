@@ -45,11 +45,34 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
+  /* Motion tokens (Emil Kowalski heuristics) */
+  --duration-micro: 120ms;
+  --duration-ui: 200ms;
+  --duration-modal: 260ms;
+
+  /* Enter/exit */
+  --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-out-cubic: cubic-bezier(0.215, 0.61, 0.355, 1);
+  --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+  --ease-out-quint: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+  --ease-out-circ: cubic-bezier(0.075, 0.82, 0.165, 1);
+
+  /* On-screen movement */
+  --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+  --ease-in-out-cubic: cubic-bezier(0.645, 0.045, 0.355, 1);
+  --ease-in-out-quart: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-in-out-quint: cubic-bezier(0.86, 0, 0.07, 1);
+  --ease-in-out-expo: cubic-bezier(1, 0, 0, 1);
+  --ease-in-out-circ: cubic-bezier(0.785, 0.135, 0.15, 0.86);
+
+  /* Hover/colors */
+  --ease-hover: ease;
+
   --animate-animate-webgl-scale-in-fade: webgl-scale-in-fade 1s ease-in-out;
-  --animate-open-scale-up-fade: open-scale-up-fade var(--default-transition-duration)
-    var(--default-transition-timing-function);
-  --animate-accordion-down: accordion-down 0.2s ease-out;
-  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-open-scale-up-fade: open-scale-up-fade var(--duration-ui) var(--ease-out-cubic);
+  --animate-accordion-down: accordion-down var(--duration-ui) var(--ease-out-cubic);
+  --animate-accordion-up: accordion-up var(--duration-ui) var(--ease-out-cubic);
   --animate-caret-blink: caret-blink 1.25s ease-out infinite;
   --animate-first: moveVertical 30s ease infinite;
   --animate-second: moveInCircle 20s reverse infinite;
@@ -160,6 +183,41 @@
       opacity: 1;
       transform: scale(1) translateY(0);
     }
+  }
+}
+
+/* Reduced motion: disable all animations and transitions */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-micro: 0ms;
+    --duration-ui: 0ms;
+    --duration-modal: 0ms;
+
+    /* Tailwind `animate-*` tokens defined in this file */
+    --animate-animate-webgl-scale-in-fade: none;
+    --animate-open-scale-up-fade: none;
+    --animate-accordion-down: none;
+    --animate-accordion-up: none;
+    --animate-caret-blink: none;
+    --animate-first: none;
+    --animate-second: none;
+    --animate-third: none;
+    --animate-fourth: none;
+    --animate-fifth: none;
+    --animate-scroll: none;
+  }
+
+  /* Explicit animations declared in this file */
+  .scale-in,
+  .scale-out,
+  .loading-bar,
+  .loading-ellipsis:after {
+    animation: none;
+  }
+
+  .loading-wrapper[data-visible='false'] {
+    animation: none;
+    opacity: 0;
   }
 }
 
@@ -546,7 +604,7 @@
 
 @keyframes scaleIn {
   from {
-    transform: scale(0);
+    transform: scale(0.95);
   }
   to {
     transform: scale(1);
@@ -558,14 +616,14 @@
     transform: scale(1);
   }
   to {
-    transform: scale(0);
+    transform: scale(0.95);
   }
 }
 
 .scale-in {
-  animation: scaleIn 0.2s forwards;
+  animation: scaleIn var(--duration-ui) var(--ease-out-cubic) forwards;
 }
 
 .scale-out {
-  animation: scaleOut 0.2s forwards;
+  animation: scaleOut var(--duration-ui) var(--ease-out-cubic) forwards;
 }

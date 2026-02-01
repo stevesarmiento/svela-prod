@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../../convex/_generated/api";
+import type { Id } from "../../../../../../convex/_generated/dataModel";
+import { convex, getServerToken } from "@/lib/convex-server";
 
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-if (!convexUrl) throw new Error("NEXT_PUBLIC_CONVEX_URL is not configured");
-
-const convex = new ConvexHttpClient(convexUrl);
-
-function getServerToken(): string {
-  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
-  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured");
-  return token;
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 export async function GET(req: NextRequest) {
@@ -25,19 +20,40 @@ export async function GET(req: NextRequest) {
   const groupId = req.nextUrl.searchParams.get("groupId");
 
   if (groupId) {
-    const items = await convex.query(api.watchlists.getWatchlistByGroup, {
-      serverToken: getServerToken(),
-      clerkId,
-      groupId: groupId as any,
-    });
-    return NextResponse.json(items);
+    try {
+      const items = await convex.query(api.watchlists.getWatchlistByGroup, {
+        serverToken: getServerToken(),
+        clerkId,
+        groupId: groupId as Id<"watchlistGroups">,
+      });
+      return NextResponse.json(items);
+    } catch (error) {
+      const message = getErrorMessage(error);
+      if (message === "Watchlist group not found") {
+        return NextResponse.json({ error: message }, { status: 404 });
+      }
+      if (message === "User not found") {
+        return NextResponse.json({ error: message }, { status: 404 });
+      }
+      return NextResponse.json(
+        { error: "Failed to load watchlist items", details: message },
+        { status: 500 },
+      );
+    }
   }
 
-  const items = await convex.query(api.watchlists.getWatchlist, {
-    serverToken: getServerToken(),
-    clerkId,
-  });
+  try {
+    const items = await convex.query(api.watchlists.getWatchlist, {
+      serverToken: getServerToken(),
+      clerkId,
+    });
 
-  return NextResponse.json(items);
+    return NextResponse.json(items);
+  } catch (error) {
+    return NextResponse.json(
+      { error: "Failed to load watchlist items", details: getErrorMessage(error) },
+      { status: 500 },
+    );
+  }
 }
 

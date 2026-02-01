@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../../../convex/_generated/api";
+import type { Id } from "../../../../../../../convex/_generated/dataModel";
+import { convex, getServerToken } from "@/lib/convex-server";
 
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-if (!convexUrl) throw new Error("NEXT_PUBLIC_CONVEX_URL is not configured");
-
-const convex = new ConvexHttpClient(convexUrl);
-
-function getServerToken(): string {
-  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
-  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured");
-  return token;
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 export async function POST(req: NextRequest) {
@@ -28,13 +23,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "coinId is required" }, { status: 400 });
   }
 
-  await convex.mutation(api.watchlists.removeFromWatchlist, {
-    serverToken: getServerToken(),
-    clerkId,
-    coinId: body.coinId,
-    groupId: body.groupId as any,
-  });
+  try {
+    await convex.mutation(api.watchlists.removeFromWatchlist, {
+      serverToken: getServerToken(),
+      clerkId,
+      coinId: body.coinId,
+      groupId: body.groupId ? (body.groupId as Id<"watchlistGroups">) : undefined,
+    });
 
-  return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    if (message === "User not found") {
+      return NextResponse.json({ error: message }, { status: 404 });
+    }
+    if (message === "Watchlist group not found") {
+      return NextResponse.json({ error: message }, { status: 404 });
+    }
+
+    return NextResponse.json(
+      { error: "Failed to remove from watchlist", details: message },
+      { status: 500 },
+    );
+  }
 }
 

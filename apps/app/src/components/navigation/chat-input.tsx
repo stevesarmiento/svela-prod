@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'motion/react'
 import { Button } from '@v1/ui/button'
 import { Input } from '@v1/ui/input'
 import { IconPaperplaneFill, IconSquareFill } from 'symbols-react'
@@ -13,6 +13,7 @@ import { BackgroundPattern } from './background-pattern'
 export function ChatInput() {
   const { isChatOpen, setIsChatOpen } = useOverlayState()
   const { showChatToast } = useChatToast()
+  const shouldReduceMotion = useReducedMotion()
   const {
     input,
     handleInputChange,
@@ -88,10 +89,10 @@ export function ChatInput() {
   return (
     <motion.div
       ref={containerRef}
-      initial={{ opacity: 0, scale: 0.95, y: 10 }}
+      initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95, y: 10 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95, y: 10 }}
-      transition={{
+      exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.95, y: 10 }}
+      transition={shouldReduceMotion ? { duration: 0 } : {
         type: "spring",
         stiffness: 280,
         damping: 18,
@@ -138,7 +139,7 @@ export function ChatInput() {
           isStopped ? 'text-red-400' : 'text-white/70'
         }`}>
           <div className={`w-2 h-2 rounded-full ${
-            isStopped ? 'bg-red-400' : 'bg-blue-400 animate-pulse'
+            isStopped ? 'bg-red-400' : 'bg-blue-400 animate-pulse motion-reduce:animate-none'
           }`} />
           <span>{getStatusMessage()}</span>
         </div>

@@ -1,32 +1,31 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getCoinMarketChart } from '@/lib/coingecko'
-import { ConvexHttpClient } from 'convex/browser'
-import { api } from '../../../../../convex/_generated/api'
-import { Effect } from "effect"
-import { makeCacheQueueService } from '@/lib/effect/cache-queue'
+import { NextRequest, NextResponse } from "next/server"
+import { getCoinMarketChart } from "@/lib/coingecko"
+import { api } from "../../../../../convex/_generated/api"
+import { Effect, Schema } from "effect"
+import { CacheQueue } from "@/lib/effect/cache-queue"
+import { runFork, runPromise } from "@/lib/effect/runtime-server"
+import { convex, getServerToken } from "@/lib/convex-server"
 
 export const dynamic = 'force-dynamic'
 
-const isDebug = process.env.LOG_LEVEL === "debug"
+class MarketChartCacheReadError extends Schema.TaggedError<MarketChartCacheReadError>()(
+  "MarketChartCacheReadError",
+  {
+    message: Schema.String,
+    coinId: Schema.String,
+    timeframe: Schema.String,
+  },
+) {}
 
-// Initialize Convex client for server-side operations
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
+class MarketChartFetchError extends Schema.TaggedError<MarketChartFetchError>()(
+  "MarketChartFetchError",
+  { coinId: Schema.String, timeframe: Schema.String, message: Schema.String },
+) {}
 
-function getServerToken(): string {
-  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN
-  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured")
-  return token
-}
-
-// Initialize cache queue service (singleton)
-let cacheQueueServiceInstance: Awaited<ReturnType<typeof makeCacheQueueService>> | null = null
-
-async function getCacheQueueService() {
-  if (!cacheQueueServiceInstance) {
-    cacheQueueServiceInstance = await makeCacheQueueService(convex, api)
-  }
-  return cacheQueueServiceInstance
-}
+class MarketChartFetchTimeoutError extends Schema.TaggedError<MarketChartFetchTimeoutError>()(
+  "MarketChartFetchTimeoutError",
+  { coinId: Schema.String, timeframe: Schema.String, message: Schema.String },
+) {}
 
 interface MarketChartParams {
   id?: string
@@ -57,95 +56,120 @@ export async function GET(request: NextRequest) {
   const coinId = params.id
   const timeframe = params.days || '7'
 
-  try {
-
-    if (isDebug) {
-      console.log('🎯 CoinGecko market chart API request:', {
-        id: coinId,
-        days: timeframe,
-        interval: params.interval
-      })
-    }
-
-    // 1. Check Convex cache first (with Effect for resilience)
-    const cachedDataEffect = Effect.tryPromise({
-      try: () => convex.query(api.historicalData.getCoinGeckoHistoricalData, {
+  // 1. Check Convex cache first (best-effort).
+  const cachedDataEffect = Effect.tryPromise({
+    try: () =>
+      convex.query(api.historicalData.getCoinGeckoHistoricalData, {
         serverToken: getServerToken(),
         coingeckoId: coinId,
-        timeframe: timeframe
+        timeframe: timeframe,
       }),
-      catch: (error) => {
-        if (isDebug) console.warn('⚠️ Convex cache query failed:', error)
-        return error
-      }
-    }).pipe(
-      // Don't wait forever for cache - timeout after 800ms
-      // (Convex cache should be instant if healthy, no need to retry slow responses)
-      Effect.timeout("800 millis"),
-      // If cache fails, return empty result (will fetch fresh data)
-      Effect.catchAll(() => {
-        if (isDebug) console.log('🔄 Cache unavailable, will fetch fresh data')
-        return Effect.succeed({ 
-          cached: false, 
-          stale: false, 
-          data: [], 
-          dataPoints: 0, 
-          lastUpdated: 0 
-        })
-      })
-    )
+    catch: (error) =>
+      new MarketChartCacheReadError({
+        message: String(error),
+        coinId,
+        timeframe,
+      }),
+  }).pipe(
+    // Don't wait forever for cache - timeout after 800ms
+    // (Convex cache should be instant if healthy, no need to retry slow responses)
+    Effect.timeout("800 millis"),
+    // If cache fails, return empty result (will fetch fresh data)
+    Effect.catchTags({
+      MarketChartCacheReadError: () =>
+        Effect.succeed({
+          cached: false,
+          stale: false,
+          data: [],
+          dataPoints: 0,
+          lastUpdated: 0,
+        }),
+      TimeoutException: () =>
+        Effect.succeed({
+          cached: false,
+          stale: false,
+          data: [],
+          dataPoints: 0,
+          lastUpdated: 0,
+        }),
+    }),
+  )
 
-    const cachedData = await Effect.runPromise(cachedDataEffect)
+  const staleDataEffect = Effect.tryPromise({
+    try: () =>
+      convex.query(api.historicalData.getCoinGeckoHistoricalData, {
+        serverToken: getServerToken(),
+        coingeckoId: coinId,
+        timeframe: timeframe,
+      }),
+    catch: (error) =>
+      new MarketChartCacheReadError({
+        message: String(error),
+        coinId,
+        timeframe,
+      }),
+  }).pipe(
+    // Quick timeout for fallback (don't delay error response)
+    Effect.timeout("800 millis"),
+    // Return empty result if cache fails
+    Effect.catchTags({
+      MarketChartCacheReadError: () => Effect.succeed({ data: [], dataPoints: 0 }),
+      TimeoutException: () => Effect.succeed({ data: [], dataPoints: 0 }),
+    }),
+  )
+
+  const fetchFreshMarketChartEffect = Effect.tryPromise({
+    try: () => getCoinMarketChart(coinId, params.vs_currency, timeframe, params.interval),
+    catch: (error) => new MarketChartFetchError({ coinId, timeframe, message: String(error) }),
+  }).pipe(
+    // Bound total upstream latency (CoinGecko + transforms).
+    Effect.timeout("20 seconds"),
+    Effect.catchTag("TimeoutException", () =>
+      Effect.fail(new MarketChartFetchTimeoutError({ coinId, timeframe, message: "Request timed out" })),
+    ),
+  )
+
+  const program: Effect.Effect<Response, never> = Effect.gen(function* () {
+    const cachedData = yield* cachedDataEffect
 
     if (cachedData.cached && !cachedData.stale && cachedData.data.length > 0) {
-      if (isDebug) {
-        console.log(`🚀 Cache hit for ${coinId} (${timeframe}):`, {
-          dataPoints: cachedData.dataPoints,
-          lastUpdated: new Date(cachedData.lastUpdated).toLocaleString()
-        })
-      }
-      
       // Return cached data in chart format
-      return NextResponse.json({
-        data: {
-          prices: cachedData.data.map(point => ({
-            time: Math.floor(point.timestamp / 1000),
-            value: point.price
-          })),
-          volumes: cachedData.data.map(point => ({
-            time: Math.floor(point.timestamp / 1000),
-            value: point.volume || 0
-          })),
-          market_caps: cachedData.data.map(point => ({
-            time: Math.floor(point.timestamp / 1000),
-            value: point.marketCap || 0
-          }))
+      return NextResponse.json(
+        {
+          data: {
+            prices: cachedData.data.map((point) => ({
+              time: Math.floor(point.timestamp / 1000),
+              value: point.price,
+            })),
+            volumes: cachedData.data.map((point) => ({
+              time: Math.floor(point.timestamp / 1000),
+              value: point.volume || 0,
+            })),
+            market_caps: cachedData.data.map((point) => ({
+              time: Math.floor(point.timestamp / 1000),
+              value: point.marketCap || 0,
+            })),
+          },
+          status: {
+            timestamp: new Date().toISOString(),
+            error_code: 0,
+            error_message: "",
+            data_source: "convex-cache",
+            total_points: cachedData.dataPoints,
+            cached: true,
+          },
         },
-        status: {
-          timestamp: new Date().toISOString(),
-          error_code: 0,
-          error_message: '',
-          data_source: 'convex-cache',
-          total_points: cachedData.dataPoints,
-          cached: true
-        }
-      }, {
-        status: 200,
-        headers: {
-          'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60'
-        }
-      })
+        {
+          status: 200,
+          headers: {
+            "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+          },
+        },
+      )
     }
 
-    // 2. Fetch fresh data from CoinGecko API
-    if (isDebug) console.log(`💾 Cache miss for ${coinId}, fetching from CoinGecko...`)
-    
-    const marketData = await getCoinMarketChart(
-      coinId,
-      params.vs_currency,
-      timeframe,
-      params.interval
-    )
+    // 2. Fetch fresh data from CoinGecko API.
+    const marketData = yield* fetchFreshMarketChartEffect
 
     // 3. Store in Convex database (fire and forget)
     const dataPoints = marketData.transformed.prices.map((price, index) => ({
@@ -156,98 +180,129 @@ export async function GET(request: NextRequest) {
     }))
 
     // Enqueue cache write (non-blocking, rate-limited via queue)
-    getCacheQueueService().then(service => {
-      Effect.runFork(
-        service.enqueue({
+    yield* Effect.sync(() => {
+      runFork(
+        CacheQueue.enqueue({
           coinId,
           timeframe,
           dataPoints,
-          dataSource: 'coingecko'
-        })
+          dataSource: "coingecko",
+        }),
       )
-    }).catch(error => {
-      if (isDebug) console.warn(`⚠️ Failed to enqueue cache write for ${coinId}:`, error)
     })
 
     // 4. Return fresh data
-    return NextResponse.json({
-      data: {
-        prices: marketData.transformed.prices,
-        volumes: marketData.transformed.volumes,
-        market_caps: marketData.transformed.market_caps
+    return NextResponse.json(
+      {
+        data: {
+          prices: marketData.transformed.prices,
+          volumes: marketData.transformed.volumes,
+          market_caps: marketData.transformed.market_caps,
+        },
+        status: {
+          timestamp: new Date().toISOString(),
+          error_code: 0,
+          error_message: "",
+          data_source: "coingecko-fresh",
+          total_points: marketData.transformed.prices.length,
+          cached: false,
+        },
       },
-      status: {
-        timestamp: new Date().toISOString(),
-        error_code: 0,
-        error_message: '',
-        data_source: 'coingecko-fresh',
-        total_points: marketData.transformed.prices.length,
-        cached: false
-      }
-    }, {
-      status: 200,
-      headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120'
-      }
-    })
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+        },
+      },
+    )
+  }).pipe(
+    Effect.catchTags({
+      MarketChartFetchError: (e) =>
+        staleDataEffect.pipe(
+          Effect.map((staleData) => {
+            if (staleData.data.length > 0) {
+              return NextResponse.json(
+                {
+                  data: {
+                    prices: staleData.data.map((point) => ({
+                      time: Math.floor(point.timestamp / 1000),
+                      value: point.price,
+                    })),
+                    volumes: staleData.data.map((point) => ({
+                      time: Math.floor(point.timestamp / 1000),
+                      value: point.volume || 0,
+                    })),
+                    market_caps: staleData.data.map((point) => ({
+                      time: Math.floor(point.timestamp / 1000),
+                      value: point.marketCap || 0,
+                    })),
+                  },
+                  status: {
+                    timestamp: new Date().toISOString(),
+                    error_code: 1,
+                    error_message: "Using stale cached data due to API error",
+                    data_source: "convex-stale",
+                    total_points: staleData.dataPoints,
+                    cached: true,
+                  },
+                },
+                { status: 200 },
+              )
+            }
 
-  } catch (error) {
-    console.error('CoinGecko market chart API error:', error)
-    
-    // Try to return stale cached data as fallback (with Effect for resilience)
-    if (coinId) {
-      const staleDataEffect = Effect.tryPromise({
-        try: () => convex.query(api.historicalData.getCoinGeckoHistoricalData, {
-          serverToken: getServerToken(),
-          coingeckoId: coinId,
-          timeframe: timeframe
-        }),
-        catch: (error) => {
-          if (isDebug) console.warn('⚠️ Fallback cache query also failed:', error)
-          return error
-        }
-      }).pipe(
-        // Quick timeout for fallback (don't delay error response)
-        Effect.timeout("800 millis"),
-        // Return empty result if cache fails
-        Effect.catchAll(() => Effect.succeed({ data: [], dataPoints: 0 }))
-      )
+            return NextResponse.json(
+              {
+                error: "Failed to fetch market chart data",
+                details: e.message,
+              },
+              { status: 500 },
+            )
+          }),
+        ),
+      MarketChartFetchTimeoutError: (e) =>
+        staleDataEffect.pipe(
+          Effect.map((staleData) => {
+            if (staleData.data.length > 0) {
+              return NextResponse.json(
+                {
+                  data: {
+                    prices: staleData.data.map((point) => ({
+                      time: Math.floor(point.timestamp / 1000),
+                      value: point.price,
+                    })),
+                    volumes: staleData.data.map((point) => ({
+                      time: Math.floor(point.timestamp / 1000),
+                      value: point.volume || 0,
+                    })),
+                    market_caps: staleData.data.map((point) => ({
+                      time: Math.floor(point.timestamp / 1000),
+                      value: point.marketCap || 0,
+                    })),
+                  },
+                  status: {
+                    timestamp: new Date().toISOString(),
+                    error_code: 1,
+                    error_message: "Using stale cached data due to API error",
+                    data_source: "convex-stale",
+                    total_points: staleData.dataPoints,
+                    cached: true,
+                  },
+                },
+                { status: 200 },
+              )
+            }
 
-      const staleData = await Effect.runPromise(staleDataEffect)
+            return NextResponse.json(
+              {
+                error: "Failed to fetch market chart data",
+                details: e.message,
+              },
+              { status: 500 },
+            )
+          }),
+        ),
+    }),
+  )
 
-      if (staleData.data.length > 0) {
-        if (isDebug) console.log(`🔄 Returning stale data as fallback for ${coinId}`)
-        
-        return NextResponse.json({
-          data: {
-            prices: staleData.data.map(point => ({
-              time: Math.floor(point.timestamp / 1000),
-              value: point.price
-            })),
-            volumes: staleData.data.map(point => ({
-              time: Math.floor(point.timestamp / 1000),
-              value: point.volume || 0
-            })),
-            market_caps: staleData.data.map(point => ({
-              time: Math.floor(point.timestamp / 1000),
-              value: point.marketCap || 0
-            }))
-          },
-          status: {
-            timestamp: new Date().toISOString(),
-            error_code: 1,
-            error_message: 'Using stale cached data due to API error',
-            data_source: 'convex-stale',
-            total_points: staleData.dataPoints,
-            cached: true
-          }
-        }, { status: 200 })
-      }
-    }
-    
-    return NextResponse.json({
-      error: 'Failed to fetch market chart data',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 })
-  }
+  return await runPromise(program)
 } 

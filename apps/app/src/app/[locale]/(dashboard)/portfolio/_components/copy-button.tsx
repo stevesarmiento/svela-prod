@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { Check, Copy } from "lucide-react";
 import { cn } from "@v1/ui/cn";
+import { DURATION_UI_S, EASE_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens";
 
 interface CopyButtonProps {
   textToCopy: string;
@@ -25,6 +26,11 @@ export function CopyButton({
   disabled,
 }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
+  const iconTransition = {
+    duration: motionDuration(shouldReduceMotion, DURATION_UI_S),
+    ease: EASE_OUT_CUBIC,
+  } as const;
 
   const handleCopy = async () => {
     try {
@@ -57,10 +63,10 @@ export function CopyButton({
             <motion.div
               key="checkmark"
               className="absolute inset-0 flex items-center justify-center"
-              initial={{ opacity: 0, rotate: 90, scale: 0 }}
+              initial={shouldReduceMotion ? false : { opacity: 0, rotate: 90, scale: 0.95 }}
               animate={{ opacity: 1, rotate: 0, scale: 1 }}
-              exit={{ opacity: 0, rotate: -10, scale: 0.8 }}
-              transition={{ duration: 0.22, ease: [0.175, 0.885, 0.32, 1.1] }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, rotate: -10, scale: 0.8 }}
+              transition={iconTransition}
             >
               <Check
                 className={cn("h-3.5 w-3.5 text-green-500 dark:text-green-300", iconClassNameCheck)}
@@ -70,10 +76,10 @@ export function CopyButton({
             <motion.div
               key="copy"
               className="absolute inset-0"
-              initial={{ opacity: 0, rotateZ: -90, scale: 0.8 }}
+              initial={shouldReduceMotion ? false : { opacity: 0, rotateZ: -90, scale: 0.95 }}
               animate={{ opacity: 1, rotateZ: 0, scale: 1 }}
-              exit={{ opacity: 0, rotateZ: -20, scale: 0 }}
-              transition={{ duration: 0.22, ease: [0.175, 0.885, 0.32, 1.1] }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, rotateZ: -20, scale: 0.95 }}
+              transition={iconTransition}
               style={{ transformOrigin: "bottom right" }}
             >
               <Copy

@@ -3,80 +3,132 @@ import { useRouter } from 'next/navigation';
 import { COMMAND_ITEMS, type NavigationItem, type ActionItem } from './bottom-nav-constants';
 import { SEQUENTIAL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
 import { useLatest } from '@/hooks/use-latest';
+import { Effect, Fiber, Queue, Ref } from "effect";
+import { useEffectScoped } from "@/lib/effect/react";
 
 // React 19: Inline type definition for better maintainability
 
 export function useSequentialShortcuts() {
   const [activeSequence, setActiveSequence] = useState<string | null>(null);
   const router = useRouter();
-  const sequenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const immediateSequenceRef = useRef<string | null>(null);
 
   const resetSequence = useCallback(() => {
+    immediateSequenceRef.current = null;
     setActiveSequence(null);
-    if (sequenceTimeoutRef.current) {
-      clearTimeout(sequenceTimeoutRef.current);
-      sequenceTimeoutRef.current = null;
-    }
   }, []);
 
   const activeSequenceRef = useLatest(activeSequence);
   const resetSequenceRef = useLatest(resetSequence);
   const routerRef = useLatest(router);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignore if typing in an input
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-        return;
-      }
+  useEffectScoped(
+    () =>
+      Effect.gen(function* () {
+        interface SequenceEvent {
+          readonly kind: "start" | "next";
+          readonly key: string;
+        }
 
-      // Ignore if modifier keys are pressed
-      if (event.metaKey || event.ctrlKey || event.altKey) {
-        return;
-      }
+        const queue = yield* Queue.bounded<SequenceEvent>(64);
+        const timeoutFiberRef = yield* Ref.make<Fiber.RuntimeFiber<void, never> | null>(null);
 
-      const key = event.key.toLowerCase();
+        const clearTimeoutFiber = Effect.gen(function* () {
+          const fiber = yield* Ref.get(timeoutFiberRef);
+          if (!fiber) return;
+          yield* Fiber.interruptFork(fiber);
+          yield* Ref.set(timeoutFiberRef, null);
+        });
 
-      const currentSequence = activeSequenceRef.current;
-      if (!currentSequence) {
-        // Check if this starts a sequence
-        if (key in SEQUENTIAL_SHORTCUTS) {
-          event.preventDefault();
-          setActiveSequence(key);
-          
-          // Set timeout to reset sequence
-          if (sequenceTimeoutRef.current) {
-            clearTimeout(sequenceTimeoutRef.current);
+        const startTimeoutFiber = Effect.gen(function* () {
+          yield* clearTimeoutFiber;
+          const fiber = yield* Effect.fork(
+            Effect.sleep("2 seconds").pipe(
+              Effect.tap(() => Effect.sync(() => resetSequenceRef.current())),
+              Effect.asVoid,
+            ),
+          );
+          yield* Ref.set(timeoutFiberRef, fiber);
+        });
+
+        const processKey = (event: SequenceEvent) =>
+          Effect.gen(function* () {
+            if (event.kind === "start") {
+              yield* startTimeoutFiber;
+              return;
+            }
+
+            // We're in a sequence, check for completion.
+            yield* clearTimeoutFiber;
+
+            const currentSequence = immediateSequenceRef.current ?? activeSequenceRef.current;
+            if (!currentSequence) return;
+
+            const shortcuts = SEQUENTIAL_SHORTCUTS[currentSequence as keyof typeof SEQUENTIAL_SHORTCUTS];
+            if (shortcuts && event.key in shortcuts) {
+              const route = shortcuts[event.key as keyof typeof shortcuts];
+              yield* Effect.sync(() => {
+                routerRef.current.push(route);
+                resetSequenceRef.current();
+              });
+              return;
+            }
+
+            yield* Effect.sync(() => resetSequenceRef.current());
+          });
+
+        // Worker fiber that processes key events sequentially.
+        yield* Effect.fork(
+          Effect.forever(
+            Queue.take(queue).pipe(
+              Effect.flatMap(processKey),
+            ),
+          ),
+        );
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+          // Ignore if typing in an input.
+          if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+            return;
           }
-          sequenceTimeoutRef.current = setTimeout(() => {
-            resetSequenceRef.current();
-          }, 2000); // 2 second timeout
-        }
-      } else {
-        // We're in a sequence, check for completion
-        event.preventDefault();
-        
-        const shortcuts = SEQUENTIAL_SHORTCUTS[currentSequence as keyof typeof SEQUENTIAL_SHORTCUTS];
-        if (shortcuts && key in shortcuts) {
-          const route = shortcuts[key as keyof typeof shortcuts];
-          routerRef.current.push(route);
-          resetSequenceRef.current();
-        } else {
-          // Invalid sequence, reset
-          resetSequenceRef.current();
-        }
-      }
-    };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      if (sequenceTimeoutRef.current) {
-        clearTimeout(sequenceTimeoutRef.current);
-        sequenceTimeoutRef.current = null;
-      }
-    };
-  }, []);
+          // Ignore if modifier keys are pressed.
+          if (event.metaKey || event.ctrlKey || event.altKey) {
+            return;
+          }
+
+          const key = event.key.toLowerCase();
+          const currentSequence = immediateSequenceRef.current;
+
+          if (!currentSequence) {
+            // Only handle valid starters.
+            if (!(key in SEQUENTIAL_SHORTCUTS)) return;
+
+            event.preventDefault();
+            immediateSequenceRef.current = key;
+            setActiveSequence(key);
+            Queue.unsafeOffer(queue, { kind: "start", key });
+            return;
+          }
+
+          event.preventDefault();
+          Queue.unsafeOffer(queue, { kind: "next", key });
+        };
+
+        document.addEventListener("keydown", handleKeyDown);
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            document.removeEventListener("keydown", handleKeyDown);
+          }).pipe(
+            Effect.zipRight(clearTimeoutFiber),
+          ),
+        );
+
+        // Keep the scope alive until the component unmounts / deps change.
+        yield* Effect.never;
+      }),
+    [],
+  );
 
   return { activeSequence, resetSequence };
 }

@@ -9,15 +9,19 @@ import { cn } from "@v1/ui/cn"
 import { toast } from "@v1/ui/use-toast"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Spinner } from "@v1/ui/spinner"
+import { env } from "@/env.mjs"
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { AvatarCircles } from '@v1/ui/token-stacks'
 import { useWatchlistGroups, useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
 import { useWatchlistOperations } from '@/hooks/use-watchlist-effect'
+import { runPromiseExit } from '@/lib/effect/runtime-watchlist'
 import type { WatchlistGroup } from './watchlist-context'
 
 type WatchlistGroupId = WatchlistGroup["_id"]
+
+const isDebug = env.NODE_ENV === "development"
 
 interface WatchlistData {
   id: WatchlistGroupId
@@ -267,27 +271,56 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
   )
   
   const watchlistGroupsData = useWatchlistGroups()
+  // TanStack Query generics can get lost across module boundaries in this file; keep this typed for build.
+  const typedWatchlistGroupsData = watchlistGroupsData as Array<WatchlistGroup> | undefined
 
   const handleRemove = async (watchlistId: WatchlistGroupId) => {
     setRemovingWatchlists(prev => new Set([...prev, watchlistId]))
     
     const program = deleteGroup(watchlistId).pipe(
+      Effect.catchTags({
+        WatchlistAuthError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Authentication Error",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        WatchlistNotFoundError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Not Found",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        WatchlistValidationError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Validation Error",
+              description: `${e.field}: ${e.reason}`,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        ApiRequestError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Request Error",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+      }),
       Effect.tap(() => Effect.sync(() => {
         toast({
           title: "Removed",
           description: "Watchlist removed successfully",
         })
-      })),
-      Effect.catchAll(() => Effect.sync(() => {
-        toast({
-          title: "Error",
-          description: "Failed to remove watchlist",
-          variant: "destructive",
-        })
       }))
     )
 
-    const exit = await Effect.runPromiseExit(program)
+    const exit = await runPromiseExit(program)
     
     // Clean up removing state
     setRemovingWatchlists(prev => {
@@ -296,12 +329,12 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
       return newSet
     })
     
-    if (Exit.isFailure(exit)) {
+    if (isDebug && Exit.isFailure(exit)) {
       console.error("Failed to remove watchlist:", Cause.pretty(exit.cause))
     }
   }
 
-  if (!watchlistGroupsData?.length) {
+  if (!typedWatchlistGroupsData?.length) {
     return (
       <div className="py-6 border border-dashed border-border rounded-lg">
         <div className="flex flex-col items-center justify-center gap-3">
@@ -316,7 +349,7 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
 
   return (
     <div className="space-y-4">
-      {watchlistGroupsData.map(group => (
+      {typedWatchlistGroupsData.map(group => (
         <WatchlistCard
           key={group._id}
           group={group}

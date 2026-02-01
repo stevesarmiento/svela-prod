@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../../../convex/_generated/api";
+import type { Id } from "../../../../../../../convex/_generated/dataModel";
+import { convex, getServerToken } from "@/lib/convex-server";
 
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-if (!convexUrl) throw new Error("NEXT_PUBLIC_CONVEX_URL is not configured");
-
-const convex = new ConvexHttpClient(convexUrl);
-
-function getServerToken(): string {
-  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
-  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured");
-  return token;
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
 }
 
 export async function PATCH(
@@ -34,17 +29,32 @@ export async function PATCH(
     color?: string;
   };
 
-  await convex.mutation(api.watchlists.updateWatchlistGroup, {
-    serverToken: getServerToken(),
-    clerkId,
-    groupId: groupId as any,
-    name: body.name,
-    description: body.description,
-    icon: body.icon,
-    color: body.color,
-  });
+  try {
+    await convex.mutation(api.watchlists.updateWatchlistGroup, {
+      serverToken: getServerToken(),
+      clerkId,
+      groupId: groupId as Id<"watchlistGroups">,
+      name: body.name,
+      description: body.description,
+      icon: body.icon,
+      color: body.color,
+    });
 
-  return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    if (message === "User not found") {
+      return NextResponse.json({ error: message }, { status: 404 });
+    }
+    if (message === "Watchlist group not found") {
+      return NextResponse.json({ error: message }, { status: 404 });
+    }
+
+    return NextResponse.json(
+      { error: "Failed to update watchlist group", details: message },
+      { status: 500 },
+    );
+  }
 }
 
 export async function DELETE(
@@ -60,12 +70,30 @@ export async function DELETE(
 
   const { groupId } = await params;
 
-  await convex.mutation(api.watchlists.deleteWatchlistGroup, {
-    serverToken: getServerToken(),
-    clerkId,
-    groupId: groupId as any,
-  });
+  try {
+    await convex.mutation(api.watchlists.deleteWatchlistGroup, {
+      serverToken: getServerToken(),
+      clerkId,
+      groupId: groupId as Id<"watchlistGroups">,
+    });
 
-  return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    if (message === "User not found") {
+      return NextResponse.json({ error: message }, { status: 404 });
+    }
+    if (message === "Watchlist group not found") {
+      return NextResponse.json({ error: message }, { status: 404 });
+    }
+    if (message === "Cannot delete default watchlist") {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+
+    return NextResponse.json(
+      { error: "Failed to delete watchlist group", details: message },
+      { status: 500 },
+    );
+  }
 }
 

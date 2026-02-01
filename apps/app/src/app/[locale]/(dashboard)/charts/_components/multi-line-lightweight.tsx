@@ -545,7 +545,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                 {coin.isOptimistic ? (
                   // Loading state in legend
                   <div className="flex items-center gap-2 opacity-50 rounded-lg p-0 -m-2">
-                    <div className="w-1 h-9 rounded-full bg-muted animate-pulse" />
+                    <div className="w-1 h-9 rounded-full bg-muted animate-pulse motion-reduce:animate-none" />
                     <div className="flex flex-row items-center gap-2 flex-1 ml-2">
                       <span className="text-xs font-medium">...</span>
                       <span className="text-xs font-diatype-mono text-muted-foreground">Loading...</span>

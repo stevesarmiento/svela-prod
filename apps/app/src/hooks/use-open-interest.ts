@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { CoinGlassApi } from '@/lib/effect/coinglass-api'
+import { runPromise } from '@/lib/effect/runtime-coinglass'
 
 interface OpenInterestOHLC {
   timestamp: number;
@@ -42,34 +44,39 @@ export function useOpenInterest({
   startTime,
   endTime,
 }: UseOpenInterestProps) {
+  function formatCoinGlassError(error: unknown): string {
+    if (error && typeof error === "object" && "_tag" in error) {
+      const tagged = error as { _tag: string; message?: unknown; status?: unknown }
+      if (typeof tagged.message === "string") return tagged.message
+      if (typeof tagged.status === "number") return `CoinGlass request failed (${tagged.status})`
+      return `CoinGlass request failed (${tagged._tag})`
+    }
+
+    return error instanceof Error ? error.message : String(error)
+  }
+
   return useQuery({
     queryKey: ['openInterest', symbol, interval, limit, unit, startTime, endTime],
     queryFn: async (): Promise<OpenInterestResponse> => {
-      const params = new URLSearchParams({
-        symbol,
-        interval,
-        limit: limit.toString(),
-        unit,
-      });
+      try {
+        const result = await runPromise(
+          CoinGlassApi.getOpenInterest({
+            symbol,
+            interval,
+            limit,
+            unit,
+            startTime,
+            endTime,
+          }),
+        )
 
-      if (startTime) params.append('start_time', startTime.toString());
-      if (endTime) params.append('end_time', endTime.toString());
-
-      const response = await fetch(
-        `/api/coinglass/open-interest/aggregated-history?${params.toString()}`
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch open interest data: ${response.statusText}`);
+        return {
+          ...result,
+          data: result.data.map((row) => ({ ...row })),
+        }
+      } catch (error) {
+        throw new Error(formatCoinGlassError(error))
       }
-
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to fetch open interest data');
-      }
-
-      return data;
     },
     enabled: !!symbol,
     refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes

@@ -87,16 +87,32 @@ export function useMultiChartData(
           // Timeout individual requests after 10 seconds
           Effect.timeout("10 seconds"),
           // On error, return null data instead of failing entire batch
-          Effect.catchAll((e) => {
-            console.warn(`Failed to fetch ${coin.id}:`, e)
-            return Effect.succeed({
-              coinId: coin.id,
-              data: null,
-              cached: false,
-              stale: false,
-              dataPoints: 0,
-            })
-          })
+          Effect.catchTags({
+            ApiRequestError: (e) =>
+              Effect.log("MultiChartData fetch failed", { coinId: coin.id, error: e }).pipe(
+                Effect.zipRight(
+                  Effect.succeed({
+                    coinId: coin.id,
+                    data: null,
+                    cached: false,
+                    stale: false,
+                    dataPoints: 0,
+                  }),
+                ),
+              ),
+            TimeoutException: () =>
+              Effect.log("MultiChartData fetch timed out", { coinId: coin.id }).pipe(
+                Effect.zipRight(
+                  Effect.succeed({
+                    coinId: coin.id,
+                    data: null,
+                    cached: false,
+                    stale: false,
+                    dataPoints: 0,
+                  }),
+                ),
+              ),
+          }),
         )
       )
       
