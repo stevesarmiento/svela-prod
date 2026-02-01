@@ -74,7 +74,7 @@ const ChartsContent = memo(function ChartsContent() {
   }
 
   return (
-    <div className="space-y-6 w-full z-0 p-8">
+    <div className="space-y-6 w-full z-0 p-0">
       <div className="space-y-14">
         {/* React 19: Show loading state during transitions */}
         <div className={isPending ? 'opacity-60 transition-opacity duration-200' : ''}>
@@ -153,9 +153,9 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
 // React 19: Optimized suspense fallback
 const ChartSkeleton = memo(function ChartSkeleton() {
   return (
-    <div className="space-y-6 w-full z-0 p-8">
+    <div className="space-y-6 w-full z-0 p-0">
       <div className="space-y-14">
-        <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
+        <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/50 overflow-hidden p-1">
           <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2" />
           <div className="col-span-9 border border-zinc-800/30 rounded-[13px] overflow-hidden">
             <div className="h-[400px] flex items-center justify-center">
@@ -188,9 +188,9 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent() {
 
   if (!isInitialized) {
     return (
-      <div className="space-y-6 w-full z-0 p-8">
+      <div className="space-y-6 w-full z-0 p-0">
         <div className="space-y-14">
-          <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
+          <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/50 overflow-hidden p-1">
             <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2" />
             <div className="col-span-9 border border-zinc-800/30 rounded-[13px] overflow-hidden">
               <div className="h-[400px] flex items-center justify-center">
@@ -204,7 +204,7 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent() {
   }
 
   return (
-    <div className="space-y-6 w-full z-0 p-8">
+    <div className="space-y-6 w-full z-0 p-0">
       <div className="space-y-4">
         {/* Comparison of all watchlists */}
         <WatchlistsGrid

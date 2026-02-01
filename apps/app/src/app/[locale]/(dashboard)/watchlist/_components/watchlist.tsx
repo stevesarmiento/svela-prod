@@ -288,7 +288,7 @@ export function Watchlist({
     <TooltipProvider>
     <div className="space-y-6 px-4">
         {/* Unified Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between py-1">
           {/* Left side - Tabs in cards mode, Filters in table mode */}
           {contentMode === 'cards' ? (
             <div className="flex items-center gap-4">          
@@ -298,18 +298,18 @@ export function Watchlist({
               }}>
                 <Tooltip>
                 <TooltipTrigger asChild>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="grid" className="flex items-center gap-2" title="Switch to Watchlists (W)">
+                <TabsList className="grid w-full grid-cols-2 p-0.5">
+                  <TabsTrigger value="grid" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Watchlists (W)">
                     <IconStarFill className="h-4 w-4 fill-muted-foreground" />
                     Watchlists
                   </TabsTrigger>
-                  <TabsTrigger value="chart" className="flex items-center gap-2" title="Switch to Comparison (C)">
+                  <TabsTrigger value="chart" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Comparison (C)">
                     <IconCircleDottedAndCircle className="h-4 w-4 fill-muted-foreground" />
                     Comparison
                   </TabsTrigger>
                 </TabsList>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" align="start" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+                <TooltipContent side="bottom" align="start" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
                   <span>Switch between Watchlists and Comparison</span>
                   <Kbd>W</Kbd>
                   <span>or</span>
@@ -347,7 +347,7 @@ export function Watchlist({
         )}
         
         {/* Right side - Action buttons and shortcuts */}
-        <div className="flex items-center justify-between gap-4 flex-1">
+      <div className="flex items-center justify-between gap-4 flex-1 py-1">
           <div className="flex items-center gap-2" />
           {/* Action buttons - right side */}
           <div className="flex items-center gap-2">

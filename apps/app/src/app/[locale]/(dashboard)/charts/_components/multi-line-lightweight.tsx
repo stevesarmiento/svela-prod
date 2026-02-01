@@ -517,7 +517,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   // Always show the main UI structure
   return (
     <div className={cn(
-      "grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/20 border-zinc-800/10 overflow-hidden p-1",
+      "grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/50 border-zinc-800/10 overflow-hidden p-1",
       showPending && "opacity-60 transition-opacity duration-200"
     )}>
       {/* Legend */}
