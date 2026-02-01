@@ -8,10 +8,11 @@ import { cn } from "@v1/ui/cn"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Checkbox } from "@v1/ui/checkbox"
 import { type ColumnDef } from '@tanstack/react-table'
-import { motion, AnimatePresence } from "motion/react"
+import { motion } from "motion/react"
 import { Spinner } from "@v1/ui/spinner"
 import type { CoinMarketData } from '@/types/coins'
 import { InlinePriceChart } from "@/components/charts/inline-price-chart"
+import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
 
 interface WatchlistColumnsProps {
   handleRemove: (coinId: number | string) => void;
@@ -55,92 +56,93 @@ export function createWatchlistColumns({
       ),
       cell: ({ row }) => {
         const isHovered = hoveredRowId === row.id;
+        const coinId = row.original.id.toString()
+        const isRowSelected = selectedCoins.has(coinId)
+        const shouldRevealSelection = hasSelectedCoins || isHovered
+        const transition = {
+          type: "tween" as const,
+          duration: motionDuration(shouldReduceMotion, DURATION_UI_S),
+          ease: EASE_IN_OUT_CUBIC,
+        }
         
         return (
           <div className="relative w-full h-full flex items-center justify-start overflow-hidden ">
-            {/* Checkbox - animate only when no selections exist */}
-            {hasSelectedCoins ? (
-              // Static checkbox when selections exist
-              <div className="absolute left-0 z-10 px-1">
-                <Checkbox
-                  checked={selectedCoins.has(row.original.id.toString())}
-                  onCheckedChange={(value) => onCoinSelect(row.original.id.toString(), !!value)}
-                  aria-label="Select row"
-                  className="mt-[6px] data-[state=checked]:mt-[2px]"
-                />
-              </div>
-            ) : (
-              // Animated checkbox when no selections exist - restructured to allow exit animations
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={isHovered ? 'hovered' : 'normal'}
-                  className="absolute left-0 z-10 px-1"
-                  initial={shouldReduceMotion ? false : { opacity: 0, x: -20 }}
-                  animate={{ 
-                    opacity: isHovered ? 1 : 0, 
-                    x: isHovered ? 0 : -20 
-                  }}
-                  exit={shouldReduceMotion ? undefined : { opacity: 0, x: -20 }}
-                  transition={shouldReduceMotion ? { duration: 0 } : {
-                    type: "spring",
-                    stiffness: 400,
-                    damping: 25,
-                    mass: 0.5,
-                    duration: 0.2,
-                  }}
-                  style={{ 
-                    pointerEvents: isHovered ? 'auto' : 'none'
-                  }}
-                >
-                  {isHovered && (
-                    <Checkbox
-                      checked={selectedCoins.has(row.original.id.toString())}
-                      onCheckedChange={(value) => onCoinSelect(row.original.id.toString(), !!value)}
-                      aria-label="Select row"
-                      className="mt-[6px] data-[state=checked]:mt-[2px]"
-                    />
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            )}
+            {/* Checkbox - stable DOM to avoid "jump" on select/deselect */}
+            <motion.div
+              className="absolute left-0 z-10 px-1"
+              initial={false}
+              animate={{
+                opacity: shouldRevealSelection ? 1 : 0,
+                x: shouldRevealSelection ? 0 : -20,
+              }}
+              transition={transition}
+              style={{
+                pointerEvents: shouldRevealSelection ? "auto" : "none",
+              }}
+            >
+              <Checkbox
+                checked={isRowSelected}
+                disabled={!shouldRevealSelection}
+                tabIndex={shouldRevealSelection ? 0 : -1}
+                onCheckedChange={(value) => onCoinSelect(coinId, !!value)}
+                onClick={(e) => {
+                  // Prevent Link navigation + prevent double-toggle with the parent first-cell click handler.
+                  e.preventDefault()
+                  e.stopPropagation()
+                }}
+                aria-label="Select row"
+                className="mt-[6px] data-[state=checked]:mt-[2px]"
+              />
+            </motion.div>
             
             {/* Token content - no link here, entire row will be linked */}
-            {hasSelectedCoins ? (
-              // Static position when selections exist
-              <div className="translate-x-10 opacity-90 flex items-center gap-2">
-                <div className="relative">
-                  {row.original.quote.USD.price > 0 ? (
-                    // Use CoinGecko image if available, otherwise fallback to letter
-                    row.original.image ? (
-                      <Image
-                        src={row.original.image?.startsWith('http') || row.original.image?.startsWith('/') ? row.original.image : '/favicon.ico'}
-                        alt={row.original.name}
-                        className="w-[20px] h-[20px] rounded-full"
-                        width={24}
-                        height={24}
-                        onError={(e) => {
-                          // Fallback to letter-based avatar on image error
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const parent = target.parentElement;
-                          if (parent) {
-                            parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
-                          }
-                        }}
-                      />
-                    ) : (
-                      // Fallback for missing image
-                      <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
-                        {row.original.symbol.charAt(0).toUpperCase()}
-                      </div>
-                    )
+            <motion.div
+              className="flex items-center gap-2"
+              initial={false}
+              animate={{
+                x: shouldRevealSelection ? 40 : 0,
+                opacity: shouldRevealSelection ? 0.9 : 1,
+              }}
+              transition={transition}
+            >
+              <div className="relative">
+                {row.original.quote.USD.price > 0 ? (
+                  // Use CoinGecko image if available, otherwise fallback to letter
+                  row.original.image ? (
+                    <Image
+                      src={row.original.image?.startsWith('http') || row.original.image?.startsWith('/') ? row.original.image : '/favicon.ico'}
+                      alt={row.original.name}
+                      className="w-[20px] h-[20px] rounded-full"
+                      width={24}
+                      height={24}
+                      onError={(e) => {
+                        // Fallback to letter-based avatar on image error
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
+                        }
+                      }}
+                    />
                   ) : (
-                    <Skeleton className="w-[20px] h-[20px] rounded-full" />
-                  )}
-                </div>
+                    // Fallback for missing image
+                    <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
+                      {row.original.symbol.charAt(0).toUpperCase()}
+                    </div>
+                  )
+                ) : (
+                  <Skeleton className="w-[20px] h-[20px] rounded-full" />
+                )}
+              </div>
+              <div className="flex flex-row items-center gap-2">
                 <div className="font-bold text-sm">
                   {row.original.quote.USD.price > 0 ? (
-                    <span className="text-primary">{row.original.symbol.toUpperCase()}</span>
+                    <span className={cn(
+                      hasSelectedCoins ? "text-primary" : "text-zinc-950 dark:text-white",
+                    )}>
+                      {row.original.symbol.toUpperCase()}
+                    </span>
                   ) : (
                     <Skeleton className="h-4 w-8 rounded" />
                   )}
@@ -153,70 +155,7 @@ export function createWatchlistColumns({
                   )}
                 </div>
               </div>
-            ) : (
-              // Animated content when no selections exist
-              <motion.div
-                className="flex items-center gap-2"
-                animate={{ 
-                  x: isHovered ? 40 : 0,
-                  opacity: isHovered ? 0.9 : 1 
-                }}
-                transition={shouldReduceMotion ? { duration: 0 } : {
-                  type: "spring",
-                  stiffness: 400,
-                  damping: 25,
-                  mass: 0.5,
-                  duration: 0.2,
-                }}
-              >
-                <div className="relative">
-                  {row.original.quote.USD.price > 0 ? (
-                    // Use CoinGecko image if available, otherwise fallback to letter
-                    row.original.image ? (
-                      <Image
-                        src={row.original.image?.startsWith('http') || row.original.image?.startsWith('/') ? row.original.image : '/favicon.ico'}
-                        alt={row.original.name}
-                        className="w-[20px] h-[20px] rounded-full"
-                        width={24}
-                        height={24}
-                        onError={(e) => {
-                          // Fallback to letter-based avatar on image error
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const parent = target.parentElement;
-                          if (parent) {
-                            parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
-                          }
-                        }}
-                      />
-                    ) : (
-                      // Fallback for missing image
-                      <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
-                        {row.original.symbol.charAt(0).toUpperCase()}
-                      </div>
-                    )
-                  ) : (
-                    <Skeleton className="w-[20px] h-[20px] rounded-full" />
-                  )}
-                </div>
-                <div className="flex flex-row items-center gap-2">
-                  <div className="font-bold text-sm">
-                    {row.original.quote.USD.price > 0 ? (
-                      <span className="text-zinc-950 dark:text-white">{row.original.symbol.toUpperCase()}</span>
-                    ) : (
-                      <Skeleton className="h-4 w-8 rounded" />
-                    )}
-                  </div>
-                  <div className="">
-                    {row.original.quote.USD.price > 0 ? (
-                      <span className="text-muted-foreground font-diatype-mono text-xs">{row.original.name}</span>
-                    ) : (
-                      <Skeleton className="h-3 w-16 rounded" />
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            )}
+            </motion.div>
           </div>
         );
       },
