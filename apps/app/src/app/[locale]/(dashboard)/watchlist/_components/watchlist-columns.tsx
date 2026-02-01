@@ -21,7 +21,6 @@ interface WatchlistColumnsProps {
   onSelectAll: (checked: boolean) => void;
   totalCoins: number;
   removingCoins: Set<string>;
-  hoveredRowId: string | null;
   hasSelectedCoins: boolean;
   shouldReduceMotion?: boolean;
   onInlineChartError?: () => void;
@@ -34,7 +33,6 @@ export function createWatchlistColumns({
   onSelectAll,
   totalCoins,
   removingCoins,
-  hoveredRowId,
   hasSelectedCoins,
   shouldReduceMotion = false,
   onInlineChartError,
@@ -55,35 +53,42 @@ export function createWatchlistColumns({
         </div>
       ),
       cell: ({ row }) => {
-        const isHovered = hoveredRowId === row.id;
         const coinId = row.original.id.toString()
         const isRowSelected = selectedCoins.has(coinId)
-        const shouldRevealSelection = hasSelectedCoins || isHovered
+        // When any rows are selected, lock the reveal state for all rows (selection mode).
+        // Otherwise, reveal on hover (handled by Motion `whileHover` below).
+        const isSelectionMode = hasSelectedCoins
         const transition = {
           type: "tween" as const,
           duration: motionDuration(shouldReduceMotion, DURATION_UI_S),
           ease: EASE_IN_OUT_CUBIC,
         }
+        const checkboxVariants = {
+          rest: { opacity: 0, x: -20, pointerEvents: "none" as const },
+          revealed: { opacity: 1, x: 0, pointerEvents: "auto" as const },
+        } as const
+
+        const contentVariants = {
+          rest: { x: 0, opacity: 1 },
+          revealed: { x: 40, opacity: 0.9 },
+        } as const
         
         return (
-          <div className="relative w-full h-full flex items-center justify-start overflow-hidden ">
+          <motion.div
+            className="relative w-full h-full flex items-center justify-start overflow-hidden"
+            initial={false}
+            animate={isSelectionMode ? "revealed" : "rest"}
+            whileHover={isSelectionMode ? undefined : "revealed"}
+          >
             {/* Checkbox - stable DOM to avoid "jump" on select/deselect */}
             <motion.div
               className="absolute left-0 z-10 px-1"
-              initial={false}
-              animate={{
-                opacity: shouldRevealSelection ? 1 : 0,
-                x: shouldRevealSelection ? 0 : -20,
-              }}
+              variants={checkboxVariants}
               transition={transition}
-              style={{
-                pointerEvents: shouldRevealSelection ? "auto" : "none",
-              }}
             >
               <Checkbox
                 checked={isRowSelected}
-                disabled={!shouldRevealSelection}
-                tabIndex={shouldRevealSelection ? 0 : -1}
+                tabIndex={isSelectionMode ? 0 : -1}
                 onCheckedChange={(value) => onCoinSelect(coinId, !!value)}
                 onClick={(e) => {
                   // Prevent Link navigation + prevent double-toggle with the parent first-cell click handler.
@@ -98,11 +103,7 @@ export function createWatchlistColumns({
             {/* Token content - no link here, entire row will be linked */}
             <motion.div
               className="flex items-center gap-2"
-              initial={false}
-              animate={{
-                x: shouldRevealSelection ? 40 : 0,
-                opacity: shouldRevealSelection ? 0.9 : 1,
-              }}
+              variants={contentVariants}
               transition={transition}
             >
               <div className="relative">
@@ -156,7 +157,7 @@ export function createWatchlistColumns({
                 </div>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         );
       },
       enableSorting: false,

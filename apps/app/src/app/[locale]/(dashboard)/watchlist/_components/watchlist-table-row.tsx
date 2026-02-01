@@ -10,17 +10,13 @@ interface WatchlistTableRowProps {
   selectedCoins: Set<string>;
   watchlistGroup: string | null;
   onCoinSelect: (coinId: string, selected: boolean) => void;
-  onHoverEnter: (rowId: string) => void;
-  onHoverLeave: () => void;
 }
 
 export function WatchlistTableRow({ 
   row, 
   selectedCoins, 
   watchlistGroup, 
-  onCoinSelect, 
-  onHoverEnter, 
-  onHoverLeave 
+  onCoinSelect
 }: WatchlistTableRowProps) {
   const isSelected = selectedCoins.has(row.original.id.toString());
   const hasAnySelections = selectedCoins.size > 0;
@@ -38,8 +34,6 @@ export function WatchlistTableRow({
       {/* First cell - merged select + token with specific hover */}
       <div 
         className="flex items-center"
-        onMouseEnter={() => onHoverEnter(row.id)}
-        onMouseLeave={onHoverLeave}
         onClick={(e) => {
           e.preventDefault(); // Always prevent navigation for first cell
           e.stopPropagation();

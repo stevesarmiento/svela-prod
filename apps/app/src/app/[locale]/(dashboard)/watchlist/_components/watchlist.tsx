@@ -54,13 +54,11 @@ interface WatchlistTableSectionProps {
   onSortingChange: React.Dispatch<React.SetStateAction<SortingState>>;
   selectedCoins: Set<string>;
   watchlistGroup: string | null;
-  hoveredRowId: string | null;
   removingCoins: Set<string>;
   hasSelectedCoins: boolean;
   onRemove: (coinId: number | string) => Promise<void>;
   onCoinSelect: (coinId: string, selected: boolean) => void;
   onSelectAll: (checked: boolean, coinIds?: string[]) => void;
-  onSetHover: (rowId: string | null) => void;
   onInlineChartError?: () => void;
 }
 
@@ -70,13 +68,11 @@ function WatchlistTableSection({
   onSortingChange,
   selectedCoins,
   watchlistGroup,
-  hoveredRowId,
   removingCoins,
   hasSelectedCoins,
   onRemove,
   onCoinSelect,
   onSelectAll,
-  onSetHover,
   onInlineChartError,
 }: WatchlistTableSectionProps) {
   const shouldReduceMotion = useReducedMotion()
@@ -94,11 +90,10 @@ function WatchlistTableSection({
     onSelectAll: handleSelectAllWrapper,
     totalCoins: coins.length,
     removingCoins,
-    hoveredRowId,
     hasSelectedCoins,
     shouldReduceMotion: shouldReduceMotion ?? false,
     onInlineChartError,
-  }), [onRemove, selectedCoins, onCoinSelect, handleSelectAllWrapper, coins.length, removingCoins, hoveredRowId, hasSelectedCoins, shouldReduceMotion, onInlineChartError]);
+  }), [onRemove, selectedCoins, onCoinSelect, handleSelectAllWrapper, coins.length, removingCoins, hasSelectedCoins, shouldReduceMotion, onInlineChartError]);
 
   const table = useReactTable({
     data: coins,
@@ -115,9 +110,7 @@ function WatchlistTableSection({
       table={table}
       selectedCoins={selectedCoins}
       watchlistGroup={watchlistGroup}
-      hoveredRowId={hoveredRowId}
       onCoinSelect={onCoinSelect}
-      onSetHover={onSetHover}
     />
   )
 }
@@ -170,8 +163,6 @@ export function Watchlist({
   const {
     selectedCoins,
     removingCoins,
-    hoveredRowId,
-    setHoveredRowId,
     handleRemove,
     handleCoinSelect,
     handleSelectAll,
@@ -442,13 +433,11 @@ export function Watchlist({
               onSortingChange={setSorting}
               selectedCoins={selectedCoins}
               watchlistGroup={watchlistGroup}
-              hoveredRowId={hoveredRowId}
               removingCoins={removingCoins}
               hasSelectedCoins={hasSelectedCoins}
               onRemove={handleRemove}
               onCoinSelect={handleCoinSelect}
               onSelectAll={handleSelectAll}
-              onSetHover={setHoveredRowId}
               onInlineChartError={onInlineChartError}
             />
           )}

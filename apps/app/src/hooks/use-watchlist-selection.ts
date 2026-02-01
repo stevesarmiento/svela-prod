@@ -20,7 +20,6 @@ export function useWatchlistSelection({
 }: UseWatchlistSelectionProps) {
   const [selectedCoins, setSelectedCoins] = useState<Set<string>>(new Set())
   const [removingCoins, setRemovingCoins] = useState<Set<string>>(new Set())
-  const [hoveredRowId, setHoveredRowId] = useState<string | null>(null)
 
   // Create stable remove handler with optimistic updates
   const handleRemove = useCallback(async (coinId: number | string) => {
@@ -107,8 +106,6 @@ export function useWatchlistSelection({
     setSelectedCoins,
     removingCoins,
     setRemovingCoins,
-    hoveredRowId,
-    setHoveredRowId,
     handleRemove,
     handleCoinSelect,
     handleSelectAll,
