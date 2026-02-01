@@ -9,7 +9,7 @@ import { useCreateWatchlistGroup } from '@/lib/convex-hooks'
 import { IconPicker } from '@/components/icon-picker'
 import { COLORS } from '@/components/color-picker'
 import { cn } from '@v1/ui/cn'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@v1/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { Kbd } from "@v1/ui/kbd"
 import { IconWidgetSmallBadgePlus } from 'symbols-react'
 import { Dialog, DialogContent } from '@v1/ui/dialog'
@@ -215,7 +215,6 @@ export function CreateWatchlist({ onClose, isOpen }: CreateWatchlistProps) {
 
 export function CreateWatchlistTrigger({ onClick }: { onClick: () => void }) {
   return (
-    <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button 
@@ -235,6 +234,5 @@ export function CreateWatchlistTrigger({ onClick }: { onClick: () => void }) {
           <Kbd>W</Kbd>
         </TooltipContent>
       </Tooltip>
-    </TooltipProvider>
   )
 }

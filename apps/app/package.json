@@ -10,7 +10,7 @@
     "lint": "biome lint",
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
-    "populate-coins": "tsx src/scripts/populate-coins.ts"
+    "populate-coins": "tsx src/scripts/populate-coingecko-coins.ts"
   },
   "resolutions": {
     "import-in-the-middle": "1.11.2"
@@ -23,6 +23,7 @@
     "@effect/platform": "^0.92.1",
     "@effect/schema": "^0.75.5",
     "@number-flow/react": "^0.3.5",
+    "@tanstack/react-pacer": "^0.19.4",
     "@tanstack/react-query": "^5.81.2",
     "@tanstack/react-query-devtools": "^5.81.2",
     "@tanstack/react-table": "^8.21.3",

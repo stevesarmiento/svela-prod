@@ -198,24 +198,31 @@ export const bulkUpsertCoinGeckoCoins = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const existingCoins = await ctx.db.query("coingeckoCoins").collect();
-    const existingIds = new Set(existingCoins.map(coin => coin.coingeckoId));
-    
-    for (const coin of args.coins) {
-      if (existingIds.has(coin.coingeckoId)) {
-        const existing = existingCoins.find(c => c.coingeckoId === coin.coingeckoId);
-        if (existing) {
-          await ctx.db.patch(existing._id, {
-            ...coin,
-            lastUpdated: Date.now(),
-          });
-        }
-      } else {
-        await ctx.db.insert("coingeckoCoins", {
+    const now = Date.now();
+
+    // Dedupe within the request (idempotent under retries).
+    const uniqueById = new Map<string, (typeof args.coins)[number]>();
+    for (const coin of args.coins) uniqueById.set(coin.coingeckoId, coin);
+
+    // Upsert using the `by_coingecko_id` index (works at any table size).
+    for (const coin of uniqueById.values()) {
+      const existing = await ctx.db
+        .query("coingeckoCoins")
+        .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", coin.coingeckoId))
+        .first();
+
+      if (existing) {
+        await ctx.db.patch(existing._id, {
           ...coin,
-          lastUpdated: Date.now(),
+          lastUpdated: now,
         });
+        continue;
       }
+
+      await ctx.db.insert("coingeckoCoins", {
+        ...coin,
+        lastUpdated: now,
+      });
     }
     return null;
   },

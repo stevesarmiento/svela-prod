@@ -7,7 +7,7 @@ import { Badge } from "@v1/ui/badge";
 import { Label } from "@v1/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@v1/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@v1/ui/popover";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@v1/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { ListFilter, X } from "lucide-react";
 import { Separator } from "@v1/ui/separator";
 import { Kbd } from "@v1/ui/kbd";
@@ -233,7 +233,6 @@ export function WatchlistFilters({
         {/* Filter Button and Active Filters Row */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <Popover open={isFilterPopoverOpen} onOpenChange={setIsFilterPopoverOpen}>
-            <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <PopoverTrigger asChild>
@@ -262,7 +261,6 @@ export function WatchlistFilters({
                   <Kbd>F</Kbd>
                 </TooltipContent>
               </Tooltip>
-            </TooltipProvider>
             <PopoverContent className="rounded-xl bg-white dark:bg-zinc-900  p-0" align="start" side="right">
               {/* Search Input - Top Level */}
               <div className="">

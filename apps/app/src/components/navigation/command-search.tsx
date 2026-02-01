@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState, useMemo, useDeferredValue } from 'react';
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import { Button } from "@v1/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { IconMagnifyingglass, IconCircleSlash, IconCommand } from "symbols-react";
@@ -20,7 +21,6 @@ import { useCommandInput } from '@/hooks/use-command-input';
 import { useHybridCoinSearch, useHybridTopCoins } from '@/hooks/use-hybrid-coin-search';
 import { useContextualCommands } from '@/hooks/use-contextual-commands';
 import { useAddCoinToWatchlist } from '@/hooks/use-add-coin-to-watchlist';
-import { useDebounce } from '@/hooks/use-debounce';
 import { BackgroundPattern } from './background-pattern';
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
@@ -39,9 +39,9 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   // Custom hooks
   const { inputRef } = useCommandInput(isOpen);
   
-  // React 19: Enhanced search state with useDeferredValue
+  // TanStack Pacer + React: debounce typing + defer expensive search work
   const [searchQuery, setSearchQuery] = useState('');
-  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+  const [debouncedSearchQuery] = useDebouncedValue(searchQuery, { wait: 300 });
   const deferredSearchQuery = useDeferredValue(debouncedSearchQuery);
   
   // React 19: Use hybrid search hooks with deferred values for better performance
@@ -74,6 +74,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   }, [deferredSearchQuery, isSearchLoading, isTopCoinsLoading]);
 
   const hasSearch = deferredSearchQuery.trim().length > 0;
+  const isCoinResultsContext = context === 'charts' || context === null;
   
   const clearSearch = useCallback(() => {
     setSearchQuery('');
@@ -239,13 +240,15 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
           }
         >
           <CommandList className="z-[100] bg-transparent border-transparent max-h-[400px]">
-            <CommandEmpty>
-              <div className="flex flex-col items-center justify-center py-6 gap-2">
-                <IconCircleSlash className="h-8 w-8 fill-muted-foreground rotate-90" />
-                <h3 className="font-medium">No Results Found</h3>
-                <p className="text-sm text-muted-foreground">Try searching for something else</p>
-              </div>
-            </CommandEmpty>
+            {(!isCoinResultsContext || !coinResultsLoading) && (
+              <CommandEmpty>
+                <div className="flex flex-col items-center justify-center py-6 gap-2">
+                  <IconCircleSlash className="h-8 w-8 fill-muted-foreground rotate-90" />
+                  <h3 className="font-medium">No Results Found</h3>
+                  <p className="text-sm text-muted-foreground">Try searching for something else</p>
+                </div>
+              </CommandEmpty>
+            )}
             
             {/* Contextual Commands - Show when context is provided but not charts */}
             {hasContextualCommands && context !== 'charts' && contextualCommands.map((group) => (
@@ -285,18 +288,23 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
             ))}
 
             {/* Charts Token Results - Only show when context is 'charts' */}
-            {context === 'charts' && coinsToDisplay.length > 0 && (
+            {context === 'charts' && (coinResultsLoading || coinsToDisplay.length > 0) && (
               <CommandGroup heading={hasSearch ? "Add Tokens" : "Add to Watchlist"}>
                 {coinResultsLoading ? (
-                  Array.from({ length: 3 }).map((_, index) => (
+                  Array.from({ length: 5 }).map((_, index) => (
                     <CommandItem key={`skeleton-${index}`} disabled>
-                      <div className="flex items-center gap-3 w-full p-2">
-                        <Skeleton className="h-6 w-6 rounded-full" />
-                        <div className="flex-1">
-                          <Skeleton className="h-4 w-20 mb-1" />
-                          <Skeleton className="h-3 w-12" />
+                      <div className="flex items-center justify-between w-full bg-transparent p-2 rounded-lg">
+                        <div className="flex items-center gap-3 pr-5">
+                          <Skeleton className="h-6 w-6 rounded-full" />
+                          <div className="flex flex-col gap-1">
+                            <Skeleton className="h-4 w-24" />
+                            <Skeleton className="h-3 w-12" />
+                          </div>
                         </div>
-                        <Skeleton className="h-4 w-16" />
+                        <div className="flex flex-col items-end gap-1">
+                          <Skeleton className="h-4 w-16" />
+                          <Skeleton className="h-3 w-10" />
+                        </div>
                       </div>
                     </CommandItem>
                   ))
@@ -315,7 +323,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                             <Image
                               src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
                               alt={coin.name}
-                              className="w-6 h-6 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-900"
+                              className="w-6 h-6 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800 shadow-sm shadow-zinc-950"
                               width={24}
                               height={24}
                               onError={(e) => {
@@ -349,18 +357,23 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
             )}
 
             {/* Regular Coin Results - Only show when there's no context */}
-            {!context && coinsToDisplay.length > 0 && (
+            {!context && (coinResultsLoading || coinsToDisplay.length > 0) && (
               <CommandGroup heading={hasSearch ? "Tokens" : "Popular Tokens"}>
                 {coinResultsLoading ? (
-                  Array.from({ length: 3 }).map((_, index) => (
+                  Array.from({ length: 5 }).map((_, index) => (
                     <CommandItem key={`skeleton-${index}`} disabled>
-                      <div className="flex items-center gap-3 w-full p-2">
-                        <Skeleton className="h-6 w-6 rounded-full" />
-                        <div className="flex-1">
-                          <Skeleton className="h-4 w-20 mb-1" />
-                          <Skeleton className="h-3 w-12" />
+                      <div className="flex items-center justify-between w-full bg-transparent p-2 rounded-lg">
+                        <div className="flex items-center gap-3 pr-5">
+                          <Skeleton className="h-6 w-6 rounded-full" />
+                          <div className="flex flex-col gap-1">
+                            <Skeleton className="h-4 w-24" />
+                            <Skeleton className="h-3 w-12" />
+                          </div>
                         </div>
-                        <Skeleton className="h-4 w-16" />
+                        <div className="flex flex-col items-end gap-1">
+                          <Skeleton className="h-4 w-16" />
+                          <Skeleton className="h-3 w-10" />
+                        </div>
                       </div>
                     </CommandItem>
                   ))
@@ -378,7 +391,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                             <Image
                               src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
                               alt={coin.name}
-                              className="w-6 h-6 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-900"
+                              className="w-6 h-6 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800 shadow-sm shadow-zinc-950"
                               width={24}
                               height={24}
                               onError={(e) => {

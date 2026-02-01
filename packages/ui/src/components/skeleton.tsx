@@ -3,10 +3,14 @@ import { cn } from "../utils";
 
 function Skeleton({
   className,
+  children,
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("animate-pulse bg-primary/10", className)} {...props} />
+    <div className={cn("relative overflow-hidden bg-primary/10 rounded-lg opacity-50", className)} {...props}>
+      <div className="ck-qr-shine" />
+      {children}
+    </div>
   );
 }
 

@@ -26,7 +26,7 @@ import { useWatchlistSelection } from "@/hooks/use-watchlist-selection"
 import type { CoinMarketData } from "@/types/coins"
 import { Button } from "@v1/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@v1/ui/tabs'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@v1/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@v1/ui/tooltip'
 import { 
   Popover,
   PopoverContent,
@@ -264,7 +264,6 @@ export function Watchlist({
   }
 
   return (
-    <TooltipProvider>
     <div className="space-y-6 px-4">
         {/* Unified Header */}
         <div className="flex items-center justify-between py-1">
@@ -288,7 +287,7 @@ export function Watchlist({
                   </TabsTrigger>
                 </TabsList>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" align="start" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
+                <TooltipContent side="right" align="center" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
                   <span>Switch between Watchlists and Comparison</span>
                   <Kbd>W</Kbd>
                   <span>or</span>
@@ -347,7 +346,7 @@ export function Watchlist({
                     )}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" align="end" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
+                <TooltipContent side="left" align="center" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
                   <span>Switch between Grid and List</span>
                     <Kbd>[</Kbd>
                     <span>/</span>
@@ -467,6 +466,5 @@ export function Watchlist({
           <CoinSearch ref={coinSearchRef} />
         </div>
     </div>
-    </TooltipProvider>
   )
 }

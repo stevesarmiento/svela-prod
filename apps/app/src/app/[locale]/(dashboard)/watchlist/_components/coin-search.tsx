@@ -18,7 +18,7 @@ import {
   SheetHeader,
   SheetTrigger,
 } from "@v1/ui/sheet"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@v1/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { Kbd } from "@v1/ui/kbd"
 
 // Skeleton Components
@@ -174,7 +174,6 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <SheetTrigger asChild>
@@ -191,7 +190,6 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
             <Kbd>A</Kbd>
           </TooltipContent>
         </Tooltip>
-      </TooltipProvider>
       <SheetContent className="p-0 !z-50 overflow-auto no-scrollbar rounded-[20px] bg-zinc-950 border-zinc-800
                                shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
                                dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">

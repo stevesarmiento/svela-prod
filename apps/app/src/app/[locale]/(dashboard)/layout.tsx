@@ -4,6 +4,7 @@ import { SidebarProvider } from "@v1/ui/sidebar";
 import { BottomNavProvider } from "@/components/navigation/bottom-nav-context"
 import { RateLimitErrorBoundary } from "@/components/error-boundary/rate-limit-error-boundary"
 import { LoadingStateManager } from "@/components/loading/loading-state-manager"
+import { TooltipProvider } from "@v1/ui/tooltip";
 
 export default function DashboardLayout({
   children,
@@ -13,6 +14,7 @@ export default function DashboardLayout({
   return (
     <BottomNavProvider>
       <SidebarProvider defaultOpen>
+        <TooltipProvider>
         <div className="flex w-screen font-diatype">
           <div className="flex flex-grow flex-col max-w-7xl mx-auto">
             <TopNav />
@@ -26,6 +28,7 @@ export default function DashboardLayout({
             <BottomNav />
           </div>
         </div>      
+        </TooltipProvider>
       </SidebarProvider>
     </BottomNavProvider>
   );

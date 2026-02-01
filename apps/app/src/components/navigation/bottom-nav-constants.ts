@@ -55,13 +55,6 @@ export const BASE_ROUTES = {
       group: "Navigation",
       items: [
         {
-          title: "Overview",
-          subtitle: "View dashboard and watchlist",
-          href: "/watchlist",
-          icon: IconCaptionsBubbleFill,
-          shortcut: getShortcutForRoute("/watchlist"),
-        },
-        {
           title: "Watchlist",
           subtitle: "Your cryptocurrency watchlist",
           href: "/watchlist",
@@ -74,29 +67,6 @@ export const BASE_ROUTES = {
           href: "/charts",
           icon: IconDistributeHorizontalCenterFill,
           shortcut: getShortcutForRoute("/charts"),
-        },
-      ]
-    },
-    {
-      group: "Quick Actions",
-      items: [
-        {
-          title: "Bitcoin Price",
-          subtitle: "Get current BTC price",
-          action: "bitcoin-price",
-          icon: IconChartLineUptrendXyaxis,
-        },
-        {
-          title: "Ethereum Price",
-          subtitle: "Get current ETH price",
-          action: "ethereum-price",
-          icon: IconChartLineUptrendXyaxis,
-        },
-        {
-          title: "Market Overview",
-          subtitle: "Top 10 cryptocurrencies",
-          action: "market-overview",
-          icon: IconWalletBifoldFill,
         },
       ]
     }
