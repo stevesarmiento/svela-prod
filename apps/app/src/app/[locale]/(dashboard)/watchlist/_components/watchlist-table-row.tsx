@@ -37,6 +37,10 @@ export function WatchlistTableRow({
         onClick={(e) => {
           e.preventDefault(); // Always prevent navigation for first cell
           e.stopPropagation();
+
+          // Let the checkbox handle its own toggling (avoid double-toggle).
+          const target = e.target as HTMLElement
+          if (target.closest('[data-watchlist-row-checkbox="true"]')) return
           
           // Toggle checkbox selection when clicking anywhere in first cell
           const isCurrentlySelected = selectedCoins.has(row.original.id.toString());

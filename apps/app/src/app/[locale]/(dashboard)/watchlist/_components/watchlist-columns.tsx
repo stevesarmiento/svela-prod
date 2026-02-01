@@ -98,14 +98,10 @@ export function createWatchlistColumns({
               transition={transition}
             >
               <Checkbox
+                data-watchlist-row-checkbox="true"
                 checked={isRowSelected}
                 tabIndex={isSelectionMode ? 0 : -1}
                 onCheckedChange={(value) => onCoinSelect(coinId, !!value)}
-                onClick={(e) => {
-                  // Prevent Link navigation + prevent double-toggle with the parent first-cell click handler.
-                  e.preventDefault()
-                  e.stopPropagation()
-                }}
                 aria-label="Select row"
                 className="mt-[6px] data-[state=checked]:mt-[2px]"
               />
