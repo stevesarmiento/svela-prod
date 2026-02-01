@@ -14,26 +14,30 @@ import type { CoinMarketData } from '@/types/coins'
 import { InlinePriceChart } from "@/components/charts/inline-price-chart"
 import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
 
+interface Ref<T> {
+  current: T;
+}
+
 interface WatchlistColumnsProps {
   handleRemove: (coinId: number | string) => void;
-  selectedCoins: Set<string>;
+  selectedCoinsRef: Ref<Set<string>>;
   onCoinSelect: (coinId: string, selected: boolean) => void;
   onSelectAll: (checked: boolean) => void;
   totalCoins: number;
-  removingCoins: Set<string>;
-  hasSelectedCoins: boolean;
+  removingCoinsRef: Ref<Set<string>>;
+  hasSelectedCoinsRef: Ref<boolean>;
   shouldReduceMotion?: boolean;
   onInlineChartError?: () => void;
 }
 
 export function createWatchlistColumns({
   handleRemove,
-  selectedCoins,
+  selectedCoinsRef,
   onCoinSelect,
   onSelectAll,
   totalCoins,
-  removingCoins,
-  hasSelectedCoins,
+  removingCoinsRef,
+  hasSelectedCoinsRef,
   shouldReduceMotion = false,
   onInlineChartError,
 }: WatchlistColumnsProps): ColumnDef<CoinMarketData>[] {
@@ -43,10 +47,10 @@ export function createWatchlistColumns({
       header: () => (
         <div className={cn(
           "transition-opacity duration-200",
-          hasSelectedCoins ? "opacity-100" : "opacity-0"
+          hasSelectedCoinsRef.current ? "opacity-100" : "opacity-0"
         )}>
           <Checkbox
-            checked={selectedCoins.size === totalCoins && totalCoins > 0}
+            checked={selectedCoinsRef.current.size === totalCoins && totalCoins > 0}
             onCheckedChange={onSelectAll}
             aria-label="Select all"
           />
@@ -54,15 +58,19 @@ export function createWatchlistColumns({
       ),
       cell: ({ row }) => {
         const coinId = row.original.id.toString()
-        const isRowSelected = selectedCoins.has(coinId)
+        const isRowSelected = selectedCoinsRef.current.has(coinId)
         // When any rows are selected, lock the reveal state for all rows (selection mode).
         // Otherwise, reveal on hover (handled by Motion `whileHover` below).
-        const isSelectionMode = hasSelectedCoins
+        const isSelectionMode = hasSelectedCoinsRef.current
         const transition = {
           type: "tween" as const,
           duration: motionDuration(shouldReduceMotion, DURATION_UI_S),
           ease: EASE_IN_OUT_CUBIC,
         }
+        const cellVariants = {
+          rest: {},
+          revealed: {},
+        } as const
         const checkboxVariants = {
           rest: { opacity: 0, x: -20, pointerEvents: "none" as const },
           revealed: { opacity: 1, x: 0, pointerEvents: "auto" as const },
@@ -76,7 +84,10 @@ export function createWatchlistColumns({
         return (
           <motion.div
             className="relative w-full h-full flex items-center justify-start overflow-hidden"
-            initial={false}
+            // Ensure non-hovered rows animate when selection mode flips on/off.
+            // Some table updates can remount cells; starting from `"rest"` prevents "jump-to-endstate".
+            variants={cellVariants}
+            initial="rest"
             animate={isSelectionMode ? "revealed" : "rest"}
             whileHover={isSelectionMode ? undefined : "revealed"}
           >
@@ -140,7 +151,7 @@ export function createWatchlistColumns({
                 <div className="font-bold text-sm">
                   {row.original.quote.USD.price > 0 ? (
                     <span className={cn(
-                      hasSelectedCoins ? "text-primary" : "text-zinc-950 dark:text-white",
+                      hasSelectedCoinsRef.current ? "text-primary" : "text-zinc-950 dark:text-white",
                     )}>
                       {row.original.symbol.toUpperCase()}
                     </span>
@@ -283,10 +294,10 @@ export function createWatchlistColumns({
               e.stopPropagation();
               handleRemove(row.original.id);
             }}
-            disabled={removingCoins.has(row.original.id.toString())}
+            disabled={removingCoinsRef.current.has(row.original.id.toString())}
             className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
             >
-            {removingCoins.has(row.original.id.toString()) ? (
+            {removingCoinsRef.current.has(row.original.id.toString()) ? (
               <Spinner size={16} />
             ) : (
               <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />

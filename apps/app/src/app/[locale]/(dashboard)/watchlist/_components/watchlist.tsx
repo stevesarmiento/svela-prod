@@ -76,6 +76,9 @@ function WatchlistTableSection({
   onInlineChartError,
 }: WatchlistTableSectionProps) {
   const shouldReduceMotion = useReducedMotion()
+  const selectedCoinsRef = useLatest(selectedCoins)
+  const removingCoinsRef = useLatest(removingCoins)
+  const hasSelectedCoinsRef = useLatest(hasSelectedCoins)
 
   // Stable wrapper to keep column defs focused and avoid re-creating work in parent.
   const handleSelectAllWrapper = useCallback((checked: boolean) => {
@@ -85,15 +88,15 @@ function WatchlistTableSection({
 
   const columns = useMemo(() => createWatchlistColumns({
     handleRemove: onRemove,
-    selectedCoins,
+    selectedCoinsRef,
     onCoinSelect,
     onSelectAll: handleSelectAllWrapper,
     totalCoins: coins.length,
-    removingCoins,
-    hasSelectedCoins,
+    removingCoinsRef,
+    hasSelectedCoinsRef,
     shouldReduceMotion: shouldReduceMotion ?? false,
     onInlineChartError,
-  }), [onRemove, selectedCoins, onCoinSelect, handleSelectAllWrapper, coins.length, removingCoins, hasSelectedCoins, shouldReduceMotion, onInlineChartError]);
+  }), [onRemove, onCoinSelect, handleSelectAllWrapper, coins.length, shouldReduceMotion, onInlineChartError]);
 
   const table = useReactTable({
     data: coins,
