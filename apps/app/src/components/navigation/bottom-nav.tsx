@@ -45,7 +45,7 @@ export function BottomNav() {
   }, [setIsCommandOpen, setCommandContext]);
 
   return (
-    <div className="fixed z-[9999] bottom-8 left-0 right-0" data-bottom-nav="true">
+    <div className="dark fixed z-[9999] bottom-8 left-0 right-0" data-bottom-nav="true">
       <div className="max-w-fit mx-auto flex items-center gap-2 relative">
         {/* Navigation Dock */}
         <AnimatePresence mode="popLayout">

@@ -187,7 +187,7 @@ export const ChartTable = memo(function ChartTable({
                         src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
                         alt={coin.name}
                         className={cn(
-                          "w-4 h-4 rounded-full",
+                          "w-4 h-4 rounded-full shadow-sm shadow-zinc-950 ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800",
                           coin.isOptimistic && "opacity-50"
                         )}
                         width={16}

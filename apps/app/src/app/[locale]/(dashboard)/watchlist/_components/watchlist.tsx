@@ -32,7 +32,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@v1/ui/popover'
-import { IconStarFill, IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmarkFill } from 'symbols-react'
+import { IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmarkFill } from 'symbols-react'
 import { CreateWatchlist } from './create-watchlist'
 import { Kbd } from "@v1/ui/kbd"
 import { useLatest } from "@/hooks/use-latest"
@@ -278,11 +278,11 @@ export function Watchlist({
                 <TooltipTrigger asChild>
                 <TabsList className="grid w-full grid-cols-2 p-0.5">
                   <TabsTrigger value="grid" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Watchlists (W)">
-                    <IconStarFill className="h-4 w-4 fill-muted-foreground" />
+                    <IconBookmarkFill className="size-3.5 fill-muted-foreground" />
                     Watchlists
                   </TabsTrigger>
                   <TabsTrigger value="chart" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Comparison (C)">
-                    <IconCircleDottedAndCircle className="h-4 w-4 fill-muted-foreground" />
+                    <IconCircleDottedAndCircle className="size-4 fill-muted-foreground" />
                     Comparison
                   </TabsTrigger>
                 </TabsList>

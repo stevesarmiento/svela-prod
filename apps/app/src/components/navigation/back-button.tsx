@@ -38,7 +38,11 @@ export const BackButton = React.memo(({ onExitSelection, selectionState }: BackB
             <TooltipTrigger asChild>
               <IconXmark className="h-3 w-3 fill-gray-600 hover:fill-gray-900 dark:fill-white/70 dark:hover:fill-white" />
             </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={25} className="flex items-center text-xs p-0 border-none bg-white/95 dark:bg-zinc-900/95 shadow-sm">
+            <TooltipContent
+              side="top"
+              sideOffset={25}
+              className="dark flex items-center text-xs p-0 border-none bg-zinc-900/95 shadow-sm"
+            >
               <kbd className="rounded-sm bg-gray-100 dark:bg-border px-1.5 py-0.5 text-xs font-diatype-mono text-gray-700 dark:text-white">
                 ESC
               </kbd>

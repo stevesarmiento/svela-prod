@@ -88,7 +88,11 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
                 }`} />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="top" sideOffset={15} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-gray-200 dark:border-zinc-800 border bg-white/95 dark:bg-zinc-900/95 shadow-sm">
+            <TooltipContent
+              side="top"
+              sideOffset={15}
+              className="dark flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border border-zinc-800 bg-zinc-900/95 shadow-sm"
+            >
               <span className="text-xs text-gray-600 dark:text-zinc-400">
                 {tooltipLabel}
               </span>
