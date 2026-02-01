@@ -1,6 +1,7 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { requireServerToken } from "./_lib/server_token";
+import type { Id } from "./_generated/dataModel";
 
 const defaultUserSettings = {
   memoryEnabled: true,
@@ -29,6 +30,23 @@ const userSettingsValueValidator = v.object({
   analyticsEnabled: v.boolean(),
   shareUsageData: v.boolean(),
 });
+
+interface UserSettingsWrite {
+  userId: Id<"users">;
+  memoryEnabled: boolean;
+  autoCleanupEnabled: boolean;
+  retentionDays: string;
+  createdAt: number;
+  updatedAt: number;
+  theme?: string;
+  currency?: string;
+  dateFormat?: string;
+  emailNotifications?: boolean;
+  pushNotifications?: boolean;
+  priceAlerts?: boolean;
+  analyticsEnabled?: boolean;
+  shareUsageData?: boolean;
+}
 
 // Get user settings with defaults
 export const getUserSettings = query({
@@ -94,8 +112,8 @@ export const upsertUserSettings = mutation({
   },
   returns: v.id("userSettings"),
   handler: async (ctx, args) => {
-    requireServerToken(args.serverToken);
-    const { clerkId, ...settingsData } = args;
+    const { clerkId, serverToken, ...settingsData } = args;
+    requireServerToken(serverToken);
     
     // First get the user by Clerk ID
     const user = await ctx.db
@@ -115,11 +133,51 @@ export const upsertUserSettings = mutation({
     const now = Date.now();
 
     if (existingSettings) {
-      // Update existing settings
-      await ctx.db.patch(existingSettings._id, {
-        ...settingsData,
+      // Replace the document to drop any legacy/unknown fields (e.g. `serverToken`)
+      // that might have been written before the schema was enforced.
+      const nextSettings: UserSettingsWrite = {
+        userId: existingSettings.userId,
+        memoryEnabled:
+          settingsData.memoryEnabled ??
+          existingSettings.memoryEnabled ??
+          defaultUserSettings.memoryEnabled,
+        autoCleanupEnabled:
+          settingsData.autoCleanupEnabled ??
+          existingSettings.autoCleanupEnabled ??
+          defaultUserSettings.autoCleanupEnabled,
+        retentionDays:
+          settingsData.retentionDays ??
+          existingSettings.retentionDays ??
+          defaultUserSettings.retentionDays,
+        createdAt: existingSettings.createdAt ?? now,
         updatedAt: now,
-      });
+      };
+
+      const theme = settingsData.theme ?? existingSettings.theme;
+      if (theme !== undefined) nextSettings.theme = theme;
+      const currency = settingsData.currency ?? existingSettings.currency;
+      if (currency !== undefined) nextSettings.currency = currency;
+      const dateFormat = settingsData.dateFormat ?? existingSettings.dateFormat;
+      if (dateFormat !== undefined) nextSettings.dateFormat = dateFormat;
+      const emailNotifications =
+        settingsData.emailNotifications ?? existingSettings.emailNotifications;
+      if (emailNotifications !== undefined)
+        nextSettings.emailNotifications = emailNotifications;
+      const pushNotifications =
+        settingsData.pushNotifications ?? existingSettings.pushNotifications;
+      if (pushNotifications !== undefined)
+        nextSettings.pushNotifications = pushNotifications;
+      const priceAlerts = settingsData.priceAlerts ?? existingSettings.priceAlerts;
+      if (priceAlerts !== undefined) nextSettings.priceAlerts = priceAlerts;
+      const analyticsEnabled =
+        settingsData.analyticsEnabled ?? existingSettings.analyticsEnabled;
+      if (analyticsEnabled !== undefined)
+        nextSettings.analyticsEnabled = analyticsEnabled;
+      const shareUsageData =
+        settingsData.shareUsageData ?? existingSettings.shareUsageData;
+      if (shareUsageData !== undefined) nextSettings.shareUsageData = shareUsageData;
+
+      await ctx.db.replace(existingSettings._id, nextSettings);
       return existingSettings._id;
     } else {
       // Create new settings with defaults

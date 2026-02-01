@@ -20,7 +20,7 @@
     "dev:web": "turbo run dev --filter=@v1/web",
     "dev:jobs": "turbo run jobs --filter=@v1/jobs",
     "dev:app": "turbo run dev --filter=@v1/app",
-    "dev:convex": "bunx convex dev",
+    "dev:convex": "cd apps/app && bunx convex dev",
     "start:web": "turbo run start --filter=@v1/web",
     "start:app": "turbo run start --filter=@v1/app",
     "test": "turbo run test",

@@ -103,10 +103,10 @@ export function useUserSettings() {
     priceAlerts?: boolean;
     analyticsEnabled?: boolean;
     shareUsageData?: boolean;
-  }) => {
+  }): Promise<boolean> => {
     if (!user?.id) {
       toast.error("Please sign in to save settings");
-      return;
+      return false;
     }
 
     try {
@@ -117,9 +117,11 @@ export function useUserSettings() {
       });
 
       await queryClient.invalidateQueries({ queryKey: ["user-settings"] });
+      return true;
     } catch (error) {
       console.error("Failed to update settings:", error);
       toast.error("Failed to save settings");
+      return false;
     }
   };
 

@@ -57,8 +57,12 @@ export function ThemeSettings() {
     }
     
     if (user?.id) {
-      await updateSettings({ theme: newTheme });
-      toast.success(`Theme updated to ${newTheme === 'system' ? 'system default' : newTheme}`);
+      const didSave = await updateSettings({ theme: newTheme });
+      if (didSave) {
+        toast.success(
+          `Theme updated to ${newTheme === "system" ? "system default" : newTheme}`,
+        );
+      }
     }
   };
 
