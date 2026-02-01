@@ -35,7 +35,6 @@ import {
 import { IconStarFill, IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmarkFill } from 'symbols-react'
 import { CreateWatchlist } from './create-watchlist'
 import { Kbd } from "@v1/ui/kbd"
-import { COLOR_THEMES } from "@/components/color-picker"
 import { useLatest } from "@/hooks/use-latest"
 import { useReducedMotion } from "motion/react"
 
@@ -246,26 +245,6 @@ export function Watchlist({
     handleSelectAll(checked, coinIds);
   }, [filteredCoins, handleSelectAll]);
 
-  // Calculate counter for toggle button
-  const toggleCounter = useMemo(() => {
-    if (contentMode === 'table') {
-      // Show number of available watchlists
-      return watchlistGroups.length;
-    }
-    // Show number of tokens in selected watchlist
-    return filteredCoins.length;
-  }, [contentMode, watchlistGroups.length, filteredCoins.length]);
-
-  // Get the selected group's color theme for the counter badge
-  const selectedGroupColorTheme = useMemo(() => {
-    const groupWithColor = selectedGroup as { color?: string } | null;
-    const groupColor = groupWithColor?.color;
-    if (!groupColor) {
-      return COLOR_THEMES.default;
-    }
-    return COLOR_THEMES[groupColor as keyof typeof COLOR_THEMES] || COLOR_THEMES.default;
-  }, [selectedGroup]);
-
   // Handle errors
   if (error) {
     toast({
@@ -351,29 +330,24 @@ export function Watchlist({
           <div className="flex items-center gap-2" />
           {/* Action buttons - right side */}
           <div className="flex items-center gap-2">
-                        {/* Content Mode Toggle */}
-                        {gridViewMode !== 'chart' && (
+            {/* Content Mode Toggle */}
+            {gridViewMode !== 'chart' && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => onContentModeChange?.(contentMode === 'cards' ? 'table' : 'cards')}
-                    className={`group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80 relative border-2 border-opacity-50 ${selectedGroupColorTheme.border}`}
+                    className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80"
                   >
                     {contentMode === 'cards' ? (
                       <IconRectangleGrid2x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
                     ) : (
                       <IconRectangleGrid1x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
                     )}
-                    {/* Counter Badge */}
-                    <span className={`absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full text-[10px] font-bold flex items-center justify-center leading-none font-diatype-mono shadow-md text-white
-                    ${selectedGroupColorTheme.bg}`}>
-                      {toggleCounter}
-                    </span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" align="end" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+                <TooltipContent side="bottom" align="end" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
                   <span>Switch between Grid and List</span>
                     <Kbd>[</Kbd>
                     <span>/</span>
@@ -389,7 +363,7 @@ export function Watchlist({
                   size="sm"
                   className="h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
                 >
-                  <IconEllipsis className="h-4 w-4 fill-muted-foreground rotate-90" />
+                  <IconEllipsis className="size-3.5 fill-muted-foreground rotate-90" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-64 p-1 rounded-xl bg-white dark:bg-zinc-900" align="end" side="bottom">

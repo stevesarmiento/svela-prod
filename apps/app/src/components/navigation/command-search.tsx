@@ -286,7 +286,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
 
             {/* Charts Token Results - Only show when context is 'charts' */}
             {context === 'charts' && coinsToDisplay.length > 0 && (
-              <CommandGroup heading={hasSearch ? "Add Tokens" : "Add to Comparison"}>
+              <CommandGroup heading={hasSearch ? "Add Tokens" : "Add to Watchlist"}>
                 {coinResultsLoading ? (
                   Array.from({ length: 3 }).map((_, index) => (
                     <CommandItem key={`skeleton-${index}`} disabled>
@@ -315,7 +315,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                             <Image
                               src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
                               alt={coin.name}
-                              className="w-6 h-6 rounded-full"
+                              className="w-6 h-6 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-900"
                               width={24}
                               height={24}
                               onError={(e) => {
@@ -378,7 +378,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                             <Image
                               src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
                               alt={coin.name}
-                              className="w-6 h-6 rounded-full"
+                              className="w-6 h-6 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-900"
                               width={24}
                               height={24}
                               onError={(e) => {
