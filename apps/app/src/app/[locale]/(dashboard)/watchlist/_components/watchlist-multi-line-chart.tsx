@@ -1,10 +1,8 @@
 'use client'
 
-import React, { useEffect, useRef, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useTheme } from 'next-themes'
-import type { ISeriesApi, LineData, Time } from 'lightweight-charts'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
-import { createRoot } from 'react-dom/client'
 import { cn } from "@v1/ui/cn"
 import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
@@ -14,8 +12,9 @@ import { useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
 import type { WatchlistGroup } from './watchlist-context'
-import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
-import { subscribeToWindowResize } from '@/hooks/window-resize-store'
+import { WatchlistMultiLineTimeScaleSelector } from "./watchlist-multi-line-time-scale-selector"
+import type { WatchlistSeries } from "./watchlist-multi-line.types"
+import { useWatchlistMultiLineLightweightChart } from "./use-watchlist-multi-line-lightweight-chart"
 
 type WatchlistGroupId = WatchlistGroup["_id"]
 
@@ -24,44 +23,6 @@ interface WatchlistMultiLineChartProps {
   setActiveTimeScale: (scale: string) => void
   selectedWatchlists: Set<WatchlistGroupId>
   onSelectWatchlist?: (watchlistId: WatchlistGroupId) => void
-}
-
-interface PriceDataPoint {
-  time: Time
-  value: number
-}
-
-interface TooltipWatchlistData {
-  name: string
-  color: string
-  value: number | null
-  icon?: string
-}
-
-interface WatchlistSeries {
-  id: WatchlistGroupId
-  name: string
-  icon?: string
-  color: string
-  data: PriceDataPoint[]
-  coinsCount: number
-  latestValue: number
-}
-
-interface LineSeriesData {
-  series: ISeriesApi<"Line">
-  watchlistData: WatchlistSeries
-}
-
-function toTimestampMs(time: Time): number {
-  if (typeof time === "number") return time * 1000
-  if (typeof time === "string") {
-    const [year, month, day] = time.split("-").map((part) => Number(part))
-    if (!year || !month || !day) return Date.now()
-    return Date.UTC(year, month - 1, day)
-  }
-  // BusinessDay (midnight UTC)
-  return Date.UTC(time.year, time.month - 1, time.day)
 }
 
 function getBucketMsFromTimeScale(timeScale: string): number {
@@ -148,101 +109,13 @@ function WatchlistSeriesProvider({
   return null
 }
 
-const TooltipContent = ({
-  watchlistData,
-  timestamp,
-}: {
-  watchlistData: TooltipWatchlistData[]
-  timestamp: number
-}) => {
-  return (
-    <div className="flex flex-col gap-1 overflow-hidden">
-      <div className="px-4 py-3">
-        <div className="mb-3 text-[11px] text-muted-foreground font-medium">
-          {new Date(timestamp).toLocaleDateString(undefined, {
-            month: 'long',
-            day: 'numeric'
-          })}
-        </div>
-        <div className="w-full h-[1px] mb-3 bg-border/50 scale-125" />
-        <div className="flex flex-col gap-2">
-          {watchlistData.map((watchlist) => (
-            <div key={watchlist.name} className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div
-                  className="h-3 w-1 rounded-full"
-                  style={{ backgroundColor: watchlist.color }}
-                />
-                <WatchlistGroupIcon 
-                  icon={watchlist.icon} 
-                  className="w-3 h-3 text-muted-foreground"
-                  size={12}
-                />
-                <span className="text-[11px] text-muted-foreground truncate max-w-[120px]">
-                  {watchlist.name}
-                </span>
-              </div>
-              <span className="text-[11px] font-diatype-mono text-foreground font-bold">
-                {watchlist.value === null ? (
-                  <span className="text-muted-foreground">—</span>
-                ) : (
-                  <>
-                    {watchlist.value > 0 ? "+" : ""}
-                    {watchlist.value.toFixed(2)}%
-                  </>
-                )}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const TimeScaleSelector = ({ 
-  activeTimeScale, 
-  setActiveTimeScale 
-}: { 
-  activeTimeScale: string
-  setActiveTimeScale: (scale: string) => void 
-}) => {
-  const scales = [
-    { value: "1d", label: "1D" },   // 24h change
-    { value: "7d", label: "1W" },   // 7d change  
-    { value: "30d", label: "1M" },  // 30d change
-    { value: "max", label: "1Y" },  // Longest available
-  ]
-
-  return (
-    <div className="flex gap-1 dark:bg-zinc-950/10 bg-zinc-950/5 backdrop-blur-xl border dark:border-zinc-800/30 border-zinc-800/10 rounded-[12px] p-1">
-      {scales.map((scale) => (
-        <button
-          key={scale.value}
-          onClick={() => setActiveTimeScale(scale.value)}
-          className={cn(
-            "px-2 py-1 text-xs rounded-lg",
-            activeTimeScale === scale.value
-              ? "dark:bg-zinc-800/50 bg-zinc-950/50 border dark:border-zinc-800/50 border-zinc-800/20  shadow-md dark:shadow-zinc-950/50 shadow-zinc-950/10 text-white"
-              : "bg-transparent text-muted-foreground hover:bg-muted/80"
-          )}
-        >
-          {scale.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
 export function WatchlistMultiLineChart({ 
   activeTimeScale, 
   setActiveTimeScale,
   selectedWatchlists,
   onSelectWatchlist
 }: WatchlistMultiLineChartProps) {
-  const chartContainerRef = useRef<HTMLDivElement>(null)
   const [hoveredWatchlist, setHoveredWatchlist] = useState<WatchlistGroupId | null>(null)
-  const lineSeriesMapRef = useRef<Map<WatchlistGroupId, LineSeriesData>>(new Map())
   const [watchlistData, setWatchlistData] = useState<Map<WatchlistGroupId, WatchlistSeries>>(new Map())
   
   // ✅ IMPROVED: Handle theme directly without hydration flag
@@ -311,239 +184,11 @@ export function WatchlistMultiLineChart({
     }))
   }, [watchlistSeriesData])
 
-  useEffect(() => {
-    if (!chartContainerRef.current || !watchlistSeriesData.length) return
-
-    let isCancelled = false
-    let cleanup: (() => void) | null = null
-
-    void (async () => {
-      const {
-        createChart,
-        ColorType,
-        CrosshairMode,
-        LineStyle,
-        LineSeries,
-        LastPriceAnimationMode,
-      } = await loadLightweightCharts()
-
-      if (isCancelled || !chartContainerRef.current || !watchlistSeriesData.length) return
-
-      const chart = createChart(chartContainerRef.current, {
-        handleScale: false,
-        handleScroll: false,
-        layout: {
-          background: { type: ColorType.Solid, color: "transparent" },
-          textColor: isDarkMode ? "#ffffff50" : "#00000050",
-          attributionLogo: false,
-        },
-        grid: {
-          vertLines: { 
-            visible: false,
-            color: isDarkMode ? "#e5e7eb20" : "#00000020",
-            style: LineStyle.Dotted,
-          },
-          horzLines: { 
-            visible: false,
-            color: isDarkMode ? "#ffffff10" : "#00000010",
-            style: LineStyle.Dotted,
-          },
-        },
-        rightPriceScale: {
-          borderVisible: false,
-          autoScale: true,
-        },
-        crosshair: {
-          mode: CrosshairMode.Magnet,
-          vertLine: {
-            labelVisible: true,
-            width: 1,
-            color: isDarkMode ? "#d1d5db40" : "#00000040",
-            visible: true,
-            style: LineStyle.Solid,
-          },
-          horzLine: {
-            visible: false,
-            labelVisible: false,
-          },
-        },
-        timeScale: {
-          visible: false,
-          timeVisible: true,
-          secondsVisible: false,
-          borderVisible: false,
-        },
-      })
-
-      // Create line series for each watchlist
-      const lineSeriesMap = new Map<WatchlistGroupId, LineSeriesData>()
-      
-      watchlistSeriesData.forEach((watchlistSeries) => {
-        const lineSeries = chart.addSeries(LineSeries, {
-          lineWidth: 1,
-          lastValueVisible: true,
-          visible: true,
-          priceLineVisible: false,
-          color: watchlistSeries.color,
-          lastPriceAnimation: LastPriceAnimationMode.Continuous,
-          priceFormat: {
-            type: "custom",
-            formatter: (price: number) => `${price > 0 ? '+' : ''}${price.toFixed(2)}%`,
-          },
-        })
-        
-        lineSeries.setData(watchlistSeries.data)
-        lineSeriesMap.set(watchlistSeries.id, { series: lineSeries, watchlistData: watchlistSeries })
-      })
-
-      // Store the map in ref for hover effects
-      lineSeriesMapRef.current = lineSeriesMap
-
-      chart.timeScale().fitContent()
-
-      const handleResize = () => {
-        if (chartContainerRef.current) {
-          chart.applyOptions({
-            width: chartContainerRef.current.clientWidth,
-            height: 400,
-          })
-        }
-      }
-
-      // Prefer observing the actual container size (avoids per-chart global resize listeners).
-      let resizeObserver: ResizeObserver | null = null
-      let resizeRafId: number | null = null
-      let unsubscribeWindowResize: (() => void) | null = null
-
-      if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
-        resizeObserver = new ResizeObserver(() => {
-          if (resizeRafId) cancelAnimationFrame(resizeRafId)
-          resizeRafId = requestAnimationFrame(() => handleResize())
-        })
-        resizeObserver.observe(chartContainerRef.current)
-      } else {
-        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
-      }
-
-      handleResize()
-
-      // Add tooltip
-      const tooltipEl = document.createElement("div")
-      const tooltipRoot = createRoot(tooltipEl)
-      tooltipEl.className = `fixed overflow-hidden text-[11px] rounded-xl w-[220px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-opacity duration-100 ease-out will-change-transform ${
-        isDarkMode 
-          ? 'text-white bg-zinc-900/95 border border-zinc-700/50' 
-          : 'text-gray-900 bg-white/95 border border-gray-200/50'
-      }`
-      tooltipEl.style.left = "0px"
-      tooltipEl.style.top = "0px"
-      tooltipEl.style.opacity = "0"
-      tooltipEl.style.visibility = "hidden"
-      tooltipEl.style.transform = "translate3d(0px, 0px, 0)"
-      document.body.appendChild(tooltipEl)
-      let isTooltipVisible = false
-
-      // Subscribe to crosshair move
-      chart.subscribeCrosshairMove((param) => {
-        if (
-          param.point === undefined ||
-          !param.time ||
-          param.point.x < 0 ||
-          param.point.y < 0
-        ) {
-          tooltipEl.style.opacity = "0"
-          tooltipEl.style.visibility = "hidden"
-          isTooltipVisible = false
-          return
-        }
-
-        if (!chartContainerRef.current) return
-        const chartRect = chartContainerRef.current.getBoundingClientRect()
-
-        const watchlistData: TooltipWatchlistData[] = []
-        
-        lineSeriesMap.forEach((lineData) => {
-          const seriesData = param.seriesData.get(lineData.series) as LineData<Time> | undefined
-          watchlistData.push({
-            name: lineData.watchlistData.name,
-            color: lineData.watchlistData.color,
-            value: seriesData?.value ?? null,
-            icon: lineData.watchlistData.icon,
-          })
-        })
-
-        watchlistData.sort((a, b) => a.name.localeCompare(b.name))
-
-        const hasAnyValue = watchlistData.some((row) => row.value !== null)
-        if (!hasAnyValue) {
-          tooltipEl.style.opacity = "0"
-          tooltipEl.style.visibility = "hidden"
-          isTooltipVisible = false
-          return
-        }
-
-        if (!isTooltipVisible) {
-          tooltipEl.style.opacity = "1"
-          tooltipEl.style.visibility = "visible"
-          isTooltipVisible = true
-        }
-        tooltipRoot.render(
-          <TooltipContent
-            watchlistData={watchlistData}
-            timestamp={toTimestampMs(param.time as Time)}
-          />
-        )
-
-        const tooltipWidth = tooltipEl.offsetWidth
-        const tooltipHeight = tooltipEl.offsetHeight
-
-        // Position tooltip
-        let left = chartRect.left + param.point.x + 15
-        // Keep vertical position stable to avoid perceived "jumpiness".
-        let top = chartRect.top + 12
-
-        // Adjust if tooltip goes beyond right edge
-        if (left + tooltipWidth > window.innerWidth - 10) {
-          left = chartRect.left + param.point.x - tooltipWidth - 15
-        }
-
-        // Adjust if tooltip goes beyond bottom edge
-        if (top + tooltipHeight > window.innerHeight - 10) {
-          top = window.innerHeight - tooltipHeight - 10
-        }
-
-        // Adjust if tooltip goes beyond top edge
-        if (top < 10) {
-          top = 10
-        }
-
-        tooltipEl.style.transform = `translate3d(${left}px, ${top}px, 0)`
-      })
-
-      cleanup = () => {
-        if (resizeRafId) cancelAnimationFrame(resizeRafId)
-        resizeObserver?.disconnect()
-        unsubscribeWindowResize?.()
-        requestAnimationFrame(() => {
-          try {
-            tooltipRoot.unmount()
-          } catch {
-            // noop
-          }
-          if (document.body.contains(tooltipEl)) {
-            document.body.removeChild(tooltipEl)
-          }
-        })
-        chart.remove()
-        lineSeriesMapRef.current = new Map<WatchlistGroupId, LineSeriesData>()
-      }
-    })()
-
-    return () => {
-      isCancelled = true
-      cleanup?.()
-    }
-  }, [watchlistSeriesData, isDarkMode, resolvedTheme])
+  const { chartContainerRef, lineSeriesMapRef } = useWatchlistMultiLineLightweightChart({
+    series: watchlistSeriesData,
+    isDarkMode,
+    height: 400,
+  })
 
   // Handle hover effects on chart lines
   useEffect(() => {
@@ -574,7 +219,7 @@ export function WatchlistMultiLineChart({
         })
       }
     })
-  }, [hoveredWatchlist])
+  }, [hoveredWatchlist, watchlistSeriesData])
 
   return (
     <div className="grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/20 border-zinc-800/10 overflow-hidden p-1">
@@ -594,15 +239,18 @@ export function WatchlistMultiLineChart({
         <div className="flex flex-col gap-2 space-y-3">
           {latestValues.map((watchlist) => (
             <div key={watchlist.id}>
-              <div 
+              <button
+                type="button"
                 className={cn(
-                  "flex overflow-hidden items-center gap-2 cursor-pointer rounded-lg p-0 -m-2 relative group hover:bg-foreground/10",
+                  "relative -m-2 flex w-full items-center gap-2 overflow-hidden rounded-lg p-0 text-left group hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                   hoveredWatchlist && hoveredWatchlist !== watchlist.id ? "opacity-40" : "opacity-100",
                   hoveredWatchlist === watchlist.id ? "bg-foreground/5" : ""
                 )}
                 style={{ backgroundColor: addOpacityToColor(watchlist.color, 0.1) }}
                 onMouseEnter={() => setHoveredWatchlist(watchlist.id)}
                 onMouseLeave={() => setHoveredWatchlist(null)}
+                onFocus={() => setHoveredWatchlist(watchlist.id)}
+                onBlur={() => setHoveredWatchlist(null)}
                 onClick={() => onSelectWatchlist?.(watchlist.id)}
               >
                 <div 
@@ -626,7 +274,7 @@ export function WatchlistMultiLineChart({
                 )}>
                   {watchlist.latestValue > 0 ? '+' : ''}{watchlist.latestValue.toFixed(2)}%
                 </div>
-              </div>
+              </button>
             </div>
           ))}
         </div>
@@ -654,7 +302,7 @@ export function WatchlistMultiLineChart({
               </div>
               
               {/* Time Scale Selector */}
-              <TimeScaleSelector
+              <WatchlistMultiLineTimeScaleSelector
                 activeTimeScale={activeTimeScale}
                 setActiveTimeScale={setActiveTimeScale}
               />

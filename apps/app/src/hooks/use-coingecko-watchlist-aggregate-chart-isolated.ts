@@ -285,15 +285,23 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
       }
 
       const percentageData: AggregateDataPoint[] = []
+      let lastAggregateValue: number | null = null
       for (let i = 0; i < bucketTimesMs.length; i++) {
-        const count = countReturnsByBucket[i] ?? 0
-        if (count <= 0) continue
-
         const bucketTimeMs = bucketTimesMs[i]!
         const bucketTimeSec = Math.floor(bucketTimeMs / 1000)
+        const count = countReturnsByBucket[i] ?? 0
+
+        if (count > 0) {
+          const value = (sumReturnsByBucket[i] ?? 0) / count
+          lastAggregateValue = value
+          percentageData.push({ time: bucketTimeSec as Time, value })
+          continue
+        }
+
+        // Keep the series continuous so crosshair markers don't blink.
         percentageData.push({
           time: bucketTimeSec as Time,
-          value: (sumReturnsByBucket[i] ?? 0) / count,
+          value: lastAggregateValue ?? 0,
         })
       }
 
