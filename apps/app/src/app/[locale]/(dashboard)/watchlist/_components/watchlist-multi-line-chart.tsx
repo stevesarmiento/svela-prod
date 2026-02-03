@@ -4,13 +4,13 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
-import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { useWatchlistGroups } from '@/lib/convex-hooks'
 import { useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
+import { ChartLoadingSkeleton } from "@/components/charts/chart-loading-skeleton"
 import type { WatchlistGroup } from './watchlist-context'
 import { WatchlistMultiLineTimeScaleSelector } from "./watchlist-multi-line-time-scale-selector"
 import type { WatchlistSeries } from "./watchlist-multi-line.types"
@@ -311,11 +311,12 @@ export function WatchlistMultiLineChart({
               <div className="p-0 relative">
                 {/* Show loading message if no chart data yet */}
                 {watchlistSeriesData.length === 0 && selectedWatchlists.size > 0 ? (
-                  <div className="flex items-center justify-center h-[400px]">
-                    <div className="text-center">
-                      <Spinner size={24} className="mb-2" />
-                      <p className="text-sm text-muted-foreground">Loading watchlist data...</p>
-                    </div>
+                  <div className="relative h-[400px]">
+                    <ChartLoadingSkeleton
+                      height={400}
+                      lines={Math.max(1, selectedWatchlists.size)}
+                      className="opacity-80"
+                    />
                   </div>
                 ) : watchlistSeriesData.length === 0 ? (
                   <div className="flex items-center justify-center h-[400px]">

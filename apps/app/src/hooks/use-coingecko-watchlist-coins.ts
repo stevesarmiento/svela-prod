@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from "react"
 import { Effect } from "effect"
-import { CoinGeckoApi } from "@/lib/effect/coingecko-api"
+import { CoinGeckoApi, type CoinGeckoQuoteMarketData } from "@/lib/effect/coingecko-api"
 import { runPromise } from "@/lib/effect/runtime-coingecko"
 
 interface CoinGeckoWatchlistCoin {
@@ -45,14 +45,16 @@ export function useCoinGeckoWatchlistCoins(coinIds: string[]) {
     queryFn: async (): Promise<CoinGeckoWatchlistCoin[]> => {
       if (!stableCoinIds.length) return []
 
+      const emptyQuotesResponse: { data: Record<string, CoinGeckoQuoteMarketData> } = { data: {} }
+
       const program = CoinGeckoApi.getQuotes({ ids: stableCoinIds }).pipe(
         Effect.catchTags({
-          CoinGeckoInvalidParamsError: () => Effect.succeed({ data: {} }),
-          CoinGeckoUnauthorizedError: () => Effect.succeed({ data: {} }),
-          CoinGeckoNotFoundError: () => Effect.succeed({ data: {} }),
-          CoinGeckoRateLimitedError: () => Effect.succeed({ data: {} }),
-          CoinGeckoApiError: () => Effect.succeed({ data: {} }),
-          CoinGeckoDecodeError: () => Effect.succeed({ data: {} }),
+          CoinGeckoInvalidParamsError: () => Effect.succeed(emptyQuotesResponse),
+          CoinGeckoUnauthorizedError: () => Effect.succeed(emptyQuotesResponse),
+          CoinGeckoNotFoundError: () => Effect.succeed(emptyQuotesResponse),
+          CoinGeckoRateLimitedError: () => Effect.succeed(emptyQuotesResponse),
+          CoinGeckoApiError: () => Effect.succeed(emptyQuotesResponse),
+          CoinGeckoDecodeError: () => Effect.succeed(emptyQuotesResponse),
         }),
       )
 

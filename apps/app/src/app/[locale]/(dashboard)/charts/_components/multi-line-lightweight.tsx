@@ -11,10 +11,10 @@ import { toast } from "@v1/ui/use-toast"
 import Link from 'next/link'
 import { useBottomNav } from '@/components/navigation/bottom-nav-context'
 import { Button } from '@v1/ui/button'
-import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { AvatarCircles } from "@v1/ui/token-stacks"
 import { getTokenLogoURL } from "@/lib/logo-overrides"
+import { ChartLoadingSkeleton } from "@/components/charts/chart-loading-skeleton"
 import { useCoinGeckoBulkChartData } from '@/hooks/use-coingecko-bulk-chart-data'
 import { TimeScaleSelector } from "./multi-line-lightweight-time-scale-selector"
 import type { CoinSeries } from "./multi-line-lightweight.types"
@@ -57,7 +57,10 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   const { openContextualCommandSearch } = useBottomNav()
 
   // 🚀 OPTIMIZED: Use CoinGecko BULK multi-chart data hook with intelligent caching
-  const { series: coinSeriesData, isLoading: chartDataLoading, performance } = useCoinGeckoBulkChartData(deferredCoins, deferredTimeScale)
+  const { 
+    series: coinSeriesData, 
+    isLoading: isChartLoading, 
+  } = useCoinGeckoBulkChartData(deferredCoins, deferredTimeScale)
 
   // React 19: Memoize expensive color generation with deferred data
   const coinSeriesWithColors = useMemo((): CoinSeries[] => {
@@ -161,7 +164,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   }, [hoveredCoin, coinSeriesWithColors, lineSeriesMapRef])
 
   // React 19: Show pending states
-  const showPending = isPending || isChartPending || chartDataLoading
+  const showPending = isPending || isChartPending || isChartLoading
 
   // Always show the main UI structure
   return (
@@ -305,16 +308,13 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
             </CardHeader>
             <CardContent className="pl-8">
               <div className="p-0 relative">
-                {/* Show loading message if no chart data yet */}
-                {chartDataLoading && coins.length > 0 ? (
-                  <div className="flex items-center justify-center h-[400px]">
-                    <div className="text-center">
-                      <Spinner size={24} className="mb-2" />
-                      <p className="text-sm text-muted-foreground">Loading chart data...</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Bulk API: {performance.bulkApiCalls} calls | Cache: {performance.cacheHitRate.toFixed(1)}%
-                      </p>
-                    </div>
+                {coins.length > 0 && coinSeriesWithColors.length === 0 ? (
+                  <div className="relative h-[400px]">
+                    <ChartLoadingSkeleton
+                      height={400}
+                      lines={Math.max(1, coins.length)}
+                      className="opacity-80"
+                    />
                   </div>
                 ) : coinSeriesWithColors.length === 0 ? (
                   <div className="flex items-center justify-center h-[400px]">
