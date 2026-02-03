@@ -27,8 +27,9 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     marketCapRange: [0, 10000000000000],
     volumeRange: [0, 1000000000],
     changeFilter: "all",
-    sortBy: "name",
-    sortOrder: "asc",
+    // Default sort: highest volume first
+    sortBy: "volume",
+    sortOrder: "desc",
   })
 
   const { 
@@ -151,8 +152,9 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       marketCapRange: [0, 10000000000000],
       volumeRange: [0, 1000000000],
       changeFilter: "all",
-      sortBy: "name",
-      sortOrder: "asc",
+      // Default sort: highest volume first
+      sortBy: "volume",
+      sortOrder: "desc",
     });
   }, []);
 

@@ -5,7 +5,7 @@ import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { cn } from "@v1/ui/cn"
 import Image from "next/image"
 import Link from "next/link"
-import NumberFlow from '@number-flow/react'
+import NumberFlow from '@/components/number-flow'
 import { useMemo } from 'react'
 import { 
   IconLaurelLeading, 

@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
+import { cleanTokenName, getTokenLogoURL } from '@/lib/logo-overrides'
 
 interface TokenHeaderData {
   id: string
@@ -42,9 +43,9 @@ export function useTokenHeader() {
   // Transform CoinGecko data to match expected interface
   const tokenData: TokenHeaderData | null = coinData ? {
     id: coinData.coingeckoId,
-    name: coinData.name,
+    name: cleanTokenName(coinData.name),
     symbol: coinData.symbol.toUpperCase(),
-    logoUrl: coinData.logoUrl
+    logoUrl: getTokenLogoURL(coinData.symbol, coinData.logoUrl) ?? coinData.logoUrl
   } : null
 
   return {

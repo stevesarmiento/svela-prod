@@ -18,6 +18,7 @@ import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingec
 import { useWatchlistOperations } from '@/hooks/use-watchlist-effect'
 import { runPromiseExit } from '@/lib/effect/runtime-watchlist'
 import type { WatchlistGroup } from './watchlist-context'
+import { getTokenLogoURL } from '@/lib/logo-overrides'
 
 type WatchlistGroupId = WatchlistGroup["_id"]
 
@@ -71,11 +72,19 @@ function useWatchlistData(groupId: WatchlistGroupId): WatchlistData | null {
 
     // Create coin images array for token stacks
     const coinImages = (coins || [])
-      .filter(coin => coin.image && (coin.image.startsWith('http') || coin.image.startsWith('/')))
+      .slice()
+      // Highest item first: pick avatars by 24h volume (descending).
+      .sort((a, b) => (b.quote?.USD?.volume_24h ?? 0) - (a.quote?.USD?.volume_24h ?? 0))
+      .map((coin) => {
+        const logoUrl = getTokenLogoURL(coin.symbol, coin.image)
+        if (!logoUrl) return null
+        return { logoUrl, coinId: coin.id }
+      })
+      .filter((item): item is { logoUrl: string; coinId: string } => item !== null)
       .slice(0, 5) // Limit to first 5 coins
-      .map(coin => ({
-        imageUrl: coin.image,
-        profileUrl: `/charts/${coin.id}`
+      .map((coin) => ({
+        imageUrl: coin.logoUrl,
+        profileUrl: `/charts/${coin.coinId}`
       }))
 
     return {

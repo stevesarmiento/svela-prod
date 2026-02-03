@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
-import NumberFlow from '@number-flow/react'
+import NumberFlow from '@/components/number-flow'
 import { useMemo } from 'react'
 import { Button } from "@v1/ui/button"
 import { 
@@ -16,6 +16,7 @@ import { IconEllipsis, IconPencilTipCropCircle, IconTrashFill } from "symbols-re
 import { AvatarCircles } from "@v1/ui/token-stacks"
 import { useCoinGeckoWatchlistAggregateChartIsolated } from "@/hooks/use-coingecko-watchlist-aggregate-chart-isolated"
 import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
+import { getTokenLogoURL } from "@/lib/logo-overrides"
 
 // Loading shine CSS
 const loadingShineStyle = `
@@ -144,10 +145,17 @@ export function WatchlistCard({
 
   // Create avatar data for coin logos
   const avatarData = useMemo(() => {
-    return coins.slice(0, 4).map((coin) => ({
-      imageUrl: coin.image || '', // Use CoinGecko image URL
-      profileUrl: `/charts/${coin.id}`,
-    }))
+    return coins
+      .slice(0, 4)
+      .map((coin) => {
+        const logoUrl = getTokenLogoURL(coin.symbol, coin.image)
+        if (!logoUrl) return null
+        return {
+          imageUrl: logoUrl,
+          profileUrl: `/charts/${coin.id}`,
+        }
+      })
+      .filter((item): item is { imageUrl: string; profileUrl: string } => item !== null)
   }, [coins])
 
   // Get aggregate chart data - using isolated CoinGecko API calls  

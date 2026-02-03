@@ -42,6 +42,11 @@ interface CoinHistoricalData {
 interface UseCoinGeckoWatchlistAggregateChartIsolatedProps {
   coins: CoinGeckoWatchlistCoin[]
   timeScale?: string
+  /**
+   * Optional override to ensure multiple series share the same range end.
+   * Pass a stable value (e.g. floored bucket time) to keep charts aligned.
+   */
+  rangeEndTimeMs?: number
 }
 
 interface CoinGeckoWatchlistAggregateIsolatedResult {
@@ -66,6 +71,53 @@ interface HistoricalDataResult {
   }
 }
 
+function getRangeDaysFromTimeScale(timeScale: string): number {
+  switch (timeScale) {
+    case "1d":
+      return 1
+    case "7d":
+      return 7
+    case "30d":
+      return 30
+    case "max":
+      return 365
+    default:
+      return 7
+  }
+}
+
+function getBucketMsFromTimeScale(timeScale: string): number {
+  switch (timeScale) {
+    // Keep buckets coarse enough to avoid hundreds/thousands of points.
+    case "1d":
+      return 15 * 60 * 1000 // 15m
+    case "7d":
+      return 2 * 60 * 60 * 1000 // 2h
+    case "30d":
+      return 12 * 60 * 60 * 1000 // 12h
+    case "max":
+      return 24 * 60 * 60 * 1000 // 1d
+    default:
+      return 2 * 60 * 60 * 1000 // 2h
+  }
+}
+
+function floorToBucket(timeMs: number, bucketMs: number): number {
+  return Math.floor(timeMs / bucketMs) * bucketMs
+}
+
+function buildBucketTimesMs(args: {
+  startTimeMs: number
+  endTimeMs: number
+  bucketMs: number
+}): Array<number> {
+  const bucketTimesMs: Array<number> = []
+  for (let t = args.startTimeMs; t <= args.endTimeMs; t += args.bucketMs) {
+    bucketTimesMs.push(t)
+  }
+  return bucketTimesMs
+}
+
 /**
  * Isolated CoinGecko watchlist aggregate chart hook that:
  * 1. Fetches historical data for all coins in the watchlist  
@@ -74,7 +126,8 @@ interface HistoricalDataResult {
  */
 export function useCoinGeckoWatchlistAggregateChartIsolated({ 
   coins,
-  timeScale = '7d'
+  timeScale = '7d',
+  rangeEndTimeMs,
 }: UseCoinGeckoWatchlistAggregateChartIsolatedProps): CoinGeckoWatchlistAggregateIsolatedResult {
   const [aggregateData, setAggregateData] = useState<AggregateDataPoint[]>([])
 
@@ -188,65 +241,68 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
         return
       }
 
-      // Find the shortest data series to ensure we have data for all coins at each point
-      const minDataLength = Math.min(...validCoinIds.map(coinId => coinDataMap[coinId]?.length || 0))
+      // Build a shared, deterministic bucket timeline so series align and end together.
+      const rangeDays = getRangeDaysFromTimeScale(timeScale)
+      const bucketMs = getBucketMsFromTimeScale(timeScale)
+      const endTimeMs = floorToBucket(rangeEndTimeMs ?? Date.now(), bucketMs)
+      const startTimeMs = endTimeMs - rangeDays * 24 * 60 * 60 * 1000
+      const bucketTimesMs = buildBucketTimesMs({ startTimeMs, endTimeMs, bucketMs })
 
-      // Create aggregated data points
-      const aggregatedPoints: AggregateDataPoint[] = []
-      
-      // Sample data points evenly to get ~50 points for smooth chart
-      const sampleSize = Math.min(50, minDataLength)
-      const step = Math.floor(minDataLength / sampleSize)
-      
-      for (let i = 0; i < sampleSize; i++) {
-        const dataIndex = i * step
-        let totalPrice = 0
-        let validPriceCount = 0
-        let timestamp = 0
-        
-        // Get price from each coin at this index
-        for (const coinId of validCoinIds) {
-          const coinData = coinDataMap[coinId]
-          if (coinData?.[dataIndex]) {
-            totalPrice += coinData[dataIndex].value
-            validPriceCount++
-            if (timestamp === 0) {
-              timestamp = coinData[dataIndex].time
-            }
+      const sumReturnsByBucket: Array<number> = Array.from({ length: bucketTimesMs.length }, () => 0)
+      const countReturnsByBucket: Array<number> = Array.from({ length: bucketTimesMs.length }, () => 0)
+
+      // Equal-weighted % returns: normalize each coin to 0% at range start, then average returns.
+      for (const coinId of validCoinIds) {
+        const rawSeries = coinDataMap[coinId]
+        if (!rawSeries?.length) continue
+
+        const series = [...rawSeries].sort((a, b) => a.time - b.time)
+        let cursor = 0
+        let lastPrice: number | null = null
+        let baselinePrice: number | null = null
+
+        for (let i = 0; i < bucketTimesMs.length; i++) {
+          const bucketTimeMs = bucketTimesMs[i]!
+          // CoinGecko market-chart timestamps are seconds; bucket times are ms.
+          const bucketTimeSec = Math.floor(bucketTimeMs / 1000)
+
+          while (cursor < series.length && series[cursor]!.time <= bucketTimeSec) {
+            lastPrice = series[cursor]!.value
+            cursor++
           }
-        }
 
-        // Calculate average price across all coins
-        if (validPriceCount > 0) {
-          const averagePrice = totalPrice / validPriceCount
-          
-          aggregatedPoints.push({
-            time: Math.floor(timestamp / 1000) as Time,
-            value: averagePrice
-          })
+          // Set baseline at the first bucket where this coin has a known price in-range.
+          if (baselinePrice === null && lastPrice !== null && lastPrice > 0) {
+            baselinePrice = lastPrice
+          }
+
+          if (baselinePrice === null || lastPrice === null) continue
+
+          const returnPct = ((lastPrice - baselinePrice) / baselinePrice) * 100
+          sumReturnsByBucket[i] = (sumReturnsByBucket[i] ?? 0) + returnPct
+          countReturnsByBucket[i] = (countReturnsByBucket[i] ?? 0) + 1
         }
       }
 
-      // Sort by time to ensure proper ordering
-      aggregatedPoints.sort((a, b) => (a.time as number) - (b.time as number))
+      const percentageData: AggregateDataPoint[] = []
+      for (let i = 0; i < bucketTimesMs.length; i++) {
+        const count = countReturnsByBucket[i] ?? 0
+        if (count <= 0) continue
 
-      // Convert to percentage changes for better visualization
-      if (aggregatedPoints.length > 0 && aggregatedPoints[0]) {
-        const baselinePrice = aggregatedPoints[0].value
-        const percentageData = aggregatedPoints.map(point => ({
-          time: point.time,
-          value: baselinePrice > 0 ? ((point.value - baselinePrice) / baselinePrice) * 100 : 0
-        }))
-
-        setAggregateData(percentageData)
-      } else {
-        setAggregateData([])
+        const bucketTimeMs = bucketTimesMs[i]!
+        const bucketTimeSec = Math.floor(bucketTimeMs / 1000)
+        percentageData.push({
+          time: bucketTimeSec as Time,
+          value: (sumReturnsByBucket[i] ?? 0) / count,
+        })
       }
+
+      setAggregateData(percentageData)
     } catch (error) {
       console.error('Error processing watchlist aggregate data:', error)
       setAggregateData([])
     }
-  }, [historicalData, coins])
+  }, [historicalData, coins, timeScale, rangeEndTimeMs])
 
   // Calculate current aggregate performance for display
   const currentAggregateChange = useMemo(() => {

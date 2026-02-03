@@ -1,5 +1,33 @@
 // Logo override system for tokens with custom/curated logos
-// xStock logos are stored in /public/logos/xstocks/{symbol}.png
+// Static logo assets live in `apps/app/public/logos/...` and are served at `/logos/...`.
+
+const LOGOS_ROUTE_BASE = "/logos" as const;
+const XSTOCKS_ROUTE_BASE = `${LOGOS_ROUTE_BASE}/xstocks` as const;
+const XSTOCK_LOGO_EXTENSION = "png" as const;
+
+function getXstockLogoFilename(symbol: string): string | null {
+    const trimmed = symbol.trim();
+    if (!trimmed) return null;
+
+    // Some tickers contain punctuation that can't be used in filenames (e.g. BRK.B → BRK_B).
+    const normalizedForFilename = trimmed.replace(/[.\-]/g, "_");
+
+    const candidates = trimmed === normalizedForFilename ? [trimmed] : [trimmed, normalizedForFilename];
+
+    for (const candidate of candidates) {
+        if (XSTOCK_LOGOS.has(candidate)) return candidate;
+
+        const mappedFilename = SYMBOL_TO_FILENAME[candidate];
+        if (mappedFilename && XSTOCK_LOGOS.has(mappedFilename)) return mappedFilename;
+
+        // Case-insensitive match (but preserve the real filename casing from the set).
+        for (const logo of XSTOCK_LOGOS) {
+            if (logo.toLowerCase() === candidate.toLowerCase()) return logo;
+        }
+    }
+
+    return null;
+}
 
 // Set of available xStock logo symbols (filename without extension)
 const XSTOCK_LOGOS = new Set([
@@ -137,26 +165,8 @@ const SYMBOL_TO_FILENAME: Record<string, string> = {
 export function getTokenLogoURL(symbol: string | undefined, fallbackLogoURI: string | undefined): string | undefined {
     if (!symbol) return fallbackLogoURI;
 
-    // Normalize symbol (handle case variations)
-    const normalizedSymbol = symbol.trim();
-
-    // Check for direct match
-    if (XSTOCK_LOGOS.has(normalizedSymbol)) {
-        return `/logos/xstocks/${normalizedSymbol}.png`;
-    }
-
-    // Check for mapped symbol
-    const mappedFilename = SYMBOL_TO_FILENAME[normalizedSymbol];
-    if (mappedFilename && XSTOCK_LOGOS.has(mappedFilename)) {
-        return `/logos/xstocks/${mappedFilename}.png`;
-    }
-
-    // Check case-insensitive match
-    for (const logo of XSTOCK_LOGOS) {
-        if (logo.toLowerCase() === normalizedSymbol.toLowerCase()) {
-            return `/logos/xstocks/${logo}.png`;
-        }
-    }
+    const filename = getXstockLogoFilename(symbol);
+    if (filename) return `${XSTOCKS_ROUTE_BASE}/${filename}.${XSTOCK_LOGO_EXTENSION}`;
 
     // Return fallback
     return fallbackLogoURI;
@@ -167,12 +177,7 @@ export function getTokenLogoURL(symbol: string | undefined, fallbackLogoURI: str
  */
 export function hasLocalLogo(symbol: string | undefined): boolean {
     if (!symbol) return false;
-    const normalized = symbol.trim();
-    return (
-        XSTOCK_LOGOS.has(normalized) ||
-        Object.keys(SYMBOL_TO_FILENAME).includes(normalized) ||
-        Array.from(XSTOCK_LOGOS).some(logo => logo.toLowerCase() === normalized.toLowerCase())
-    );
+    return getXstockLogoFilename(symbol) !== null;
 }
 
 /**

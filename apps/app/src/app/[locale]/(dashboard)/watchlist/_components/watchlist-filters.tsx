@@ -97,7 +97,8 @@ export function WatchlistFilters({
         marketCapRange[0] > 0 || marketCapRange[1] < 1000000000000 ||
         volumeRange[0] > 0 || volumeRange[1] < 1000000000 ||
         changeFilter !== "all" ||
-        sortBy !== "name" || sortOrder !== "asc"
+        // Default sort is volume desc (highest volume first)
+        sortBy !== "volume" || sortOrder !== "desc"
       );
 
       // Check for Escape to clear filters (only if popover is not open and there are active filters)
@@ -177,7 +178,7 @@ export function WatchlistFilters({
       });
     }
 
-    if (sortBy !== "name" || sortOrder !== "asc") {
+    if (sortBy !== "volume" || sortOrder !== "desc") {
       chips.push({
         key: "sort",
         label: "Sort",
@@ -207,8 +208,9 @@ export function WatchlistFilters({
         onChangeFilterChange("all");
         break;
       case "sort":
-        onSortByChange("name");
-        onSortOrderChange("asc");
+        // Reset to default sort (highest volume first)
+        onSortByChange("volume");
+        onSortOrderChange("desc");
         break;
     }
   };

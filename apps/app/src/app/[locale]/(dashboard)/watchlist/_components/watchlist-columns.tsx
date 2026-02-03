@@ -13,6 +13,7 @@ import { Spinner } from "@v1/ui/spinner"
 import type { CoinMarketData } from '@/types/coins'
 import { InlinePriceChart } from "@/components/charts/inline-price-chart"
 import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
+import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
 
 interface Ref<T> {
   current: T;
@@ -59,6 +60,12 @@ export function createWatchlistColumns({
       cell: ({ row }) => {
         const coinId = row.original.id.toString()
         const isRowSelected = selectedCoinsRef.current.has(coinId)
+        const tokenName = cleanTokenName(row.original.name)
+        const tokenLogoUrl = getTokenLogoURL(row.original.symbol, row.original.image)
+        const safeTokenLogoUrl =
+          tokenLogoUrl && (tokenLogoUrl.startsWith("http") || tokenLogoUrl.startsWith("/"))
+            ? tokenLogoUrl
+            : undefined
         // When any rows are selected, lock the reveal state for all rows (selection mode).
         // Otherwise, reveal on hover (handled by Motion `whileHover` below).
         const isSelectionMode = hasSelectedCoinsRef.current
@@ -116,10 +123,10 @@ export function createWatchlistColumns({
               <div className="relative">
                 {row.original.quote.USD.price > 0 ? (
                   // Use CoinGecko image if available, otherwise fallback to letter
-                  row.original.image ? (
+                  safeTokenLogoUrl ? (
                     <Image
-                      src={row.original.image?.startsWith('http') || row.original.image?.startsWith('/') ? row.original.image : '/favicon.ico'}
-                      alt={row.original.name}
+                      src={safeTokenLogoUrl}
+                      alt={tokenName}
                       className="w-[20px] h-[20px] rounded-full"
                       width={24}
                       height={24}
@@ -157,7 +164,7 @@ export function createWatchlistColumns({
                 </div>
                 <div className="">
                   {row.original.quote.USD.price > 0 ? (
-                    <span className="text-muted-foreground font-diatype-mono text-xs">{row.original.name}</span>
+                    <span className="text-muted-foreground font-diatype-mono text-xs">{tokenName}</span>
                   ) : (
                     <Skeleton className="h-3 w-16 rounded" />
                   )}

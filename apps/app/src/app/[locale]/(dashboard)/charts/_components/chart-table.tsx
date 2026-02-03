@@ -12,6 +12,7 @@ import { cn } from "@v1/ui/cn"
 import { toast } from "@v1/ui/use-toast"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Spinner } from "@v1/ui/spinner"
+import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
 // Accept whatever data format the existing hook provides
 interface OptimisticCoinData {
   id: string | number;
@@ -56,7 +57,7 @@ export const ChartTable = memo(function ChartTable({
 
   // React 19: Memoize expensive interval calculations with deferred values
   const coinsWithIntervalChange = useMemo(() => {
-    return deferredCoins.map(coin => {
+    const enrichedCoins = deferredCoins.map(coin => {
       let intervalChange = 0
 
       // Skip calculation for optimistic coins
@@ -117,6 +118,13 @@ export const ChartTable = memo(function ChartTable({
         intervalChange
       }
     })
+    
+    // Highest item first: sort by 24h volume (descending).
+    enrichedCoins.sort(
+      (a, b) => (b.quote?.USD?.volume_24h ?? 0) - (a.quote?.USD?.volume_24h ?? 0),
+    )
+
+    return enrichedCoins
   }, [deferredCoins, deferredTimeScale])
 
   const getTimeScaleLabel = (scale: string) => {
@@ -168,24 +176,32 @@ export const ChartTable = memo(function ChartTable({
       "space-y-4",
       showPending && "opacity-60 transition-opacity duration-200"
     )}>
-      {coinsWithIntervalChange.map(coin => (
-        <div 
-          key={coin.id} 
-          className={cn(
-            "rounded-[10px] bg-primary/5 p-0.5",
-            isRemovePending && "pointer-events-none"
-          )}
-        >
+      {coinsWithIntervalChange.map((coin) => {
+        const tokenName = coin.isOptimistic ? "Loading..." : cleanTokenName(coin.name)
+        const tokenLogoUrl = getTokenLogoURL(coin.symbol, coin.image)
+        const safeTokenLogoUrl =
+          tokenLogoUrl && (tokenLogoUrl.startsWith("http") || tokenLogoUrl.startsWith("/"))
+            ? tokenLogoUrl
+            : undefined
+
+        return (
+          <div 
+            key={coin.id} 
+            className={cn(
+              "rounded-[10px] bg-primary/5 p-0.5",
+              isRemovePending && "pointer-events-none"
+            )}
+          >
           {/* Header with Token Name */}
           <div className="px-3 py-2">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
               <div className="grid grid-cols-4 gap-4">
                 <div className="flex items-center gap-2">
                   <div className="relative">
-                    {coin.image ? (
+                    {safeTokenLogoUrl ? (
                       <Image
-                        src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
-                        alt={coin.name}
+                        src={safeTokenLogoUrl}
+                        alt={tokenName}
                         className={cn(
                           "w-4 h-4 rounded-full shadow-sm shadow-zinc-950 ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800",
                           coin.isOptimistic && "opacity-50"
@@ -212,7 +228,7 @@ export const ChartTable = memo(function ChartTable({
                     )}
                   </div>
                   <span className="text-muted-foreground/70">
-                    {coin.isOptimistic ? "Loading..." : coin.name}
+                    {tokenName}
                   </span>
                 </div>
                 <div className="flex items-center gap-1 justify-end">
@@ -332,7 +348,8 @@ export const ChartTable = memo(function ChartTable({
             )}
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 })

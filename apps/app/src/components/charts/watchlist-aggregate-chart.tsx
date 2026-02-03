@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef } from "react"
-import type { IChartApi, Time as LightweightTime } from 'lightweight-charts'
+import type { IChartApi, ISeriesApi, Time as LightweightTime } from 'lightweight-charts'
 import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
 import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 import { Effect } from "effect"
@@ -27,11 +27,13 @@ export function WatchlistAggregateChart({
 }: WatchlistAggregateChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
+  const lineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null)
+  const hasData = data.length > 0
 
   useEffectScoped(
     () => {
       const container = chartContainerRef.current
-      if (!container || data.length === 0) return Effect.void
+      if (!container || !hasData) return Effect.void
 
       return Effect.acquireRelease(
         Effect.gen(function* () {
@@ -44,6 +46,7 @@ export function WatchlistAggregateChart({
               // Ignore cleanup errors.
             }
             chartRef.current = null
+            lineSeriesRef.current = null
           })
 
           const { createChart, ColorType, LineStyle, LineSeries } = yield* Effect.tryPromise({
@@ -100,6 +103,7 @@ export function WatchlistAggregateChart({
           chart.timeScale().fitContent()
 
           chartRef.current = chart
+          lineSeriesRef.current = lineSeries
 
           const resizeRafIdRef: { current: number | null } = { current: null }
           let resizeObserver: ResizeObserver | null = null
@@ -138,14 +142,25 @@ export function WatchlistAggregateChart({
               // Ignore cleanup errors.
             }
             chartRef.current = null
+            lineSeriesRef.current = null
           }),
       ).pipe(
         Effect.flatMap(() => Effect.never),
         Effect.asVoid,
       )
     },
-    [data, isPositive, width, height],
+    [hasData, isPositive, width, height],
   )
+
+  React.useEffect(() => {
+    if (!hasData) return
+    const series = lineSeriesRef.current
+    const chart = chartRef.current
+    if (!series || !chart) return
+
+    series.setData(data)
+    chart.timeScale().fitContent()
+  }, [data, hasData])
 
   if (data.length === 0) {
     return (

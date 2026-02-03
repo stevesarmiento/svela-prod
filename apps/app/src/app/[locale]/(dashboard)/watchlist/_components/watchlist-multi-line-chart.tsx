@@ -34,7 +34,7 @@ interface PriceDataPoint {
 interface TooltipWatchlistData {
   name: string
   color: string
-  value: number
+  value: number | null
   icon?: string
 }
 
@@ -53,7 +53,41 @@ interface LineSeriesData {
   watchlistData: WatchlistSeries
 }
 
-function useWatchlistSeriesData(group: WatchlistGroup, activeTimeScale: string): WatchlistSeries | null {
+function toTimestampMs(time: Time): number {
+  if (typeof time === "number") return time * 1000
+  if (typeof time === "string") {
+    const [year, month, day] = time.split("-").map((part) => Number(part))
+    if (!year || !month || !day) return Date.now()
+    return Date.UTC(year, month - 1, day)
+  }
+  // BusinessDay (midnight UTC)
+  return Date.UTC(time.year, time.month - 1, time.day)
+}
+
+function getBucketMsFromTimeScale(timeScale: string): number {
+  switch (timeScale) {
+    case "1d":
+      return 15 * 60 * 1000
+    case "7d":
+      return 2 * 60 * 60 * 1000
+    case "30d":
+      return 12 * 60 * 60 * 1000
+    case "max":
+      return 24 * 60 * 60 * 1000
+    default:
+      return 2 * 60 * 60 * 1000
+  }
+}
+
+function floorToBucket(timeMs: number, bucketMs: number): number {
+  return Math.floor(timeMs / bucketMs) * bucketMs
+}
+
+function useWatchlistSeriesData(
+  group: WatchlistGroup,
+  activeTimeScale: string,
+  rangeEndTimeMs: number,
+): WatchlistSeries | null {
   // Get watchlist coins for this group
   const groupWatchlist = useWatchlistByGroup(group._id)
   
@@ -69,7 +103,8 @@ function useWatchlistSeriesData(group: WatchlistGroup, activeTimeScale: string):
   // Get aggregate chart data using isolated CoinGecko hook
   const { aggregateData } = useCoinGeckoWatchlistAggregateChartIsolated({
     coins: coins || [],
-    timeScale: activeTimeScale
+    timeScale: activeTimeScale,
+    rangeEndTimeMs,
   })
 
   const watchlistSeries = useMemo((): WatchlistSeries | null => {
@@ -94,14 +129,16 @@ function useWatchlistSeriesData(group: WatchlistGroup, activeTimeScale: string):
 function WatchlistSeriesProvider({ 
   group, 
   activeTimeScale,
+  rangeEndTimeMs,
   onDataUpdate 
 }: { 
   group: WatchlistGroup
   activeTimeScale: string
+  rangeEndTimeMs: number
   onDataUpdate: (groupId: WatchlistGroupId, data: WatchlistSeries | null) => void
 }) {
   // Use our custom hook to get series data
-  const seriesData = useWatchlistSeriesData(group, activeTimeScale)
+  const seriesData = useWatchlistSeriesData(group, activeTimeScale, rangeEndTimeMs)
   
   // Update parent when data changes
   React.useEffect(() => {
@@ -146,7 +183,14 @@ const TooltipContent = ({
                 </span>
               </div>
               <span className="text-[11px] font-diatype-mono text-foreground font-bold">
-                {watchlist.value > 0 ? '+' : ''}{watchlist.value.toFixed(2)}%
+                {watchlist.value === null ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : (
+                  <>
+                    {watchlist.value > 0 ? "+" : ""}
+                    {watchlist.value.toFixed(2)}%
+                  </>
+                )}
               </span>
             </div>
           ))}
@@ -217,6 +261,12 @@ export function WatchlistMultiLineChart({
     const groups = watchlistGroupsData || []
     return groups.filter(group => selectedWatchlists.has(group._id))
   }, [watchlistGroupsData, selectedWatchlists])
+
+  // Compute a single shared range end so ALL watchlists end together.
+  const rangeEndTimeMs = useMemo(() => {
+    const bucketMs = getBucketMsFromTimeScale(activeTimeScale)
+    return floorToBucket(Date.now(), bucketMs)
+  }, [activeTimeScale])
 
   const handleDataUpdate = React.useCallback((groupId: WatchlistGroupId, data: WatchlistSeries | null) => {
     setWatchlistData(prev => {
@@ -413,18 +463,19 @@ export function WatchlistMultiLineChart({
         const watchlistData: TooltipWatchlistData[] = []
         
         lineSeriesMap.forEach((lineData) => {
-          const seriesData = param.seriesData.get(lineData.series) as LineData<Time>
-          if (seriesData) {
-            watchlistData.push({
-              name: lineData.watchlistData.name,
-              color: lineData.watchlistData.color,
-              value: seriesData.value,
-              icon: lineData.watchlistData.icon,
-            })
-          }
+          const seriesData = param.seriesData.get(lineData.series) as LineData<Time> | undefined
+          watchlistData.push({
+            name: lineData.watchlistData.name,
+            color: lineData.watchlistData.color,
+            value: seriesData?.value ?? null,
+            icon: lineData.watchlistData.icon,
+          })
         })
 
-        if (watchlistData.length === 0) {
+        watchlistData.sort((a, b) => a.name.localeCompare(b.name))
+
+        const hasAnyValue = watchlistData.some((row) => row.value !== null)
+        if (!hasAnyValue) {
           tooltipEl.style.opacity = "0"
           tooltipEl.style.visibility = "hidden"
           isTooltipVisible = false
@@ -439,7 +490,7 @@ export function WatchlistMultiLineChart({
         tooltipRoot.render(
           <TooltipContent
             watchlistData={watchlistData}
-            timestamp={Number(param.time) * 1000}
+            timestamp={toTimestampMs(param.time as Time)}
           />
         )
 
@@ -448,7 +499,8 @@ export function WatchlistMultiLineChart({
 
         // Position tooltip
         let left = chartRect.left + param.point.x + 15
-        let top = chartRect.top + param.point.y - tooltipHeight / 2
+        // Keep vertical position stable to avoid perceived "jumpiness".
+        let top = chartRect.top + 12
 
         // Adjust if tooltip goes beyond right edge
         if (left + tooltipWidth > window.innerWidth - 10) {
@@ -532,6 +584,7 @@ export function WatchlistMultiLineChart({
           key={group._id}
           group={group}
           activeTimeScale={activeTimeScale}
+          rangeEndTimeMs={rangeEndTimeMs}
           onDataUpdate={handleDataUpdate}
         />
       ))}

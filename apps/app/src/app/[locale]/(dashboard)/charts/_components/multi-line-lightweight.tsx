@@ -16,6 +16,7 @@ import { Button } from '@v1/ui/button'
 import { Spinner } from "@v1/ui/spinner"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { AvatarCircles } from "@v1/ui/token-stacks"
+import { getTokenLogoURL } from "@/lib/logo-overrides"
 import { useCoinGeckoBulkChartData } from '@/hooks/use-coingecko-bulk-chart-data'
 import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
 import { subscribeToWindowResize } from '@/hooks/window-resize-store'
@@ -215,10 +216,17 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
 
   // Create avatar data for coin logos (filter out optimistic coins) - using deferred coins
   const avatarData = useMemo(() => {
-    return deferredCoins.filter(coin => !coin.isOptimistic && coin.image).map((coin) => ({
-      imageUrl: coin.image!, // Only use CoinGecko images, skip coins without images
-      profileUrl: `/charts/${coin.id}`,
-    }))
+    return deferredCoins
+      .filter((coin) => !coin.isOptimistic)
+      .map((coin) => {
+        const logoUrl = getTokenLogoURL(coin.symbol, coin.image)
+        if (!logoUrl) return null
+        return {
+          imageUrl: logoUrl,
+          profileUrl: `/charts/${coin.id}`,
+        }
+      })
+      .filter((item): item is { imageUrl: string; profileUrl: string } => item !== null)
   }, [deferredCoins])
 
   // Memoize tooltip configuration
