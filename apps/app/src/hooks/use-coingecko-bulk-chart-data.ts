@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useMemo } from "react"
 import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
 import { Effect } from "effect"
@@ -37,6 +38,79 @@ interface BulkChartDataResult {
   }
 }
 
+function alignSeriesToSharedTimeAxis(series: CoinSeries[]): CoinSeries[] {
+  if (series.length <= 1) return series
+
+  const axisSource = series.reduce((best, current) => {
+    if (current.data.length > best.data.length) return current
+    return best
+  }, series[0]!)
+
+  const axisTimes = axisSource.data.map((point) => point.time as number)
+  const uniqueAxisTimes = Array.from(new Set(axisTimes)).sort((a, b) => a - b)
+  if (uniqueAxisTimes.length === 0) return series
+
+  return series.map((row) => {
+    if (row.data.length === 0) return row
+
+    if (row.data.length === 1) {
+      const onlyValue = row.data[0]?.value ?? 0
+      return {
+        ...row,
+        data: uniqueAxisTimes.map((time) => ({ time: time as Time, value: onlyValue })),
+      }
+    }
+
+    const points = row.data
+    const lastIndex = points.length - 1
+    const firstTime = points[0]?.time as number | undefined
+    const lastTime = points[lastIndex]?.time as number | undefined
+    const firstValue = points[0]?.value ?? 0
+    const lastValue = points[lastIndex]?.value ?? firstValue
+
+    if (firstTime === undefined || lastTime === undefined) return row
+
+    const alignedData: Array<{ time: Time; value: number }> = []
+    let cursor = 0
+
+    for (const time of uniqueAxisTimes) {
+      if (time <= firstTime) {
+        alignedData.push({ time: time as Time, value: firstValue })
+        continue
+      }
+
+      if (time >= lastTime) {
+        alignedData.push({ time: time as Time, value: lastValue })
+        continue
+      }
+
+      while (cursor < lastIndex - 1 && ((points[cursor + 1]?.time as number) < time)) {
+        cursor += 1
+      }
+
+      const left = points[cursor]
+      const right = points[cursor + 1]
+      if (!left || !right) {
+        alignedData.push({ time: time as Time, value: lastValue })
+        continue
+      }
+
+      const t0 = left.time as number
+      const t1 = right.time as number
+      if (t1 <= t0) {
+        alignedData.push({ time: time as Time, value: left.value })
+        continue
+      }
+
+      const ratio = (time - t0) / (t1 - t0)
+      const value = left.value + ratio * (right.value - left.value)
+      alignedData.push({ time: time as Time, value })
+    }
+
+    return { ...row, data: alignedData }
+  })
+}
+
 export function useCoinGeckoBulkChartData(
   coins: OptimisticCoinMarketData[],
   activeTimeScale: string
@@ -46,6 +120,13 @@ export function useCoinGeckoBulkChartData(
   // Filter out optimistic (loading) coins and coins without valid IDs
   const realCoins = coins.filter(coin => !coin.isOptimistic && coin.id != null)
   const coinIds = realCoins.map(coin => coin.id.toString())
+  const coinMetaById = useMemo(() => {
+    const map = new Map<string, { name: string; symbol: string }>()
+    for (const coin of realCoins) {
+      map.set(coin.id.toString(), { name: coin.name, symbol: coin.symbol })
+    }
+    return map
+  }, [realCoins])
   
   const { data, isLoading } = useQuery({
     queryKey: ['coingecko-bulk-chart', coinIds.join(','), activeTimeScale],
@@ -58,36 +139,29 @@ export function useCoinGeckoBulkChartData(
       const fetchEffects = coinIds.map((coinId) =>
         CoinGeckoApi.getMarketChart({ coinId, days }).pipe(
           Effect.map((response): SeriesWithCache => {
-            const coin = realCoins.find((c) => c.id.toString() === coinId)
+            const coinMeta = coinMetaById.get(coinId)
             const prices = response.data.prices
-            const basePrice = prices[0]?.value || 1
-
-            const percentageData = prices.map((point) => ({
-              time: point.time as Time,
-              value: basePrice > 0 ? ((point.value - basePrice) / basePrice) * 100 : 0,
-            }))
-
             // Remove duplicates and ensure strict ascending order.
-            const uniqueData = new Map<number, { time: Time; value: number }>()
-            for (const point of percentageData) {
-              uniqueData.set(point.time as number, point)
+            // NOTE: `time` is already seconds (UTCTimestamp) from our `/api/coingecko/market-chart` route.
+            const uniquePrices = new Map<number, number>()
+            for (const point of prices) {
+              uniquePrices.set(point.time, point.value)
             }
 
-            const sortedUniqueData = Array.from(uniqueData.values()).sort(
-              (a, b) => (a.time as number) - (b.time as number),
-            )
+            const sortedUniquePrices = Array.from(uniquePrices.entries()).sort(([a], [b]) => a - b)
+            const basePrice = sortedUniquePrices[0]?.[1] ?? 1
 
-            const finalData = sortedUniqueData.filter((point, index, array) => {
-              if (index === 0) return true
-              return (point.time as number) > (array[index - 1]?.time as number ?? 0)
-            })
+            const finalData: Array<{ time: Time; value: number }> = sortedUniquePrices.map(([time, value]) => ({
+              time: time as Time,
+              value: basePrice > 0 ? ((value - basePrice) / basePrice) * 100 : 0,
+            }))
 
             return {
               cached: response.status?.cached ?? false,
               series: {
                 id: coinId,
-                name: coin?.name || "Unknown",
-                symbol: coin?.symbol || "UNK",
+                name: coinMeta?.name || "Unknown",
+                symbol: coinMeta?.symbol || "UNK",
                 data: finalData,
               },
             }
@@ -114,8 +188,11 @@ export function useCoinGeckoBulkChartData(
       const cacheHits = validResults.filter((r) => r.cached).length
       const cacheHitRate = coinIds.length > 0 ? (cacheHits / coinIds.length) * 100 : 0
 
+      const rawSeries = validResults.map((r) => r.series)
+      const alignedSeries = alignSeriesToSharedTimeAxis(rawSeries)
+
       return {
-        series: validResults.map((r) => r.series),
+        series: alignedSeries,
         cacheHitRate,
       }
     },
