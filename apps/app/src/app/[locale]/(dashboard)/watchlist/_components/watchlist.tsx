@@ -272,7 +272,7 @@ export function Watchlist({
                 <TooltipTrigger asChild>
                 <TabsList className="grid w-full grid-cols-2 p-0.5">
                   <TabsTrigger value="grid" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Watchlists (W)">
-                    <IconBookmarkFill className="size-3.5 fill-muted-foreground" />
+                    <IconBookmarkFill className="size-3 fill-muted-foreground" />
                     Watchlists
                   </TabsTrigger>
                   <TabsTrigger value="chart" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Comparison (C)">
