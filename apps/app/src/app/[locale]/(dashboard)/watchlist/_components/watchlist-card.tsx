@@ -274,7 +274,8 @@ export function WatchlistCard({
                     className="w-[130px] p-2 rounded-xl bg-zinc-900 border-zinc-800"
                   >
                     <DropdownMenuItem 
-                      onClick={() => {
+                      onClick={(event) => {
+                        event.stopPropagation()
                         if (!onEdit) return
                         if (!isPersistedWatchlistGroup(group)) return
                         onEdit(group)
@@ -286,7 +287,8 @@ export function WatchlistCard({
                     </DropdownMenuItem>
                     <DropdownMenuSeparator className="my-2 bg-zinc-800" />
                     <DropdownMenuItem 
-                      onClick={() => {
+                      onClick={(event) => {
+                        event.stopPropagation()
                         if (!onDelete) return
                         if (!isPersistedWatchlistGroup(group)) return
                         onDelete(group)
