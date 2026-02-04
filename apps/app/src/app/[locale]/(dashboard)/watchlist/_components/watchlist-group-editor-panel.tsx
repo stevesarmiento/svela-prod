@@ -197,7 +197,7 @@ export function WatchlistGroupEditorPanel({
                       size="sm"
                       aria-label={emoji.label}
                       className={cn(
-                        "h-10 w-10 p-0 rounded-lg hover:bg-zinc-800",
+                        "h-10 w-10 p-0 rounded-lg hover:bg-white/[0.05]",
                         icon === emoji.key && "bg-zinc-800 ring-2 ring-white/20",
                       )}
                       onClick={() => handleSelectIcon(emoji.key)}
@@ -219,8 +219,8 @@ export function WatchlistGroupEditorPanel({
                       size="sm"
                       aria-label={iconItem.label}
                       className={cn(
-                        "h-10 w-10 p-0 rounded-lg hover:bg-zinc-800",
-                        icon === iconItem.key && "bg-zinc-800 ring-2 ring-white/20",
+                        "h-10 w-10 p-0 rounded-lg hover:bg-white/[0.05]",
+                        icon === iconItem.key && "ring-2 ring-white/20",
                       )}
                       onClick={() => handleSelectIcon(iconItem.key)}
                       title={iconItem.label}
