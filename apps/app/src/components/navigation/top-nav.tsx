@@ -153,7 +153,28 @@ export function TopNav() {
 
   // Get current watchlist group parameter to preserve it in back navigation
   const watchlistGroup = searchParams.get('wg');
-  const backToChartsUrl = watchlistGroup ? `/charts?wg=${watchlistGroup}` : '/charts';
+  const backToWatchlistComparisonUrl = watchlistGroup
+    ? `/watchlist?wt=chart&wg=${watchlistGroup}`
+    : "/watchlist?wt=chart";
+
+  const handleBack = () => {
+    // Prefer history navigation so we restore scroll + prior view state.
+    let didPop = false;
+
+    const onPopState = () => {
+      didPop = true;
+    };
+
+    window.addEventListener("popstate", onPopState, { once: true });
+    router.back();
+
+    // If there's no history entry, `router.back()` is a no-op — fall back.
+    window.setTimeout(() => {
+      if (didPop) return;
+      window.removeEventListener("popstate", onPopState);
+      router.push(backToWatchlistComparisonUrl);
+    }, 200);
+  };
 
   // Check if current route is overview (now watchlist is the default overview)
   const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
@@ -194,9 +215,14 @@ export function TopNav() {
           {isChartDetailPage ? (
             // Token Header with cached data
             <div className="flex items-center gap-4">
-              <Link href={backToChartsUrl} className="flex text-gray-600 hover:text-gray-900 dark:text-white/70 dark:hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150">
+              <button
+                type="button"
+                onClick={handleBack}
+                className="flex text-gray-600 hover:text-gray-900 dark:text-white/70 dark:hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150"
+                aria-label="Go back"
+              >
                 <IconChevronBackward className="h-3 w-3 fill-current" />
-              </Link>
+              </button>
               <div className="flex items-center gap-2">
                 {tokenData && !isLoading && (
                   <Image

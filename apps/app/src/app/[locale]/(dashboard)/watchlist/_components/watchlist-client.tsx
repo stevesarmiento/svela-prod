@@ -2,9 +2,13 @@
 
 import { Suspense, useState } from 'react'
 import { Watchlist } from "./watchlist"
+import { parseAsStringLiteral, useQueryState } from "nuqs"
+
+const watchlistTabValues = ["grid", "chart"] as const
+const watchlistTabParser = parseAsStringLiteral(watchlistTabValues).withDefault("grid")
 
 function WatchlistContent() {
-  const [viewMode, setViewMode] = useState<'grid' | 'chart'>('grid')
+  const [viewMode, setViewMode] = useQueryState("wt", watchlistTabParser)
   const [activeTimeScale, setActiveTimeScale] = useState<string>('7d')
   const [contentMode, setContentMode] = useState<'cards' | 'table'>('cards')
 
