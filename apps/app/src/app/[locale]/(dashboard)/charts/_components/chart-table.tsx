@@ -245,7 +245,7 @@ export const ChartTable = memo(function ChartTable({
           </div>
 
           {/* Table Body */}
-          <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden hover:ring-2 hover:ring-zinc-200/30 transition-all duration-100">
             {coin.isOptimistic ? (
               // Show non-clickable loading state for optimistic coins
               <div className="grid grid-cols-4 gap-4 px-4 py-2 pr-2 opacity-60">

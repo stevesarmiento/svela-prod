@@ -8,7 +8,7 @@ import type { HybridCoinSearchResult } from './use-hybrid-coin-search';
 
 export function useAddCoinToWatchlist() {
   const [isAddingCoin, setIsAddingCoin] = useState(false);
-  const { addToWatchlist } = useWatchlist();
+  const { addToWatchlist, addToSelectedGroup, selectedGroup } = useWatchlist();
   const { user } = useUser();
 
   const handleAddCoin = useCallback(async (coin: HybridCoinSearchResult) => {
@@ -27,11 +27,18 @@ export function useAddCoinToWatchlist() {
 
     try {
       setIsAddingCoin(true);
-      await addToWatchlist(coin.id); // Use CoinGecko string ID directly
+      // If a watchlist group is selected, add to that group (charts comparison UX).
+      // Otherwise, fall back to the legacy/default watchlist behavior.
+      if (selectedGroup) {
+        await addToSelectedGroup(coin.id);
+      } else {
+        await addToWatchlist(coin.id); // Use CoinGecko string ID directly
+      }
       
+      const targetName = selectedGroup ? selectedGroup.name : "your watchlist"
       toast({
         title: "Success",
-        description: `Added ${coin.name} to your watchlist`,
+        description: `Added ${coin.name} to ${targetName}`,
       });
       
       return true;
@@ -46,7 +53,7 @@ export function useAddCoinToWatchlist() {
     } finally {
       setIsAddingCoin(false);
     }
-  }, [user, addToWatchlist, isAddingCoin]);
+  }, [user, selectedGroup, addToSelectedGroup, addToWatchlist, isAddingCoin]);
 
   return {
     handleAddCoin,

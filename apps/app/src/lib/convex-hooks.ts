@@ -6,6 +6,14 @@ import { WatchlistApi } from "@/lib/effect/watchlist-api";
 import { runPromise } from "@/lib/effect/runtime-watchlist";
 import type { WatchlistGroup, WatchlistItem } from "@/lib/effect/watchlist-models";
 
+interface AuthUser {
+  id: string;
+  email?: string;
+  fullName?: string;
+  avatarUrl?: string;
+  createdAt?: Date | number | null;
+}
+
 export function useAuth() {
   const { user, isLoaded } = useUser();
   const clerk = useClerk();
@@ -13,12 +21,13 @@ export function useAuth() {
 
   return {
     user: user
-      ? {
+      ? ({
           id: user.id,
           email: user.emailAddresses[0]?.emailAddress,
-          fullName: user.fullName,
+          fullName: user.fullName ?? undefined,
           avatarUrl: user.imageUrl,
-        }
+          createdAt: user.createdAt ?? null,
+        } satisfies AuthUser)
       : null,
     signIn: (provider?: string) => {
       if (provider === "google" && clerkSignIn) {

@@ -38,7 +38,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   setActiveTimeScale,
   isPending 
 }: MultiPriceChartLightweightProps) {
-  const { removeFromWatchlist } = useWatchlist()
+  const { removeFromSelectedGroup, removeFromWatchlist, selectedGroup } = useWatchlist()
   const [hoveredCoin, setHoveredCoin] = useState<string | null>(null)
   const [hoveredRemoveId, setHoveredRemoveId] = useState<string | null>(null)
   
@@ -249,10 +249,16 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                       }}
                       onClick={async () => {
                         try {
-                          await removeFromWatchlist(coin.id.toString())
+                          if (selectedGroup) {
+                            await removeFromSelectedGroup(coin.id.toString())
+                          } else {
+                            await removeFromWatchlist(coin.id.toString())
+                          }
+
+                          const targetName = selectedGroup ? selectedGroup.name : "watchlist"
                           toast({
                             title: "Removed",
-                            description: `${coin.name} removed from watchlist`,
+                            description: `${coin.name} removed from ${targetName}`,
                           })
                         } catch {
                           toast({
