@@ -2,12 +2,15 @@
 
 import { useWatchlist } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context";
 import { IconStar, IconStarFill, IconStarSlashFill } from "symbols-react";
-import { AnimatePresence, motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { Button } from "@v1/ui/button";
 import { toast } from "@v1/ui/use-toast";
 import { matchesShortcut, getShortcutsForComponent } from "@/lib/keyboard-shortcuts";
+import { useLatest } from "@/hooks/use-latest";
+import { Effect } from "effect";
+import { useEffectScoped } from "@/lib/effect/react";
 
 interface WatchlistButtonProps {
   coinId: string | number;
@@ -22,6 +25,8 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
     isInitialized,
     selectedGroup 
   } = useWatchlist();
+  const shouldReduceMotion = useReducedMotion();
+
   // Keep coinId as string since Convex and context expect string IDs (CoinGecko format)
   const coinIdString = typeof coinId === 'number' ? coinId.toString() : coinId;
   const isInWatchlist = isInitialized && selectedGroupCoins.includes(coinIdString);
@@ -32,68 +37,20 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
   const watchlistShortcuts = getShortcutsForComponent('WatchlistButton');
   const toggleShortcut = watchlistShortcuts.find(s => s.handler === 'toggleWatchlist');
 
-  useEffect(() => {
-    if (!isInWatchlist && showSlash) {
-      const timeout = setTimeout(() => setShowSlash(false), 900);
-      return () => clearTimeout(timeout);
-    }
-  }, [isInWatchlist, showSlash]);
+  useEffectScoped(
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.addFinalizer(() => Effect.void)
 
-  // Keyboard shortcut handler
-  useEffect(() => {
-    const handleClick = async () => {
-      if (isToggling || !selectedGroup) return;
-      
-      setIsToggling(true);
-      
-      try {
-        if (isInWatchlist) {
-          setShowSlash(true);
-          await removeFromSelectedGroup(coinIdString);
-          toast({
-            title: "Removed",
-            description: `${coinName || 'Coin'} removed from ${selectedGroup.name}`,
-          });
-        } else {
-          await addToSelectedGroup(coinIdString);
-          toast({
-            title: "Added",
-            description: `${coinName || 'Coin'} added to ${selectedGroup.name}`,
-          });
-        }
-      } catch (error) {
-        console.error('Watchlist toggle error:', error);
-        toast({
-          title: "Error",
-          description: isInWatchlist ? "Failed to remove from watchlist" : "Failed to add to watchlist",
-          variant: "destructive",
-        });
-      } finally {
-        setIsToggling(false);
-      }
-    };
+        if (isInWatchlist || !showSlash) return
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignore if typing in an input
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-        return;
-      }
+        yield* Effect.sleep("900 millis")
+        yield* Effect.sync(() => setShowSlash(false))
+      }),
+    [isInWatchlist, showSlash],
+  )
 
-      // Check if this matches our toggle watchlist shortcut
-      if (toggleShortcut && matchesShortcut(event, toggleShortcut)) {
-        event.preventDefault();
-        handleClick();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [toggleShortcut, isInWatchlist, isToggling, coinIdString, coinName, addToSelectedGroup, removeFromSelectedGroup, setShowSlash, selectedGroup]);
-
-  const handleButtonClick = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
+  const toggleWatchlist = async () => {
     if (isToggling || !selectedGroup) return;
     
     setIsToggling(true);
@@ -101,13 +58,13 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
     try {
       if (isInWatchlist) {
         setShowSlash(true);
-          await removeFromSelectedGroup(coinIdString);
+        await removeFromSelectedGroup(coinIdString);
         toast({
           title: "Removed",
           description: `${coinName || 'Coin'} removed from ${selectedGroup.name}`,
         });
       } else {
-          await addToSelectedGroup(coinIdString);
+        await addToSelectedGroup(coinIdString);
         toast({
           title: "Added",
           description: `${coinName || 'Coin'} added to ${selectedGroup.name}`,
@@ -123,6 +80,45 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
     } finally {
       setIsToggling(false);
     }
+  };
+
+  const toggleWatchlistRef = useLatest(toggleWatchlist);
+  const toggleShortcutRef = useLatest(toggleShortcut);
+
+  // Keyboard shortcut handler (stable subscription, latest handler via refs)
+  useEffectScoped(
+    () =>
+      Effect.gen(function* () {
+        const handleKeyDown = (event: KeyboardEvent) => {
+          // Ignore if typing in an input
+          if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+            return
+          }
+
+          const shortcut = toggleShortcutRef.current
+          if (shortcut && matchesShortcut(event, shortcut)) {
+            event.preventDefault()
+            void toggleWatchlistRef.current()
+          }
+        }
+
+        document.addEventListener('keydown', handleKeyDown)
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            document.removeEventListener('keydown', handleKeyDown)
+          }),
+        )
+
+        yield* Effect.never
+      }),
+    [],
+  )
+
+  const handleButtonClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    await toggleWatchlist();
   };
 
   // Don't show button if no group is selected
@@ -147,24 +143,25 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
             {!isInitialized ? (
               <motion.div
                 key="loading"
-                initial={{ opacity: 0 }}
+                initial={shouldReduceMotion ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0.8 }}
+                exit={shouldReduceMotion ? undefined : { opacity: 0.8 }}
+                transition={shouldReduceMotion ? { duration: 0 } : undefined}
               >
                 <IconStar className="h-4 w-4 fill-gray-500 dark:fill-zinc-400" />
               </motion.div>
             ) : showSlash ? (
               <motion.div
                 key="slash"
-                initial={{ rotate: -20, scale: 0.8 }}
+                initial={shouldReduceMotion ? false : { rotate: -20, scale: 0.8 }}
                 animate={{ rotate: 0, scale: 1 }}
-                exit={{
+                exit={shouldReduceMotion ? undefined : {
                   rotate: 0,
                   scale: 1.1,
                   opacity: 1,
                   transition: { duration: 0.1 },
                 }}
-                transition={{
+                transition={shouldReduceMotion ? { duration: 0 } : {
                     type: "spring",
                     stiffness: 280,
                     damping: 18,
@@ -176,18 +173,20 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
             ) : isInWatchlist ? (
               <motion.div
                 key="filled"
-                initial={{ scale: 1, rotate: 10 }}
+                initial={shouldReduceMotion ? false : { scale: 1, rotate: 10 }}
                 animate={{ scale: 1, rotate: 0 }}
-                exit={{ scale: 1.1, rotate: -20 }}
+                exit={shouldReduceMotion ? undefined : { scale: 1.1, rotate: -20 }}
+                transition={shouldReduceMotion ? { duration: 0 } : undefined}
               >
                 <IconStarFill className="h-4 w-4 fill-yellow-500" />
               </motion.div>
             ) : (
               <motion.div
                 key="star"
-                initial={{ scale: 1, rotate: -10 }}
+                initial={shouldReduceMotion ? false : { scale: 1, rotate: -10 }}
                 animate={{ scale: 1, rotate: 0 }}
-                exit={{ scale: 1.1, rotate: 20 }}
+                exit={shouldReduceMotion ? undefined : { scale: 1.1, rotate: 20 }}
+                transition={shouldReduceMotion ? { duration: 0 } : undefined}
               >
                 <IconStarFill className="h-4 w-4 fill-gray-500 dark:fill-zinc-400" />
               </motion.div>

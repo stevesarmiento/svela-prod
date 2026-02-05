@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { Effect, Exit, Cause } from "effect"
 import { Button } from "@v1/ui/button"
 import { X } from "lucide-react"
 import Link from "next/link"
@@ -8,14 +9,23 @@ import { cn } from "@v1/ui/cn"
 import { toast } from "@v1/ui/use-toast"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Spinner } from "@v1/ui/spinner"
+import { env } from "@/env.mjs"
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { AvatarCircles } from '@v1/ui/token-stacks'
-import { useWatchlistGroups, useDeleteWatchlistGroup, useWatchlistByGroup } from '@v1/convex/hooks'
+import { useWatchlistGroups, useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
+import { useWatchlistOperations } from '@/hooks/use-watchlist-effect'
+import { runPromiseExit } from '@/lib/effect/runtime-watchlist'
+import type { WatchlistGroup } from './watchlist-context'
+import { getTokenLogoURL } from '@/lib/logo-overrides'
+
+type WatchlistGroupId = WatchlistGroup["_id"]
+
+const isDebug = env.NODE_ENV === "development"
 
 interface WatchlistData {
-  id: string
+  id: WatchlistGroupId
   name: string
   icon?: string
   coinsCount: number
@@ -31,7 +41,7 @@ interface WatchlistTableProps {
 }
 
 // ✅ IMPROVED: Convert to custom hook that returns data instead of using callback pattern
-function useWatchlistData(groupId: string): WatchlistData | null {
+function useWatchlistData(groupId: WatchlistGroupId): WatchlistData | null {
   // Get watchlist coins for this group
   const groupWatchlist = useWatchlistByGroup(groupId)
   
@@ -62,11 +72,19 @@ function useWatchlistData(groupId: string): WatchlistData | null {
 
     // Create coin images array for token stacks
     const coinImages = (coins || [])
-      .filter(coin => coin.image && (coin.image.startsWith('http') || coin.image.startsWith('/')))
+      .slice()
+      // Highest item first: pick avatars by 24h volume (descending).
+      .sort((a, b) => (b.quote?.USD?.volume_24h ?? 0) - (a.quote?.USD?.volume_24h ?? 0))
+      .map((coin) => {
+        const logoUrl = getTokenLogoURL(coin.symbol, coin.image)
+        if (!logoUrl) return null
+        return { logoUrl, coinId: coin.id }
+      })
+      .filter((item): item is { logoUrl: string; coinId: string } => item !== null)
       .slice(0, 5) // Limit to first 5 coins
-      .map(coin => ({
-        imageUrl: coin.image,
-        profileUrl: `/charts/${coin.id}`
+      .map((coin) => ({
+        imageUrl: coin.logoUrl,
+        profileUrl: `/charts/${coin.coinId}`
       }))
 
     return {
@@ -91,9 +109,9 @@ function WatchlistCard({
   onRemove,
   isRemoving 
 }: { 
-  group: { _id: string; name: string; icon?: string; slug: string }
+  group: WatchlistGroup
   activeTimeScale: string
-  onRemove: (groupId: string) => void
+  onRemove: (groupId: WatchlistGroupId) => void
   isRemoving: boolean
 }) {
   // Use our custom hook to get watchlist data
@@ -256,36 +274,76 @@ function WatchlistCard({
 }
 
 export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
-  const deleteWatchlistGroup = useDeleteWatchlistGroup()
-  const [removingWatchlists, setRemovingWatchlists] = useState<Set<string>>(new Set())
+  const { deleteGroup } = useWatchlistOperations()
+  const [removingWatchlists, setRemovingWatchlists] = useState<Set<WatchlistGroupId>>(
+    new Set(),
+  )
   
   const watchlistGroupsData = useWatchlistGroups()
+  // TanStack Query generics can get lost across module boundaries in this file; keep this typed for build.
+  const typedWatchlistGroupsData = watchlistGroupsData as Array<WatchlistGroup> | undefined
 
-  const handleRemove = async (watchlistId: string) => {
+  const handleRemove = async (watchlistId: WatchlistGroupId) => {
     setRemovingWatchlists(prev => new Set([...prev, watchlistId]))
     
-    try {
-      await deleteWatchlistGroup(watchlistId)
-      toast({
-        title: "Removed",
-        description: "Watchlist removed successfully",
-      })
-    } catch {
-      toast({
-        title: "Error",
-        description: "Failed to remove watchlist",
-        variant: "destructive",
-      })
-    } finally {
-      setRemovingWatchlists(prev => {
-        const newSet = new Set(prev)
-        newSet.delete(watchlistId)
-        return newSet
-      })
+    const program = deleteGroup(watchlistId).pipe(
+      Effect.catchTags({
+        WatchlistAuthError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Authentication Error",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        WatchlistNotFoundError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Not Found",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        WatchlistValidationError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Validation Error",
+              description: `${e.field}: ${e.reason}`,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        ApiRequestError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Request Error",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+      }),
+      Effect.tap(() => Effect.sync(() => {
+        toast({
+          title: "Removed",
+          description: "Watchlist removed successfully",
+        })
+      }))
+    )
+
+    const exit = await runPromiseExit(program)
+    
+    // Clean up removing state
+    setRemovingWatchlists(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(watchlistId)
+      return newSet
+    })
+    
+    if (isDebug && Exit.isFailure(exit)) {
+      console.error("Failed to remove watchlist:", Cause.pretty(exit.cause))
     }
   }
 
-  if (!watchlistGroupsData?.length) {
+  if (!typedWatchlistGroupsData?.length) {
     return (
       <div className="py-6 border border-dashed border-border rounded-lg">
         <div className="flex flex-col items-center justify-center gap-3">
@@ -300,7 +358,7 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
 
   return (
     <div className="space-y-4">
-      {watchlistGroupsData.map(group => (
+      {typedWatchlistGroupsData.map(group => (
         <WatchlistCard
           key={group._id}
           group={group}

@@ -8,17 +8,9 @@ import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { useOpenInterest } from '@/hooks/use-open-interest'
 import { generatePastelColors } from '@/lib/chart-colors'
 import { coinGeckoIdToSymbolFallback } from '@/lib/coingecko-to-symbol'
-import {
-  createChart,
-  ColorType,
-  LineStyle,
-  Time,
-  IChartApi,
-  LineSeries,
-  CrosshairMode,
-  LastPriceAnimationMode,
-  LineType,
-} from 'lightweight-charts'
+import type { IChartApi, Time } from 'lightweight-charts'
+import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
+import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 
 interface OpenInterestChartProps {
   coinId: string
@@ -58,7 +50,7 @@ export function OpenInterestChart({
   unit = 'usd',
 }: OpenInterestChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<IChartApi>(null)
+  const chartRef = useRef<IChartApi | null>(null)
   const [tooltip, setTooltip] = useState<TooltipData>({
     time: '',
     value: 0,
@@ -128,139 +120,193 @@ export function OpenInterestChart({
   useEffect(() => {
     if (!chartContainerRef.current || !lineData.length) return
 
-    // Create chart with same styling as price chart
-    const chart = createChart(chartContainerRef.current, {
-      handleScale: false,
-      handleScroll: false,
-      layout: {
-        background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#ffffff50",
-        attributionLogo: false,
-      },
-      grid: {
-        vertLines: { visible: false, color: "#e5e7eb20", style: LineStyle.Dotted },
-        horzLines: { visible: true, color: "#f5f5f510", style: LineStyle.Dotted },
-      },
-      rightPriceScale: { borderVisible: false, autoScale: true },
-      crosshair: {
-        mode: CrosshairMode.Magnet,
-        vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
-        horzLine: { visible: false, labelVisible: false },
-      },
-      timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
-      height: 200,
-      
-    })
+    let isCancelled = false
+    let cleanup: (() => void) | null = null
 
-    chartRef.current = chart
+    void (async () => {
+      const {
+        createChart,
+        ColorType,
+        LineStyle,
+        LineSeries,
+        CrosshairMode,
+        LastPriceAnimationMode,
+        LineType,
+      } = await loadLightweightCharts()
 
-    // Add main line series for open interest (close values)
-    const lineSeries = chart.addSeries(LineSeries, {
-      color: colors.line,
-      lineWidth: 2,
-      lineType: LineType.WithSteps,
-      lastPriceAnimation: LastPriceAnimationMode.Continuous,
-      priceFormat: {
-        type: 'custom',
-        formatter: (price: number) => `${unit === 'usd' ? '$' : ''}${formatLargeNumber(price)}${unit === 'coin' ? ' BTC' : ''}`,
-      },
-    })
+      if (isCancelled || !chartContainerRef.current || !lineData.length) return
 
-    // Add high points as line series with markers
-    const highSeries = chart.addSeries(LineSeries, {
-      color: colors.high, // Completely invisible line
-      lineWidth: 1,
-      lineStyle: LineStyle.Dotted,
-      lineVisible: false,
-      pointMarkersVisible: true,
-      pointMarkersRadius: 2,
-      priceFormat: {
-        type: 'custom',
-        formatter: (price: number) => `H: ${unit === 'usd' ? '$' : ''}${formatLargeNumber(price)}${unit === 'coin' ? ' BTC' : ''}`,
-      },
-    })
-
-    // Add low points as line series with markers
-    const lowSeries = chart.addSeries(LineSeries, {
-      color: colors.low, // Completely invisible line
-      lineWidth: 1,
-      lineStyle: LineStyle.Dotted,
-      lineVisible: false,
-      pointMarkersVisible: true,
-      pointMarkersRadius: 2,
-      priceFormat: {
-        type: 'custom',
-        formatter: (price: number) => `L: ${unit === 'usd' ? '$' : ''}${formatLargeNumber(price)}${unit === 'coin' ? ' BTC' : ''}`,
-      },
-    })
-
-    // Set data
-    lineSeries.setData(lineData)
-    highSeries.setData(highData)
-    lowSeries.setData(lowData)
-
-    // Subscribe to crosshair move for tooltip
-    chart.subscribeCrosshairMove((param) => {
-      if (!param.time || !chartContainerRef.current) {
-        setTooltip(prev => ({ ...prev, visible: false }))
-        return
-      }
-
-      // Find the data points for this time
-      const dataPoint = lineData.find(d => d.time === param.time)
-      const highPoint = highData.find(d => d.time === param.time)
-      const lowPoint = lowData.find(d => d.time === param.time)
-
-      if (!dataPoint || !highPoint || !lowPoint) {
-        setTooltip(prev => ({ ...prev, visible: false }))
-        return
-      }
-
-      // Get mouse position relative to chart container
-      const x = param.point?.x || 0
-      const y = param.point?.y || 0
-
-      // Calculate change from previous point
-      const currentIndex = lineData.findIndex(d => d.time === param.time)
-      const previousPoint = currentIndex > 0 ? lineData[currentIndex - 1] : null
-      const change = previousPoint ? dataPoint.value - previousPoint.value : 0
-      const changePercent = previousPoint ? (change / previousPoint.value) * 100 : 0
-
-      // Format time
-      const timeStr = new Date((param.time as number) * 1000).toLocaleDateString()
-
-      setTooltip({
-        time: timeStr,
-        value: dataPoint.value,
-        high: highPoint.value,
-        low: lowPoint.value,
-        change,
-        changePercent,
-        x: x + 10,
-        y: y - 10,
-        visible: true
+      // Create chart with same styling as price chart
+      const chart = createChart(chartContainerRef.current, {
+        handleScale: false,
+        handleScroll: false,
+        layout: {
+          background: { type: ColorType.Solid, color: "transparent" },
+          textColor: "#ffffff50",
+          attributionLogo: false,
+        },
+        grid: {
+          vertLines: { visible: false, color: "#e5e7eb20", style: LineStyle.Dotted },
+          horzLines: { visible: true, color: "#f5f5f510", style: LineStyle.Dotted },
+        },
+        rightPriceScale: { borderVisible: false, autoScale: true },
+        crosshair: {
+          mode: CrosshairMode.Magnet,
+          vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
+          horzLine: { visible: false, labelVisible: false },
+        },
+        timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
+        height: 200,
+        
       })
-    })
 
-    // Fit content
-    chart.timeScale().fitContent()
+      chartRef.current = chart
 
-    // Handle resize
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: 200,
-        })
+      // Add main line series for open interest (close values)
+      const lineSeries = chart.addSeries(LineSeries, {
+        color: colors.line,
+        lineWidth: 2,
+        lineType: LineType.WithSteps,
+        lastPriceAnimation: LastPriceAnimationMode.Continuous,
+        priceFormat: {
+          type: 'custom',
+          formatter: (price: number) => `${unit === 'usd' ? '$' : ''}${formatLargeNumber(price)}${unit === 'coin' ? ' BTC' : ''}`,
+        },
+      })
+
+      // Add high points as line series with markers
+      const highSeries = chart.addSeries(LineSeries, {
+        color: colors.high, // Completely invisible line
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        lineVisible: false,
+        pointMarkersVisible: true,
+        pointMarkersRadius: 2,
+        priceFormat: {
+          type: 'custom',
+          formatter: (price: number) => `H: ${unit === 'usd' ? '$' : ''}${formatLargeNumber(price)}${unit === 'coin' ? ' BTC' : ''}`,
+        },
+      })
+
+      // Add low points as line series with markers
+      const lowSeries = chart.addSeries(LineSeries, {
+        color: colors.low, // Completely invisible line
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        lineVisible: false,
+        pointMarkersVisible: true,
+        pointMarkersRadius: 2,
+        priceFormat: {
+          type: 'custom',
+          formatter: (price: number) => `L: ${unit === 'usd' ? '$' : ''}${formatLargeNumber(price)}${unit === 'coin' ? ' BTC' : ''}`,
+        },
+      })
+
+      // Set data
+      lineSeries.setData(lineData)
+      highSeries.setData(highData)
+      lowSeries.setData(lowData)
+
+      const lineIndexByTime = new Map<Time, number>()
+      for (let index = 0; index < lineData.length; index++) {
+        const point = lineData[index]
+        if (point) lineIndexByTime.set(point.time, index)
       }
-    }
 
-    window.addEventListener('resize', handleResize)
-    handleResize()
+      const highValueByTime = new Map<Time, number>()
+      for (const point of highData) highValueByTime.set(point.time, point.value)
+
+      const lowValueByTime = new Map<Time, number>()
+      for (const point of lowData) lowValueByTime.set(point.time, point.value)
+
+      // Subscribe to crosshair move for tooltip
+      chart.subscribeCrosshairMove((param) => {
+        if (!param.time || !chartContainerRef.current) {
+          setTooltip(prev => ({ ...prev, visible: false }))
+          return
+        }
+
+        const currentIndex = lineIndexByTime.get(param.time)
+        const high = highValueByTime.get(param.time)
+        const low = lowValueByTime.get(param.time)
+
+        if (currentIndex === undefined || high === undefined || low === undefined) {
+          setTooltip(prev => ({ ...prev, visible: false }))
+          return
+        }
+
+        const dataPoint = lineData[currentIndex]
+        if (!dataPoint) {
+          setTooltip(prev => ({ ...prev, visible: false }))
+          return
+        }
+
+        // Get mouse position relative to chart container
+        const x = param.point?.x || 0
+        const y = param.point?.y || 0
+
+        // Calculate change from previous point
+        const previousPoint = currentIndex > 0 ? lineData[currentIndex - 1] : null
+        const change = previousPoint ? dataPoint.value - previousPoint.value : 0
+        const changePercent = previousPoint ? (change / previousPoint.value) * 100 : 0
+
+        // Format time
+        const timeStr = new Date((param.time as number) * 1000).toLocaleDateString()
+
+        setTooltip({
+          time: timeStr,
+          value: dataPoint.value,
+          high,
+          low,
+          change,
+          changePercent,
+          x: x + 10,
+          y: y - 10,
+          visible: true
+        })
+      })
+
+      // Fit content
+      chart.timeScale().fitContent()
+
+      // Handle resize
+      const handleResize = () => {
+        if (chartContainerRef.current) {
+          chart.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+            height: 200,
+          })
+        }
+      }
+
+      // Prefer observing the actual container size (avoids per-chart global resize listeners).
+      let resizeObserver: ResizeObserver | null = null
+      let resizeRafId: number | null = null
+      let unsubscribeWindowResize: (() => void) | null = null
+
+      if (typeof ResizeObserver !== 'undefined' && chartContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeRafId) cancelAnimationFrame(resizeRafId)
+          resizeRafId = requestAnimationFrame(() => handleResize())
+        })
+        resizeObserver.observe(chartContainerRef.current)
+      } else {
+        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
+      }
+      handleResize()
+
+      cleanup = () => {
+        if (resizeRafId) cancelAnimationFrame(resizeRafId)
+        resizeObserver?.disconnect()
+        unsubscribeWindowResize?.()
+        chart.remove()
+        chartRef.current = null
+      }
+    })()
 
     return () => {
-      window.removeEventListener('resize', handleResize)
-      chart.remove()
+      isCancelled = true
+      cleanup?.()
     }
   }, [lineData, highData, lowData, colors, unit])
 

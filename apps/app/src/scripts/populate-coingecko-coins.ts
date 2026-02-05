@@ -1,7 +1,11 @@
-import 'dotenv/config';
-import { ConvexHttpClient } from 'convex/browser';
-import { api } from '../../convex/_generated/api';
-import { getCoinsList } from '../lib/coingecko';
+import { config } from "dotenv";
+import path from "path";
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "../../convex/_generated/api";
+
+// Load environment variables (so running via `tsx` behaves like Next).
+config({ path: path.join(process.cwd(), ".env.local") });
+config({ path: path.join(process.cwd(), ".env") });
 
 if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
   throw new Error('NEXT_PUBLIC_CONVEX_URL is not configured');
@@ -11,7 +15,12 @@ if (!process.env.X_CG_PRO_API_KEY) {
   throw new Error('X_CG_PRO_API_KEY is not configured. Please add it to your .env.local file');
 }
 
+if (!process.env.INTERNAL_CONVEX_SERVER_TOKEN) {
+  throw new Error('INTERNAL_CONVEX_SERVER_TOKEN is not configured.');
+}
+
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL);
+const serverToken = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
 
 interface CoinGeckoListItem {
   id: string;
@@ -31,41 +40,59 @@ interface CoinGeckoApiResponse {
 
 // Fetch real image URLs from API
 async function fetchRealImageUrls(coingeckoIds: string[]): Promise<CoinGeckoApiResponse> {
-  const chunkSize = 25; // API-friendly chunk size
+  const { getCoinsMarketData } = await import("../lib/coingecko");
+  const chunkSize = 200; // Keep URLs reasonable (CoinGecko allows up to 250 per page)
   const chunks: string[][] = [];
-  
+
   for (let i = 0; i < coingeckoIds.length; i += chunkSize) {
     chunks.push(coingeckoIds.slice(i, i + chunkSize));
   }
-  
+
   const allResults: CoinGeckoApiResponse = {};
-  
+
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    if (!chunk) continue;
-    
+    if (!chunk?.length) continue;
+
     try {
-      console.log(`  📡 Fetching real images ${i + 1}/${chunks.length} (${chunk.length} coins)...`);
-      
-      const response = await fetch(`http://localhost:3000/api/coingecko/quotes?ids=${chunk.join(',')}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        Object.assign(allResults, data.data || {});
-        console.log(`  ✅ Got ${Object.keys(data.data || {}).length} real image URLs`);
-      } else {
-        console.warn(`  ⚠️ API error: ${response.status}`);
+      console.log(`  📡 Fetching market data ${i + 1}/${chunks.length} (${chunk.length} coins)...`);
+
+      const marketData = await getCoinsMarketData(
+        chunk,
+        "usd",
+        "market_cap_desc",
+        Math.min(chunk.length, 250),
+        1,
+        false,
+        "24h",
+      );
+
+      for (const coin of marketData as Array<{
+        id: string;
+        name: string;
+        symbol: string;
+        image: string;
+      }>) {
+        if (!coin?.id) continue;
+        allResults[coin.id] = {
+          id: coin.id,
+          name: coin.name,
+          symbol: coin.symbol,
+          image: coin.image,
+        };
       }
-      
-      // Rate limit friendly delay
-      if (i < chunks.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 150));
-      }
+
+      console.log(`  ✅ Got ${Object.keys(allResults).length} image URLs so far`);
     } catch (error) {
-      console.error(`  ❌ Error fetching images:`, error);
+      console.error(`  ❌ Error fetching market data:`, error);
+    }
+
+    // Rate limit friendly delay
+    if (i < chunks.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
     }
   }
-  
+
   return allResults;
 }
 
@@ -76,12 +103,13 @@ async function populateCoinGeckoCoins() {
     
     // Fetch coins list from CoinGecko with platform data
     console.log('📡 Fetching coins list from CoinGecko...');
+    const { getCoinsList } = await import("../lib/coingecko");
     const coins = await getCoinsList(true); // Include platform data
     
     console.log(`✅ Successfully fetched ${coins.length} coins from CoinGecko`);
     
     // Process in chunks to get real image URLs
-    const chunkSize = 100; // Process 100 coins at a time (4 API calls per chunk)
+    const chunkSize = 100; // Process 100 coins at a time
     const totalChunks = Math.ceil(coins.length / chunkSize);
     const startTime = Date.now();
     
@@ -116,7 +144,7 @@ async function populateCoinGeckoCoins() {
       // Insert into database
       try {
         console.log(`💾 Inserting ${transformedCoins.length} coins into database...`);
-        await convex.mutation(api.coins.bulkUpsertCoinGeckoCoins, { coins: transformedCoins });
+        await convex.mutation(api.coins.bulkUpsertCoinGeckoCoins, { serverToken, coins: transformedCoins });
         
         const realImagesCount = transformedCoins.filter(c => c.imageUpdated).length;
         console.log(`✅ Inserted chunk ${chunkIndex} - ${realImagesCount}/${transformedCoins.length} with real images`);
@@ -141,17 +169,8 @@ async function populateCoinGeckoCoins() {
     }
     
     console.log('\n🎉 Population completed successfully!');
-    
-    // Print statistics
-    const allInsertedCoins = await convex.query(api.coins.getAllCoinGeckoCoins, { limit: 20000 });
-    const totalCoins = allInsertedCoins?.length || 0;
-    const uniqueSymbols = new Set(allInsertedCoins?.map(coin => coin.symbol) || []).size;
-    const realImageCount = allInsertedCoins?.filter(coin => coin.imageUpdated).length || 0;
-    
+
     console.log('\n📊 Final Statistics:');
-    console.log(`  Total coins inserted: ${totalCoins}`);
-    console.log(`  Unique symbols: ${uniqueSymbols}`);
-    console.log(`  Real images: ${realImageCount}/${totalCoins} (${((realImageCount/totalCoins)*100).toFixed(1)}%)`);
     console.log(`  Processing time: ${((Date.now() - startTime) / 1000 / 60).toFixed(1)} minutes`);
     
   } catch (error) {
@@ -169,44 +188,11 @@ async function populateCoinGeckoCoins() {
   }
 }
 
-// Test API connections
-async function testConnections() {
-  try {
-    console.log('🔍 Testing API connections...');
-    
-    // Test CoinGecko search
-    const { searchCoins } = await import('../lib/coingecko');
-    const testResult = await searchCoins('bitcoin');
-    console.log(`✅ CoinGecko search API working! Found ${testResult.coins.length} results`);
-    
-    // Test local quotes API
-    const response = await fetch('http://localhost:3000/api/coingecko/quotes?limit=3');
-    if (response.ok) {
-      const data = await response.json();
-      console.log(`✅ Local quotes API working! Got ${Object.keys(data.data || {}).length} quotes`);
-      return true;
-    } else {
-      console.error(`❌ Local quotes API failed: ${response.status}`);
-      return false;
-    }
-  } catch (error) {
-    console.error('❌ API connection test failed:', error);
-    return false;
-  }
-}
-
 // Main execution
 async function main() {
   console.log('🪙 CoinGecko Coins Population Script (With Real Images)');
   console.log('========================================================\n');
-  
-  // Test connections first
-  const connected = await testConnections();
-  if (!connected) {
-    console.log('💡 Please make sure your local server is running and API keys are configured.');
-    process.exit(1);
-  }
-  
+
   console.log('');
   await populateCoinGeckoCoins();
   

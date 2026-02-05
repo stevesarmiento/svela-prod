@@ -2,7 +2,7 @@
 
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 import ReactMarkdown from "react-markdown";
-import { useAuth } from "@v1/convex/hooks";
+import { useAuth } from "@/lib/convex-hooks";
 import { PriceCard } from "./price-card";
 import { ComparisonChart } from "./comparison-chart";
 import { TradePreview } from "./trade-preview";

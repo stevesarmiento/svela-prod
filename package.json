@@ -1,40 +1,54 @@
 {
   "name": "v1",
   "private": true,
-  "workspaces": ["packages/*", "packages/armadura/*", "apps/*", "tooling/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/analytics",
+    "packages/convex",
+    "packages/email",
+    "packages/jobs",
+    "packages/kv",
+    "packages/logger",
+    "packages/ui",
+    "tooling/*"
+  ],
   "scripts": {
-    "build": "turbo build",
+    "build": "turbo run build",
     "clean": "git clean -xdf node_modules",
-    "clean:workspaces": "turbo clean",
-    "dev": "turbo dev --parallel --filter=!@v1/api",
-    "dev:web": "turbo dev --filter=@v1/web",
-    "dev:jobs": "turbo jobs --filter=@v1/jobs",
-    "dev:app": "turbo dev --filter=@v1/app",
-    "dev:convex": "bunx convex dev",
-    "start:web": "turbo start --filter=@v1/web",
-    "start:app": "turbo start --filter=@v1/app",
-    "test": "turbo test --parallel",
+    "clean:workspaces": "turbo run clean",
+    "dev": "turbo run dev --filter=!@v1/api",
+    "dev:web": "turbo run dev --filter=@v1/web",
+    "dev:jobs": "turbo run jobs --filter=@v1/jobs",
+    "dev:app": "turbo run dev --filter=@v1/app",
+    "dev:convex": "cd apps/app && bunx convex dev",
+    "start:web": "turbo run start --filter=@v1/web",
+    "start:app": "turbo run start --filter=@v1/app",
+    "test": "turbo run test",
     "format": "biome format --write .",
-    "lint": "turbo lint && bun lint:repo",
+    "lint": "turbo run lint && bun lint:repo",
     "lint:repo": "bunx sherif@latest",
     "lint:repo:fix": "bunx sherif@latest --fix",
-    "typecheck": "turbo typecheck",
-    "dev:with-api": "turbo dev --parallel"
+    "typecheck": "turbo run typecheck",
+    "dev:with-api": "turbo run dev"
   },
   "devDependencies": {
     "@biomejs/biome": "1.8.3",
     "@t3-oss/env-nextjs": "^0.11.1",
-    "turbo": "^2.5.8",
+    "@v1/typescript": "workspace:*",
+    "turbo": "^2.8.2",
     "typescript": "^5.9.3"
   },
   "packageManager": "bun@1.1.26",
   "engines": {
-    "node": ">=18.18.0",
+    "node": ">=20.9.0",
     "npm": ">=8.0.0"
   },
   "trustedDependencies": [
     "@biomejs/biome",
     "@sentry/cli",
     "protobufjs"
-  ]
+  ],
+  "dependencies": {
+    "latest": "^0.2.0"
+  }
 }

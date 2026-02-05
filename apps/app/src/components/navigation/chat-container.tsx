@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import { Button } from '@v1/ui/button'
 import { Input } from '@v1/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@v1/ui/tooltip'
@@ -11,10 +11,17 @@ import { useClickOutside } from '@v1/ui/hooks'
 import { useChatState } from '../chat/chat-toast'
 import { ChatDialog } from '../chat/chat-dialog'
 import { BackgroundPattern } from './background-pattern'
+import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
+import { DURATION_MICRO_S, EASE_OUT_CUBIC, motionDuration } from '@/lib/motion-tokens'
+import { Effect } from 'effect'
+import { useEffectScoped } from '@/lib/effect/react'
+import { useLatest } from '@/hooks/use-latest'
 
 export function ChatContainer() {
   const { isChatOpen, setIsChatOpen } = useOverlayState()
   const { openChat, isChatDialogOpen, openChatDialog, closeChatDialog } = useChatContext()
+  const shouldReduceMotion = useReducedMotion()
+  
   const {
     input,
     handleInputChange,
@@ -28,6 +35,9 @@ export function ChatContainer() {
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const isRequestActive = isLoading || isDataLoading
+  const isChatOpenRef = useLatest(isChatOpen)
+  const isChatDialogOpenRef = useLatest(isChatDialogOpen)
+  const setIsChatOpenRef = useLatest(setIsChatOpen)
 
   // Only close on click outside if not actively typing or processing, and dialog is not open
   useClickOutside(containerRef as React.RefObject<HTMLElement>, (event) => {
@@ -45,28 +55,43 @@ export function ChatContainer() {
     }
   })
 
-  useEffect(() => {
-    if (isChatOpen && inputRef.current) {
-      // Small delay to ensure dialog animations don't interfere
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus()
+  useEffectScoped(
+    () =>
+      Effect.gen(function* () {
+        yield* Effect.addFinalizer(() => Effect.void)
+
+        if (!isChatOpen) return
+
+        // Small delay to ensure dialog animations don't interfere (interruptible).
+        yield* Effect.sleep("100 millis")
+        yield* Effect.sync(() => {
+          inputRef.current?.focus()
+        })
+      }),
+    [isChatOpen, isChatDialogOpen],
+  )
+
+  // Handle escape key to close chat (stable subscription; values via refs).
+  useEffectScoped(
+    () =>
+      Effect.gen(function* () {
+        const handleEscape = (e: KeyboardEvent) => {
+          if (e.key !== 'Escape') return
+          if (!isChatOpenRef.current || isChatDialogOpenRef.current) return
+          setIsChatOpenRef.current(false)
         }
-      }, 100)
-    }
-  }, [isChatOpen, isChatDialogOpen])
 
-  // Handle escape key to close chat (but not when dialog is open)
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isChatOpen && !isChatDialogOpen) {
-        setIsChatOpen(false)
-      }
-    }
+        document.addEventListener('keydown', handleEscape)
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            document.removeEventListener('keydown', handleEscape)
+          }),
+        )
 
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [isChatOpen, isChatDialogOpen, setIsChatOpen])
+        yield* Effect.never
+      }),
+    [],
+  )
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -85,10 +110,10 @@ export function ChatContainer() {
     return null
   }
 
-  return (
+  return isAlphaFeaturesEnabled() && (
     <motion.div
       ref={containerRef}
-      layout
+      layout={!shouldReduceMotion}
       data-chat-container="true"
       className={`relative rounded-[20px] bg-white/95 backdrop-blur-md border border-gray-200/50 dark:bg-zinc-900 dark:border-transparent overflow-hidden transition-all duration-300 ease-out
                  shadow-[0_4px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
@@ -99,8 +124,8 @@ export function ChatContainer() {
         height: isChatOpen ? '54px' : '54px'
       }}
       transition={{
-        duration: 0.1,
-        ease: [0.4, 0, 0.2, 1]
+        duration: motionDuration(shouldReduceMotion, DURATION_MICRO_S),
+        ease: EASE_OUT_CUBIC,
       }}
     >
       {/* React 19: Optimized shared background pattern */}
@@ -111,12 +136,12 @@ export function ChatContainer() {
           {!isChatOpen ? (
             <motion.div
               key="chat-button"
-              initial={{ opacity: 0 }}
+              initial={shouldReduceMotion ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0 }}
               transition={{
-                duration: 0.1,
-                ease: [0.4, 0, 0.2, 1]
+                duration: motionDuration(shouldReduceMotion, DURATION_MICRO_S),
+                ease: EASE_OUT_CUBIC,
               }}
               className="h-full flex items-center justify-center"
             >
@@ -144,12 +169,12 @@ export function ChatContainer() {
           ) : (
             <motion.div
               key="chat-input"
-              initial={{ opacity: 0 }}
+              initial={shouldReduceMotion ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0 }}
               transition={{
-                duration: 0.1,
-                ease: [0.4, 0, 0.2, 1]
+                duration: motionDuration(shouldReduceMotion, DURATION_MICRO_S),
+                ease: EASE_OUT_CUBIC,
               }}
               onAnimationComplete={() => {
                 // Focus input when animation completes
@@ -195,19 +220,19 @@ export function ChatContainer() {
       <AnimatePresence>
         {getStatusMessage() && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={shouldReduceMotion ? false : { opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
+            exit={shouldReduceMotion ? undefined : { opacity: 0, y: -10 }}
             transition={{
-                duration: 0.1,
-                ease: [0.4, 0, 0.2, 1]
+                duration: motionDuration(shouldReduceMotion, DURATION_MICRO_S),
+                ease: EASE_OUT_CUBIC,
               }}
             className={`absolute top-full left-4 mt-2 flex items-center gap-2 text-sm ${
               isStopped ? 'text-red-400' : 'text-gray-600 dark:text-white/70'
             }`}
           >
             <div className={`w-2 h-2 rounded-full ${
-              isStopped ? 'bg-red-400' : 'bg-blue-400 animate-pulse'
+              isStopped ? 'bg-red-400' : 'bg-blue-400 animate-pulse motion-reduce:animate-none'
             }`} />
             <span>{getStatusMessage()}</span>
           </motion.div>

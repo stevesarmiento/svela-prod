@@ -1,9 +1,11 @@
 'use client'
 
-import { createContext, useContext, useEffect, useCallback, useMemo } from 'react'
+import React, { createContext, useContext, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { useQueryState } from 'nuqs'
-import { 
+import type { WatchlistGroup as WatchlistGroupModel } from '@/lib/effect/watchlist-models'
+import { env } from '@/env.mjs'
+import {
   useWatchlist as useConvexWatchlist, 
   useWatchlistGroups,
   useWatchlistByGroup,
@@ -11,17 +13,9 @@ import {
   useAddToWatchlistGroup, 
   useRemoveFromWatchlistGroup, 
   useRemoveBulkFromWatchlist 
-} from '@v1/convex/hooks'
+} from '@/lib/convex-hooks'
 
-interface WatchlistGroup {
-  _id: string
-  name: string
-  slug: string
-  description?: string
-  isDefault: boolean
-  createdAt: number
-  updatedAt: number
-}
+export type WatchlistGroup = WatchlistGroupModel
 
 interface WatchlistContextType {
   // MIGRATED TO COINGECKO: Now uses string IDs instead of numeric IDs
@@ -45,22 +39,24 @@ interface WatchlistContextType {
 
 const WatchlistContext = createContext<WatchlistContextType | undefined>(undefined)
 
+const isDebug = env.NODE_ENV === "development"
+
 export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoaded } = useUser()
   
   // Legacy hooks
-  const convexWatchlist = useConvexWatchlist()
+  const convexWatchlist = useConvexWatchlist() as Array<{ coinId: string }> | undefined
   const addToConvexWatchlistGroup = useAddToWatchlistGroup()
   const removeFromConvexWatchlistGroup = useRemoveFromWatchlistGroup()
   const removeBulkFromConvexWatchlist = useRemoveBulkFromWatchlist()
   
   // New hooks for multiple groups
-  const watchlistGroups = useWatchlistGroups()
+  const watchlistGroups = useWatchlistGroups() as WatchlistGroup[] | undefined
   
   // ✅ IMPROVED: Derive state instead of using useState + useEffect
   // MIGRATED TO COINGECKO: Convert Convex watchlist data to CoinGecko string array
   const watchlist = useMemo(() => {
-    if (convexWatchlist && isLoaded) {
+    if (Array.isArray(convexWatchlist) && isLoaded) {
       const coinIds = convexWatchlist.map(item => item.coinId) // Keep as CoinGecko string IDs
       return coinIds
     } else if (isLoaded && !user) {
@@ -85,10 +81,13 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     return watchlistGroups.find(g => g.slug === selectedGroupSlug) || null
   }, [selectedGroupSlug, watchlistGroups])
   
-  const selectedGroupData = useWatchlistBySlug(selectedGroupSlug)
+  const selectedGroupData = useWatchlistBySlug(selectedGroupSlug) as
+    | { group: WatchlistGroup; items: Array<{ coinId: string }> }
+    | null
+    | undefined
   const selectedGroupWatchlist = selectedGroupData?.items
 
-  const selectedGroupWatchlistById = useWatchlistByGroup(selectedGroup?._id)
+  const selectedGroupWatchlistById = useWatchlistByGroup(selectedGroup?._id) as Array<{ coinId: string }> | undefined
   
   const effectiveWatchlist = selectedGroupWatchlist || selectedGroupWatchlistById
   
@@ -96,46 +95,34 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     
     if (effectiveWatchlist && Array.isArray(effectiveWatchlist)) {
       const coinIds = effectiveWatchlist.map(item => item.coinId) // Keep as CoinGecko string IDs
-      console.log('Calculated selectedGroupCoins:', coinIds)
       return coinIds
     } else if (selectedGroup) {
-      console.log('Setting selectedGroupCoins to empty array for group:', selectedGroup.name)
       return []
     } else {
-      console.log('No selectedGroup, returning empty array')
       return []
     }
   }, [effectiveWatchlist, selectedGroup])
 
-  useEffect(() => {
-    console.log('WatchlistContext Debug:', {
-      selectedGroupSlug,
-      selectedGroupData,
-      selectedGroupWatchlist,
-      selectedGroup: selectedGroup?.name
-    })
-  }, [selectedGroupSlug, selectedGroupData, selectedGroupWatchlist, selectedGroup])
-
 
   // Auto-select default group when groups load and no group is selected via URL
   useEffect(() => {
-    if (!watchlistGroups || watchlistGroups.length === 0) return;
+    if (!watchlistGroups || watchlistGroups.length === 0) return
     
     // If no group is selected via URL, auto-select the default group
     if (!selectedGroupSlug) {
-      const defaultGroup = watchlistGroups.find(g => g.isDefault) || watchlistGroups[0];
+      const defaultGroup = watchlistGroups.find(g => g.isDefault) || watchlistGroups[0]
       if (defaultGroup) {
-        console.log('Auto-selecting default/first group:', defaultGroup.name);
-        setSelectedGroupSlug(defaultGroup.slug);
+        if (isDebug) console.log('Auto-selecting default/first group:', defaultGroup.name)
+        setSelectedGroupSlug(defaultGroup.slug)
       }
     } else {
       // Validate that the selected group still exists
-      const groupExists = watchlistGroups.find(g => g.slug === selectedGroupSlug);
+      const groupExists = watchlistGroups.find(g => g.slug === selectedGroupSlug)
       if (!groupExists) {
-        console.log('Selected group no longer exists, falling back to default');
-        const defaultGroup = watchlistGroups.find(g => g.isDefault) || watchlistGroups[0];
+        if (isDebug) console.log('Selected group no longer exists, falling back to default')
+        const defaultGroup = watchlistGroups.find(g => g.isDefault) || watchlistGroups[0]
         if (defaultGroup) {
-          setSelectedGroupSlug(defaultGroup.slug);
+          setSelectedGroupSlug(defaultGroup.slug)
         }
       }
     }
@@ -147,7 +134,6 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     if (!user) throw new Error('Not authenticated')
 
     try {
-      console.log('Adding CoinGecko coin to default watchlist:', coinId)
       await addToConvexWatchlistGroup(coinId) // Adds to default group - no conversion needed
     } catch (error) {
       console.error('Error adding to watchlist:', error)
@@ -179,15 +165,14 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   }, [user, removeBulkFromConvexWatchlist])
 
   const selectWatchlistGroup = useCallback((group: WatchlistGroup | null) => {
-    console.log('Selecting watchlist group:', group?.name);
-    setSelectedGroupSlug(group?.slug || '');
+    if (isDebug) console.log('Selecting watchlist group:', group?.name)
+    setSelectedGroupSlug(group?.slug || '')
   }, [setSelectedGroupSlug])
 
   const addToSelectedGroup = useCallback(async (coinId: string) => {
     if (!user || !selectedGroup) throw new Error('Not authenticated or no group selected')
 
     try {
-      console.log('Adding CoinGecko coin to selected group:', coinId, selectedGroup._id)
       await addToConvexWatchlistGroup(coinId, selectedGroup._id) // No conversion needed
     } catch (error) {
       console.error('Error adding to selected group:', error)
@@ -226,17 +211,6 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
   const isLoading = !isLoaded || (user && convexWatchlist === undefined && !isInitialized)
   const isGroupsLoading = !watchlistGroups
 
-  // Debug context values before memoization
-  useEffect(() => {
-    console.log('Context values before memoization:', {
-      watchlist: watchlist.length,
-      selectedGroup: selectedGroup?.name,
-      selectedGroupCoins: selectedGroupCoins.length,
-      isInitialized,
-      isGroupsLoading
-    })
-  }, [watchlist, selectedGroup, selectedGroupCoins, isInitialized, isGroupsLoading])
-
   // Make sure the context value is memoized
   const contextValue = useMemo(() => ({
     // Legacy
@@ -262,10 +236,11 @@ export function WatchlistProvider({ children }: { children: React.ReactNode }) {
     selectWatchlistGroup, addToSelectedGroup, removeFromSelectedGroup, removeBulkFromSelectedGroup
   ])
 
+  const Provider = WatchlistContext.Provider as React.FC<{ value: WatchlistContextType; children: ReactNode }>;
   return (
-    <WatchlistContext.Provider value={contextValue}>
+    <Provider value={contextValue}>
       {children}
-    </WatchlistContext.Provider>
+    </Provider>
   )
 }
 

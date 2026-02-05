@@ -10,13 +10,22 @@
       "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-      "convex": "^1.14.2",
-      "@convex-dev/auth": "^0.0.55",
-      "@v1/logger": "workspace:*",
-      "react": "19"
+      "@v1/logger": "workspace:*"
+    },
+    "peerDependencies": {
+      "convex": ">=1.28.0",
+      "react": ">=18.0.0"
     },
     "devDependencies": {
-      "typescript": "^5.5.4"
+      "@clerk/nextjs": "^6.36.10",
+      "@types/node": "^24.0.3",
+      "@types/react": "^19.2.9",
+      "@types/react-dom": "^19.2.3",
+      "typescript": "^5.9.3",
+      "convex": "^1.31.6",
+      "next": "^16.1.5",
+      "react": "^19.2.4",
+      "react-dom": "^19.2.4"
     },
     "exports": {
       "./client": "./src/client.ts",

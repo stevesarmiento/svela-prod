@@ -3,6 +3,7 @@
 //import Link from "next/link";
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 // import { 
 //   IconHouseFill, 
@@ -10,7 +11,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 //   IconGearshapeFill,
 // } from "symbols-react";
 import { Button } from "@v1/ui/button";
-import { useAuth } from "@v1/convex/hooks";
+import { useAuth } from "@/lib/convex-hooks";
 import { useUser } from "@clerk/nextjs";
 import { 
   DropdownMenu,
@@ -27,9 +28,22 @@ import { IconChevronBackward, IconGearshapeFill } from 'symbols-react';
 import { SvelaLogo } from "@v1/ui/svela-logo";
 import { useTokenHeader } from "@/hooks/use-token-header";
 import { WatchlistButton } from "./watchlist-button";
-import { AnalysisDialog } from "./analysis-dialog";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+
+function loadAnalysisDialog() {
+  return import("./analysis-dialog");
+}
+
+const AnalysisDialog = dynamic(
+  () => loadAnalysisDialog().then((module) => module.AnalysisDialog),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-8 w-[92px] rounded-xl bg-zinc-950/10 dark:bg-white/10" />
+    ),
+  },
+);
 
 
 // const menuItems = [
@@ -90,6 +104,40 @@ function getRouteGreeting(pathname: string): string {
   return "Welcome";
 }
 
+function getStaticRouteGreeting(pathname: string): string | null {
+  // Remove locale prefix if present (e.g., /en/charts -> /charts)
+  const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
+
+  // Overview/watchlist uses time-based greeting (handled client-side to avoid hydration mismatch)
+  if (
+    cleanPath === '/watchlist' ||
+    cleanPath.startsWith('/watchlist/') ||
+    cleanPath === '/' ||
+    cleanPath === '/overview' ||
+    cleanPath.startsWith('/overview/')
+  ) {
+    return null;
+  }
+
+  const routeGreetings: Record<string, string> = {
+    '/charts': 'Charts & Graphs',
+    '/settings': 'Settings',
+    '/portfolio': 'Portfolio',
+  };
+
+  if (routeGreetings[cleanPath]) {
+    return routeGreetings[cleanPath];
+  }
+
+  for (const [route, greeting] of Object.entries(routeGreetings)) {
+    if (cleanPath.startsWith(route + '/')) {
+      return greeting;
+    }
+  }
+
+  return null;
+}
+
 export function TopNav() {
   const router = useRouter();
   const { user } = useAuth();
@@ -97,8 +145,7 @@ export function TopNav() {
   const { openUserProfile } = useClerk();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [greeting, setGreeting] = useState("Dashboard");
-  const [isMounted, setIsMounted] = useState(false);
+  const [overviewGreeting, setOverviewGreeting] = useState<string | null>(null);
   const { isChartDetailPage, tokenData, isLoading } = useTokenHeader();
 
   // Extract coin ID from pathname for watchlist button
@@ -106,13 +153,45 @@ export function TopNav() {
 
   // Get current watchlist group parameter to preserve it in back navigation
   const watchlistGroup = searchParams.get('wg');
-  const backToChartsUrl = watchlistGroup ? `/charts?wg=${watchlistGroup}` : '/charts';
+  const backToWatchlistComparisonUrl = watchlistGroup
+    ? `/watchlist?wt=chart&wg=${watchlistGroup}`
+    : "/watchlist?wt=chart";
 
-  // Update greeting based on route after component mounts
+  const handleBack = () => {
+    // Prefer history navigation so we restore scroll + prior view state.
+    let didPop = false;
+
+    const onPopState = () => {
+      didPop = true;
+    };
+
+    window.addEventListener("popstate", onPopState, { once: true });
+    router.back();
+
+    // If there's no history entry, `router.back()` is a no-op — fall back.
+    window.setTimeout(() => {
+      if (didPop) return;
+      window.removeEventListener("popstate", onPopState);
+      router.push(backToWatchlistComparisonUrl);
+    }, 200);
+  };
+
+  // Check if current route is overview (now watchlist is the default overview)
+  const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
+  const isOverviewRoute = cleanPath === '/watchlist' || cleanPath.startsWith('/watchlist/') || cleanPath === '/' || cleanPath === '/overview' || cleanPath.startsWith('/overview/');
+
+  // Static route greeting (safe to render during SSR without time-based mismatch)
+  const staticGreeting = getStaticRouteGreeting(pathname);
+
+  // Update time-based greeting client-side for overview routes (avoids hydration mismatch).
   useEffect(() => {
-    setIsMounted(true);
-    setGreeting(getRouteGreeting(pathname));
-  }, [pathname]);
+    if (!isOverviewRoute) {
+      setOverviewGreeting(null);
+      return;
+    }
+
+    setOverviewGreeting(getRouteGreeting(pathname));
+  }, [isOverviewRoute, pathname]);
 
   const handleProfileClick = () => {
     openUserProfile();
@@ -125,10 +204,6 @@ export function TopNav() {
   const email = clerkUser?.primaryEmailAddress?.emailAddress || user?.email;
   const avatarUrl = clerkUser?.imageUrl || user?.avatarUrl;
 
-  // Check if current route is overview (now watchlist is the default overview)
-  const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
-  const isOverviewRoute = cleanPath === '/watchlist' || cleanPath.startsWith('/watchlist/') || cleanPath === '/' || cleanPath === '/overview' || cleanPath.startsWith('/overview/');
-
   // Don't show greeting with name until user data is loaded
   const showPersonalizedGreeting = isLoaded && firstName;
 
@@ -140,9 +215,14 @@ export function TopNav() {
           {isChartDetailPage ? (
             // Token Header with cached data
             <div className="flex items-center gap-4">
-              <Link href={backToChartsUrl} className="flex text-gray-600 hover:text-gray-900 dark:text-white/70 dark:hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150">
+              <button
+                type="button"
+                onClick={handleBack}
+                className="flex text-gray-600 hover:text-gray-900 dark:text-white/70 dark:hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150"
+                aria-label="Go back"
+              >
                 <IconChevronBackward className="h-3 w-3 fill-current" />
-              </Link>
+              </button>
               <div className="flex items-center gap-2">
                 {tokenData && !isLoading && (
                   <Image
@@ -164,7 +244,7 @@ export function TopNav() {
                 <div className="flex flex-col gap-0">
                   <h1 className="text-sm font-semibold text-gray-900 dark:text-white">
                     {isLoading ? (
-                      <div className="h-4 w-16 bg-gray-200 dark:bg-white/10 rounded animate-pulse" />
+                      <div className="h-4 w-16 bg-gray-200 dark:bg-white/10 rounded animate-pulse motion-reduce:animate-none" />
                     ) : (
                       tokenData?.symbol || 'Token Details'
                     )}
@@ -191,18 +271,11 @@ export function TopNav() {
                 />
               </Link>
               <span className="text-xl font-bold text-zinc-950 dark:text-white">
-                {isMounted 
-                  ? isOverviewRoute 
-                    ? showPersonalizedGreeting 
-                      ? `${greeting}, ${firstName}` 
-                      : greeting
-                    : greeting
-                  : isOverviewRoute 
-                    ? showPersonalizedGreeting
-                      ? `Good morning, ${firstName}` 
-                      : "Good morning"
-                    : "Watchlist"
-                }
+                {isOverviewRoute
+                  ? showPersonalizedGreeting
+                    ? `${overviewGreeting ?? "Good morning"}, ${firstName}`
+                    : overviewGreeting ?? "Good morning"
+                  : staticGreeting ?? "Watchlist"}
               </span>
             </>
           )}

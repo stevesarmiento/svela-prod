@@ -1,5 +1,15 @@
 import type { Address, Instruction, Lamports } from '@solana/kit'
 
+// ===== Extended types for prebuilt transactions (provider-friendly) =====
+
+export interface PrebuiltTransaction {
+  wireTransaction: Uint8Array
+}
+
+export type SwapBuild =
+  | { kind: 'instructions'; instructions: Instruction[] }
+  | { kind: 'prebuilt'; transaction: PrebuiltTransaction }
+
 export interface SwapQuote {
   provider: string
   inputMint: Address
@@ -38,13 +48,3 @@ export function createProvider(config: Partial<Provider>): Provider {
     ...config
   }
 }
-
-// ===== Extended types for prebuilt transactions (provider-friendly) =====
-
-export interface PrebuiltTransaction {
-  wireTransaction: Uint8Array
-}
-
-export type SwapBuild =
-  | { kind: 'instructions'; instructions: Instruction[] }
-  | { kind: 'prebuilt'; transaction: PrebuiltTransaction }

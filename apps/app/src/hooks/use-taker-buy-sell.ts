@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
+import { CoinGlassApi } from '@/lib/effect/coinglass-api'
+import { runPromise } from '@/lib/effect/runtime-coinglass'
 
 interface ExchangeData {
   exchange: string
@@ -47,29 +49,39 @@ export function useTakerBuySell({
   symbol,
   range = '24h',
 }: UseTakerBuySellProps) {
+  function formatCoinGlassError(error: unknown): string {
+    if (error && typeof error === "object" && "_tag" in error) {
+      const tagged = error as { _tag: string; message?: unknown; status?: unknown }
+      if (typeof tagged.message === "string") return tagged.message
+      if (typeof tagged.status === "number") return `CoinGlass request failed (${tagged.status})`
+      return `CoinGlass request failed (${tagged._tag})`
+    }
+
+    return error instanceof Error ? error.message : String(error)
+  }
+
   return useQuery({
     queryKey: ['takerBuySell', symbol, range],
     queryFn: async (): Promise<TakerBuySellResponse> => {
-      const params = new URLSearchParams({
-        symbol,
-        range,
-      })
+      try {
+        const result = await runPromise(
+          CoinGlassApi.getTakerBuySell({
+            symbol,
+            range,
+          }),
+        )
 
-      const response = await fetch(
-        `/api/coinglass/taker-buy-sell/exchange-list?${params.toString()}`
-      )
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch taker buy/sell data: ${response.statusText}`)
+        return {
+          ...result,
+          data: {
+            ...result.data,
+            overall: { ...result.data.overall },
+            exchanges: result.data.exchanges.map((exchange) => ({ ...exchange })),
+          },
+        }
+      } catch (error) {
+        throw new Error(formatCoinGlassError(error))
       }
-
-      const data = await response.json()
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to fetch taker buy/sell data')
-      }
-
-      return data
     },
     enabled: !!symbol,
     refetchInterval: 60 * 1000, // Refetch every minute (data updates every second)

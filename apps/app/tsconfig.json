@@ -14,6 +14,7 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
+    "types": ["react", "react-dom", "node"],
     "plugins": [
       {
         "name": "next"
@@ -29,7 +30,6 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    "tailwind.config.ts",
     ".cursorrules"
   ],
   "exclude": ["node_modules", ".turbo", ".next"]

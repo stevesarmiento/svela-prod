@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useCallback } from 'react'
-import { useAuth } from '@v1/convex/hooks'
+import { useAuth } from '@/lib/convex-hooks'
 import { autoCleanupSessionMemories, bulkCleanupMemories } from '@/lib/client-memory-utils'
 
 export function useChatDialog() {

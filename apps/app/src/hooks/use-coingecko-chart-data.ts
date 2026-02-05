@@ -3,6 +3,9 @@
 import { useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
+import { Effect } from "effect"
+import { CoinGeckoApi } from "@/lib/effect/coingecko-api"
+import { runPromise } from "@/lib/effect/runtime-coingecko"
 
 // Map time scales to optimal CoinGecko parameters
 // Strategy: ≤90 days = prefer OHLC+volume for real candlesticks, >90 days = prefer market-chart for better granularity
@@ -24,8 +27,8 @@ interface OHLCDataPoint {
 }
 
 interface OHLCAPIResponse {
-  data: OHLCDataPoint[]
-  cached?: boolean
+  readonly data: ReadonlyArray<OHLCDataPoint>
+  readonly cached?: boolean
 }
 
 interface MarketChartPoint {
@@ -34,13 +37,13 @@ interface MarketChartPoint {
 }
 
 interface MarketChartAPIResponse {
-  data: {
-    prices: MarketChartPoint[]
-    volumes: MarketChartPoint[]
-    market_caps: MarketChartPoint[]
+  readonly data: {
+    prices: ReadonlyArray<MarketChartPoint>
+    volumes: ReadonlyArray<MarketChartPoint>
+    market_caps: ReadonlyArray<MarketChartPoint>
   }
-  status?: {
-    cached?: boolean
+  readonly status?: {
+    readonly cached?: boolean
   }
 }
 
@@ -171,22 +174,23 @@ function generateFallbackData(
   const config = TIMEFRAME_CONFIG[timeframe as keyof typeof TIMEFRAME_CONFIG] || TIMEFRAME_CONFIG['7d']
   const days = parseInt(config.days)
   const dataPoints = Math.min(days, 90) // Limit fallback data points
-  
+  const basePrice = initialData?.price
+
+  // If we don't have a real price to anchor on, return empty data (no fake charting).
+  if (!basePrice || basePrice <= 0) {
+    return { lineChart: [], volumeChart: [], ohlcData: [] }
+  }
+
   const fallbackPoints = Array.from({ length: dataPoints }, (_, i) => {
     const time = ((Date.now() - (dataPoints - i) * 24 * 60 * 60 * 1000) / 1000) as Time
-    const basePrice = initialData?.price || 100
-    const randomFactor = 0.95 + Math.random() * 0.1 // ±5% variation
-    const price = basePrice * randomFactor
-    const volume = (initialData?.volume_24h || 1000000) * (0.5 + Math.random() * 1.0)
-    
     return {
       time,
-      price,
-      volume,
-      open: price * 0.998,
-      high: price * 1.003,
-      low: price * 0.997,
-      close: price
+      price: basePrice,
+      volume: 0,
+      open: basePrice,
+      high: basePrice,
+      low: basePrice,
+      close: basePrice,
     }
   })
 
@@ -259,120 +263,99 @@ export function useCoinGeckoChartData(
   const { data: combinedData, isLoading } = useQuery({
     queryKey: ['coingecko-combined-chart-data', coinId, activeTimeScale],
     queryFn: async (): Promise<DataSourceResult> => {
-      console.log('🎯 Fetching CoinGecko data for:', { coinId, timeframe: activeTimeScale, config })
-
       let primaryResult: DataSourceResult | null = null
 
-            try {
-        // Smart strategy: For longer timeframes (and 30d), prefer market-chart for better granularity
+      try {
         const shouldPreferMarketChart = parseInt(config.days) > 90 || activeTimeScale === '30d'
-        console.log('🔄 Fetching both OHLC and market-chart data', { 
-          days: config.days, 
-          preferMarketChart: shouldPreferMarketChart 
-        })
-        
-        let ohlcResult: OHLCAPIResponse | null = null
-        let marketResult: MarketChartAPIResponse | null = null
-        
-        // Fetch both endpoints in parallel
-        const [ohlcResponse, marketResponse] = await Promise.allSettled([
-          fetch(`/api/coingecko/ohlc?id=${coinId}&days=${config.days}&vs_currency=usd`),
-          fetch(`/api/coingecko/market-chart?id=${coinId}&days=${config.days}&vs_currency=usd`)
-        ])
-        
-        // Process OHLC response
-        if (ohlcResponse.status === 'fulfilled' && ohlcResponse.value.ok) {
-          try {
-            ohlcResult = await ohlcResponse.value.json()
-            console.log('✅ OHLC data fetched successfully')
-          } catch (error) {
-            console.warn('⚠️ Failed to parse OHLC data:', error)
-          }
-        } else {
-          console.warn('⚠️ OHLC request failed:', ohlcResponse.status === 'rejected' ? ohlcResponse.reason : ohlcResponse.value.status)
-        }
-        
-        // Process market-chart response
-        if (marketResponse.status === 'fulfilled' && marketResponse.value.ok) {
-          try {
-            marketResult = await marketResponse.value.json()
-            console.log('✅ Market-chart data fetched successfully')
-          } catch (error) {
-            console.warn('⚠️ Failed to parse market-chart data:', error)
-          }
-        } else {
-          console.warn('⚠️ Market-chart request failed:', marketResponse.status === 'rejected' ? marketResponse.reason : marketResponse.value.status)
-        }
-        
-        // Combine data intelligently based on what we got and timeframe
+        const swallowToNull = (_: unknown) => Effect.succeed(null)
+
+        const ohlcEffect = CoinGeckoApi.getOHLC({
+          coinId,
+          days: config.days,
+          vsCurrency: "usd",
+        }).pipe(
+          Effect.catchTags({
+            CoinGeckoInvalidParamsError: swallowToNull,
+            CoinGeckoUnauthorizedError: swallowToNull,
+            CoinGeckoNotFoundError: swallowToNull,
+            CoinGeckoRateLimitedError: swallowToNull,
+            CoinGeckoApiError: swallowToNull,
+            CoinGeckoDecodeError: swallowToNull,
+          }),
+        )
+
+        const marketEffect = CoinGeckoApi.getMarketChart({
+          coinId,
+          days: config.days,
+          vsCurrency: "usd",
+        }).pipe(
+          Effect.catchTags({
+            CoinGeckoInvalidParamsError: swallowToNull,
+            CoinGeckoUnauthorizedError: swallowToNull,
+            CoinGeckoNotFoundError: swallowToNull,
+            CoinGeckoRateLimitedError: swallowToNull,
+            CoinGeckoApiError: swallowToNull,
+            CoinGeckoDecodeError: swallowToNull,
+          }),
+        )
+
+        const [ohlcResult, marketResult] = await runPromise(
+          Effect.all([ohlcEffect, marketEffect], { concurrency: "unbounded" }),
+        )
+
         if (ohlcResult && marketResult) {
           if (shouldPreferMarketChart) {
-            // For longer timeframes: prefer market-chart for better daily granularity
             const parsedMarket = parseMarketChartData(marketResult)
             if (parsedMarket) {
-              console.log('✅ Using market-chart data for long timeframe (daily granularity preferred)')
               primaryResult = {
                 data: parsedMarket,
                 source: 'market-chart',
-                cached: marketResult.status?.cached || false
+                cached: marketResult.status?.cached || false,
               }
             }
           } else {
-            // For shorter timeframes: combine real OHLC + real volume
-            const combinedData = combineOHLCWithVolume(ohlcResult, marketResult)
-            if (combinedData) {
-              console.log('✅ Combined real OHLC + real volume data for short timeframe')
+            const combined = combineOHLCWithVolume(ohlcResult, marketResult)
+            if (combined) {
               primaryResult = {
-                data: combinedData,
+                data: combined,
                 source: 'ohlc',
-                cached: ohlcResult.cached || false
+                cached: ohlcResult.cached || false,
               }
             }
           }
         } else if (marketResult) {
-          // Market-chart only: real price line + volume, synthetic OHLC
           const parsedMarket = parseMarketChartData(marketResult)
           if (parsedMarket) {
-            console.log('✅ Using market-chart data (real price+volume, synthetic OHLC)')
             primaryResult = {
               data: parsedMarket,
               source: 'market-chart',
-              cached: marketResult.status?.cached || false
+              cached: marketResult.status?.cached || false,
             }
           }
         } else if (ohlcResult) {
-          // OHLC only: real candlesticks, no volume
           const parsedOHLC = parseOHLCData(ohlcResult)
           if (parsedOHLC) {
-            console.log('✅ Using OHLC data (real candlesticks, no volume)')
             primaryResult = {
               data: parsedOHLC,
               source: 'ohlc',
-              cached: ohlcResult.cached || false
+              cached: ohlcResult.cached || false,
             }
           }
         }
 
-        // Return the result if we have one
-        if (primaryResult) {
-          return primaryResult
-        }
+        if (primaryResult) return primaryResult
 
-        // Generate fallback data if both routes fail
-        console.log('🔄 Generating fallback data (both API routes failed)')
-        return {
-          data: generateFallbackData(coinId, activeTimeScale, initialData),
-          source: 'fallback',
-          cached: false
-        }
-
-      } catch (error) {
-        console.error('❌ Complete chart data fetch failure:', error)
         return {
           data: generateFallbackData(coinId, activeTimeScale, initialData),
           source: 'fallback',
           cached: false,
-          error: error instanceof Error ? error.message : 'Unknown error'
+        }
+      } catch (error) {
+        return {
+          data: generateFallbackData(coinId, activeTimeScale, initialData),
+          source: 'fallback',
+          cached: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
         }
       }
     },
@@ -392,17 +375,11 @@ export function useCoinGeckoChartData(
     parsedData = combinedData.data;
     dataSource = combinedData.source;
     cached = combinedData.cached;
-    console.log('✅ Using real data from', dataSource);
   } else if (combinedData?.error) {
-    // We have an error - log it and only use fallback if specifically needed
-    console.error('❌ Chart data fetch error:', combinedData.error);
-    
     // Only generate fallback data if we have some initial pricing data to work with
     if (initialData && initialData.price && initialData.price > 0) {
-      console.warn('⚠️ Using fallback data due to API error, but with real initial price');
       parsedData = generateFallbackData(coinId, activeTimeScale, initialData);
     } else {
-      console.error('💥 No real data and no valid initial data - returning empty chart');
       // Return empty data instead of fake data
       parsedData = {
         lineChart: [],
@@ -420,10 +397,8 @@ export function useCoinGeckoChartData(
   } else {
     // No data and not loading - only use fallback if we have valid initial data
     if (initialData && initialData.price && initialData.price > 0) {
-      console.warn('⚠️ No API data available, using fallback with real initial price');
       parsedData = generateFallbackData(coinId, activeTimeScale, initialData);
     } else {
-      console.warn('⚠️ No API data and no valid initial data - returning empty chart');
       parsedData = {
         lineChart: [],
         volumeChart: [],
@@ -431,17 +406,6 @@ export function useCoinGeckoChartData(
       };
     }
   }
-
-  console.log('📊 Final chart data summary:', {
-    source: dataSource,
-    cached,
-    timeframe: activeTimeScale,
-    days: config.days,
-    linePoints: parsedData.lineChart.length,
-    volumePoints: parsedData.volumeChart.length,
-    ohlcPoints: parsedData.ohlcData.length,
-    granularity: parsedData.lineChart.length > 0 ? `~${Math.round(parseInt(config.days) / parsedData.lineChart.length)} days per point` : 'unknown'
-  })
 
   return {
     chartData: parsedData.lineChart,

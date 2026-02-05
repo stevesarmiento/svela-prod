@@ -1,9 +1,25 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery as useConvexQuery } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../convex/_generated/api";
+
+interface CoinSearchResult {
+  coingeckoId: string;
+  name: string;
+  symbol: string;
+  logoUrl: string;
+}
+
+function isCoinSearchResult(value: unknown): value is CoinSearchResult {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.coingeckoId === "string" &&
+    typeof record.name === "string" &&
+    typeof record.symbol === "string" &&
+    typeof record.logoUrl === "string"
+  );
+}
 
 // Interface for CoinGecko API pricing response
 interface CoinGeckoPricingData {
@@ -72,19 +88,40 @@ export function useHybridCoinSearch(
   const { limit = 50 } = options;
   
   // Step 1: Search our database for matching coins (very fast)
-  const dbSearchResults = useConvexQuery(
-    api.coins.searchCoinGeckoCoins,
-    query.trim() ? { query: query.trim(), limit } : "skip"
-  );
+  const {
+    data: dbSearchResults,
+    isLoading: isDbLoading,
+    error: dbError,
+  } = useQuery({
+    queryKey: ["coins", "search", query.trim(), limit],
+    queryFn: async (): Promise<CoinSearchResult[]> => {
+      const response = await fetch(
+        `/api/internal/coins/search?query=${encodeURIComponent(query.trim())}&limit=${limit}`,
+      );
+      if (!response.ok) throw new Error(`Search error: ${response.status}`);
+      const json: unknown = await response.json();
+      if (!Array.isArray(json) || !json.every(isCoinSearchResult)) {
+        throw new Error("Invalid coin search response");
+      }
+      return json;
+    },
+    enabled: !!query.trim(),
+    staleTime: 10 * 60 * 1000,
+  });
 
   // Extract CoinGecko IDs from database results
   const coingeckoIds = useMemo(() => {
     return dbSearchResults?.map(coin => coin.coingeckoId) || [];
   }, [dbSearchResults]);
 
+  const coingeckoIdsKey = useMemo(() => {
+    if (!coingeckoIds.length) return ""
+    return [...coingeckoIds].sort().join(",")
+  }, [coingeckoIds])
+
   // Step 2: Get pricing data from API for only the matched coins
   const { data: pricingData, isLoading: isPricingLoading, error: pricingError } = useQuery({
-    queryKey: ["hybrid-pricing", coingeckoIds.sort().join(",")],
+    queryKey: ["hybrid-pricing", coingeckoIdsKey],
     queryFn: async (): Promise<Record<string, CoinGeckoPricingData>> => {
       if (!coingeckoIds.length) return {};
 
@@ -168,8 +205,10 @@ export function useHybridCoinSearch(
 
   return {
     data: combinedResults,
-    isLoading: !dbSearchResults || (coingeckoIds.length > 0 && isPricingLoading),
-    error: pricingError as Error | null,
+    isLoading:
+      (query.trim() !== "" && (isDbLoading || !dbSearchResults)) ||
+      (coingeckoIds.length > 0 && isPricingLoading),
+    error: (dbError || pricingError) as Error | null,
     searchType,
     totalResults: combinedResults.length
   };

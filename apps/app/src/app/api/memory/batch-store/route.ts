@@ -15,34 +15,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Memory service not available' }, { status: 503 });
     }
 
-    // Store memories in batch
-    const results = [];
-    let successCount = 0;
-    let failureCount = 0;
+    // Store memories in parallel (each item is independent).
+    const results = await Promise.all(
+      memories.map(async (memory) => {
+        try {
+          const result = await capxMemoryService.addMemory(
+            userId,
+            memory.text,
+            memory.metadata || {},
+            memory.strategy || 'raw',
+          );
+          return {
+            success: true as const,
+            memoryId: result.memoryId,
+            text: memory.text.substring(0, 100), // First 100 chars for reference
+          };
+        } catch (error) {
+          return {
+            success: false as const,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            text: memory.text.substring(0, 100),
+          };
+        }
+      }),
+    );
 
-    for (const memory of memories) {
-      try {
-        const result = await capxMemoryService.addMemory(
-          userId,
-          memory.text,
-          memory.metadata || {},
-          memory.strategy || 'raw'
-        );
-        results.push({
-          success: true,
-          memoryId: result.memoryId,
-          text: memory.text.substring(0, 100) // First 100 chars for reference
-        });
-        successCount++;
-      } catch (error) {
-        results.push({
-          success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
-          text: memory.text.substring(0, 100)
-        });
-        failureCount++;
-      }
-    }
+    const successCount = results.filter((r) => r.success).length;
+    const failureCount = results.length - successCount;
 
     return NextResponse.json({ 
       success: failureCount === 0,

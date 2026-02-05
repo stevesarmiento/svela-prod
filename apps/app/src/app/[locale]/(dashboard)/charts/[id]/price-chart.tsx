@@ -1,21 +1,23 @@
 'use client'
 
-import React, { useTransition, useDeferredValue, useCallback, memo } from 'react'
+import React, { useTransition, useDeferredValue, useCallback, useMemo, memo, useState } from 'react'
 import { useIsomorphicTheme } from '@/hooks/use-isomorphic-theme'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'motion/react'
 import { cn } from "@v1/ui/cn"
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
-import { useChartInstance } from '@/hooks/use-chart-instance'
+import { useChartInstance, type HullSuiteOverlay } from '@/hooks/use-chart-instance'
 import { usePriceCalculations } from '@/hooks/use-price-calculations'
 import type { CoinMarketData } from '@/types/coins'
 import { useHullSuite } from '@/hooks/use-hull-suite'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { IconArrowUpRight } from 'symbols-react'
 import Image from 'next/image'
-import { useQuery } from 'convex/react'
-import { api } from '../../../../../../convex/_generated/api'
+import NumberFlow from '@/components/number-flow'
 import { useQuery as useTanStackQuery } from '@tanstack/react-query'
+import { CoinsInternalApi } from '@/lib/effect/coins-internal-api'
+import { runPromise } from '@/lib/effect/runtime-coins-internal'
+import type { Time } from 'lightweight-charts'
 
 interface PriceChartProps {
   coinId: string;
@@ -32,6 +34,120 @@ interface IndicatorSettings {
   showRSI: boolean
   showStochRSI: boolean
   showHullSuite: boolean
+}
+
+// Stable settings objects to avoid chart re-creation from changing identity.
+const PRICE_CHART_INDICATORS: IndicatorSettings = {
+  showWaveTrend: false,
+  showFastMoneyFlow: false,
+  showSlowMoneyFlow: false,
+  showRSI: false,
+  showStochRSI: false,
+  showHullSuite: true,
+}
+
+const HULL_SUITE_CONFIG: Parameters<typeof useHullSuite>[1] = {
+  src: 'close',
+  modeSwitch: 'Ehma',
+  length: 55,
+  lengthMult: 1.0,
+  useHtf: false,
+  htf: '240',
+  switchColor: true,
+  candleCol: false,
+  visualSwitch: true,
+  thicknesSwitch: 1,
+  transpSwitch: 40,
+}
+
+interface VolumePointByEpoch {
+  epochSeconds: number
+  value: number
+}
+
+function isBusinessDay(value: unknown): value is { year: number; month: number; day: number } {
+  if (!value || typeof value !== 'object') return false
+  return (
+    'year' in value &&
+    'month' in value &&
+    'day' in value &&
+    typeof (value as { year?: unknown }).year === 'number' &&
+    typeof (value as { month?: unknown }).month === 'number' &&
+    typeof (value as { day?: unknown }).day === 'number'
+  )
+}
+
+function timeToEpochSeconds(time: Time): number | null {
+  if (typeof time === 'number') return (time > 1e10 ? Math.floor(time / 1000) : Math.floor(time))
+  if (typeof time === 'string') {
+    const ms = Date.parse(time)
+    if (!Number.isFinite(ms)) return null
+    return Math.floor(ms / 1000)
+  }
+  if (isBusinessDay(time)) {
+    const ms = Date.UTC(time.year, time.month - 1, time.day, 0, 0, 0, 0)
+    return Math.floor(ms / 1000)
+  }
+  return null
+}
+
+function estimateAverageIntervalSeconds(epochSeconds: number[]): number | null {
+  if (epochSeconds.length < 2) return null
+  const sorted = epochSeconds.slice().sort((a, b) => a - b)
+  const first = sorted[0]!
+  const last = sorted[sorted.length - 1]!
+  const span = last - first
+  if (span <= 0) return null
+  return span / (sorted.length - 1)
+}
+
+function findNearestVolumeValue(
+  targetEpochSeconds: number,
+  volumePoints: Array<VolumePointByEpoch>,
+): { value: number; diffSeconds: number } | null {
+  if (volumePoints.length === 0) return null
+
+  let lo = 0
+  let hi = volumePoints.length - 1
+
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    const midEpoch = volumePoints[mid]!.epochSeconds
+    if (midEpoch === targetEpochSeconds) return { value: volumePoints[mid]!.value, diffSeconds: 0 }
+    if (midEpoch < targetEpochSeconds) lo = mid + 1
+    else hi = mid - 1
+  }
+
+  const right = volumePoints[Math.min(lo, volumePoints.length - 1)]!
+  const left = volumePoints[Math.max(0, lo - 1)]!
+
+  const diffRight = Math.abs(right.epochSeconds - targetEpochSeconds)
+  const diffLeft = Math.abs(left.epochSeconds - targetEpochSeconds)
+
+  return diffLeft <= diffRight
+    ? { value: left.value, diffSeconds: diffLeft }
+    : { value: right.value, diffSeconds: diffRight }
+}
+
+function getUtcMonthRange(epochSeconds: number): { fromEpochSeconds: number; toEpochSeconds: number } {
+  const date = new Date(epochSeconds * 1000)
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  return {
+    fromEpochSeconds: Math.floor(Date.UTC(year, month, 1, 0, 0, 0, 0) / 1000),
+    toEpochSeconds: Math.floor(Date.UTC(year, month + 1, 1, 0, 0, 0, 0) / 1000),
+  }
+}
+
+function getUtcQuarterRange(epochSeconds: number): { fromEpochSeconds: number; toEpochSeconds: number } {
+  const date = new Date(epochSeconds * 1000)
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  const quarterStartMonth = Math.floor(month / 3) * 3
+  return {
+    fromEpochSeconds: Math.floor(Date.UTC(year, quarterStartMonth, 1, 0, 0, 0, 0) / 1000),
+    toEpochSeconds: Math.floor(Date.UTC(year, quarterStartMonth + 3, 1, 0, 0, 0, 0) / 1000),
+  }
 }
 
 // React 19: Memoized time scale selector
@@ -68,6 +184,8 @@ const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, set
 export const PriceChart = memo(function PriceChart({ coinId, initialData, activeTimeScale, setActiveTimeScale, isPending }: PriceChartProps) {
   // React 19: Add concurrent features
   const [isDataPending, startDataTransition] = useTransition()
+  const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null)
+  const [crosshairTime, setCrosshairTime] = useState<Time | null>(null)
   
   // React 19: Defer expensive computations
   const deferredCoinId = useDeferredValue(coinId)
@@ -80,11 +198,23 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
     })
   }, [setActiveTimeScale])
 
-  // React 19: Use deferred values for data fetching
-  const coingeckoCoinData = useQuery(
-    api.coins.getCoinGeckoCoinById,
-    { coingeckoId: deferredCoinId }
-  )
+  const handleCrosshairTimeMove = useCallback((time: Time | null) => {
+    setCrosshairTime(time)
+  }, [])
+
+  const handleCrosshairMove = useCallback((price: number | null) => {
+    setCrosshairPrice(price)
+  }, [])
+
+  const { data: coingeckoCoinData } = useTanStackQuery({
+    queryKey: ["coingecko-coin", deferredCoinId],
+    queryFn: async () => {
+      if (!deferredCoinId) return null
+      return await runPromise(CoinsInternalApi.getCoinGeckoCoinById({ id: deferredCoinId }))
+    },
+    enabled: !!deferredCoinId,
+    staleTime: 10 * 60 * 1000,
+  })
   
   // Get live price data from CoinGecko API
   const { data: livePrice, isLoading: isPriceLoading } = useTanStackQuery({
@@ -115,71 +245,105 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   
   // Always use line chart - simplified approach
 
-  const indicators: IndicatorSettings = {
-    showWaveTrend: false,
-    showFastMoneyFlow: false,
-    showSlowMoneyFlow: false,
-    showRSI: false,
-    showStochRSI: false,
-    showHullSuite: true,
-  }
+  // Use OHLC data for Hull Suite (add volume=0 for compatibility).
+  const ohlcvDataForHull = useMemo(() => {
+    return ohlcData.map((point) => ({ ...point, volume: 0 }))
+  }, [ohlcData])
 
-  // Hardcoded Hull Suite settings (EHMA-55)
-  const hullSettings = {
-    modeSwitch: 'Ehma' as const,
-    length: 55,
-    visualSwitch: true,
-  }
+  const hullSuiteData = useHullSuite(ohlcvDataForHull, HULL_SUITE_CONFIG)
 
-  // Use OHLC data for Hull Suite (add volume=0 for compatibility)
-  const ohlcvDataForHull = ohlcData.map(point => ({ ...point, volume: 0 }))
-  const hullSuiteData = useHullSuite(ohlcvDataForHull || [], {
-    src: 'close',
-    modeSwitch: hullSettings.modeSwitch,
-    length: hullSettings.length,
-    lengthMult: 1.0,
-    useHtf: false,
-    htf: '240',
-    switchColor: true,
-    candleCol: false,
-    visualSwitch: hullSettings.visualSwitch,
-    thicknesSwitch: 1,
-    transpSwitch: 40,
+  const hullSuiteOverlay = useMemo<HullSuiteOverlay>(() => {
+    return {
+      mhull: hullSuiteData.MHULL,
+      shull: hullSuiteData.SHULL,
+      color: primaryHullColor,
+      lineStyle: 'dotted',
+      lineWidth: 1,
+    }
+  }, [hullSuiteData, primaryHullColor])
+
+  const ohlcvDataForChart = useMemo(() => {
+    if (!ohlcData.length) return []
+
+    const volumePoints: Array<VolumePointByEpoch> = volumeData
+      .map((point) => {
+        const epochSeconds = timeToEpochSeconds(point.time)
+        return epochSeconds == null || !Number.isFinite(point.value)
+          ? null
+          : { epochSeconds, value: point.value }
+      })
+      .filter((point): point is VolumePointByEpoch => point !== null)
+      .sort((a, b) => a.epochSeconds - b.epochSeconds)
+
+    const ohlcEpochSeconds = ohlcData
+      .map((point) => timeToEpochSeconds(point.time))
+      .filter((t): t is number => t != null)
+    const averageIntervalSeconds = estimateAverageIntervalSeconds(ohlcEpochSeconds)
+    const maxDiffSeconds = Math.max(2 * 60 * 60, Math.floor((averageIntervalSeconds ?? 0) / 2) || 12 * 60 * 60)
+
+    return ohlcData.map((point) => {
+      const epochSeconds = timeToEpochSeconds(point.time)
+      if (epochSeconds == null || volumePoints.length === 0) return { ...point }
+
+      const nearest = findNearestVolumeValue(epochSeconds, volumePoints)
+      const volume =
+        nearest && nearest.diffSeconds <= maxDiffSeconds && Number.isFinite(nearest.value) ? nearest.value : undefined
+
+      return { ...point, volume }
+    })
+  }, [ohlcData, volumeData])
+
+  // Highlight the period under the crosshair and dim the rest:
+  // - 1Q + 1Y: highlight month
+  // - Max: highlight quarter
+  const highlightRange = useMemo(() => {
+    if (crosshairTime == null) return null
+
+    const crosshairEpochSeconds = timeToEpochSeconds(crosshairTime)
+    if (crosshairEpochSeconds == null) return null
+
+    const isQuarterly = deferredTimeScale === '2y'
+    const range = isQuarterly
+      ? getUtcQuarterRange(crosshairEpochSeconds)
+      : getUtcMonthRange(crosshairEpochSeconds)
+
+    const boundaryColor = isDarkMode ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)'
+
+    return {
+      from: range.fromEpochSeconds as Time,
+      to: range.toEpochSeconds as Time,
+      dimOpacity: 0.18,
+      boundaryColor,
+    }
+  }, [crosshairTime, deferredTimeScale, isDarkMode])
+
+  const chartContainerRef = useChartInstance(ohlcvDataForChart, {
+    chartType: 'line',
+    showVolume: true,
+    isDarkMode,
+    hullSuite: hullSuiteOverlay,
+    onCrosshairMove: handleCrosshairMove,
+    onCrosshairTimeMove: handleCrosshairTimeMove,
+    highlightRange,
   })
-
-  // Convert Hull Suite data for chart instance
-  const legacyHullSuiteData = {
-    mhull: hullSuiteData.MHULL,
-    shull: hullSuiteData.SHULL,
-    trend: hullSuiteData.hullColor.map(item => ({ 
-      time: item.time, 
-      isUp: true, // Always use same color as requested
-      color: primaryHullColor // Use consistent pastel color with 70% opacity
-    }))
-  }
-
-  // React 19: Memoized chart instance creation
-  const chartContainerRef = useChartInstance(
-    chartData, 
-    volumeData, 
-    undefined, // No Market Cipher indicators
-    indicators, // Hull Suite indicator settings
-    legacyHullSuiteData,
-    undefined, // No callback - tooltip handles dynamic updates
-    'line', // Always use line chart
-    ohlcvDataForHull, // Pass OHLC data for tooltips
-    isDarkMode // Pass theme state for consistent theming
-  )
 
   // Get coin info from CoinGecko database
   const coinName = coingeckoCoinData?.name || 'Loading...'
   const coinImage = coingeckoCoinData?.logoUrl
   
   // React 19: Show pending states and optimize price display
-  const currentPrice = livePrice?.current_price || displayPrice || 0
-  const priceChange24h = livePrice?.price_change_percentage_24h || calculatePercentageChange || 0
+  const basePrice = ohlcvDataForChart[0]?.open || ohlcvDataForChart[0]?.close || null
+  const scrubPriceChange =
+    crosshairPrice != null && basePrice != null && Number.isFinite(basePrice) && basePrice !== 0
+      ? ((crosshairPrice - basePrice) / basePrice) * 100
+      : null
+
+  const liveChange24h = livePrice?.price_change_percentage_24h ?? calculatePercentageChange ?? 0
+  const currentPrice = crosshairPrice ?? livePrice?.current_price ?? displayPrice ?? 0
+  const priceChange24h = scrubPriceChange ?? liveChange24h
   const isLoadingPrice = isPriceLoading || isLoading
   const showPending = isPending || isDataPending || isLoadingPrice
+  const shouldReduceMotion = useReducedMotion()
 
   return (
     <div className={cn(
@@ -220,18 +384,23 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                     <span className="text-muted-foreground text-xs">is currently</span>
                     </div>
                     <div className="flex items-center">
-                      <span className={cn(
-                        "text-3xl font-bold font-sans text-gray-900 dark:text-white",
-                        showPending && "animate-pulse"
-                      )}>
-                        ${currentPrice.toLocaleString('en-US', {
+                      <NumberFlow
+                        value={currentPrice}
+                        format={{
+                          style: "currency",
+                          currency: "USD",
                           minimumFractionDigits: 2,
-                          maximumFractionDigits: 8
-                        })}
-                      </span>
+                          maximumFractionDigits: 2,
+                        }}
+                        willChange
+                        className={cn(
+                          "text-3xl font-bold font-sans text-gray-900 dark:text-white",
+                          showPending && "animate-pulse motion-reduce:animate-none",
+                        )}
+                      />
                       {showPending && (
                         <div className="inline-flex items-center ml-2">
-                          <div className="w-2 h-2 bg-gray-400 dark:bg-white/50 rounded-full animate-pulse" />
+                          <div className="w-2 h-2 bg-gray-400 dark:bg-white/50 rounded-full animate-pulse motion-reduce:animate-none" />
                         </div>
                       )}
                     </div>
@@ -245,7 +414,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                           key={priceChange24h >= 0 ? 'up' : 'down'}
                           initial={{ rotate: priceChange24h >= 0 ? 0 : 90 }}
                           animate={{ rotate: priceChange24h >= 0 ? 0 : 90 }}
-                          transition={{ type: "spring", bounce: 0.3, duration: 0.3 }}
+                          transition={shouldReduceMotion ? { duration: 0 } : { type: "spring", bounce: 0.3, duration: 0.3 }}
                           className="inline-block mr-2"
                           style={{ transformOrigin: 'center' }}
                         >

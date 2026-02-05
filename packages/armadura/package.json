@@ -1,30 +1,23 @@
 {
-  "name": "@armadura",
+  "name": "@armadura/workspace",
   "version": "0.0.0",
   "private": true,
   "sideEffects": false,
   "description": "Arma Web3 components and utilities for Solana development",
+  "workspaces": ["connector", "jupiter", "providers", "sdk"],
   "scripts": {
-    "clean": "rm -rf .turbo node_modules && turbo clean --filter=@armadura/*",
-    "lint": "turbo lint --filter=@armadura/*",
-    "format": "turbo format --filter=@armadura/*",
-    "typecheck": "turbo typecheck --filter=@armadura/*"
+    "build": "turbo run build",
+    "clean": "rm -rf .turbo node_modules && turbo run clean",
+    "format": "turbo run format",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck"
   },
-  "exports": {
-    "./connector": "./connector/src/index.ts",
-    "./sdk": "./sdk/src/index.ts",
-    "./jupiter": "./jupiter/src/index.ts",
-    "./providers": "./providers/src/index.ts"
-  },
-  "dependencies": {
-    "@armadura/sdk": "0.1.5",
-    "@armadura/jupiter": "0.1.5", 
-    "@armadura/providers": "0.1.5"
-  },
-  "peerDependencies": {
-    "@armadura/connector": "0.1.5"
-  },
+  "exports": {},
+  "dependencies": {},
   "devDependencies": {
-    "typescript": "^5.6.3"
+    "@biomejs/biome": "1.8.3",
+    "turbo": "^2.8.1",
+    "typescript": "^5.9.3"
   }
 }

@@ -4,6 +4,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
+function getServerToken(): string {
+  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
+  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured");
+  return token;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { query, limit = 20 } = await req.json();
@@ -14,6 +20,7 @@ export async function POST(req: NextRequest) {
 
     // Use CoinGecko search instead of legacy CoinMarketCap search
     const coins = await convex.query(api.coins.searchCoinGeckoCoins, { 
+      serverToken: getServerToken(),
       query: query.toString(),
       limit: Number(limit)
     });

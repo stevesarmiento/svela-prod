@@ -7,7 +7,7 @@ import { Badge } from "@v1/ui/badge";
 import { Label } from "@v1/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@v1/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@v1/ui/popover";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@v1/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { ListFilter, X } from "lucide-react";
 import { Separator } from "@v1/ui/separator";
 import { Kbd } from "@v1/ui/kbd";
@@ -97,7 +97,8 @@ export function WatchlistFilters({
         marketCapRange[0] > 0 || marketCapRange[1] < 1000000000000 ||
         volumeRange[0] > 0 || volumeRange[1] < 1000000000 ||
         changeFilter !== "all" ||
-        sortBy !== "name" || sortOrder !== "asc"
+        // Default sort is volume desc (highest volume first)
+        sortBy !== "volume" || sortOrder !== "desc"
       );
 
       // Check for Escape to clear filters (only if popover is not open and there are active filters)
@@ -177,7 +178,7 @@ export function WatchlistFilters({
       });
     }
 
-    if (sortBy !== "name" || sortOrder !== "asc") {
+    if (sortBy !== "volume" || sortOrder !== "desc") {
       chips.push({
         key: "sort",
         label: "Sort",
@@ -207,8 +208,9 @@ export function WatchlistFilters({
         onChangeFilterChange("all");
         break;
       case "sort":
-        onSortByChange("name");
-        onSortOrderChange("asc");
+        // Reset to default sort (highest volume first)
+        onSortByChange("volume");
+        onSortOrderChange("desc");
         break;
     }
   };
@@ -233,7 +235,6 @@ export function WatchlistFilters({
         {/* Filter Button and Active Filters Row */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <Popover open={isFilterPopoverOpen} onOpenChange={setIsFilterPopoverOpen}>
-            <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <PopoverTrigger asChild>
@@ -255,14 +256,13 @@ export function WatchlistFilters({
                     </Button>
                   </PopoverTrigger>
                 </TooltipTrigger>
-                <TooltipContent side="right" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+                <TooltipContent side="right" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
                   <span>Filters</span>
                   <Kbd>Cmd</Kbd>
                   <span>+</span>
                   <Kbd>F</Kbd>
                 </TooltipContent>
               </Tooltip>
-            </TooltipProvider>
             <PopoverContent className="rounded-xl bg-white dark:bg-zinc-900  p-0" align="start" side="right">
               {/* Search Input - Top Level */}
               <div className="">

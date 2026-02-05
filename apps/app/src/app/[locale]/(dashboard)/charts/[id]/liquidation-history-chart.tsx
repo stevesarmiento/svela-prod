@@ -7,15 +7,9 @@ import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { useLiquidationHistory } from '@/hooks/use-liquidation-history'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { coinGeckoIdToSymbolFallback } from '@/lib/coingecko-to-symbol'
-import {
-  createChart,
-  ColorType,
-  LineStyle,
-  Time,
-  IChartApi,
-  HistogramSeries,
-  CrosshairMode,
-} from 'lightweight-charts'
+import type { IChartApi, Time } from 'lightweight-charts'
+import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
+import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 
 interface LiquidationHistoryChartProps {
   coinId: string
@@ -48,7 +42,7 @@ export function LiquidationHistoryChart({
   limit = 30,
 }: LiquidationHistoryChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<IChartApi>(null)
+  const chartRef = useRef<IChartApi | null>(null)
   const [tooltip, setTooltip] = useState<TooltipData>({
     time: '',
     longValue: 0,
@@ -115,121 +109,158 @@ export function LiquidationHistoryChart({
   useEffect(() => {
     if (!chartContainerRef.current || !longData.length) return
 
-    // Create chart with same styling as price chart
-    const chart = createChart(chartContainerRef.current, {
-      handleScale: false,
-      handleScroll: false,
-      layout: {
-        background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#ffffff50",
-        attributionLogo: false,
-      },
-      grid: {
-        vertLines: { visible: false, color: "#e5e7eb20", style: LineStyle.Dotted },
-        horzLines: { visible: true, color: "#f5f5f510", style: LineStyle.Dotted },
-      },
-      rightPriceScale: { borderVisible: false, autoScale: true },
-      crosshair: {
-        mode: CrosshairMode.Magnet,
-        vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
-        horzLine: { visible: false, labelVisible: false },
-      },
-      timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
-      height: 200,
-    })
+    let isCancelled = false
+    let cleanup: (() => void) | null = null
 
-    chartRef.current = chart
+    void (async () => {
+      const {
+        createChart,
+        ColorType,
+        LineStyle,
+        HistogramSeries,
+        CrosshairMode,
+      } = await loadLightweightCharts()
 
-    // Add long liquidations histogram series
-    const longSeries = chart.addSeries(HistogramSeries, {
-      color: colors.long,
-      priceFormat: {
-        type: 'custom',
-        formatter: (price: number) => `$${formatLargeNumber(price)}`,
-      },
-      priceScaleId: 'longs',
-      base: 0,
-    })
+      if (isCancelled || !chartContainerRef.current || !longData.length) return
 
-    // Add short liquidations histogram series  
-    const shortSeries = chart.addSeries(HistogramSeries, {
-      color: colors.short,
-      priceFormat: {
-        type: 'custom',
-        formatter: (price: number) => `$${formatLargeNumber(price)}`,
-      },
-      priceScaleId: 'shorts',
-      base: 0,
-    })
-
-    // Configure the long liquidations scale (top half)
-    chart.priceScale('longs').applyOptions({
-      scaleMargins: { top: 0, bottom: 0.5 },
-    })
-
-    // Configure the short liquidations scale (bottom half, inverted)
-    chart.priceScale('shorts').applyOptions({
-      scaleMargins: { top: 0.5, bottom: 0 },
-      invertScale: true,
-    })
-
-    // Set data
-    longSeries.setData(longData)
-    shortSeries.setData(shortData)
-
-    // Subscribe to crosshair move for tooltip
-    chart.subscribeCrosshairMove((param) => {
-      if (!param.time || !chartContainerRef.current) {
-        setTooltip(prev => ({ ...prev, visible: false }))
-        return
-      }
-
-      // Find the data points for this time
-      const longPoint = longData.find(d => d.time === param.time)
-      const shortPoint = shortData.find(d => d.time === param.time)
-
-      if (!longPoint || !shortPoint) {
-        setTooltip(prev => ({ ...prev, visible: false }))
-        return
-      }
-
-      // Get mouse position relative to chart container
-      const x = param.point?.x || 0
-      const y = param.point?.y || 0
-
-      // Format time
-      const timeStr = new Date((param.time as number) * 1000).toLocaleDateString()
-
-      setTooltip({
-        time: timeStr,
-        longValue: longPoint.value,
-        shortValue: shortPoint.value,
-        total: longPoint.value + shortPoint.value,
-        x: x + 10, // Offset slightly from cursor
-        y: y - 10,
-        visible: true
+      // Create chart with same styling as price chart
+      const chart = createChart(chartContainerRef.current, {
+        handleScale: false,
+        handleScroll: false,
+        layout: {
+          background: { type: ColorType.Solid, color: "transparent" },
+          textColor: "#ffffff50",
+          attributionLogo: false,
+        },
+        grid: {
+          vertLines: { visible: false, color: "#e5e7eb20", style: LineStyle.Dotted },
+          horzLines: { visible: true, color: "#f5f5f510", style: LineStyle.Dotted },
+        },
+        rightPriceScale: { borderVisible: false, autoScale: true },
+        crosshair: {
+          mode: CrosshairMode.Magnet,
+          vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
+          horzLine: { visible: false, labelVisible: false },
+        },
+        timeScale: { timeVisible: true, secondsVisible: false, borderVisible: false },
+        height: 200,
       })
-    })
 
-    // Fit content
-    chart.timeScale().fitContent()
+      chartRef.current = chart
 
-    // Handle resize
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: 200,
+      // Add long liquidations histogram series
+      const longSeries = chart.addSeries(HistogramSeries, {
+        color: colors.long,
+        priceFormat: {
+          type: 'custom',
+          formatter: (price: number) => `$${formatLargeNumber(price)}`,
+        },
+        priceScaleId: 'longs',
+        base: 0,
+      })
+
+      // Add short liquidations histogram series  
+      const shortSeries = chart.addSeries(HistogramSeries, {
+        color: colors.short,
+        priceFormat: {
+          type: 'custom',
+          formatter: (price: number) => `$${formatLargeNumber(price)}`,
+        },
+        priceScaleId: 'shorts',
+        base: 0,
+      })
+
+      // Configure the long liquidations scale (top half)
+      chart.priceScale('longs').applyOptions({
+        scaleMargins: { top: 0, bottom: 0.5 },
+      })
+
+      // Configure the short liquidations scale (bottom half, inverted)
+      chart.priceScale('shorts').applyOptions({
+        scaleMargins: { top: 0.5, bottom: 0 },
+        invertScale: true,
+      })
+
+      // Set data
+      longSeries.setData(longData)
+      shortSeries.setData(shortData)
+
+      // Subscribe to crosshair move for tooltip
+      chart.subscribeCrosshairMove((param) => {
+        if (!param.time || !chartContainerRef.current) {
+          setTooltip(prev => ({ ...prev, visible: false }))
+          return
+        }
+
+        // Find the data points for this time
+        const longPoint = longData.find(d => d.time === param.time)
+        const shortPoint = shortData.find(d => d.time === param.time)
+
+        if (!longPoint || !shortPoint) {
+          setTooltip(prev => ({ ...prev, visible: false }))
+          return
+        }
+
+        // Get mouse position relative to chart container
+        const x = param.point?.x || 0
+        const y = param.point?.y || 0
+
+        // Format time
+        const timeStr = new Date((param.time as number) * 1000).toLocaleDateString()
+
+        setTooltip({
+          time: timeStr,
+          longValue: longPoint.value,
+          shortValue: shortPoint.value,
+          total: longPoint.value + shortPoint.value,
+          x: x + 10, // Offset slightly from cursor
+          y: y - 10,
+          visible: true
         })
-      }
-    }
+      })
 
-    window.addEventListener('resize', handleResize)
-    handleResize()
+      // Fit content
+      chart.timeScale().fitContent()
+
+      // Handle resize
+      const handleResize = () => {
+        if (chartContainerRef.current) {
+          chart.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+            height: 200,
+          })
+        }
+      }
+
+      // Prefer observing the actual container size (avoids per-chart global resize listeners).
+      let resizeObserver: ResizeObserver | null = null
+      let resizeRafId: number | null = null
+      let unsubscribeWindowResize: (() => void) | null = null
+
+      if (typeof ResizeObserver !== 'undefined' && chartContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeRafId) cancelAnimationFrame(resizeRafId)
+          resizeRafId = requestAnimationFrame(() => handleResize())
+        })
+        resizeObserver.observe(chartContainerRef.current)
+      } else {
+        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
+      }
+
+      handleResize()
+
+      cleanup = () => {
+        if (resizeRafId) cancelAnimationFrame(resizeRafId)
+        resizeObserver?.disconnect()
+        unsubscribeWindowResize?.()
+        chart.remove()
+        chartRef.current = null
+      }
+    })()
 
     return () => {
-      window.removeEventListener('resize', handleResize)
-      chart.remove()
+      isCancelled = true
+      cleanup?.()
     }
   }, [longData, shortData, colors])
 

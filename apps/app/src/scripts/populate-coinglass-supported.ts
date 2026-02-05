@@ -12,11 +12,18 @@ console.log('Current working directory:', process.cwd());
 console.log('NEXT_PUBLIC_CONVEX_URL:', process.env.NEXT_PUBLIC_CONVEX_URL ? 'SET' : 'NOT SET');
 console.log('CG_API_KEY:', process.env.CG_API_KEY ? 'SET' : 'NOT SET');
 console.log('CG-API-KEY:', process.env['CG-API-KEY'] ? 'SET' : 'NOT SET');
+console.log('INTERNAL_CONVEX_SERVER_TOKEN:', process.env.INTERNAL_CONVEX_SERVER_TOKEN ? 'SET' : 'NOT SET');
 
 // Check required environment variables
 if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
   console.error('❌ NEXT_PUBLIC_CONVEX_URL is not set');
   console.log('Please add NEXT_PUBLIC_CONVEX_URL to your .env.local file');
+  process.exit(1);
+}
+
+if (!process.env.INTERNAL_CONVEX_SERVER_TOKEN) {
+  console.error('❌ INTERNAL_CONVEX_SERVER_TOKEN is not set');
+  console.log('Please add INTERNAL_CONVEX_SERVER_TOKEN to your .env.local file');
   process.exit(1);
 }
 
@@ -31,6 +38,7 @@ if (!apiKey) {
 const apiKeyConfirmed = apiKey as string;
 
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL);
+const serverToken = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
 
 async function populateCoinglassSupportedCoins() {
   try {
@@ -70,6 +78,7 @@ async function populateCoinglassSupportedCoins() {
     // Use our Convex mutation to update the database
     console.log('Updating database with supported coins...');
     await convex.mutation(api.coins.bulkUpsertCoinglassSupportedCoins, { 
+      serverToken,
       symbols: supportedSymbols 
     });
 
@@ -77,7 +86,7 @@ async function populateCoinglassSupportedCoins() {
     console.log(`Total coins: ${supportedSymbols.length}`);
     
     // Display some stats
-    const activeCoins = await convex.query(api.coins.getCoinglassSupportedCoins, { onlyActive: true });
+    const activeCoins = await convex.query(api.coins.getCoinglassSupportedCoins, { serverToken, onlyActive: true });
     console.log(`Active supported coins in DB: ${activeCoins.length}`);
     
   } catch (error) {
@@ -95,11 +104,11 @@ async function verifyCoinglassSupport() {
     const testSymbols = ['BTC', 'ETH', 'SOL', 'DOGE', 'ADA'];
     
     for (const symbol of testSymbols) {
-      const isSupported = await convex.query(api.coins.isCoinglassSupported, { symbol });
+      const isSupported = await convex.query(api.coins.isCoinglassSupported, { serverToken, symbol });
       console.log(`${symbol}: ${isSupported ? '✅ Supported' : '❌ Not supported'}`);
     }
     
-    const allSupportedSymbols = await convex.query(api.coins.getCoinglassSupportedSymbols, {});
+    const allSupportedSymbols = await convex.query(api.coins.getCoinglassSupportedSymbols, { serverToken });
     console.log(`\nTotal supported symbols: ${allSupportedSymbols.length}`);
     console.log('First 20 symbols:', allSupportedSymbols.slice(0, 20).join(', '));
     

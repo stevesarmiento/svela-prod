@@ -3,7 +3,7 @@
 import React, { useMemo, useRef, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
 import { Skeleton } from "@v1/ui/skeleton"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@v1/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { useTakerBuySell } from '@/hooks/use-taker-buy-sell'
 import { TrendingUp, TrendingDown, Info } from 'lucide-react'
@@ -291,7 +291,6 @@ export function TakerBuySell({
                 Market Sentiment: <span style={{ color: isBuyPressure ? colors.buy : colors.sell }}>
                   {isBuyPressure ? 'Bullish' : 'Bearish'}
                 </span>
-                <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger>
                       <Info className="w-3 h-3 text-muted-foreground" />
@@ -330,7 +329,6 @@ export function TakerBuySell({
                       </div>
                     </TooltipContent>
                   </Tooltip>
-                </TooltipProvider>
               </div>
               <div className="text-xs text-muted-foreground">
                 Volume-weighted average: {weightedAverage.toFixed(1)}% buy ratio

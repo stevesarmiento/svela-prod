@@ -1,10 +1,35 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireServerToken } from "./_lib/server_token";
+
+const watchlistGroupValidator = v.object({
+  _id: v.id("watchlistGroups"),
+  _creationTime: v.number(),
+  userId: v.id("users"),
+  name: v.string(),
+  slug: v.string(),
+  description: v.optional(v.string()),
+  icon: v.optional(v.string()),
+  color: v.optional(v.string()),
+  isDefault: v.boolean(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+});
+
+const watchlistItemValidator = v.object({
+  _id: v.id("watchlists"),
+  _creationTime: v.number(),
+  userId: v.id("users"),
+  watchlistGroupId: v.id("watchlistGroups"),
+  coinId: v.string(),
+});
 
 // Watchlist Group functions
 export const getWatchlistGroups = query({
-  args: { clerkId: v.string() },
+  args: { serverToken: v.string(), clerkId: v.string() },
+  returns: v.array(watchlistGroupValidator),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
@@ -33,13 +58,16 @@ function generateSlug(name: string): string {
 
 export const createWatchlistGroup = mutation({
   args: {
+    serverToken: v.string(),
     clerkId: v.string(),
     name: v.string(),
     description: v.optional(v.string()),
     icon: v.optional(v.string()),
     color: v.optional(v.string()),
   },
+  returns: v.id("watchlistGroups"),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
@@ -85,6 +113,7 @@ export const createWatchlistGroup = mutation({
 
 export const updateWatchlistGroup = mutation({
   args: {
+    serverToken: v.string(),
     clerkId: v.string(),
     groupId: v.id("watchlistGroups"),
     name: v.optional(v.string()),
@@ -92,7 +121,9 @@ export const updateWatchlistGroup = mutation({
     icon: v.optional(v.string()),
     color: v.optional(v.string()),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
@@ -147,15 +178,19 @@ export const updateWatchlistGroup = mutation({
     if (args.color !== undefined) updates.color = args.color;
 
     await ctx.db.patch(args.groupId, updates);
+    return null;
   },
 });
 
 export const deleteWatchlistGroup = mutation({
   args: {
+    serverToken: v.string(),
     clerkId: v.string(),
     groupId: v.id("watchlistGroups"),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
@@ -184,13 +219,16 @@ export const deleteWatchlistGroup = mutation({
 
     // Delete the group
     await ctx.db.delete(args.groupId);
+    return null;
   },
 });
 
 // Legacy function - get default watchlist (backward compatibility)
 export const getWatchlist = query({
-  args: { clerkId: v.string() },
+  args: { serverToken: v.string(), clerkId: v.string() },
+  returns: v.array(watchlistItemValidator),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
@@ -220,10 +258,13 @@ export const getWatchlist = query({
 // Get watchlist for specific group by ID
 export const getWatchlistByGroup = query({
   args: { 
+    serverToken: v.string(),
     clerkId: v.string(),
     groupId: v.id("watchlistGroups"),
   },
+  returns: v.array(watchlistItemValidator),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
@@ -246,10 +287,19 @@ export const getWatchlistByGroup = query({
 // Get watchlist for specific group by slug
 export const getWatchlistBySlug = query({
   args: { 
+    serverToken: v.string(),
     clerkId: v.string(),
     slug: v.string(),
   },
+  returns: v.union(
+    v.object({
+      group: watchlistGroupValidator,
+      items: v.array(watchlistItemValidator),
+    }),
+    v.null(),
+  ),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
@@ -279,10 +329,13 @@ export const getWatchlistBySlug = query({
 // Get watchlist group by slug
 export const getWatchlistGroupBySlug = query({
   args: { 
+    serverToken: v.string(),
     clerkId: v.string(),
     slug: v.string(),
   },
+  returns: v.union(watchlistGroupValidator, v.null()),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
@@ -301,11 +354,14 @@ export const getWatchlistGroupBySlug = query({
 // instead of numeric CoinMarketCap IDs
 export const addToWatchlist = mutation({
   args: {
+    serverToken: v.string(),
     clerkId: v.string(),
     coinId: v.string(), // Now accepts CoinGecko string IDs (e.g., "bitcoin", "ethereum")
     groupId: v.optional(v.id("watchlistGroups")),
   },
+  returns: v.id("watchlists"),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
@@ -367,11 +423,14 @@ export const addToWatchlist = mutation({
 // MIGRATED TO COINGECKO: Now accepts CoinGecko string IDs
 export const removeFromWatchlist = mutation({
   args: {
+    serverToken: v.string(),
     clerkId: v.string(),
     coinId: v.string(), // Now accepts CoinGecko string IDs
     groupId: v.optional(v.id("watchlistGroups")),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
@@ -402,17 +461,21 @@ export const removeFromWatchlist = mutation({
     if (!watchlistItem) throw new Error("Not in watchlist");
 
     await ctx.db.delete(watchlistItem._id);
+    return null;
   },
 });
 
 // MIGRATED TO COINGECKO: Now accepts array of CoinGecko string IDs
 export const removeBulkFromWatchlist = mutation({
   args: {
+    serverToken: v.string(),
     clerkId: v.string(),
     coinIds: v.array(v.string()), // Now accepts array of CoinGecko string IDs
     groupId: v.optional(v.id("watchlistGroups")),
   },
+  returns: v.object({ removedCount: v.number() }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
@@ -459,11 +522,14 @@ export const removeBulkFromWatchlist = mutation({
 // NEW: Check if a CoinGecko coin is in a specific watchlist group
 export const isInWatchlist = query({
   args: {
+    serverToken: v.string(),
     clerkId: v.string(),
     coinId: v.string(), // CoinGecko string ID
     groupId: v.optional(v.id("watchlistGroups")),
   },
+  returns: v.boolean(),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
@@ -498,10 +564,13 @@ export const isInWatchlist = query({
 // NEW: Get all CoinGecko IDs from a watchlist group for batch processing
 export const getWatchlistCoinIds = query({
   args: {
+    serverToken: v.string(),
     clerkId: v.string(),
     groupId: v.optional(v.id("watchlistGroups")),
   },
+  returns: v.array(v.string()),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))

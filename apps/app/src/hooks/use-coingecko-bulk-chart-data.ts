@@ -1,8 +1,12 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useMemo } from "react"
 import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
+import { Effect } from "effect"
+import { CoinGeckoApi } from "@/lib/effect/coingecko-api"
+import { runPromise } from "@/lib/effect/runtime-coingecko"
 
 // Map time scales to CoinGecko days parameter
 const TIME_SCALE_DAYS = {
@@ -34,94 +38,163 @@ interface BulkChartDataResult {
   }
 }
 
+function alignSeriesToSharedTimeAxis(series: CoinSeries[]): CoinSeries[] {
+  if (series.length <= 1) return series
+
+  const axisSource = series.reduce((best, current) => {
+    if (current.data.length > best.data.length) return current
+    return best
+  }, series[0]!)
+
+  const axisTimes = axisSource.data.map((point) => point.time as number)
+  const uniqueAxisTimes = Array.from(new Set(axisTimes)).sort((a, b) => a - b)
+  if (uniqueAxisTimes.length === 0) return series
+
+  return series.map((row) => {
+    if (row.data.length === 0) return row
+
+    if (row.data.length === 1) {
+      const onlyValue = row.data[0]?.value ?? 0
+      return {
+        ...row,
+        data: uniqueAxisTimes.map((time) => ({ time: time as Time, value: onlyValue })),
+      }
+    }
+
+    const points = row.data
+    const lastIndex = points.length - 1
+    const firstTime = points[0]?.time as number | undefined
+    const lastTime = points[lastIndex]?.time as number | undefined
+    const firstValue = points[0]?.value ?? 0
+    const lastValue = points[lastIndex]?.value ?? firstValue
+
+    if (firstTime === undefined || lastTime === undefined) return row
+
+    const alignedData: Array<{ time: Time; value: number }> = []
+    let cursor = 0
+
+    for (const time of uniqueAxisTimes) {
+      if (time <= firstTime) {
+        alignedData.push({ time: time as Time, value: firstValue })
+        continue
+      }
+
+      if (time >= lastTime) {
+        alignedData.push({ time: time as Time, value: lastValue })
+        continue
+      }
+
+      while (cursor < lastIndex - 1 && ((points[cursor + 1]?.time as number) < time)) {
+        cursor += 1
+      }
+
+      const left = points[cursor]
+      const right = points[cursor + 1]
+      if (!left || !right) {
+        alignedData.push({ time: time as Time, value: lastValue })
+        continue
+      }
+
+      const t0 = left.time as number
+      const t1 = right.time as number
+      if (t1 <= t0) {
+        alignedData.push({ time: time as Time, value: left.value })
+        continue
+      }
+
+      const ratio = (time - t0) / (t1 - t0)
+      const value = left.value + ratio * (right.value - left.value)
+      alignedData.push({ time: time as Time, value })
+    }
+
+    return { ...row, data: alignedData }
+  })
+}
+
 export function useCoinGeckoBulkChartData(
   coins: OptimisticCoinMarketData[],
   activeTimeScale: string
 ): BulkChartDataResult {
   const days = TIME_SCALE_DAYS[activeTimeScale as keyof typeof TIME_SCALE_DAYS] || '7'
   
-  // Filter out optimistic (loading) coins and get real coin IDs
-  const realCoins = coins.filter(coin => !coin.isOptimistic)
+  // Filter out optimistic (loading) coins and coins without valid IDs
+  const realCoins = coins.filter(coin => !coin.isOptimistic && coin.id != null)
   const coinIds = realCoins.map(coin => coin.id.toString())
+  const coinMetaById = useMemo(() => {
+    const map = new Map<string, { name: string; symbol: string }>()
+    for (const coin of realCoins) {
+      map.set(coin.id.toString(), { name: coin.name, symbol: coin.symbol })
+    }
+    return map
+  }, [realCoins])
   
-  const { data: seriesData = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['coingecko-bulk-chart', coinIds.join(','), activeTimeScale],
-    queryFn: async (): Promise<CoinSeries[]> => {
-      if (coinIds.length === 0) return []
-      
-      console.log('🎯 Fetching bulk CoinGecko chart data:', { 
-        coinIds: coinIds.slice(0, 3), // Log first 3 for brevity
-        totalCoins: coinIds.length,
-        days, 
-        timeScale: activeTimeScale 
-      })
-      
-      // Fetch all coins in parallel with proper error handling
-      const promises = coinIds.map(async (coinId): Promise<CoinSeries | null> => {
-        try {
-          const response = await fetch(`/api/coingecko/market-chart?id=${coinId}&days=${days}`)
-          if (!response.ok) {
-            console.warn(`Failed to fetch data for ${coinId}:`, response.status)
-            return null
-          }
-          
-          const data = await response.json()
-          const coin = realCoins.find(c => c.id.toString() === coinId)
-          
-          if (!data?.data?.prices || !Array.isArray(data.data.prices)) {
-            console.warn(`Invalid data format for ${coinId}`)
-            return null
-          }
-          
-          // Convert prices to percentage changes for multi-coin comparison
-          const prices = data.data.prices as Array<{ time: number; value: number }>
-          const basePrice = prices[0]?.value || 1 // First price as baseline
-          
-          const percentageData = prices.map((point) => ({
-            time: point.time as Time,
-            value: basePrice > 0 ? ((point.value - basePrice) / basePrice) * 100 : 0 // Percentage change from start
-          }))
-          
-          // FIXED: Remove duplicates and ensure strict ascending order
-          // First, create a Map to remove duplicates (keep last occurrence for same time)
-          const uniqueData = new Map<number, { time: Time; value: number }>()
-          percentageData.forEach(point => {
-            uniqueData.set(point.time as number, point)
-          })
-          
-          // Then sort by time ascending
-          const sortedUniqueData = Array.from(uniqueData.values())
-            .sort((a, b) => (a.time as number) - (b.time as number))
-          
-          // If there are still duplicates (shouldn't be), but just in case
-          const finalData = sortedUniqueData.filter((point, index, array) => {
-            if (index === 0) return true
-            return (point.time as number) > (array[index - 1]?.time as number ?? 0) // FIXED: Added null check with ?? 0
-          })
-          
-          // Debug: Log if any duplicates were removed
-          if (finalData.length < percentageData.length) {
-            console.warn(`Removed ${percentageData.length - finalData.length} duplicate timestamps for ${coinId}`)
-          }
-          
-          return {
-            id: coinId,
-            name: coin?.name || 'Unknown',
-            symbol: coin?.symbol || 'UNK',
-            data: finalData
-          }
-        } catch (error) {
-          console.warn(`Error fetching data for ${coinId}:`, error)
-          return null
-        }
-      })
-      
-      const results = await Promise.all(promises)
-      const validResults = results.filter((result): result is CoinSeries => result !== null)
-      
-      console.log(`✅ CoinGecko bulk fetch completed: ${validResults.length}/${coinIds.length} successful`)
-      
-      return validResults
+    queryFn: async (): Promise<{ series: CoinSeries[]; cacheHitRate: number }> => {
+      if (coinIds.length === 0) return { series: [], cacheHitRate: 0 }
+
+      type SeriesWithCache = { series: CoinSeries; cached: boolean }
+      const swallowToNull = (_: unknown) => Effect.succeed(null)
+
+      const fetchEffects = coinIds.map((coinId) =>
+        CoinGeckoApi.getMarketChart({ coinId, days }).pipe(
+          Effect.map((response): SeriesWithCache => {
+            const coinMeta = coinMetaById.get(coinId)
+            const prices = response.data.prices
+            // Remove duplicates and ensure strict ascending order.
+            // NOTE: `time` is already seconds (UTCTimestamp) from our `/api/coingecko/market-chart` route.
+            const uniquePrices = new Map<number, number>()
+            for (const point of prices) {
+              uniquePrices.set(point.time, point.value)
+            }
+
+            const sortedUniquePrices = Array.from(uniquePrices.entries()).sort(([a], [b]) => a - b)
+            const basePrice = sortedUniquePrices[0]?.[1] ?? 1
+
+            const finalData: Array<{ time: Time; value: number }> = sortedUniquePrices.map(([time, value]) => ({
+              time: time as Time,
+              value: basePrice > 0 ? ((value - basePrice) / basePrice) * 100 : 0,
+            }))
+
+            return {
+              cached: response.status?.cached ?? false,
+              series: {
+                id: coinId,
+                name: coinMeta?.name || "Unknown",
+                symbol: coinMeta?.symbol || "UNK",
+                data: finalData,
+              },
+            }
+          }),
+          Effect.catchTags({
+            CoinGeckoInvalidParamsError: swallowToNull,
+            CoinGeckoUnauthorizedError: swallowToNull,
+            CoinGeckoNotFoundError: swallowToNull,
+            CoinGeckoRateLimitedError: swallowToNull,
+            CoinGeckoApiError: swallowToNull,
+            CoinGeckoDecodeError: swallowToNull,
+          }),
+        ),
+      )
+
+      const results = await runPromise(
+        Effect.all(fetchEffects, {
+          concurrency: 5,
+          batching: false,
+        }),
+      )
+
+      const validResults = results.filter((result): result is SeriesWithCache => result !== null)
+      const cacheHits = validResults.filter((r) => r.cached).length
+      const cacheHitRate = coinIds.length > 0 ? (cacheHits / coinIds.length) * 100 : 0
+
+      const rawSeries = validResults.map((r) => r.series)
+      const alignedSeries = alignSeriesToSharedTimeAxis(rawSeries)
+
+      return {
+        series: alignedSeries,
+        cacheHitRate,
+      }
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
     refetchInterval: 5 * 60 * 1000, // 5 minutes
@@ -129,8 +202,8 @@ export function useCoinGeckoBulkChartData(
     retry: 1, // Limited retry for bulk operations
   })
 
-  // Calculate cache hit rate (simplified - assumes some caching from individual API calls)
-  const cacheHitRate = seriesData.length > 0 ? Math.random() * 30 + 10 : 0 // Mock 10-40% hit rate
+  const seriesData = data?.series ?? []
+  const cacheHitRate = data?.cacheHitRate ?? 0
 
   return {
     series: seriesData,

@@ -1,6 +1,6 @@
 import { cn } from "@v1/ui/cn"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
-import { Fragment, memo, useMemo, useDeferredValue } from "react"
+import { memo, useMemo, useDeferredValue } from "react"
 import { IconLaurelLeading, IconLaurelTrailing } from "symbols-react"
 
 interface MarketMetricsProps {
@@ -89,7 +89,7 @@ export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: Ma
         {/* React 19: Enhanced Rank content with pending states */}
         <div className={cn(
           "relative flex items-center gap-3 bg-background px-0 rounded-full",
-          showPending && "animate-pulse"
+          showPending && "animate-pulse motion-reduce:animate-none"
         )}>
           <IconLaurelLeading className={cn(
             "w-10 h-10 fill-foreground/20",
@@ -100,7 +100,7 @@ export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: Ma
             <span className="text-[11px] uppercase text-muted-foreground font-medium">Rank</span>
             <span className={cn(
               "text-2xl font-diatype-mono text-white",
-              showPending && "animate-pulse"
+              showPending && "animate-pulse motion-reduce:animate-none"
             )}>
               {deferredData.market_cap_rank || 'N/A'}
             </span>
@@ -116,7 +116,7 @@ export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: Ma
       {/* Metrics Grid */}
       <div className="grid grid-cols-9 items-center">
         {metrics.map((metric, index) => (
-          <Fragment key={metric.label}>
+          <div key={metric.label} className="contents">
             <div 
               className={cn(
                 "flex flex-col items-center py-4 col-span-1",
@@ -134,7 +134,7 @@ export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: Ma
               <div className={cn(
                 "text-md font-diatype-mono text-center",
                 metric.className || "text-foreground",
-                showPending && "animate-pulse"
+                showPending && "animate-pulse motion-reduce:animate-none"
               )}>
                 {metric.value}
               </div>
@@ -146,7 +146,7 @@ export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: Ma
                 <div className="h-[77px] w-[1px] bg-gradient-to-b from-transparent via-foreground/20 to-transparent" />
               </div>
             )}
-          </Fragment>
+          </div>
         ))}
       </div>
     </div>

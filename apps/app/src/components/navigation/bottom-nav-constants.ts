@@ -1,11 +1,12 @@
 import { 
-    IconDistributeHorizontalCenterFill,  
-    IconChartLineUptrendXyaxis,
-    IconWalletBifoldFill,
-    IconCaptionsBubbleFill,
-    IconBinocularsFill,
-  } from "symbols-react";
-import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
+  // IconCompassDrawing, 
+  IconBinocularsFill, 
+  IconDistributeHorizontalCenterFill, 
+  IconWalletBifoldFill, 
+  IconChartLineUptrendXyaxis, 
+  IconCaptionsBubbleFill } from "symbols-react";
+import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
+import { getShortcutForRoute } from "@/lib/keyboard-shortcuts";
 
 // Base routes (will be enhanced with watchlist params by components)
 export const BASE_ROUTES = {
@@ -15,12 +16,8 @@ export const BASE_ROUTES = {
   portfolio: "/portfolio"
 } as const;
   
-  export const MENU_ITEMS = [
-    // {
-    //   title: "Overview",
-    //   href: "/overview",
-    //   icon: IconCompassDrawing,
-    // },
+  export const MENU_ITEMS = isAlphaFeaturesEnabled() ? (
+  [
     {
       title: "Watchlist",
       href: "/watchlist",
@@ -28,7 +25,20 @@ export const BASE_ROUTES = {
     },
     {
       title: "Charts",
-      href: "/charts", 
+      href: "/charts",
+      icon: IconDistributeHorizontalCenterFill,
+    },
+  ]
+) : (
+  [
+    {
+      title: "Watchlist",
+      href: "/watchlist",
+      icon: IconBinocularsFill,
+    },
+    {
+      title: "Charts",
+      href: "/charts",
       icon: IconDistributeHorizontalCenterFill,
     },
     {
@@ -36,9 +46,33 @@ export const BASE_ROUTES = {
       href: "/portfolio",
       icon: IconWalletBifoldFill,
     },
-  ] as const;
+  ]
+) as const;
   
-  export const COMMAND_ITEMS = [
+  export const COMMAND_ITEMS = isAlphaFeaturesEnabled() ? (
+  [
+    {
+      group: "Navigation",
+      items: [
+        {
+          title: "Watchlist",
+          subtitle: "Your cryptocurrency watchlist",
+          href: "/watchlist",
+          icon: IconBinocularsFill,
+          shortcut: getShortcutForRoute("/watchlist"),
+        },
+        {
+          title: "Charts",
+          subtitle: "Price charts and market data",
+          href: "/charts",
+          icon: IconDistributeHorizontalCenterFill,
+          shortcut: getShortcutForRoute("/charts"),
+        },
+      ]
+    }
+  ]
+) : (
+  [
     {
       group: "Navigation",
       items: [
@@ -82,7 +116,7 @@ export const BASE_ROUTES = {
           icon: IconChartLineUptrendXyaxis,
         },
         {
-          title: "Ethereum Price", 
+          title: "Ethereum Price",
           subtitle: "Get current ETH price",
           action: "ethereum-price",
           icon: IconChartLineUptrendXyaxis,
@@ -90,12 +124,13 @@ export const BASE_ROUTES = {
         {
           title: "Market Overview",
           subtitle: "Top 10 cryptocurrencies",
-          action: "market-overview", 
+          action: "market-overview",
           icon: IconWalletBifoldFill,
         },
       ]
     }
-  ];
+  ]
+) as const;
   
   export type NavigationItem = {
     title: string;

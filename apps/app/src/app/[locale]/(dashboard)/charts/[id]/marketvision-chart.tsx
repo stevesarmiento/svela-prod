@@ -1,12 +1,14 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
-import { createChart, ColorType, CrosshairMode, LineStyle, LineSeries, ISeriesApi, IChartApi, Time, LineData } from 'lightweight-charts'
-import { createRoot } from "react-dom/client"
+import type { IChartApi, ISeriesApi, LineData, Time } from 'lightweight-charts'
+import { createRoot } from 'react-dom/client'
 import { useMarketVisionB, type MarketVisionBConfig } from '@/hooks/market-vision'
 import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { cn } from '@v1/ui/cn'
+import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
+import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 
 interface MarketVisionDisplaySettings {
   showOscillator1: boolean
@@ -126,6 +128,7 @@ export function MarketVisionChart({
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
+  const lightweightChartsRef = useRef<LightweightChartsModule | null>(null)
 
   // State for controlling visibility of each indicator
   const [displaySettings, setDisplaySettings] = useState<MarketVisionDisplaySettings>({
@@ -156,177 +159,220 @@ export function MarketVisionChart({
     const hasActiveIndicators = Object.values(displaySettings).some(Boolean)
     if (!hasActiveIndicators) return
 
+    let isCancelled = false
+    let cleanup: (() => void) | null = null
+
     // Capture the current seriesRefs for cleanup
     const currentSeriesRefs = seriesRefs.current
 
-    const chart = createChart(chartContainerRef.current, {
-      handleScale: true,
-      handleScroll: true,
-      layout: {
-        background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#ffffff50",
-        attributionLogo: false,
-      },
-      grid: {
-        vertLines: { visible: false },
-        horzLines: { visible: true, color: "#f5f5f510", style: LineStyle.Dotted },
-      },
-      rightPriceScale: { 
-        borderVisible: false, 
-        autoScale: true,
-        scaleMargins: { top: 0.1, bottom: 0.1 }
-      },
-      crosshair: {
-        mode: CrosshairMode.Magnet,
-        vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
-        horzLine: { visible: false, labelVisible: false },
-      },
-      timeScale: { 
-        visible: showTimeAxis,
-        timeVisible: showTimeAxis,
-        secondsVisible: false,
-        borderVisible: false 
-      },
-    })
+    void (async () => {
+      const lightweightCharts = await loadLightweightCharts()
+      lightweightChartsRef.current = lightweightCharts
 
-    chartRef.current = chart
+      const { createChart, ColorType, CrosshairMode, LineStyle } = lightweightCharts
 
-    const handleResize = () => {
-      if (chartContainerRef.current && chart) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: height,
-        })
-      }
-    }
+      if (isCancelled || !chartContainerRef.current) return
 
-    window.addEventListener("resize", handleResize)
-    handleResize()
-
-    // Add tooltip
-    const tooltipEl = document.createElement("div")
-    const tooltipRoot = createRoot(tooltipEl)
-    tooltipEl.className = "fixed hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
-    document.body.appendChild(tooltipEl)
-
-    // Subscribe to crosshair move
-    chart.subscribeCrosshairMove((param) => {
-      if (
-        param.point === undefined ||
-        !param.time ||
-        param.point.x < 0 ||
-        param.point.y < 0
-      ) {
-        tooltipEl.style.display = "none"
-        return
-      }
-
-      if (!chartContainerRef.current) return
-      const chartRect = chartContainerRef.current.getBoundingClientRect()
-
-      const indicatorData: TooltipIndicatorData[] = []
-      
-      // Get values from active series
-      seriesRefs.current.forEach((series, key) => {
-        const seriesData = param.seriesData.get(series) as LineData<Time>
-        if (seriesData && typeof seriesData.value === 'number') {
-          let name = ''
-          let color = ''
-          
-          // Map series keys to display names and colors
-          switch (key) {
-            case 'wt1Line':
-              name = 'WT1'
-              color = COLORS.wt1
-              break
-            case 'wt2Line':
-              name = 'WT2'
-              color = COLORS.wt2
-              break
-            case 'fastMF':
-              name = 'Money Flow'
-              color = COLORS.moneyFlow
-              break
-            case 'slowMF':
-              name = 'Slow MF'
-              color = COLORS.moneyFlow
-              break
-            case 'osc1':
-              name = config?.oscillator1?.type || 'RSI'
-              color = COLORS.oscillator1
-              break
-            case 'osc2':
-              name = config?.oscillator2?.type || 'MFI'
-              color = COLORS.oscillator2
-              break
-            default:
-              return // Skip reference lines and other series
-          }
-          
-          if (name) {
-            indicatorData.push({
-              name,
-              color,
-              value: seriesData.value,
-            })
-          }
-        }
+      const chart = createChart(chartContainerRef.current, {
+        handleScale: true,
+        handleScroll: true,
+        layout: {
+          background: { type: ColorType.Solid, color: "transparent" },
+          textColor: "#ffffff50",
+          attributionLogo: false,
+        },
+        grid: {
+          vertLines: { visible: false },
+          horzLines: { visible: true, color: "#f5f5f510", style: LineStyle.Dotted },
+        },
+        rightPriceScale: { 
+          borderVisible: false, 
+          autoScale: true,
+          scaleMargins: { top: 0.1, bottom: 0.1 }
+        },
+        crosshair: {
+          mode: CrosshairMode.Magnet,
+          vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
+          horzLine: { visible: false, labelVisible: false },
+        },
+        timeScale: { 
+          visible: showTimeAxis,
+          timeVisible: showTimeAxis,
+          secondsVisible: false,
+          borderVisible: false 
+        },
       })
 
-      if (indicatorData.length === 0) {
-        tooltipEl.style.display = "none"
-        return
+      chartRef.current = chart
+
+      const handleResize = () => {
+        if (chartContainerRef.current && chart) {
+          chart.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+            height: height,
+          })
+        }
       }
 
-      tooltipEl.style.display = "block"
-      tooltipRoot.render(
-        <TooltipContent
-          indicatorData={indicatorData}
-          timestamp={Number(param.time) * 1000}
-        />
-      )
+      // Prefer observing the actual container size (avoids per-chart global resize listeners).
+      let resizeObserver: ResizeObserver | null = null
+      let resizeRafId: number | null = null
+      let unsubscribeWindowResize: (() => void) | null = null
 
-      const tooltipWidth = tooltipEl.offsetWidth
-      const tooltipHeight = tooltipEl.offsetHeight
-
-      // Position tooltip
-      let left = chartRect.left + param.point.x + 15
-      let top = chartRect.top + param.point.y - tooltipHeight / 2
-
-      // Adjust if tooltip goes beyond right edge
-      if (left + tooltipWidth > window.innerWidth - 10) {
-        left = chartRect.left + param.point.x - tooltipWidth - 15
+      if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeRafId) cancelAnimationFrame(resizeRafId)
+          resizeRafId = requestAnimationFrame(() => handleResize())
+        })
+        resizeObserver.observe(chartContainerRef.current)
+      } else {
+        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
       }
 
-      // Adjust if tooltip goes beyond bottom edge
-      if (top + tooltipHeight > window.innerHeight - 10) {
-        top = window.innerHeight - tooltipHeight - 10
-      }
+      handleResize()
 
-      // Adjust if tooltip goes beyond top edge
-      if (top < 10) {
-        top = 10
-      }
+      // Add tooltip
+      const tooltipEl = document.createElement("div")
+      const tooltipRoot = createRoot(tooltipEl)
+      tooltipEl.className = "fixed hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
+      document.body.appendChild(tooltipEl)
 
-      tooltipEl.style.left = `${left}px`
-      tooltipEl.style.top = `${top}px`
-    })
+      // Subscribe to crosshair move
+      chart.subscribeCrosshairMove((param) => {
+        if (
+          param.point === undefined ||
+          !param.time ||
+          param.point.x < 0 ||
+          param.point.y < 0
+        ) {
+          tooltipEl.style.display = "none"
+          return
+        }
+
+        if (!chartContainerRef.current) return
+        const chartRect = chartContainerRef.current.getBoundingClientRect()
+
+        const indicatorData: TooltipIndicatorData[] = []
+        
+        // Get values from active series
+        seriesRefs.current.forEach((series, key) => {
+          const seriesData = param.seriesData.get(series) as LineData<Time>
+          if (seriesData && typeof seriesData.value === 'number') {
+            let name = ''
+            let color = ''
+            
+            // Map series keys to display names and colors
+            switch (key) {
+              case 'wt1Line':
+                name = 'WT1'
+                color = COLORS.wt1
+                break
+              case 'wt2Line':
+                name = 'WT2'
+                color = COLORS.wt2
+                break
+              case 'fastMF':
+                name = 'Money Flow'
+                color = COLORS.moneyFlow
+                break
+              case 'slowMF':
+                name = 'Slow MF'
+                color = COLORS.moneyFlow
+                break
+              case 'osc1':
+                name = config?.oscillator1?.type || 'RSI'
+                color = COLORS.oscillator1
+                break
+              case 'osc2':
+                name = config?.oscillator2?.type || 'MFI'
+                color = COLORS.oscillator2
+                break
+              default:
+                return // Skip reference lines and other series
+            }
+            
+            if (name) {
+              indicatorData.push({
+                name,
+                color,
+                value: seriesData.value,
+              })
+            }
+          }
+        })
+
+        if (indicatorData.length === 0) {
+          tooltipEl.style.display = "none"
+          return
+        }
+
+        tooltipEl.style.display = "block"
+        tooltipRoot.render(
+          <TooltipContent
+            indicatorData={indicatorData}
+            timestamp={Number(param.time) * 1000}
+          />
+        )
+
+        const tooltipWidth = tooltipEl.offsetWidth
+        const tooltipHeight = tooltipEl.offsetHeight
+
+        // Position tooltip
+        let left = chartRect.left + param.point.x + 15
+        let top = chartRect.top + param.point.y - tooltipHeight / 2
+
+        // Adjust if tooltip goes beyond right edge
+        if (left + tooltipWidth > window.innerWidth - 10) {
+          left = chartRect.left + param.point.x - tooltipWidth - 15
+        }
+
+        // Adjust if tooltip goes beyond bottom edge
+        if (top + tooltipHeight > window.innerHeight - 10) {
+          top = window.innerHeight - tooltipHeight - 10
+        }
+
+        // Adjust if tooltip goes beyond top edge
+        if (top < 10) {
+          top = 10
+        }
+
+        tooltipEl.style.left = `${left}px`
+        tooltipEl.style.top = `${top}px`
+      })
+
+      cleanup = () => {
+        if (resizeRafId) cancelAnimationFrame(resizeRafId)
+        resizeObserver?.disconnect()
+        unsubscribeWindowResize?.()
+        requestAnimationFrame(() => {
+          try {
+            tooltipRoot.unmount()
+          } catch {
+            // noop
+          }
+          if (document.body.contains(tooltipEl)) {
+            document.body.removeChild(tooltipEl)
+          }
+        })
+        chart.remove()
+        chartRef.current = null
+        currentSeriesRefs.clear()
+      }
+    })()
 
     return () => {
-      window.removeEventListener("resize", handleResize)
-      requestAnimationFrame(() => {
-        tooltipRoot.unmount()
-        document.body.removeChild(tooltipEl)
-      })
-      chart.remove()
-      chartRef.current = null
-      currentSeriesRefs.clear()
+      isCancelled = true
+      cleanup?.()
     }
   }, [height, showTimeAxis, displaySettings, config])
 
   // Update series based on calculations and display settings
   useEffect(() => {
     if (!chartRef.current || !calculations) return
+
+    const lightweightCharts = lightweightChartsRef.current
+    if (!lightweightCharts) return
+    const { LineSeries, LineStyle } = lightweightCharts
 
     // Check if we have any data to display
     const hasWaveTrendData = displaySettings.showWaveTrend && 

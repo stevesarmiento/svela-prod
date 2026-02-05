@@ -1,36 +1,27 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
+import { Effect, Exit, Cause } from "effect"
 import { WatchlistCard } from './watchlist-card'
+import { WatchlistGroupEditorPanel } from './watchlist-group-editor-panel'
 import { Button } from '@v1/ui/button'
-import { Plus, Grid3X3 } from 'lucide-react'
+import { Grid3X3, Plus } from 'lucide-react'
 import { toast } from '@v1/ui/use-toast'
+import { useQueryClient } from "@tanstack/react-query"
+import { env } from '@/env.mjs'
 import { 
   useWatchlistGroups,
-  useUpdateWatchlistGroup,
-  useDeleteWatchlistGroup,
   useWatchlistByGroup
-} from '@v1/convex/hooks'
+} from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
-import { IconPicker } from '@/components/icon-picker'
-import { COLORS } from '@/components/color-picker'
-import { useWatchlist } from './watchlist-context'
-import { cn } from '@v1/ui/cn'
-import { Input } from '@v1/ui/input'
+import { useWatchlistOperations } from '@/hooks/use-watchlist-effect'
+import { useWatchlist, type WatchlistGroup } from './watchlist-context'
+import { Dialog, DialogContent } from '@v1/ui/dialog'
 import { Tabs, TabsContent } from '@v1/ui/tabs'
 import { WatchlistMultiLineChart } from './watchlist-multi-line-chart'
+import { runPromiseExit } from '@/lib/effect/runtime-watchlist'
 
-interface WatchlistGroup {
-  _id: string
-  name: string
-  slug: string
-  description?: string
-  icon?: string
-  color?: string
-  isDefault: boolean
-  createdAt: number
-  updatedAt: number
-}
+const isDebug = env.NODE_ENV === "development"
 
 interface CoinGeckoWatchlistCoin {
   id: string; // CoinGecko string ID
@@ -68,26 +59,15 @@ function WatchlistGroupWithCoins({
   onEdit, 
   onDelete, 
   onSelect,
-  selected,
-  isEditing,
-  editCardRef,
-  editingName,
-  editingIcon,
-  editingColor
+  selected
 }: {
   group: WatchlistGroup
   onEdit: (group: WatchlistGroup) => void
   onDelete: (group: WatchlistGroup) => void
   onSelect?: (group: WatchlistGroup) => void
   selected?: boolean
-  isEditing?: boolean
-  editCardRef?: React.RefObject<HTMLDivElement | null>
-  editingName?: string
-  editingIcon?: string
-  editingColor?: string
 }) {
-  const groupWatchlist = useWatchlistByGroup(group._id)
-  const prevCoinsRef = useRef<CoinGeckoWatchlistCoin[]>([])
+  const groupWatchlist = useWatchlistByGroup(group._id) as Array<{ coinId: string }> | undefined
   
   // For watchlist cards only: Convert to CoinGecko IDs for display
   const coingeckoIds = useMemo(() => {
@@ -95,65 +75,19 @@ function WatchlistGroupWithCoins({
     const ids = groupWatchlist?.map(item => item.coinId) || []
     return ids
   }, [groupWatchlist])
-
-  // Debug logging for edit mode - separate useEffect to avoid dependency issues
-  useEffect(() => {
-    if (isEditing) {
-      console.log('🔍 WatchlistGroupWithCoins DEBUG (Edit Mode):', {
-        groupName: group.name,
-        groupId: group._id,
-        isEditing,
-        groupWatchlistLength: groupWatchlist?.length || 0,
-        groupWatchlistData: groupWatchlist,
-        coingeckoIdsLength: coingeckoIds.length,
-        coingeckoIds: coingeckoIds
-      })
-    }
-  }, [isEditing, group.name, group._id, groupWatchlist, coingeckoIds])
   
   // Use CoinGecko data only for watchlist card display
-  const { data: coins = [], isLoading, error } = useCoinGeckoWatchlistCoins(coingeckoIds)
-  
-  // Maintain previous coin data during edit transitions to prevent empty state
-  const stableCoins = useMemo(() => {
-    if (coins.length > 0) {
-      prevCoinsRef.current = coins
-      return coins
-    }
-    // If no coins and we're editing, use previous data to prevent flash of empty state
-    if (isEditing && prevCoinsRef.current.length > 0) {
-      console.log('🔄 Using cached coin data during edit mode for:', group.name)
-      return prevCoinsRef.current
-    }
-    return coins
-  }, [coins, isEditing, group.name])
-  
-  // Debug logging for coin data in edit mode
-  if (isEditing) {
-    console.log('🪙 Coins data DEBUG (Edit Mode):', {
-      groupName: group.name,
-      originalCoinsLength: coins.length,
-      stableCoinsLength: stableCoins.length,
-      isLoading,
-      error,
-      usingCached: stableCoins.length > 0 && coins.length === 0
-    })
-  }
-  
+  const { data: coins = [] } = useCoinGeckoWatchlistCoins(coingeckoIds)
+
   return (
-    <div ref={isEditing ? editCardRef : undefined}>
-      <WatchlistCard
-        group={group}
-        coins={stableCoins}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        onSelect={onSelect}
-        selected={selected}
-        nameOverride={isEditing ? editingName : undefined}
-        iconOverride={isEditing ? editingIcon : undefined}
-        colorOverride={isEditing ? editingColor : undefined}
-      />
-    </div>
+    <WatchlistCard
+      group={group}
+      coins={coins}
+      onEdit={onEdit}
+      onDelete={onDelete}
+      onSelect={onSelect}
+      selected={selected}
+    />
   )
 }
 
@@ -165,7 +99,7 @@ export function WatchlistsGrid({
   onViewModeChange
 }: WatchlistsGridProps) {
   const [editingGroup, setEditingGroup] = useState<WatchlistGroup | null>(null)
-  const editCardRef = useRef<HTMLDivElement>(null)
+  const queryClient = useQueryClient()
   
   // Current editing values for real-time preview
   const [editingName, setEditingName] = useState('')
@@ -173,39 +107,103 @@ export function WatchlistsGrid({
   const [editingColor, setEditingColor] = useState('')
 
   // Hooks
-  const watchlistGroups = useWatchlistGroups()
-  const updateWatchlistGroup = useUpdateWatchlistGroup()
-  const deleteWatchlistGroup = useDeleteWatchlistGroup()
+  const watchlistGroups = useWatchlistGroups() as WatchlistGroup[] | undefined
+  const { updateGroup, deleteGroup } = useWatchlistOperations()
   const { selectedGroup } = useWatchlist()
+
+  const editingGroupWatchlist = useWatchlistByGroup(editingGroup?._id) as Array<{ coinId: string }> | undefined
+  const editingCoinIds = useMemo(() => {
+    return editingGroupWatchlist?.map((item) => item.coinId) || []
+  }, [editingGroupWatchlist])
+  const { data: editingCoins = [] } = useCoinGeckoWatchlistCoins(editingCoinIds)
 
   const handleEditSave = useCallback(async (name: string, icon: string, color: string) => {
     if (!editingGroup) return
+    const trimmedName = name.trim()
 
-    try {
-      await updateWatchlistGroup(
-        editingGroup._id,
-        name,
-        undefined, // No description
-        icon,
-        color
-      )
-      toast({
-        title: "Success",
-        description: "Watchlist updated successfully",
-      })
-      setEditingGroup(null)
-      setEditingName('')
-      setEditingIcon('')
-      setEditingColor('')
-    } catch (error) {
-      console.error('Failed to update watchlist:', error)
+    if (!trimmedName) {
       toast({
         title: "Error",
-        description: "Failed to update watchlist",
+        description: "Please enter a watchlist name",
         variant: "destructive",
       })
+      return
     }
-  }, [editingGroup, updateWatchlistGroup])
+
+    const program = updateGroup(editingGroup._id, trimmedName, undefined, icon, color).pipe(
+      Effect.catchTags({
+        WatchlistValidationError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Validation Error",
+              description: `${e.field}: ${e.reason}`,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        WatchlistAuthError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Authentication Error",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        WatchlistNotFoundError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Not Found",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        ApiRequestError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Request Error",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+      }),
+      Effect.tap(() => Effect.sync(() => {
+        toast({
+          title: "Success",
+          description: "Watchlist updated successfully",
+        })
+        setEditingGroup(null)
+        setEditingName('')
+        setEditingIcon('')
+        setEditingColor('')
+      }))
+    )
+
+    const exit = await runPromiseExit(program)
+
+    if (Exit.isSuccess(exit)) {
+      // Optimistically update cached groups so UI updates immediately.
+      queryClient.setQueryData<Array<WatchlistGroup>>(["watchlists", "groups"], (prev) => {
+        if (!prev) return prev
+        return prev.map((g) =>
+          g._id === editingGroup._id
+            ? {
+                ...g,
+                name: trimmedName,
+                icon,
+                color,
+                updatedAt: Date.now(),
+              }
+            : g,
+        )
+      })
+
+      // Revalidate from server to ensure slug/updatedAt stay authoritative.
+      void queryClient.invalidateQueries({ queryKey: ["watchlists"] })
+    }
+    
+    if (isDebug && Exit.isFailure(exit)) {
+      console.error("Failed to update watchlist:", Cause.pretty(exit.cause))
+    }
+  }, [editingGroup, updateGroup])
 
   const handleEditCancel = useCallback(() => {
     setEditingGroup(null)
@@ -224,26 +222,61 @@ export function WatchlistsGrid({
       return
     }
 
-    try {
-      await deleteWatchlistGroup(group._id)
-      toast({
-        title: "Success",
-        description: "Watchlist deleted successfully",
+    const program = deleteGroup(group._id).pipe(
+      Effect.tap(() => Effect.sync(() => {
+        toast({
+          title: "Success",
+          description: "Watchlist deleted successfully",
+        })
+      })),
+      Effect.catchTags({
+        WatchlistAuthError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Authentication Error",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        WatchlistNotFoundError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Not Found",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
+        ApiRequestError: (e) =>
+          Effect.sync(() => {
+            toast({
+              title: "Request Error",
+              description: e.message,
+              variant: "destructive",
+            })
+          }).pipe(Effect.flatMap(() => Effect.fail(e))),
       })
-    } catch (error) {
-      console.error('Failed to delete watchlist:', error)
-      toast({
-        title: "Error",
-        description: "Failed to delete watchlist",
-        variant: "destructive",
+    )
+
+    const exit = await runPromiseExit(program)
+
+    if (Exit.isSuccess(exit)) {
+      queryClient.setQueryData<Array<WatchlistGroup>>(["watchlists", "groups"], (prev) => {
+        if (!prev) return prev
+        return prev.filter((g) => g._id !== group._id)
       })
+
+      void queryClient.invalidateQueries({ queryKey: ["watchlists"] })
     }
-  }, [deleteWatchlistGroup])
+    
+    if (isDebug && Exit.isFailure(exit)) {
+      console.error("Failed to delete watchlist:", Cause.pretty(exit.cause))
+    }
+  }, [deleteGroup])
 
   const openEditDialog = useCallback((group: WatchlistGroup) => {
     setEditingGroup(group)
     setEditingName(group.name)
-    setEditingIcon(group.icon || 'list')
+    setEditingIcon(group.icon || 'sparkles')
     setEditingColor(group.color || 'default')
   }, [])
 
@@ -285,107 +318,56 @@ export function WatchlistsGrid({
                   .slice()
                   .reverse()
                   .map((group) => (
-                  <div 
-                    key={group._id}
-                    className={cn(
-                      "transition-all duration-200",
-                      editingGroup && editingGroup._id === group._id && "relative z-50",
-                      editingGroup && editingGroup._id !== group._id && "opacity-20"
-                    )}
-                  >
+                  <div key={group._id}>
                     <WatchlistGroupWithCoins
                       group={group}
                       onEdit={openEditDialog}
                       onDelete={handleDeleteWatchlist}
                       onSelect={onSelectWatchlist}
                       selected={selectedGroup?._id === group._id}
-                      isEditing={editingGroup?._id === group._id}
-                      editCardRef={editCardRef}
-                      editingName={editingGroup?._id === group._id ? editingName : undefined}
-                      editingIcon={editingGroup?._id === group._id ? editingIcon : undefined}
-                      editingColor={editingGroup?._id === group._id ? editingColor : undefined}
                     />
                   </div>
                 ))}
               </div>
 
-              {/* Edit Overlay */}
-              {editingGroup && editCardRef.current && (
-                <>
-                  {/* Backdrop */}
-                  <div 
-                    className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[20px] pointer-events-auto"
-                    onClick={handleEditCancel}
-                  />
-                  
-                  {/* Edit Panel */}
-                  <div 
-                    className="fixed z-50"
-                    style={{
-                      left: editCardRef.current.getBoundingClientRect().left,
-                      top: editCardRef.current.getBoundingClientRect().bottom + window.scrollY + 12,
-                      width: Math.max(editCardRef.current.getBoundingClientRect().width, 320),
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl pt-2 w-[280px] space-y-6 p-4">
-                      {/* Name and Icon Row */}
-                      <div className="flex gap-2 items-start">
-                        <div className="flex-shrink-0">
-                          <IconPicker 
-                            value={editingIcon} 
-                            onSelect={setEditingIcon}
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <Input
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            placeholder="Watchlist name"
-                            className="rounded-xl h-12"
-                            autoFocus
-                          />
-                        </div>
-                      </div>
-
-                      {/* Color Grid */}
-                      <div className="grid grid-cols-6 gap-3">
-                        {COLORS.map((color: { value: string; bg: string; border: string }) => (
-                          <button
-                            key={color.value}
-                            className={cn(
-                              "h-8 w-8 rounded-md transition-all",
-                              color.bg,
-                              color.border,
-                              editingColor === color.value && "ring-2 ring-white/20 ring-offset-2 ring-offset-zinc-900 scale-110"
-                            )}
-                            onClick={() => setEditingColor(color.value)}
-                          />
-                        ))}
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="space-y-2">
-                        <Button 
-                          onClick={() => handleEditSave(editingName, editingIcon, editingColor)} 
-                          size="sm" 
-                          className="w-full h-8"
-                        >
-                          Save Changes
-                        </Button>
-                        <Button 
-                          onClick={handleEditCancel} 
-                          variant="outline" 
-                          size="sm" 
-                          className="w-full h-8 border-zinc-700 hover:bg-zinc-800"
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
+              {/* Edit Watchlist Modal (centered) */}
+              <Dialog
+                open={Boolean(editingGroup)}
+                onOpenChange={(open) => {
+                  if (!open) handleEditCancel()
+                }}
+              >
+                <DialogContent className="p-0 border-none bg-transparent shadow-none max-w-[320px] h-[600px]">
+                {/* Preview Card */}
+                  <div className="relative">
+                    {editingGroup ? (
+                      <WatchlistCard
+                        group={editingGroup}
+                        coins={editingCoins}
+                        selected={false}
+                        nameOverride={editingName}
+                        iconOverride={editingIcon}
+                        colorOverride={editingColor}
+                      />
+                    ) : null}
                   </div>
-                </>
-              )}
+
+                  {/* Edit Panel */}
+                  {editingGroup ? (
+                    <WatchlistGroupEditorPanel
+                      name={editingName}
+                      icon={editingIcon}
+                      color={editingColor}
+                      onNameChange={setEditingName}
+                      onIconChange={setEditingIcon}
+                      onColorChange={setEditingColor}
+                      submitLabel="Save Changes"
+                      onSubmit={() => handleEditSave(editingName, editingIcon, editingColor)}
+                      onCancel={handleEditCancel}
+                    />
+                  ) : null}
+                </DialogContent>
+              </Dialog>
             </>
           )}
         </TabsContent>

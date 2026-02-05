@@ -165,7 +165,7 @@ export function getTokenInfo(symbolOrMint: string) {
   }
   
   // Check if it's a mint address and find the corresponding token
-  for (const [symbol, info] of Object.entries(TOKEN_MAPPINGS)) {
+  for (const info of Object.values(TOKEN_MAPPINGS)) {
     if (info.mint === symbolOrMint) {
       return info
     }

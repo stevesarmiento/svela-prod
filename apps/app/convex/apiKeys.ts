@@ -1,45 +1,33 @@
 import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { API_PROVIDERS } from "../src/constants/api-providers";
+import { requireServerToken } from "./_lib/server_token";
 
-// API Provider types and configurations
-export const API_PROVIDERS = {
-  coingecko: {
-    name: "CoinGecko Pro",
-    description: "Premium cryptocurrency market data and pricing",
-    keyPattern: /^.{10,}$/, // Just check minimum length - let the API validate
-    testEndpoint: "https://pro-api.coingecko.com/api/v3/ping",
-    rateLimit: { requests: 500, window: 60000 }, // 500 requests per minute
-  },
-  coinglass: {
-    name: "CoinGlass",
-    description: "Derivatives and futures market data",
-    keyPattern: /^.{10,}$/, // Just check minimum length - let the API validate
-    testEndpoint: "https://fapi.coinglass.com/api/futures/supported-coins",
-    rateLimit: { requests: 1000, window: 60000 }, // 1000 requests per minute
-  },
-  openai: {
-    name: "OpenAI",
-    description: "AI-powered analysis and chat features",
-    keyPattern: /^.{10,}$/, // Just check minimum length - let the API validate
-    testEndpoint: "https://api.openai.com/v1/models",
-    rateLimit: { requests: 3500, window: 60000 }, // Varies by tier
-  },
-  gemini: {
-    name: "Google Gemini",
-    description: "Google's AI model for analysis and chat",
-    keyPattern: /^.{10,}$/, // Just check minimum length - let the API validate
-    testEndpoint: "https://generativelanguage.googleapis.com/v1beta/models",
-    rateLimit: { requests: 60, window: 60000 }, // 60 requests per minute
-  },
-  // coinmarketcap removed - no longer used
-} as const;
-
+// Re-export for use in convex functions
+export { API_PROVIDERS };
 export type ApiProvider = keyof typeof API_PROVIDERS;
+
+const userApiKeySummaryValidator = v.object({
+  _id: v.id("userApiKeys"),
+  provider: v.string(),
+  keyName: v.string(),
+  displayKey: v.optional(v.string()),
+  isActive: v.boolean(),
+  lastValidated: v.optional(v.number()),
+  validationError: v.optional(v.string()),
+  usageCount: v.number(),
+  rateLimitRemaining: v.optional(v.number()),
+  rateLimitReset: v.optional(v.number()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+});
 
 // Get all API keys for a user
 export const getUserApiKeys = query({
-  args: { clerkId: v.string() },
+  args: { serverToken: v.string(), clerkId: v.string() },
+  returns: v.array(userApiKeySummaryValidator),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     // First get the user by Clerk ID
     const user = await ctx.db
       .query("users")
@@ -76,10 +64,22 @@ export const getUserApiKeys = query({
 // Get active API key for a specific provider
 export const getActiveApiKey = query({
   args: { 
+    serverToken: v.string(),
     clerkId: v.string(),
     provider: v.string(),
   },
+  returns: v.union(
+    v.object({
+      _id: v.id("userApiKeys"),
+      encryptedKey: v.string(),
+      usageCount: v.number(),
+      rateLimitRemaining: v.optional(v.number()),
+      rateLimitReset: v.optional(v.number()),
+    }),
+    v.null(),
+  ),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     // First get the user by Clerk ID
     const user = await ctx.db
       .query("users")
@@ -95,10 +95,9 @@ export const getActiveApiKey = query({
       .withIndex("by_user_provider", (q) => 
         q.eq("userId", user._id).eq("provider", args.provider)
       )
-      .filter((q) => q.eq(q.field("isActive"), true))
       .first();
 
-    if (!apiKey) {
+    if (!apiKey || !apiKey.isActive) {
       return null;
     }
 
@@ -116,6 +115,7 @@ export const getActiveApiKey = query({
 // Create or update an API key
 export const upsertApiKey = mutation({
   args: {
+    serverToken: v.string(),
     clerkId: v.string(),
     provider: v.string(),
     keyName: v.string(),
@@ -123,7 +123,9 @@ export const upsertApiKey = mutation({
     displayKey: v.optional(v.string()),
     isActive: v.boolean(),
   },
+  returns: v.id("userApiKeys"),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     // First get the user by Clerk ID
     const user = await ctx.db
       .query("users")
@@ -134,9 +136,9 @@ export const upsertApiKey = mutation({
       throw new Error("User not found");
     }
 
-    // Validate provider
-    if (!(args.provider in API_PROVIDERS)) {
-      throw new Error(`Invalid API provider: ${args.provider}`);
+    const providerConfig = API_PROVIDERS[args.provider as keyof typeof API_PROVIDERS]
+    if (!providerConfig) {
+      throw new Error(`Invalid API provider: ${args.provider}`)
     }
 
     const now = Date.now();
@@ -181,11 +183,14 @@ export const upsertApiKey = mutation({
 // Update API key status (active/inactive)
 export const updateApiKeyStatus = mutation({
   args: {
+    serverToken: v.string(),
     clerkId: v.string(),
     keyId: v.id("userApiKeys"),
     isActive: v.boolean(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     // First get the user by Clerk ID
     const user = await ctx.db
       .query("users")
@@ -206,16 +211,20 @@ export const updateApiKeyStatus = mutation({
       isActive: args.isActive,
       updatedAt: Date.now(),
     });
+    return null;
   },
 });
 
 // Delete an API key
 export const deleteApiKey = mutation({
   args: {
+    serverToken: v.string(),
     clerkId: v.string(),
     keyId: v.id("userApiKeys"),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     // First get the user by Clerk ID
     const user = await ctx.db
       .query("users")
@@ -233,12 +242,14 @@ export const deleteApiKey = mutation({
     }
 
     await ctx.db.delete(args.keyId);
+    return null;
   },
 });
 
 // Update API key validation status and usage stats
 export const updateApiKeyStats = mutation({
   args: {
+    serverToken: v.string(),
     keyId: v.id("userApiKeys"),
     lastValidated: v.optional(v.number()),
     validationError: v.optional(v.string()),
@@ -246,7 +257,9 @@ export const updateApiKeyStats = mutation({
     rateLimitRemaining: v.optional(v.number()),
     rateLimitReset: v.optional(v.number()),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     const { keyId, ...updateData } = args;
     
     // Verify the key exists
@@ -259,12 +272,29 @@ export const updateApiKeyStats = mutation({
       ...updateData,
       updatedAt: Date.now(),
     });
+    return null;
   },
 });
 
 export const getApiKeyStats = query({
-  args: { clerkId: v.string() },
+  args: { serverToken: v.string(), clerkId: v.string() },
+  returns: v.object({
+    totalKeys: v.number(),
+    activeKeys: v.number(),
+    totalUsage: v.number(),
+    providerStats: v.record(
+      v.string(),
+      v.object({
+        hasKey: v.boolean(),
+        isActive: v.boolean(),
+        usage: v.number(),
+        lastValidated: v.optional(v.number()),
+        validationError: v.optional(v.string()),
+      }),
+    ),
+  }),
   handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
     // First get the user by Clerk ID
     const user = await ctx.db
       .query("users")
@@ -296,6 +326,10 @@ export const getApiKeyStats = query({
 
     // Build provider-specific stats
     Object.keys(API_PROVIDERS).forEach(provider => {
+      const providerConfig = API_PROVIDERS[provider as keyof typeof API_PROVIDERS]
+      if (!providerConfig) {
+        return
+      }
       const providerKey = apiKeys.find(key => key.provider === provider);
       stats.providerStats[provider] = {
         hasKey: !!providerKey,

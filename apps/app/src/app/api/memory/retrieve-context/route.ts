@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { capxMemoryService } from '@/lib/capx-memory';
+import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
 
 export async function POST(request: NextRequest) {
+  if (!isAlphaFeaturesEnabled()) {
+    return NextResponse.json({ error: 'Feature not available' }, { status: 403 });
+  }
+
   try {
     const { 
       userId, 
@@ -16,10 +21,6 @@ export async function POST(request: NextRequest) {
 
     if (!userId || !query) {
       return NextResponse.json({ error: 'User ID and query are required' }, { status: 400 });
-    }
-
-    if (!capxMemoryService.isAvailable()) {
-      return NextResponse.json({ error: 'Memory service not available' }, { status: 503 });
     }
 
     // Build metadata filter from structured parameters

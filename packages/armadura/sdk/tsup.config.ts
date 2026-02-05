@@ -7,7 +7,11 @@ export default defineConfig({
     client: 'src/client.ts',
   },
   format: ['cjs', 'esm'],
-  dts: true,
+  dts: {
+    compilerOptions: {
+      skipLibCheck: true,
+    },
+  },
   clean: true,
   external: ['react', 'react-dom', '@tanstack/react-query'],
 })

@@ -8,31 +8,39 @@ import { cn } from "@v1/ui/cn"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Checkbox } from "@v1/ui/checkbox"
 import { type ColumnDef } from '@tanstack/react-table'
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "motion/react"
 import { Spinner } from "@v1/ui/spinner"
 import type { CoinMarketData } from '@/types/coins'
 import { InlinePriceChart } from "@/components/charts/inline-price-chart"
+import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
+import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
+
+interface Ref<T> {
+  current: T;
+}
 
 interface WatchlistColumnsProps {
   handleRemove: (coinId: number | string) => void;
-  selectedCoins: Set<string>;
+  selectedCoinsRef: Ref<Set<string>>;
   onCoinSelect: (coinId: string, selected: boolean) => void;
   onSelectAll: (checked: boolean) => void;
   totalCoins: number;
-  removingCoins: Set<string>;
-  hoveredRowId: string | null;
-  hasSelectedCoins: boolean;
+  removingCoinsRef: Ref<Set<string>>;
+  hasSelectedCoinsRef: Ref<boolean>;
+  shouldReduceMotion?: boolean;
+  onInlineChartError?: () => void;
 }
 
 export function createWatchlistColumns({
   handleRemove,
-  selectedCoins,
+  selectedCoinsRef,
   onCoinSelect,
   onSelectAll,
   totalCoins,
-  removingCoins,
-  hoveredRowId,
-  hasSelectedCoins
+  removingCoinsRef,
+  hasSelectedCoinsRef,
+  shouldReduceMotion = false,
+  onInlineChartError,
 }: WatchlistColumnsProps): ColumnDef<CoinMarketData>[] {
   return [
     {
@@ -40,180 +48,130 @@ export function createWatchlistColumns({
       header: () => (
         <div className={cn(
           "transition-opacity duration-200",
-          hasSelectedCoins ? "opacity-100" : "opacity-0"
+          hasSelectedCoinsRef.current ? "opacity-100" : "opacity-0"
         )}>
           <Checkbox
-            checked={selectedCoins.size === totalCoins && totalCoins > 0}
+            checked={selectedCoinsRef.current.size === totalCoins && totalCoins > 0}
             onCheckedChange={onSelectAll}
             aria-label="Select all"
           />
         </div>
       ),
       cell: ({ row }) => {
-        const isHovered = hoveredRowId === row.id;
+        const coinId = row.original.id.toString()
+        const isRowSelected = selectedCoinsRef.current.has(coinId)
+        const tokenName = cleanTokenName(row.original.name)
+        const tokenLogoUrl = getTokenLogoURL(row.original.symbol, row.original.image)
+        const safeTokenLogoUrl =
+          tokenLogoUrl && (tokenLogoUrl.startsWith("http") || tokenLogoUrl.startsWith("/"))
+            ? tokenLogoUrl
+            : undefined
+        // When any rows are selected, lock the reveal state for all rows (selection mode).
+        // Otherwise, reveal on hover (handled by Motion `whileHover` below).
+        const isSelectionMode = hasSelectedCoinsRef.current
+        const transition = {
+          type: "tween" as const,
+          duration: motionDuration(shouldReduceMotion, DURATION_UI_S),
+          ease: EASE_IN_OUT_CUBIC,
+        }
+        const cellVariants = {
+          rest: {},
+          revealed: {},
+        } as const
+        const checkboxVariants = {
+          rest: { opacity: 0, x: -20, pointerEvents: "none" as const },
+          revealed: { opacity: 1, x: 0, pointerEvents: "auto" as const },
+        } as const
+
+        const contentVariants = {
+          rest: { x: 0, opacity: 1 },
+          revealed: { x: 40, opacity: 0.9 },
+        } as const
         
         return (
-          <div className="relative w-full h-full flex items-center justify-start overflow-hidden ">
-            {/* Checkbox - animate only when no selections exist */}
-            {hasSelectedCoins ? (
-              // Static checkbox when selections exist
-              <div className="absolute left-0 z-10 px-1">
-                <Checkbox
-                  checked={selectedCoins.has(row.original.id.toString())}
-                  onCheckedChange={(value) => onCoinSelect(row.original.id.toString(), !!value)}
-                  aria-label="Select row"
-                  className="mt-[6px] data-[state=checked]:mt-[2px]"
-                />
-              </div>
-            ) : (
-              // Animated checkbox when no selections exist - restructured to allow exit animations
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={isHovered ? 'hovered' : 'normal'}
-                  className="absolute left-0 z-10 px-1"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ 
-                    opacity: isHovered ? 1 : 0, 
-                    x: isHovered ? 0 : -20 
-                  }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{
-                    type: "spring",
-                    stiffness: 400,
-                    damping: 25,
-                    mass: 0.5,
-                    duration: 0.2,
-                  }}
-                  style={{ 
-                    pointerEvents: isHovered ? 'auto' : 'none'
-                  }}
-                >
-                  {isHovered && (
-                    <Checkbox
-                      checked={selectedCoins.has(row.original.id.toString())}
-                      onCheckedChange={(value) => onCoinSelect(row.original.id.toString(), !!value)}
-                      aria-label="Select row"
-                      className="mt-[6px] data-[state=checked]:mt-[2px]"
-                    />
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            )}
+          <motion.div
+            className="relative w-full h-full flex items-center justify-start overflow-hidden"
+            // Ensure non-hovered rows animate when selection mode flips on/off.
+            // Some table updates can remount cells; starting from `"rest"` prevents "jump-to-endstate".
+            variants={cellVariants}
+            initial="rest"
+            animate={isSelectionMode ? "revealed" : "rest"}
+            whileHover={isSelectionMode ? undefined : "revealed"}
+          >
+            {/* Checkbox - stable DOM to avoid "jump" on select/deselect */}
+            <motion.div
+              className="absolute left-0 z-10 px-1"
+              variants={checkboxVariants}
+              transition={transition}
+            >
+              <Checkbox
+                data-watchlist-row-checkbox="true"
+                checked={isRowSelected}
+                tabIndex={isSelectionMode ? 0 : -1}
+                onCheckedChange={(value) => onCoinSelect(coinId, !!value)}
+                aria-label="Select row"
+                className="mt-[6px] data-[state=checked]:mt-[2px]"
+              />
+            </motion.div>
             
             {/* Token content - no link here, entire row will be linked */}
-            {hasSelectedCoins ? (
-              // Static position when selections exist
-              <div className="translate-x-10 opacity-90 flex items-center gap-2">
-                <div className="relative">
-                  {row.original.quote.USD.price > 0 ? (
-                    // Use CoinGecko image if available, otherwise fallback to letter
-                    row.original.image ? (
-                      <Image
-                        src={row.original.image?.startsWith('http') || row.original.image?.startsWith('/') ? row.original.image : '/favicon.ico'}
-                        alt={row.original.name}
-                        className="w-[20px] h-[20px] rounded-full"
-                        width={24}
-                        height={24}
-                        onError={(e) => {
-                          // Fallback to letter-based avatar on image error
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const parent = target.parentElement;
-                          if (parent) {
-                            parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
-                          }
-                        }}
-                      />
-                    ) : (
-                      // Fallback for missing image
-                      <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
-                        {row.original.symbol.charAt(0).toUpperCase()}
-                      </div>
-                    )
+            <motion.div
+              className="flex items-center gap-2"
+              variants={contentVariants}
+              transition={transition}
+            >
+              <div className="relative">
+                {row.original.quote.USD.price > 0 ? (
+                  // Use CoinGecko image if available, otherwise fallback to letter
+                  safeTokenLogoUrl ? (
+                    <Image
+                      src={safeTokenLogoUrl}
+                      alt={tokenName}
+                      className="w-[20px] h-[20px] rounded-full"
+                      width={24}
+                      height={24}
+                      onError={(e) => {
+                        // Fallback to letter-based avatar on image error
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
+                        }
+                      }}
+                    />
                   ) : (
-                    <Skeleton className="w-[20px] h-[20px] rounded-full" />
-                  )}
-                </div>
+                    // Fallback for missing image
+                    <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
+                      {row.original.symbol.charAt(0).toUpperCase()}
+                    </div>
+                  )
+                ) : (
+                  <Skeleton className="w-[20px] h-[20px] rounded-full" />
+                )}
+              </div>
+              <div className="flex flex-row items-center gap-2">
                 <div className="font-bold text-sm">
                   {row.original.quote.USD.price > 0 ? (
-                    <span className="text-primary">{row.original.symbol.toUpperCase()}</span>
+                    <span className={cn(
+                      hasSelectedCoinsRef.current ? "text-primary" : "text-zinc-950 dark:text-white",
+                    )}>
+                      {row.original.symbol.toUpperCase()}
+                    </span>
                   ) : (
                     <Skeleton className="h-4 w-8 rounded" />
                   )}
                 </div>
                 <div className="">
                   {row.original.quote.USD.price > 0 ? (
-                    <span className="text-muted-foreground font-diatype-mono text-xs">{row.original.name}</span>
+                    <span className="text-muted-foreground font-diatype-mono text-xs">{tokenName}</span>
                   ) : (
                     <Skeleton className="h-3 w-16 rounded" />
                   )}
                 </div>
               </div>
-            ) : (
-              // Animated content when no selections exist
-              <motion.div
-                className="flex items-center gap-2"
-                animate={{ 
-                  x: isHovered ? 40 : 0,
-                  opacity: isHovered ? 0.9 : 1 
-                }}
-                transition={{
-                  type: "spring",
-                  stiffness: 400,
-                  damping: 25,
-                  mass: 0.5,
-                  duration: 0.2,
-                }}
-              >
-                <div className="relative">
-                  {row.original.quote.USD.price > 0 ? (
-                    // Use CoinGecko image if available, otherwise fallback to letter
-                    row.original.image ? (
-                      <Image
-                        src={row.original.image?.startsWith('http') || row.original.image?.startsWith('/') ? row.original.image : '/favicon.ico'}
-                        alt={row.original.name}
-                        className="w-[20px] h-[20px] rounded-full"
-                        width={24}
-                        height={24}
-                        onError={(e) => {
-                          // Fallback to letter-based avatar on image error
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          const parent = target.parentElement;
-                          if (parent) {
-                            parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
-                          }
-                        }}
-                      />
-                    ) : (
-                      // Fallback for missing image
-                      <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
-                        {row.original.symbol.charAt(0).toUpperCase()}
-                      </div>
-                    )
-                  ) : (
-                    <Skeleton className="w-[20px] h-[20px] rounded-full" />
-                  )}
-                </div>
-                <div className="flex flex-row items-center gap-2">
-                  <div className="font-bold text-sm">
-                    {row.original.quote.USD.price > 0 ? (
-                      <span className="text-zinc-950 dark:text-white">{row.original.symbol.toUpperCase()}</span>
-                    ) : (
-                      <Skeleton className="h-4 w-8 rounded" />
-                    )}
-                  </div>
-                  <div className="">
-                    {row.original.quote.USD.price > 0 ? (
-                      <span className="text-muted-foreground font-diatype-mono text-xs">{row.original.name}</span>
-                    ) : (
-                      <Skeleton className="h-3 w-16 rounded" />
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </div>
+            </motion.div>
+          </motion.div>
         );
       },
       enableSorting: false,
@@ -312,6 +270,7 @@ export function createWatchlistColumns({
                 percentChange24h={row.original.quote.USD.percent_change_24h}
                 symbol={row.original.symbol}
                 initialData={row.original.quote.USD}
+                onError={onInlineChartError}
               />
             </div>
           ) : (
@@ -338,10 +297,10 @@ export function createWatchlistColumns({
               e.stopPropagation();
               handleRemove(row.original.id);
             }}
-            disabled={removingCoins.has(row.original.id.toString())}
+            disabled={removingCoinsRef.current.has(row.original.id.toString())}
             className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
             >
-            {removingCoins.has(row.original.id.toString()) ? (
+            {removingCoinsRef.current.has(row.original.id.toString()) ? (
               <Spinner size={16} />
             ) : (
               <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />

@@ -1,10 +1,11 @@
 "use client"
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import React, { useCallback, useEffect, useRef, useState } from "react"
+import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@v1/ui/button'
 import { AlertTriangle, RefreshCw, Clock } from 'lucide-react'
 import { toast } from '@v1/ui/use-toast'
+import { Effect, Fiber } from "effect"
 
 interface LoadingStateManagerProps {
   children: React.ReactNode
@@ -25,6 +26,12 @@ export function LoadingStateManager({
   maxWaitMs = 30000  // 30 seconds max wait
 }: LoadingStateManagerProps) {
   const queryClient = useQueryClient()
+  const isFetching = useIsFetching()
+  const isLoading = isFetching > 0
+
+  const stuckSinceRef = useRef<number | null>(null)
+  const monitorFiberRef = useRef<Fiber.RuntimeFiber<void, never> | null>(null)
+
   const [loadingState, setLoadingState] = useState<LoadingState>({
     isStuck: false,
     hasTimedOut: false,
@@ -33,7 +40,12 @@ export function LoadingStateManager({
   })
 
   const handleForceRecovery = useCallback(() => {
-    console.log('🔧 Forcing loading state recovery...')
+    if (monitorFiberRef.current) {
+      Effect.runFork(Fiber.interruptFork(monitorFiberRef.current))
+      monitorFiberRef.current = null
+    }
+
+    stuckSinceRef.current = null
     
     // Cancel all queries
     queryClient.cancelQueries()
@@ -62,7 +74,12 @@ export function LoadingStateManager({
   }, [queryClient])
 
   const handleRetry = useCallback(() => {
-    console.log('🔄 Retrying stuck requests...')
+    if (monitorFiberRef.current) {
+      Effect.runFork(Fiber.interruptFork(monitorFiberRef.current))
+      monitorFiberRef.current = null
+    }
+
+    stuckSinceRef.current = null
     
     // Cancel existing queries first
     queryClient.cancelQueries()
@@ -75,7 +92,7 @@ export function LoadingStateManager({
         ...prev,
         isStuck: false,
         hasTimedOut: false,
-        stuckSince: Date.now() // Reset timer
+        stuckSince: null
       }))
     }, 500)
     
@@ -86,74 +103,63 @@ export function LoadingStateManager({
     })
   }, [queryClient])
 
-  // Monitor for stuck loading states
+  // Monitor for stuck loading states without polling.
   useEffect(() => {
-    let timeoutId: NodeJS.Timeout
-    let maxTimeoutId: NodeJS.Timeout
+    // Start monitoring once when we transition into a loading state.
+    if (isLoading) {
+      if (stuckSinceRef.current !== null || monitorFiberRef.current !== null) return
 
-    const checkForStuckState = () => {
-      const queries = queryClient.getQueriesData({ type: 'active' })
-      const hasActiveQueries = queries.length > 0
-      
-      if (hasActiveQueries) {
-        if (!loadingState.stuckSince) {
-          setLoadingState(prev => ({
+      const startedAt = Date.now()
+      stuckSinceRef.current = startedAt
+      setLoadingState((prev) => ({ ...prev, stuckSince: startedAt }))
+
+      const remainingMs = Math.max(0, maxWaitMs - timeoutMs)
+
+      const program = Effect.gen(function* () {
+        yield* Effect.sleep(`${timeoutMs} millis`)
+
+        yield* Effect.sync(() => {
+          setLoadingState((prev) => ({
             ...prev,
-            stuckSince: Date.now()
+            isStuck: true,
+            hasTimedOut: true,
+            timeoutCount: prev.timeoutCount + 1,
           }))
-          
-          // Set timeout for stuck detection
-          timeoutId = setTimeout(() => {
-            setLoadingState(prev => ({
-              ...prev,
-              isStuck: true,
-              hasTimedOut: true,
-              timeoutCount: prev.timeoutCount + 1
-            }))
-            
-            console.warn('🐌 Loading state appears stuck, offering recovery options')
-            
-            toast({
-              title: "Slow loading detected",
-              description: "Some data is taking longer than expected to load",
-              variant: "default",
-            })
-          }, timeoutMs)
-          
-          // Set maximum wait timeout
-          maxTimeoutId = setTimeout(() => {
-            console.error('🚨 Maximum wait time exceeded, forcing recovery')
-            handleForceRecovery()
-          }, maxWaitMs)
+
+          toast({
+            title: "Slow loading detected",
+            description: "Some data is taking longer than expected to load",
+            variant: "default",
+          })
+        })
+
+        if (remainingMs > 0) {
+          yield* Effect.sleep(`${remainingMs} millis`)
         }
-      } else {
-        // Clear stuck state when no active queries
-        if (loadingState.stuckSince) {
-          setLoadingState(prev => ({
-            ...prev,
-            isStuck: false,
-            hasTimedOut: false,
-            stuckSince: null
-          }))
-          
-          if (timeoutId) clearTimeout(timeoutId)
-          if (maxTimeoutId) clearTimeout(maxTimeoutId)
-        }
-      }
+
+        yield* Effect.sync(() => {
+          handleForceRecovery()
+        })
+      })
+
+      monitorFiberRef.current = Effect.runFork(program)
+      return
     }
 
-    // Check every 2 seconds
-    const interval = setInterval(checkForStuckState, 2000)
-    
-    // Initial check
-    checkForStuckState()
-
-    return () => {
-      clearInterval(interval)
-      if (timeoutId) clearTimeout(timeoutId)
-      if (maxTimeoutId) clearTimeout(maxTimeoutId)
+    // No active fetching: interrupt monitoring and reset stuck state.
+    if (monitorFiberRef.current) {
+      Effect.runFork(Fiber.interruptFork(monitorFiberRef.current))
+      monitorFiberRef.current = null
     }
-  }, [queryClient, timeoutMs, maxWaitMs, loadingState.stuckSince, handleForceRecovery])
+
+    stuckSinceRef.current = null
+    setLoadingState((prev) => ({
+      ...prev,
+      isStuck: false,
+      hasTimedOut: false,
+      stuckSince: null,
+    }))
+  }, [isLoading, timeoutMs, maxWaitMs, handleForceRecovery])
 
   // Show stuck state overlay when detected
   if (loadingState.isStuck && loadingState.hasTimedOut) {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { SEQUENTIAL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
 
 interface KeyboardIndicatorProps {
@@ -7,6 +7,8 @@ interface KeyboardIndicatorProps {
 }
 
 export const KeyboardIndicator = React.memo(({ activeSequence }: KeyboardIndicatorProps) => {
+  const shouldReduceMotion = useReducedMotion()
+
   const getNextKeys = (sequence: string) => {
     const shortcuts = SEQUENTIAL_SHORTCUTS[sequence as keyof typeof SEQUENTIAL_SHORTCUTS];
     if (!shortcuts) return [];
@@ -22,10 +24,10 @@ export const KeyboardIndicator = React.memo(({ activeSequence }: KeyboardIndicat
     <AnimatePresence>
       {activeSequence && (
         <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 20, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 20, scale: 0.95 }}
-          transition={{ duration: 0.15 }}
+          exit={shouldReduceMotion ? undefined : { opacity: 0, y: 20, scale: 0.95 }}
+          transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.15 }}
           className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-[200]"
         >
           <div className="bg-zinc-900/95 backdrop-blur-xl border border-zinc-800/50 rounded-xl p-3 shadow-2xl">

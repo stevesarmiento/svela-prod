@@ -60,7 +60,8 @@ tailwind.css
 # Trigger
 .trigger
 
-connector-external/
-/providers/
-/sdk/
-/jupiter/
+references/
+.agents
+.cursor
+.claude
+.opencode/

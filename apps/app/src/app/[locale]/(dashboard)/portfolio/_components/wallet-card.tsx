@@ -1,4 +1,4 @@
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useEffect } from 'react'
 import { IconGamecontrollerFill } from "symbols-react";
 import { MousePointerClick } from 'lucide-react'
@@ -23,6 +23,8 @@ export function WalletCard({
     address,
     onDisconnect,
 }: WalletCardProps) {
+    const shouldReduceMotion = useReducedMotion()
+
     useEffect(() => {
         if (!onDisconnect) return
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -36,10 +38,10 @@ export function WalletCard({
         <div className="flex flex-col items-center gap-2">
         <motion.div
             key={uniqueId}
-            initial={{ scale: 0.7, translateY: 20 }}
+            initial={shouldReduceMotion ? false : { scale: 0.7, translateY: 20 }}
             animate={{ scale: 1, translateY: 0 }}
-            layoutId={`wallet-${uniqueId}`}
-            transition={{
+            layoutId={shouldReduceMotion ? undefined : `wallet-${uniqueId}`}
+            transition={shouldReduceMotion ? { duration: 0 } : {
                 scale: {
                     type: "spring",
                     stiffness: 200, 
@@ -58,18 +60,19 @@ export function WalletCard({
         >
         <motion.div className="flex w-full items-start justify-between">
           <motion.div
-            layoutId={`icon-${uniqueId}`}
+            layoutId={shouldReduceMotion ? undefined : `icon-${uniqueId}`}
             className="flex items-center justify-center bg-white/10 rounded-full p-2"
             onClick={onClick}
           >
              <IconGamecontrollerFill className="h-10 w-10 translate-x-0 translate-y-0 fill-white" />
           </motion.div>
           <motion.div
-            initial={{ opacity: 0, scale: 0.5, filter: "blur(4px)" }}
+            initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.5, filter: "blur(4px)" }}
             animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
-            exit={{ opacity: 0, scale: 0.5, filter: "blur(4px)" }}
+            exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.5, filter: "blur(4px)" }}
             whileTap={{ scale: 0.9 }}
             className="flex shrink-0 translate-x-0 text-white/80 hover:text-white translate-y-0 hover:border-white/10 border border-transparent rounded-full p-2 py-1 transition-all duration-300 ease-in-out"
+            transition={shouldReduceMotion ? { duration: 0 } : undefined}
           >
             {address ? (
               <CopyButton
@@ -87,7 +90,7 @@ export function WalletCard({
         <div className="flex w-full items-end justify-between">
           <div className="flex flex-col items-start justify-center">
             <motion.span
-              layoutId={`walletName-${uniqueId}`}
+              layoutId={shouldReduceMotion ? undefined : `walletName-${uniqueId}`}
               className="select-none text-xs font-semibold text-white"
             >
               {walletName}

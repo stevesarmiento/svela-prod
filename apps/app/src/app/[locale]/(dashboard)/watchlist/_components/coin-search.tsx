@@ -18,8 +18,9 @@ import {
   SheetHeader,
   SheetTrigger,
 } from "@v1/ui/sheet"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@v1/ui/tooltip"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { Kbd } from "@v1/ui/kbd"
+import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
 
 // Skeleton Components
 const CoinSearchSkeleton = ({ rowCount = 5 }: { rowCount?: number }) => (
@@ -174,7 +175,6 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <SheetTrigger asChild>
@@ -191,7 +191,6 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
             <Kbd>A</Kbd>
           </TooltipContent>
         </Tooltip>
-      </TooltipProvider>
       <SheetContent className="p-0 !z-50 overflow-auto no-scrollbar rounded-[20px] bg-zinc-950 border-zinc-800
                                shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
                                dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
@@ -247,6 +246,8 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                       </TableRow>
                     ) : (
                       coinsToDisplay.map((coin) => (
+                        // Use curated logos + cleaned names for specific token types.
+                        // (e.g. xStocks / wrapped tokens / LST naming conventions)
                         <TableRow 
                           key={coin.id}
                           className="cursor-pointer border-none hover:bg-zinc-800/50 border-zinc-700/30 font-diatype-mono transition-colors group"
@@ -255,8 +256,13 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                           <TableCell className="text-white rounded-l-xl">
                             <div className="flex items-center gap-3">
                               <Image
-                                src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
-                                alt={coin.name}
+                                src={(() => {
+                                  const logoUrl = getTokenLogoURL(coin.symbol, coin.image)
+                                  return logoUrl?.startsWith('http') || logoUrl?.startsWith('/')
+                                    ? logoUrl
+                                    : '/favicon.ico'
+                                })()}
+                                alt={cleanTokenName(coin.name)}
                                 className="w-6 h-6 rounded-full"
                                 width={24}
                                 height={24}
@@ -266,7 +272,7 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                                 }}
                               />
                               <div>
-                                <div className="font-semibold font-sans text-sm text-white group-hover:text-white/90 mt-1">{coin.name}</div>
+                                <div className="font-semibold font-sans text-sm text-white group-hover:text-white/90 mt-1">{cleanTokenName(coin.name)}</div>
                                 <div className="text-[11px] text-white/50 -mt-1">{coin.symbol.toUpperCase()}</div>
                               </div>
                             </div>

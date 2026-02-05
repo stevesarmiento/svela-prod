@@ -5,7 +5,7 @@ import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { cn } from "@v1/ui/cn"
 import Image from "next/image"
 import Link from "next/link"
-import NumberFlow from '@number-flow/react'
+import NumberFlow from '@/components/number-flow'
 import { useMemo } from 'react'
 import { 
   IconLaurelLeading, 
@@ -13,12 +13,9 @@ import {
 } from "symbols-react"
 import { buildWatchlistUrl } from '@/lib/navigation-utils'
 import { useQueryState } from 'nuqs'
-import {
-  Time,
-  LastPriceAnimationMode,
-  LineSeries,
-} from 'lightweight-charts'
+import type { Time } from 'lightweight-charts'
 import { useOptimizedChart } from '@/hooks/use-optimized-chart'
+import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
 
 interface PriceCardProps {
   coingeckoId: string // CoinGecko ID (e.g., "bitcoin", "ethereum")
@@ -99,17 +96,21 @@ export function PriceCard({
     showRightPriceScale: false,
     onChartReady: (chart) => {
       if (chartData.length > 0) {
-        const lineSeries = chart.addSeries(LineSeries, {
-          lineWidth: 2,
-          lastValueVisible: false,
-          visible: true,
-          priceLineVisible: false,
-          color: isPositive ? "#10b981" : "#ef4444",
-          lastPriceAnimation: LastPriceAnimationMode.Continuous,
-        })
-        
-        lineSeries.setData(chartData)
-        chart.timeScale().fitContent()
+        void (async () => {
+          const { LineSeries, LastPriceAnimationMode } = await loadLightweightCharts()
+
+          const lineSeries = chart.addSeries(LineSeries, {
+            lineWidth: 2,
+            lastValueVisible: false,
+            visible: true,
+            priceLineVisible: false,
+            color: isPositive ? "#10b981" : "#ef4444",
+            lastPriceAnimation: LastPriceAnimationMode.Continuous,
+          })
+          
+          lineSeries.setData(chartData)
+          chart.timeScale().fitContent()
+        })()
       }
     }
   })

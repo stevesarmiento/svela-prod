@@ -86,7 +86,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
     <main className={`mx-auto py-6 px-4 relative z-10 ${showPending ? 'opacity-90 transition-opacity duration-200' : ''}`}>
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
         <div className="col-span-12 sm:space-y-0 sticky top-0 z-[100] will-change-transform">
-          <div className={`transition-all duration-300 ${isSticky ? 'pt-4' : 'pt-0'}`}>
+          <div className={`${isSticky ? 'pt-4' : 'pt-0'}`}>
             <PriceChart 
               coinId={deferredId}
               initialData={deferredTokenData.quote.USD}
@@ -111,7 +111,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
           ) : (
             <div className={`h-[120px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center ${showPending ? 'opacity-60' : ''}`}>
               <div className="text-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
+                <div className="animate-spin motion-reduce:animate-none rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
                 <p className="text-xs text-muted-foreground">Loading market data...</p>
                 <p className="text-xs text-muted-foreground">ID: {deferredId}</p>
               </div>
@@ -125,7 +125,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
           {isLoading ? (
             <div className={`h-[250px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center ${showPending ? 'opacity-60' : ''}`}>
               <div className="text-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
+                <div className="animate-spin motion-reduce:animate-none rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
                 <p className="text-xs text-muted-foreground">Loading Market Vision data...</p>
               </div>
             </div>
@@ -143,7 +143,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
           {isLoading ? (
             <div className={`h-[250px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center ${showPending ? 'opacity-60' : ''}`}>
               <div className="text-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
+                <div className="animate-spin motion-reduce:animate-none rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2"></div>
                 <p className="text-xs text-muted-foreground">Loading Bollinger Bands data...</p>
               </div>
             </div>

@@ -41,6 +41,19 @@ function subscribeToScroll(callback: () => void) {
   }
 }
 
+function subscribeToScrollThreshold(threshold: number, callback: () => void) {
+  // Track the derived value so we only notify when it flips.
+  let last = getScrollSnapshot() > threshold
+
+  return subscribeToScroll(() => {
+    const next = getScrollSnapshot() > threshold
+    if (next === last) return
+
+    last = next
+    callback()
+  })
+}
+
 // Get current scroll position
 function getScrollSnapshot(): number {
   if (typeof window === 'undefined') return 0
@@ -69,8 +82,19 @@ export function useScrollY(): number {
  * Common pattern for sticky headers, etc.
  */
 export function useScrollThreshold(threshold: number): boolean {
-  const scrollY = useScrollY()
-  return scrollY > threshold
+  const subscribe = useMemo(() => {
+    return (callback: () => void) => subscribeToScrollThreshold(threshold, callback)
+  }, [threshold])
+
+  const getSnapshot = useMemo(() => {
+    return () => getScrollSnapshot() > threshold
+  }, [threshold])
+
+  return useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    () => getServerSnapshot() > threshold
+  )
 }
 
 /**

@@ -1,13 +1,21 @@
-import { useQuery, useMutation, useAction } from "convex/react";
-import { api } from "@/../convex/_generated/api";
-import { useAuth } from "@v1/convex/hooks";
-import { toast } from "sonner";
-import { API_PROVIDERS, type ApiProvider } from "@/../convex/apiKeys";
-import type { Id } from "@/../convex/_generated/dataModel";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { API_PROVIDERS, type ApiProvider } from "@/constants/api-providers";
+import { useAuth } from "@/lib/convex-hooks";
 import { useState, useCallback } from "react";
+import { toast } from "sonner";
+
+async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, init);
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `Request failed: ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
 
 export function useUserSettings() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   
   // Optimistic updates state for API keys
   const [optimisticApiKeys, setOptimisticApiKeys] = useState<Array<{
@@ -19,25 +27,18 @@ export function useUserSettings() {
   }>>([]);
   
   // Get settings from database
-  const settings = useQuery(
-    api.userSettings.getUserSettings,
-    user?.id ? { clerkId: user.id } : "skip"
-  );
-  
-  // Settings Mutations
-  const upsertSettings = useMutation(api.userSettings.upsertUserSettings);
-  const updateMemorySettings = useMutation(api.userSettings.updateMemorySettings);
-  
-  // API Key Mutations and Actions
-  const addApiKeyAction = useAction(api.apiKeysActions.addApiKeyWithEncryption);
-  const updateApiKeyStatus = useMutation(api.apiKeys.updateApiKeyStatus);
-  const deleteApiKey = useMutation(api.apiKeys.deleteApiKey);
+  const { data: settings } = useQuery({
+    queryKey: ["user-settings"],
+    queryFn: async () => fetchJson<any>("/api/internal/user-settings"),
+    enabled: !!user?.id,
+  });
   
   // API Key Queries
-  const apiKeysFromDb = useQuery(
-    api.apiKeys.getUserApiKeys,
-    user?.id ? { clerkId: user.id } : "skip"
-  );
+  const { data: apiKeysFromDb } = useQuery({
+    queryKey: ["api-keys"],
+    queryFn: async () => fetchJson<any[]>("/api/internal/api-keys"),
+    enabled: !!user?.id,
+  });
 
   // Combine real API keys with optimistic updates
   const apiKeys = useCallback(() => {
@@ -45,10 +46,11 @@ export function useUserSettings() {
     return [...realKeys, ...optimisticApiKeys];
   }, [apiKeysFromDb, optimisticApiKeys])();
   
-  const apiKeyStats = useQuery(
-    api.apiKeys.getApiKeyStats,
-    user?.id ? { clerkId: user.id } : "skip"
-  );
+  const { data: apiKeyStats } = useQuery({
+    queryKey: ["api-keys", "stats"],
+    queryFn: async () => fetchJson<any>("/api/internal/api-keys/stats"),
+    enabled: !!user?.id,
+  });
   
   // Update memory-specific settings
   const updateMemory = async (memorySettings: {
@@ -62,10 +64,13 @@ export function useUserSettings() {
     }
 
     try {
-      await updateMemorySettings({
-        clerkId: user.id,
-        ...memorySettings,
+      await fetchJson<{ id: string }>("/api/internal/user-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(memorySettings),
       });
+
+      await queryClient.invalidateQueries({ queryKey: ["user-settings"] });
       
       // Also sync to localStorage for immediate access (client-side only)
       if (typeof window !== 'undefined') {
@@ -98,25 +103,30 @@ export function useUserSettings() {
     priceAlerts?: boolean;
     analyticsEnabled?: boolean;
     shareUsageData?: boolean;
-  }) => {
+  }): Promise<boolean> => {
     if (!user?.id) {
       toast.error("Please sign in to save settings");
-      return;
+      return false;
     }
 
     try {
-      await upsertSettings({
-        clerkId: user.id,
-        ...newSettings,
+      await fetchJson<{ id: string }>("/api/internal/user-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newSettings),
       });
+
+      await queryClient.invalidateQueries({ queryKey: ["user-settings"] });
+      return true;
     } catch (error) {
       console.error("Failed to update settings:", error);
       toast.error("Failed to save settings");
+      return false;
     }
   };
 
   // Get memory settings with localStorage fallback for immediate access
-  const getMemorySettings = () => {
+  const getMemorySettings = useCallback(() => {
     // If settings are loaded from DB, use those
     if (settings) {
       return {
@@ -137,15 +147,18 @@ export function useUserSettings() {
     }
 
     // Fallback to localStorage while DB loads (client-side only)
+    const memoryEnabled = localStorage.getItem('memoryEnabled')
+    const autoCleanupEnabled = localStorage.getItem('autoCleanupEnabled')
+    const retentionDays = localStorage.getItem('retentionDays')
     return {
-      memoryEnabled: localStorage.getItem('memoryEnabled') !== 'false', // default true
-      autoCleanupEnabled: localStorage.getItem('autoCleanupEnabled') === 'true', // default false
-      retentionDays: localStorage.getItem('retentionDays') || '30', // default 30
+      memoryEnabled: memoryEnabled !== 'false', // default true
+      autoCleanupEnabled: autoCleanupEnabled === 'true', // default false
+      retentionDays: retentionDays || '30', // default 30
     };
-  };
+  }, [settings]);
 
   // API Key Management Functions
-  const addApiKey = async (provider: ApiProvider, keyName: string, apiKey: string, isActive: boolean = true) => {
+  const addApiKey = async (provider: ApiProvider, keyName: string, apiKey: string, isActive = true) => {
     if (!user?.id) {
       toast.error("Please sign in to manage API keys");
       return;
@@ -164,13 +177,15 @@ export function useUserSettings() {
     setOptimisticApiKeys(prev => [...prev, optimisticKey]);
 
     try {
-      // Use Convex action for server-side encryption and storage
-      await addApiKeyAction({
-        clerkId: user.id,
-        provider,
-        keyName,
-        apiKey,
-        isActive,
+      await fetchJson<{ id: string }>("/api/internal/api-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          keyName,
+          apiKey,
+          isActive,
+        }),
       });
       
       const providerConfig = API_PROVIDERS[provider];
@@ -178,12 +193,11 @@ export function useUserSettings() {
       
       // Remove optimistic update - real data will come from the server
       setOptimisticApiKeys(prev => prev.filter(key => key._id !== optimisticKey._id));
-      
-      // Trigger a refetch of API keys to get the real data
-      // We could also implement a small delay to allow server propagation
-      setTimeout(() => {
-        // The useQuery will automatically refetch and update the UI
-      }, 100);
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["api-keys"] }),
+        queryClient.invalidateQueries({ queryKey: ["api-keys", "stats"] }),
+      ]);
       
     } catch (error) {
       console.error("Failed to add API key:", error);
@@ -201,14 +215,17 @@ export function useUserSettings() {
     }
 
     try {
-      await updateApiKeyStatus({
-        clerkId: user.id,
-        keyId: keyId as Id<"userApiKeys">,
-        isActive,
+      await fetchJson<{ success: true }>(`/api/internal/api-keys/${encodeURIComponent(keyId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive }),
       });
       
       toast.success(`API key ${isActive ? 'activated' : 'deactivated'}`);
-      // No need to refresh - Convex queries auto-update!
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["api-keys"] }),
+        queryClient.invalidateQueries({ queryKey: ["api-keys", "stats"] }),
+      ]);
     } catch (error) {
       console.error("Failed to update API key status:", error);
       toast.error("Failed to update API key status");
@@ -222,13 +239,15 @@ export function useUserSettings() {
     }
 
     try {
-      await deleteApiKey({
-        clerkId: user.id,
-        keyId: keyId as Id<"userApiKeys">,
+      await fetchJson<{ success: true }>(`/api/internal/api-keys/${encodeURIComponent(keyId)}`, {
+        method: "DELETE",
       });
       
       toast.success(`${providerName} API key removed`);
-      // No need to refresh - Convex queries auto-update!
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["api-keys"] }),
+        queryClient.invalidateQueries({ queryKey: ["api-keys", "stats"] }),
+      ]);
     } catch (error) {
       console.error("Failed to remove API key:", error);
       toast.error("Failed to remove API key");

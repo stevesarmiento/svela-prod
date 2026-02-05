@@ -1,23 +1,16 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
-import { ConvexReactClient } from "convex/react";
-import { ConvexProvider as BaseConvexProvider } from "convex/react";
 import { useUser } from "@clerk/nextjs";
-import { useMutation } from "convex/react";
-import { api } from "../../../apps/app/convex/_generated/api.js";
-
-if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
-  throw new Error("Missing NEXT_PUBLIC_CONVEX_URL in your .env file");
-}
-
-const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL);
 
 // Component to handle user storage after authentication
 function AuthenticatedUserHandler({ children }: { children: React.ReactNode }) {
   const { user, isLoaded } = useUser();
-  const createUser = useMutation(api.users.createUser);
   const [userSynced, setUserSynced] = useState(false);
+
+  useEffect(() => {
+    setUserSynced(false);
+  }, [user?.id]);
 
   useEffect(() => {
     const syncUser = async () => {
@@ -28,13 +21,12 @@ function AuthenticatedUserHandler({ children }: { children: React.ReactNode }) {
 
       try {
         console.log("Syncing user to Convex:", user.id);
-        
-        await createUser({
-          clerkId: user.id,
-          email: user.emailAddresses[0]?.emailAddress || "",
-          fullName: user.fullName || undefined,
-          avatarUrl: user.imageUrl || undefined,
+
+        const response = await fetch("/api/internal/users/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
         });
+        if (!response.ok) throw new Error("User sync failed");
         
         console.log("User synced successfully");
         setUserSynced(true);
@@ -45,17 +37,11 @@ function AuthenticatedUserHandler({ children }: { children: React.ReactNode }) {
     };
 
     syncUser();
-  }, [user, isLoaded, createUser, userSynced]);
+  }, [user, isLoaded, userSynced]);
 
   return <>{children}</>;
 }
 
 export function ConvexProvider({ children }: { children: ReactNode }) {
-  return (
-    <BaseConvexProvider client={convex}>
-      <AuthenticatedUserHandler>
-        {children}
-      </AuthenticatedUserHandler>
-    </BaseConvexProvider>
-  );
+  return <AuthenticatedUserHandler>{children}</AuthenticatedUserHandler>;
 }

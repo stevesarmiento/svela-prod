@@ -1,6 +1,5 @@
 {
   "$schema": "https://turborepo.org/schema.json",
-  "globalDependencies": ["**/.env.*local"],
   "ui": "stream",
   "tasks": {
     "topo": {
@@ -31,12 +30,12 @@
         "X_CAPI_API_KEY",
         "V0_API_KEY"
       ],
-      "inputs": ["$TURBO_DEFAULT$", ".env"],
+      "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"],
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**", "next-env.d.ts", ".expo/**"]
     },
     "dev": {
-      "inputs": ["$TURBO_DEFAULT$", ".env"],
+      "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"],
       "persistent": true,
       "cache": false
     },
@@ -62,7 +61,7 @@
     },
     "typecheck": {
       "dependsOn": ["^topo"],
-      "outputs": ["node_modules/.cache/tsbuildinfo.json"]
+      "outputs": ["**/*.tsbuildinfo"]
     }
   },
   "globalEnv": ["NODE_ENV"]

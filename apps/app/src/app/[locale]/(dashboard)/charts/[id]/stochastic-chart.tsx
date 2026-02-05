@@ -1,11 +1,13 @@
 'use client'
 
 import { useRef, useEffect, useMemo } from 'react'
-import { createChart, ColorType, CrosshairMode, LineStyle, LineSeries, ISeriesApi, IChartApi, Time } from 'lightweight-charts'
+import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
 import { calculateStochasticIndicator, getAllRSIDivergences, type StochasticConfig, type DivergencePoint } from '@/hooks/market-vision/stochastic'
 import { rsi } from '@/hooks/market-vision/technical-indicators'
 import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
+import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
+import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 
 interface StochasticDisplaySettings {
   showK: boolean
@@ -73,6 +75,7 @@ export function StochasticChart({
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
+  const lightweightChartsRef = useRef<LightweightChartsModule | null>(null)
 
   // Merge with default config
   const finalConfig = { ...DEFAULT_STOCHASTIC_CONFIG, ...config }
@@ -106,64 +109,101 @@ export function StochasticChart({
     const hasActiveIndicators = Object.values(displaySettings).some(Boolean)
     if (!hasActiveIndicators) return
 
+    let isCancelled = false
+    let cleanup: (() => void) | null = null
+
     // Capture the current seriesRefs for cleanup
     const currentSeriesRefs = seriesRefs.current
 
-    const chart = createChart(chartContainerRef.current, {
-        handleScale: false,
-        handleScroll: false,
-        layout: {
-          background: { type: ColorType.Solid, color: "transparent" },
-          textColor: "#ffffff50",
-          attributionLogo: false,
-        },
-        grid: {
-          vertLines: { visible: false },
-          horzLines: { visible: true, color: "#f5f5f510", style: LineStyle.Dotted },
-        },
-        rightPriceScale: { 
-          borderVisible: false, 
-          autoScale: true,
-          scaleMargins: { top: 0.1, bottom: 0.1 }
-        },
-        crosshair: {
-          mode: CrosshairMode.Magnet,
-          vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
-          horzLine: { visible: false, labelVisible: false },
-        },
-        timeScale: { 
-          visible: showTimeAxis,
-          timeVisible: showTimeAxis,
-          secondsVisible: false,
-          borderVisible: false 
-        },
-      })
+    void (async () => {
+      const lightweightCharts = await loadLightweightCharts()
+      lightweightChartsRef.current = lightweightCharts
 
-    chartRef.current = chart
+      const { createChart, ColorType, CrosshairMode, LineStyle } = lightweightCharts
 
-    const handleResize = () => {
-      if (chartContainerRef.current && chart) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: height,
+      if (isCancelled || !chartContainerRef.current) return
+
+      const chart = createChart(chartContainerRef.current, {
+          handleScale: false,
+          handleScroll: false,
+          layout: {
+            background: { type: ColorType.Solid, color: "transparent" },
+            textColor: "#ffffff50",
+            attributionLogo: false,
+          },
+          grid: {
+            vertLines: { visible: false },
+            horzLines: { visible: true, color: "#f5f5f510", style: LineStyle.Dotted },
+          },
+          rightPriceScale: { 
+            borderVisible: false, 
+            autoScale: true,
+            scaleMargins: { top: 0.1, bottom: 0.1 }
+          },
+          crosshair: {
+            mode: CrosshairMode.Magnet,
+            vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
+            horzLine: { visible: false, labelVisible: false },
+          },
+          timeScale: { 
+            visible: showTimeAxis,
+            timeVisible: showTimeAxis,
+            secondsVisible: false,
+            borderVisible: false 
+          },
         })
-      }
-    }
 
-    window.addEventListener("resize", handleResize)
-    handleResize()
+      chartRef.current = chart
+
+      const handleResize = () => {
+        if (chartContainerRef.current && chart) {
+          chart.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+            height: height,
+          })
+        }
+      }
+
+      // Prefer observing the actual container size (avoids per-chart global resize listeners).
+      let resizeObserver: ResizeObserver | null = null
+      let resizeRafId: number | null = null
+      let unsubscribeWindowResize: (() => void) | null = null
+
+      if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeRafId) cancelAnimationFrame(resizeRafId)
+          resizeRafId = requestAnimationFrame(() => handleResize())
+        })
+        resizeObserver.observe(chartContainerRef.current)
+      } else {
+        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
+      }
+
+      handleResize()
+
+      cleanup = () => {
+        if (resizeRafId) cancelAnimationFrame(resizeRafId)
+        resizeObserver?.disconnect()
+        unsubscribeWindowResize?.()
+        chart.remove()
+        chartRef.current = null
+        currentSeriesRefs.clear()
+      }
+    })()
 
     return () => {
-      window.removeEventListener("resize", handleResize)
-      chart.remove()
-      chartRef.current = null
-      currentSeriesRefs.clear()
+      isCancelled = true
+      cleanup?.()
     }
   }, [height, showTimeAxis, displaySettings])
 
   // Update series based on calculations and display settings
   useEffect(() => {
     if (!chartRef.current || !stochasticResult) return
+
+    const lightweightCharts = lightweightChartsRef.current
+    if (!lightweightCharts) return
+    const { LineSeries, LineStyle } = lightweightCharts
 
     // Check if we have any data to display
     const hasStochasticData = (displaySettings.showK && stochasticResult.stochK.length > 0) ||

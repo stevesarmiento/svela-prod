@@ -1,7 +1,7 @@
 'use client'
 
 import { useSyncExternalStore } from 'react'
-import { ChatStateManager } from '../chat-toast'
+import { ChatStateManager } from '../chat-state-manager'
 
 /**
  * Optimized hook using useSyncExternalStore for ChatStateManager

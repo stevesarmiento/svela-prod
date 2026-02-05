@@ -55,9 +55,8 @@ const CommandPopover = ({
         </PopoverTrigger>
         <PopoverContent
           ref={contentRef}
-          className="relative rounded-[20px] bg-white/95 backdrop-blur-md border border-gray-200/50 dark:bg-zinc-900 dark:border-transparent overflow-hidden p-1 w-[499px] z-[1000] data-[state=open]:slide-in-from-bottom-24 data-[state=closed]:slide-out-to-bottom-24
-                     shadow-[0_4px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
-                     dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]"
+          className="dark relative rounded-[20px] bg-zinc-900/95 backdrop-blur-md border border-transparent overflow-hidden p-1 w-[499px] z-[1000] data-[state=open]:slide-in-from-bottom-24 data-[state=closed]:slide-out-to-bottom-24
+                     text-popover-foreground shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.4)]"
           side="bottom"
           sideOffset={12}
         >
@@ -165,7 +164,7 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-pointer select-none items-center px-2 py-1.5 text-sm outline-none aria-selected:bg-gray-100/80 dark:aria-selected:bg-zinc-800/30 rounded-2xl aria-selected:text-gray-900 dark:aria-selected:text-white",
+      "relative flex cursor-pointer select-none items-center px-2 py-1.5 text-sm outline-none aria-selected:bg-gray-100/80 dark:aria-selected:bg-zinc-800/30 rounded-2xl aria-selected:text-gray-900 dark:aria-selected:text-white active:scale-[0.98] transition-all duration-150 ease-in-out",
       className,
     )}
     {...props}

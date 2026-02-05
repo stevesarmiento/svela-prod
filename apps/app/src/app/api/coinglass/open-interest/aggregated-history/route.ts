@@ -31,25 +31,20 @@ const CoinglassOpenInterestResponseSchema = z.object({
 
 export async function GET(request: Request) {
   try {
-    console.log('=== Open Interest API Route Start ===');
-    
     // Check API key first
     if (!API_KEY) {
-      console.error('❌ CoinGlass API key not configured');
+      console.error("CoinGlass API key not configured");
       return NextResponse.json(
         { error: 'CoinGlass API key not configured', success: false },
         { status: 500 }
       );
     }
-    console.log('✅ API key found, length:', API_KEY.length);
 
     const { searchParams } = new URL(request.url);
     const rawSymbol = searchParams.get('symbol');
     const interval = searchParams.get('interval') || '12h';
     const unit = searchParams.get('unit') || 'usd';
     const limit = searchParams.get('limit') || '30';
-
-    console.log('📊 Request params:', { rawSymbol, interval, unit, limit });
 
     if (!rawSymbol) {
       return NextResponse.json(
@@ -73,9 +68,8 @@ export async function GET(request: Request) {
           name: 'Unknown',
           isSupported: true
         };
-        console.log('✅ Mapped coin ID', coinId, 'to symbol', mappedSymbol);
       } else {
-        console.error('❌ Coin ID not found in mapping:', coinId);
+        console.error("Coin ID not found in mapping:", coinId);
         return NextResponse.json(
           { 
             error: `Coin with ID ${coinId} not supported`,
@@ -89,7 +83,6 @@ export async function GET(request: Request) {
 
     // Build API URL
     const apiUrl = `${BASE_URL}/futures/open-interest/aggregated-history?symbol=${symbol}&interval=${interval}&unit=${unit}&limit=${limit}`;
-    console.log('🌐 Calling CoinGlass API:', apiUrl);
 
     // Make API request
     const response = await fetch(apiUrl, {
@@ -99,11 +92,9 @@ export async function GET(request: Request) {
       },
     });
 
-    console.log('📡 CoinGlass response status:', response.status);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ CoinGlass API error:', response.status, errorText);
+      console.error("CoinGlass API error:", response.status, errorText);
       return NextResponse.json(
         { 
           error: `CoinGlass API error: ${response.status}`,
@@ -115,17 +106,12 @@ export async function GET(request: Request) {
     }
 
     const data = await response.json();
-    console.log('📊 CoinGlass response:', { 
-      code: data.code, 
-      msg: data.msg,
-      dataLength: data.data?.length 
-    });
 
     // Validate response
     const validatedData = CoinglassOpenInterestResponseSchema.parse(data);
 
     if (validatedData.code !== "0") {
-      console.error('❌ CoinGlass API returned error:', validatedData.msg);
+      console.error("CoinGlass API returned error:", validatedData.msg);
       return NextResponse.json(
         { 
           error: `CoinGlass API error: ${validatedData.msg || 'Unknown error'}`,
@@ -144,8 +130,6 @@ export async function GET(request: Request) {
       close: typeof item.close === 'string' ? parseFloat(item.close) : item.close,
     }));
 
-    console.log('✅ Successfully processed', transformedData.length, 'data points');
-
     return NextResponse.json({
       success: true,
       data: transformedData,
@@ -159,8 +143,7 @@ export async function GET(request: Request) {
     });
 
   } catch (error) {
-    console.error('❌ Open Interest Route Error:', error);
-    console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error("Open interest route error:", error);
     
     return NextResponse.json(
       { 

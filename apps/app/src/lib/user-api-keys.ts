@@ -1,9 +1,28 @@
 import { decryptValue } from "@/lib/encryption";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/../convex/_generated/api";
+import { cache } from "react";
 
 // Initialize Convex client for server-side usage
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+
+function getServerToken(): string {
+  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
+  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured");
+  return token;
+}
+
+const getActiveApiKeyCached = cache(async (clerkId: string, provider: string) => {
+  return await convex.query(api.apiKeys.getActiveApiKey, {
+    serverToken: getServerToken(),
+    clerkId,
+    provider,
+  });
+});
+
+const decryptValueCached = cache(async (encryptedKey: string) => {
+  return await decryptValue(encryptedKey);
+});
 
 export interface UserApiKeyResult {
   key: string | null;
@@ -26,18 +45,16 @@ export async function getUserApiKey(
   // Try to get user's API key if they're authenticated
   if (clerkId) {
     try {
-      const userApiKey = await convex.query(api.apiKeys.getActiveApiKey, {
-        clerkId,
-        provider,
-      });
+      const userApiKey = await getActiveApiKeyCached(clerkId, provider);
 
       if (userApiKey && userApiKey.encryptedKey) {
         try {
-          userKey = await decryptValue(userApiKey.encryptedKey);
+          userKey = await decryptValueCached(userApiKey.encryptedKey);
           isUserKey = true;
           
           // Update usage stats (fire and forget)
           convex.mutation(api.apiKeys.updateApiKeyStats, {
+            serverToken: getServerToken(),
             keyId: userApiKey._id,
             usageCount: (userApiKey.usageCount || 0) + 1,
             lastValidated: Date.now(),
@@ -118,13 +135,11 @@ export async function updateUserApiKeyRateLimit(
   if (!clerkId) return;
   
   try {
-    const userApiKey = await convex.query(api.apiKeys.getActiveApiKey, {
-      clerkId,
-      provider,
-    });
+    const userApiKey = await getActiveApiKeyCached(clerkId, provider);
 
     if (userApiKey) {
       await convex.mutation(api.apiKeys.updateApiKeyStats, {
+        serverToken: getServerToken(),
         keyId: userApiKey._id,
         rateLimitRemaining,
         rateLimitReset,
@@ -146,13 +161,11 @@ export async function reportApiKeyError(
   if (!clerkId) return;
   
   try {
-    const userApiKey = await convex.query(api.apiKeys.getActiveApiKey, {
-      clerkId,
-      provider,
-    });
+    const userApiKey = await getActiveApiKeyCached(clerkId, provider);
 
     if (userApiKey) {
       await convex.mutation(api.apiKeys.updateApiKeyStats, {
+        serverToken: getServerToken(),
         keyId: userApiKey._id,
         validationError: error,
       });

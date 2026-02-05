@@ -14,26 +14,29 @@ import {
   getFilteredRowModel,
   type SortingState,
 } from '@tanstack/react-table'
+import type React from 'react'
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from "next/navigation"
 import { Spinner } from "@v1/ui/spinner"
 import { WatchlistsGrid } from "./watchlists-grid"
-import { WatchlistTable } from "./watchlist-table"
+import { ChartsClient } from "../../charts/_components/chart-client"
 import { matchesShortcut, GLOBAL_SHORTCUTS } from "@/lib/keyboard-shortcuts"
 import { useWatchlistData } from "@/hooks/use-watchlist-data"
 import { useWatchlistSelection } from "@/hooks/use-watchlist-selection"
+import type { CoinMarketData } from "@/types/coins"
 import { Button } from "@v1/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@v1/ui/tabs'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@v1/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@v1/ui/tooltip'
 import { 
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@v1/ui/popover'
-import { IconStarFill, IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmarkFill } from 'symbols-react'
+import { IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmarkFill } from 'symbols-react'
 import { CreateWatchlist } from './create-watchlist'
 import { Kbd } from "@v1/ui/kbd"
-import { COLOR_THEMES } from "@/components/color-picker"
+import { useLatest } from "@/hooks/use-latest"
+import { useReducedMotion } from "motion/react"
 
 interface WatchlistProps {
   activeTimeScale?: string;
@@ -42,21 +45,93 @@ interface WatchlistProps {
   onGridViewModeChange?: (mode: 'grid' | 'chart') => void;
   contentMode?: 'cards' | 'table';
   onContentModeChange?: (mode: 'cards' | 'table') => void;
+  onInlineChartError?: () => void;
 }
 
-export function Watchlist({ 
+interface WatchlistTableSectionProps {
+  coins: Array<CoinMarketData>;
+  sorting: SortingState;
+  onSortingChange: React.Dispatch<React.SetStateAction<SortingState>>;
+  selectedCoins: Set<string>;
+  watchlistGroup: string | null;
+  removingCoins: Set<string>;
+  hasSelectedCoins: boolean;
+  onRemove: (coinId: number | string) => Promise<void>;
+  onCoinSelect: (coinId: string, selected: boolean) => void;
+  onSelectAll: (checked: boolean, coinIds?: string[]) => void;
+  onInlineChartError?: () => void;
+}
+
+function WatchlistTableSection({
+  coins,
+  sorting,
+  onSortingChange,
+  selectedCoins,
+  watchlistGroup,
+  removingCoins,
+  hasSelectedCoins,
+  onRemove,
+  onCoinSelect,
+  onSelectAll,
+  onInlineChartError,
+}: WatchlistTableSectionProps) {
+  const shouldReduceMotion = useReducedMotion()
+  const selectedCoinsRef = useLatest(selectedCoins)
+  const removingCoinsRef = useLatest(removingCoins)
+  const hasSelectedCoinsRef = useLatest(hasSelectedCoins)
+
+  // Stable wrapper to keep column defs focused and avoid re-creating work in parent.
+  const handleSelectAllWrapper = useCallback((checked: boolean) => {
+    const coinIds = checked ? coins.map(coin => coin.id.toString()) : [];
+    onSelectAll(checked, coinIds);
+  }, [coins, onSelectAll]);
+
+  const columns = useMemo(() => createWatchlistColumns({
+    handleRemove: onRemove,
+    selectedCoinsRef,
+    onCoinSelect,
+    onSelectAll: handleSelectAllWrapper,
+    totalCoins: coins.length,
+    removingCoinsRef,
+    hasSelectedCoinsRef,
+    shouldReduceMotion: shouldReduceMotion ?? false,
+    onInlineChartError,
+  }), [onRemove, onCoinSelect, handleSelectAllWrapper, coins.length, shouldReduceMotion, onInlineChartError]);
+
+  const table = useReactTable({
+    data: coins,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    onSortingChange,
+    state: { sorting },
+  })
+
+  return (
+    <WatchlistTableBody
+      table={table}
+      selectedCoins={selectedCoins}
+      watchlistGroup={watchlistGroup}
+      onCoinSelect={onCoinSelect}
+    />
+  )
+}
+
+export function Watchlist({
   activeTimeScale = '7d',
   onTimeScaleChange,
   gridViewMode = 'grid',
   onGridViewModeChange,
   contentMode = 'cards',
-  onContentModeChange
+  onContentModeChange,
+  onInlineChartError,
 }: WatchlistProps) {
-  const { 
+  const {
     // Legacy for backward compatibility
-    watchlist, 
-    removeFromWatchlist, 
-    removeBulkFromWatchlist, 
+    watchlist,
+    removeFromWatchlist,
+    removeBulkFromWatchlist,
     isInitialized,
     // New group functionality
     selectedGroup,
@@ -66,6 +141,7 @@ export function Watchlist({
     removeBulkFromSelectedGroup,
     watchlistGroups
   } = useWatchlist()
+
   
   const searchParams = useSearchParams()
   const [sorting, setSorting] = useState<SortingState>([])
@@ -90,8 +166,6 @@ export function Watchlist({
   const {
     selectedCoins,
     removingCoins,
-    hoveredRowId,
-    setHoveredRowId,
     handleRemove,
     handleCoinSelect,
     handleSelectAll,
@@ -105,106 +179,65 @@ export function Watchlist({
     removeBulkFromWatchlist,
   });
 
-  // Keyboard shortcuts handler - Memoize the handler to avoid recreating the event listener
-  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+  const contentModeRef = useLatest(contentMode)
+  const onGridViewModeChangeRef = useLatest(onGridViewModeChange)
+  const onContentModeChangeRef = useLatest(onContentModeChange)
+
+  // Keyboard shortcuts handler (stable subscription, latest state via refs)
+  useEffect(() => {
+    const addTokenShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'focusAddToken')
+
+    const handleKeyDown = (event: KeyboardEvent) => {
       // Ignore if typing in an input or textarea
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
         return;
       }
 
-      // Get the add token shortcut
-      const addTokenShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'focusAddToken')
-      
       if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
         event.preventDefault()
         coinSearchRef.current?.open()
-      return;
-    }
-
-    if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      event.preventDefault()
-      onContentModeChange?.('cards')
-      return;
-    }
-
-    // "]" key for Table mode  
-    if (event.key === ']' && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      event.preventDefault()
-      onContentModeChange?.('table')
-      return;
-    }
-
-    // Watchlist mode shortcuts (only work in cards mode)
-    if (contentMode === 'cards') {
-      // "w" key for Watchlist mode
-      if (event.key.toLowerCase() === 'w' && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        event.preventDefault()
-        onGridViewModeChange?.('grid')
         return;
       }
 
-      // "c" key for Comparison mode  
-      if (event.key.toLowerCase() === 'e' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault()
-        onGridViewModeChange?.('chart')
+        onContentModeChangeRef.current?.('cards')
         return;
       }
-    }
-  }, [contentMode, onGridViewModeChange, onContentModeChange])
 
-  useEffect(() => {
+      // "]" key for Table mode  
+      if (event.key === ']' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault()
+        onContentModeChangeRef.current?.('table')
+        return;
+      }
+
+      // Watchlist mode shortcuts (only work in cards mode)
+      if (contentModeRef.current === 'cards') {
+        // "w" key for Watchlist mode
+        if (event.key.toLowerCase() === 'w' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          event.preventDefault()
+          onGridViewModeChangeRef.current?.('grid')
+          return;
+        }
+
+        // "e" key for Comparison mode  
+        if (event.key.toLowerCase() === 'e' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          event.preventDefault()
+          onGridViewModeChangeRef.current?.('chart')
+          return;
+        }
+      }
+    }
+
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [handleKeyDown])
+  }, [])
 
-  // Create a stable handleSelectAll wrapper to avoid column recreations
   const handleSelectAllWrapper = useCallback((checked: boolean) => {
     const coinIds = checked ? filteredCoins.map(coin => coin.id.toString()) : [];
     handleSelectAll(checked, coinIds);
   }, [filteredCoins, handleSelectAll]);
-
-  // Calculate counter for toggle button
-  const toggleCounter = useMemo(() => {
-    if (contentMode === 'table') {
-      // Show number of available watchlists
-      return watchlistGroups.length;
-    } else {
-      // Show number of tokens in selected watchlist
-      return filteredCoins.length;
-    }
-  }, [contentMode, watchlistGroups.length, filteredCoins.length]);
-
-  // Get the selected group's color theme for the counter badge
-  const selectedGroupColorTheme = useMemo(() => {
-    const groupWithColor = selectedGroup as { color?: string } | null;
-    const groupColor = groupWithColor?.color;
-    if (!groupColor) {
-      return COLOR_THEMES.default;
-    }
-    return COLOR_THEMES[groupColor as keyof typeof COLOR_THEMES] || COLOR_THEMES.default;
-  }, [selectedGroup]);
-
-  // Memoize columns with hover state - Split dependencies to reduce recalculations
-  const columns = useMemo(() => createWatchlistColumns({
-    handleRemove, 
-    selectedCoins, 
-    onCoinSelect: handleCoinSelect, 
-    onSelectAll: handleSelectAllWrapper, 
-    totalCoins: filteredCoins.length,
-    removingCoins,
-    hoveredRowId,
-    hasSelectedCoins
-  }), [handleRemove, selectedCoins, handleCoinSelect, handleSelectAllWrapper, filteredCoins.length, removingCoins, hoveredRowId, hasSelectedCoins]);
-
-  const table = useReactTable({
-    data: filteredCoins,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    onSortingChange: setSorting,
-    state: { sorting },
-  })
 
   // Handle errors
   if (error) {
@@ -225,10 +258,9 @@ export function Watchlist({
   }
 
   return (
-    <TooltipProvider>
     <div className="space-y-6 px-4">
         {/* Unified Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between py-1">
           {/* Left side - Tabs in cards mode, Filters in table mode */}
           {contentMode === 'cards' ? (
             <div className="flex items-center gap-4">          
@@ -238,18 +270,18 @@ export function Watchlist({
               }}>
                 <Tooltip>
                 <TooltipTrigger asChild>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="grid" className="flex items-center gap-2" title="Switch to Watchlists (W)">
-                    <IconStarFill className="h-4 w-4 fill-muted-foreground" />
+                <TabsList className="grid w-full grid-cols-2 p-0.5">
+                  <TabsTrigger value="grid" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Watchlists (W)">
+                    <IconBookmarkFill className="size-3 fill-muted-foreground" />
                     Watchlists
                   </TabsTrigger>
-                  <TabsTrigger value="chart" className="flex items-center gap-2" title="Switch to Comparison (C)">
-                    <IconCircleDottedAndCircle className="h-4 w-4 fill-muted-foreground" />
+                  <TabsTrigger value="chart" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Comparison (C)">
+                    <IconCircleDottedAndCircle className="size-4 fill-muted-foreground" />
                     Comparison
                   </TabsTrigger>
                 </TabsList>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" align="start" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+                <TooltipContent side="right" align="center" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
                   <span>Switch between Watchlists and Comparison</span>
                   <Kbd>W</Kbd>
                   <span>or</span>
@@ -287,33 +319,28 @@ export function Watchlist({
         )}
         
         {/* Right side - Action buttons and shortcuts */}
-        <div className="flex items-center justify-between gap-4 flex-1">
-          <div className="flex items-center gap-2"></div>
+      <div className="flex items-center justify-between gap-4 flex-1 py-1">
+          <div className="flex items-center gap-2" />
           {/* Action buttons - right side */}
           <div className="flex items-center gap-2">
-                        {/* Content Mode Toggle */}
-                        {gridViewMode !== 'chart' && (
+            {/* Content Mode Toggle */}
+            {gridViewMode !== 'chart' && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => onContentModeChange?.(contentMode === 'cards' ? 'table' : 'cards')}
-                    className={`group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80 relative border-2 border-opacity-50 ${selectedGroupColorTheme.border}`}
+                    className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80"
                   >
                     {contentMode === 'cards' ? (
                       <IconRectangleGrid2x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
                     ) : (
                       <IconRectangleGrid1x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
                     )}
-                    {/* Counter Badge */}
-                    <span className={`absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full text-[10px] font-bold flex items-center justify-center leading-none font-diatype-mono shadow-md text-white
-                    ${selectedGroupColorTheme.bg}`}>
-                      {toggleCounter}
-                    </span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" align="end" className="flex items-center gap-2 p-1 pl-2 rounded-md">
+                <TooltipContent side="left" align="center" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
                   <span>Switch between Grid and List</span>
                     <Kbd>[</Kbd>
                     <span>/</span>
@@ -329,7 +356,7 @@ export function Watchlist({
                   size="sm"
                   className="h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
                 >
-                  <IconEllipsis className="h-4 w-4 fill-muted-foreground rotate-90" />
+                  <IconEllipsis className="size-3.5 fill-muted-foreground rotate-90" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-64 p-1 rounded-xl bg-white dark:bg-zinc-900" align="end" side="bottom">
@@ -378,7 +405,10 @@ export function Watchlist({
         <Tabs value={gridViewMode}>
           <TabsContent value="grid" className="mt-0">
             <WatchlistsGrid 
-              onSelectWatchlist={selectWatchlistGroup}
+              onSelectWatchlist={(group) => {
+                selectWatchlistGroup(group)
+                onGridViewModeChange?.('chart')
+              }}
               viewMode="grid"
               activeTimeScale={activeTimeScale}
               onTimeScaleChange={onTimeScaleChange}
@@ -387,17 +417,8 @@ export function Watchlist({
           </TabsContent>
 
           <TabsContent value="chart" className="mt-0">
-            {/* Comparison Mode */}
-            <div className="space-y-4">
-              <WatchlistsGrid 
-                onSelectWatchlist={selectWatchlistGroup}
-                viewMode="chart"
-                activeTimeScale={activeTimeScale}
-                onTimeScaleChange={onTimeScaleChange}
-                onViewModeChange={onGridViewModeChange}
-              />
-              <WatchlistTable activeTimeScale={activeTimeScale} />
-            </div>
+            {/* Comparison Mode - Shows individual coin charts for selected watchlist */}
+            <ChartsClient />
           </TabsContent>
         </Tabs>
       ) : (
@@ -409,13 +430,18 @@ export function Watchlist({
           ) : filteredCoins.length === 0 ? (
             <WatchlistEmptyState type="no-filtered-coins" onClearFilters={handleClearAllFilters} />
           ) : (
-            <WatchlistTableBody
-              table={table}
+            <WatchlistTableSection
+              coins={filteredCoins}
+              sorting={sorting}
+              onSortingChange={setSorting}
               selectedCoins={selectedCoins}
               watchlistGroup={watchlistGroup}
-              hoveredRowId={hoveredRowId}
+              removingCoins={removingCoins}
+              hasSelectedCoins={hasSelectedCoins}
+              onRemove={handleRemove}
               onCoinSelect={handleCoinSelect}
-              onSetHover={setHoveredRowId}
+              onSelectAll={handleSelectAll}
+              onInlineChartError={onInlineChartError}
             />
           )}
         </div>
@@ -432,6 +458,5 @@ export function Watchlist({
           <CoinSearch ref={coinSearchRef} />
         </div>
     </div>
-    </TooltipProvider>
   )
 }

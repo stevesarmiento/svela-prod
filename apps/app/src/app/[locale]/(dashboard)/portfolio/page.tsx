@@ -1,5 +1,7 @@
 import { Metadata } from "next";
 import { StandardWalletDemo } from "./_components/wallet-connector";
+import { notFound } from 'next/navigation';
+import { isAlphaFeaturesEnabled } from '@/lib/feature-flags';
 
 export const metadata: Metadata = {
   title: "Portfolio - Svela",
@@ -7,6 +9,10 @@ export const metadata: Metadata = {
 };
 
 export default function PortfolioPage() {
+  if (!isAlphaFeaturesEnabled()) {
+    notFound();
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-6">

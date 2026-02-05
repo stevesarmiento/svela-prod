@@ -1,11 +1,13 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
-import { createChart, ColorType, CrosshairMode, LineStyle, LineSeries, ISeriesApi, IChartApi, Time } from 'lightweight-charts'
+import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
 import { calculateBollingerBands, type BollingerBandsConfig } from '@/hooks/market-vision/bollinger-bands'
 import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { cn } from '@v1/ui/cn'
+import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
+import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 
 interface BollingerBandsDisplaySettings {
   showIndicator: boolean
@@ -85,6 +87,7 @@ export function BollingerBandsChart({
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRefs = useRef<Map<string, ISeriesApi<'Line' | 'Area'>>>(new Map())
+  const lightweightChartsRef = useRef<LightweightChartsModule | null>(null)
 
   // State for controlling visibility of each component
   const [displaySettings, setDisplaySettings] = useState<BollingerBandsDisplaySettings>({
@@ -117,64 +120,101 @@ export function BollingerBandsChart({
     const hasActiveIndicators = Object.values(displaySettings).some(Boolean)
     if (!hasActiveIndicators) return
 
+    let isCancelled = false
+    let cleanup: (() => void) | null = null
+
     // Capture the current seriesRefs for cleanup
     const currentSeriesRefs = seriesRefs.current
 
-    const chart = createChart(chartContainerRef.current, {
-      handleScale: true,
-      handleScroll: true,
-      layout: {
-        background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#ffffff50",
-        attributionLogo: false,
-      },
-      grid: {
-        vertLines: { visible: false },
-        horzLines: { visible: false, color: "#f5f5f510", style: LineStyle.Dotted },
-      },
-      rightPriceScale: { 
-        borderVisible: false, 
-        autoScale: true,
-        scaleMargins: { top: 0.1, bottom: 0.1 }
-      },
-      crosshair: {
-        mode: CrosshairMode.Magnet,
-        vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
-        horzLine: { visible: false, labelVisible: false },
-      },
-      timeScale: { 
-        visible: showTimeAxis,
-        timeVisible: showTimeAxis,
-        secondsVisible: false,
-        borderVisible: false 
-      },
-    })
+    void (async () => {
+      const lightweightCharts = await loadLightweightCharts()
+      lightweightChartsRef.current = lightweightCharts
 
-    chartRef.current = chart
+      const { createChart, ColorType, CrosshairMode, LineStyle } = lightweightCharts
 
-    const handleResize = () => {
-      if (chartContainerRef.current && chart) {
-        chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: height,
-        })
+      if (isCancelled || !chartContainerRef.current) return
+
+      const chart = createChart(chartContainerRef.current, {
+        handleScale: true,
+        handleScroll: true,
+        layout: {
+          background: { type: ColorType.Solid, color: "transparent" },
+          textColor: "#ffffff50",
+          attributionLogo: false,
+        },
+        grid: {
+          vertLines: { visible: false },
+          horzLines: { visible: false, color: "#f5f5f510", style: LineStyle.Dotted },
+        },
+        rightPriceScale: { 
+          borderVisible: false, 
+          autoScale: true,
+          scaleMargins: { top: 0.1, bottom: 0.1 }
+        },
+        crosshair: {
+          mode: CrosshairMode.Magnet,
+          vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
+          horzLine: { visible: false, labelVisible: false },
+        },
+        timeScale: { 
+          visible: showTimeAxis,
+          timeVisible: showTimeAxis,
+          secondsVisible: false,
+          borderVisible: false 
+        },
+      })
+
+      chartRef.current = chart
+
+      const handleResize = () => {
+        if (chartContainerRef.current && chart) {
+          chart.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+            height: height,
+          })
+        }
       }
-    }
 
-    window.addEventListener("resize", handleResize)
-    handleResize()
+      // Prefer observing the actual container size (avoids per-chart global resize listeners).
+      let resizeObserver: ResizeObserver | null = null
+      let resizeRafId: number | null = null
+      let unsubscribeWindowResize: (() => void) | null = null
+
+      if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeRafId) cancelAnimationFrame(resizeRafId)
+          resizeRafId = requestAnimationFrame(() => handleResize())
+        })
+        resizeObserver.observe(chartContainerRef.current)
+      } else {
+        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
+      }
+
+      handleResize()
+
+      cleanup = () => {
+        if (resizeRafId) cancelAnimationFrame(resizeRafId)
+        resizeObserver?.disconnect()
+        unsubscribeWindowResize?.()
+        chart.remove()
+        chartRef.current = null
+        currentSeriesRefs.clear()
+      }
+    })()
 
     return () => {
-      window.removeEventListener("resize", handleResize)
-      chart.remove()
-      chartRef.current = null
-      currentSeriesRefs.clear()
+      isCancelled = true
+      cleanup?.()
     }
   }, [height, showTimeAxis, displaySettings])
 
   // Update series based on calculations and display settings
   useEffect(() => {
     if (!chartRef.current || !bbResult) return
+
+    const lightweightCharts = lightweightChartsRef.current
+    if (!lightweightCharts) return
+    const { LineSeries, LineStyle } = lightweightCharts
 
     const chart = chartRef.current
     

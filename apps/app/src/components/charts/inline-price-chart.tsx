@@ -1,22 +1,36 @@
 'use client'
 
-import { useMemo, useEffect, useRef } from 'react'
+import { useMemo, useRef } from "react"
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
-import { LineSeries, LastPriceAnimationMode, ColorType, type IChartApi } from 'lightweight-charts'
+import type { IChartApi } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
+import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
+import { Effect, Schema } from "effect"
+import { useEffectScoped } from "@/lib/effect/react"
 
 interface InlinePriceChartProps {
   coingeckoId: string // CoinGecko ID to fetch real data
   percentChange24h: number // For color determination
   symbol?: string // For debugging
   initialData: CoinMarketData['quote']['USD'] // Required for useCoinGeckoChartData
+  onError?: () => void
 }
+
+class InlinePriceChartInitError extends Schema.TaggedError<InlinePriceChartInitError>()(
+  "InlinePriceChartInitError",
+  {
+    message: Schema.String,
+    coingeckoId: Schema.String,
+    symbol: Schema.String,
+  },
+) {}
 
 export function InlinePriceChart({ 
   coingeckoId,
   percentChange24h,
   symbol = '',
-  initialData
+  initialData,
+  onError,
 }: InlinePriceChartProps) {
   const isPositive = percentChange24h >= 0
 
@@ -30,7 +44,6 @@ export function InlinePriceChart({
   // Filter and prepare chart data
   const validChartData = useMemo(() => {
     if (!chartData || chartData.length === 0) {
-      console.log(`📊 InlineChart (${symbol}): No chart data`, { coingeckoId, isLoading })
       return []
     }
 
@@ -39,15 +52,8 @@ export function InlinePriceChart({
       typeof point.time === 'number' && 
       typeof point.value === 'number' && 
       point.value > 0 &&
-      !isNaN(point.value)
+      !Number.isNaN(point.value)
     )
-
-    console.log(`✅ InlineChart (${symbol}): Data ready`, { 
-      coingeckoId, 
-      points: filtered.length,
-      dataSource: performance.dataSource,
-      cached: performance.cached 
-    })
 
     return filtered
   }, [chartData, symbol, coingeckoId, isLoading, performance])
@@ -65,83 +71,111 @@ export function InlinePriceChart({
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
 
-  // Create chart when data is available (same timing as useChartInstance)
-  useEffect(() => {
-    if (!chartContainerRef.current || validChartData.length === 0) {
-      console.log(`📊 InlineChart (${symbol}): Waiting for data`, { 
-        hasContainer: !!chartContainerRef.current, 
-        dataLength: validChartData.length 
-      })
-      return
-    }
+  useEffectScoped(
+    () => {
+      const container = chartContainerRef.current
+      if (!container || validChartData.length === 0) return Effect.void
 
-    console.log(`📊 InlineChart (${symbol}): Creating chart with data`, { 
-      dataLength: validChartData.length 
-    })
+      return Effect.acquireRelease(
+        Effect.gen(function* () {
+          if (!container.isConnected) {
+            yield* Effect.sync(() => onError?.())
+            return null
+          }
 
-    // Import createChart dynamically to avoid SSR issues
-    import('lightweight-charts').then(({ createChart }) => {
-      try {
-        // Clean up existing chart
-        if (chartRef.current) {
-          chartRef.current.remove()
-          chartRef.current = null
-        }
+          // Clean up any previous instance before creating a new one.
+          yield* Effect.sync(() => {
+            if (!chartRef.current) return
+            try {
+              chartRef.current.remove()
+            } catch {
+              // Ignore cleanup errors
+            }
+            chartRef.current = null
+          })
 
-        const chart = createChart(chartContainerRef.current!, {
-          height: 32,
-          layout: {
-            background: { type: ColorType.Solid, color: 'transparent' },
-            textColor: 'transparent',
-            attributionLogo: false,
-          },
-          grid: {
-            vertLines: { visible: false },
-            horzLines: { visible: false },
-          },
-          rightPriceScale: { visible: false },
-          timeScale: { visible: false },
-          crosshair: {
-            mode: 0, // Normal mode
-            vertLine: { visible: false },
-            horzLine: { visible: false },
-          },
-          handleScroll: false,
-          handleScale: false,
-        })
+          const { createChart, LineSeries, ColorType, LastPriceAnimationMode } =
+            yield* Effect.tryPromise({
+              try: () => loadLightweightCharts(),
+              catch: (error) =>
+                new InlinePriceChartInitError({
+                  message: String(error),
+                  coingeckoId,
+                  symbol,
+                }),
+            })
 
-        chartRef.current = chart
+          const chart = yield* Effect.try({
+            try: () =>
+              createChart(container, {
+                height: 32,
+                layout: {
+                  background: { type: ColorType.Solid, color: "transparent" },
+                  textColor: "transparent",
+                  attributionLogo: false,
+                },
+                grid: {
+                  vertLines: { visible: false },
+                  horzLines: { visible: false },
+                },
+                rightPriceScale: { visible: false },
+                timeScale: { visible: false },
+                crosshair: {
+                  mode: 0, // Normal mode
+                  vertLine: { visible: false },
+                  horzLine: { visible: false },
+                },
+                handleScroll: false,
+                handleScale: false,
+              }),
+            catch: (error) =>
+              new InlinePriceChartInitError({
+                message: String(error),
+                coingeckoId,
+                symbol,
+              }),
+          })
 
-        const lineSeries = chart.addSeries(LineSeries, {
-          lineWidth: 2,
-          lastValueVisible: false,
-          visible: true,
-          priceLineVisible: false,
-          color: isPositive ? '#10b981' : '#ef4444',
-          lastPriceAnimation: LastPriceAnimationMode.Continuous,
-        })
-        
-        lineSeries.setData(validChartData)
-        chart.timeScale().fitContent()
-        
-        console.log(`✅ InlineChart (${symbol}): Chart created and data set successfully`)
-      } catch {
-        console.error(`❌ InlineChart (${symbol}): Error creating chart`)
-      }
-    })
+          chartRef.current = chart
 
-    // Cleanup function
-    return () => {
-      if (chartRef.current) {
-        try {
-          chartRef.current.remove()
-          chartRef.current = null
-        } catch {
-          // Ignore cleanup errors
-        }
-      }
-    }
-  }, [validChartData, isPositive, symbol])
+          const lineSeries = chart.addSeries(LineSeries, {
+            lineWidth: 2,
+            lastValueVisible: false,
+            visible: true,
+            priceLineVisible: false,
+            color: isPositive ? "#10b981" : "#ef4444",
+            lastPriceAnimation: LastPriceAnimationMode.Continuous,
+          })
+
+          lineSeries.setData(validChartData)
+          chart.timeScale().fitContent()
+
+          return chart
+        }),
+        (chart) =>
+          Effect.sync(() => {
+            if (!chart) return
+            try {
+              chart.remove()
+            } catch {
+              // Ignore cleanup errors
+            }
+            chartRef.current = null
+          }),
+      ).pipe(
+        Effect.flatMap((chart) => (chart ? Effect.never : Effect.void)),
+        Effect.catchTag("InlinePriceChartInitError", (error) =>
+          Effect.log("InlinePriceChart failed to create chart", {
+            coingeckoId,
+            symbol,
+            message: error.message,
+          }).pipe(Effect.zipRight(Effect.sync(() => onError?.()))),
+        ),
+        Effect.asVoid,
+      )
+    },
+    [validChartData, isPositive, symbol],
+  )
 
   // Show loading skeleton while fetching data
   if (isLoading || validChartData.length === 0) {
@@ -151,7 +185,7 @@ export function InlinePriceChart({
         title={`${symbol} ${isLoading ? 'loading data...' : 'no data available'}`}
       >
         {isLoading ? (
-          <div className="w-48 h-5 bg-gray-200/60 dark:bg-zinc-700/40 rounded-sm animate-pulse" />
+          <div className="w-48 h-5 bg-gray-200/60 dark:bg-zinc-700/40 rounded-sm animate-pulse motion-reduce:animate-none" />
         ) : (
           <div className="text-xs text-muted-foreground">No data</div>
         )}

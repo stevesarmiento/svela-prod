@@ -27,8 +27,9 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     marketCapRange: [0, 10000000000000],
     volumeRange: [0, 1000000000],
     changeFilter: "all",
-    sortBy: "name",
-    sortOrder: "asc",
+    // Default sort: highest volume first
+    sortBy: "volume",
+    sortOrder: "desc",
   })
 
   const { 
@@ -68,10 +69,16 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
   const filteredCoins = useMemo(() => {
     if (!optimisticCoins.length) return [];
     
+    const searchLower = filters.searchText ? filters.searchText.toLowerCase() : null
+
     const filtered = optimisticCoins.filter(coin => {
+      const usd = coin.quote.USD
+      const price = usd.price
+      const marketCap = usd.market_cap
+      const change24h = usd.percent_change_24h
+
       // Search filter
-      if (filters.searchText) {
-        const searchLower = filters.searchText.toLowerCase();
+      if (searchLower) {
         if (!coin.name.toLowerCase().includes(searchLower) && 
             !coin.symbol.toLowerCase().includes(searchLower)) {
           return false;
@@ -79,22 +86,20 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       }
       
       // Price range filter
-      if (coin.quote.USD.price < filters.priceRange[0] || 
-          coin.quote.USD.price > filters.priceRange[1]) {
+      if (price < filters.priceRange[0] || price > filters.priceRange[1]) {
         return false;
       }
       
       // Market cap range filter
-      if (coin.quote.USD.market_cap < filters.marketCapRange[0] || 
-          coin.quote.USD.market_cap > filters.marketCapRange[1]) {
+      if (marketCap < filters.marketCapRange[0] || marketCap > filters.marketCapRange[1]) {
         return false;
       }
       
       // 24h change filter
-      if (filters.changeFilter === "positive" && coin.quote.USD.percent_change_24h <= 0) {
+      if (filters.changeFilter === "positive" && change24h <= 0) {
         return false;
       }
-      if (filters.changeFilter === "negative" && coin.quote.USD.percent_change_24h >= 0) {
+      if (filters.changeFilter === "negative" && change24h >= 0) {
         return false;
       }
       
@@ -103,24 +108,26 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     
     // Sort coins
     filtered.sort((a, b) => {
+      const aUsd = a.quote.USD
+      const bUsd = b.quote.USD
       let aValue, bValue;
       
       switch (filters.sortBy) {
         case "price":
-          aValue = a.quote.USD.price;
-          bValue = b.quote.USD.price;
+          aValue = aUsd.price;
+          bValue = bUsd.price;
           break;
         case "change":
-          aValue = a.quote.USD.percent_change_24h;
-          bValue = b.quote.USD.percent_change_24h;
+          aValue = aUsd.percent_change_24h;
+          bValue = bUsd.percent_change_24h;
           break;
         case "marketCap":
-          aValue = a.quote.USD.market_cap;
-          bValue = b.quote.USD.market_cap;
+          aValue = aUsd.market_cap;
+          bValue = bUsd.market_cap;
           break;
         case "volume":
-          aValue = a.quote.USD.volume_24h;
-          bValue = b.quote.USD.volume_24h;
+          aValue = aUsd.volume_24h;
+          bValue = bUsd.volume_24h;
           break;
         default: // "name"
           aValue = a.name.toLowerCase();
@@ -145,8 +152,9 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       marketCapRange: [0, 10000000000000],
       volumeRange: [0, 1000000000],
       changeFilter: "all",
-      sortBy: "name",
-      sortOrder: "asc",
+      // Default sort: highest volume first
+      sortBy: "volume",
+      sortOrder: "desc",
     });
   }, []);
 

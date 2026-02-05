@@ -7,6 +7,12 @@ const BASE_URL = "https://open-api-v4.coinglass.com/api";
 const API_KEY = process.env.CG_API_KEY || process.env['CG-API-KEY'];
 const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
+function getServerToken(): string {
+  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
+  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured");
+  return token;
+}
+
 // Validation schema for CoinGlass liquidation aggregated history response
 const LiquidationDataSchema = z.object({
   time: z.number(),
@@ -80,12 +86,15 @@ export async function GET(request: Request) {
     if (!isNaN(coinId)) {
       // It's a coin ID, look up the symbol
       coinInfo = await convex.query(api.coins.getCoinglassSymbolByCoinId, { 
+        serverToken: getServerToken(),
         coinId 
       });
       
       if (!coinInfo) {
         // Get list of supported coins for error message
-        const supportedCoins = await convex.query(api.coins.getCoinglassSupportedCoinsList, {});
+        const supportedCoins = await convex.query(api.coins.getCoinglassSupportedCoinsList, {
+          serverToken: getServerToken(),
+        });
         
         return NextResponse.json({
           success: false,
@@ -98,9 +107,16 @@ export async function GET(request: Request) {
       actualSymbol = coinInfo.symbol;
     } else {
       // It's a symbol, check if it's supported
-      const isSupported = await convex.query(api.coins.isCoinglassSupported, { 
-        symbol: symbolOrId.toUpperCase() 
+      const symbol = symbolOrId.toUpperCase();
+      const isSupportedPromise = convex.query(api.coins.isCoinglassSupported, {
+        serverToken: getServerToken(),
+        symbol,
       });
+      const coinPromise = convex.query(api.coins.getCoinBySymbol, {
+        serverToken: getServerToken(),
+        symbol,
+      });
+      const isSupported = await isSupportedPromise;
       
       if (!isSupported) {
         return NextResponse.json({
@@ -110,12 +126,10 @@ export async function GET(request: Request) {
         }, { status: 400 });
       }
       
-      actualSymbol = symbolOrId.toUpperCase();
+      actualSymbol = symbol;
       
       // Get coin info for response
-      const coin = await convex.query(api.coins.getCoinBySymbol, { 
-        symbol: actualSymbol 
-      });
+      const coin = await coinPromise;
       
       if (coin) {
         coinInfo = {

@@ -69,10 +69,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <Script
-          src="//unpkg.com/react-scan/dist/auto.global.js"
-          strategy="beforeInteractive"
-        />
+        {process.env.NODE_ENV === "development" ? (
+          <Script
+            src="//unpkg.com/react-scan/dist/auto.global.js"
+            strategy="beforeInteractive"
+          />
+        ) : null}
       </head>
       <body
         className={cn(

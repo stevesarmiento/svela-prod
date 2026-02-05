@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useDeferredValue } from 'react'
-import { useAuth } from '@v1/convex/hooks'
+import { useAuth } from '@/lib/convex-hooks'
 import { autoCleanupSessionMemories } from '@/lib/client-memory-utils'
 import { useChatStateSync } from './hooks/use-chat-state-sync'
 import { Button } from '@v1/ui/button'
@@ -50,7 +50,7 @@ function ChatDialogContent({ onClose }: { onClose?: () => void }) {
     return (
       <div className="flex items-center justify-center h-[400px]">
         <div className="text-center space-y-2">
-          <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full mx-auto" />
+          <div className="animate-spin motion-reduce:animate-none h-6 w-6 border-2 border-primary border-t-transparent rounded-full mx-auto" />
           <p className="text-sm text-muted-foreground">Initializing chat...</p>
         </div>
       </div>
