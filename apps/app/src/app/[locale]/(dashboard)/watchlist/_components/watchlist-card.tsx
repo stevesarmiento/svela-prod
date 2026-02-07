@@ -160,8 +160,16 @@ export function WatchlistCard({
 
   // Get aggregate chart data - using isolated CoinGecko API calls  
   const { aggregateData, isLoading: isChartLoading, performance } = useCoinGeckoWatchlistAggregateChartIsolated({
-    coins
+    coins,
+    timeScale: '1d'
   })
+
+  // Use the latest aggregate value so the displayed % matches the sparkline timeframe.
+  const latestAggregateChange = useMemo(() => {
+    return aggregateData[aggregateData.length - 1]?.value ?? 0
+  }, [aggregateData])
+
+  const isAggregatePositive = latestAggregateChange >= 0
 
   // Get color theme for this group
   const colorTheme = COLOR_THEMES[displayColor as keyof typeof COLOR_THEMES] || COLOR_THEMES.default
@@ -329,7 +337,7 @@ export function WatchlistCard({
               >
               <WatchlistAggregateChart
                 data={aggregateData}
-                isPositive={isPositive}
+                isPositive={isAggregatePositive}
                 width={0}
                 height={70}
               />
@@ -374,11 +382,11 @@ export function WatchlistCard({
                   displayColor === 'orange' ? "text-orange-300" :
                   displayColor === 'slate' ? "text-slate-300" :
                   "text-zinc-300", // default
-                  isPositive ? "opacity-100" : "opacity-100"
+                  isAggregatePositive ? "opacity-100" : "opacity-100"
                 )}>
-                  {isPositive ? "+" : "-"}
+                  {isAggregatePositive ? "+" : "-"}
                   <NumberFlow
-                    value={Math.abs(stats.averageChange)}
+                    value={Math.abs(latestAggregateChange)}
                     format={{ 
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2
