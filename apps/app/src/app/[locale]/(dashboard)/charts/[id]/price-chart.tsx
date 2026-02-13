@@ -17,6 +17,9 @@ import NumberFlow from '@/components/number-flow'
 import { useQuery as useTanStackQuery } from '@tanstack/react-query'
 import { CoinsInternalApi } from '@/lib/effect/coins-internal-api'
 import { runPromise } from '@/lib/effect/runtime-coins-internal'
+import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
+import { getUsdPriceFormatOptions } from '@/lib/format-usd'
+import type { Format } from '@/lib/number-flow/lite'
 import type { Time } from 'lightweight-charts'
 
 interface PriceChartProps {
@@ -216,19 +219,9 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
     staleTime: 10 * 60 * 1000,
   })
   
-  // Get live price data from CoinGecko API
-  const { data: livePrice, isLoading: isPriceLoading } = useTanStackQuery({
-    queryKey: ['coingecko-price', deferredCoinId],
-    queryFn: async () => {
-      const response = await fetch(`/api/coingecko/quotes?ids=${deferredCoinId}`)
-      if (!response.ok) throw new Error('Failed to fetch price')
-      const data = await response.json()
-      return data.data[deferredCoinId]
-    },
-    enabled: !!deferredCoinId,
-    staleTime: 30 * 1000, // 30 seconds
-    refetchInterval: 60 * 1000, // 1 minute
-  })
+  // Canonical quote source (shared cache across token page + tables).
+  const quoteQuery = useCoinGeckoQuote(deferredCoinId)
+  const liveQuote = quoteQuery.data
   
   // React 19: Get line chart data with OHLC data for tooltips using deferred values
   const { chartData, volumeData, ohlcData, isLoading, tokenData } = useCoinGeckoChartData(deferredCoinId, deferredTimeScale, deferredInitialData)
@@ -338,10 +331,12 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
       ? ((crosshairPrice - basePrice) / basePrice) * 100
       : null
 
-  const liveChange24h = livePrice?.price_change_percentage_24h ?? calculatePercentageChange ?? 0
-  const currentPrice = crosshairPrice ?? livePrice?.current_price ?? displayPrice ?? 0
+  const liveChange24h = liveQuote?.price_change_percentage_24h ?? calculatePercentageChange ?? 0
+  const livePrice = liveQuote?.current_price ?? deferredInitialData?.price ?? displayPrice ?? 0
+  const currentPrice = crosshairPrice ?? livePrice
   const priceChange24h = scrubPriceChange ?? liveChange24h
-  const isLoadingPrice = isPriceLoading || isLoading
+
+  const isLoadingPrice = quoteQuery.isLoading || isLoading
   const showPending = isPending || isDataPending || isLoadingPrice
   const shouldReduceMotion = useReducedMotion()
 
@@ -386,12 +381,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                     <div className="flex items-center">
                       <NumberFlow
                         value={currentPrice}
-                        format={{
-                          style: "currency",
-                          currency: "USD",
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        }}
+                        format={getUsdPriceFormatOptions(currentPrice) as Format}
                         willChange
                         className={cn(
                           "text-3xl font-bold font-sans text-gray-900 dark:text-white",

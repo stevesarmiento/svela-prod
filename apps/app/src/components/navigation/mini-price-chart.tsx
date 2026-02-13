@@ -12,6 +12,7 @@ import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
 import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 import { Effect, Schema } from "effect"
 import { useEffectScoped } from "@/lib/effect/react"
+import { formatUsdPrice } from "@/lib/format-usd"
 
 interface MiniPriceChartProps {
   coinId: string
@@ -36,10 +37,7 @@ const TooltipContent = ({ data, tokenSymbol }: { data: { time: number; price: nu
     return `$${vol.toFixed(2)}`
   }
   const formatPrice = (price: number) => {
-    return `$${price.toLocaleString('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    })}`
+    return formatUsdPrice(price)
   }
   return (
     <div className="flex flex-col gap-1 overflow-hidden">

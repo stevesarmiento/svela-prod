@@ -13,6 +13,7 @@ import { toast } from "@v1/ui/use-toast"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Spinner } from "@v1/ui/spinner"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
+import { formatUsdPrice } from "@/lib/format-usd"
 // Accept whatever data format the existing hook provides
 interface OptimisticCoinData {
   id: string | number;
@@ -292,7 +293,7 @@ export const ChartTable = memo(function ChartTable({
                   <span className="font-bold text-xs">{coin.symbol.toUpperCase()}</span>
                   <span className="text-primary/40 text-xs">price is currently</span>
                   <span className="font-diatype-mono text-xs font-semibold">
-                    ${coin.quote.USD.price.toLocaleString()}
+                    {formatUsdPrice(coin.quote.USD.price)}
                   </span>
                 </div>
 

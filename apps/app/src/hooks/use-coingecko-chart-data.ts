@@ -1,11 +1,13 @@
 'use client'
 
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
 import { Effect } from "effect"
 import { CoinGeckoApi } from "@/lib/effect/coingecko-api"
 import { runPromise } from "@/lib/effect/runtime-coingecko"
+import { useCoinGeckoQuote } from './use-coingecko-quotes'
 
 // Map time scales to optimal CoinGecko parameters
 // Strategy: ≤90 days = prefer OHLC+volume for real candlesticks, >90 days = prefer market-chart for better granularity
@@ -73,6 +75,8 @@ interface CoinGeckoChartDataResult {
     dataPoints: number
   }
 }
+
+const LATEST_POINT_UPSERT_WINDOW_SECONDS = 5 * 60
 
 /**
  * Parse OHLC data from /api/coingecko/ohlc route
@@ -252,12 +256,72 @@ function combineOHLCWithVolume(
   }
 }
 
+function toEpochSeconds(time: Time): number | null {
+  if (typeof time === 'number') return time > 1e10 ? Math.floor(time / 1000) : Math.floor(time)
+  if (typeof time === 'string') {
+    const parsed = Date.parse(time)
+    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null
+  }
+  return null
+}
+
+function upsertLatestPricePoint(parsedData: ParsedChartData, latestPrice: number, latestTimestampSeconds: number): ParsedChartData {
+  if (!Number.isFinite(latestPrice) || latestPrice <= 0) return parsedData
+
+  const lastLinePoint = parsedData.lineChart[parsedData.lineChart.length - 1]
+  const lastSeconds = lastLinePoint ? toEpochSeconds(lastLinePoint.time) : null
+  const nextTime = latestTimestampSeconds as Time
+
+  // No history yet; seed a single point with the latest quote.
+  if (parsedData.lineChart.length === 0 || lastSeconds == null) {
+    return {
+      lineChart: [{ time: nextTime, value: latestPrice }],
+      volumeChart: [{ time: nextTime, value: 0, color: '#ffffff40' }],
+      ohlcData: [{ time: nextTime, open: latestPrice, high: latestPrice, low: latestPrice, close: latestPrice }],
+    }
+  }
+
+  // If we already have a very recent bar, update it instead of appending.
+  if (Math.abs(latestTimestampSeconds - lastSeconds) <= LATEST_POINT_UPSERT_WINDOW_SECONDS) {
+    const lineChart = parsedData.lineChart.slice()
+    lineChart[lineChart.length - 1] = { time: nextTime, value: latestPrice }
+
+    const ohlcData = parsedData.ohlcData.slice()
+    if (ohlcData.length > 0) {
+      ohlcData[ohlcData.length - 1] = {
+        time: nextTime,
+        open: latestPrice,
+        high: latestPrice,
+        low: latestPrice,
+        close: latestPrice,
+      }
+    }
+
+    return {
+      lineChart,
+      volumeChart: parsedData.volumeChart,
+      ohlcData,
+    }
+  }
+
+  // Otherwise append a new point so startup always reflects the latest quote.
+  return {
+    lineChart: [...parsedData.lineChart, { time: nextTime, value: latestPrice }],
+    volumeChart: [...parsedData.volumeChart, { time: nextTime, value: 0, color: '#ffffff40' }],
+    ohlcData: [
+      ...parsedData.ohlcData,
+      { time: nextTime, open: latestPrice, high: latestPrice, low: latestPrice, close: latestPrice },
+    ],
+  }
+}
+
 export function useCoinGeckoChartData(
   coinId: string,
   activeTimeScale: string,
   initialData: CoinMarketData['quote']['USD']
 ): CoinGeckoChartDataResult {
   const config = TIMEFRAME_CONFIG[activeTimeScale as keyof typeof TIMEFRAME_CONFIG] || TIMEFRAME_CONFIG['7d']
+  const quoteQuery = useCoinGeckoQuote(coinId)
 
   // Fetch data from both routes with intelligent prioritization
   const { data: combinedData, isLoading } = useQuery({
@@ -407,17 +471,29 @@ export function useCoinGeckoChartData(
     }
   }
 
+  const dataWithLatestQuote = useMemo(() => {
+    const latestPrice = quoteQuery.data?.current_price
+    if (!latestPrice || latestPrice <= 0) return parsedData
+
+    const quoteTimeMs = quoteQuery.data?.last_updated ? Date.parse(quoteQuery.data.last_updated) : NaN
+    const latestTimestampSeconds = Number.isFinite(quoteTimeMs)
+      ? Math.floor(quoteTimeMs / 1000)
+      : Math.floor(Date.now() / 1000)
+
+    return upsertLatestPricePoint(parsedData, latestPrice, latestTimestampSeconds)
+  }, [parsedData, quoteQuery.data?.current_price, quoteQuery.data?.last_updated])
+
   return {
-    chartData: parsedData.lineChart,
-    volumeData: parsedData.volumeChart,
-    ohlcData: parsedData.ohlcData, // OHLC data for tooltip
+    chartData: dataWithLatestQuote.lineChart,
+    volumeData: dataWithLatestQuote.volumeChart,
+    ohlcData: dataWithLatestQuote.ohlcData, // OHLC data for tooltip
     isLoading,
     tokenData: null,
     performance: {
       dataSource,
       cached,
       cacheHitRate: cached ? 100 : 0,
-      dataPoints: parsedData.lineChart.length
+      dataPoints: dataWithLatestQuote.lineChart.length
     }
   }
 }

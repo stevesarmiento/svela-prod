@@ -132,8 +132,36 @@ export async function GET(request: NextRequest) {
   const program: Effect.Effect<Response, never> = Effect.gen(function* () {
     const cachedData = yield* cachedDataEffect
 
-    if (cachedData.cached && !cachedData.stale && cachedData.data.length > 0) {
-      // Return cached data in chart format
+    if (cachedData.cached && cachedData.data.length > 0) {
+      if (cachedData.stale) {
+        // Backfill missing historical points in the background while serving cached data immediately.
+        yield* Effect.sync(() => {
+          runFork(
+            fetchFreshMarketChartEffect.pipe(
+              Effect.map((marketData) =>
+                marketData.transformed.prices.map((price, index) => ({
+                  timestamp: price.time * 1000,
+                  price: price.value,
+                  volume: marketData.transformed.volumes[index]?.value || 0,
+                  marketCap: marketData.transformed.market_caps[index]?.value || 0,
+                })),
+              ),
+              Effect.flatMap((dataPoints) =>
+                CacheQueue.enqueue({
+                  coinId,
+                  timeframe,
+                  dataPoints,
+                  dataSource: "coingecko",
+                }),
+              ),
+              Effect.catchAll(() => Effect.void),
+            ),
+          )
+        })
+      }
+
+      // Return historical data from Convex whenever present.
+      // Startup should not block on refetching full history.
       return NextResponse.json(
         {
           data: {
@@ -153,10 +181,11 @@ export async function GET(request: NextRequest) {
           status: {
             timestamp: new Date().toISOString(),
             error_code: 0,
-            error_message: "",
-            data_source: "convex-cache",
+            error_message: cachedData.stale ? "Historical cache is stale; latest quote should refresh client price." : "",
+            data_source: cachedData.stale ? "convex-cache-stale" : "convex-cache",
             total_points: cachedData.dataPoints,
             cached: true,
+            stale: cachedData.stale,
           },
         },
         {

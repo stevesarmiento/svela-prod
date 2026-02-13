@@ -14,6 +14,7 @@ import type { CoinMarketData } from '@/types/coins'
 import { InlinePriceChart } from "@/components/charts/inline-price-chart"
 import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
+import { formatUsdPrice } from "@/lib/format-usd"
 
 interface Ref<T> {
   current: T;
@@ -199,7 +200,7 @@ export function createWatchlistColumns({
       cell: ({ row }) => (
         <span className="font-diatype-mono text-xs">
           {row.original.quote.USD.price > 0 ? (
-            `$${row.original.quote.USD.price.toLocaleString()}`
+            formatUsdPrice(row.original.quote.USD.price)
           ) : (
             <Skeleton className="h-4 w-16 rounded-full" />
           )}

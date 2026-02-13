@@ -21,6 +21,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { Kbd } from "@v1/ui/kbd"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
+import { formatUsdPrice } from "@/lib/format-usd"
 
 // Skeleton Components
 const CoinSearchSkeleton = ({ rowCount = 5 }: { rowCount?: number }) => (
@@ -279,7 +280,7 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                           </TableCell>
                           <TableCell className="font-diatype-mono text-xs text-white/90">
                             {coin.quote.USD.price > 0 ? (
-                              `$${coin.quote.USD.price.toLocaleString()}`
+                              formatUsdPrice(coin.quote.USD.price)
                             ) : (
                               <Skeleton className="h-4 w-16 bg-zinc-700/50" />
                             )}

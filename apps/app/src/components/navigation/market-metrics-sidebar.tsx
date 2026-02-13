@@ -21,6 +21,7 @@ import {
   IconChartLineFlattrendXyaxis
 } from 'symbols-react'
 import { formatNumber, getTrendBadgeVariant, getBuySellPressure, calculateDivergence, calculateSupportResistance } from '@/lib/analysis-utils'
+import { formatUsdPrice } from "@/lib/format-usd"
 import { MiniPriceChart } from './mini-price-chart'
 import type { Time } from 'lightweight-charts'
 
@@ -266,7 +267,7 @@ export function MarketMetricsSidebar({
           <MetricRow
             icon={<IconDollarsign className="w-3 h-3 fill-zinc-100" />}
             label="Current Price"
-            value={`$${marketData?.quote?.USD?.price?.toLocaleString() || '0.00'}`}
+            value={formatUsdPrice(marketData?.quote?.USD?.price ?? 0)}
           />
           
           <MetricRow
@@ -290,12 +291,12 @@ export function MarketMetricsSidebar({
           <MetricRow
             icon={<IconTengesign className="w-3 h-3 fill-red-500" />}
             label="Resistance (21d)"
-            value={<span className="font-diatype-mono text-xs text-red-400">${calculations.resistance.toLocaleString()}</span>}
+            value={<span className="font-diatype-mono text-xs text-red-400">{formatUsdPrice(calculations.resistance)}</span>}
           />
           <MetricRow
             icon={<IconTengesign className="w-3 h-3 fill-green-500 rotate-180" />}
             label="Support (21d)"
-            value={<span className="font-diatype-mono text-xs text-green-400">${calculations.support.toLocaleString()}</span>}
+            value={<span className="font-diatype-mono text-xs text-green-400">{formatUsdPrice(calculations.support)}</span>}
           />
         </Section>
 

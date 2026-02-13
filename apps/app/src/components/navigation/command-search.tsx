@@ -22,6 +22,7 @@ import { useHybridCoinSearch, useHybridTopCoins } from '@/hooks/use-hybrid-coin-
 import { useContextualCommands } from '@/hooks/use-contextual-commands';
 import { useAddCoinToWatchlist } from '@/hooks/use-add-coin-to-watchlist';
 import { BackgroundPattern } from './background-pattern';
+import { formatUsdPrice } from "@/lib/format-usd";
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
 
@@ -350,7 +351,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                         <div className="flex items-center gap-2">
                           <div className="text-right">
                             <div className="text-sm font-diatype-mono text-white">
-                              ${coin.quote.USD.price.toLocaleString()}
+                              {formatUsdPrice(coin.quote.USD.price)}
                             </div>
                             <div className={`text-xs font-diatype-mono ${
                               coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'
@@ -421,7 +422,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                         <div className="flex items-center gap-2">
                           <div className="text-right">
                             <div className="text-sm font-diatype-mono text-white">
-                              ${coin.quote.USD.price.toLocaleString()}
+                              {formatUsdPrice(coin.quote.USD.price)}
                             </div>
                             <div className={`text-xs font-diatype-mono ${
                               coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'

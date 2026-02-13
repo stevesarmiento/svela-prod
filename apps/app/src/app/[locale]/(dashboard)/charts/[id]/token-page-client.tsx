@@ -12,7 +12,7 @@ import { TakerBuySell } from './taker-buy-sell'
 import { MarketVisionChart } from './marketvision-chart'
 import { BollingerBandsChart } from './bollinger-bands-chart'
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
-import { useCoinGeckoMarketData } from '@/hooks/use-coingecko-market-data'
+import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
 import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
 import { useScrollThreshold } from '@/hooks/use-scroll-effect'
 
@@ -45,16 +45,24 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
     deferredTokenData.quote.USD
   )
 
-  // Get CoinGecko market data for the metrics display
-  const { marketData, isLoading: marketDataLoading, error: marketDataError } = useCoinGeckoMarketData(deferredId)
-  
-  // Debug logging
-  console.log('🔍 Token Page Debug:', {
-    id,
-    marketData,
-    marketDataLoading,
-    marketDataError
-  })
+  // Canonical quote source for headline + metrics (keeps price consistent everywhere).
+  const quoteQuery = useCoinGeckoQuote(deferredId)
+
+  const metricsData = React.useMemo(() => {
+    const quote = quoteQuery.data
+    if (!quote) return null
+
+    return {
+      current_price: quote.current_price,
+      total_volume: quote.total_volume,
+      market_cap: quote.market_cap,
+      price_change_percentage_24h: quote.price_change_percentage_24h,
+      market_cap_rank: quote.market_cap_rank,
+      circulating_supply: quote.circulating_supply ?? null,
+      max_supply: quote.max_supply ?? null,
+      symbol: quote.symbol,
+    }
+  }, [quoteQuery.data])
 
   // React 19: Enhanced time scale change handler with transition
   const handleTimeScaleChange = useCallback((scale: string) => {
@@ -80,7 +88,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
   }, [ohlcData, volumeData])
 
   // React 19: Show pending states
-  const showPending = isPending || isTransitionPending || isLoading || marketDataLoading
+  const showPending = isPending || isTransitionPending || isLoading || quoteQuery.isLoading
 
   return (
     <main className={`mx-auto py-6 px-4 relative z-10 ${showPending ? 'opacity-90 transition-opacity duration-200' : ''}`}>
@@ -98,14 +106,14 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
         </div>
         
         <div className="col-span-12">
-          {marketData ? (
-            <MarketMetrics data={marketData} isPending={showPending} />
-          ) : marketDataError ? (
+          {metricsData ? (
+            <MarketMetrics data={metricsData} isPending={showPending} />
+          ) : quoteQuery.error ? (
             <div className={`h-[120px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center ${showPending ? 'opacity-60' : ''}`}>
               <div className="text-center">
                 <p className="text-xs text-red-400 mb-2">Failed to load market data</p>
                 <p className="text-xs text-muted-foreground">ID: {deferredId}</p>
-                <p className="text-xs text-muted-foreground">Error: {marketDataError?.message}</p>
+                <p className="text-xs text-muted-foreground">Error: {quoteQuery.error?.message}</p>
               </div>
             </div>
           ) : (

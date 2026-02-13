@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useCoinGeckoQuotesBulk } from "@/hooks/use-coingecko-quotes";
 
 interface CoinSearchResult {
   coingeckoId: string;
@@ -114,30 +115,8 @@ export function useHybridCoinSearch(
     return dbSearchResults?.map(coin => coin.coingeckoId) || [];
   }, [dbSearchResults]);
 
-  const coingeckoIdsKey = useMemo(() => {
-    if (!coingeckoIds.length) return ""
-    return [...coingeckoIds].sort().join(",")
-  }, [coingeckoIds])
-
   // Step 2: Get pricing data from API for only the matched coins
-  const { data: pricingData, isLoading: isPricingLoading, error: pricingError } = useQuery({
-    queryKey: ["hybrid-pricing", coingeckoIdsKey],
-    queryFn: async (): Promise<Record<string, CoinGeckoPricingData>> => {
-      if (!coingeckoIds.length) return {};
-
-      const response = await fetch(`/api/coingecko/quotes?ids=${coingeckoIds.join(",")}`);
-      
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.data || {};
-    },
-    enabled: coingeckoIds.length > 0,
-    staleTime: 30 * 1000, // 30 seconds
-    refetchInterval: 60 * 1000, // 1 minute
-  });
+  const quotesQuery = useCoinGeckoQuotesBulk(coingeckoIds)
 
   // Step 3: Combine database static data with API pricing data
   const combinedResults = useMemo((): HybridCoinSearchResult[] => {
@@ -145,7 +124,7 @@ export function useHybridCoinSearch(
 
     return dbSearchResults
       .map(dbCoin => {
-        const pricing = pricingData?.[dbCoin.coingeckoId];
+        const pricing = quotesQuery.data?.[dbCoin.coingeckoId];
         
         return {
           id: dbCoin.coingeckoId,
@@ -157,9 +136,9 @@ export function useHybridCoinSearch(
             USD: {
               price: pricing?.current_price || 0, // From API (live price)
               percent_change_24h: pricing?.price_change_percentage_24h || 0, // From API (live)
-              percent_change_1h: pricing?.price_change_percentage_1h_in_currency, // From API (live)
-              percent_change_7d: pricing?.price_change_percentage_7d_in_currency, // From API (live)
-              percent_change_30d: pricing?.price_change_percentage_30d_in_currency, // From API (live)
+              percent_change_1h: pricing?.price_change_percentage_1h_in_currency ?? undefined, // From API (live)
+              percent_change_7d: pricing?.price_change_percentage_7d_in_currency ?? undefined, // From API (live)
+              percent_change_30d: pricing?.price_change_percentage_30d_in_currency ?? undefined, // From API (live)
               market_cap: pricing?.market_cap || 0, // From API (live)
               volume_24h: pricing?.total_volume || 0, // From API (live)
             }
@@ -185,7 +164,7 @@ export function useHybridCoinSearch(
         const rankB = b.cmc_rank || 999999;
         return rankA - rankB;
       });
-  }, [dbSearchResults, pricingData]);
+  }, [dbSearchResults, quotesQuery.data]);
 
   // Determine search type based on query characteristics
   const searchType = useMemo(() => {
@@ -207,8 +186,8 @@ export function useHybridCoinSearch(
     data: combinedResults,
     isLoading:
       (query.trim() !== "" && (isDbLoading || !dbSearchResults)) ||
-      (coingeckoIds.length > 0 && isPricingLoading),
-    error: (dbError || pricingError) as Error | null,
+      (coingeckoIds.length > 0 && quotesQuery.isLoading),
+    error: (dbError || quotesQuery.error) as Error | null,
     searchType,
     totalResults: combinedResults.length
   };
