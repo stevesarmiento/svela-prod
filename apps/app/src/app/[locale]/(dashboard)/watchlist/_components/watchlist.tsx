@@ -25,6 +25,11 @@ import { useWatchlistData } from "@/hooks/use-watchlist-data"
 import { useWatchlistSelection } from "@/hooks/use-watchlist-selection"
 import type { CoinMarketData } from "@/types/coins"
 import { Button } from "@v1/ui/button"
+import {
+  useAllWatchlistCoinIds,
+  useRemoveBulkFromAllWatchlists,
+  useRemoveFromAllWatchlists,
+} from "@/lib/convex-hooks"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@v1/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@v1/ui/tooltip'
 import { 
@@ -153,6 +158,10 @@ export function Watchlist({
   
   // Use selected group coins if available, otherwise fall back to legacy watchlist
   const currentWatchlist = selectedGroup ? selectedGroupCoins : watchlist;
+
+  const allCoinIds = useAllWatchlistCoinIds()
+  const tableCoinIds = allCoinIds ?? []
+  const watchlistForTable = contentMode === "table" ? tableCoinIds : currentWatchlist
   
   // Use extracted data and selection hooks
   const { 
@@ -161,7 +170,10 @@ export function Watchlist({
     filteredCoins,
     error,
     handleClearAllFilters,
-  } = useWatchlistData({ watchlist: currentWatchlist });
+  } = useWatchlistData({ watchlist: watchlistForTable });
+
+  const removeFromAllWatchlists = useRemoveFromAllWatchlists()
+  const removeBulkFromAllWatchlists = useRemoveBulkFromAllWatchlists()
 
   const {
     selectedCoins,
@@ -177,6 +189,9 @@ export function Watchlist({
     removeFromWatchlist,
     removeBulkFromSelectedGroup,
     removeBulkFromWatchlist,
+    removalScope: contentMode === "table" ? "everywhere" : "selectedGroupOrDefault",
+    removeFromAllWatchlists: contentMode === "table" ? removeFromAllWatchlists : undefined,
+    removeBulkFromAllWatchlists: contentMode === "table" ? removeBulkFromAllWatchlists : undefined,
   });
 
   const contentModeRef = useLatest(contentMode)
@@ -324,14 +339,13 @@ export function Watchlist({
           {/* Action buttons - right side */}
           <div className="flex items-center gap-2">
             {/* Content Mode Toggle */}
-            {gridViewMode !== 'chart' && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => onContentModeChange?.(contentMode === 'cards' ? 'table' : 'cards')}
-                    className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/80"
+                    className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
                   >
                     {contentMode === 'cards' ? (
                       <IconRectangleGrid2x2Fill className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
@@ -341,22 +355,21 @@ export function Watchlist({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="left" align="center" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
-                  <span>Switch between Grid and List</span>
+                  <span>Switch between Watchlists and Screener</span>
                     <Kbd>[</Kbd>
                     <span>/</span>
                     <Kbd>]</Kbd>
                 </TooltipContent>
               </Tooltip>
-            )}
             {/* Actions Menu */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
+                  className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
                 >
-                  <IconEllipsis className="size-3.5 fill-muted-foreground rotate-90" />
+                  <IconEllipsis className="size-3.5 fill-muted-foreground group-hover:fill-primary rotate-90" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-64 p-1 rounded-xl bg-white dark:bg-zinc-900" align="end" side="bottom">
@@ -425,7 +438,7 @@ export function Watchlist({
         /* Table Mode - Direct render without tabs, filters now in header */
         <div className="space-y-4">
           {/* Show empty state if no coins after filtering */}
-          {!watchlist.length ? (
+          {watchlistForTable.length === 0 ? (
             <WatchlistEmptyState type="no-coins" />
           ) : filteredCoins.length === 0 ? (
             <WatchlistEmptyState type="no-filtered-coins" onClearFilters={handleClearAllFilters} />

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { WatchlistApi } from "@/lib/effect/watchlist-api";
 import { runPromise } from "@/lib/effect/runtime-watchlist";
 import type { WatchlistGroup, WatchlistItem } from "@/lib/effect/watchlist-models";
+import { useCallback } from "react";
 
 interface AuthUser {
   id: string;
@@ -96,6 +97,19 @@ export function useWatchlistBySlug(slug?: string) {
   const { data } = useQuery<{ group: WatchlistGroup; items: Array<WatchlistItem> } | null>({
     queryKey: ["watchlists", "slug", slug],
     queryFn: async () => runPromise(WatchlistApi.getBySlug(String(slug))),
+    enabled,
+  });
+
+  return data;
+}
+
+export function useAllWatchlistCoinIds() {
+  const { user, isLoaded } = useUser();
+  const enabled = Boolean(isLoaded && user?.id);
+
+  const { data } = useQuery<Array<string>>({
+    queryKey: ["watchlists", "all-coin-ids"],
+    queryFn: async () => runPromise(WatchlistApi.listAllCoinIds()),
     enabled,
   });
 
@@ -226,5 +240,33 @@ export function useRemoveBulkFromWatchlist() {
 
   return (coinIds: string[], groupId?: string) =>
     mutation.mutateAsync({ coinIds, groupId });
+}
+
+export function useRemoveFromAllWatchlists() {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async (input: { coinId: string }) =>
+      runPromise(WatchlistApi.removeItemEverywhere({ coinId: input.coinId })),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
+    },
+  });
+
+  return useCallback((coinId: string) => mutation.mutateAsync({ coinId }), [mutation.mutateAsync]);
+}
+
+export function useRemoveBulkFromAllWatchlists() {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async (input: { coinIds: string[] }) =>
+      runPromise(WatchlistApi.removeItemsBulkEverywhere({ coinIds: input.coinIds })),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
+    },
+  });
+
+  return useCallback((coinIds: string[]) => mutation.mutateAsync({ coinIds }), [mutation.mutateAsync]);
 }
 

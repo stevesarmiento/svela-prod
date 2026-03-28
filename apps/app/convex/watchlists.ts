@@ -659,3 +659,125 @@ export const getWatchlistCoinIds = query({
     return watchlistItems.map(item => item.coinId); // Returns CoinGecko string IDs
   },
 });
+
+// Screener helpers - union across all watchlist groups for the user.
+export const getAllWatchlistCoinIds = query({
+  args: { serverToken: v.string(), clerkId: v.string() },
+  returns: v.array(v.string()),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user) return [];
+
+    const items = await ctx.db
+      .query("watchlists")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    const unique = Array.from(new Set(items.map((item) => item.coinId))).filter((id) => id.length > 0);
+    unique.sort();
+    return unique;
+  },
+});
+
+export const removeFromAllWatchlists = mutation({
+  args: {
+    serverToken: v.string(),
+    clerkId: v.string(),
+    coinId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user) throw new Error("User not found");
+
+    const rows = await ctx.db
+      .query("watchlists")
+      .withIndex("by_user_coin", (q) => q.eq("userId", user._id).eq("coinId", args.coinId))
+      .collect();
+
+    if (rows.length === 0) return null;
+
+    await Promise.all(rows.map((row) => ctx.db.delete(row._id)));
+
+    // If nobody is watching this coin anymore, remove it from the tracked set.
+    const remaining = await ctx.db
+      .query("watchlists")
+      .withIndex("by_coin", (q) => q.eq("coinId", args.coinId))
+      .first();
+
+    if (!remaining) {
+      await ctx.runMutation(internal.coingeckoState._removeTrackedCoinReason, {
+        coingeckoId: args.coinId,
+        reason: "watchlist",
+      });
+    }
+
+    return null;
+  },
+});
+
+export const removeBulkFromAllWatchlists = mutation({
+  args: {
+    serverToken: v.string(),
+    clerkId: v.string(),
+    coinIds: v.array(v.string()),
+  },
+  returns: v.object({ removedCount: v.number() }),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+
+    if (!user) throw new Error("User not found");
+
+    const uniqueCoinIds = Array.from(new Set(args.coinIds)).filter((id) => id.length > 0);
+    if (uniqueCoinIds.length === 0) return { removedCount: 0 };
+
+    const removedByCoin = await Promise.all(
+      uniqueCoinIds.map(async (coinId) => {
+        const rows = await ctx.db
+          .query("watchlists")
+          .withIndex("by_user_coin", (q) => q.eq("userId", user._id).eq("coinId", coinId))
+          .collect();
+
+        if (rows.length === 0) return { coinId, removed: 0 };
+
+        await Promise.all(rows.map((row) => ctx.db.delete(row._id)));
+        return { coinId, removed: rows.length };
+      }),
+    );
+
+    const removedCount = removedByCoin.reduce((sum, row) => sum + row.removed, 0);
+
+    // Remove global watchlist tracking when the coin is no longer watched by anyone.
+    await Promise.all(
+      removedByCoin
+        .filter((row) => row.removed > 0)
+        .map(async ({ coinId }) => {
+          const remaining = await ctx.db
+            .query("watchlists")
+            .withIndex("by_coin", (q) => q.eq("coinId", coinId))
+            .first();
+          if (remaining) return;
+          await ctx.runMutation(internal.coingeckoState._removeTrackedCoinReason, {
+            coingeckoId: coinId,
+            reason: "watchlist",
+          });
+        }),
+    );
+
+    return { removedCount };
+  },
+});

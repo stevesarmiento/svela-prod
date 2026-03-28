@@ -91,7 +91,7 @@ export function createWatchlistColumns({
         
         return (
           <motion.div
-            className="relative w-full h-full flex items-center justify-start overflow-hidden"
+            className="relative w-full h-full flex items-center justify-start"
             // Ensure non-hovered rows animate when selection mode flips on/off.
             // Some table updates can remount cells; starting from `"rest"` prevents "jump-to-endstate".
             variants={cellVariants}
@@ -128,8 +128,8 @@ export function createWatchlistColumns({
                     <Image
                       src={safeTokenLogoUrl}
                       alt={tokenName}
-                      className="w-[20px] h-[20px] rounded-full"
-                      width={24}
+                      className="w-[20px] h-[20px] rounded-full mr-1 border-[1.5px] border-zinc-200 dark:border-black/60"
+                      width={14}
                       height={24}
                       onError={(e) => {
                         // Fallback to letter-based avatar on image error

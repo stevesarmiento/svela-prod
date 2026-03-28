@@ -2,8 +2,10 @@
 
 import { useMemo, useTransition, useDeferredValue, memo, useCallback } from 'react'
 import { useSearchParams } from "next/navigation"
+import dynamic from "next/dynamic"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { Button } from "@v1/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { X } from "lucide-react"
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import Link from "next/link"
@@ -14,6 +16,20 @@ import { Skeleton } from "@v1/ui/skeleton"
 import { Spinner } from "@v1/ui/spinner"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
 import { formatUsdPrice } from "@/lib/format-usd"
+
+function loadAnalysisDialog() {
+  return import("@/components/navigation/analysis-dialog")
+}
+
+const AnalysisDialog = dynamic(
+  () => loadAnalysisDialog().then((module) => module.AnalysisDialog),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-8 w-[92px] rounded-xl bg-zinc-950/10 dark:bg-white/10" />
+    ),
+  },
+)
 // Accept whatever data format the existing hook provides
 interface OptimisticCoinData {
   id: string | number;
@@ -239,7 +255,7 @@ export const ChartTable = memo(function ChartTable({
                   {getTimeScaleLabel(activeTimeScale)} Change
                 </div>
                 <div className="flex items-center justify-end gap-1">
-                  Action
+                  Actions
                 </div>
               </div>
             </div>
@@ -269,17 +285,27 @@ export const ChartTable = memo(function ChartTable({
 
                 {/* Remove */}
                 <div className="flex items-center justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={showPending}
-                    className={cn(
-                      "h-6 w-6 p-0 rounded-lg bg-transparent",
-                      showPending && "opacity-50"
-                    )}
-                  >
-                    <X className="h-4 w-4 text-muted-foreground" />
-                  </Button>
+                  <Tooltip delayDuration={500}>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={showPending}
+                          aria-label="Remove from watchlist"
+                          className={cn(
+                            "h-6 w-6 p-0 rounded-lg bg-transparent",
+                            showPending && "opacity-50"
+                          )}
+                        >
+                          <X className="h-4 w-4 text-zinc-800 dark:text-zinc-800" />
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
+                      <span>Remove from watchlist</span>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             ) : (
@@ -322,28 +348,48 @@ export const ChartTable = memo(function ChartTable({
 
                 {/* Remove */}
                 <div 
-                  className="flex items-center justify-end"
+                  className="flex items-center justify-end gap-1"
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
                   }}
                 >
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      handleRemove(coin.id)
+                  <AnalysisDialog
+                    coinId={String(coin.id)}
+                    tokenData={{
+                      name: tokenName,
+                      symbol: coin.symbol,
+                      id: String(coin.id),
+                      logoUrl: safeTokenLogoUrl,
                     }}
-                    disabled={showPending}
-                    className={cn(
-                      "h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group",
-                      showPending && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
-                  </Button>
+                    triggerVariant="icon"
+                    triggerTooltip="Analyze with AI"
+                    triggerAriaLabel="Analyze with AI"
+                  />
+                  <Tooltip delayDuration={500}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleRemove(coin.id)
+                        }}
+                        disabled={showPending}
+                        aria-label="Remove from watchlist"
+                        className={cn(
+                          "h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/15 transition-colors group",
+                          showPending && "opacity-50 cursor-not-allowed"
+                        )}
+                      >
+                        <X className="h-4 w-4 text-zinc-600 dark:text-zinc-300 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
+                      <span>Remove from watchlist</span>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </Link>
             )}

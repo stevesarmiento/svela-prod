@@ -3,7 +3,6 @@
 //import Link from "next/link";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 // import { 
 //   IconHouseFill, 
@@ -30,20 +29,6 @@ import { useTokenHeader } from "@/hooks/use-token-header";
 import { WatchlistButton } from "./watchlist-button";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-
-function loadAnalysisDialog() {
-  return import("./analysis-dialog");
-}
-
-const AnalysisDialog = dynamic(
-  () => loadAnalysisDialog().then((module) => module.AnalysisDialog),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-8 w-[92px] rounded-xl bg-zinc-950/10 dark:bg-white/10" />
-    ),
-  },
-);
 
 
 // const menuItems = [
@@ -307,10 +292,6 @@ export function TopNav() {
           <div className="flex items-center gap-2">
             {isChartDetailPage && coinId && (
               <>
-                <AnalysisDialog 
-                  coinId={coinId} 
-                  tokenData={tokenData}
-                />
                 <WatchlistButton 
                   coinId={coinId} 
                   coinName={tokenData?.name || tokenData?.symbol}

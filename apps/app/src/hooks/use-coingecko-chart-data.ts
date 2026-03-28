@@ -177,7 +177,8 @@ function generateFallbackData(
 ): ParsedChartData {
   const config = TIMEFRAME_CONFIG[timeframe as keyof typeof TIMEFRAME_CONFIG] || TIMEFRAME_CONFIG['7d']
   const days = parseInt(config.days)
-  const dataPoints = Math.min(days, 90) // Limit fallback data points
+  // Ensure at least 2 points so tiny charts don't render "No data".
+  const dataPoints = Math.max(2, Math.min(days, 90)) // Limit fallback data points
   const basePrice = initialData?.price
 
   // If we don't have a real price to anchor on, return empty data (no fake charting).
@@ -238,6 +239,8 @@ function combineOHLCWithVolume(
       value: point.value || 0,
       color: '#ffffff40'
     }))
+
+    if (ohlcPoints.length < 2) return null
 
     // Generate line chart from OHLC close prices
     const lineChart = ohlcPoints.map(point => ({

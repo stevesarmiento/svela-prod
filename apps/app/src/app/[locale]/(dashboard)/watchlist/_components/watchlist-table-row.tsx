@@ -26,7 +26,7 @@ export function WatchlistTableRow({
       key={row.id}
       href={watchlistGroup ? `/charts/${row.original.id}?wg=${watchlistGroup}` : `/charts/${row.original.id}`}
       className={cn(
-        "grid gap-4 px-4 py-2.5 border-b last:border-b-0 hover:bg-primary/[0.02] transition-opacity duration-200 cursor-pointer",
+        "grid gap-4 px-4 py-2.5 border-b last:border-b-0 hover:bg-primary/[0.02] transition-opacity duration-200  cursor-pointer",
         hasAnySelections ? (isSelected ? "opacity-100" : "opacity-40") : "opacity-100"
       )}
       style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1.5fr 0.5fr' }}

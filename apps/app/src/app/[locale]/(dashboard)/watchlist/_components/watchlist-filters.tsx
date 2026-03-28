@@ -242,7 +242,7 @@ export function WatchlistFilters({
                       ref={filterButtonRef}
                       variant="ghost"
                       size="icon"
-                      className={`h-7 w-7 rounded-md relative group bg-zinc-50 dark:bg-zinc-900 flex-shrink-0 ${
+                      className={`group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10 ${
                         hasActiveFilters ? "text-blue-600 dark:text-blue-400" : ""
                       } ${hasSelectedCoins ? "ring-2 ring-red-500/50" : ""}`}
                     >

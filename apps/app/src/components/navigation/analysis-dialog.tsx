@@ -10,10 +10,11 @@ import {
   DialogTrigger,
 } from '@v1/ui/dialog'
 import { Button } from '@v1/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 
 import { ScrollArea } from '@v1/ui/scroll-area'
 import Image from 'next/image'
-import { IconSparkles } from 'symbols-react'
+import { IconBookPages, IconSparkles } from 'symbols-react'
 import { useAnalysisData } from '@/hooks/use-analysis-data'
 
 function loadMarketMetricsSidebar() {
@@ -45,9 +46,18 @@ interface AnalysisDialogProps {
     id?: string
     logoUrl?: string
   } | null
+  triggerVariant?: "default" | "icon"
+  triggerTooltip?: string
+  triggerAriaLabel?: string
 }
 
-export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
+export function AnalysisDialog({
+  coinId,
+  tokenData,
+  triggerVariant = "default",
+  triggerTooltip,
+  triggerAriaLabel,
+}: AnalysisDialogProps) {
   const [isDialogOpen, setIsDialogOpen] = React.useState(false)
 
   // Preload heavy dialog chunks on user intent (hover/focus).
@@ -58,20 +68,38 @@ export function AnalysisDialog({ coinId, tokenData }: AnalysisDialogProps) {
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-      <DialogTrigger asChild>
-        <Button
-          onPointerEnter={preloadDialogChunks}
-          onFocus={preloadDialogChunks}
-          onTouchStart={preloadDialogChunks}
-          onClick={() => setIsDialogOpen(true)}
-          variant="ghost"
-          size="sm"
-          className="h-8 px-2 rounded-xl w-auto pr-3 bg-gray-100/80 hover:bg-gray-200/80 ring-1 ring-gray-300/60 dark:bg-zinc-800/40 dark:hover:bg-zinc-900/50 dark:ring-zinc-800/80"
-        >
-          <IconSparkles className="h-4 w-4 fill-gray-600 dark:fill-white/50" />
-          <span className="text-gray-900 dark:text-white">Analyze</span>
-        </Button>
-      </DialogTrigger>
+      <Tooltip delayDuration={500}>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <Button
+              onPointerEnter={preloadDialogChunks}
+              onFocus={preloadDialogChunks}
+              onTouchStart={preloadDialogChunks}
+              onClick={() => setIsDialogOpen(true)}
+              aria-label={triggerAriaLabel ?? (triggerVariant === "icon" ? "Analyze with AI" : undefined)}
+              variant="ghost"
+              size="sm"
+              className={
+                triggerVariant === "icon"
+                  ? "h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-primary/5 transition-colors group"
+                  : "h-8 px-2 rounded-xl w-auto pr-3 bg-gray-100/80 hover:bg-gray-200/80 ring-1 ring-gray-300/60 dark:bg-zinc-800/40 dark:hover:bg-zinc-900/50 dark:ring-zinc-800/80"
+              }
+            >
+              {triggerVariant === "icon" ? (
+                <IconBookPages className="h-4 w-4 fill-zinc-600 group-hover:fill-zinc-900 dark:fill-zinc-600 dark:group-hover:fill-white transition-colors" />
+              ) : (
+                <>
+                  <IconSparkles className="h-4 w-4 fill-gray-600 dark:fill-white/50" />
+                  <span className="text-gray-900 dark:text-white">Analyze</span>
+                </>
+              )}
+            </Button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
+          <span>{triggerTooltip ?? (triggerVariant === "icon" ? "Analyze with AI" : "Analyze")}</span>
+        </TooltipContent>
+      </Tooltip>
       <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
         {isDialogOpen ? <AnalysisDialogBody coinId={coinId} tokenData={tokenData} /> : null}
       </DialogContent>
