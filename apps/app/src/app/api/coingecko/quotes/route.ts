@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { api } from "../../../../../convex/_generated/api";
 import { convex, getServerToken } from "@/lib/convex-server";
@@ -30,6 +30,30 @@ interface CoinGeckoMarketsRow {
   circulating_supply?: number;
   max_supply?: number | null;
   last_updated?: string;
+}
+
+interface CoinGeckoCoinResponse {
+  id: string;
+  symbol: string;
+  name: string;
+  image?: {
+    thumb?: string;
+    small?: string;
+    large?: string;
+  };
+  market_data?: {
+    current_price?: { usd?: number };
+    market_cap?: { usd?: number };
+    total_volume?: { usd?: number };
+    market_cap_rank?: number;
+    price_change_percentage_24h?: number;
+    price_change_percentage_1h_in_currency?: { usd?: number };
+    price_change_percentage_7d_in_currency?: { usd?: number };
+    price_change_percentage_30d_in_currency?: { usd?: number };
+    circulating_supply?: number;
+    max_supply?: number | null;
+    last_updated?: string;
+  };
 }
 
 async function fetchCoinGeckoMarkets(args: {
@@ -66,6 +90,35 @@ async function fetchCoinGeckoMarkets(args: {
   const data = (await response.json()) as unknown;
   if (!Array.isArray(data)) return [];
   return data as CoinGeckoMarketsRow[];
+}
+
+async function fetchCoinGeckoCoin(args: {
+  apiKey: string;
+  id: string;
+}): Promise<CoinGeckoCoinResponse | null> {
+  const url = new URL(`https://pro-api.coingecko.com/api/v3/coins/${encodeURIComponent(args.id)}`);
+  url.searchParams.set("localization", "false");
+  url.searchParams.set("tickers", "false");
+  url.searchParams.set("market_data", "true");
+  url.searchParams.set("community_data", "false");
+  url.searchParams.set("developer_data", "false");
+  url.searchParams.set("sparkline", "false");
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      "x-cg-pro-api-key": args.apiKey,
+      Accept: "application/json",
+    },
+    next: { revalidate: 30 },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = (await response.json()) as unknown;
+  if (typeof data !== "object" || data === null) return null;
+  return data as CoinGeckoCoinResponse;
 }
 
 export async function GET(request: NextRequest) {
@@ -154,10 +207,49 @@ export async function GET(request: NextRequest) {
       if (resolvedIds.length > 0) {
         const missingIds = resolvedIds.filter((id) => data[id] === undefined);
         if (missingIds.length > 0) {
+          // Fallback: some valid CoinGecko ids occasionally don't show up in `coins/markets`.
+          // Try the per-coin endpoint to avoid blank watchlist rows.
+          const fallbackCoins = await Promise.all(
+            missingIds.map(async (id) => {
+              const coin = await fetchCoinGeckoCoin({ apiKey, id });
+              if (!coin) return null;
+              const md = coin.market_data;
+              const image = coin.image?.large ?? coin.image?.small ?? coin.image?.thumb ?? "";
+
+              data[id] = {
+                id: coin.id ?? id,
+                name: coin.name ?? id,
+                symbol: coin.symbol?.toUpperCase?.() ? coin.symbol.toUpperCase() : coin.symbol ?? "N/A",
+                market_cap_rank: md?.market_cap_rank ?? null,
+                image,
+                current_price: md?.current_price?.usd ?? null,
+                market_cap: md?.market_cap?.usd ?? null,
+                total_volume: md?.total_volume?.usd ?? null,
+                price_change_percentage_24h: md?.price_change_percentage_24h ?? null,
+                price_change_percentage_1h_in_currency:
+                  md?.price_change_percentage_1h_in_currency?.usd ?? null,
+                price_change_percentage_7d_in_currency:
+                  md?.price_change_percentage_7d_in_currency?.usd ?? null,
+                price_change_percentage_30d_in_currency:
+                  md?.price_change_percentage_30d_in_currency?.usd ?? null,
+                circulating_supply: md?.circulating_supply ?? null,
+                max_supply: md?.max_supply ?? null,
+                last_updated: md?.last_updated ?? new Date().toISOString(),
+              };
+
+              return id;
+            }),
+          );
+
+          const stillMissing = missingIds.filter((id) => data[id] === undefined);
+
           await convex.mutation(api.coingeckoWarmup.requestMarketsRefresh, {
             serverToken,
-            coingeckoIds: missingIds,
+            coingeckoIds: stillMissing,
           });
+
+          // If we successfully filled some via fallback, keep the warmup set minimal.
+          void fallbackCoins;
         }
       }
     } else {

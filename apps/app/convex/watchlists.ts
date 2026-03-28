@@ -448,6 +448,21 @@ export const addToWatchlist = mutation({
       coingeckoIds: [args.coinId],
     });
 
+    // Warm chart series quickly so brand-new watchlist coins don't show blank/old price action.
+    await ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshSingleMarketChart, {
+      coingeckoId: args.coinId,
+      days: "7",
+    });
+    await ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshSingleMarketChart, {
+      coingeckoId: args.coinId,
+      days: "1",
+    });
+
+    await ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshSingleOhlc, {
+      coingeckoId: args.coinId,
+      days: "1",
+    });
+
     return id;
   },
 });

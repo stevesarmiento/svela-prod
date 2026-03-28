@@ -185,6 +185,8 @@ const POPULAR_SYMBOL_TO_FILENAME: Record<string, string> = {
     tether: "tether",
     apt: "aptos",
     aptos: "aptos",
+    bp: "backpack",
+    jto: "jito",
     hype: "hyperliquid",
     hyperliquid: "hyperliquid",
     mon: "monad",

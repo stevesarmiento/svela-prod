@@ -64,6 +64,17 @@ const COINGECKO_QUOTES_QUERY_OPTIONS = {
   refetchIntervalInBackground: false,
 } as const
 
+function isSameQuote(a: CoinGeckoQuoteMarketData | undefined, b: CoinGeckoQuoteMarketData | undefined): boolean {
+  if (!a || !b) return false
+  return (
+    a.last_updated === b.last_updated &&
+    a.current_price === b.current_price &&
+    a.total_volume === b.total_volume &&
+    a.market_cap === b.market_cap &&
+    a.price_change_percentage_24h === b.price_change_percentage_24h
+  )
+}
+
 function formatCoinGeckoError(error: unknown): string {
   if (error && typeof error === "object" && "_tag" in error) {
     const tagged = error as { _tag: string; message?: unknown; status?: unknown }
@@ -76,7 +87,9 @@ function formatCoinGeckoError(error: unknown): string {
 }
 
 export function useCoinGeckoQuote(coinId: string | null | undefined) {
-  return useQuery<CoinGeckoQuoteMarketData | null, Error>({
+  const queryClient = useQueryClient()
+
+  const query = useQuery<CoinGeckoQuoteMarketData | null, Error>({
     queryKey: coingeckoQuoteQueryKeys.single(coinId ?? ""),
     queryFn: async (): Promise<CoinGeckoQuoteMarketData | null> => {
       if (!coinId) return null
@@ -95,6 +108,29 @@ export function useCoinGeckoQuote(coinId: string | null | undefined) {
     retry: 1,
     ...COINGECKO_QUOTES_QUERY_OPTIONS,
   })
+
+  useEffect(() => {
+    if (!coinId) return
+    const coin = query.data
+    if (!coin) return
+
+    // Keep ALL bulk quote maps consistent with the canonical per-coin quote.
+    const bulkQueries = queryClient.getQueryCache().findAll({ queryKey: ["coingecko-quotes"] })
+    for (const bulkQuery of bulkQueries) {
+      const key = bulkQuery.queryKey
+      const stableIdsKey = typeof key[1] === "string" ? (key[1] as string) : null
+      if (!stableIdsKey) continue
+
+      queryClient.setQueryData<Record<string, CoinGeckoQuoteMarketData> | undefined>(key, (old) => {
+        if (!old) return old
+        if (!(coinId in old)) return old
+        if (isSameQuote(old[coinId], coin)) return old
+        return { ...old, [coinId]: coin }
+      })
+    }
+  }, [coinId, query.data, queryClient])
+
+  return query
 }
 
 export function useCoinGeckoQuotesBulk(coingeckoIds: ReadonlyArray<string>) {
@@ -146,6 +182,30 @@ export function useCoinGeckoQuotesBulk(coingeckoIds: ReadonlyArray<string>) {
     for (const [id, coin] of Object.entries(data)) {
       if (!coin) continue
       queryClient.setQueryData(coingeckoQuoteQueryKeys.single(id), coin)
+    }
+
+    // Also keep ALL bulk quote maps in sync so different tables never drift for the same coin.
+    const bulkQueries = queryClient.getQueryCache().findAll({ queryKey: ["coingecko-quotes"] })
+    for (const bulkQuery of bulkQueries) {
+      const key = bulkQuery.queryKey
+      const otherStableIdsKey = typeof key[1] === "string" ? (key[1] as string) : null
+      if (!otherStableIdsKey) continue
+      if (otherStableIdsKey === stableIdsKey) continue
+
+      queryClient.setQueryData<Record<string, CoinGeckoQuoteMarketData> | undefined>(key, (old) => {
+        if (!old) return old
+
+        let didChange = false
+        const next: Record<string, CoinGeckoQuoteMarketData> = { ...old }
+        for (const [id, coin] of Object.entries(data)) {
+          if (!(id in old)) continue
+          if (isSameQuote(old[id], coin)) continue
+          next[id] = coin
+          didChange = true
+        }
+
+        return didChange ? next : old
+      })
     }
   }, [query.data, queryClient])
 

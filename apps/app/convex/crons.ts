@@ -85,6 +85,14 @@ crons.interval(
   { batchSize: 200 },
 );
 
+// Sync CoinGecko's coin universe (new listings) into `coingeckoCoins`.
+crons.interval(
+  "coingecko_sync_coins_list",
+  { hours: 1 },
+  internal.coingeckoJobs.syncCoinGeckoCoinsListBatch,
+  { batchSize: 1000 },
+);
+
 // Data cleanup (rolling).
 crons.interval(
   "cleanup_old_market_data",

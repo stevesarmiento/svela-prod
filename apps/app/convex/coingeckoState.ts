@@ -2,11 +2,25 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { paginationOptsValidator } from "convex/server";
 
+function normalizeCoingeckoIds(coingeckoIds: ReadonlyArray<string>): Array<string> {
+  const out: Array<string> = [];
+  const seen = new Set<string>();
+  for (const raw of coingeckoIds) {
+    const id = raw.trim();
+    if (id.length === 0) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 export const _getJobState = internalQuery({
   args: { jobKey: v.string() },
   returns: v.union(
     v.object({
       _id: v.id("jobState"),
+      _creationTime: v.number(),
       jobKey: v.string(),
       cursor: v.optional(v.string()),
       createdAt: v.number(),
@@ -108,6 +122,71 @@ export const _removeTrackedCoinReason = internalMutation({
   },
 });
 
+export const _touchTrackedCoinsBatch = internalMutation({
+  args: {
+    coingeckoIds: v.array(v.string()),
+    reason: v.string(),
+    lastSeen: v.optional(v.number()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const lastSeen = args.lastSeen ?? now;
+    const coingeckoIds = normalizeCoingeckoIds(args.coingeckoIds);
+
+    for (const coingeckoId of coingeckoIds) {
+      const existing = await ctx.db
+        .query("trackedCoins")
+        .withIndex("by_coingecko_id_and_reason", (q) =>
+          q.eq("coingeckoId", coingeckoId).eq("reason", args.reason),
+        )
+        .first();
+
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          lastSeen,
+          updatedAt: now,
+        });
+        continue;
+      }
+
+      await ctx.db.insert("trackedCoins", {
+        coingeckoId,
+        reason: args.reason,
+        lastSeen,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    return null;
+  },
+});
+
+export const _removeTrackedCoinsReasonBatch = internalMutation({
+  args: {
+    coingeckoIds: v.array(v.string()),
+    reason: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const coingeckoIds = normalizeCoingeckoIds(args.coingeckoIds);
+
+    for (const coingeckoId of coingeckoIds) {
+      const existing = await ctx.db
+        .query("trackedCoins")
+        .withIndex("by_coingecko_id_and_reason", (q) =>
+          q.eq("coingeckoId", coingeckoId).eq("reason", args.reason),
+        )
+        .first();
+      if (!existing) continue;
+      await ctx.db.delete(existing._id);
+    }
+
+    return null;
+  },
+});
+
 const trackedCoinRowValidator = v.object({
   _id: v.id("trackedCoins"),
   _creationTime: v.number(),
@@ -128,11 +207,14 @@ export const _getTrackedCoinsPage = internalQuery({
     continueCursor: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
-    return await ctx.db
+    const result = await ctx.db
       .query("trackedCoins")
       .withIndex("by_coingecko_id")
       .order("asc")
       .paginate(args.paginationOpts);
+    // `.paginate()` may include extra metadata fields; return only what our validator allows.
+    const { page, isDone, continueCursor } = result;
+    return { page, isDone, continueCursor };
   },
 });
 

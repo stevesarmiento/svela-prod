@@ -39,7 +39,7 @@ type CoinGeckoMarketRow = {
   atl: number | null;
   atl_change_percentage: number | null;
   atl_date: string | null;
-  last_updated: string;
+  last_updated: string | null;
 };
 
 async function fetchJson(endpoint: string, apiKey: string): Promise<unknown> {
@@ -85,6 +85,7 @@ function mapMarketRows(rows: ReadonlyArray<CoinGeckoMarketRow>): Array<{
   atlDate?: string;
   lastUpdated: string;
 }> {
+  const fetchedAtIso = new Date().toISOString();
   return rows.map((coin) => ({
     coingeckoId: coin.id,
     symbol: coin.symbol.toUpperCase(),
@@ -112,8 +113,24 @@ function mapMarketRows(rows: ReadonlyArray<CoinGeckoMarketRow>): Array<{
     atl: coin.atl ?? undefined,
     atlChangePercentage: coin.atl_change_percentage ?? undefined,
     atlDate: coin.atl_date ?? undefined,
-    lastUpdated: coin.last_updated,
+    lastUpdated: coin.last_updated ?? fetchedAtIso,
   }));
+}
+
+type CoinGeckoCoinListRow = {
+  id: string;
+  symbol: string;
+  name: string;
+  platforms?: Record<string, string>;
+};
+
+async function fetchCoinList(apiKey: string): Promise<CoinGeckoCoinListRow[]> {
+  const url = new URL("https://pro-api.coingecko.com/api/v3/coins/list");
+  url.searchParams.set("include_platform", "true");
+
+  const data = (await fetchJson(url.toString(), apiKey)) as unknown;
+  if (!Array.isArray(data)) return [];
+  return data as CoinGeckoCoinListRow[];
 }
 
 async function upsertMarketsByIds(
@@ -148,6 +165,98 @@ async function upsertMarketsByIds(
   return { requested: uniqueIds.length, refreshed };
 }
 
+export const syncCoinGeckoCoinsListBatch = internalAction({
+  args: { batchSize: v.optional(v.number()) },
+  returns: v.object({
+    processed: v.number(),
+    total: v.number(),
+    inserted: v.number(),
+    updated: v.number(),
+    normalized: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    processed: number;
+    total: number;
+    inserted: number;
+    updated: number;
+    normalized: number;
+    nextCursor: string | null;
+  }> => {
+    const apiKey = getCoinGeckoApiKey();
+    const batchSize = Math.min(2000, Math.max(50, args.batchSize ?? 500));
+    const jobKey = "coingecko:coins:list";
+
+    const state: { cursor?: string } | null = await ctx.runQuery(internal.coingeckoState._getJobState, {
+      jobKey,
+    });
+    const rawCursor = state?.cursor ?? null;
+
+    let offset = Number.parseInt(rawCursor ?? "0", 10);
+    if (!Number.isFinite(offset) || offset < 0) offset = 0;
+
+    const list = await fetchCoinList(apiKey);
+    const total = list.length;
+    if (total === 0) {
+      await ctx.runMutation(internal.coingeckoState._setJobCursor, { jobKey, cursor: null });
+      return {
+        processed: 0,
+        total: 0,
+        inserted: 0,
+        updated: 0,
+        normalized: 0,
+        nextCursor: null,
+      };
+    }
+
+    if (offset >= total) offset = 0;
+
+    const slice = list.slice(offset, offset + batchSize);
+    if (slice.length === 0) {
+      await ctx.runMutation(internal.coingeckoState._setJobCursor, { jobKey, cursor: null });
+      return {
+        processed: 0,
+        total,
+        inserted: 0,
+        updated: 0,
+        normalized: 0,
+        nextCursor: null,
+      };
+    }
+
+    const mapped = slice.map((coin) => ({
+      coingeckoId: coin.id,
+      name: coin.name,
+      symbol: coin.symbol,
+      platforms: coin.platforms ?? {},
+    }));
+
+    const result: { inserted: number; updated: number; normalized: number } = await ctx.runMutation(
+      internal.coingeckoWriters._syncCoinGeckoCoinsListBatch,
+      {
+        coins: mapped,
+        asOfMs: Date.now(),
+      },
+    );
+
+    const nextOffset = offset + slice.length;
+    const nextCursor = nextOffset >= total ? null : String(nextOffset);
+    await ctx.runMutation(internal.coingeckoState._setJobCursor, { jobKey, cursor: nextCursor });
+
+    return {
+      processed: slice.length,
+      total,
+      inserted: result.inserted,
+      updated: result.updated,
+      normalized: result.normalized,
+      nextCursor,
+    };
+  },
+});
+
 export const refreshTopMarkets = internalAction({
   args: { topN: v.optional(v.number()) },
   returns: v.object({ count: v.number() }),
@@ -181,27 +290,25 @@ export const refreshTopMarkets = internalAction({
       limit: 5000,
     });
 
-    // Touch membership for current top set.
-    await Promise.all(
-      items.map((item) =>
-        ctx.runMutation(internal.coingeckoState._touchTrackedCoin, {
-          coingeckoId: item.coingeckoId,
-          reason: "top",
-          lastSeen: Date.now(),
-        }),
-      ),
-    );
+    // Touch membership for current top set (batch + sequential to avoid commit throttling).
+    const touchIds = items.map((item) => item.coingeckoId);
+    const touchLastSeen = Date.now();
+    for (const idChunk of chunk(touchIds, 100)) {
+      await ctx.runMutation(internal.coingeckoState._touchTrackedCoinsBatch, {
+        coingeckoIds: idChunk,
+        reason: "top",
+        lastSeen: touchLastSeen,
+      });
+    }
 
     // Remove stale top membership.
     const stale = prevTopIds.filter((id) => !nextTopIds.has(id));
-    await Promise.all(
-      stale.map((id) =>
-        ctx.runMutation(internal.coingeckoState._removeTrackedCoinReason, {
-          coingeckoId: id,
-          reason: "top",
-        }),
-      ),
-    );
+    for (const idChunk of chunk(stale, 200)) {
+      await ctx.runMutation(internal.coingeckoState._removeTrackedCoinsReasonBatch, {
+        coingeckoIds: idChunk,
+        reason: "top",
+      });
+    }
 
     return { count: items.length };
   },
@@ -363,6 +470,52 @@ export const refreshSingleMarketChart = internalAction({
 
 type OhlcApiRow = [number, number, number, number, number];
 
+async function upsertOhlc(
+  ctx: ActionCtx,
+  args: { coingeckoId: string; days: string; apiKey: string; dataSource: string },
+): Promise<void> {
+  const url = new URL(`https://pro-api.coingecko.com/api/v3/coins/${encodeURIComponent(args.coingeckoId)}/ohlc`);
+  url.searchParams.set("vs_currency", "usd");
+  url.searchParams.set("days", args.days);
+
+  const data = (await fetchJson(url.toString(), args.apiKey)) as Array<OhlcApiRow>;
+  const points = data.map((row) => ({
+    timestamp: row[0],
+    price: row[4],
+    volume: 0,
+    open: row[1],
+    high: row[2],
+    low: row[3],
+    close: row[4],
+  }));
+
+  await ctx.runMutation(internal.coingeckoWriters._upsertCoinGeckoHistoricalData, {
+    coingeckoId: args.coingeckoId,
+    timeframe: `${args.days}_ohlc`,
+    dataPoints: points,
+    dataSource: args.dataSource,
+    asOfMs: Date.now(),
+  });
+}
+
+export const refreshSingleOhlc = internalAction({
+  args: {
+    coingeckoId: v.string(),
+    days: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const apiKey = getCoinGeckoApiKey();
+    await upsertOhlc(ctx, {
+      coingeckoId: args.coingeckoId,
+      days: args.days,
+      apiKey,
+      dataSource: "coingecko-warmup-ohlc",
+    });
+    return null;
+  },
+});
+
 export const refreshTrackedOhlcBatch = internalAction({
   args: {
     days: v.string(), // CoinGecko OHLC supported windows
@@ -395,29 +548,11 @@ export const refreshTrackedOhlcBatch = internalAction({
     }
 
     for (const coingeckoId of uniqueIds) {
-      const url = new URL(
-        `https://pro-api.coingecko.com/api/v3/coins/${encodeURIComponent(coingeckoId)}/ohlc`,
-      );
-      url.searchParams.set("vs_currency", "usd");
-      url.searchParams.set("days", args.days);
-
-      const data = (await fetchJson(url.toString(), apiKey)) as Array<OhlcApiRow>;
-      const points = data.map((row) => ({
-        timestamp: row[0],
-        price: row[4],
-        volume: 0,
-        open: row[1],
-        high: row[2],
-        low: row[3],
-        close: row[4],
-      }));
-
-      await ctx.runMutation(internal.coingeckoWriters._upsertCoinGeckoHistoricalData, {
+      await upsertOhlc(ctx, {
         coingeckoId,
-        timeframe: `${args.days}_ohlc`,
-        dataPoints: points,
+        days: args.days,
+        apiKey,
         dataSource: "coingecko-cron-ohlc",
-        asOfMs: Date.now(),
       });
     }
 

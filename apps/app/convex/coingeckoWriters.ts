@@ -257,3 +257,97 @@ export const _bulkUpsertCoinGeckoCoins = internalMutation({
   },
 });
 
+const coinGeckoCoinListItemValidator = v.object({
+  coingeckoId: v.string(),
+  name: v.string(),
+  symbol: v.string(),
+  platforms: v.optional(v.record(v.string(), v.string())),
+});
+
+function areStringRecordsEqual(
+  a: Record<string, string> | undefined,
+  b: Record<string, string> | undefined,
+): boolean {
+  const aKeys = Object.keys(a ?? {});
+  const bKeys = Object.keys(b ?? {});
+  if (aKeys.length !== bKeys.length) return false;
+  for (const key of aKeys) {
+    if ((b ?? {})[key] !== (a ?? {})[key]) return false;
+  }
+  return true;
+}
+
+// Sync CoinGecko's `/coins/list` universe into `coingeckoCoins` without clobbering logos.
+// - Inserts new ids with `logoUrl: ""` and `imageUpdated: false` (backfilled by cron).
+// - Updates name/symbol/platforms for existing rows, preserving `logoUrl` and `imageUpdated`.
+export const _syncCoinGeckoCoinsListBatch = internalMutation({
+  args: {
+    coins: v.array(coinGeckoCoinListItemValidator),
+    asOfMs: v.optional(v.number()),
+  },
+  returns: v.object({
+    inserted: v.number(),
+    updated: v.number(),
+    normalized: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const now = args.asOfMs ?? Date.now();
+
+    const uniqueById = new Map<string, (typeof args.coins)[number]>();
+    for (const coin of args.coins) uniqueById.set(coin.coingeckoId, coin);
+
+    let inserted = 0;
+    let updated = 0;
+    let normalized = 0;
+
+    for (const coin of uniqueById.values()) {
+      const existing = await ctx.db
+        .query("coingeckoCoins")
+        .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", coin.coingeckoId))
+        .first();
+
+      const nextSymbol = coin.symbol.toUpperCase();
+      const nextPlatforms = coin.platforms ?? {};
+
+      if (existing) {
+        const shouldNormalizeImageUpdated = existing.imageUpdated === undefined;
+
+        const needsUpdate =
+          existing.name !== coin.name ||
+          existing.symbol !== nextSymbol ||
+          (existing.isActive !== true && existing.isActive !== undefined) ||
+          !areStringRecordsEqual(existing.platforms ?? {}, nextPlatforms) ||
+          shouldNormalizeImageUpdated;
+
+        if (!needsUpdate) continue;
+
+        await ctx.db.patch(existing._id, {
+          name: coin.name,
+          symbol: nextSymbol,
+          platforms: nextPlatforms,
+          isActive: true,
+          lastUpdated: now,
+          ...(shouldNormalizeImageUpdated ? { imageUpdated: false } : {}),
+        });
+        updated++;
+        if (shouldNormalizeImageUpdated) normalized++;
+        continue;
+      }
+
+      await ctx.db.insert("coingeckoCoins", {
+        coingeckoId: coin.coingeckoId,
+        name: coin.name,
+        symbol: nextSymbol,
+        logoUrl: "",
+        isActive: true,
+        lastUpdated: now,
+        platforms: nextPlatforms,
+        imageUpdated: false,
+      });
+      inserted++;
+    }
+
+    return { inserted, updated, normalized };
+  },
+});
+
