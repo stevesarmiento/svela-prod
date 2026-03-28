@@ -22,6 +22,8 @@ import type * as coingeckoWriters from "../coingeckoWriters.js";
 import type * as coins from "../coins.js";
 import type * as crons from "../crons.js";
 import type * as historicalData from "../historicalData.js";
+import type * as portfolio from "../portfolio.js";
+import type * as portfolioJobs from "../portfolioJobs.js";
 import type * as userSettings from "../userSettings.js";
 import type * as users from "../users.js";
 import type * as watchlists from "../watchlists.js";
@@ -47,6 +49,8 @@ declare const fullApi: ApiFromModules<{
   coins: typeof coins;
   crons: typeof crons;
   historicalData: typeof historicalData;
+  portfolio: typeof portfolio;
+  portfolioJobs: typeof portfolioJobs;
   userSettings: typeof userSettings;
   users: typeof users;
   watchlists: typeof watchlists;

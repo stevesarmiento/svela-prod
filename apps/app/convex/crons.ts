@@ -93,6 +93,14 @@ crons.interval(
   { batchSize: 1000 },
 );
 
+// Portfolio wallet sync (top 100 tokens by USD value).
+crons.interval(
+  "portfolio_sync_wallets_daily",
+  { hours: 24 },
+  internal.portfolioJobs.syncWalletsDaily,
+  { batchSize: 25 },
+);
+
 // Data cleanup (rolling).
 crons.interval(
   "cleanup_old_market_data",

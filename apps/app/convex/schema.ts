@@ -125,6 +125,40 @@ export default defineSchema({
     .index("by_last_seen", ["lastSeen"])
     .index("by_coingecko_id_and_reason", ["coingeckoId", "reason"]),
 
+  portfolioWallets: defineTable({
+    userId: v.id("users"),
+    address: v.string(),
+    name: v.optional(v.string()),
+    isActive: v.boolean(),
+    lastSyncedAt: v.optional(v.number()),
+    lastSyncError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_address", ["userId", "address"])
+    .index("by_active", ["isActive", "updatedAt"]),
+
+  portfolioWalletCoins: defineTable({
+    userId: v.id("users"),
+    walletId: v.id("portfolioWallets"),
+    coingeckoId: v.string(),
+    mint: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_wallet", ["walletId"])
+    .index("by_wallet_coingecko", ["walletId", "coingeckoId"])
+    .index("by_coingecko", ["coingeckoId"])
+    .index("by_user_wallet", ["userId", "walletId"]),
+
+  portfolioMintMappings: defineTable({
+    mint: v.string(),
+    coingeckoId: v.string(),
+    source: v.string(), // "birdeye"
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_mint", ["mint"]),
+
   jobState: defineTable({
     jobKey: v.string(),
     cursor: v.optional(v.string()),
