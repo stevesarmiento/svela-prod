@@ -41,7 +41,8 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_user_coin", ["userId", "coinId"])
     .index("by_group", ["watchlistGroupId"])
-    .index("by_group_coin", ["watchlistGroupId", "coinId"]),
+    .index("by_group_coin", ["watchlistGroupId", "coinId"])
+    .index("by_coin", ["coinId"]),
 
   coins: defineTable({
     coinId: v.number(),
@@ -112,6 +113,25 @@ export default defineSchema({
     .index("by_symbol", ["symbol"])
     .index("by_active", ["isActive"]),
 
+  trackedCoins: defineTable({
+    coingeckoId: v.string(),
+    reason: v.string(), // "top" | "watchlist" (string to keep migrations simple)
+    lastSeen: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_coingecko_id", ["coingeckoId"])
+    .index("by_reason", ["reason"])
+    .index("by_last_seen", ["lastSeen"])
+    .index("by_coingecko_id_and_reason", ["coingeckoId", "reason"]),
+
+  jobState: defineTable({
+    jobKey: v.string(),
+    cursor: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_job_key", ["jobKey"]),
+
   userSettings: defineTable({
     userId: v.id("users"),
     // Memory & AI Settings
@@ -176,6 +196,7 @@ export default defineSchema({
     lastUpdated: v.number(),
   })
     .index("by_coingecko_timeframe", ["coingeckoId", "timeframe"])
+    .index("by_coingecko_timeframe_timestamp", ["coingeckoId", "timeframe", "timestamp"])
     .index("by_coingecko_timeframe_and_last_updated", [
       "coingeckoId",
       "timeframe",

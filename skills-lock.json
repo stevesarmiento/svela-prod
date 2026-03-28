@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "brand-name-generator": {
+      "source": "shipshitdev/library",
+      "sourceType": "github",
+      "computedHash": "8de3c7bf0a1e7030c7c477162c9dc8404d047aefbc2a543c344acfbccedcbc85"
+    }
+  }
+}

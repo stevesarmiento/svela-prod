@@ -3,7 +3,9 @@
 
 const LOGOS_ROUTE_BASE = "/logos" as const;
 const XSTOCKS_ROUTE_BASE = `${LOGOS_ROUTE_BASE}/xstocks` as const;
+const POPULAR_ROUTE_BASE = `${LOGOS_ROUTE_BASE}/popular` as const;
 const XSTOCK_LOGO_EXTENSION = "png" as const;
+const POPULAR_LOGO_EXTENSION = "svg" as const;
 
 function getXstockLogoFilename(symbol: string): string | null {
     const trimmed = symbol.trim();
@@ -27,6 +29,16 @@ function getXstockLogoFilename(symbol: string): string | null {
     }
 
     return null;
+}
+
+function normalizeSymbol(symbol: string): string {
+    return symbol.trim().toLowerCase();
+}
+
+function getPopularLogoFilename(symbol: string): string | null {
+    const normalized = normalizeSymbol(symbol);
+    if (!normalized) return null;
+    return POPULAR_SYMBOL_TO_FILENAME[normalized] ?? null;
 }
 
 // Set of available xStock logo symbols (filename without extension)
@@ -156,6 +168,30 @@ const SYMBOL_TO_FILENAME: Record<string, string> = {
     STRKx: 'STRCx', // Strategy PP Fixed
 };
 
+// Popular coin logo overrides (served from `/public/logos/popular`).
+const POPULAR_SYMBOL_TO_FILENAME: Record<string, string> = {
+    btc: "bitcoin",
+    bitcoin: "bitcoin",
+    eth: "ethereum",
+    ethereum: "ethereum",
+    sol: "solana",
+    solana: "solana",
+    ada: "cardano",
+    cardano: "cardano",
+    trx: "tron",
+    tron: "tron",
+    bnb: "bnb",
+    usdt: "tether",
+    tether: "tether",
+    apt: "aptos",
+    aptos: "aptos",
+    hype: "hyperliquid",
+    hyperliquid: "hyperliquid",
+    mon: "monad",
+    monad: "monad",
+    okxbtc: "okxbtc",
+};
+
 /**
  * Get the logo URL for a token, using local override if available
  * @param symbol - Token symbol (e.g., "AAPLx")
@@ -168,6 +204,9 @@ export function getTokenLogoURL(symbol: string | undefined, fallbackLogoURI: str
     const filename = getXstockLogoFilename(symbol);
     if (filename) return `${XSTOCKS_ROUTE_BASE}/${filename}.${XSTOCK_LOGO_EXTENSION}`;
 
+    const popularFilename = getPopularLogoFilename(symbol);
+    if (popularFilename) return `${POPULAR_ROUTE_BASE}/${popularFilename}.${POPULAR_LOGO_EXTENSION}`;
+
     // Return fallback
     return fallbackLogoURI;
 }
@@ -177,7 +216,7 @@ export function getTokenLogoURL(symbol: string | undefined, fallbackLogoURI: str
  */
 export function hasLocalLogo(symbol: string | undefined): boolean {
     if (!symbol) return false;
-    return getXstockLogoFilename(symbol) !== null;
+    return getXstockLogoFilename(symbol) !== null || getPopularLogoFilename(symbol) !== null;
 }
 
 /**

@@ -7,6 +7,8 @@ import type {
   MarketStructureData,
   ComparisonData
 } from '@/types/enhanced-chat';
+import { api } from "../../convex/_generated/api";
+import { convex, getServerToken } from "@/lib/convex-server";
 
 interface CoinSearchResult {
   coinId: string; // Changed to string for CoinGecko IDs
@@ -123,25 +125,16 @@ export class EnhancedDataOrchestrator {
    */
   private async searchCoinInDatabase(query: string): Promise<{ id: string; name: string; symbol: string } | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/convex/search-coins`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, limit: 1 })
+      const coins = await convex.query(api.coins.searchCoinGeckoCoins, {
+        serverToken: getServerToken(),
+        query,
+        limit: 1,
       });
-      
-      if (!response.ok) return null;
-      
-      const coins: CoinSearchResult[] = await response.json();
-      
-      if (coins.length > 0 && coins[0]) {
-        return {
-          id: coins[0].coinId,
-          name: coins[0].name,
-          symbol: coins[0].symbol
-        };
-      }
-      
-      return null;
+
+      const coin = coins[0];
+      if (!coin) return null;
+
+      return { id: coin.coingeckoId, name: coin.name, symbol: coin.symbol };
     } catch (error) {
       console.error('Error searching coin in database:', error);
       return null;
@@ -287,50 +280,39 @@ export class EnhancedDataOrchestrator {
   ): Promise<void> {
     try {
       console.log('💰 Fetching price data for coins:', priceTargets.map(t => `${t.name} (${t.coinId})`));
-      
-      const coinIds = priceTargets.map(t => t.coinId).join(',');
-      const url = `${this.baseUrl}/api/coingecko/markets?ids=${coinIds}`;
-      console.log('🌐 Calling CoinGecko markets API:', url);
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ CoinGecko markets API error:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorText: errorText.substring(0, 200)
-        });
-        throw new Error(`Failed to fetch price data: ${response.status} ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-      console.log('📊 CoinGecko markets API response:', {
-        hasData: !!data.data,
-        dataLength: data.data?.length || 0,
-        dataPreview: data.data?.[0] ? {
-          id: data.data[0].id,
-          name: data.data[0].name,
-          current_price: data.data[0].current_price
-        } : null
-      });
-      
-      if (data.data && Array.isArray(data.data)) {
-      priceTargets.forEach(target => {
-          const coinData = data.data.find((coin: CoinGeckoMarketData) => coin.id === target.coinId);
-        if (coinData) {
-            console.log(`✅ Found price data for ${target.name}: $${coinData.current_price}`);
-          results.priceData.push(this.transformToPriceData(coinData, target));
-          } else {
-            console.warn(`⚠️ No price data found for ${target.name} (${target.coinId})`);
+
+      const serverToken = getServerToken();
+      const docs = await Promise.all(
+        priceTargets.map(async (target) => {
+          return await convex.query(api.coingeckoMarkets.getMarketDataByCoingeckoId, {
+            serverToken,
+            coingeckoId: target.coinId,
+          });
+        }),
+      );
+
+      priceTargets.forEach((target, idx) => {
+        const doc = docs[idx];
+        if (!doc) {
+          console.warn(`⚠️ No price data found for ${target.name} (${target.coinId})`);
+          return;
         }
+
+        const coinData: Record<string, unknown> = {
+          id: doc.coingeckoId,
+          current_price: doc.currentPrice ?? 0,
+          total_volume: doc.totalVolume ?? 0,
+          market_cap: doc.marketCap ?? 0,
+          price_change_percentage_24h: doc.priceChangePercentage24h ?? 0,
+          price_change_percentage_7d: 0,
+          market_cap_rank: doc.marketCapRank ?? 0,
+          image: doc.image,
+        };
+
+        results.priceData.push(this.transformToPriceData(coinData, target));
       });
-        
-        console.log(`💰 Successfully processed ${results.priceData.length}/${priceTargets.length} price data entries`);
-      } else {
-        console.warn('⚠️ Invalid or empty price data response:', data);
-        results.errors.push('Price data: Invalid response format from CoinGecko markets API');
-      }
+
+      console.log(`💰 Successfully processed ${results.priceData.length}/${priceTargets.length} price data entries`);
       
     } catch (error) {
       console.error('❌ Price data fetch failed:', error);
@@ -348,13 +330,18 @@ export class EnhancedDataOrchestrator {
     try {
       const promises = historicalTargets.map(async (target) => {
         try {
-          const response = await fetch(
-            `${this.baseUrl}/api/coingecko/market-chart?id=${target.coinId}&vs_currency=usd&days=${this.mapTimeframeToDays(target.timeframe)}`
-          );
-          
-          if (!response.ok) throw new Error(`Failed to fetch historical data for ${target.coinId}`);
-          
-          const data = await response.json();
+          const days = this.mapTimeframeToDays(target.timeframe);
+          const series = await convex.query(api.coingeckoReads.getPriceHistorySeries, {
+            serverToken: getServerToken(),
+            coingeckoId: target.coinId,
+            timeframe: days,
+          });
+
+          const data = {
+            prices: series.data.map((p) => [p.timestamp, p.price]),
+            total_volumes: series.data.map((p) => [p.timestamp, p.volume ?? 0]),
+          };
+
           const transformedData = this.transformToHistoricalData(data, target);
           
           if (transformedData) {
@@ -383,13 +370,25 @@ export class EnhancedDataOrchestrator {
     try {
       const promises = technicalTargets.map(async (target) => {
         try {
-          const response = await fetch(
-            `${this.baseUrl}/api/coingecko/ohlc?id=${target.coinId}&vs_currency=usd&days=${this.mapTimeframeToDays(target.timeframe)}`
-          );
-          
-          if (!response.ok) throw new Error(`Failed to fetch OHLC data for ${target.coinId}`);
-          
-          const data = await response.json();
+          const days = this.mapTimeframeToDays(target.timeframe);
+          const series = await convex.query(api.coingeckoReads.getPriceHistorySeries, {
+            serverToken: getServerToken(),
+            coingeckoId: target.coinId,
+            timeframe: `${days}_ohlc`,
+          });
+
+          const data = {
+            data: series.data.map((p) => {
+              const close = p.close ?? p.price;
+              return {
+                timestamp: p.timestamp,
+                open: p.open ?? close,
+                high: p.high ?? close,
+                low: p.low ?? close,
+                close,
+              };
+            }),
+          };
           
                      // Transform OHLC data to technical analysis format
            if (data.data && Array.isArray(data.data)) {
@@ -480,39 +479,43 @@ export class EnhancedDataOrchestrator {
     results: FetchResults
   ): Promise<void> {
     try {
-      // Fetch bulk data for comparison
-      const coinIds = comparisonTarget.coinIds.join(',');
-      
-      // Could implement bulk comparison endpoint or aggregate individual calls
-      const response = await fetch(`${this.baseUrl}/api/coingecko/markets?ids=${coinIds}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        // Transform to comparison format
-        const coinPriceData = (data.data || []).map((coinData: CoinGeckoMarketData) => ({
-          coingeckoId: coinData.id, // Use string coingeckoId
-          name: coinData.id,
-          symbol: coinData.id,
-          currentPrice: coinData.current_price,
-          priceChangePercentage24h: coinData.price_change_percentage_24h,
-          totalVolume: coinData.total_volume,
-          marketCap: coinData.market_cap,
-          marketCapRank: coinData.market_cap_rank,
-          lastUpdated: new Date().toISOString(),
-          image: coinData.image
+      const serverToken = getServerToken();
+      const docs = await Promise.all(
+        comparisonTarget.coinIds.map(async (id) => {
+          return await convex.query(api.coingeckoMarkets.getMarketDataByCoingeckoId, {
+            serverToken,
+            coingeckoId: id,
+          });
+        }),
+      );
+
+      const coinPriceData = docs
+        .filter((d) => d !== null)
+        .map((doc) => ({
+          coingeckoId: doc!.coingeckoId,
+          name: doc!.name,
+          symbol: doc!.symbol,
+          currentPrice: doc!.currentPrice ?? 0,
+          priceChangePercentage24h: doc!.priceChangePercentage24h ?? 0,
+          totalVolume: doc!.totalVolume ?? 0,
+          marketCap: doc!.marketCap ?? 0,
+          marketCapRank: doc!.marketCapRank ?? 0,
+          lastUpdated: doc!.lastUpdated,
+          image: doc!.image,
         }));
-        
-        results.comparisonData = {
-          coins: coinPriceData,
-          metrics: {
-            performance: coinPriceData.map((coin: CoinPriceData) => ({
-              coingeckoId: coin.coingeckoId, // Use string coingeckoId
-              change24h: coin.priceChangePercentage24h || 0,
-              change7d: 0
-            }))
-          }
-        };
-      }
+
+      if (coinPriceData.length === 0) return;
+
+      results.comparisonData = {
+        coins: coinPriceData,
+        metrics: {
+          performance: coinPriceData.map((coin: CoinPriceData) => ({
+            coingeckoId: coin.coingeckoId,
+            change24h: coin.priceChangePercentage24h || 0,
+            change7d: 0,
+          })),
+        },
+      };
     } catch (error) {
       console.error('Comparison data fetch failed:', error);
       results.errors.push(`Comparison data: ${error}`);
@@ -525,12 +528,13 @@ export class EnhancedDataOrchestrator {
       '4h': '1', 
       '1d': '1',
       '7d': '7',
-      '30d': '30',
+      '30d': '90',
       '90d': '90',
       '1y': '365',
-      'max': 'max'
+      '2y': '1825',
+      'max': '365',
     };
-    return timeframeMap[timeframe] || '30';
+    return timeframeMap[timeframe] || '90';
   }
 
   /**

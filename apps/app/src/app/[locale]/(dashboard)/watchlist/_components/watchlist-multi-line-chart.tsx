@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createRoot } from "react-dom/client"
 import { useTheme } from 'next-themes'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
@@ -13,8 +14,11 @@ import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingec
 import { ChartLoadingSkeleton } from "@/components/charts/chart-loading-skeleton"
 import type { WatchlistGroup } from './watchlist-context'
 import { WatchlistMultiLineTimeScaleSelector } from "./watchlist-multi-line-time-scale-selector"
-import type { WatchlistSeries } from "./watchlist-multi-line.types"
-import { useWatchlistMultiLineLightweightChart } from "./use-watchlist-multi-line-lightweight-chart"
+import type { TooltipWatchlistDataRow, WatchlistSeries } from "./watchlist-multi-line.types"
+import { WatchlistMultiLineTooltipContent } from "./watchlist-multi-line-tooltip"
+import { Liveline } from "liveline"
+import type { LivelinePoint, LivelineSeries } from "liveline"
+import type { Time as LightweightTime } from "lightweight-charts"
 
 type WatchlistGroupId = WatchlistGroup["_id"]
 
@@ -42,6 +46,55 @@ function getBucketMsFromTimeScale(timeScale: string): number {
 
 function floorToBucket(timeMs: number, bucketMs: number): number {
   return Math.floor(timeMs / bucketMs) * bucketMs
+}
+
+function toUnixSeconds(time: LightweightTime): number | null {
+  if (typeof time === "number") return Number.isFinite(time) ? time : null
+
+  if (typeof time === "string") {
+    const [year, month, day] = time.split("-").map((part) => Number(part))
+    if (!year || !month || !day) return null
+    return Math.floor(Date.UTC(year, month - 1, day) / 1000)
+  }
+
+  if (typeof time === "object" && time) {
+    const maybe = time as { year?: unknown; month?: unknown; day?: unknown }
+    const year = typeof maybe.year === "number" ? maybe.year : null
+    const month = typeof maybe.month === "number" ? maybe.month : null
+    const day = typeof maybe.day === "number" ? maybe.day : null
+    if (!year || !month || !day) return null
+    return Math.floor(Date.UTC(year, month - 1, day) / 1000)
+  }
+
+  return null
+}
+
+function findClosestPoint(
+  data: Array<LivelinePoint>,
+  targetTimeSec: number,
+): LivelinePoint | null {
+  if (data.length === 0) return null
+
+  let low = 0
+  let high = data.length - 1
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const midTime = data[mid]?.time
+    if (midTime === undefined) break
+    if (midTime === targetTimeSec) return data[mid] ?? null
+    if (midTime < targetTimeSec) low = mid + 1
+    else high = mid - 1
+  }
+
+  const right = data[low]
+  const left = data[low - 1]
+  if (!left) return right ?? null
+  if (!right) return left ?? null
+
+  const leftDiff = Math.abs(left.time - targetTimeSec)
+  const rightDiff = Math.abs(right.time - targetTimeSec)
+  return leftDiff <= rightDiff ? left : right
 }
 
 function useWatchlistSeriesData(
@@ -167,7 +220,7 @@ export function WatchlistMultiLineChart({
         ? baseColor 
         : baseColor.replace(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/, (_, h, s, l) => {
             // Increase saturation and decrease lightness for light mode
-            return `hsl(${h}, ${Math.min(100, parseInt(s) + 20)}%, ${Math.max(30, parseInt(l) - 40)}%)`
+            return `hsl(${h}, ${Math.min(100, Number.parseInt(s) + 20)}%, ${Math.max(30, Number.parseInt(l) - 40)}%)`
           })
       
       return {
@@ -184,42 +237,211 @@ export function WatchlistMultiLineChart({
     }))
   }, [watchlistSeriesData])
 
-  const { chartContainerRef, lineSeriesMapRef } = useWatchlistMultiLineLightweightChart({
-    series: watchlistSeriesData,
-    isDarkMode,
-    height: 400,
-  })
+  const livelineSeries = useMemo((): LivelineSeries[] => {
+    const isHovering = Boolean(hoveredWatchlist)
 
-  // Handle hover effects on chart lines
+    return watchlistSeriesData
+      .map((row): LivelineSeries | null => {
+        const data: LivelinePoint[] = []
+        for (const point of row.data) {
+          const time = toUnixSeconds(point.time)
+          if (time === null) continue
+          if (!Number.isFinite(point.value)) continue
+          data.push({ time, value: point.value })
+        }
+
+        const latestValue = data[data.length - 1]?.value
+        if (typeof latestValue !== "number") return null
+
+        const isDimmed = isHovering && hoveredWatchlist !== row.id
+        const color = isDimmed ? addOpacityToColor(row.color, 0.25) : row.color
+        const latestPctText = `${latestValue > 0 ? "+" : ""}${latestValue.toFixed(2)}%`
+
+        return {
+          id: row.id,
+          data,
+          value: latestValue,
+          color,
+          label: latestPctText,
+        }
+      })
+      .filter((row): row is LivelineSeries => row !== null)
+  }, [watchlistSeriesData, hoveredWatchlist])
+
+  const tooltipSeries = useMemo(() => {
+    return watchlistSeriesData
+      .map((row) => {
+        const data: LivelinePoint[] = []
+        for (const point of row.data) {
+          const time = toUnixSeconds(point.time)
+          if (time === null) continue
+          if (!Number.isFinite(point.value)) continue
+          data.push({ time, value: point.value })
+        }
+
+        return {
+          id: row.id,
+          name: row.name,
+          color: row.color,
+          icon: row.icon,
+          data,
+        }
+      })
+      .filter((row) => row.data.length > 0)
+  }, [watchlistSeriesData])
+
+  const windowSecs = useMemo(() => {
+    let min: number | null = null
+    let max: number | null = null
+
+    for (const s of livelineSeries) {
+      const first = s.data[0]?.time
+      const last = s.data[s.data.length - 1]?.time
+      if (typeof first !== "number" || typeof last !== "number") continue
+      if (min === null || first < min) min = first
+      if (max === null || last > max) max = last
+    }
+
+    if (min === null || max === null) return 30
+    return Math.max(30, max - min)
+  }, [livelineSeries])
+
+  const tooltipClassName = useMemo(
+    () =>
+      `fixed overflow-hidden text-[11px] rounded-xl w-[220px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-opacity duration-100 ease-out ${
+        isDarkMode
+          ? "text-white bg-zinc-900/95 border border-zinc-700/50"
+          : "text-gray-900 bg-white/95 border border-gray-200/50"
+      }`,
+    [isDarkMode],
+  )
+
+  const chartWrapperRef = useRef<HTMLDivElement | null>(null)
+  const tooltipElRef = useRef<HTMLDivElement | null>(null)
+  const tooltipRootRef = useRef<ReturnType<typeof createRoot> | null>(null)
+  const isTooltipVisibleRef = useRef(false)
+  const lastTooltipTimeRef = useRef<number | null>(null)
+
   useEffect(() => {
-    if (!lineSeriesMapRef.current.size) return
+    const tooltipEl = document.createElement("div")
+    const tooltipRoot = createRoot(tooltipEl)
+    tooltipElRef.current = tooltipEl
+    tooltipRootRef.current = tooltipRoot
 
-    lineSeriesMapRef.current.forEach((lineData, watchlistId) => {
-      const { series, watchlistData } = lineData
-      const isHovered = hoveredWatchlist === watchlistId
-      const isOtherHovered = hoveredWatchlist && hoveredWatchlist !== watchlistId
+    tooltipEl.className = tooltipClassName
+    tooltipEl.style.left = "0px"
+    tooltipEl.style.top = "0px"
+    tooltipEl.style.opacity = "0"
+    tooltipEl.style.visibility = "hidden"
+    tooltipEl.style.transform = "translate3d(0px, 0px, 0)"
+    document.body.appendChild(tooltipEl)
 
-      if (isOtherHovered) {
-        // Dim this line
-        series.applyOptions({
-          color: addOpacityToColor(watchlistData.color, 0.3), // 30% opacity
-          lineWidth: 1,
-        })
-      } else if (isHovered) {
-        // Highlight this line
-        series.applyOptions({
-          color: watchlistData.color,
-          lineWidth: 2,
-        })
-      } else {
-        // Reset to normal
-        series.applyOptions({
-          color: watchlistData.color,
-          lineWidth: 1,
+    return () => {
+      isTooltipVisibleRef.current = false
+      lastTooltipTimeRef.current = null
+      tooltipElRef.current = null
+      tooltipRootRef.current = null
+
+      requestAnimationFrame(() => {
+        try {
+          tooltipRoot.unmount()
+        } catch {
+          // noop
+        }
+        if (document.body.contains(tooltipEl)) {
+          document.body.removeChild(tooltipEl)
+        }
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    const tooltipEl = tooltipElRef.current
+    if (tooltipEl) tooltipEl.className = tooltipClassName
+  }, [tooltipClassName])
+
+  const handleLivelineHover = useCallback(
+    (hover: { time: number; value: number; x: number; y: number } | null) => {
+      const tooltipEl = tooltipElRef.current
+      const tooltipRoot = tooltipRootRef.current
+      const container = chartWrapperRef.current
+      if (!tooltipEl || !tooltipRoot || !container) return
+
+      if (!hover) {
+        if (isTooltipVisibleRef.current) {
+          tooltipEl.style.opacity = "0"
+          tooltipEl.style.visibility = "hidden"
+          isTooltipVisibleRef.current = false
+          lastTooltipTimeRef.current = null
+        }
+        return
+      }
+
+      const primary = tooltipSeries[0]
+      const closestPrimary = primary ? findClosestPoint(primary.data, Math.round(hover.time)) : null
+      const timeSec = closestPrimary?.time ?? Math.round(hover.time)
+      const timestampMs = timeSec * 1000
+
+      const rows: TooltipWatchlistDataRow[] = []
+      for (const row of tooltipSeries) {
+        const closest = findClosestPoint(row.data, timeSec)
+        rows.push({
+          name: row.name,
+          color: row.color,
+          value: closest?.value ?? null,
+          icon: row.icon,
         })
       }
-    })
-  }, [hoveredWatchlist, watchlistSeriesData])
+
+      const hasAnyValue = rows.some((row) => row.value !== null)
+      if (!hasAnyValue) {
+        if (isTooltipVisibleRef.current) {
+          tooltipEl.style.opacity = "0"
+          tooltipEl.style.visibility = "hidden"
+          isTooltipVisibleRef.current = false
+          lastTooltipTimeRef.current = null
+        }
+        return
+      }
+
+      rows.sort((a, b) => a.name.localeCompare(b.name))
+
+      if (!isTooltipVisibleRef.current) {
+        tooltipEl.style.opacity = "1"
+        tooltipEl.style.visibility = "visible"
+        isTooltipVisibleRef.current = true
+      }
+
+      if (lastTooltipTimeRef.current !== timeSec) {
+        lastTooltipTimeRef.current = timeSec
+        tooltipRoot.render(
+          <WatchlistMultiLineTooltipContent watchlistData={rows} timestamp={timestampMs} />,
+        )
+      }
+
+      const chartRect = container.getBoundingClientRect()
+      const tooltipWidth = tooltipEl.offsetWidth || 220
+      const tooltipHeight = tooltipEl.offsetHeight || 120
+
+      // Pin tooltip to a stable position (top-right of chart) so it doesn't jump while scrubbing.
+      let left = chartRect.right - tooltipWidth - 12
+      let top = chartRect.top + 12
+
+      if (left < 10) left = 10
+      if (left + tooltipWidth > window.innerWidth - 10) {
+        left = window.innerWidth - tooltipWidth - 10
+      }
+
+      if (top + tooltipHeight > window.innerHeight - 10) {
+        top = window.innerHeight - tooltipHeight - 10
+      }
+
+      if (top < 10) top = 10
+
+      tooltipEl.style.transform = `translate3d(${left}px, ${top}px, 0)`
+    },
+    [tooltipSeries],
+  )
 
   return (
     <div className="grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/20 border-zinc-800/10 overflow-hidden p-1">
@@ -325,7 +547,30 @@ export function WatchlistMultiLineChart({
                     </div>
                   </div>
                 ) : (
-                  <div ref={chartContainerRef} />
+                  <div ref={chartWrapperRef} className="h-[400px] w-full">
+                    <Liveline
+                      data={[]}
+                      value={0}
+                      series={livelineSeries}
+                      theme={isDarkMode ? "dark" : "light"}
+                      color={isDarkMode ? "#e5e7eb" : "#0f172a"}
+                      lineWidth={2}
+                      window={windowSecs}
+                      grid={false}
+                      fill={false}
+                      pulse={false}
+                      badge={false}
+                      momentum={false}
+                      scrub
+                      tooltipY={-9999}
+                      tooltipOutline={false}
+                      onHover={handleLivelineHover}
+                      formatTime={() => ""}
+                      formatValue={(v) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%`}
+                      padding={{ top: 12, right: 12, bottom: 12, left: 12 }}
+                      className="size-full"
+                    />
+                  </div>
                 )}
               </div>
             </CardContent>

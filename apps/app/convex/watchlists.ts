@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
+import { internal } from "./_generated/api";
 
 const watchlistGroupValidator = v.object({
   _id: v.id("watchlistGroups"),
@@ -213,8 +214,25 @@ export const deleteWatchlistGroup = mutation({
       .withIndex("by_group", (q) => q.eq("watchlistGroupId", args.groupId))
       .collect();
 
+    const coinIds = Array.from(new Set(watchlistItems.map((item) => item.coinId)));
+
     await Promise.all(
       watchlistItems.map(item => ctx.db.delete(item._id))
+    );
+
+    // Remove global watchlist tracking when the coin is no longer watched by anyone.
+    await Promise.all(
+      coinIds.map(async (coinId) => {
+        const remaining = await ctx.db
+          .query("watchlists")
+          .withIndex("by_coin", (q) => q.eq("coinId", coinId))
+          .first();
+        if (remaining) return;
+        await ctx.runMutation(internal.coingeckoState._removeTrackedCoinReason, {
+          coingeckoId: coinId,
+          reason: "watchlist",
+        });
+      }),
     );
 
     // Delete the group
@@ -412,11 +430,25 @@ export const addToWatchlist = mutation({
     if (existing) throw new Error("Already in watchlist");
 
     // Store CoinGecko string ID directly (e.g., "bitcoin", "ethereum")
-    return await ctx.db.insert("watchlists", {
+    const id = await ctx.db.insert("watchlists", {
       userId: user._id,
       watchlistGroupId: targetGroupId,
       coinId: args.coinId, // CoinGecko string ID
     });
+
+    // Track this coin globally so crons can keep it warm.
+    await ctx.runMutation(internal.coingeckoState._touchTrackedCoin, {
+      coingeckoId: args.coinId,
+      reason: "watchlist",
+      lastSeen: Date.now(),
+    });
+
+    // Warm market quotes quickly so the watchlist row doesn't show N/A on first render.
+    await ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshMarketsByIds, {
+      coingeckoIds: [args.coinId],
+    });
+
+    return id;
   },
 });
 
@@ -461,6 +493,19 @@ export const removeFromWatchlist = mutation({
     if (!watchlistItem) throw new Error("Not in watchlist");
 
     await ctx.db.delete(watchlistItem._id);
+
+    // If nobody is watching this coin anymore, remove it from the tracked set.
+    const remaining = await ctx.db
+      .query("watchlists")
+      .withIndex("by_coin", (q) => q.eq("coinId", args.coinId))
+      .first();
+
+    if (!remaining) {
+      await ctx.runMutation(internal.coingeckoState._removeTrackedCoinReason, {
+        coingeckoId: args.coinId,
+        reason: "watchlist",
+      });
+    }
     return null;
   },
 });
@@ -513,6 +558,21 @@ export const removeBulkFromWatchlist = mutation({
     
     await Promise.all(
       validItems.map(item => ctx.db.delete(item!._id))
+    );
+
+    const uniqueCoinIds = Array.from(new Set(args.coinIds));
+    await Promise.all(
+      uniqueCoinIds.map(async (coinId) => {
+        const remaining = await ctx.db
+          .query("watchlists")
+          .withIndex("by_coin", (q) => q.eq("coinId", coinId))
+          .first();
+        if (remaining) return;
+        await ctx.runMutation(internal.coingeckoState._removeTrackedCoinReason, {
+          coingeckoId: coinId,
+          reason: "watchlist",
+        });
+      }),
     );
 
     return { removedCount: validItems.length };

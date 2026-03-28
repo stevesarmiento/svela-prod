@@ -78,6 +78,41 @@ const DEFAULT_CONFIG: BollingerBandsConfig = {
   fillOpacity: 0.1
 }
 
+function normalizeEpochSeconds(value: number): number | null {
+  if (!Number.isFinite(value)) return null
+  const seconds = value > 1e10 ? Math.floor(value / 1000) : Math.floor(value)
+  return Number.isFinite(seconds) ? seconds : null
+}
+
+function normalizeIndicatorOhlcv(data: OHLCVDataPoint[]): OHLCVDataPoint[] {
+  const byEpoch = new Map<number, OHLCVDataPoint>()
+  for (const point of data) {
+    const epoch = normalizeEpochSeconds(point.time)
+    if (epoch == null) continue
+    if (!Number.isFinite(point.open) || !Number.isFinite(point.high) || !Number.isFinite(point.low) || !Number.isFinite(point.close))
+      continue
+    byEpoch.set(epoch, { ...point, time: epoch, volume: Number.isFinite(point.volume) ? point.volume : 0 })
+  }
+
+  return Array.from(byEpoch.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([, value]) => value)
+}
+
+function normalizeSeries(points: Array<{ time: number; value: number }>): Array<{ time: Time; value: number }> {
+  const byEpoch = new Map<number, { time: Time; value: number }>()
+  for (const point of points) {
+    const epoch = normalizeEpochSeconds(point.time)
+    if (epoch == null) continue
+    if (!Number.isFinite(point.value)) continue
+    byEpoch.set(epoch, { time: epoch as Time, value: point.value })
+  }
+
+  return Array.from(byEpoch.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([, value]) => value)
+}
+
 export function BollingerBandsChart({ 
   data, 
   config,
@@ -103,7 +138,7 @@ export function BollingerBandsChart({
   const finalConfig = { ...DEFAULT_CONFIG, ...config }
 
   // Calculate Bollinger Bands
-  const bbResult = calculateBollingerBands(data, finalConfig)
+  const bbResult = calculateBollingerBands(normalizeIndicatorOhlcv(data), finalConfig)
 
   // Toggle indicator visibility
   const toggleIndicator = (key: keyof BollingerBandsDisplaySettings) => {
@@ -242,7 +277,7 @@ export function BollingerBandsChart({
         lastValueVisible: false,
         priceLineVisible: false,
       })
-      upperSeries.setData(bbResult.upper as { time: Time; value: number }[])
+      upperSeries.setData(normalizeSeries(bbResult.upper))
       seriesRefs.current.set('upper', upperSeries)
     }
 
@@ -258,7 +293,7 @@ export function BollingerBandsChart({
         lastValueVisible: false,
         priceLineVisible: false,
       })
-      lowerSeries.setData(bbResult.lower as { time: Time; value: number }[])
+      lowerSeries.setData(normalizeSeries(bbResult.lower))
       seriesRefs.current.set('lower', lowerSeries)
     }
 
@@ -273,7 +308,7 @@ export function BollingerBandsChart({
         lastValueVisible: true,
         priceLineVisible: false,
       })
-      basisSeries.setData(bbResult.basis as { time: Time; value: number }[])
+      basisSeries.setData(normalizeSeries(bbResult.basis))
       seriesRefs.current.set('basis', basisSeries)
     }
 
@@ -288,7 +323,7 @@ export function BollingerBandsChart({
         lastValueVisible: true,
         priceLineVisible: false,
       })
-      indicatorSeries.setData(bbResult.indicator as { time: Time; value: number }[])
+      indicatorSeries.setData(normalizeSeries(bbResult.indicator))
       seriesRefs.current.set('indicator', indicatorSeries)
     }
 
@@ -306,11 +341,7 @@ export function BollingerBandsChart({
           lastValueVisible: false,
           priceLineVisible: false,
         })
-        obSeries.setData(bbResult.overboughtBreaches.map(point => ({
-          ...point,
-          time: point.time as Time,
-          color: bbResult.colors.overbought
-        })))
+        obSeries.setData(normalizeSeries(bbResult.overboughtBreaches))
         seriesRefs.current.set('overbought', obSeries)
       }
 
@@ -326,11 +357,7 @@ export function BollingerBandsChart({
           lastValueVisible: false,
           priceLineVisible: false,
         })
-        osSeries.setData(bbResult.oversoldBreaches.map(point => ({
-          ...point,
-          time: point.time as Time,
-          color: bbResult.colors.oversold
-        })))
+        osSeries.setData(normalizeSeries(bbResult.oversoldBreaches))
         seriesRefs.current.set('oversold', osSeries)
       }
     }

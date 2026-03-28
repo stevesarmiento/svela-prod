@@ -209,6 +209,23 @@ export function createChartController({
     let ohlcvByEpochSecond = new Map<number, OHLCVDataPoint>();
     let safeOhlcvData: OHLCVDataPoint[] = [];
 
+    function normalizeLineSeries(points: HullSuiteOverlay['mhull']): HullSuiteOverlay['mhull'] {
+        if (!points || points.length === 0) return [];
+
+        const byEpoch = new Map<number, { time: Time; value: number }>();
+        for (const point of points) {
+            if (!point) continue;
+            const epoch = timeToEpochSeconds(point.time);
+            if (epoch == null) continue;
+            if (!Number.isFinite(point.value)) continue;
+            byEpoch.set(epoch, { time: epoch as Time, value: point.value });
+        }
+
+        return Array.from(byEpoch.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map(([, value]) => value);
+    }
+
     // Highlight overlay + Axis overlay
     const highlightOverlay = createHighlightOverlay({
         containerEl,
@@ -367,6 +384,32 @@ export function createChartController({
             return true;
         });
 
+        // Normalize: lightweight-charts requires strictly ascending, unique times.
+        // We coerce all times to epoch-seconds and dedupe by that key.
+        const uniqueByEpoch = new Map<number, OHLCVDataPoint>();
+        for (const d of safeOhlcvData) {
+            const epoch = timeToEpochSeconds(d.time);
+            if (epoch == null) continue;
+
+            const existing = uniqueByEpoch.get(epoch);
+            if (!existing) {
+                uniqueByEpoch.set(epoch, { ...d, time: epoch as Time });
+                continue;
+            }
+
+            // Prefer the latest datapoint while preserving any defined volume.
+            uniqueByEpoch.set(epoch, {
+                ...existing,
+                ...d,
+                time: epoch as Time,
+                volume: d.volume ?? existing.volume,
+            });
+        }
+
+        safeOhlcvData = Array.from(uniqueByEpoch.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map(([, d]) => d);
+
         // Rebuild map for tooltip OHLC lookup.
         ohlcvByEpochSecond = new Map<number, OHLCVDataPoint>();
         for (const d of safeOhlcvData) {
@@ -453,8 +496,11 @@ export function createChartController({
             shullSeries.applyOptions({ lineWidth, color, lineStyle, visible: true });
         }
 
-        if (overlay.mhull?.length) mhullSeries.setData(overlay.mhull);
-        if (overlay.shull?.length) shullSeries.setData(overlay.shull);
+        const mhull = overlay.mhull?.length ? normalizeLineSeries(overlay.mhull) : [];
+        const shull = overlay.shull?.length ? normalizeLineSeries(overlay.shull) : [];
+
+        mhullSeries.setData(mhull);
+        shullSeries.setData(shull);
     }
 
     function setCallbacks(next: Pick<UseChartInstanceOptions, 'onCrosshairMove' | 'onCrosshairTimeMove'>) {

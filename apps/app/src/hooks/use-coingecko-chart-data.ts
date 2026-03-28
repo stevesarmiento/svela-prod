@@ -88,7 +88,7 @@ function parseOHLCData(data: OHLCAPIResponse): ParsedChartData | null {
 
   try {
     const ohlcPoints = data.data.map((point: OHLCDataPoint) => ({
-      time: (point.timestamp / 1000) as Time,
+      time: Math.floor(point.timestamp / 1000) as Time,
       open: point.open || 0,
       high: point.high || 0,
       low: point.low || 0,
@@ -132,7 +132,7 @@ function parseMarketChartData(data: MarketChartAPIResponse): ParsedChartData | n
 
     // Parse line chart data
     const lineChart = prices.map((point: MarketChartPoint) => ({
-      time: point.time as Time,
+      time: Math.floor(point.time) as Time,
       value: point.value || 0
     }))
 
@@ -225,7 +225,7 @@ function combineOHLCWithVolume(
   try {
     // Parse real OHLC data
     const ohlcPoints = ohlcData.data.map((point: OHLCDataPoint) => ({
-      time: (point.timestamp / 1000) as Time,
+      time: Math.floor(point.timestamp / 1000) as Time,
       open: point.open || 0,
       high: point.high || 0,
       low: point.low || 0,
@@ -424,7 +424,12 @@ export function useCoinGeckoChartData(
       }
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
-    refetchInterval: 5 * 60 * 1000, // 5 minutes
+    refetchInterval: (query) => {
+      const points = query.state.data?.data?.lineChart?.length ?? 0
+      // When warmup is in-flight, poll quickly so token pages don't stay empty.
+      if (points < 2) return 5_000
+      return 5 * 60 * 1000
+    },
     enabled: !!coinId,
     retry: 1, // Don't retry too much, fallback handles failures
   })

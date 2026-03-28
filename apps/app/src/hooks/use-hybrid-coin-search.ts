@@ -240,7 +240,7 @@ export function useHybridTopCoins(limit = 25) {
           }
         }
       }))
-      .filter(coin => coin.quote.USD.price > 0) // Only coins with valid pricing
+      .filter((coin) => coin.quote.USD.price > 0 && Number.isFinite(coin.cmc_rank) && coin.cmc_rank > 0)
       .sort((a, b) => a.cmc_rank - b.cmc_rank) // Sort by market cap rank
       .slice(0, limit);
   }, [pricingData, limit]);

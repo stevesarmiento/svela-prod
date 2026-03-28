@@ -23,6 +23,7 @@ import { useContextualCommands } from '@/hooks/use-contextual-commands';
 import { useAddCoinToWatchlist } from '@/hooks/use-add-coin-to-watchlist';
 import { BackgroundPattern } from './background-pattern';
 import { formatUsdPrice } from "@/lib/format-usd";
+import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides";
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
 
@@ -75,7 +76,9 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   }, [deferredSearchQuery, isSearchLoading, isTopCoinsLoading]);
 
   const hasSearch = deferredSearchQuery.trim().length > 0;
-  const isCoinResultsContext = context === 'charts' || context === null;
+  const isCoinResultsContext = true;
+  const coinSelectMode: "watchlist-add" | "navigate" =
+    context === "charts" || context === "watchlist" ? "watchlist-add" : "navigate";
   
   const clearSearch = useCallback(() => {
     setSearchQuery('');
@@ -295,10 +298,18 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
               </CommandGroup>
             ))}
 
-            {/* Charts Token Results - Only show when context is 'charts' */}
-            {context === 'charts' && (coinResultsLoading || coinsToDisplay.length > 0) && (
+            {/* Token Results */}
+            {(coinResultsLoading || coinsToDisplay.length > 0) && (
               <CommandGroup
-                heading={hasSearch ? "Add Tokens" : "Add to Watchlist"}
+                heading={
+                  coinSelectMode === "watchlist-add"
+                    ? hasSearch
+                      ? "Add Tokens"
+                      : "Add to Watchlist"
+                    : hasSearch
+                      ? "Tokens"
+                      : "Popular Tokens"
+                }
                 className="text-white [&_[cmdk-group-heading]]:text-white/60"
               >
                 {coinResultsLoading ? (
@@ -323,7 +334,11 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                   coinsToDisplay.map((coin) => (
                     <CommandItem
                       key={coin.id}
-                      value={`watchlist-add:${coin.id}`}
+                      value={
+                        coinSelectMode === "watchlist-add"
+                          ? `watchlist-add:${coin.id}`
+                          : `coin:${coin.id}`
+                      }
                       onSelect={handleCommandSelect}
                       className="cursor-pointer bg-transparent aria-selected:bg-zinc-800/30 aria-selected:text-white"
                       disabled={isAddingCoin}
@@ -332,8 +347,11 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                         <div className="flex items-center gap-3 pr-5">
                           <div className="relative">
                             <Image
-                              src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
-                              alt={coin.name}
+                              src={(() => {
+                                const logoUrl = getTokenLogoURL(coin.symbol, coin.image)
+                                return logoUrl?.startsWith("http") || logoUrl?.startsWith("/") ? logoUrl : "/favicon.ico"
+                              })()}
+                              alt={cleanTokenName(coin.name)}
                               className="w-6 h-6 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800 shadow-sm shadow-zinc-950"
                               width={24}
                               height={24}
@@ -344,78 +362,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                             />
                           </div>
                           <div className="flex flex-col">
-                            <span className="font-medium text-white">{coin.name}</span>
-                            <span className="text-xs text-white/60">{coin.symbol.toUpperCase()}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="text-right">
-                            <div className="text-sm font-diatype-mono text-white">
-                              {formatUsdPrice(coin.quote.USD.price)}
-                            </div>
-                            <div className={`text-xs font-diatype-mono ${
-                              coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'
-                            }`}>
-                              {coin.quote.USD.percent_change_24h.toFixed(2)}%
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </CommandItem>
-                  ))
-                )}
-              </CommandGroup>
-            )}
-
-            {/* Regular Coin Results - Only show when there's no context */}
-            {!context && (coinResultsLoading || coinsToDisplay.length > 0) && (
-              <CommandGroup
-                heading={hasSearch ? "Tokens" : "Popular Tokens"}
-                className="text-white [&_[cmdk-group-heading]]:text-white/60"
-              >
-                {coinResultsLoading ? (
-                  Array.from({ length: 5 }).map((_, index) => (
-                    <CommandItem key={`skeleton-${index}`} disabled>
-                      <div className="flex items-center justify-between w-full bg-transparent p-2 rounded-lg">
-                        <div className="flex items-center gap-3 pr-5">
-                          <Skeleton className="h-6 w-6 rounded-full" />
-                          <div className="flex flex-col gap-1">
-                            <Skeleton className="h-4 w-24" />
-                            <Skeleton className="h-3 w-12" />
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <Skeleton className="h-4 w-16" />
-                          <Skeleton className="h-3 w-10" />
-                        </div>
-                      </div>
-                    </CommandItem>
-                  ))
-                ) : (
-                  coinsToDisplay.map((coin) => (
-                    <CommandItem
-                      key={coin.id}
-                      value={`coin:${coin.id}`}
-                      onSelect={handleCommandSelect}
-                      className="cursor-pointer bg-transparent aria-selected:bg-zinc-800/30 aria-selected:text-white"
-                    >
-                      <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
-                        <div className="flex items-center gap-3 pr-5">
-                          <div className="relative">
-                            <Image
-                              src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
-                              alt={coin.name}
-                              className="w-6 h-6 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800 shadow-sm shadow-zinc-950"
-                              width={24}
-                              height={24}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = '/favicon.ico';
-                              }}
-                            />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-medium text-white">{coin.name}</span>
+                            <span className="font-medium text-white">{cleanTokenName(coin.name)}</span>
                             <span className="text-xs text-white/60">{coin.symbol.toUpperCase()}</span>
                           </div>
                         </div>

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getCoinsList, searchCoins, getCoinData, getRateLimitStatus } from "@/lib/coingecko";
+import { auth } from "@clerk/nextjs/server";
+import { api } from "../../../../convex/_generated/api";
+import { convex, getServerToken } from "@/lib/convex-server";
 
 // Validation schemas
 const SearchQuerySchema = z.object({
@@ -16,28 +18,41 @@ const ListQuerySchema = z.object({
 });
 
 export async function GET(request: Request) {
+  let userId: string | null = null;
+  try {
+    userId = (await auth()).userId;
+  } catch {
+    userId = null;
+  }
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("query");
     const coinId = searchParams.get("id");
     const list = searchParams.get("list");
     const includePlatform = searchParams.get("include_platform");
-
-    // Check rate limit status
-    const rateLimitStatus = getRateLimitStatus();
-    console.log('🚦 CoinGecko Rate Limit Status:', rateLimitStatus);
+    const serverToken = getServerToken();
 
     // Handle coins list endpoint
     if (list === 'true') {
       const { include_platform: includePlatformFlag } = ListQuerySchema.parse({ include_platform: includePlatform });
-      
-      const coins = await getCoinsList(includePlatformFlag);
-      
+
+      // DB-only: we always return the stored CoinGecko coin list.
+      // `include_platform` is best-effort; platforms are present only if previously ingested.
+      const coins = await convex.query(api.coins.getAllCoinGeckoCoins, {
+        serverToken,
+        limit: 1000,
+      });
+
       return NextResponse.json({
         coins,
         meta: {
           total: coins.length,
-          rateLimitStatus
+          includePlatform: includePlatformFlag,
+          source: "convex",
         }
       }, {
         headers: {
@@ -49,14 +64,18 @@ export async function GET(request: Request) {
     // Handle search endpoint
     if (query) {
       const validatedQuery = SearchQuerySchema.parse({ query });
-      const data = await searchCoins(validatedQuery.query);
-      
+      const coins = await convex.query(api.coins.searchCoinGeckoCoins, {
+        serverToken,
+        query: validatedQuery.query,
+        limit: 50,
+      });
+
       return NextResponse.json({
-        ...data,
+        coins,
         meta: {
-          total: data.coins.length,
-          rateLimitStatus
-        }
+          total: coins.length,
+          source: "convex",
+        },
       }, {
         headers: {
           'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=30',
@@ -67,12 +86,16 @@ export async function GET(request: Request) {
     // Handle coin details endpoint
     if (coinId) {
       const validatedId = CoinIdSchema.parse({ id: coinId });
-      const data = await getCoinData(validatedId.id);
-      
+
+      const coin = await convex.query(api.coins.getCoinGeckoCoinById, {
+        serverToken,
+        coingeckoId: validatedId.id,
+      });
+
       return NextResponse.json({
-        ...data,
+        coin,
         meta: {
-          rateLimitStatus
+          source: "convex",
         }
       }, {
         headers: {
@@ -87,7 +110,7 @@ export async function GET(request: Request) {
     );
 
   } catch (error) {
-    console.error("CoinGecko API route error:", error);
+    console.error("CoinGecko DB route error:", error);
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -96,24 +119,8 @@ export async function GET(request: Request) {
       );
     }
 
-    // Handle rate limit errors
-    if (error instanceof Error && error.message.includes('Rate limit exceeded')) {
-      return NextResponse.json(
-        { error: error.message, rateLimitStatus: getRateLimitStatus() },
-        { status: 429 }
-      );
-    }
-
-    // Handle API key errors
-    if (error instanceof Error && error.message.includes('API key')) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 401 }
-      );
-    }
-
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to fetch data from CoinGecko" },
+      { error: error instanceof Error ? error.message : "Failed to read CoinGecko data from DB" },
       { status: 500 }
     );
   }

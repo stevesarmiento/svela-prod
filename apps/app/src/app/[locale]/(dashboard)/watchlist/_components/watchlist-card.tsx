@@ -234,7 +234,7 @@ export function WatchlistCard({
                 onSelect(group)
               }}
             >
-              <div className="w-10 h-10 rounded-full bg-zinc-50/5 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-full bg-white/5 border border-white/5 backdrop-blur-sm flex items-center justify-center">
                 <WatchlistGroupIcon 
                   icon={displayIcon} 
                   className="text-zinc-300"

@@ -16,6 +16,17 @@ import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
 import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
 import { useScrollThreshold } from '@/hooks/use-scroll-effect'
 
+function toEpochSeconds(time: unknown): number | null {
+  if (typeof time === "number") return Math.floor(time > 1e10 ? time / 1000 : time)
+  if (typeof time === "string") {
+    const parsed = Number(time)
+    if (Number.isFinite(parsed)) return Math.floor(parsed > 1e10 ? parsed / 1000 : parsed)
+    const ms = Date.parse(time)
+    return Number.isFinite(ms) ? Math.floor(ms / 1000) : null
+  }
+  return null
+}
+
 
 interface TokenPageClientProps {
   id: string
@@ -73,18 +84,35 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
 
   // React 19: Optimized indicator data with deferred values
   const indicatorData = React.useMemo(() => {
-    if (ohlcData.length > 0) {
-      return ohlcData.map((point, index) => ({
-        time: typeof point.time === 'string' ? parseInt(point.time) : point.time as number,
+    if (ohlcData.length === 0) return []
+
+    const volumeByEpoch = new Map<number, number>()
+    for (const volumePoint of volumeData) {
+      const epoch = toEpochSeconds(volumePoint.time)
+      if (epoch == null) continue
+      if (!Number.isFinite(volumePoint.value)) continue
+      volumeByEpoch.set(epoch, volumePoint.value)
+    }
+
+    const outByEpoch = new Map<number, { time: number; open: number; high: number; low: number; close: number; volume: number }>()
+
+    for (const point of ohlcData) {
+      const epoch = toEpochSeconds(point.time)
+      if (epoch == null) continue
+
+      outByEpoch.set(epoch, {
+        time: epoch,
         open: point.open,
         high: point.high,
         low: point.low,
         close: point.close,
-        volume: volumeData[index]?.value || 0 // Add volume from market-chart data
-      }))
+        volume: volumeByEpoch.get(epoch) ?? 0,
+      })
     }
-    
-    return []
+
+    return Array.from(outByEpoch.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([, value]) => value)
   }, [ohlcData, volumeData])
 
   // React 19: Show pending states

@@ -1,12 +1,13 @@
 'use client'
 
-import React, { useMemo, useTransition, useDeferredValue, useCallback, memo, useEffect, useState } from 'react'
+import React, { useMemo, useTransition, useDeferredValue, useCallback, memo, useEffect, useRef, useState } from 'react'
+import { createRoot } from "react-dom/client"
 import { useIsomorphicTheme } from '@/hooks/use-isomorphic-theme'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import type { CoinMarketData } from '@/types/coins'
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import { cn } from "@v1/ui/cn";
-import { IconCircleDottedAndCircle, IconXmarkCircleFill, IconPlus } from 'symbols-react'
+import { IconXmarkCircleFill, IconPlus } from 'symbols-react'
 import { toast } from "@v1/ui/use-toast"
 import Link from 'next/link'
 import { useBottomNav } from '@/components/navigation/bottom-nav-context'
@@ -18,7 +19,11 @@ import { ChartLoadingSkeleton } from "@/components/charts/chart-loading-skeleton
 import { useCoinGeckoBulkChartData } from '@/hooks/use-coingecko-bulk-chart-data'
 import { TimeScaleSelector } from "./multi-line-lightweight-time-scale-selector"
 import type { CoinSeries } from "./multi-line-lightweight.types"
-import { useMultiLineLightweightChart } from "./use-multi-line-lightweight-chart"
+import type { TooltipCoinData } from "./multi-line-lightweight.types"
+import { TooltipContent } from "./multi-line-lightweight-tooltip"
+import { Liveline } from "liveline"
+import type { LivelinePoint, LivelineSeries } from "liveline"
+import type { Time as LightweightTime } from "lightweight-charts"
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -30,6 +35,55 @@ interface MultiPriceChartLightweightProps {
   activeTimeScale: string
   setActiveTimeScale: (scale: string) => void
   isPending?: boolean
+}
+
+function toUnixSeconds(time: LightweightTime): number | null {
+  if (typeof time === "number") return Number.isFinite(time) ? time : null
+
+  if (typeof time === "string") {
+    const [year, month, day] = time.split("-").map((part) => Number(part))
+    if (!year || !month || !day) return null
+    return Math.floor(Date.UTC(year, month - 1, day) / 1000)
+  }
+
+  if (typeof time === "object" && time) {
+    const maybe = time as { year?: unknown; month?: unknown; day?: unknown }
+    const year = typeof maybe.year === "number" ? maybe.year : null
+    const month = typeof maybe.month === "number" ? maybe.month : null
+    const day = typeof maybe.day === "number" ? maybe.day : null
+    if (!year || !month || !day) return null
+    return Math.floor(Date.UTC(year, month - 1, day) / 1000)
+  }
+
+  return null
+}
+
+function findClosestPoint(
+  data: Array<LivelinePoint>,
+  targetTimeSec: number,
+): LivelinePoint | null {
+  if (data.length === 0) return null
+
+  let low = 0
+  let high = data.length - 1
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const midTime = data[mid]?.time
+    if (midTime === undefined) break
+    if (midTime === targetTimeSec) return data[mid] ?? null
+    if (midTime < targetTimeSec) low = mid + 1
+    else high = mid - 1
+  }
+
+  const right = data[low]
+  const left = data[low - 1]
+  if (!left) return right ?? null
+  if (!right) return left ?? null
+
+  const leftDiff = Math.abs(left.time - targetTimeSec)
+  const rightDiff = Math.abs(right.time - targetTimeSec)
+  return leftDiff <= rightDiff ? left : right
 }
 
 export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweight({ 
@@ -75,7 +129,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
         ? baseColor 
         : baseColor.replace(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/, (_, h, s, l) => {
             // Increase saturation and decrease lightness for light mode
-            return `hsl(${h}, ${Math.min(100, parseInt(s) + 20)}%, ${Math.max(30, parseInt(l) - 40)}%)`
+            return `hsl(${h}, ${Math.min(100, Number.parseInt(s) + 20)}%, ${Math.max(30, Number.parseInt(l) - 40)}%)`
           })
       
       return {
@@ -126,42 +180,211 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
       .filter((item): item is { imageUrl: string; profileUrl: string } => item !== null)
   }, [deferredCoins])
 
-  const { chartContainerRef, lineSeriesMapRef } = useMultiLineLightweightChart({
-    series: coinSeriesWithColors,
-    isDarkMode,
-    height: 400,
-  })
+  const livelineSeries = useMemo((): LivelineSeries[] => {
+    const isHovering = Boolean(hoveredCoin)
 
-  // Handle hover effects on chart lines
+    return coinSeriesWithColors
+      .map((row): LivelineSeries | null => {
+        const data: LivelinePoint[] = []
+        for (const point of row.data) {
+          const time = toUnixSeconds(point.time)
+          if (time === null) continue
+          if (!Number.isFinite(point.value)) continue
+          data.push({ time, value: point.value })
+        }
+
+        const latestValue = data[data.length - 1]?.value
+        if (typeof latestValue !== "number") return null
+
+        const isDimmed = isHovering && hoveredCoin !== row.id
+        const color = isDimmed ? addOpacityToColor(row.color, 0.25) : row.color
+
+        const latestPctText = `${latestValue > 0 ? "+" : ""}${latestValue.toFixed(2)}%`
+
+        return {
+          id: row.id,
+          data,
+          value: latestValue,
+          color,
+          // Render the latest % directly on the line endpoint.
+          label: `${row.symbol.toUpperCase()} ${latestPctText}`,
+        }
+      })
+      .filter((row): row is LivelineSeries => row !== null)
+  }, [coinSeriesWithColors, hoveredCoin])
+
+  const tooltipSeries = useMemo(() => {
+    return coinSeriesWithColors
+      .map((row) => {
+        const data: LivelinePoint[] = []
+        for (const point of row.data) {
+          const time = toUnixSeconds(point.time)
+          if (time === null) continue
+          if (!Number.isFinite(point.value)) continue
+          data.push({ time, value: point.value })
+        }
+
+        return {
+          id: row.id,
+          name: row.name,
+          symbol: row.symbol,
+          color: row.color,
+          data,
+        }
+      })
+      .filter((row) => row.data.length > 0)
+  }, [coinSeriesWithColors])
+
+  const windowSecs = useMemo(() => {
+    let min: number | null = null
+    let max: number | null = null
+
+    for (const s of livelineSeries) {
+      const first = s.data[0]?.time
+      const last = s.data[s.data.length - 1]?.time
+      if (typeof first !== "number" || typeof last !== "number") continue
+      if (min === null || first < min) min = first
+      if (max === null || last > max) max = last
+    }
+
+    if (min === null || max === null) return 30
+    return Math.max(30, max - min)
+  }, [livelineSeries])
+
+  const tooltipClassName = useMemo(
+    () =>
+      `fixed overflow-hidden text-[11px] rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-opacity duration-100 ease-out ${
+        isDarkMode
+          ? "text-white bg-zinc-900/95 border border-zinc-700/50"
+          : "text-gray-900 bg-white/95 border border-gray-200/50"
+      }`,
+    [isDarkMode],
+  )
+
+  const chartWrapperRef = useRef<HTMLDivElement | null>(null)
+  const tooltipElRef = useRef<HTMLDivElement | null>(null)
+  const tooltipRootRef = useRef<ReturnType<typeof createRoot> | null>(null)
+  const isTooltipVisibleRef = useRef(false)
+  const lastTooltipTimeRef = useRef<number | null>(null)
+
   useEffect(() => {
-    if (!lineSeriesMapRef.current.size) return
+    const tooltipEl = document.createElement("div")
+    const tooltipRoot = createRoot(tooltipEl)
+    tooltipElRef.current = tooltipEl
+    tooltipRootRef.current = tooltipRoot
 
-    lineSeriesMapRef.current.forEach((lineData, coinId) => {
-      const { series, coinData } = lineData
-      const isHovered = hoveredCoin === coinId
-      const isOtherHovered = hoveredCoin && hoveredCoin !== coinId
+    tooltipEl.className = tooltipClassName
+    tooltipEl.style.left = "0px"
+    tooltipEl.style.top = "0px"
+    tooltipEl.style.opacity = "0"
+    tooltipEl.style.visibility = "hidden"
+    tooltipEl.style.transform = "translate3d(0px, 0px, 0)"
+    document.body.appendChild(tooltipEl)
 
-      if (isOtherHovered) {
-        // Dim this line
-        series.applyOptions({
-          color: addOpacityToColor(coinData.color, 0.3), // 30% opacity
-          lineWidth: 1,
-        })
-      } else if (isHovered) {
-        // Highlight this line
-        series.applyOptions({
-          color: coinData.color,
-          lineWidth: 2,
-        })
-      } else {
-        // Reset to normal
-        series.applyOptions({
-          color: coinData.color,
-          lineWidth: 1,
+    return () => {
+      isTooltipVisibleRef.current = false
+      lastTooltipTimeRef.current = null
+      tooltipElRef.current = null
+      tooltipRootRef.current = null
+
+      requestAnimationFrame(() => {
+        try {
+          tooltipRoot.unmount()
+        } catch {
+          // noop
+        }
+        if (document.body.contains(tooltipEl)) {
+          document.body.removeChild(tooltipEl)
+        }
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    const tooltipEl = tooltipElRef.current
+    if (tooltipEl) tooltipEl.className = tooltipClassName
+  }, [tooltipClassName])
+
+  const handleLivelineHover = useCallback(
+    (hover: { time: number; value: number; x: number; y: number } | null) => {
+      const tooltipEl = tooltipElRef.current
+      const tooltipRoot = tooltipRootRef.current
+      const container = chartWrapperRef.current
+      if (!tooltipEl || !tooltipRoot || !container) return
+
+      if (!hover) {
+        if (isTooltipVisibleRef.current) {
+          tooltipEl.style.opacity = "0"
+          tooltipEl.style.visibility = "hidden"
+          isTooltipVisibleRef.current = false
+          lastTooltipTimeRef.current = null
+        }
+        return
+      }
+
+      const primary = tooltipSeries[0]
+      const closestPrimary = primary ? findClosestPoint(primary.data, Math.round(hover.time)) : null
+      const timeSec = closestPrimary?.time ?? Math.round(hover.time)
+      const timestampMs = timeSec * 1000
+
+      const coinData: TooltipCoinData[] = []
+      for (const row of tooltipSeries) {
+        const closest = findClosestPoint(row.data, timeSec)
+        if (!closest) continue
+        coinData.push({
+          id: row.id,
+          name: row.name,
+          symbol: row.symbol,
+          color: row.color,
+          value: closest.value,
         })
       }
-    })
-  }, [hoveredCoin, coinSeriesWithColors, lineSeriesMapRef])
+
+      if (coinData.length === 0) {
+        if (isTooltipVisibleRef.current) {
+          tooltipEl.style.opacity = "0"
+          tooltipEl.style.visibility = "hidden"
+          isTooltipVisibleRef.current = false
+          lastTooltipTimeRef.current = null
+        }
+        return
+      }
+
+      if (!isTooltipVisibleRef.current) {
+        tooltipEl.style.opacity = "1"
+        tooltipEl.style.visibility = "visible"
+        isTooltipVisibleRef.current = true
+      }
+
+      if (lastTooltipTimeRef.current !== timeSec) {
+        lastTooltipTimeRef.current = timeSec
+        tooltipRoot.render(<TooltipContent coinData={coinData} timestamp={timestampMs} />)
+      }
+
+      const chartRect = container.getBoundingClientRect()
+      const tooltipWidth = tooltipEl.offsetWidth || 200
+      const tooltipHeight = tooltipEl.offsetHeight || 120
+
+      // Pin tooltip to a stable position (top-right of chart) so it doesn't jump while scrubbing.
+      let left = chartRect.right - tooltipWidth - 12
+      let top = chartRect.top + 12
+
+      // Clamp into viewport.
+      if (left < 10) left = 10
+      if (left + tooltipWidth > window.innerWidth - 10) {
+        left = window.innerWidth - tooltipWidth - 10
+      }
+
+      if (top + tooltipHeight > window.innerHeight - 10) {
+        top = window.innerHeight - tooltipHeight - 10
+      }
+
+      if (top < 10) top = 10
+
+      tooltipEl.style.transform = `translate3d(${left}px, ${top}px, 0)`
+    },
+    [tooltipSeries],
+  )
 
   // React 19: Show pending states
   const showPending = isPending || isChartPending || isChartLoading
@@ -173,21 +396,19 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
       showPending && "opacity-60 transition-opacity duration-200"
     )}>
       {/* Legend */}
-      <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2">   
+      <div className="flex flex-col col-span-3 p-3 pt-2 space-y-2">   
         <div className="flex flex-row items-center justify-between gap-2 mb-3"> 
-          <IconCircleDottedAndCircle className="size-6 fill-primary/40" />
-          {/* Add Coin Button - triggers chart contextual command search */}
           <Button
             variant="outline"
             onClick={() => openContextualCommandSearch('charts')}
-            className="group w-full border-zinc-800/0 dark:hover:border-zinc-800/80 bg-transparent hover:bg-transparent flex items-center gap-2 justify-between p-3 rounded-lg"
+            className="group w-full border-zinc-800/50 dark:hover:border-zinc-800 bg-transparent hover:bg-transparent flex items-center gap-2 justify-between p-3 rounded-lg"
           >
             <span className="text-muted-foreground font-normal text-sm group-hover:text-primary">Add to comparison</span>
             <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
           </Button>
         </div> 
         
-        <div className="flex flex-col gap-2 space-y-3">
+        <div className="flex flex-col gap-2 p-3 space-y-3">
           {/* Show loading coins in legend */}
           {coins.map((coin) => {
             const realCoin = latestValuesById.get(coin.id.toString())
@@ -346,7 +567,30 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                         `
                       }}
                     />
-                    <div ref={chartContainerRef} />
+                    <div ref={chartWrapperRef} className="h-[400px] w-full">
+                      <Liveline
+                        data={[]}
+                        value={0}
+                        series={livelineSeries}
+                        theme={isDarkMode ? "dark" : "light"}
+                        color={isDarkMode ? "#e5e7eb" : "#0f172a"}
+                        lineWidth={1}
+                        window={windowSecs}
+                        grid={false}
+                        fill={false}
+                        pulse={false}
+                        badge={false}
+                        momentum={false}
+                        scrub
+                        tooltipY={-9999}
+                        tooltipOutline={false}
+                        onHover={handleLivelineHover}
+                        formatTime={() => ""}
+                        formatValue={(v) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%`}
+                        padding={{ top: 12, right: 12, bottom: 12, left: 12 }}
+                        className="size-full"
+                      />
+                    </div>
                   </div>
                 )}
               </div>

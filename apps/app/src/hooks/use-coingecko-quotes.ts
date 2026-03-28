@@ -126,6 +126,16 @@ export function useCoinGeckoQuotesBulk(coingeckoIds: ReadonlyArray<string>) {
     enabled: stableIds.length > 0,
     retry: 1,
     ...COINGECKO_QUOTES_QUERY_OPTIONS,
+    refetchInterval: (q) => {
+      const data = q.state.data as Record<string, CoinGeckoQuoteMarketData> | undefined
+      if (!data) return 2_000
+
+      for (const id of stableIds) {
+        if (!data[id]) return 5_000
+      }
+
+      return COINGECKO_QUOTES_QUERY_OPTIONS.refetchInterval
+    },
   })
 
   useEffect(() => {

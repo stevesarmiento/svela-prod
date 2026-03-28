@@ -159,10 +159,10 @@ function WatchlistCard({
             <div className="flex items-center gap-2">
               <WatchlistGroupIcon 
                 icon={watchlist.icon} 
-                className="w-4 h-4 text-muted-foreground/70"
+                className="size-4"
                 size={16}
               />
-              <span className="text-muted-foreground/70">
+              <span className="text-muted-foreground">
                 {watchlist.isLoading ? "Loading..." : watchlist.name}
               </span>
             </div>
@@ -178,7 +178,7 @@ function WatchlistCard({
       </div>
 
       {/* Table Body */}
-      <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden hover:ring-2 hover:ring-zinc-200/30 transition-all duration-100">
         {watchlist.isLoading ? (
           // Show loading state
           <div className="grid grid-cols-3 gap-4 px-4 py-2 pr-2 opacity-60">
@@ -210,7 +210,7 @@ function WatchlistCard({
         ) : (
           // Show clickable link for real watchlists
           <Link 
-            href={`/watchlist?wg=${watchlist.id}`}
+            href={group.slug ? `/watchlist?wg=${encodeURIComponent(group.slug)}&wt=chart` : "/watchlist?wt=chart"}
             className="grid grid-cols-3 gap-4 px-4 py-2 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer"
           >
             {/* Watchlist Info */}
@@ -241,13 +241,7 @@ function WatchlistCard({
             </div>
 
             {/* Remove */}
-            <div 
-              className="flex items-center justify-end"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-              }}
-            >
+            <div className="flex items-center justify-end">
               <Button
                 variant="ghost"
                 size="sm"
