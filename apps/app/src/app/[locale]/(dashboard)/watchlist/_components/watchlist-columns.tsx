@@ -253,7 +253,7 @@ export function createWatchlistColumns({
       id: 'chart',
       header: () => (
         <div className="text-center flex items-center justify-center gap-1">
-          24h Chart
+          7d Chart
         </div>
       ),
       cell: ({ row }) => (

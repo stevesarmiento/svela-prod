@@ -366,6 +366,10 @@ export const ChartTable = memo(function ChartTable({
                     triggerTooltip="Analyze with AI"
                     triggerAriaLabel="Analyze with AI"
                   />
+                  <div
+                    aria-hidden="true"
+                    className="mx-1 h-4 w-px shrink-0 bg-zinc-200/70 dark:bg-zinc-700/70"
+                  />
                   <Tooltip delayDuration={500}>
                     <TooltipTrigger asChild>
                       <Button
@@ -383,7 +387,7 @@ export const ChartTable = memo(function ChartTable({
                           showPending && "opacity-50 cursor-not-allowed"
                         )}
                       >
-                        <X className="h-4 w-4 text-zinc-600 dark:text-zinc-300 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors" />
+                        <X className="h-4 w-4 text-zinc-600 dark:text-zinc-400 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
