@@ -295,6 +295,7 @@ export function createWatchlistColumns({
                 coingeckoId={row.original.id}
                 percentChange24h={row.original.quote.USD.percent_change_24h}
                 symbol={row.original.symbol}
+                sparkline7d={row.original.sparkline7d}
                 initialData={row.original.quote.USD}
                 onError={onInlineChartError}
               />

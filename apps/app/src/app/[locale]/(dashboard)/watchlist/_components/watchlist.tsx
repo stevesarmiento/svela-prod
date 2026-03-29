@@ -37,7 +37,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@v1/ui/popover'
-import { IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmarkFill, IconWalletBifoldFill } from 'symbols-react'
+import { IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmark, IconWalletBifold } from 'symbols-react'
 import { CreateWatchlist } from './create-watchlist'
 import { Kbd } from "@v1/ui/kbd"
 import { useLatest } from "@/hooks/use-latest"
@@ -182,7 +182,7 @@ export function Watchlist({
   // Use selected group coins if available, otherwise fall back to legacy watchlist
   const currentWatchlist = selectedGroup ? selectedGroupCoins : watchlist;
 
-  const allCoinIds = useAllWatchlistCoinIds()
+  const allCoinIds = useAllWatchlistCoinIds({ enabled: contentMode === "table" })
   const tableCoinIds = allCoinIds ?? []
   const watchlistForTable = contentMode === "table" ? tableCoinIds : currentWatchlist
   const isTableCoinIdsLoading = contentMode === "table" && allCoinIds === undefined
@@ -226,6 +226,7 @@ export function Watchlist({
   // Keyboard shortcuts handler (stable subscription, latest state via refs)
   useEffect(() => {
     const addTokenShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'focusAddToken')
+    const addWalletShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'openAddWallet')
 
     const handleKeyDown = (event: KeyboardEvent) => {
       // Ignore if typing in an input or textarea
@@ -237,6 +238,12 @@ export function Watchlist({
         event.preventDefault()
         coinSearchRef.current?.open()
         return;
+      }
+
+      if (addWalletShortcut && matchesShortcut(event, addWalletShortcut)) {
+        event.preventDefault()
+        setIsAddWalletOpen(true)
+        return
       }
 
       if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
@@ -312,7 +319,7 @@ export function Watchlist({
                 <TooltipTrigger asChild>
                 <TabsList className="grid w-full grid-cols-2 p-0.5">
                   <TabsTrigger value="grid" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Watchlists (W)">
-                    <IconBookmarkFill className="size-3 fill-muted-foreground" />
+                    <IconBookmark className="size-3 fill-muted-foreground" />
                     Watchlists
                   </TabsTrigger>
                   <TabsTrigger value="chart" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Comparison (C)">
@@ -410,8 +417,8 @@ export function Watchlist({
                      <IconWidgetSmallBadgePlus className="h-3.5 w-3.5 fill-muted-foreground" />
                      <span>Create Watchlist</span>
                      <div className="ml-auto flex items-center gap-1">
-                       <Kbd className="text-xs">Shift</Kbd>
-                       <Kbd className="text-xs">N</Kbd>
+                       <Kbd className="text-[10px]">Shift</Kbd>
+                       <Kbd className="text-[10px] font-diatype-bold">N</Kbd>
                      </div>
                    </Button>
                    <Button
@@ -422,8 +429,12 @@ export function Watchlist({
                      }}
                      className="w-full justify-start gap-2 rounded-md"
                    >
-                     <IconWalletBifoldFill className="h-3.5 w-3.5 fill-muted-foreground" />
-                     <span>Add Wallet</span>
+                     <IconWalletBifold className="h-3.5 w-3.5 fill-muted-foreground" />
+                     <span>Watch a Wallet</span>
+                     <div className="ml-auto flex items-center gap-1">
+                       <Kbd className="text-[10px]">Shift</Kbd>
+                       <Kbd className="text-[10px] font-diatype-bold">M</Kbd>
+                     </div>
                    </Button>
                    <Button
                      variant="ghost"
@@ -433,11 +444,11 @@ export function Watchlist({
                      }}
                      className="w-full justify-start gap-2 rounded-md"
                    >
-                     <IconBookmarkFill className="h-3.5 w-3.5 fill-muted-foreground" />
+                     <IconBookmark className="h-3.5 w-3.5 fill-muted-foreground" />
                      <span>Add Token</span>
                      <div className="ml-auto flex items-center gap-1">
-                       <Kbd className="text-xs">Shift</Kbd>
-                       <Kbd className="text-xs">A</Kbd>
+                       <Kbd className="text-[10px]">Shift</Kbd>
+                       <Kbd className="text-[10px] font-diatype-bold">A</Kbd>
                      </div>
                    </Button>
                 </div>

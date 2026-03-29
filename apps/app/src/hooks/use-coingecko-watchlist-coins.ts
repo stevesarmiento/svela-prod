@@ -10,6 +10,7 @@ interface CoinGeckoWatchlistCoin {
   symbol: string;
   slug: string;
   image: string; // CoinGecko image URL
+  sparkline7d?: ReadonlyArray<number>;
   cmc_rank: number;
   circulating_supply: number;
   max_supply: number | null;
@@ -74,6 +75,7 @@ export function useCoinGeckoWatchlistCoins(coinIds: string[]) {
         symbol: coin.symbol,
         slug: coin.id,
         image: coin.image,
+        sparkline7d: coin.sparkline7d,
         cmc_rank: coin.market_cap_rank ?? 0,
         circulating_supply: 0,
         max_supply: null,

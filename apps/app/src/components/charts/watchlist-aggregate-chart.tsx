@@ -5,7 +5,6 @@ import { useMemo } from "react"
 import type { Time as LightweightTime } from "lightweight-charts"
 import { Liveline } from "liveline"
 import type { LivelinePoint } from "liveline"
-import { useTheme } from "next-themes"
 
 interface AggregateDataPoint {
   time: LightweightTime
@@ -46,7 +45,7 @@ export function WatchlistAggregateChart({
   width = 0, 
   height = 0 
 }: WatchlistAggregateChartProps) {
-  const { resolvedTheme } = useTheme()
+  const resolvedTheme = "dark"
 
   const points = useMemo((): LivelinePoint[] => {
     const result: LivelinePoint[] = []
@@ -85,9 +84,9 @@ export function WatchlistAggregateChart({
     ...(width > 0 ? { width } : null),
   }
 
-  const livelineTheme = resolvedTheme === "light" ? "light" : "dark"
-  const livelineColor = resolvedTheme === "light" ? "#334155" : "#e5e7eb"
-  const opacityClassName = resolvedTheme === "light" ? "opacity-80" : "opacity-60"
+  const livelineTheme = "dark"
+  const livelineColor = "#e5e7eb"
+  const opacityClassName = "opacity-60"
 
   return (
     <div className="w-full relative" style={wrapperStyle}>

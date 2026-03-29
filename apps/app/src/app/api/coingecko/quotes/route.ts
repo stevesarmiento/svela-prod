@@ -19,6 +19,9 @@ interface CoinGeckoMarketsRow {
   symbol: string;
   name: string;
   image: string;
+  sparkline_in_7d?: {
+    price?: number[];
+  };
   current_price?: number;
   market_cap?: number;
   market_cap_rank?: number;
@@ -66,7 +69,8 @@ async function fetchCoinGeckoMarkets(args: {
   url.searchParams.set("order", "market_cap_desc");
   url.searchParams.set("per_page", String(Math.min(250, Math.max(1, args.perPage))));
   url.searchParams.set("page", "1");
-  url.searchParams.set("sparkline", "false");
+  // Needed to render Watchlist inline charts without per-coin market-chart fan-out.
+  url.searchParams.set("sparkline", "true");
   url.searchParams.set("price_change_percentage", "1h,24h,7d,30d");
 
   if (args.ids && args.ids.length > 0) {
@@ -205,6 +209,11 @@ export async function GET(request: NextRequest) {
       });
 
       for (const row of rows) {
+        const sparkline7d =
+          Array.isArray(row.sparkline_in_7d?.price) && row.sparkline_in_7d.price.length >= 2
+            ? row.sparkline_in_7d.price.filter((v) => typeof v === "number" && Number.isFinite(v))
+            : undefined;
+
         data[row.id] = {
           id: row.id,
           name: row.name,
@@ -221,6 +230,7 @@ export async function GET(request: NextRequest) {
           circulating_supply: row.circulating_supply ?? null,
           max_supply: row.max_supply ?? null,
           last_updated: row.last_updated ?? new Date().toISOString(),
+          sparkline7d,
         };
       }
 

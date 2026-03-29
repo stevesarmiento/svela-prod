@@ -441,9 +441,8 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                       className="flex h-8 flex-1 items-center gap-2 overflow-hidden border border-zinc-200 dark:border-zinc-800/70 rounded-lg"
                     >
                       <div className="absolute left-1.5 h-3 w-1.5 rounded-full border border-black" style={{ backgroundColor: realCoin.color }} />
-                      <div className="h-6 w-2.5 rounded-full blur-[12px] translate-x-[-2px]" style={{ backgroundColor: realCoin.color }} />
                       <div className="flex flex-1 flex-row items-center gap-2 overflow-hidden">
-                        <span className="text-xs font-medium">{realCoin.symbol.toUpperCase()}</span>
+                        <span className="ml-4.5 text-xs font-medium">{realCoin.symbol.toUpperCase()}</span>
                         <span className="truncate text-xs font-diatype-mono text-muted-foreground">
                           {realCoin.name}
                         </span>

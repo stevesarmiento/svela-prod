@@ -196,6 +196,7 @@ export interface CoinGeckoQuoteMarketData {
   symbol: string
   market_cap_rank: number | null
   image: string
+  sparkline7d?: ReadonlyArray<number>
   current_price: number | null
   market_cap: number | null
   total_volume: number | null
@@ -219,6 +220,7 @@ const CoinGeckoQuoteMarketDataSchema = Schema.Struct({
   symbol: Schema.String,
   market_cap_rank: Schema.NullOr(Schema.Number),
   image: Schema.String,
+  sparkline7d: Schema.optional(Schema.Array(Schema.Number)),
   current_price: Schema.NullOr(Schema.Number),
   market_cap: Schema.NullOr(Schema.Number),
   total_volume: Schema.NullOr(Schema.Number),

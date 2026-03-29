@@ -7,7 +7,6 @@ import { useWatchlistPreservingNavigation } from "@/lib/navigation-utils";
 import { 
   IconHouseFill, 
   IconDistributeHorizontalCenterFill,  
-  IconGearshapeFill,
 } from "symbols-react";
 import {
   Sidebar,
@@ -42,11 +41,6 @@ const menuItems = [
     href: "/charts",
     icon: IconDistributeHorizontalCenterFill,
   },
-  {
-    title: "Settings",
-    href: "/settings",
-    icon: IconGearshapeFill,
-  },
 ];
 
 export function SideNav() {
@@ -61,8 +55,6 @@ export function SideNav() {
         return navigation.charts;
       case "/overview":
         return navigation.overview;
-      case "/settings":
-        return navigation.settings;
       default:
         return href;
     }

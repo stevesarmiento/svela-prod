@@ -30,6 +30,7 @@ export interface CoinMarketData {
   symbol: string
   slug: string
   image?: string // CoinGecko image URL
+  sparkline7d?: ReadonlyArray<number>
   cmc_rank: number // Market cap rank (using cmc_rank for backward compatibility)
   circulating_supply: number
   max_supply: number | null

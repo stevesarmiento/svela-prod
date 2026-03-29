@@ -66,6 +66,14 @@ const COINGECKO_QUOTES_QUERY_OPTIONS = {
 
 function isSameQuote(a: CoinGeckoQuoteMarketData | undefined, b: CoinGeckoQuoteMarketData | undefined): boolean {
   if (!a || !b) return false
+
+  const aSpark = a.sparkline7d
+  const bSpark = b.sparkline7d
+  if ((aSpark?.length ?? 0) !== (bSpark?.length ?? 0)) return false
+  const aSparkLast = aSpark && aSpark.length > 0 ? aSpark[aSpark.length - 1] : undefined
+  const bSparkLast = bSpark && bSpark.length > 0 ? bSpark[bSpark.length - 1] : undefined
+  if (aSparkLast !== bSparkLast) return false
+
   return (
     a.last_updated === b.last_updated &&
     a.current_price === b.current_price &&
@@ -164,10 +172,19 @@ export function useCoinGeckoQuotesBulk(coingeckoIds: ReadonlyArray<string>) {
     ...COINGECKO_QUOTES_QUERY_OPTIONS,
     refetchInterval: (q) => {
       const data = q.state.data as Record<string, CoinGeckoQuoteMarketData> | undefined
-      if (!data) return 2_000
+      const error = q.state.error
+      const errorMessage = error instanceof Error ? error.message.toLowerCase() : ""
+      if (errorMessage.includes("429") || errorMessage.includes("rate")) {
+        return 60_000
+      }
+
+      const failureCount = q.state.fetchFailureCount ?? 0
+      const backoffMs = Math.min(60_000, 10_000 * Math.max(1, failureCount))
+
+      if (!data) return backoffMs
 
       for (const id of stableIds) {
-        if (!data[id]) return 5_000
+        if (!data[id]) return Math.max(20_000, backoffMs)
       }
 
       return COINGECKO_QUOTES_QUERY_OPTIONS.refetchInterval

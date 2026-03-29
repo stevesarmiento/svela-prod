@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef } from "react"
-import { useTheme } from "next-themes"
 import { createRoot } from "react-dom/client"
 import { Liveline } from "liveline"
 import type { LivelinePoint } from "liveline"
@@ -127,7 +126,7 @@ function findClosestPoint(
 }
 
 export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceChartProps) {
-  const { resolvedTheme } = useTheme()
+  const resolvedTheme = "dark"
 
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const tooltipElRef = useRef<HTMLDivElement | null>(null)
@@ -360,7 +359,7 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
           <Liveline
             data={pricePoints}
             value={latestValue}
-            theme={resolvedTheme === "light" ? "light" : "dark"}
+            theme="dark"
             color={priceChange >= 0 ? "#10B981" : "#EF4444"}
             lineWidth={2}
             window={windowSecs}
