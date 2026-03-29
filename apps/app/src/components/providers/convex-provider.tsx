@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, type ReactNode } from "react";
-import { useAuth, useUser } from "@clerk/nextjs";
+import { useAuth as useClerkAuth, useUser } from "@clerk/nextjs";
 import { ConvexReactClient, useConvexAuth, useMutation } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { api } from "../../../convex/_generated/api";
@@ -14,6 +14,29 @@ const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 if (!convexUrl) throw new Error("NEXT_PUBLIC_CONVEX_URL is not configured");
 
 const convex = new ConvexReactClient(convexUrl);
+
+function useAuthWithConvexTokenFallback(): ReturnType<typeof useClerkAuth> {
+  const clerk = useClerkAuth();
+
+  const getToken = React.useCallback<ReturnType<typeof useClerkAuth>["getToken"]>(
+    async (options) => {
+      const skipCache = options?.skipCache;
+
+      // Try the Convex JWT template first (classic setup), then fall back to the
+      // default token (Convex integration setup).
+      const templated = await clerk.getToken({ template: "convex", skipCache }).catch(() => null);
+      if (templated) return templated;
+
+      return await clerk.getToken({ skipCache }).catch(() => null);
+    },
+    [clerk],
+  );
+
+  return React.useMemo(
+    () => ({ ...clerk, getToken }) as ReturnType<typeof useClerkAuth>,
+    [clerk, getToken],
+  );
+}
 
 function UserBootstrap({ children }: ConvexProviderProps) {
   const { user, isLoaded: isClerkLoaded } = useUser();
@@ -59,7 +82,7 @@ function UserBootstrap({ children }: ConvexProviderProps) {
 
 export function ConvexProvider({ children }: ConvexProviderProps) {
   return (
-    <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+    <ConvexProviderWithClerk client={convex} useAuth={useAuthWithConvexTokenFallback}>
       <UserBootstrap>{children}</UserBootstrap>
     </ConvexProviderWithClerk>
   );

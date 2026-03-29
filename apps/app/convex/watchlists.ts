@@ -1316,7 +1316,14 @@ export const getMyWatchlistBootstrap = query({
   }),
   handler: async (ctx) => {
     const user = await getCurrentUser(ctx);
-    if (!user) throw new Error("Not authenticated");
+    if (!user) {
+      return {
+        groups: [],
+        defaultGroup: null,
+        defaultItems: [],
+        allCoinIds: [],
+      };
+    }
 
     const groups = await ctx.db
       .query("watchlistGroups")
