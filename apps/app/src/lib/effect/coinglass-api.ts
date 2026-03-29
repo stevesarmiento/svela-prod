@@ -170,6 +170,24 @@ const TakerBuySellResponseSchema = Schema.Struct({
   lastUpdated: Schema.String,
 })
 
+const SpotTakerBuySellHistoryPointSchema = Schema.Struct({
+  time: Schema.Number,
+  takerBuyVolumeUsd: Schema.Number,
+  takerSellVolumeUsd: Schema.Number,
+})
+
+const SpotTakerBuySellHistoryResponseSchema = Schema.Struct({
+  success: Schema.Boolean,
+  data: Schema.Array(SpotTakerBuySellHistoryPointSchema),
+  count: Schema.Number,
+  exchange: Schema.String,
+  symbol: Schema.String,
+  interval: Schema.String,
+  limit: Schema.NullOr(Schema.Number),
+  originalInput: Schema.String,
+  lastUpdated: Schema.String,
+})
+
 const LiquidationHistoryItemSchema = Schema.Struct({
   timestamp: Schema.Number,
   date: Schema.String,
@@ -251,6 +269,28 @@ export class CoinGlassApi extends Effect.Service<CoinGlassApi>()("CoinGlassApi",
       })
     })
 
+    const getSpotTakerBuySellVolumeHistory = Effect.fn("CoinGlassApi.getSpotTakerBuySellVolumeHistory")(function* (args: {
+      exchange: string
+      symbol: string
+      interval?: string
+      limit?: number
+      startTime?: number
+      endTime?: number
+    }) {
+      const searchParams = new URLSearchParams()
+      searchParams.set("exchange", args.exchange)
+      searchParams.set("symbol", args.symbol)
+      if (args.interval) searchParams.set("interval", args.interval)
+      if (args.limit !== undefined) searchParams.set("limit", String(args.limit))
+      if (args.startTime !== undefined) searchParams.set("start_time", String(args.startTime))
+      if (args.endTime !== undefined) searchParams.set("end_time", String(args.endTime))
+
+      return yield* requestJson({
+        endpoint: `/api/coinglass/spot/taker-buy-sell-volume/history?${searchParams.toString()}`,
+        decode: (data) => Schema.decodeUnknownSync(SpotTakerBuySellHistoryResponseSchema)(data),
+      })
+    })
+
     const getLiquidationHistory = Effect.fn("CoinGlassApi.getLiquidationHistory")(function* (args: {
       symbol?: string
       interval?: string
@@ -288,6 +328,7 @@ export class CoinGlassApi extends Effect.Service<CoinGlassApi>()("CoinGlassApi",
     return {
       getOpenInterest,
       getTakerBuySell,
+      getSpotTakerBuySellVolumeHistory,
       getLiquidationHistory,
       getFundingRateExchanges,
     } as const

@@ -40,8 +40,9 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
   } = useCoinGeckoWatchlistCoins(watchlist);
 
   // Create optimistic loading coins while data is being fetched
+  const isOptimisticLoading = watchlist.length > 0 && isCoinsLoading && coins.length === 0
   const optimisticCoins = useMemo(() => {
-    if (isCoinsLoading && !coins) {
+    if (isOptimisticLoading) {
       // Show skeleton rows during initial load
       return watchlist.map(coinId => ({
         id: coinId,
@@ -62,12 +63,16 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
         }
       } as CoinMarketData))
     }
-    return coins || []
-  }, [isCoinsLoading, coins, watchlist])
+    return coins
+  }, [isOptimisticLoading, coins, watchlist])
 
   // Filter and sort coins based on filter state
   const filteredCoins = useMemo(() => {
     if (!optimisticCoins.length) return [];
+
+    // While CoinGecko quotes are still loading, don't show an empty-state flicker.
+    // Render skeleton rows immediately; apply filters once real quotes arrive.
+    if (isOptimisticLoading) return optimisticCoins
     
     const searchLower = filters.searchText ? filters.searchText.toLowerCase() : null
 
@@ -142,7 +147,7 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     });
     
     return filtered;
-  }, [optimisticCoins, filters]);
+  }, [optimisticCoins, filters, isOptimisticLoading]);
 
   // Filter handlers
   const handleClearAllFilters = useCallback(() => {

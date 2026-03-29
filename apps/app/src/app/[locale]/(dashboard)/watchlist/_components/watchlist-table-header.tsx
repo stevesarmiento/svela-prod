@@ -3,6 +3,7 @@
 import { flexRender, type Table } from '@tanstack/react-table'
 import { cn } from "@v1/ui/cn"
 import type { CoinMarketData } from '@/types/coins'
+import { WATCHLIST_TABLE_GRID_TEMPLATE_COLUMNS } from "./watchlist-table-layout"
 
 interface WatchlistTableHeaderProps {
   table: Table<CoinMarketData>;
@@ -10,14 +11,18 @@ interface WatchlistTableHeaderProps {
 
 export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
   return (
-    <div className="px-3 py-1">
+    <div className="px-4 py-1">
       <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
         {table.getHeaderGroups().map(headerGroup => (
-          <div key={headerGroup.id} className="grid gap-4" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1.5fr 0.5fr' }}>
+          <div
+            key={headerGroup.id}
+            className="grid gap-4"
+            style={{ gridTemplateColumns: WATCHLIST_TABLE_GRID_TEMPLATE_COLUMNS }}
+          >
             {headerGroup.headers.slice(0, 1).map(header => ( // Show first header (select/token merged)
               <div 
                 key={header.id}
-                className="flex items-center gap-2 cursor-pointer select-none hover:text-foreground"
+                className="flex min-w-0 items-center gap-2 cursor-pointer select-none hover:text-foreground"
                 onClick={() => table.getColumn('token-sort')?.toggleSorting()} // Sort by token
               >
                 <span>Token</span>
@@ -28,14 +33,18 @@ export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
               </div>
             ))}
             {headerGroup.headers.slice(2).map(header => ( // Skip the hidden token-sort column
+              (() => {
+                const canSort = header.column.getCanSort()
+                const onClick = canSort ? header.column.getToggleSortingHandler() : undefined
+                return (
               <div 
                 key={header.id}
                 className={cn(
-                  "flex items-center gap-1",
-                  header.column.getCanSort() ? "cursor-pointer select-none hover:text-foreground" : "",
-                  header.id === 'actions' ? "justify-end" : "justify-start"
+                  "flex min-w-0 items-center gap-1",
+                  canSort ? "cursor-pointer select-none hover:text-foreground" : "",
+                  header.column.id === 'actions' ? "justify-end" : "justify-start"
                 )}
-                onClick={header.column.getToggleSortingHandler()}
+                onClick={onClick}
               >
                 {flexRender(header.column.columnDef.header, header.getContext())}
                 {{
@@ -43,6 +52,8 @@ export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
                   desc: ' ↓',
                 }[header.column.getIsSorted() as string] ?? null}
               </div>
+                )
+              })()
             ))}
           </div>
         ))}

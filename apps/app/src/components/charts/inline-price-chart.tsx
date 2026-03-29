@@ -9,6 +9,7 @@ import type { CoinMarketData } from '@/types/coins'
 import { Liveline } from "liveline"
 import type { LivelinePoint } from "liveline"
 import { useTheme } from "next-themes"
+import { cn } from "@v1/ui/cn"
 
 interface InlinePriceChartProps {
   coingeckoId: string // CoinGecko ID to fetch real data
@@ -16,6 +17,7 @@ interface InlinePriceChartProps {
   symbol?: string // For debugging
   initialData: CoinMarketData['quote']['USD'] // Required for useCoinGeckoChartData
   onError?: () => void
+  className?: string
 }
 
 type InlineChartTimeScale = "1d" | "7d" | "30d" | "max" | "2y"
@@ -132,6 +134,7 @@ export function InlinePriceChart({
   symbol = '',
   initialData,
   onError: _onError,
+  className,
 }: InlinePriceChartProps) {
   const { resolvedTheme } = useTheme()
 
@@ -213,7 +216,10 @@ export function InlinePriceChart({
 
   return (
     <div 
-      className="w-56 h-8 rounded-sm overflow-hidden bg-transparent"
+      className={cn(
+        "h-8 rounded-sm overflow-hidden bg-transparent",
+        className ?? "w-56",
+      )}
       title={
         isLoading
           ? `${symbol} loading data...`

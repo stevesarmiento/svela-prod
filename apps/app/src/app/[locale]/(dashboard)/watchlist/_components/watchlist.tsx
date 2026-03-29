@@ -68,6 +68,27 @@ interface WatchlistTableSectionProps {
   onInlineChartError?: () => void;
 }
 
+function createLoadingCoins(rowCount: number): Array<CoinMarketData> {
+  return Array.from({ length: rowCount }, (_, i) => ({
+    id: `loading-${i}`,
+    name: "",
+    symbol: "",
+    image: "",
+    slug: "",
+    cmc_rank: 0,
+    circulating_supply: 0,
+    max_supply: null,
+    quote: {
+      USD: {
+        price: 0,
+        volume_24h: 0,
+        market_cap: 0,
+        percent_change_24h: 0,
+      },
+    },
+  })) as Array<CoinMarketData>
+}
+
 function WatchlistTableSection({
   coins,
   sorting,
@@ -164,6 +185,8 @@ export function Watchlist({
   const allCoinIds = useAllWatchlistCoinIds()
   const tableCoinIds = allCoinIds ?? []
   const watchlistForTable = contentMode === "table" ? tableCoinIds : currentWatchlist
+  const isTableCoinIdsLoading = contentMode === "table" && allCoinIds === undefined
+  const loadingCoins = useMemo(() => createLoadingCoins(10), [])
   
   // Use extracted data and selection hooks
   const { 
@@ -451,7 +474,21 @@ export function Watchlist({
         /* Table Mode - Direct render without tabs, filters now in header */
         <div className="space-y-4">
           {/* Show empty state if no coins after filtering */}
-          {watchlistForTable.length === 0 ? (
+          {isTableCoinIdsLoading ? (
+            <WatchlistTableSection
+              coins={loadingCoins}
+              sorting={sorting}
+              onSortingChange={setSorting}
+              selectedCoins={selectedCoins}
+              watchlistGroup={watchlistGroup}
+              removingCoins={removingCoins}
+              hasSelectedCoins={hasSelectedCoins}
+              onRemove={handleRemove}
+              onCoinSelect={handleCoinSelect}
+              onSelectAll={handleSelectAll}
+              onInlineChartError={onInlineChartError}
+            />
+          ) : watchlistForTable.length === 0 ? (
             <WatchlistEmptyState type="no-coins" />
           ) : filteredCoins.length === 0 ? (
             <WatchlistEmptyState type="no-filtered-coins" onClearFilters={handleClearAllFilters} />

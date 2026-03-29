@@ -115,6 +115,56 @@ export default defineSchema({
     .index("by_symbol", ["symbol"])
     .index("by_active", ["isActive"]),
 
+  coinglassSpotTakerBuySellVolumeHistory: defineTable({
+    exchange: v.string(), // e.g. "Binance"
+    symbol: v.string(), // e.g. "BTCUSDT"
+    interval: v.string(), // e.g. "4h"
+    timestamp: v.number(), // ms
+    takerBuyVolumeUsd: v.number(),
+    takerSellVolumeUsd: v.number(),
+    dataSource: v.string(), // e.g. "coinglass-cron-spot-taker"
+    lastUpdated: v.number(),
+  })
+    .index("by_exchange_and_symbol_and_interval", ["exchange", "symbol", "interval"])
+    .index("by_exchange_and_symbol_and_interval_and_timestamp", [
+      "exchange",
+      "symbol",
+      "interval",
+      "timestamp",
+    ])
+    .index("by_exchange_and_symbol_and_interval_and_last_updated", [
+      "exchange",
+      "symbol",
+      "interval",
+      "lastUpdated",
+    ])
+    .index("by_last_updated", ["lastUpdated"]),
+
+  coinglassFuturesTakerBuySellVolumeHistory: defineTable({
+    exchange: v.string(), // e.g. "Binance"
+    symbol: v.string(), // e.g. "BTCUSDT"
+    interval: v.string(), // e.g. "4h"
+    timestamp: v.number(), // ms
+    takerBuyVolumeUsd: v.number(),
+    takerSellVolumeUsd: v.number(),
+    dataSource: v.string(), // e.g. "coinglass-cron-futures-taker"
+    lastUpdated: v.number(),
+  })
+    .index("by_exchange_and_symbol_and_interval", ["exchange", "symbol", "interval"])
+    .index("by_exchange_and_symbol_and_interval_and_timestamp", [
+      "exchange",
+      "symbol",
+      "interval",
+      "timestamp",
+    ])
+    .index("by_exchange_and_symbol_and_interval_and_last_updated", [
+      "exchange",
+      "symbol",
+      "interval",
+      "lastUpdated",
+    ])
+    .index("by_last_updated", ["lastUpdated"]),
+
   trackedCoins: defineTable({
     coingeckoId: v.string(),
     reason: v.string(), // "top" | "watchlist" (string to keep migrations simple)

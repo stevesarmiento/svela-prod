@@ -84,6 +84,7 @@ interface CoinGeckoWatchlistCoin {
 interface WatchlistCardProps {
   group: WatchlistCardGroup
   coins: CoinGeckoWatchlistCoin[]
+  isLoading?: boolean
   onEdit?: (group: WatchlistGroup) => void
   onDelete?: (group: WatchlistGroup) => void
   onSelect?: (group: WatchlistGroup) => void
@@ -96,6 +97,7 @@ interface WatchlistCardProps {
 export function WatchlistCard({ 
   group, 
   coins = [],
+  isLoading = false,
   onEdit,
   onDelete,
   onSelect,
@@ -183,6 +185,8 @@ export function WatchlistCard({
     sampleAggregateData: aggregateData.slice(0, 3)
   })
 
+  const shouldShowLoadingState = isLoading || isChartLoading
+
   return (
     <Card 
       className={cn(
@@ -201,7 +205,7 @@ export function WatchlistCard({
       {/* Inject loading shine CSS only once per card */}
       <style>{loadingShineStyle}</style>
       {/* Loading shine overlay */}
-      {isChartLoading && (
+      {shouldShowLoadingState && (
         <div className="ck-qr-shine" />
       )}
       <div
@@ -248,14 +252,14 @@ export function WatchlistCard({
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
                       <span className="text-white font-diatype-mono">
-                        {stats.positiveCount} 
+                        {isLoading ? "—" : stats.positiveCount}
                       </span>
                       <span className="text-white/50">up</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
                       <span className="text-white font-diatype-mono">
-                        {stats.negativeCount} 
+                        {isLoading ? "—" : stats.negativeCount}
                       </span>
                       <span className="text-white/50">down</span>
                   </div>
@@ -316,19 +320,19 @@ export function WatchlistCard({
 
           {/* Chart or Empty State */}
           <div className="w-full">
-            {coins.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <p className="text-md text-white/60 max-w-[180px] mx-auto">
-                  To add tokens, press <Kbd className=" bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md text-white/80">Shift</Kbd> + <Kbd className=" bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md text-white/80">A</Kbd>
-                </p>
-              </div>
-            ) : isChartLoading ? (
+            {shouldShowLoadingState ? (
               <div className="flex items-center justify-center h-full relative">
                 <div className="flex items-center gap-2 z-10 h-[70px]">
                   <span className="text-white/50 text-xs sr-only">
                     Cache: {performance.cacheHitRate.toFixed(0)}%
                   </span>
                 </div>
+              </div>
+            ) : coins.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <p className="text-md text-white/60 max-w-[180px] mx-auto">
+                  To add tokens, press <Kbd className=" bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md text-white/80">Shift</Kbd> + <Kbd className=" bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md text-white/80">A</Kbd>
+                </p>
               </div>
             ) : (
               <div

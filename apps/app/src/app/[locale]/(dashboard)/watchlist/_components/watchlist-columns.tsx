@@ -12,6 +12,7 @@ import { motion } from "motion/react"
 import { Spinner } from "@v1/ui/spinner"
 import type { CoinMarketData } from '@/types/coins'
 import { InlinePriceChart } from "@/components/charts/inline-price-chart"
+import { InlineSpotTakerBuySellVolumeChart } from "@/components/charts/inline-spot-taker-buy-sell-volume-chart"
 import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
 import { formatUsdPrice } from "@/lib/format-usd"
@@ -60,6 +61,7 @@ export function createWatchlistColumns({
       ),
       cell: ({ row }) => {
         const coinId = row.original.id.toString()
+        const isRowLoading = row.original.quote.USD.price <= 0
         const isRowSelected = selectedCoinsRef.current.has(coinId)
         const tokenName = cleanTokenName(row.original.name)
         const tokenLogoUrl = getTokenLogoURL(row.original.symbol, row.original.image)
@@ -108,7 +110,8 @@ export function createWatchlistColumns({
               <Checkbox
                 data-watchlist-row-checkbox="true"
                 checked={isRowSelected}
-                tabIndex={isSelectionMode ? 0 : -1}
+                disabled={isRowLoading}
+                tabIndex={isSelectionMode && !isRowLoading ? 0 : -1}
                 onCheckedChange={(value) => onCoinSelect(coinId, !!value)}
                 aria-label="Select row"
                 className="mt-[6px] data-[state=checked]:mt-[2px]"
@@ -193,7 +196,7 @@ export function createWatchlistColumns({
       id: 'price',
       accessorKey: 'quote.USD.price',
       header: () => (
-        <div className="text-left flex items-center justify-end gap-1">
+        <div className="text-left flex items-center justify-start gap-1">
           Price
         </div>
       ),
@@ -212,7 +215,7 @@ export function createWatchlistColumns({
       id: 'change24h',
       accessorKey: 'quote.USD.percent_change_24h',
       header: () => (
-        <div className="text-left flex items-center justify-end gap-1">
+        <div className="text-left flex items-center justify-start gap-1">
           24h Change
         </div>
       ),
@@ -234,7 +237,7 @@ export function createWatchlistColumns({
       id: 'volume',
       accessorKey: 'quote.USD.volume_24h',
       header: () => (
-        <div className="text-left flex items-center justify-end gap-1">
+        <div className="text-left flex items-center justify-start gap-1">
           Volume 24h
         </div>
       ),
@@ -250,23 +253,45 @@ export function createWatchlistColumns({
       enableSorting: true,
     },
     {
+      id: 'takerBuySellVolume',
+      header: () => (
+        <div className="text-left flex items-center justify-start gap-1">
+          Taker Buy/Sell Vol
+        </div>
+      ),
+      cell: ({ row }) => (
+        <div className="flex min-w-0 items-center justify-start">
+          {row.original.quote.USD.price > 0 ? (
+            <InlineSpotTakerBuySellVolumeChart
+              baseSymbol={row.original.symbol}
+              className="w-full max-w-56"
+            />
+          ) : (
+            <Skeleton className="h-8 w-full max-w-56 rounded-sm" />
+          )}
+        </div>
+      ),
+      enableSorting: false,
+    },
+    {
       id: 'chart',
       header: () => (
-        <div className="text-center flex items-center justify-center gap-1">
+        <div className="text-left flex items-center justify-start gap-1">
           7d Chart
         </div>
       ),
       cell: ({ row }) => (
-        <div className="flex items-center justify-center">
+        <div className="flex min-w-0 items-center justify-start">
           {row.original.quote.USD.price > 0 ? (
-            <div 
-              className="[mask-image:linear-gradient(to_right,transparent_0%,black_50%,black_100%)]"
+            <div
+              className="w-full max-w-56 overflow-hidden [mask-image:linear-gradient(to_right,transparent_0%,black_12%,black_100%)]"
               style={{
-                WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 50%, black 100%)',
-                maskImage: 'linear-gradient(to right, transparent 0%, black 50%, black 100%)'
+                WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 12%, black 100%)",
+                maskImage: "linear-gradient(to right, transparent 0%, black 12%, black 100%)",
               }}
             >
               <InlinePriceChart 
+                className="w-full"
                 coingeckoId={row.original.id}
                 percentChange24h={row.original.quote.USD.percent_change_24h}
                 symbol={row.original.symbol}
@@ -275,40 +300,44 @@ export function createWatchlistColumns({
               />
             </div>
           ) : (
-            <Skeleton className="h-8 w-56 rounded-sm" />
+            <Skeleton className="h-8 w-full max-w-56 rounded-sm" />
           )}
         </div>
       ),
       enableSorting: false,
     },
-    {
-      id: 'actions',
-      header: () => (
-        <div className="flex items-center justify-end gap-1">
-          Action
-        </div>
-      ),
-      cell: ({ row }) => (
-        <div className="flex items-center justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.preventDefault(); // Prevent row link navigation
-              e.stopPropagation();
-              handleRemove(row.original.id);
-            }}
-            disabled={removingCoinsRef.current.has(row.original.id.toString())}
-            className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
-            >
-            {removingCoinsRef.current.has(row.original.id.toString()) ? (
-              <Spinner size={16} />
-            ) : (
-              <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
-            )}
-          </Button>
-        </div>
-      ),
-    },
+    // {
+    //   id: 'actions',
+    //   header: () => (
+    //     <div className="flex items-center justify-end gap-1">
+    //       Action
+    //     </div>
+    //   ),
+    //   cell: ({ row }) => (
+    //     <div className="flex items-center justify-end">
+    //       {row.original.quote.USD.price > 0 ? (
+    //         <Button
+    //           variant="ghost"
+    //           size="sm"
+    //           onClick={(e) => {
+    //             e.preventDefault(); // Prevent row link navigation
+    //             e.stopPropagation();
+    //             handleRemove(row.original.id);
+    //           }}
+    //           disabled={removingCoinsRef.current.has(row.original.id.toString())}
+    //           className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
+    //           >
+    //           {removingCoinsRef.current.has(row.original.id.toString()) ? (
+    //             <Spinner size={16} />
+    //           ) : (
+    //             <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
+    //           )}
+    //         </Button>
+    //       ) : (
+    //         <Skeleton className="h-6 w-6 rounded-lg" />
+    //       )}
+    //     </div>
+    //   ),
+    // },
   ];
 }

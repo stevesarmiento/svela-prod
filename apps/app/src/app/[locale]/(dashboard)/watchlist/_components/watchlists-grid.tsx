@@ -69,6 +69,7 @@ function WatchlistGroupWithCoins({
   selected?: boolean
 }) {
   const groupWatchlist = useWatchlistByGroup(group._id) as Array<{ coinId: string }> | undefined
+  const isGroupWatchlistLoading = groupWatchlist === undefined
   
   // For watchlist cards only: Convert to CoinGecko IDs for display
   const coingeckoIds = useMemo(() => {
@@ -78,12 +79,14 @@ function WatchlistGroupWithCoins({
   }, [groupWatchlist])
   
   // Use CoinGecko data only for watchlist card display
-  const { data: coins = [] } = useCoinGeckoWatchlistCoins(coingeckoIds)
+  const { data: coins = [], isLoading: isCoinsLoading } = useCoinGeckoWatchlistCoins(coingeckoIds)
+  const isCardLoading = isGroupWatchlistLoading || (coingeckoIds.length > 0 && isCoinsLoading && coins.length === 0)
 
   return (
     <WatchlistCard
       group={group}
       coins={coins}
+      isLoading={isCardLoading}
       onEdit={onEdit}
       onDelete={onDelete}
       onSelect={onSelect}
