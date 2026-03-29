@@ -5,17 +5,22 @@ import { parseAsStringLiteral, useQueryState } from "nuqs"
 import type { PortfolioWallet } from "@/lib/portfolio-api"
 import { PortfolioWalletCard } from "./portfolio-wallet-card"
 import { PortfolioEmptyState } from "./portfolio-empty-state"
-import { usePortfolioWallets } from "@/hooks/use-portfolio-wallets"
 import { Spinner } from "@v1/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@v1/ui/tabs"
 import { PortfolioWalletComparison } from "@/app/[locale]/(dashboard)/portfolio/_components/portfolio-wallet-comparison"
 import { IconCircleDottedAndCircle, IconWalletBifoldFill } from "symbols-react"
+import { Preloaded, usePreloadedQuery } from "convex/react"
+import { api } from "../../../../../../convex/_generated/api"
 
 const portfolioTabValues = ["wallets", "comparison"] as const
 const portfolioTabParser = parseAsStringLiteral(portfolioTabValues).withDefault("wallets")
 
-export function Portfolio() {
-  const { wallets, isLoading, error } = usePortfolioWallets()
+export function Portfolio(props: {
+  preloadedWallets: Preloaded<typeof api.portfolio.listMyPortfolioWallets>
+}) {
+  const wallets = usePreloadedQuery(props.preloadedWallets)
+  const isLoadingState = false
+  const errorState = null as Error | null
 
   const [tab, setTab] = useQueryState("pt", portfolioTabParser)
   const [selectedWalletId, setSelectedWalletId] = useQueryState("pw", {
@@ -40,8 +45,6 @@ export function Portfolio() {
     void setSelectedWalletId(first._id)
   }, [activeWallets, selectedWalletId, setSelectedWalletId])
 
-  const isLoadingState = isLoading
-  const errorState = error
   const hasNoWallets = !isLoadingState && !errorState && activeWallets.length === 0
 
   return (

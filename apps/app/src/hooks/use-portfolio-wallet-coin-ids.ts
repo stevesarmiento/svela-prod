@@ -1,23 +1,17 @@
-import { useQuery } from "@tanstack/react-query"
-import { getPortfolioWalletCoinIds } from "@/lib/portfolio-api"
+import { useQuery } from "convex/react"
+import { api } from "../../convex/_generated/api"
 
 export function usePortfolioWalletCoinIds(walletId?: string) {
   const enabled = Boolean(walletId && walletId.length > 0)
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["portfolio", "wallet", walletId, "coin-ids"],
-    queryFn: async () => {
-      if (!walletId) return []
-      return await getPortfolioWalletCoinIds(walletId)
-    },
-    enabled,
-    staleTime: 60 * 1000,
-  })
+  const data = useQuery(
+    api.portfolio.getMyPortfolioWalletCoinIds,
+    enabled && walletId ? { walletId: walletId as any } : "skip",
+  ) as Array<string> | undefined
 
   return {
     coinIds: data ?? [],
-    isLoading,
-    error: (error as Error | null) ?? null,
+    isLoading: data === undefined,
+    error: null as Error | null,
   }
 }
 

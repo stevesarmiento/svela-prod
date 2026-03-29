@@ -64,7 +64,7 @@ function getRouteGreeting(pathname: string): string {
   }
   
   const routeGreetings: Record<string, string> = {
-    '/charts': 'Charts & Graphs',
+    '/charts': 'Compare Watchlists',
     '/portfolio': 'Portfolio',
   };
 
@@ -104,7 +104,7 @@ function getStaticRouteGreeting(pathname: string): string | null {
   }
 
   const routeGreetings: Record<string, string> = {
-    '/charts': 'Charts & Graphs',
+    '/charts': 'Compare Watchlists',
     '/portfolio': 'Portfolio',
   };
 

@@ -2,7 +2,7 @@
 
 import { action } from "./_generated/server";
 import { v } from "convex/values";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { API_PROVIDERS } from "./apiKeys";
 import type { Id } from "./_generated/dataModel";
 import { createCipheriv, randomBytes, scrypt } from 'crypto';
@@ -128,6 +128,36 @@ export const addApiKeyWithEncryption = action({
     const keyId: Id<"userApiKeys"> = await ctx.runMutation(api.apiKeys.upsertApiKey, {
       serverToken: args.serverToken,
       clerkId: args.clerkId,
+      provider: args.provider,
+      keyName: args.keyName,
+      encryptedKey,
+      displayKey,
+      isActive: args.isActive,
+    });
+    return keyId;
+  },
+});
+
+export const addMyApiKeyWithEncryption = action({
+  args: {
+    provider: v.string(),
+    keyName: v.string(),
+    apiKey: v.string(),
+    isActive: v.boolean(),
+  },
+  returns: v.id("userApiKeys"),
+  handler: async (ctx, args): Promise<Id<"userApiKeys">> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    if (!(args.provider in API_PROVIDERS)) {
+      throw new Error(`Invalid API provider: ${args.provider}`);
+    }
+
+    const displayKey = createDisplayKey(args.apiKey);
+    const encryptedKey = await encryptValue(args.apiKey);
+
+    const keyId: Id<"userApiKeys"> = await ctx.runMutation(internal.apiKeys._upsertMyApiKeyEncrypted, {
       provider: args.provider,
       keyName: args.keyName,
       encryptedKey,
