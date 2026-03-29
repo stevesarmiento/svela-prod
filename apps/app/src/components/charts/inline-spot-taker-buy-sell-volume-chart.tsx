@@ -5,7 +5,6 @@ import { Skeleton } from "@v1/ui/skeleton"
 import { useSpotTakerBuySellVolumeHistory } from "@/hooks/use-spot-taker-buy-sell-volume-history"
 import { cn } from "@v1/ui/cn"
 import { useIsomorphicTheme } from "@/hooks/use-isomorphic-theme"
-import { generatePastelColors } from "@/lib/chart-colors"
 
 interface InlineSpotTakerBuySellVolumeChartProps {
   baseSymbol: string
@@ -29,14 +28,17 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 const SPOT_SCALE_CAP = 4
-const PASTELS = generatePastelColors(3)
-const BUY_PASTEL = PASTELS[2] ?? "hsl(160, 60.40%, 62.40%)"
-const SELL_PASTEL = PASTELS[1] ?? "hsl(341, 55.40%, 69.20%)"
+// Darker pastels for dark mode (less neon), mapped as: buy=top, sell=bottom.
+const BUY_PASTEL = "hsl(0, 0.00%, 68.60%)" // amber
+const SELL_PASTEL = "hsl(0, 0.00%, 45.50%)" // yellow
 
 function toThemeAwareColor(color: string, isDarkMode: boolean): string {
   if (isDarkMode) return color
   return color.replace(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/, (_m, h, s, l) => {
-    return `hsl(${h}, ${Math.min(100, Number.parseInt(s) + 20)}%, ${Math.max(30, Number.parseInt(l) - 40)}%)`
+    // On light backgrounds, increase contrast without going muddy.
+    const nextS = clamp(Number.parseInt(s) + 12, 0, 100)
+    const nextL = clamp(Number.parseInt(l) - 24, 0, 100)
+    return `hsl(${h}, ${nextS}%, ${nextL}%)`
   })
 }
 
@@ -185,11 +187,11 @@ export function InlineSpotTakerBuySellVolumeChart({
   if (series.maxVolume <= 0) return <DataUnavailable />
   if (series.count <= 0) return <DataUnavailable />
 
-  const width = 150
+  const width = 180
   const height = 32
   const baselineY = 16
   const barMax = 14
-  const gap = 1
+  const gap = 2
   const count = series.count
   const barWidth = count > 0 ? (width - gap * Math.max(0, count - 1)) / count : 0
   const futuresWidth = Math.max(0, barWidth)
@@ -243,7 +245,6 @@ export function InlineSpotTakerBuySellVolumeChart({
                 y={baselineY - spotBuyH}
                 width={Math.max(0, barWidth)}
                 height={spotBuyH}
-                rx={0.75}
                 fill={buyColor}
                 opacity={0.9}
               />
@@ -252,7 +253,6 @@ export function InlineSpotTakerBuySellVolumeChart({
                 y={baselineY}
                 width={Math.max(0, barWidth)}
                 height={spotSellH}
-                rx={0.75}
                 fill={sellColor}
                 opacity={0.9}
               />
@@ -263,7 +263,6 @@ export function InlineSpotTakerBuySellVolumeChart({
                 y={baselineY - futuresBuyH}
                 width={Math.max(0, futuresWidth)}
                 height={futuresBuyH}
-                rx={0.75}
                 fill={buyColor}
                 opacity={0.28}
               />
@@ -285,7 +284,6 @@ export function InlineSpotTakerBuySellVolumeChart({
                 y={baselineY}
                 width={Math.max(0, futuresWidth)}
                 height={futuresSellH}
-                rx={0.75}
                 fill={sellColor}
                 opacity={0.28}
               />

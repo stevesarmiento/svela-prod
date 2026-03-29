@@ -306,38 +306,38 @@ export function createWatchlistColumns({
       ),
       enableSorting: false,
     },
-    // {
-    //   id: 'actions',
-    //   header: () => (
-    //     <div className="flex items-center justify-end gap-1">
-    //       Action
-    //     </div>
-    //   ),
-    //   cell: ({ row }) => (
-    //     <div className="flex items-center justify-end">
-    //       {row.original.quote.USD.price > 0 ? (
-    //         <Button
-    //           variant="ghost"
-    //           size="sm"
-    //           onClick={(e) => {
-    //             e.preventDefault(); // Prevent row link navigation
-    //             e.stopPropagation();
-    //             handleRemove(row.original.id);
-    //           }}
-    //           disabled={removingCoinsRef.current.has(row.original.id.toString())}
-    //           className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
-    //           >
-    //           {removingCoinsRef.current.has(row.original.id.toString()) ? (
-    //             <Spinner size={16} />
-    //           ) : (
-    //             <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
-    //           )}
-    //         </Button>
-    //       ) : (
-    //         <Skeleton className="h-6 w-6 rounded-lg" />
-    //       )}
-    //     </div>
-    //   ),
-    // },
+    {
+      id: 'actions',
+      header: () => (
+        <div className="flex items-center justify-end gap-1">
+          Action
+        </div>
+      ),
+      cell: ({ row }) => (
+        <div className="flex items-center justify-end">
+          {row.original.quote.USD.price > 0 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.preventDefault(); // Prevent row link navigation
+                e.stopPropagation();
+                handleRemove(row.original.id);
+              }}
+              disabled={removingCoinsRef.current.has(row.original.id.toString())}
+              className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
+              >
+              {removingCoinsRef.current.has(row.original.id.toString()) ? (
+                <Spinner size={16} />
+              ) : (
+                <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
+              )}
+            </Button>
+          ) : (
+            <Skeleton className="h-6 w-6 rounded-lg" />
+          )}
+        </div>
+      ),
+    },
   ];
 }
