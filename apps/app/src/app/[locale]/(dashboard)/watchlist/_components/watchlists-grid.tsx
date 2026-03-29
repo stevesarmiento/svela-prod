@@ -20,6 +20,7 @@ import { Dialog, DialogContent } from '@v1/ui/dialog'
 import { Tabs, TabsContent } from '@v1/ui/tabs'
 import { WatchlistMultiLineChart } from './watchlist-multi-line-chart'
 import { runPromiseExit } from '@/lib/effect/runtime-watchlist'
+import { deletePortfolioWallet } from "@/lib/portfolio-api"
 
 const isDebug = env.NODE_ENV === "development"
 
@@ -62,8 +63,8 @@ function WatchlistGroupWithCoins({
   selected
 }: {
   group: WatchlistGroup
-  onEdit: (group: WatchlistGroup) => void
-  onDelete: (group: WatchlistGroup) => void
+  onEdit?: (group: WatchlistGroup) => void
+  onDelete?: (group: WatchlistGroup) => void
   onSelect?: (group: WatchlistGroup) => void
   selected?: boolean
 }) {
@@ -110,6 +111,13 @@ export function WatchlistsGrid({
   const watchlistGroups = useWatchlistGroups() as WatchlistGroup[] | undefined
   const { updateGroup, deleteGroup } = useWatchlistOperations()
   const { selectedGroup } = useWatchlist()
+
+  const { regularGroups, walletGroups } = useMemo(() => {
+    const groups = watchlistGroups ?? []
+    const regularGroups = groups.filter((g) => !g.portfolioWalletId)
+    const walletGroups = groups.filter((g) => Boolean(g.portfolioWalletId))
+    return { regularGroups, walletGroups }
+  }, [watchlistGroups])
 
   const editingGroupWatchlist = useWatchlistByGroup(editingGroup?._id) as Array<{ coinId: string }> | undefined
   const editingCoinIds = useMemo(() => {
@@ -222,6 +230,34 @@ export function WatchlistsGrid({
       return
     }
 
+    if (group.portfolioWalletId) {
+      try {
+        await deletePortfolioWallet(group.portfolioWalletId)
+
+        toast({
+          title: "Success",
+          description: "Wallet deleted successfully",
+        })
+
+        queryClient.setQueryData<Array<WatchlistGroup>>(["watchlists", "groups"], (prev) => {
+          if (!prev) return prev
+          return prev.filter((g) => g._id !== group._id)
+        })
+
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["watchlists"] }),
+          queryClient.invalidateQueries({ queryKey: ["portfolio"] }),
+        ])
+      } catch (error) {
+        toast({
+          title: "Request Error",
+          description: error instanceof Error ? error.message : String(error),
+          variant: "destructive",
+        })
+      }
+      return
+    }
+
     const program = deleteGroup(group._id).pipe(
       Effect.tap(() => Effect.sync(() => {
         toast({
@@ -314,7 +350,7 @@ export function WatchlistsGrid({
               {/* Watchlists Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 relative">
                 {/* Existing Watchlists */}
-                {watchlistGroups
+                {regularGroups
                   .slice()
                   .reverse()
                   .map((group) => (
@@ -329,6 +365,30 @@ export function WatchlistsGrid({
                   </div>
                 ))}
               </div>
+
+              {walletGroups.length > 0 ? (
+                <div className="mt-10 space-y-4">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Wallets
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 relative">
+                    {walletGroups
+                      .slice()
+                      .reverse()
+                      .map((group) => (
+                        <div key={group._id}>
+                          <WatchlistGroupWithCoins
+                            group={group}
+                            onEdit={openEditDialog}
+                          onDelete={handleDeleteWatchlist}
+                            onSelect={onSelectWatchlist}
+                            selected={selectedGroup?._id === group._id}
+                          />
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              ) : null}
 
               {/* Edit Watchlist Modal (centered) */}
               <Dialog

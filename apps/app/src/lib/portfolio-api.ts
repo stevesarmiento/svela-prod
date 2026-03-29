@@ -36,6 +36,7 @@ const WalletListSchema = z.array(PortfolioWalletSchema)
 const AddWalletResponseSchema = z.object({ id: z.string() })
 
 const CoinIdsResponseSchema = z.object({ coinIds: z.array(z.string()) })
+const DeleteWalletResponseSchema = z.object({ success: z.boolean() })
 
 const PortfolioWalletCandidateSchema = z.object({
   mint: z.string(),
@@ -145,5 +146,15 @@ export async function getPortfolioWalletCoinIds(walletId: string): Promise<Array
     parse: (data) => CoinIdsResponseSchema.parse(data),
   })
   return result.coinIds
+}
+
+export async function deletePortfolioWallet(walletId: string): Promise<void> {
+  await requestJson({
+    endpoint: `/api/internal/portfolio/wallets/${encodeURIComponent(walletId)}`,
+    init: {
+      method: "DELETE",
+    },
+    parse: (data) => DeleteWalletResponseSchema.parse(data),
+  })
 }
 

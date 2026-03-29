@@ -37,11 +37,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@v1/ui/popover'
-import { IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmarkFill } from 'symbols-react'
+import { IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmarkFill, IconWalletBifoldFill } from 'symbols-react'
 import { CreateWatchlist } from './create-watchlist'
 import { Kbd } from "@v1/ui/kbd"
 import { useLatest } from "@/hooks/use-latest"
 import { useReducedMotion } from "motion/react"
+import { AddWalletDialog } from "@/app/[locale]/(dashboard)/portfolio/_components/add-wallet-dialog"
 
 interface WatchlistProps {
   activeTimeScale?: string;
@@ -151,6 +152,7 @@ export function Watchlist({
   const searchParams = useSearchParams()
   const [sorting, setSorting] = useState<SortingState>([])
   const [isCreatingWatchlist, setIsCreatingWatchlist] = useState(false)
+  const [isAddWalletOpen, setIsAddWalletOpen] = useState(false)
   const coinSearchRef = useRef<CoinSearchRef>(null)
 
   // Get current watchlist group parameter to preserve it in navigation (same as chart-table and top-nav)
@@ -393,6 +395,17 @@ export function Watchlist({
                      variant="ghost"
                      size="sm"
                      onClick={() => {
+                       setIsAddWalletOpen(true)
+                     }}
+                     className="w-full justify-start gap-2 rounded-md"
+                   >
+                     <IconWalletBifoldFill className="h-3.5 w-3.5 fill-muted-foreground" />
+                     <span>Add Wallet</span>
+                   </Button>
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={() => {
                        coinSearchRef.current?.open()
                      }}
                      className="w-full justify-start gap-2 rounded-md"
@@ -465,6 +478,8 @@ export function Watchlist({
           isOpen={isCreatingWatchlist} 
           onClose={() => setIsCreatingWatchlist(false)} 
         />
+
+        <AddWalletDialog open={isAddWalletOpen} onOpenChange={setIsAddWalletOpen} />
 
         {/* Hidden CoinSearch for ref access */}
         <div className="sr-only">

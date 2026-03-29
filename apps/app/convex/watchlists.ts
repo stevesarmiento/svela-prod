@@ -12,6 +12,7 @@ const watchlistGroupValidator = v.object({
   description: v.optional(v.string()),
   icon: v.optional(v.string()),
   color: v.optional(v.string()),
+  portfolioWalletId: v.optional(v.id("portfolioWallets")),
   isDefault: v.boolean(),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -137,6 +138,7 @@ export const updateWatchlistGroup = mutation({
       throw new Error("Watchlist group not found");
     }
 
+    const now = Date.now();
     const updates: { 
       updatedAt: number;
       name?: string;
@@ -144,14 +146,15 @@ export const updateWatchlistGroup = mutation({
       description?: string;
       icon?: string;
       color?: string;
-    } = { updatedAt: Date.now() };
+    } = { updatedAt: now };
     
     if (args.name !== undefined) {
-      updates.name = args.name;
+      const trimmed = args.name.trim();
+      updates.name = trimmed;
       
       // Generate new slug if name is changing
-      if (args.name !== group.name) {
-        let baseSlug = generateSlug(args.name);
+      if (trimmed !== group.name) {
+        let baseSlug = generateSlug(trimmed);
         if (!baseSlug) baseSlug = 'watchlist';
         
         // Ensure slug is unique for this user (excluding current group)
@@ -179,6 +182,19 @@ export const updateWatchlistGroup = mutation({
     if (args.color !== undefined) updates.color = args.color;
 
     await ctx.db.patch(args.groupId, updates);
+
+    // If this is a wallet-backed group, keep the portfolio wallet name in sync
+    // so Portfolio (read-only for now) doesn’t drift from Watchlist edits.
+    if (group.portfolioWalletId && typeof updates.name === "string" && updates.name.length > 0) {
+      const wallet = await ctx.db.get(group.portfolioWalletId);
+      if (wallet && wallet.userId === user._id) {
+        await ctx.db.patch(group.portfolioWalletId, {
+          name: updates.name,
+          updatedAt: now,
+        });
+      }
+    }
+
     return null;
   },
 });

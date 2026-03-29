@@ -25,13 +25,15 @@ export default defineSchema({
     description: v.optional(v.string()),
     icon: v.optional(v.string()), // Emoji or icon name from symbols-react
     color: v.optional(v.string()), // Background color for the card
+    portfolioWalletId: v.optional(v.id("portfolioWallets")),
     isDefault: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_user_default", ["userId", "isDefault"])
-    .index("by_user_slug", ["userId", "slug"]),
+    .index("by_user_slug", ["userId", "slug"])
+    .index("by_user_and_portfolio_wallet", ["userId", "portfolioWalletId"]),
 
   watchlists: defineTable({
     userId: v.id("users"),

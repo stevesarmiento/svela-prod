@@ -25,7 +25,10 @@ export function useAddPortfolioWallet() {
   const mutation = useMutation({
     mutationFn: addPortfolioWallet,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["portfolio"] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["portfolio"] }),
+        queryClient.invalidateQueries({ queryKey: ["watchlists"] }),
+      ])
     },
   })
 
@@ -55,7 +58,10 @@ export function useCreatePortfolioWalletFromSelection() {
   const mutation = useMutation({
     mutationFn: createPortfolioWalletFromSelection,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["portfolio"] })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["portfolio"] }),
+        queryClient.invalidateQueries({ queryKey: ["watchlists"] }),
+      ])
     },
   })
 
