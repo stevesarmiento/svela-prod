@@ -233,7 +233,7 @@ export function InlineSpotTakerBuySellVolumeChart({
           const futuresCapInset = Math.min(0.4, futuresWidth / 2)
           const futuresCapX1 = futuresX + futuresCapInset
           const futuresCapX2 = futuresX + Math.max(0, futuresWidth) - futuresCapInset
-          const futuresCapStrokeWidth = 1.5
+          const futuresCapStrokeWidth = 0.5
 
           return (
             <g key={i}>
