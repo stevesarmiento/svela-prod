@@ -57,8 +57,8 @@ export function ComparisonCard({
           // Validate timestamp and price values
           if (typeof timestamp === 'number' && 
               typeof priceValue === 'number' && 
-              !isNaN(timestamp) && 
-              !isNaN(priceValue) && 
+              !Number.isNaN(timestamp) && 
+              !Number.isNaN(priceValue) && 
               priceValue > 0) {
             // CoinGecko timestamps are in milliseconds, convert to consistent format
             const timeMs = timestamp
@@ -88,8 +88,8 @@ export function ComparisonCard({
         // Validate prices before calculating percentage
         if (typeof initialPrice === 'number' && 
             typeof currentPrice === 'number' && 
-            !isNaN(initialPrice) && 
-            !isNaN(currentPrice) && 
+            !Number.isNaN(initialPrice) && 
+            !Number.isNaN(currentPrice) && 
             initialPrice > 0) {
           dataPoint[coinId] = ((currentPrice - initialPrice) / initialPrice) * 100
         } else {
@@ -135,14 +135,14 @@ export function ComparisonCard({
                     <div className="flex items-center gap-3">
                       <div className="relative w-8 h-8 rounded-full overflow-hidden bg-muted flex-shrink-0">
                     <Image
-                          src={coin.image || `https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png`}
+                          src={coin.image || "https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png"}
                       alt={coin.name}
                           fill
                           className="object-cover"
                           sizes="32px"
                           onError={(e) => {
                             // Fallback to a default CoinGecko image if the primary image fails
-                            e.currentTarget.src = `https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png`
+                            e.currentTarget.src = "https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png"
                           }}
                     />
                       </div>

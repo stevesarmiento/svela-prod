@@ -1,7 +1,7 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
+import { type ReactNode, useEffect, useState } from "react";
 
 // Component to handle user storage after authentication
 function AuthenticatedUserHandler({ children }: { children: React.ReactNode }) {
@@ -15,7 +15,11 @@ function AuthenticatedUserHandler({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const syncUser = async () => {
       if (!isLoaded || !user || userSynced) {
-        console.log("Skipping user sync:", { isLoaded, hasUser: !!user, userSynced });
+        console.log("Skipping user sync:", {
+          isLoaded,
+          hasUser: !!user,
+          userSynced,
+        });
         return;
       }
 
@@ -27,7 +31,7 @@ function AuthenticatedUserHandler({ children }: { children: React.ReactNode }) {
           headers: { "Content-Type": "application/json" },
         });
         if (!response.ok) throw new Error("User sync failed");
-        
+
         console.log("User synced successfully");
         setUserSynced(true);
       } catch (error) {

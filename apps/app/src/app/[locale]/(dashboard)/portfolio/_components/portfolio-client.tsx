@@ -3,7 +3,7 @@
 import { Suspense } from "react"
 import { Portfolio } from "./portfolio"
 import type { Preloaded } from "convex/react"
-import { api } from "../../../../../../convex/_generated/api"
+import type { api } from "../../../../../../convex/_generated/api"
 
 function PortfolioContent(props: {
   preloadedWallets?: Preloaded<typeof api.portfolio.listMyPortfolioWallets>

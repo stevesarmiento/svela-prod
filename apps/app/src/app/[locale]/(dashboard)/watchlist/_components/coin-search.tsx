@@ -27,8 +27,8 @@ import { formatUsdPrice } from "@/lib/format-usd"
 const CoinSearchSkeleton = ({ rowCount = 5 }: { rowCount?: number }) => (
   <Table>
     <TableBody>
-      {Array.from({ length: rowCount }).map((_, index) => (
-        <TableRow key={index}>
+      {Array.from({ length: rowCount }, (_, i) => `row-${i}`).map((rowKey) => (
+        <TableRow key={rowKey}>
           <TableCell>
             <div className="flex items-center gap-2">
               <Skeleton className="h-6 w-6 rounded-full" />

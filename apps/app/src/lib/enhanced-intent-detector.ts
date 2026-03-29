@@ -118,7 +118,7 @@ export class EnhancedIntentDetector {
         }
         
         if (multiplier && unit && match[1]) {
-          const number = parseInt(match[1]);
+          const number = Number.parseInt(match[1]);
           const totalDays = unit === 'hours' ? number / 24 : number * multiplier;
           
           // Map to supported timeframes
@@ -271,7 +271,7 @@ export class EnhancedIntentDetector {
         if (inputInfo && outputInfo && amount) {
           const tradeAction = {
             type: 'swap' as const,
-            amount: parseFloat(amount),
+            amount: Number.parseFloat(amount),
             inputToken: inputMint,
             outputToken: outputMint,
             amountType: 'exact_in' as const,
@@ -297,7 +297,7 @@ export class EnhancedIntentDetector {
       if (outputInfo) {
         return {
           type: 'swap',
-          amount: parseFloat(amount),
+          amount: Number.parseFloat(amount),
           outputToken: outputMint,
           amountType: 'exact_out',
           confidence: 0.85,
@@ -341,8 +341,8 @@ export class EnhancedIntentDetector {
   private extractSlippage(message: string): number | undefined {
     const slippagePattern = /(?:slippage|slip)\s*(?:of\s*)?(\d+(?:\.\d+)?)\s*%/i;
     const match = message.match(slippagePattern);
-    if (match && match[1]) {
-      return parseFloat(match[1]);
+    if (match?.[1]) {
+      return Number.parseFloat(match[1]);
     }
     return undefined;
   }

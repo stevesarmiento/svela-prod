@@ -48,12 +48,14 @@ const ColorPicker = ({ value, onChange, label }: { value: string, onChange: (col
       <div className="flex flex-wrap gap-1">
         {colors.map((color) => (
           <button
+            type="button"
             key={color}
             className={cn(
               "w-6 h-6 rounded border-2 transition-all",
               value === color ? "border-white scale-110" : "border-gray-600 hover:border-gray-400"
             )}
             style={{ backgroundColor: color }}
+            aria-label={`${label}: ${color}`}
             onClick={() => onChange(color)}
           />
         ))}
@@ -272,7 +274,7 @@ export function MarketCipherB({ coinId, initialData, activeTimeScale, className 
     if (displaySettings.showFastMoneyFlow && calculations.fastMoneyFlow.length) {
       const fastMFSeries = chart.addSeries(LineSeries, {
         lineWidth: 1,
-        color: colors.fastMoneyFlow + '60',
+        color: `${colors.fastMoneyFlow}60`,
         title: 'Fast MF',
       })
       
@@ -283,7 +285,7 @@ export function MarketCipherB({ coinId, initialData, activeTimeScale, className 
     if (displaySettings.showSlowMoneyFlow && calculations.slowMoneyFlow.length) {
       const slowMFSeries = chart.addSeries(LineSeries, {
         lineWidth: 1,
-        color: colors.slowMoneyFlow + '60',
+        color: `${colors.slowMoneyFlow}60`,
         title: 'Slow MF',
       })
       

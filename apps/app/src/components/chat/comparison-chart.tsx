@@ -67,8 +67,8 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
             price && 
             typeof price.timestamp === 'number' && 
             typeof price.price === 'number' && 
-            !isNaN(price.timestamp) && 
-            !isNaN(price.price) && 
+            !Number.isNaN(price.timestamp) && 
+            !Number.isNaN(price.price) && 
             price.price > 0
           )
           .sort((a, b) => a.timestamp - b.timestamp)
@@ -77,13 +77,13 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
           // Use the first price as baseline for percentage calculation
           const initialPrice = sortedPrices[0]?.price
           
-          if (initialPrice && initialPrice > 0 && !isNaN(initialPrice)) {
+          if (initialPrice && initialPrice > 0 && !Number.isNaN(initialPrice)) {
             sortedPrices.forEach((pricePoint) => {
               const currentPrice = pricePoint.price
-              if (currentPrice && currentPrice > 0 && !isNaN(currentPrice)) {
+              if (currentPrice && currentPrice > 0 && !Number.isNaN(currentPrice)) {
                 const percentChange = ((currentPrice - initialPrice) / initialPrice) * 100
                 // Additional validation for the calculated percentage
-                if (!isNaN(percentChange) && isFinite(percentChange)) {
+                if (!Number.isNaN(percentChange) && Number.isFinite(percentChange)) {
                   data.push({
                     time: (pricePoint.timestamp / 1000) as Time,
                     value: percentChange,
@@ -106,7 +106,8 @@ export function ComparisonChart({ coins, timeframe }: ComparisonChartProps) {
           item &&
           typeof item.time === "number" &&
           typeof item.value === "number" &&
-          !isNaN(item.value) &&
+          !Number.isNaN(item.value) &&
+          Number.
           isFinite(item.value)
         ),
         latestValue

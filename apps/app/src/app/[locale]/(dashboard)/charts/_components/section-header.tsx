@@ -1,5 +1,5 @@
-import React from 'react'
-import { LucideIcon } from 'lucide-react'
+import type React from 'react'
+import type { LucideIcon } from 'lucide-react'
 
 interface SectionHeaderProps {
   title: string

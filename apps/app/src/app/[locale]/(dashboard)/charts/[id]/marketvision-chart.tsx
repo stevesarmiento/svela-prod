@@ -404,7 +404,7 @@ export function MarketVisionChart({
     seriesRefs.current.clear()
 
     // Add zero line first (always show for oscillators)
-    if (calculations.levels && calculations.levels.zero && calculations.levels.zero.length) {
+    if (calculations.levels?.zero?.length) {
       const zeroSeries = chart.addSeries(LineSeries, {
         lineWidth: 1,
         color: '#ffffff60',
@@ -421,7 +421,7 @@ export function MarketVisionChart({
     if (displaySettings.showLevels && calculations.levels) {
 
       // Add overbought/oversold levels
-      if (calculations.levels.overbought1 && calculations.levels.overbought1.length) {
+      if (calculations.levels.overbought1?.length) {
         const ob1Series = chart.addSeries(LineSeries, {
           lineWidth: 1,
           color: addOpacityToColor(COLORS.levels, 0.4),
@@ -434,7 +434,7 @@ export function MarketVisionChart({
         seriesRefs.current.set('ob1', ob1Series)
       }
 
-      if (calculations.levels.oversold1 && calculations.levels.oversold1.length) {
+      if (calculations.levels.oversold1?.length) {
         const os1Series = chart.addSeries(LineSeries, {
           lineWidth: 1,
           color: addOpacityToColor(COLORS.levels, 0.4),
@@ -451,7 +451,7 @@ export function MarketVisionChart({
     // WaveTrend Line Charts
     if (displaySettings.showWaveTrend) {
       // WT1 Line (Soft blue)
-      if (calculations.waveTrend.wt1 && calculations.waveTrend.wt1.length) {
+      if (calculations.waveTrend.wt1?.length) {
         const wt1LineSeries = chart.addSeries(LineSeries, {
           lineWidth: hoveredIndicator === 'showWaveTrend' ? 2 : 1,
           color: hoveredIndicator && hoveredIndicator !== 'showWaveTrend' 
@@ -466,7 +466,7 @@ export function MarketVisionChart({
       }
 
       // WT2 Line (Soft pink)
-      if (calculations.waveTrend.wt2 && calculations.waveTrend.wt2.length) {
+      if (calculations.waveTrend.wt2?.length) {
         const wt2LineSeries = chart.addSeries(LineSeries, {
           lineWidth: hoveredIndicator === 'showWaveTrend' ? 2 : 1,
           color: hoveredIndicator && hoveredIndicator !== 'showWaveTrend'
@@ -481,7 +481,7 @@ export function MarketVisionChart({
       }
 
       // WaveTrend Cross Dots (dots only, no connecting lines)
-      if (calculations.waveTrend.positiveCrosses && calculations.waveTrend.positiveCrosses.length) {
+      if (calculations.waveTrend.positiveCrosses?.length) {
         const positiveCrossSeries = chart.addSeries(LineSeries, {
           lineWidth: 1,               // Minimum line width
           color: 'transparent',       // Transparent line
@@ -503,7 +503,7 @@ export function MarketVisionChart({
         seriesRefs.current.set('wtPositiveCross', positiveCrossSeries)
       }
 
-      if (calculations.waveTrend.negativeCrosses && calculations.waveTrend.negativeCrosses.length) {
+      if (calculations.waveTrend.negativeCrosses?.length) {
         const negativeCrossSeries = chart.addSeries(LineSeries, {
           lineWidth: 1,               // Minimum line width  
           color: 'transparent',       // Transparent line
@@ -608,7 +608,8 @@ export function MarketVisionChart({
             const isOtherHovered = hoveredIndicator && hoveredIndicator !== item.key
             
             return (
-              <div
+              <button
+                type="button"
                 key={item.key}
                 className={cn(
                   "flex overflow-hidden items-center gap-2 cursor-pointer transition-all duration-200 rounded-lg p-2 -m-1 relative group",
@@ -619,6 +620,7 @@ export function MarketVisionChart({
                 style={{ 
                   backgroundColor: isHovered ? addOpacityToColor(item.color, 0.1) : undefined 
                 }}
+                aria-pressed={isActive}
                 onMouseEnter={() => setHoveredIndicator(item.key)}
                 onMouseLeave={() => setHoveredIndicator(null)}
                 onClick={() => toggleIndicator(item.key)}
@@ -643,7 +645,7 @@ export function MarketVisionChart({
                   "w-2 h-2 rounded-full transition-all duration-200",
                   isActive ? "bg-white" : "bg-transparent"
                 )} />
-              </div>
+              </button>
             )
           })}
         </div>

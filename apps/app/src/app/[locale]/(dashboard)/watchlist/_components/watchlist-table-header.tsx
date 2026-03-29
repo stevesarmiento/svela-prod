@@ -20,7 +20,8 @@ export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
             style={{ gridTemplateColumns: WATCHLIST_TABLE_GRID_TEMPLATE_COLUMNS }}
           >
             {headerGroup.headers.slice(0, 1).map(header => ( // Show first header (select/token merged)
-              <div 
+              <button
+                type="button"
                 key={header.id}
                 className="flex min-w-0 items-center gap-2 cursor-pointer select-none hover:text-foreground"
                 onClick={() => table.getColumn('token-sort')?.toggleSorting()} // Sort by token
@@ -30,31 +31,46 @@ export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
                   asc: ' ↑',
                   desc: ' ↓',
                 }[table.getColumn('token-sort')?.getIsSorted() as string] ?? null}
-              </div>
+              </button>
             ))}
-            {headerGroup.headers.slice(2).map(header => ( // Skip the hidden token-sort column
-              (() => {
-                const canSort = header.column.getCanSort()
-                const onClick = canSort ? header.column.getToggleSortingHandler() : undefined
+            {headerGroup.headers.slice(2).map(header => { // Skip the hidden token-sort column
+              const canSort = header.column.getCanSort()
+              const onClick = canSort ? header.column.getToggleSortingHandler() : undefined
+              const className = cn(
+                "flex min-w-0 items-center gap-1",
+                canSort ? "cursor-pointer select-none hover:text-foreground" : "",
+                header.column.id === 'actions' ? "justify-end" : "justify-start"
+              )
+
+              const content = (
+                <>
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                  {{
+                    asc: ' ↑',
+                    desc: ' ↓',
+                  }[header.column.getIsSorted() as string] ?? null}
+                </>
+              )
+
+              if (canSort && onClick) {
                 return (
-              <div 
-                key={header.id}
-                className={cn(
-                  "flex min-w-0 items-center gap-1",
-                  canSort ? "cursor-pointer select-none hover:text-foreground" : "",
-                  header.column.id === 'actions' ? "justify-end" : "justify-start"
-                )}
-                onClick={onClick}
-              >
-                {flexRender(header.column.columnDef.header, header.getContext())}
-                {{
-                  asc: ' ↑',
-                  desc: ' ↓',
-                }[header.column.getIsSorted() as string] ?? null}
-              </div>
+                  <button
+                    type="button"
+                    key={header.id}
+                    className={className}
+                    onClick={onClick}
+                  >
+                    {content}
+                  </button>
                 )
-              })()
-            ))}
+              }
+
+              return (
+                <div key={header.id} className={className}>
+                  {content}
+                </div>
+              )
+            })}
           </div>
         ))}
       </div>

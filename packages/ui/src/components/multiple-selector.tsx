@@ -472,6 +472,14 @@ const MultipleSelector = React.forwardRef<
             if (disabled) return;
             inputRef?.current?.focus();
           }}
+          role="button"
+          tabIndex={disabled ? -1 : 0}
+          onKeyDown={(e) => {
+            if (disabled) return;
+            if (e.key !== "Enter" && e.key !== " ") return;
+            e.preventDefault();
+            inputRef?.current?.focus();
+          }}
         >
           <div className="relative flex flex-wrap gap-1">
             {selected.map((option) => {

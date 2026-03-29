@@ -195,7 +195,7 @@ export function getTokenDecimals(symbolOrMint: string): number {
  */
 export function formatTokenAmount(amount: number, symbolOrMint: string): bigint {
   const decimals = getTokenDecimals(symbolOrMint)
-  return BigInt(Math.floor(amount * Math.pow(10, decimals)))
+  return BigInt(Math.floor(amount * 10 ** decimals))
 }
 
 /**
@@ -203,5 +203,5 @@ export function formatTokenAmount(amount: number, symbolOrMint: string): bigint 
  */
 export function parseTokenAmount(amount: bigint, symbolOrMint: string): number {
   const decimals = getTokenDecimals(symbolOrMint)
-  return Number(amount) / Math.pow(10, decimals)
+  return Number(amount) / 10 ** decimals
 }

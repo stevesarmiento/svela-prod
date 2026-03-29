@@ -106,7 +106,7 @@ export const ChartTable = memo(function ChartTable({
             break
           case '2y':
             // 2Y = CoinMarketCap doesn't provide this data
-            intervalChange = NaN
+            intervalChange = Number.NaN
             break
           default:
             // Default to 24h real data
@@ -117,7 +117,7 @@ export const ChartTable = memo(function ChartTable({
       // Debug: Always log what data we're using to ensure it's real
       if (!coin.isOptimistic) {
         console.log(`📈 ${coin.symbol} (${deferredTimeScale}):`, {
-          selectedChange: isNaN(intervalChange) ? 'N/A - No real data available' : intervalChange,
+          selectedChange: Number.isNaN(intervalChange) ? 'N/A - No real data available' : intervalChange,
           timeScale: deferredTimeScale,
           realDataAvailable: {
             percent_change_1h: coin.quote?.USD?.percent_change_1h,
@@ -126,7 +126,7 @@ export const ChartTable = memo(function ChartTable({
             percent_change_30d: coin.quote?.USD?.percent_change_30d,
           },
           dataSource: 'Pure CoinGecko API',
-          usingRealData: !isNaN(intervalChange)
+          usingRealData: !Number.isNaN(intervalChange)
         })
       }
 
@@ -332,7 +332,7 @@ export const ChartTable = memo(function ChartTable({
 
                 {/* Interval Change */}
                 <div className="flex items-center justify-end">
-                  {isNaN(coin.intervalChange) ? (
+                  {Number.isNaN(coin.intervalChange) ? (
                     <span className="font-diatype-mono text-xs text-muted-foreground">
                       N/A
                     </span>
@@ -350,6 +350,11 @@ export const ChartTable = memo(function ChartTable({
                 <div 
                   className="flex items-center justify-end gap-1"
                   onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return
                     e.preventDefault()
                     e.stopPropagation()
                   }}

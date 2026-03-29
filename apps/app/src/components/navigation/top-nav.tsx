@@ -75,7 +75,7 @@ function getRouteGreeting(pathname: string): string {
 
   // Check for partial matches (e.g., /charts/bitcoin -> Charts & Graphs)
   for (const [route, greeting] of Object.entries(routeGreetings)) {
-    if (cleanPath.startsWith(route + '/')) {
+    if (cleanPath.startsWith(`${route}/`)) {
       return greeting;
     }
   }
@@ -113,7 +113,7 @@ function getStaticRouteGreeting(pathname: string): string | null {
   }
 
   for (const [route, greeting] of Object.entries(routeGreetings)) {
-    if (cleanPath.startsWith(route + '/')) {
+    if (cleanPath.startsWith(`${route}/`)) {
       return greeting;
     }
   }
@@ -338,7 +338,7 @@ export function TopNav() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="cursor-pointer w-full rounded-xl" asChild>
                   <SignOutButton>
-                    <button className="w-full text-left flex items-center">
+                    <button type="button" className="w-full text-left flex items-center">
                       <LogOut className="mr-2 h-4 w-4 text-primary/50" />
                       Sign out
                     </button>

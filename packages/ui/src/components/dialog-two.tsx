@@ -1,23 +1,22 @@
 "use client";
 
-import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 // Remove the direct import attempt if it's causing an error
 // import type { PointerDownOutsideEvent } from "@radix-ui/react-dismissable-layer";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { X } from "lucide-react";
+import * as React from "react";
 import { cn } from "../utils";
 
 // Infer PointerDownOutsideEvent type from DialogPrimitive.Content props
 type DialogContentProps = React.ComponentPropsWithoutRef<
   typeof DialogPrimitive.Content
 >;
-type PointerDownOutsideEvent =
-  NonNullable<DialogContentProps["onPointerDownOutside"]> extends (
-    event: infer E,
-  ) => void
-    ? E
-    : never;
+type PointerDownOutsideEvent = NonNullable<
+  DialogContentProps["onPointerDownOutside"]
+> extends (event: infer E) => void
+  ? E
+  : never;
 
 const Dialog = DialogPrimitive.Root;
 
@@ -69,11 +68,12 @@ const DialogContent = React.forwardRef<
       if (preventCloseOnOutsideClick) {
         // Allow events to propagate to chat container and bottom nav elements
         const target = e.target as Element;
-        const isChatContainerClick = target.closest('[data-bottom-nav]') ||      // bottom nav container
-                                   target.closest('[data-chat-container]') ||    // chat container
-                                   target.closest('form') ||                     // any form (like chat form)
-                                   target.closest('input[placeholder*="Ask about"]'); // chat input
-        
+        const isChatContainerClick =
+          target.closest("[data-bottom-nav]") || // bottom nav container
+          target.closest("[data-chat-container]") || // chat container
+          target.closest("form") || // any form (like chat form)
+          target.closest('input[placeholder*="Ask about"]'); // chat input
+
         if (!isChatContainerClick) {
           e.preventDefault();
         }

@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, memo, ReactElement } from 'react'
+import { useMemo, memo, type ReactElement } from 'react'
 import { Treemap } from 'recharts'
-import { Props as ContentProps } from 'recharts/types/component/DefaultLegendContent'
+import type { Props as ContentProps } from 'recharts/types/component/DefaultLegendContent'
 import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
 import { ChartContainer, ChartTooltip } from "@v1/ui/chart"
 import { Skeleton } from "@v1/ui/skeleton"

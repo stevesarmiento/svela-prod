@@ -282,8 +282,8 @@ function ProfileCardSkeleton() {
             <Skeleton className="h-6 w-32 rounded-md" />
             <Skeleton className="h-4 w-48 rounded-md" />
             <div className="pt-8 grid grid-cols-6 gap-2">
-              {Array.from({ length: 18 }).map((_, i) => (
-                <Skeleton key={i} className="aspect-square w-full rounded-sm opacity-20" />
+              {Array.from({ length: 18 }, (_, i) => `skeleton-${i}`).map((skeletonKey) => (
+                <Skeleton key={skeletonKey} className="aspect-square w-full rounded-sm opacity-20" />
               ))}
             </div>
           </div>

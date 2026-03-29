@@ -75,7 +75,7 @@ class CapxMemoryService {
   async retrieveContext(
     userId: string,
     query: string,
-    limit: number = 3,
+    limit = 3,
     metadataFilter?: Record<string, unknown>
   ): Promise<CapxContextResponse> {
     try {
@@ -133,7 +133,7 @@ class CapxMemoryService {
   }
 
   // Helper method to clean up old memories
-  async cleanupOldMemories(userId: string, days: number = 30): Promise<CapxForgetMemoryResponse> {
+  async cleanupOldMemories(userId: string, days = 30): Promise<CapxForgetMemoryResponse> {
     console.log(`🧹 Cleaning up memories older than ${days} days for user: ${userId}`);
     return this.forgetMemory(userId, { olderThanDays: days });
   }

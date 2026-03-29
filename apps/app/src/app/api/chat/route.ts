@@ -172,7 +172,7 @@ ${enhancedResponse.textResponse}${memoryContext}`;
             
             // Store key insights from the response
             const responseInsights = enhancedResponse.textResponse.length > 500 
-              ? enhancedResponse.textResponse.substring(0, 500) + '...'
+              ? `${enhancedResponse.textResponse.substring(0, 500)}...`
               : enhancedResponse.textResponse;
 
             const [userMemoryResult, responseMemoryResult] = await Promise.all([

@@ -6,17 +6,17 @@ interface SpinnerProps {
   className?: string;
 }
 
-export function SpinnerEllipsis({ 
-  size = 36, 
-  color = "#fff", 
-  className 
+export function SpinnerEllipsis({
+  size = 36,
+  color = "#fff",
+  className,
 }: SpinnerProps) {
   return (
-    <svg 
-      width={size} 
-      height={size} 
-      fill={color} 
-      viewBox="0 0 24 24" 
+    <svg
+      width={size}
+      height={size}
+      fill={color}
+      viewBox="0 0 24 24"
       xmlns="http://www.w3.org/2000/svg"
       className={cn("", className)}
     >

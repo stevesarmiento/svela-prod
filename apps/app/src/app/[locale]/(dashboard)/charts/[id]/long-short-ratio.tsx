@@ -38,18 +38,6 @@ export function LongShortRatio({ cmcId }: LongShortRatioProps) {
       </div>
     );
   }
-
-  // Always show no data message since hook is not implemented
-  if (true) {
-    return (
-      <div className="flex flex-col items-center py-4">
-        <span className="text-[11px] text-muted-foreground font-medium mb-2">
-          Long/Short Ratio
-        </span>
-        <span className="text-md font-diatype-mono text-muted-foreground">
-          No Data
-        </span>
-      </div>
-    );
-  }
+  
+  return null;
 }

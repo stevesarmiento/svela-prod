@@ -1,4 +1,4 @@
-import { query, mutation, internalMutation } from "./_generated/server";
+import { query, mutation, internalMutation, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { API_PROVIDERS } from "../src/constants/api-providers";
 import { requireServerToken } from "./_lib/server_token";
@@ -164,7 +164,7 @@ export const upsertApiKey = mutation({
         validationError: undefined,
       });
       return existingKey._id;
-    } else {
+    }
       // Create new key
       return await ctx.db.insert("userApiKeys", {
         userId: user._id,
@@ -176,7 +176,6 @@ export const upsertApiKey = mutation({
         createdAt: now,
         updatedAt: now,
       });
-    }
   },
 });
 
@@ -344,12 +343,12 @@ export const getApiKeyStats = query({
   },
 });
 
-async function getCurrentUser(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string } | null> }; db: any }) {
+async function getCurrentUser(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
   const user = await ctx.db
     .query("users")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", identity.subject))
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
     .first();
   return user ?? null;
 }

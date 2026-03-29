@@ -1,4 +1,4 @@
-'use strict';
+"use strict";
 
 /**
  * React Email's preview server evaluates templates in a VM context by doing:
@@ -31,13 +31,15 @@ function ensureEnumerableGlobal(name, fallbackValue) {
 try {
   // These are provided by Node >= 18, but non-enumerable on globalThis.
   // eslint-disable-next-line node/no-unsupported-features/node-builtins
-  const web = require('node:stream/web');
+  const web = require("node:stream/web");
 
-  ensureEnumerableGlobal('WritableStream', web?.WritableStream);
-  ensureEnumerableGlobal('TransformStream', web?.TransformStream);
-  ensureEnumerableGlobal('ByteLengthQueuingStrategy', web?.ByteLengthQueuingStrategy);
-  ensureEnumerableGlobal('CountQueuingStrategy', web?.CountQueuingStrategy);
+  ensureEnumerableGlobal("WritableStream", web?.WritableStream);
+  ensureEnumerableGlobal("TransformStream", web?.TransformStream);
+  ensureEnumerableGlobal(
+    "ByteLengthQueuingStrategy",
+    web?.ByteLengthQueuingStrategy,
+  );
+  ensureEnumerableGlobal("CountQueuingStrategy", web?.CountQueuingStrategy);
 } catch {
   // Best-effort polyfill; ignore.
 }
-

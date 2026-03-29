@@ -25,13 +25,13 @@ export function Liquidations({ symbols }: LiquidationsProps) {
       const now = Math.floor(Date.now() / 1000)
       const oneDayAgo = now - 24 * 60 * 60
 
-      const response = await fetch(`/api/liquidations?` + new URLSearchParams({
+      const response = await fetch(`/api/liquidations?${new URLSearchParams({
         symbols: symbolsKey,
         interval: '1hour',
         from: oneDayAgo.toString(),
         to: now.toString(),
         convert_to_usd: 'true'
-      }))
+      })}`)
 
       if (!response.ok) throw new Error('Failed to fetch liquidations')
       

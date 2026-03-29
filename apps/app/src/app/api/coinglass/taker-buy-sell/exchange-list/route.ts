@@ -63,8 +63,8 @@ export async function GET(request: Request) {
     let symbol = rawSymbol;
     let coinInfo = null;
 
-    const coinId = parseInt(rawSymbol);
-    if (!isNaN(coinId)) {
+    const coinId = Number.parseInt(rawSymbol);
+    if (!Number.isNaN(coinId)) {
       const mappedSymbol = COIN_ID_TO_SYMBOL[coinId];
       if (mappedSymbol) {
         symbol = mappedSymbol;

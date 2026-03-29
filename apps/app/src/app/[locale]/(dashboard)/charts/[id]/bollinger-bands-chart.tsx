@@ -378,7 +378,8 @@ export function BollingerBandsChart({
           const isOtherHovered = hoveredIndicator && hoveredIndicator !== item.key
           
           return (
-            <div
+            <button
+              type="button"
               key={item.key}
               className={cn(
                 "flex items-center gap-2 cursor-pointer transition-all duration-200 rounded-lg px-3 py-1 relative group",
@@ -389,6 +390,7 @@ export function BollingerBandsChart({
               style={{ 
                 backgroundColor: isHovered ? addOpacityToColor(item.color, 0.1) : undefined 
               }}
+              aria-pressed={isActive}
               onMouseEnter={() => setHoveredIndicator(item.key)}
               onMouseLeave={() => setHoveredIndicator(null)}
               onClick={() => toggleIndicator(item.key)}
@@ -411,7 +413,7 @@ export function BollingerBandsChart({
                 "w-2 h-2 rounded-full transition-all duration-200",
                 isActive ? "bg-white" : "bg-transparent"
               )} />
-            </div>
+            </button>
           )
         })}
       </div>

@@ -157,10 +157,9 @@ export function ChartLoadingSkeleton({ className, height = 400, lines }: ChartLo
           {/* Base skeleton line mask */}
           <mask id={maskId}>
             <rect x="0" y="0" width="100" height="100" fill="black" />
-            {paths.map((d, index) => (
+            {paths.map((d) => (
               <path
-                // eslint-disable-next-line react/no-array-index-key
-                key={index}
+                key={d}
                 d={d}
                 fill="none"
                 stroke="white"
@@ -181,10 +180,9 @@ export function ChartLoadingSkeleton({ className, height = 400, lines }: ChartLo
         </defs>
 
         {/* Static faint lines (so the chart is visible even between shines) */}
-        {paths.map((d, index) => (
+        {paths.map((d) => (
           <path
-            // eslint-disable-next-line react/no-array-index-key
-            key={index}
+            key={d}
             d={d}
             fill="none"
             stroke="hsl(var(--muted-foreground) / 0.25)"

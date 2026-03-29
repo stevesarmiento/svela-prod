@@ -15,7 +15,7 @@ export function sma(data: number[], period: number): number[] {
     
     for (let j = 0; j < period; j++) {
       const value = data[i - j]
-      if (value != null && !isNaN(value) && isFinite(value)) {
+      if (value != null && !Number.isNaN(value) && Number.isFinite(value)) {
         sum += value
         count++
       }
@@ -35,7 +35,7 @@ export function ema(data: number[], period: number): number[] {
   
   let firstValidIndex = 0
   while (firstValidIndex < data.length && 
-         (data[firstValidIndex] == null || isNaN(data[firstValidIndex] as number) || !isFinite(data[firstValidIndex] as number))) {
+         (data[firstValidIndex] == null || Number.isNaN(data[firstValidIndex] as number) || !Number.isFinite(data[firstValidIndex] as number))) {
     firstValidIndex++
   }
   
@@ -51,7 +51,7 @@ export function ema(data: number[], period: number): number[] {
   for (let i = firstValidIndex + 1; i < data.length; i++) {
     const value = data[i]
     const prevValue = result[i - 1]
-    if (value != null && !isNaN(value) && isFinite(value) && prevValue != null && !isNaN(prevValue) && isFinite(prevValue)) {
+    if (value != null && !Number.isNaN(value) && Number.isFinite(value) && prevValue != null && !Number.isNaN(prevValue) && Number.isFinite(prevValue)) {
       result[i] = (value * multiplier) + (prevValue * (1 - multiplier))
     } else {
       result[i] = prevValue ?? 0
@@ -75,7 +75,7 @@ export function rma(data: number[], period: number): number[] {
   let count = 0
   for (let i = 0; i < Math.min(period, data.length); i++) {
     const value = data[i]
-    if (value != null && !isNaN(value) && isFinite(value)) {
+    if (value != null && !Number.isNaN(value) && Number.isFinite(value)) {
       sum += value
       count++
     }
@@ -90,7 +90,7 @@ export function rma(data: number[], period: number): number[] {
   for (let i = period; i < data.length; i++) {
     const value = data[i]
     const prevResult = result[i - 1]
-    if (value != null && !isNaN(value) && isFinite(value) && prevResult != null && !isNaN(prevResult) && isFinite(prevResult)) {
+    if (value != null && !Number.isNaN(value) && Number.isFinite(value) && prevResult != null && !Number.isNaN(prevResult) && Number.isFinite(prevResult)) {
       result[i] = (prevResult * (period - 1) + value) / period
     } else {
       result[i] = prevResult ?? 0
@@ -114,7 +114,7 @@ export function wma(data: number[], period: number): number[] {
     
     for (let j = 0; j < period; j++) {
       const value = data[i - j]
-      if (value != null && !isNaN(value) && isFinite(value)) {
+      if (value != null && !Number.isNaN(value) && Number.isFinite(value)) {
         const weight = period - j
         sum += value * weight
         weightSum += weight
@@ -202,7 +202,7 @@ export function vwma(prices: number[], volumes: number[], period: number): numbe
     for (let j = 0; j < period; j++) {
       const price = prices[i - j]
       const volume = volumes[i - j]
-      if (price != null && volume != null && !isNaN(price) && !isNaN(volume) && isFinite(price) && isFinite(volume)) {
+      if (price != null && volume != null && !Number.isNaN(price) && !Number.isNaN(volume) && Number.isFinite(price) && Number.isFinite(volume)) {
         priceVolumeSum += price * volume
         volumeSum += volume
       }
@@ -217,8 +217,8 @@ export function vwma(prices: number[], volumes: number[], period: number): numbe
 // SuperSmoother filter (Ehlers)
 export function superSmoother(data: number[], period: number): number[] {
   const result: number[] = []
-  const a1 = Math.exp(-1.414 * Math.PI / period)
-  const b1 = 2 * a1 * Math.cos(1.414 * Math.PI / period)
+  const a1 = Math.exp(-Math.SQRT2 * Math.PI / period)
+  const b1 = 2 * a1 * Math.cos(Math.SQRT2 * Math.PI / period)
   const c2 = b1
   const c3 = -a1 * a1
   const c1 = 1 - c2 - c3
@@ -347,7 +347,7 @@ export function mfi(prices: number[], volumes: number[], period: number): number
 
 // Ultimate Oscillator
 export function ultimateOscillator(highs: number[], lows: number[], closes: number[], 
-                                  period1: number = 7, period2: number = 14, period3: number = 28): number[] {
+                                  period1 = 7, period2 = 14, period3 = 28): number[] {
   const result: number[] = []
   
   const buyingPressure: number[] = []
@@ -373,7 +373,12 @@ export function ultimateOscillator(highs: number[], lows: number[], closes: numb
   const avg3 = period3
   
   for (let i = Math.max(avg1, avg2, avg3) - 1; i < buyingPressure.length; i++) {
-    let bp1 = 0, tr1 = 0, bp2 = 0, tr2 = 0, bp3 = 0, tr3 = 0
+    let bp1 = 0
+    let tr1 = 0
+    let bp2 = 0
+    let tr2 = 0
+    let bp3 = 0
+    let tr3 = 0
     
     for (let j = 0; j < avg1; j++) {
       bp1 += buyingPressure[i - j] || 0
@@ -405,8 +410,8 @@ export function williamsR(highs: number[], lows: number[], closes: number[], per
   const result: number[] = []
   
   for (let i = period - 1; i < closes.length; i++) {
-    let highest = -Infinity
-    let lowest = Infinity
+    let highest = Number.NEGATIVE_INFINITY
+    let lowest = Number.POSITIVE_INFINITY
     
     for (let j = 0; j < period; j++) {
       const high = highs[i - j]
@@ -418,7 +423,7 @@ export function williamsR(highs: number[], lows: number[], closes: number[], per
     }
     
     const close = closes[i]
-    if (close != null && highest !== -Infinity && lowest !== Infinity && highest !== lowest) {
+    if (close != null && highest !== Number.NEGATIVE_INFINITY && lowest !== Number.POSITIVE_INFINITY && highest !== lowest) {
       result[i] = ((close - highest) / (highest - lowest)) * 100
     } else {
       result[i] = -50 // Middle value
@@ -437,7 +442,7 @@ export function linearRegression(data: number[], period: number): number[] {
     const y = data.slice(i - period + 1, i + 1)
     
     const xMean = x.reduce((sum, val) => sum + val, 0) / period
-    const validY = y.filter(val => val != null && !isNaN(val) && isFinite(val))
+    const validY = y.filter(val => val != null && !Number.isNaN(val) && Number.isFinite(val))
     const yMean = validY.length > 0 ? validY.reduce((sum, val) => sum + val, 0) / validY.length : 0
     
     let numerator = 0
@@ -445,9 +450,9 @@ export function linearRegression(data: number[], period: number): number[] {
     
     for (let j = 0; j < period; j++) {
       const yValue = y[j]
-      if (yValue != null && !isNaN(yValue) && isFinite(yValue)) {
+      if (yValue != null && !Number.isNaN(yValue) && Number.isFinite(yValue)) {
         const xValue = x[j]
-        if (xValue != null && !isNaN(xValue) && isFinite(xValue)) {
+        if (xValue != null && !Number.isNaN(xValue) && Number.isFinite(xValue)) {
           numerator += (xValue - xMean) * (yValue - yMean)
           denominator += (xValue - xMean) ** 2
         }
@@ -468,7 +473,7 @@ export function stdev(data: number[], period: number): number[] {
   const result: number[] = new Array(data.length).fill(0) // Initialize with proper length
   
   for (let i = period - 1; i < data.length; i++) {
-    const slice = data.slice(i - period + 1, i + 1).filter(val => val != null && !isNaN(val) && isFinite(val))
+    const slice = data.slice(i - period + 1, i + 1).filter(val => val != null && !Number.isNaN(val) && Number.isFinite(val))
     
     if (slice.length === 0) {
       result[i] = 0
@@ -476,7 +481,7 @@ export function stdev(data: number[], period: number): number[] {
     }
     
     const mean = slice.reduce((sum, val) => sum + val, 0) / slice.length
-    const variance = slice.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / slice.length
+    const variance = slice.reduce((sum, val) => sum + (val - mean) ** 2, 0) / slice.length
     result[i] = Math.sqrt(variance)
   }
   
@@ -492,7 +497,7 @@ export function correlation(x: number[], y: number[], period: number): number[] 
     const ySlice = y.slice(i - period + 1, i + 1)
     
     const validPairs = xSlice.map((xVal, idx) => [xVal, ySlice[idx]])
-      .filter(([xVal, yVal]) => xVal != null && yVal != null && !isNaN(xVal) && !isNaN(yVal) && isFinite(xVal) && isFinite(yVal))
+      .filter(([xVal, yVal]) => xVal != null && yVal != null && !Number.isNaN(xVal) && !Number.isNaN(yVal) && Number.isFinite(xVal) && Number.isFinite(yVal))
     
     if (validPairs.length < 2) {
       result[i] = 0
@@ -549,14 +554,14 @@ export function highest(data: number[], period: number): number[] {
   }
   
   for (let i = period - 1; i < data.length; i++) {
-    let max = -Infinity
+    let max = Number.NEGATIVE_INFINITY
     for (let j = 0; j < period; j++) {
       const value = data[i - j]
-      if (value != null && !isNaN(value) && isFinite(value)) {
+      if (value != null && !Number.isNaN(value) && Number.isFinite(value)) {
         max = Math.max(max, value)
       }
     }
-    result[i] = max === -Infinity ? 0 : max
+    result[i] = max === Number.NEGATIVE_INFINITY ? 0 : max
   }
   
   return result
@@ -572,14 +577,14 @@ export function lowest(data: number[], period: number): number[] {
   }
   
   for (let i = period - 1; i < data.length; i++) {
-    let min = Infinity
+    let min = Number.POSITIVE_INFINITY
     for (let j = 0; j < period; j++) {
       const value = data[i - j]
-      if (value != null && !isNaN(value) && isFinite(value)) {
+      if (value != null && !Number.isNaN(value) && Number.isFinite(value)) {
         min = Math.min(min, value)
       }
     }
-    result[i] = min === Infinity ? 0 : min
+    result[i] = min === Number.POSITIVE_INFINITY ? 0 : min
   }
   
   return result
@@ -597,7 +602,7 @@ export function sum(data: number[], period: number): number[] {
     let total = 0
     for (let j = 0; j < period; j++) {
       const value = data[i - j]
-      if (value != null && !isNaN(value) && isFinite(value)) {
+      if (value != null && !Number.isNaN(value) && Number.isFinite(value)) {
         total += value
       }
     }

@@ -47,7 +47,7 @@ export async function getUserApiKey(
     try {
       const userApiKey = await getActiveApiKeyCached(clerkId, provider);
 
-      if (userApiKey && userApiKey.encryptedKey) {
+      if (userApiKey?.encryptedKey) {
         try {
           userKey = await decryptValueCached(userApiKey.encryptedKey);
           isUserKey = true;

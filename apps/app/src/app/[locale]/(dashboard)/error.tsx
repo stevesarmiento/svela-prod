@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { Button } from "@v1/ui/button";
 
-export default function Error({
+export default function DashboardError({
   error,
   reset,
 }: {

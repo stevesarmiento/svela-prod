@@ -220,7 +220,7 @@ ${volumeSpike ? 'VOLUME SPIKE DETECTED' : 'Normal volume activity'}`)
       if (longLiquidations !== undefined && shortLiquidations !== undefined) {
         const total = longLiquidations + shortLiquidations
         const longRatio = (longLiquidations / total * 100).toFixed(1)
-        marketStructure.push(`Liquidations: ${longRatio}% long, ${(100 - parseFloat(longRatio)).toFixed(1)}% short`)
+        marketStructure.push(`Liquidations: ${longRatio}% long, ${(100 - Number.parseFloat(longRatio)).toFixed(1)}% short`)
       }
       if (openInterest !== undefined) {
         const changeText = openInterestChange ? ` (${openInterestChange > 0 ? '+' : ''}${openInterestChange.toFixed(1)}%)` : ''
@@ -255,7 +255,7 @@ ${volumeSpike ? 'VOLUME SPIKE DETECTED' : 'Normal volume activity'}`)
 export async function POST(req: Request) {
   try {
     const rawData = await req.text()
-    let data
+    let data: unknown
     
     try {
       const parsed = JSON.parse(rawData)

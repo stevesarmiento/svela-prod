@@ -146,7 +146,7 @@ export function createAxisOverlay({
         labelEl: HTMLDivElement,
         y: number | null,
         text: string | null,
-        xOffsetPx: number = 0,
+        xOffsetPx = 0,
     ) {
         if (!isMounted || y == null || !Number.isFinite(y) || !text) {
             wrapEl.style.display = 'none';

@@ -156,7 +156,7 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
               <Image
                 src={
                   tokenData?.logoUrl ||
-                  `https://assets.coingecko.com/coins/images/1/standard/bitcoin.png`
+                  "https://assets.coingecko.com/coins/images/1/standard/bitcoin.png"
                 }
                 alt={tokenData?.name || marketData?.name || "Token"}
                 className="w-8 h-8 rounded-full ring-1 ring-gray-200 dark:ring-white/10"

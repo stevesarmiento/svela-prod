@@ -8,7 +8,8 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "rounded-lg border-white/20 bg-zinc-800/50 hover:bg-zinc-800/80 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-zinc-700/80 dark:ring-zinc-700/80 text-white transition-colors duration-200 ease-in-out",
+        default:
+          "rounded-lg border-white/20 bg-zinc-800/50 hover:bg-zinc-800/80 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-zinc-700/80 dark:ring-zinc-700/80 text-white transition-colors duration-200 ease-in-out",
         destructive:
           "border-t rounded-lg border-white/40 bg-gradient-to-b from-rose-500 to-rose-500 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-rose-700 dark:ring-rose-700 text-white",
         outline:
@@ -34,15 +35,27 @@ const buttonVariants = cva(
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-  VariantProps<typeof buttonVariants> {
-  asChild?: boolean
-  startIcon?: React.ReactNode
-  endIcon?: React.ReactNode
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean;
+  startIcon?: React.ReactNode;
+  endIcon?: React.ReactNode;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, startIcon, endIcon, children, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button"
+  (
+    {
+      className,
+      variant,
+      size,
+      asChild = false,
+      startIcon,
+      endIcon,
+      children,
+      ...props
+    },
+    ref,
+  ) => {
+    const Comp = asChild ? Slot : "button";
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
@@ -53,9 +66,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         {children}
         {endIcon && <span className="ml-2">{endIcon}</span>}
       </Comp>
-    )
-  }
-)
-Button.displayName = "Button"
+    );
+  },
+);
+Button.displayName = "Button";
 
-export { Button, buttonVariants }
+export { Button, buttonVariants };

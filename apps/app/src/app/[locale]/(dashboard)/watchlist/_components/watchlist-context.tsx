@@ -1,6 +1,7 @@
 'use client'
 
-import React, { createContext, useContext, useEffect, useCallback, useMemo, type ReactNode } from 'react'
+import type React from 'react'
+import { createContext, useContext, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { useQueryState } from 'nuqs'
 import type { WatchlistGroup as WatchlistGroupModel } from '@/lib/effect/watchlist-models'
@@ -197,7 +198,7 @@ function WatchlistProviderLive({ children }: { children: React.ReactNode }) {
     if (Array.isArray(convexWatchlist) && isLoaded) {
       const coinIds = convexWatchlist.map(item => item.coinId) // Keep as CoinGecko string IDs
       return coinIds
-    } else if (isLoaded && !user) {
+    }if (isLoaded && !user) {
       // User not logged in
       return []
     }
@@ -234,11 +235,10 @@ function WatchlistProviderLive({ children }: { children: React.ReactNode }) {
     if (effectiveWatchlist && Array.isArray(effectiveWatchlist)) {
       const coinIds = effectiveWatchlist.map(item => item.coinId) // Keep as CoinGecko string IDs
       return coinIds
-    } else if (selectedGroup) {
-      return []
-    } else {
+    }if (selectedGroup) {
       return []
     }
+      return []
   }, [effectiveWatchlist, selectedGroup])
 
 

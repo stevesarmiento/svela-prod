@@ -9,8 +9,8 @@ import { Spinner } from "@v1/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@v1/ui/tabs"
 import { PortfolioWalletComparison } from "@/app/[locale]/(dashboard)/portfolio/_components/portfolio-wallet-comparison"
 import { IconCircleDottedAndCircle, IconWalletBifoldFill } from "symbols-react"
-import { Preloaded, usePreloadedQuery } from "convex/react"
-import { api } from "../../../../../../convex/_generated/api"
+import { type Preloaded, usePreloadedQuery } from "convex/react"
+import type { api } from "../../../../../../convex/_generated/api"
 import { usePortfolioWallets } from "@/hooks/use-portfolio-wallets"
 
 const portfolioTabValues = ["wallets", "comparison"] as const

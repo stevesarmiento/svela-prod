@@ -9,7 +9,8 @@ import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import dynamic from "next/dynamic";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
-import React, { useMemo } from "react";
+import type React from "react";
+import { useMemo } from "react";
 import { ConvexProvider } from "./convex-provider";
 import { NotifToaster } from "@v1/ui/sonner-notif";
 import { WatchlistProvider } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context";

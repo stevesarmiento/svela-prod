@@ -1,7 +1,7 @@
 "use client";
-import { cn } from "../utils";
 import { AnimatePresence, motion } from "motion/react";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { cn } from "../utils";
 import { Spinner } from "./spinner";
 
 const CheckIcon = ({ className }: { className?: string }) => {
@@ -58,7 +58,7 @@ const LoaderCore = ({
 
         return (
           <motion.div
-            key={index}
+            key={loadingState.text}
             className={cn("text-left flex gap-2 mb-4")}
             initial={{ opacity: 0, y: -(value * 40) }}
             animate={{ opacity: opacity, y: -(value * 40) }}
@@ -79,22 +79,18 @@ const LoaderCore = ({
                   <CheckFilled className="text-emerald-500" />
                 </motion.div>
               )}
-              
+
               {/* Show loading spinner for current step */}
-              {isCurrentStep && (
-                <Spinner size={24} className="text-white/70" />
-              )}
-              
+              {isCurrentStep && <Spinner size={24} className="text-white/70" />}
+
               {/* Show nothing for future steps */}
-              {isFutureStep && (
-                <div className="w-6 h-6" />
-              )}
+              {isFutureStep && <div className="w-6 h-6" />}
             </div>
             <span
               className={cn(
                 "text-black dark:text-white",
                 isCurrentStep && "text-black dark:text-white",
-                isCompletedStep && "text-black dark:text-white/70"
+                isCompletedStep && "text-black dark:text-white/70",
               )}
             >
               {loadingState.text}
@@ -130,7 +126,7 @@ export const MultiStepLoader = ({
           ? prevState === loadingStates.length - 1
             ? 0
             : prevState + 1
-          : Math.min(prevState + 1, loadingStates.length - 1)
+          : Math.min(prevState + 1, loadingStates.length - 1),
       );
     }, duration);
 

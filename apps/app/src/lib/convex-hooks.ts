@@ -5,6 +5,7 @@ import { useMutation, useQuery, useConvexAuth } from "convex/react";
 import type { WatchlistGroup, WatchlistItem } from "@/lib/effect/watchlist-models";
 import { useCallback } from "react";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 interface AuthUser {
   id: string;
@@ -83,7 +84,7 @@ export function useWatchlistByGroup(groupId?: string) {
 
   const data = useQuery(
     api.watchlists.getMyWatchlistByGroup,
-    enabled ? { groupId: groupId as any } : "skip",
+    enabled ? { groupId: groupId as Id<"watchlistGroups"> } : "skip",
   ) as Array<WatchlistItem> | undefined;
 
   return data;
@@ -135,30 +136,30 @@ export function useUpdateWatchlistGroup() {
     description?: string,
     icon?: string,
     color?: string,
-  ) => update({ groupId: groupId as any, name, description, icon, color });
+  ) => update({ groupId: groupId as Id<"watchlistGroups">, name, description, icon, color });
 }
 
 export function useDeleteWatchlistGroup() {
   const del = useMutation(api.watchlists.deleteMyWatchlistGroup);
-  return (groupId: string) => del({ groupId: groupId as any });
+  return (groupId: string) => del({ groupId: groupId as Id<"watchlistGroups"> });
 }
 
 export function useAddToWatchlistGroup() {
   const add = useMutation(api.watchlists.addToMyWatchlist);
   return (coinId: string, groupId?: string) =>
-    add({ coinId, groupId: groupId ? (groupId as any) : undefined });
+    add({ coinId, groupId: groupId ? (groupId as Id<"watchlistGroups">) : undefined });
 }
 
 export function useRemoveFromWatchlistGroup() {
   const remove = useMutation(api.watchlists.removeFromMyWatchlist);
   return (coinId: string, groupId?: string) =>
-    remove({ coinId, groupId: groupId ? (groupId as any) : undefined });
+    remove({ coinId, groupId: groupId ? (groupId as Id<"watchlistGroups">) : undefined });
 }
 
 export function useRemoveBulkFromWatchlist() {
   const bulkRemove = useMutation(api.watchlists.removeBulkFromMyWatchlist);
   return (coinIds: string[], groupId?: string) =>
-    bulkRemove({ coinIds, groupId: groupId ? (groupId as any) : undefined });
+    bulkRemove({ coinIds, groupId: groupId ? (groupId as Id<"watchlistGroups">) : undefined });
 }
 
 export function useRemoveFromAllWatchlists() {

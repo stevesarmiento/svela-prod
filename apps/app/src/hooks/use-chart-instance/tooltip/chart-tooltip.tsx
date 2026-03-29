@@ -44,7 +44,7 @@ export function ChartTooltip({ price, percentageChange, timestampMs, volume, ohl
                                         : 'bg-red-500/20 text-red-400'
                                 }`}
                             >
-                                {(percentageChange > 0 ? '+' : '') + percentageChange.toFixed(2) + '%'}
+                                {`${(percentageChange > 0 ? '+' : '') + percentageChange.toFixed(2)}%`}
                             </span>
                             <span className="text-[11px] font-diatype-mono font-bold text-white">
                                 {formatUsdPrice(price)}

@@ -389,8 +389,8 @@ export const getCoinByIdString = query({
   returns: v.union(coinValidator, v.null()),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const id = parseInt(args.coinId);
-    if (isNaN(id)) return null;
+    const id = Number.parseInt(args.coinId);
+    if (Number.isNaN(id)) return null;
 
     return (
       (await ctx.db

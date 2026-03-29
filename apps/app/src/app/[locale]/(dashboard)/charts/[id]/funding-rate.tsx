@@ -15,7 +15,7 @@ import {
   CardTitle,
 } from "@v1/ui/card";
 import {
-  ChartConfig,
+  type ChartConfig,
   ChartContainer,
   ChartLegend,
   ChartLegendContent,

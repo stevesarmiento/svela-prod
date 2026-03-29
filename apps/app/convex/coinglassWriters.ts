@@ -54,7 +54,7 @@ export const _upsertSpotTakerBuySellVolumeHistory = internalMutation({
       .first();
 
     const overlapMs = pickOverlapMs(args.interval);
-    const cutoff = latestExisting ? latestExisting.timestamp - overlapMs : -Infinity;
+    const cutoff = latestExisting ? latestExisting.timestamp - overlapMs : Number.NEGATIVE_INFINITY;
 
     const existingWindow = latestExisting
       ? await ctx.db
@@ -155,7 +155,7 @@ export const _upsertFuturesTakerBuySellVolumeHistory = internalMutation({
       .first();
 
     const overlapMs = pickOverlapMs(args.interval);
-    const cutoff = latestExisting ? latestExisting.timestamp - overlapMs : -Infinity;
+    const cutoff = latestExisting ? latestExisting.timestamp - overlapMs : Number.NEGATIVE_INFINITY;
 
     const existingWindow = latestExisting
       ? await ctx.db

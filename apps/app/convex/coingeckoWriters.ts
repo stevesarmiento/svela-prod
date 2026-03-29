@@ -123,7 +123,7 @@ export const _upsertCoinGeckoHistoricalData = internalMutation({
       .first();
 
     const overlapMs = pickOverlapMs(args.timeframe);
-    const cutoff = latestExisting ? latestExisting.timestamp - overlapMs : -Infinity;
+    const cutoff = latestExisting ? latestExisting.timestamp - overlapMs : Number.NEGATIVE_INFINITY;
 
     const existingWindow = latestExisting
       ? await ctx.db
@@ -272,7 +272,7 @@ function areStringRecordsEqual(
   const bKeys = Object.keys(b ?? {});
   if (aKeys.length !== bKeys.length) return false;
   for (const key of aKeys) {
-    if ((b ?? {})[key] !== (a ?? {})[key]) return false;
+    if (b?.[key] !== a?.[key]) return false;
   }
   return true;
 }

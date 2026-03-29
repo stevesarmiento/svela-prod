@@ -52,7 +52,7 @@ export function usePriceCalculations(
           return initialData.percent_change_30d ?? initialData.percent_change_7d ?? initialData.percent_change_24h ?? 0
         case '2y':
           // 2Y = CoinMarketCap doesn't provide this data
-          return NaN
+          return Number.NaN
         default:
           return initialData.percent_change_24h ?? 0
       }

@@ -168,6 +168,7 @@ const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, set
     <div className="flex gap-1 bg-white/95 dark:bg-zinc-950/10 backdrop-blur-xl border border-gray-200/50 dark:border-zinc-800/30 rounded-[12px] p-1">
       {scales.map((scale) => (
         <button
+          type="button"
           key={scale.value}
           onClick={() => setActiveTimeScale(scale.value)}
           className={cn(
@@ -395,8 +396,8 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                       )}
                     </div>
 
-                  <div className={`text-xs font-bold font-diatype-mono ${isNaN(priceChange24h) ? 'text-muted-foreground' : priceChange24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {isNaN(priceChange24h) ? (
+                  <div className={`text-xs font-bold font-diatype-mono ${Number.isNaN(priceChange24h) ? 'text-muted-foreground' : priceChange24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {Number.isNaN(priceChange24h) ? (
                       <span>N/A</span>
                     ) : (
                       <>

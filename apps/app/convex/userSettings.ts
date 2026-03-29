@@ -1,4 +1,4 @@
-import { query, mutation } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { requireServerToken } from "./_lib/server_token";
 import type { Id } from "./_generated/dataModel";
@@ -179,7 +179,7 @@ export const upsertUserSettings = mutation({
 
       await ctx.db.replace(existingSettings._id, nextSettings);
       return existingSettings._id;
-    } else {
+    }
       // Create new settings with defaults
       const newSettings = {
         userId: user._id,
@@ -202,7 +202,6 @@ export const upsertUserSettings = mutation({
       };
       
       return await ctx.db.insert("userSettings", newSettings);
-    }
   },
 });
 
@@ -251,7 +250,7 @@ export const updateMemorySettings = mutation({
 
       await ctx.db.patch(existingSettings._id, updateData);
       return existingSettings._id;
-    } else {
+    }
       // Create new settings with defaults
       const newSettings = {
         userId: user._id,
@@ -266,7 +265,6 @@ export const updateMemorySettings = mutation({
       };
       
       return await ctx.db.insert("userSettings", newSettings);
-    }
   },
 });
 
@@ -312,13 +310,13 @@ export const getMemorySettings = query({
   },
 }); 
 
-async function getCurrentUserId(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string } | null> }; db: any }): Promise<Id<"users">> {
+async function getCurrentUserId(ctx: QueryCtx | MutationCtx): Promise<Id<"users">> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not authenticated");
 
   const user = await ctx.db
     .query("users")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", identity.subject))
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
     .first();
   if (!user) throw new Error("User not found");
   return user._id;

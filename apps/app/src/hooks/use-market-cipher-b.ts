@@ -44,7 +44,7 @@ function ema(data: number[], period: number): number[] {
   // Find first valid value
   let firstValidIndex = 0
   while (firstValidIndex < data.length && 
-         (data[firstValidIndex] == null || isNaN(data[firstValidIndex] as number) || !isFinite(data[firstValidIndex] as number))) {
+         (data[firstValidIndex] == null || Number.isNaN(data[firstValidIndex] as number) || !Number.isFinite(data[firstValidIndex] as number))) {
     firstValidIndex++
   }
   
@@ -55,7 +55,7 @@ function ema(data: number[], period: number): number[] {
   for (let i = firstValidIndex + 1; i < data.length; i++) {
     const value = data[i]
     const prevValue = result[i - 1]
-    if (value != null && !isNaN(value) && isFinite(value) && prevValue != null && !isNaN(prevValue) && isFinite(prevValue)) {
+    if (value != null && !Number.isNaN(value) && Number.isFinite(value) && prevValue != null && !Number.isNaN(prevValue) && Number.isFinite(prevValue)) {
       result[i] = (value * multiplier) + (prevValue * (1 - multiplier))
     } else {
       result[i] = prevValue ?? 0
@@ -74,13 +74,13 @@ function sma(data: number[], period: number): number[] {
     
     for (let j = 0; j < period; j++) {
       const value = data[i - j]
-      if (value != null && !isNaN(value) && isFinite(value)) {
+      if (value != null && !Number.isNaN(value) && Number.isFinite(value)) {
         sum += value
         count++
       }
     }
     
-    result[i] = count > 0 ? sum / count : NaN
+    result[i] = count > 0 ? sum / count : Number.NaN
   }
   
   return result
@@ -96,7 +96,7 @@ function rma(data: number[], period: number): number[] {
   let count = 0
   for (let i = 0; i < Math.min(period, data.length); i++) {
     const value = data[i]
-    if (value != null && !isNaN(value) && isFinite(value)) {
+    if (value != null && !Number.isNaN(value) && Number.isFinite(value)) {
       sum += value
       count++
     }
@@ -110,7 +110,7 @@ function rma(data: number[], period: number): number[] {
   for (let i = period; i < data.length; i++) {
     const value = data[i]
     const prevResult = result[i - 1]
-    if (value != null && !isNaN(value) && isFinite(value) && prevResult != null && !isNaN(prevResult) && isFinite(prevResult)) {
+    if (value != null && !Number.isNaN(value) && Number.isFinite(value) && prevResult != null && !Number.isNaN(prevResult) && Number.isFinite(prevResult)) {
       result[i] = (prevResult * (period - 1) + value) / period
     } else {
       result[i] = prevResult ?? 0
@@ -166,7 +166,7 @@ function linearRegression(data: number[], period: number): number[] {
     
     // Calculate means
     const xMean = x.reduce((sum, val) => sum + val, 0) / period
-    const validY = y.filter(val => val != null && !isNaN(val) && isFinite(val))
+    const validY = y.filter(val => val != null && !Number.isNaN(val) && Number.isFinite(val))
     const yMean = validY.length > 0 ? validY.reduce((sum, val) => sum + val, 0) / validY.length : 0
     
     // Calculate slope
@@ -175,9 +175,9 @@ function linearRegression(data: number[], period: number): number[] {
     
     for (let j = 0; j < period; j++) {
       const yValue = y[j]
-      if (yValue != null && !isNaN(yValue) && isFinite(yValue)) {
+      if (yValue != null && !Number.isNaN(yValue) && Number.isFinite(yValue)) {
         const xValue = x[j]
-        if (xValue != null && !isNaN(xValue) && isFinite(xValue)) {
+        if (xValue != null && !Number.isNaN(xValue) && Number.isFinite(xValue)) {
           numerator += (xValue - xMean) * (yValue - yMean)
           denominator += (xValue - xMean) ** 2
         }
@@ -336,10 +336,10 @@ export function useMarketCipherB(data: OHLCVDataPoint[], config?: Partial<Market
 
     // RSI with Signal Line
     const rsiVals = rsi(closes, finalConfig.rsiLength)
-    const rsiSignalLine = linearRegression(rsiVals.filter(val => !isNaN(val) && isFinite(val)), finalConfig.rsiSignalLength)
+    const rsiSignalLine = linearRegression(rsiVals.filter(val => !Number.isNaN(val) && Number.isFinite(val)), finalConfig.rsiSignalLength)
 
     // RSI Stochastic
-    const rsiForStoch = rsiVals.filter(val => !isNaN(val) && isFinite(val))
+    const rsiForStoch = rsiVals.filter(val => !Number.isNaN(val) && Number.isFinite(val))
     const stochRSI = stochastic(rsiForStoch, rsiForStoch, rsiForStoch, finalConfig.stochLength)
     const stochK = sma(stochRSI, finalConfig.stochKSmoothing)
     const stochD = sma(stochK, finalConfig.stochDSmoothing)
@@ -350,7 +350,7 @@ export function useMarketCipherB(data: OHLCVDataPoint[], config?: Partial<Market
       
       for (let i = 0; i < times.length; i++) {
         const value = values[i]
-        if (value !== undefined && !isNaN(value) && isFinite(value)) {
+        if (value !== undefined && !Number.isNaN(value) && Number.isFinite(value)) {
           result.push({
             time: times[i] as Time,
             value: value

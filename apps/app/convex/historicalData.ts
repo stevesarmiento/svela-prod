@@ -141,7 +141,7 @@ export const upsertCoinGeckoHistoricalData = mutation({
       console.log(
         `🎯 CoinGecko Convex mutation called for ${args.coingeckoId} (${args.timeframe}) with ${args.dataPoints.length} data points`,
       );
-      console.log(`🔍 Mutation arguments:`, {
+      console.log("🔍 Mutation arguments:", {
         coingeckoId: args.coingeckoId,
         timeframe: args.timeframe,
         dataPointsCount: args.dataPoints.length,
@@ -184,8 +184,8 @@ export const upsertCoinGeckoHistoricalData = mutation({
       point.open !== undefined || point.high !== undefined || point.low !== undefined || point.close !== undefined
     )
     if (isDebug && hasOHLCData) {
-      console.log(`📊 OHLC data detected - storing full candlestick information`)
-      console.log(`📈 Sample OHLC:`, {
+      console.log("📊 OHLC data detected - storing full candlestick information")
+      console.log("📈 Sample OHLC:", {
         open: newDataPoints[0]?.open,
         high: newDataPoints[0]?.high,
         low: newDataPoints[0]?.low,
@@ -236,7 +236,7 @@ export const upsertCoinGeckoHistoricalData = mutation({
       if (verificationQuery.length > 0) {
         const firstRecord = verificationQuery[0];
         if (isDebug && firstRecord) {
-          console.log(`📊 Sample stored record:`, {
+          console.log("📊 Sample stored record:", {
             id: firstRecord._id,
             timestamp: firstRecord.timestamp,
             price: firstRecord.price,
@@ -249,7 +249,7 @@ export const upsertCoinGeckoHistoricalData = mutation({
         }
       }
     } catch (verifyError) {
-      console.error(`❌ Failed to verify stored data:`, verifyError);
+      console.error("❌ Failed to verify stored data:", verifyError);
     }
 
     return { 

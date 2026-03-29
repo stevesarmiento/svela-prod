@@ -198,13 +198,13 @@ export function InlineSpotTakerBuySellVolumeChart({
   const barWidth = count > 0 ? (width - gap * Math.max(0, count - 1)) / count : 0
   const futuresWidth = Math.max(0, barWidth)
 
-  const bars = Array.from({ length: count }, (_, i) => {
+  const bars = Array.from({ length: count }, (_, index) => {
     const maxVolume = series.maxVolume
 
-    const futuresBuy = series.futuresBuy[i] ?? 0
-    const futuresSell = series.futuresSell[i] ?? 0
-    const spotBuy = series.spotBuy[i] ?? 0
-    const spotSell = series.spotSell[i] ?? 0
+    const futuresBuy = series.futuresBuy[index] ?? 0
+    const futuresSell = series.futuresSell[index] ?? 0
+    const spotBuy = series.spotBuy[index] ?? 0
+    const spotSell = series.spotSell[index] ?? 0
 
     const futuresBuyH = clamp(maxVolume > 0 ? (futuresBuy / maxVolume) * barMax : 0, 0, barMax)
     const futuresSellH = clamp(maxVolume > 0 ? (futuresSell / maxVolume) * barMax : 0, 0, barMax)
@@ -219,15 +219,16 @@ export function InlineSpotTakerBuySellVolumeChart({
       barMax,
     )
 
-    const x = i * (barWidth + gap)
+    const x = index * (barWidth + gap)
     const futuresX = x
     const futuresCapInset = Math.min(0.4, futuresWidth / 2)
     const futuresCapX1 = futuresX + futuresCapInset
     const futuresCapX2 = futuresX + Math.max(0, futuresWidth) - futuresCapInset
     const futuresCapStrokeWidth = 0.5
+    const barKey = `${exchange}-${interval}-${index}`
 
     return (
-      <g key={i}>
+      <g key={barKey}>
         {/* Spot (faint, behind) */}
         <rect
           x={x}

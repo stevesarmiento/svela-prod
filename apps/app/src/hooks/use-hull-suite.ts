@@ -49,14 +49,14 @@ function wma(data: number[], period: number): number[] {
     
     for (let j = 0; j < period; j++) {
       const value = data[i - j]
-      if (value !== undefined && !isNaN(value) && isFinite(value)) {
+      if (value !== undefined && !Number.isNaN(value) && Number.isFinite(value)) {
         const weight = period - j
         sum += value * weight
         weightSum += weight
       }
     }
     
-    result[i] = weightSum > 0 ? sum / weightSum : NaN
+    result[i] = weightSum > 0 ? sum / weightSum : Number.NaN
   }
   
   return result
@@ -70,7 +70,7 @@ function ema(data: number[], period: number): number[] {
   
   // Find first valid value for initialization
   let firstValidIndex = 0
-  while (firstValidIndex < data.length && (data[firstValidIndex] === undefined || isNaN(data[firstValidIndex] as number) || !isFinite(data[firstValidIndex] as number))) {
+  while (firstValidIndex < data.length && (data[firstValidIndex] === undefined || Number.isNaN(data[firstValidIndex] as number) || !Number.isFinite(data[firstValidIndex] as number))) {
     firstValidIndex++
   }
   
@@ -79,7 +79,7 @@ function ema(data: number[], period: number): number[] {
   result[firstValidIndex] = data[firstValidIndex] as number
   
   for (let i = firstValidIndex + 1; i < data.length; i++) {
-    if (data[i] !== undefined && !isNaN(data[i] as number) && isFinite(data[i] as number) && result[i - 1] !== undefined && !isNaN(result[i - 1] as number) && isFinite(result[i - 1] as number)) {
+    if (data[i] !== undefined && !Number.isNaN(data[i] as number) && Number.isFinite(data[i] as number) && result[i - 1] !== undefined && !Number.isNaN(result[i - 1] as number) && Number.isFinite(result[i - 1] as number)) {
       result[i] = (data[i] as number * multiplier) + (result[i - 1] as number * (1 - multiplier))
     } else {
       result[i] = result[i - 1] as number // Carry forward previous value if current is invalid
@@ -209,7 +209,6 @@ export function useHullSuite(data: OHLCVDataPoint[], config: HullSuiteConfig): H
         case 'high': return d.high
         case 'low': return d.low
         case 'open': return d.open
-        case 'close':
         default: return d.close
       }
     })
@@ -251,13 +250,13 @@ export function useHullSuite(data: OHLCVDataPoint[], config: HullSuiteConfig): H
       const MHULL = HULL[i]      // Current value: HULL[0]
       const SHULL = HULL[i - 2]  // Value 2 periods ago: HULL[2]
       
-      if (MHULL !== undefined && !isNaN(MHULL) && isFinite(MHULL)) {
+      if (MHULL !== undefined && !Number.isNaN(MHULL) && Number.isFinite(MHULL)) {
         MHULLData.push({
           time: times[i] as Time,
           value: MHULL
         })
         
-        if (SHULL !== undefined && !isNaN(SHULL) && isFinite(SHULL)) {
+        if (SHULL !== undefined && !Number.isNaN(SHULL) && Number.isFinite(SHULL)) {
           SHULLData.push({
             time: times[i] as Time,
             value: SHULL

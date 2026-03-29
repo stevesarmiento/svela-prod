@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card"
 import { 
   ChartContainer, 
   ChartTooltip,
-  ChartConfig
+  type ChartConfig
 } from "@v1/ui/chart"
 import type { CoinMarketData } from '@/types/coins'
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
@@ -40,8 +40,8 @@ interface ChartDataPoint {
           <div className="space-y-4">
             <Skeleton className="h-[400px] w-full" />
             <div className="flex flex-wrap gap-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-2">
+              {Array.from({ length: 4 }, (_, i) => `legend-${i}`).map((legendKey) => (
+                <div key={legendKey} className="flex items-center gap-2">
                   <Skeleton className="h-3 w-3 rounded-full" />
                   <Skeleton className="h-4 w-24" />
                 </div>
@@ -152,9 +152,9 @@ export function MultiPriceChart({ coins }: MultiPriceChartProps) {
               dataKey="value"
               radius={[2, 2, 0, 0]}
             >
-              {chartData.map((entry, index) => (
+              {chartData.map((entry) => (
                 <Cell 
-                  key={`cell-${index}`} 
+                  key={entry.coinId} 
                   fill={entry.value >= 0 ? '#10b981' : '#ef4444'}
                 />
               ))}

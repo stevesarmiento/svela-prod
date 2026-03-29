@@ -51,7 +51,7 @@ export function PriceCard({
 
   const chartData = useMemo(() => {
     // Validate currentPrice to prevent NaN values
-    const validPrice = typeof currentPrice === 'number' && !isNaN(currentPrice) && currentPrice > 0 ? currentPrice : 1;
+    const validPrice = typeof currentPrice === 'number' && !Number.isNaN(currentPrice) && currentPrice > 0 ? currentPrice : 1;
     
     if (!historical?.data?.prices?.length) {
       // Fallback data for demo purposes using current price
@@ -67,8 +67,8 @@ export function PriceCard({
         // Filter out invalid data points
         return typeof timestamp === 'number' && 
                typeof priceValue === 'number' && 
-               !isNaN(timestamp) && 
-               !isNaN(priceValue) && 
+               !Number.isNaN(timestamp) && 
+               !Number.isNaN(priceValue) && 
                priceValue > 0;
       })
       .map(([timestamp, priceValue]) => ({
@@ -135,14 +135,14 @@ export function PriceCard({
             <div className="flex items-center gap-3">
               <div className="relative w-10 h-10 rounded-full overflow-hidden bg-muted flex-shrink-0">
                 <Image
-                  src={image || `https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png`}
+                  src={image || "https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png"}
                   alt={name}
                   fill
                   className="object-cover"
                   sizes="40px"
                   onError={(e) => {
                     // Fallback to a default CoinGecko image if the primary image fails
-                    e.currentTarget.src = `https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png`
+                    e.currentTarget.src = "https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png"
                   }}
                 />
               </div>

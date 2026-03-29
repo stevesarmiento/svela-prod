@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useCallback, useEffect, useRef, useState } from "react"
+import type React from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@v1/ui/button'
 import { AlertTriangle, RefreshCw, Clock } from 'lucide-react'

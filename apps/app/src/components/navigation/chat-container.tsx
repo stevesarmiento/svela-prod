@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useRef, useEffect } from 'react'
+import type React from 'react'
+import { useRef, useEffect } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react'
 import { Button } from '@v1/ui/button'
 import { Input } from '@v1/ui/input'

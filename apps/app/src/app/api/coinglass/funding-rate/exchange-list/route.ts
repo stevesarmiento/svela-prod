@@ -84,8 +84,8 @@ export async function GET(request: Request) {
     let coinInfo = null;
 
     // Check if the input is a number (coin ID) or a symbol
-    const coinId = parseInt(symbolOrId);
-    if (!isNaN(coinId)) {
+    const coinId = Number.parseInt(symbolOrId);
+    if (!Number.isNaN(coinId)) {
       // It's a coin ID, look up the symbol
       coinInfo = await convex.query(api.coins.getCoinglassSymbolByCoinId, { 
         serverToken: getServerToken(),

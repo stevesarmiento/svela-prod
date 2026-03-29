@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import type React from 'react';
 import { Button } from '@v1/ui/button';
 import { Input } from '@v1/ui/input';
 import { IconPaperplaneFill, IconSquareFill } from 'symbols-react';

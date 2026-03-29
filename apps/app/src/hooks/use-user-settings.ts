@@ -4,6 +4,7 @@ import { useAuth } from "@/lib/convex-hooks";
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, init);
@@ -218,7 +219,7 @@ export function useUserSettings() {
     }
 
     try {
-      await updateKeyStatus({ keyId: keyId as any, isActive });
+      await updateKeyStatus({ keyId: keyId as Id<"userApiKeys">, isActive });
       
       toast.success(`API key ${isActive ? 'activated' : 'deactivated'}`);
     } catch (error) {
@@ -234,7 +235,7 @@ export function useUserSettings() {
     }
 
     try {
-      await deleteKey({ keyId: keyId as any });
+      await deleteKey({ keyId: keyId as Id<"userApiKeys"> });
       
       toast.success(`${providerName} API key removed`);
     } catch (error) {

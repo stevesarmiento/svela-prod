@@ -176,7 +176,7 @@ function generateFallbackData(
   initialData: CoinMarketData['quote']['USD']
 ): ParsedChartData {
   const config = TIMEFRAME_CONFIG[timeframe as keyof typeof TIMEFRAME_CONFIG] || TIMEFRAME_CONFIG['7d']
-  const days = parseInt(config.days)
+  const days = Number.parseInt(config.days)
   // Ensure at least 2 points so tiny charts don't render "No data".
   const dataPoints = Math.max(2, Math.min(days, 90)) // Limit fallback data points
   const basePrice = initialData?.price
@@ -333,7 +333,7 @@ export function useCoinGeckoChartData(
       let primaryResult: DataSourceResult | null = null
 
       try {
-        const shouldPreferMarketChart = parseInt(config.days) > 90 || activeTimeScale === '30d'
+        const shouldPreferMarketChart = Number.parseInt(config.days) > 90 || activeTimeScale === '30d'
         const swallowToNull = (_: unknown) => Effect.succeed(null)
 
         const ohlcEffect = CoinGeckoApi.getOHLC({
@@ -449,7 +449,7 @@ export function useCoinGeckoChartData(
     cached = combinedData.cached;
   } else if (combinedData?.error) {
     // Only generate fallback data if we have some initial pricing data to work with
-    if (initialData && initialData.price && initialData.price > 0) {
+    if (initialData?.price && initialData.price > 0) {
       parsedData = generateFallbackData(coinId, activeTimeScale, initialData);
     } else {
       // Return empty data instead of fake data
@@ -468,7 +468,7 @@ export function useCoinGeckoChartData(
     };
   } else {
     // No data and not loading - only use fallback if we have valid initial data
-    if (initialData && initialData.price && initialData.price > 0) {
+    if (initialData?.price && initialData.price > 0) {
       parsedData = generateFallbackData(coinId, activeTimeScale, initialData);
     } else {
       parsedData = {
@@ -483,7 +483,7 @@ export function useCoinGeckoChartData(
     const latestPrice = quoteQuery.data?.current_price
     if (!latestPrice || latestPrice <= 0) return parsedData
 
-    const quoteTimeMs = quoteQuery.data?.last_updated ? Date.parse(quoteQuery.data.last_updated) : NaN
+    const quoteTimeMs = quoteQuery.data?.last_updated ? Date.parse(quoteQuery.data.last_updated) : Number.NaN
     const latestTimestampSeconds = Number.isFinite(quoteTimeMs)
       ? Math.floor(quoteTimeMs / 1000)
       : Math.floor(Date.now() / 1000)

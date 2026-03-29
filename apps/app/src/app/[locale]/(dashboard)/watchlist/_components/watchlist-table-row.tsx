@@ -34,6 +34,8 @@ export function WatchlistTableRow({
       {/* First cell - merged select + token with specific hover */}
       <div
         className="flex min-w-0 items-center"
+        role="button"
+        tabIndex={isLoadingRow ? -1 : 0}
         onClick={(e) => {
           if (isLoadingRow) return
           e.preventDefault(); // Always prevent navigation for first cell
@@ -44,6 +46,15 @@ export function WatchlistTableRow({
           if (target.closest('[data-watchlist-row-checkbox="true"]')) return
 
           // Toggle checkbox selection when clicking anywhere in first cell
+          const isCurrentlySelected = selectedCoins.has(row.original.id.toString());
+          onCoinSelect(row.original.id.toString(), !isCurrentlySelected);
+        }}
+        onKeyDown={(e) => {
+          if (isLoadingRow) return
+          if (e.key !== "Enter" && e.key !== " ") return
+          e.preventDefault()
+          e.stopPropagation()
+
           const isCurrentlySelected = selectedCoins.has(row.original.id.toString());
           onCoinSelect(row.original.id.toString(), !isCurrentlySelected);
         }}
@@ -71,6 +82,12 @@ export function WatchlistTableRow({
           if (isLoadingRow) return
           e.preventDefault();
           e.stopPropagation();
+        }}
+        onKeyDown={(e) => {
+          if (isLoadingRow) return
+          if (e.key !== "Enter" && e.key !== " ") return
+          e.preventDefault()
+          e.stopPropagation()
         }}
       >
         {(() => {

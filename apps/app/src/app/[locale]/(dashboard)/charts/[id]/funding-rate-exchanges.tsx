@@ -283,24 +283,45 @@ export function FundingRateExchanges({ coinId, className }: FundingRateExchanges
                 <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                   {table.getHeaderGroups().map(headerGroup => (
                     <div key={headerGroup.id} className="grid grid-cols-4 gap-4">
-                      {headerGroup.headers.map(header => (
-                        <div 
-                          key={header.id}
-                          className={cn(
-                            "flex items-center gap-1",
-                            header.column.getCanSort() ? "cursor-pointer select-none hover:text-foreground" : "",
-                            header.id === 'fundingRate' || header.id === 'nextFunding' ? "justify-end" : 
-                            header.id === 'interval' ? "justify-center" : "justify-start"
-                          )}
-                          onClick={header.column.getToggleSortingHandler()}
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          {{
-                            asc: ' ↑',
-                            desc: ' ↓',
-                          }[header.column.getIsSorted() as string] ?? null}
-                        </div>
-                      ))}
+                      {headerGroup.headers.map(header => {
+                        const canSort = header.column.getCanSort()
+                        const onClick = canSort ? header.column.getToggleSortingHandler() : undefined
+                        const className = cn(
+                          "flex items-center gap-1",
+                          canSort ? "cursor-pointer select-none hover:text-foreground" : "",
+                          header.id === 'fundingRate' || header.id === 'nextFunding' ? "justify-end" : 
+                          header.id === 'interval' ? "justify-center" : "justify-start"
+                        )
+
+                        const content = (
+                          <>
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            {{
+                              asc: ' ↑',
+                              desc: ' ↓',
+                            }[header.column.getIsSorted() as string] ?? null}
+                          </>
+                        )
+
+                        if (canSort && onClick) {
+                          return (
+                            <button
+                              type="button"
+                              key={header.id}
+                              className={className}
+                              onClick={onClick}
+                            >
+                              {content}
+                            </button>
+                          )
+                        }
+
+                        return (
+                          <div key={header.id} className={className}>
+                            {content}
+                          </div>
+                        )
+                      })}
                     </div>
                   ))}
                 </div>

@@ -1,6 +1,6 @@
 // Server-side only encryption utilities
-import { createCipheriv, createDecipheriv, randomBytes, scrypt, timingSafeEqual } from 'crypto';
-import { promisify } from 'util';
+import { createCipheriv, createDecipheriv, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
 
 // Ensure this only runs on the server
 if (typeof window !== 'undefined') {

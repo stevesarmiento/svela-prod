@@ -115,7 +115,8 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     filtered.sort((a, b) => {
       const aUsd = a.quote.USD
       const bUsd = b.quote.USD
-      let aValue, bValue;
+      let aValue: number | string;
+      let bValue: number | string;
       
       switch (filters.sortBy) {
         case "price":
@@ -141,9 +142,8 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       
       if (filters.sortOrder === "desc") {
         return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
-      } else {
-        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
       }
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
     });
     
     return filtered;

@@ -5,8 +5,8 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { API_PROVIDERS } from "./apiKeys";
 import type { Id } from "./_generated/dataModel";
-import { createCipheriv, randomBytes, scrypt } from 'crypto';
-import { promisify } from 'util';
+import { createCipheriv, randomBytes, scrypt } from 'node:crypto';
+import { promisify } from 'node:util';
 import { requireServerToken } from "./_lib/server_token";
 
 // Convert scrypt to promise-based

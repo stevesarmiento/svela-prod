@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useTransition, useDeferredValue, memo, Component, ErrorInfo } from 'react'
+import { Suspense, useTransition, useDeferredValue, memo, Component, type ErrorInfo } from 'react'
 import { MultiPriceChartLightweight } from "./multi-line-lightweight"
 import { ChartTable } from "./chart-table"
 import { useOptimizedChartsData } from '@/hooks/use-optimized-charts-data'
@@ -130,7 +130,8 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
               <p className="text-muted-foreground mb-4">
                 An error occurred while loading the charts. Please try refreshing the page.
               </p>
-              <button 
+              <button
+                type="button"
                 onClick={() => this.setState({ hasError: false })}
                 className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
               >

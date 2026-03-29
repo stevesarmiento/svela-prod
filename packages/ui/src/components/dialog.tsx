@@ -1,23 +1,22 @@
 "use client";
 
-import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 // Remove the direct import attempt if it's causing an error
 // import type { PointerDownOutsideEvent } from "@radix-ui/react-dismissable-layer";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { X } from "lucide-react";
+import * as React from "react";
 import { cn } from "../utils";
 
 // Infer PointerDownOutsideEvent type from DialogPrimitive.Content props
 type DialogContentProps = React.ComponentPropsWithoutRef<
   typeof DialogPrimitive.Content
 >;
-type PointerDownOutsideEvent =
-  NonNullable<DialogContentProps["onPointerDownOutside"]> extends (
-    event: infer E,
-  ) => void
-    ? E
-    : never;
+type PointerDownOutsideEvent = NonNullable<
+  DialogContentProps["onPointerDownOutside"]
+> extends (event: infer E) => void
+  ? E
+  : never;
 
 const Dialog = DialogPrimitive.Root;
 

@@ -144,8 +144,8 @@ function calculateLinearRegression(src: number[], length: number, barIndex: numb
     const indexMean = indexSlice.reduce((a, b) => a + b, 0) / indexSlice.length
     
     // Standard deviation
-    const srcStd = Math.sqrt(srcSlice.reduce((sum, val) => sum + Math.pow(val - srcMean, 2), 0) / srcSlice.length)
-    const indexStd = Math.sqrt(indexSlice.reduce((sum, val) => sum + Math.pow(val - indexMean, 2), 0) / indexSlice.length)
+    const srcStd = Math.sqrt(srcSlice.reduce((sum, val) => sum + (val - srcMean) ** 2, 0) / srcSlice.length)
+    const indexStd = Math.sqrt(indexSlice.reduce((sum, val) => sum + (val - indexMean) ** 2, 0) / indexSlice.length)
     
     // Correlation
     let correlation = 0
@@ -170,8 +170,8 @@ function calculateLinearRegression(src: number[], length: number, barIndex: numb
 // Advanced MA implementations
 function calculateSuperSmoother(src: number[], length: number): number[] {
   const result: number[] = []
-  const a1 = Math.exp(-1.414 * Math.PI / length)
-  const b1 = 2 * a1 * Math.cos(1.414 * Math.PI / length)
+  const a1 = Math.exp(-Math.SQRT2 * Math.PI / length)
+  const b1 = 2 * a1 * Math.cos(Math.SQRT2 * Math.PI / length)
   const c2 = b1
   const c3 = -a1 * a1
   const c1 = 1 - c2 - c3
@@ -282,10 +282,11 @@ function calculateMA(maType: string, src: number[], length: number, barIndex?: n
       return calculateZeroLagEMA(src, length)
     case 'RSI':
       return rsi(src, length)
-    case 'RSI.Signal Line - Set Value - RSI 13, Signal Line (Linear Regression) 21':
+    case 'RSI.Signal Line - Set Value - RSI 13, Signal Line (Linear Regression) 21': {
       if (!barIndex) return src
       const rsiValues = rsi(src, 13)
       return calculateLinearRegression(rsiValues, 21, barIndex)
+    }
     default:
       return src
   }
@@ -322,9 +323,8 @@ export function calculateMoneyFlow(
     candleValue = data.map(d => {
       if ((d.close === d.high && d.close === d.low) || d.high === d.low) {
         return 0
-      } else {
-        return (2 * d.close - d.low - d.high) / (d.high - d.low) * d.volume
       }
+        return (2 * d.close - d.low - d.high) / (d.high - d.low) * d.volume
     })
   } else {
     // Standard: (Close - Open) / (High - Low) 
@@ -338,7 +338,7 @@ export function calculateMoneyFlow(
   let moneyFlow: number[]
   
   switch (config.type) {
-    case 'Pine Script RSI+MFI':
+    case 'Pine Script RSI+MFI': {
       // Exact Pine Script logic: sma(((close - open) / (high - low)) * multiplier, period) - yOffset
       const pineScriptValues: number[] = []
       for (let i = 0; i < data.length; i++) {
@@ -363,12 +363,13 @@ export function calculateMoneyFlow(
       // Subtract Y offset (rsiMFIPosY in Pine Script)
       moneyFlow = smaValues.map(val => (val || 0) - (config.yOffset || 2.5))
       break
+    }
       
     case 'Dynamic Money Flow':
       moneyFlow = calculateDynamicMoneyFlow(data, candleValue, config.oscLength)
       break
       
-    case 'Chaikin Money Flow':
+    case 'Chaikin Money Flow': {
       const sumCandleValues = sum(candleValue, config.oscLength)
       const sumVolumes = sum(volumes, config.oscLength)
       moneyFlow = sumCandleValues.map((val, i) => {
@@ -376,27 +377,31 @@ export function calculateMoneyFlow(
         return (val || 0) / volSum
       })
       break
+    }
       
     case 'MFI':
       moneyFlow = calculateCustomMFI(candleValue, volumes, config.oscLength)
       moneyFlow = moneyFlow.map(val => val - 50) // Center around 0
       break
       
-    case 'RSI':
+    case 'RSI': {
       const rsiValues = rsi(candleValue, config.oscLength)
       moneyFlow = rsiValues.map(val => val - 50) // Center around 0
       break
+    }
       
-    case 'RSI.Signal Line - Set Value - RSI 13, Signal Line (Linear Regression) 21':
+    case 'RSI.Signal Line - Set Value - RSI 13, Signal Line (Linear Regression) 21': {
       const linRegValues = calculateMA(config.type, candleValue, config.oscLength, barIndex)
       moneyFlow = linRegValues.map(val => val - 50) // Center around 0
       break
+    }
       
-    default:
+    default: {
       // Standard MA calculation
       const multipliedValues = candleValue.map(val => val * (config.multiplier + 1))
       moneyFlow = calculateMA(config.type, multipliedValues, config.maLength)
       break
+    }
   }
   
   // Apply limits and multiplier for specific types
@@ -427,7 +432,7 @@ export function calculateMoneyFlow(
     for (let i = 0; i < times.length; i++) {
       const value = values[i]
       const time = times[i]
-      if (value != null && time != null && !isNaN(value) && isFinite(value)) {
+      if (value != null && time != null && !Number.isNaN(value) && Number.isFinite(value)) {
         result.push({ time, value })
       }
     }

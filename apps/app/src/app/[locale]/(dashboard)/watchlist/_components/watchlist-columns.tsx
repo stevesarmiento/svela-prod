@@ -7,7 +7,7 @@ import Image from "next/image"
 import { cn } from "@v1/ui/cn"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Checkbox } from "@v1/ui/checkbox"
-import { type ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef } from '@tanstack/react-table'
 import { motion } from "motion/react"
 import { Spinner } from "@v1/ui/spinner"
 import type { CoinMarketData } from '@/types/coins'

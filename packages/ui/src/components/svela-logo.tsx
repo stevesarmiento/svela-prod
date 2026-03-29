@@ -13,9 +13,8 @@ export function SvelaLogo({
   height = 671,
   className,
   fillColor,
-  adaptive = true // Enable adaptive theming by default
+  adaptive = true, // Enable adaptive theming by default
 }: SvelaLogoProps) {
-
   // Theme-adaptive fill color logic
   const getAdaptiveFill = () => {
     if (fillColor) return fillColor; // Override if explicitly provided
@@ -34,16 +33,20 @@ export function SvelaLogo({
       className={cn(
         "svela-logo transition-all duration-300",
         adaptive && "theme-adaptive",
-        className
+        className,
       )}
       xmlns="http://www.w3.org/2000/svg"
-      style={{
-        filter: adaptive ? "drop-shadow(0 0 8px hsla(var(--primary), 0.1))" : undefined
-      } as React.CSSProperties}
+      style={
+        {
+          filter: adaptive
+            ? "drop-shadow(0 0 8px hsla(var(--primary), 0.1))"
+            : undefined,
+        } as React.CSSProperties
+      }
     >
       <g
         style={{
-          mixBlendMode: adaptive ? 'normal' : 'difference' // Use normal blend for better theme compatibility
+          mixBlendMode: adaptive ? "normal" : "difference", // Use normal blend for better theme compatibility
         }}
       >
         <path

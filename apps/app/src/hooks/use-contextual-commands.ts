@@ -15,7 +15,7 @@ import {
   IconEye,
   IconTrayAndArrowDown
 } from 'symbols-react';
-import React from 'react';
+import type React from 'react';
 
 interface ContextualCommand {
   title: string;

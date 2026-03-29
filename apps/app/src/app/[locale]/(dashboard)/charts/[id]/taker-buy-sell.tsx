@@ -169,7 +169,7 @@ export function TakerBuySell({
       },
       tooltip: {
         theme: 'dark',
-        custom: function({ dataPointIndex }: { dataPointIndex: number }) {
+        custom: ({ dataPointIndex }: { dataPointIndex: number }) => {
           const exchange = topExchanges[dataPointIndex]
           if (!exchange) return ''
           // No date available, so just show exchange name at top
@@ -304,7 +304,7 @@ export function TakerBuySell({
                             backgroundColor: addOpacityToColor(colors.sell, 0.2), 
                             borderColor: colors.sell 
                           }}
-                        ></div>
+                        />
                         <span>Sell Pressure (&lt;48%)</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs">
@@ -314,7 +314,7 @@ export function TakerBuySell({
                             backgroundColor: addOpacityToColor(colors.neutral, 0.2), 
                             borderColor: colors.neutral 
                           }}
-                        ></div>
+                        />
                         <span>Neutral (48-52%)</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs">
@@ -324,7 +324,7 @@ export function TakerBuySell({
                             backgroundColor: addOpacityToColor(colors.buy, 0.2), 
                             borderColor: colors.buy 
                           }}
-                        ></div>
+                        />
                         <span>Buy Pressure (&gt;52%)</span>
                       </div>
                     </TooltipContent>

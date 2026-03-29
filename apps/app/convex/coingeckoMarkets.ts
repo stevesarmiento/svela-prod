@@ -81,7 +81,7 @@ export const upsertMarketData = mutation({
         updatedAt: now,
       })
       return existing._id
-    } else {
+    }
       // Create new record
       const id = await ctx.db.insert("coingeckoMarkets", {
         ...args,
@@ -89,7 +89,6 @@ export const upsertMarketData = mutation({
         updatedAt: now,
       })
       return id
-    }
   },
 })
 

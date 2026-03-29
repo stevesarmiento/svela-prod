@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import type React from "react";
+import { useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { Check, Copy } from "lucide-react";
 import { cn } from "@v1/ui/cn";
@@ -44,6 +45,7 @@ export function CopyButton({
 
   return (
     <button
+      type="button"
       onClick={handleCopy}
       disabled={disabled}
       className={cn(

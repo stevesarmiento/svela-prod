@@ -10,32 +10,32 @@ export const Spinner = ({ size = 24, className }: SpinnerProps) => {
   return (
     <motion.svg
       initial={{ opacity: 0, scale: 0.5, rotate: 0 }}
-      animate={{ 
-        opacity: 1, 
-        scale: 1, 
+      animate={{
+        opacity: 1,
+        scale: 1,
         rotate: 360,
       }}
       exit={{ opacity: 0, scale: 0.5 }}
-      transition={{ 
-        opacity: { 
-          type: "spring", 
-          stiffness: 400, 
-          damping: 25 
+      transition={{
+        opacity: {
+          type: "spring",
+          stiffness: 400,
+          damping: 25,
         },
-        scale: { 
-          type: "spring", 
-          stiffness: 400, 
-          damping: 25 
+        scale: {
+          type: "spring",
+          stiffness: 400,
+          damping: 25,
         },
         rotate: {
           type: "spring",
           stiffness: 120,
           damping: 12,
           mass: 0.8,
-          repeat: Infinity,
+          repeat: Number.POSITIVE_INFINITY,
           repeatType: "loop",
-          duration: 0.8
-        }
+          duration: 0.8,
+        },
       }}
       className={cn("text-neutral-300", className)}
       xmlns="http://www.w3.org/2000/svg"

@@ -1,5 +1,6 @@
 import { useAction, useMutation, useQuery } from "convex/react"
 import { api } from "../../convex/_generated/api"
+import type { Id } from "../../convex/_generated/dataModel"
 import { useCallback, useState } from "react"
 import type { PortfolioWallet } from "@/lib/portfolio-api"
 
@@ -127,7 +128,7 @@ export function useDeletePortfolioWallet() {
       setError(null)
       setIsPending(true)
       try {
-        await del({ walletId: walletId as any })
+        await del({ walletId: walletId as Id<"portfolioWallets"> })
       } catch (e) {
         const err = e instanceof Error ? e : new Error(String(e))
         setError(err)

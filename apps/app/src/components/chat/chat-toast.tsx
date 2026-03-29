@@ -229,7 +229,7 @@ export function useChatToast() {
         </div>
       );
     }, {
-      duration: Infinity,
+      duration: Number.POSITIVE_INFINITY,
       position: 'top-center',
       onDismiss: async () => {
         // Immediate UI updates for responsiveness

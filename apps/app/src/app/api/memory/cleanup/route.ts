@@ -19,13 +19,15 @@ export async function POST(req: Request) {
       );
     }
 
-    let result;
+    type CleanupResult = Awaited<ReturnType<(typeof capxMemoryService)["cleanupOldMemories"]>>;
+    let result: CleanupResult;
     
     switch (action) {
-      case 'cleanup_old':
+      case 'cleanup_old': {
         const cleanupDays = days || 30;
         result = await capxMemoryService.cleanupOldMemories(userId, cleanupDays);
         break;
+      }
         
       case 'cleanup_session':
         result = await capxMemoryService.cleanupSessionData(userId);

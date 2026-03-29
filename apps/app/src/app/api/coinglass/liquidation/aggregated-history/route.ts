@@ -74,7 +74,7 @@ export async function GET(request: Request) {
     const symbolOrId = searchParams.get('symbol') || 'BTC';
     const interval = searchParams.get('interval') || '1d';
     const exchangeList = searchParams.get('exchange_list') || 'Binance';
-    const limit = parseInt(searchParams.get('limit') || '30');
+    const limit = Number.parseInt(searchParams.get('limit') || '30');
     const startTime = searchParams.get('start_time');
     const endTime = searchParams.get('end_time');
 
@@ -82,8 +82,8 @@ export async function GET(request: Request) {
     let coinInfo = null;
 
     // Check if the input is a number (coin ID) or a symbol
-    const coinId = parseInt(symbolOrId);
-    if (!isNaN(coinId)) {
+    const coinId = Number.parseInt(symbolOrId);
+    if (!Number.isNaN(coinId)) {
       // It's a coin ID, look up the symbol
       coinInfo = await convex.query(api.coins.getCoinglassSymbolByCoinId, { 
         serverToken: getServerToken(),

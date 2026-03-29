@@ -105,7 +105,7 @@ export class EnhancedDataOrchestrator {
       const resolvedCoins = new Map<string, { id: string; name: string; symbol: string }>();
       
       searchResults.flat().forEach(coin => {
-        if (coin && coin.id) {
+        if (coin?.id) {
           resolvedCoins.set(coin.id, coin);
         }
       });
@@ -558,14 +558,14 @@ export class EnhancedDataOrchestrator {
     });
 
     // Helper function to safely convert to number
-    const safeNumber = (value: unknown, fallback: number = 0): number => {
+    const safeNumber = (value: unknown, fallback = 0): number => {
       if (value === null || value === undefined) return fallback;
       const num = Number(value);
-      return isNaN(num) ? fallback : num;
+      return Number.isNaN(num) ? fallback : num;
     };
 
     // Helper function to safely convert to string
-    const safeString = (value: unknown, fallback: string = ''): string => {
+    const safeString = (value: unknown, fallback = ''): string => {
       if (value === null || value === undefined) return fallback;
       return String(value);
     };
@@ -622,7 +622,7 @@ export class EnhancedDataOrchestrator {
       }
 
       const dataPoints = prices.map((pricePoint, index) => {
-        const volume = volumes && volumes[index] ? volumes[index][1] : 0;
+        const volume = volumes?.[index] ? volumes[index][1] : 0;
         return {
           timestamp: pricePoint[0],
           price: pricePoint[1],

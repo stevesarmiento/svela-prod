@@ -83,7 +83,7 @@ export function BlendModeBackground({ coinId, tokenName }: BlendModeBackgroundPr
               max="1"
               step="0.01"
               value={opacity}
-              onChange={(e) => setOpacity(parseFloat(e.target.value))}
+              onChange={(e) => setOpacity(Number.parseFloat(e.target.value))}
               className="w-full"
             />
           </div>

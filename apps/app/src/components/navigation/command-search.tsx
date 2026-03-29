@@ -232,7 +232,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
               </Button>
               <div 
                 className={`overflow-hidden ${isOpen ? 'w-[420px] opacity-100' : 'w-0 opacity-0'}`}
-                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
               >
                 <CommandInput 
                   ref={inputRef}
@@ -313,8 +313,8 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                 className="text-white [&_[cmdk-group-heading]]:text-white/60"
               >
                 {coinResultsLoading ? (
-                  Array.from({ length: 5 }).map((_, index) => (
-                    <CommandItem key={`skeleton-${index}`} disabled>
+                  Array.from({ length: 5 }, (_, i) => `skeleton-${i}`).map((skeletonKey) => (
+                    <CommandItem key={skeletonKey} disabled>
                       <div className="flex items-center justify-between w-full bg-transparent p-2 rounded-lg">
                         <div className="flex items-center gap-3 pr-5">
                           <Skeleton className="h-6 w-6 rounded-full" />

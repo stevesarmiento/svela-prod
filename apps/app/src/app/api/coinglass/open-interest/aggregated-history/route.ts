@@ -57,8 +57,8 @@ export async function GET(request: Request) {
     let symbol = rawSymbol;
     let coinInfo = null;
 
-    const coinId = parseInt(rawSymbol);
-    if (!isNaN(coinId)) {
+    const coinId = Number.parseInt(rawSymbol);
+    if (!Number.isNaN(coinId)) {
       const mappedSymbol = COIN_ID_TO_SYMBOL[coinId];
       if (mappedSymbol) {
         symbol = mappedSymbol;
@@ -124,10 +124,10 @@ export async function GET(request: Request) {
     // Transform data - convert all values to numbers consistently
     const transformedData = validatedData.data.map(item => ({
       timestamp: item.time,
-      open: typeof item.open === 'string' ? parseFloat(item.open) : item.open,
-      high: typeof item.high === 'string' ? parseFloat(item.high) : item.high,
-      low: typeof item.low === 'string' ? parseFloat(item.low) : item.low,
-      close: typeof item.close === 'string' ? parseFloat(item.close) : item.close,
+      open: typeof item.open === 'string' ? Number.parseFloat(item.open) : item.open,
+      high: typeof item.high === 'string' ? Number.parseFloat(item.high) : item.high,
+      low: typeof item.low === 'string' ? Number.parseFloat(item.low) : item.low,
+      close: typeof item.close === 'string' ? Number.parseFloat(item.close) : item.close,
     }));
 
     return NextResponse.json({
