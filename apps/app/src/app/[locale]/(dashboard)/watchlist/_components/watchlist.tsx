@@ -43,6 +43,7 @@ import { Kbd } from "@v1/ui/kbd"
 import { useLatest } from "@/hooks/use-latest"
 import { useReducedMotion } from "motion/react"
 import { AddWalletDialog } from "@/app/[locale]/(dashboard)/portfolio/_components/add-wallet-dialog"
+import { Separator } from "@v1/ui/separator"
 
 interface WatchlistProps {
   activeTimeScale?: string;
@@ -404,7 +405,7 @@ export function Watchlist({
                   <IconEllipsis className="size-3.5 fill-muted-foreground group-hover:fill-primary rotate-90" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-64 p-1 rounded-xl bg-white dark:bg-zinc-900" align="end" side="bottom">
+              <PopoverContent className="w-64 p-1 rounded-xl bg-white dark:bg-zinc-900 overflow-hidden" align="end" side="bottom">
                 <div className="space-y-1">
                    <Button
                      variant="ghost"
@@ -421,21 +422,7 @@ export function Watchlist({
                        <Kbd className="text-[10px] font-diatype-bold">N</Kbd>
                      </div>
                    </Button>
-                   <Button
-                     variant="ghost"
-                     size="sm"
-                     onClick={() => {
-                       setIsAddWalletOpen(true)
-                     }}
-                     className="w-full justify-start gap-2 rounded-md"
-                   >
-                     <IconWalletBifold className="h-3.5 w-3.5 fill-muted-foreground" />
-                     <span>Watch a Wallet</span>
-                     <div className="ml-auto flex items-center gap-1">
-                       <Kbd className="text-[10px]">Shift</Kbd>
-                       <Kbd className="text-[10px] font-diatype-bold">M</Kbd>
-                     </div>
-                   </Button>
+
                    <Button
                      variant="ghost"
                      size="sm"
@@ -449,6 +436,22 @@ export function Watchlist({
                      <div className="ml-auto flex items-center gap-1">
                        <Kbd className="text-[10px]">Shift</Kbd>
                        <Kbd className="text-[10px] font-diatype-bold">A</Kbd>
+                     </div>
+                   </Button>
+                    <Separator className="my-1 scale-x-110" />
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={() => {
+                       setIsAddWalletOpen(true)
+                     }}
+                     className="w-full justify-start gap-2 rounded-md"
+                   >
+                     <IconWalletBifold className="h-3.5 w-3.5 fill-muted-foreground" />
+                     <span>Import from Wallet</span>
+                     <div className="ml-auto flex items-center gap-1">
+                       <Kbd className="text-[10px]">Shift</Kbd>
+                       <Kbd className="text-[10px] font-diatype-bold">M</Kbd>
                      </div>
                    </Button>
                 </div>

@@ -115,11 +115,9 @@ export function WatchlistsGrid({
   const { updateGroup, deleteGroup } = useWatchlistOperations()
   const { selectedGroup } = useWatchlist()
 
-  const { regularGroups, walletGroups } = useMemo(() => {
-    const groups = watchlistGroups ?? []
-    const regularGroups = groups.filter((g) => !g.portfolioWalletId)
-    const walletGroups = groups.filter((g) => Boolean(g.portfolioWalletId))
-    return { regularGroups, walletGroups }
+  const gridGroups = useMemo(() => {
+    // Keep the existing "newest first" behavior, but render all groups in one grid.
+    return (watchlistGroups ?? []).slice().reverse()
   }, [watchlistGroups])
 
   const editingGroupWatchlist = useWatchlistByGroup(editingGroup?._id) as Array<{ coinId: string }> | undefined
@@ -352,11 +350,7 @@ export function WatchlistsGrid({
             <>
               {/* Watchlists Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 relative">
-                {/* Existing Watchlists */}
-                {regularGroups
-                  .slice()
-                  .reverse()
-                  .map((group) => (
+                {gridGroups.map((group) => (
                   <div key={group._id}>
                     <WatchlistGroupWithCoins
                       group={group}
@@ -368,30 +362,6 @@ export function WatchlistsGrid({
                   </div>
                 ))}
               </div>
-
-              {walletGroups.length > 0 ? (
-                <div className="mt-10 space-y-4">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Wallets
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 relative">
-                    {walletGroups
-                      .slice()
-                      .reverse()
-                      .map((group) => (
-                        <div key={group._id}>
-                          <WatchlistGroupWithCoins
-                            group={group}
-                            onEdit={openEditDialog}
-                          onDelete={handleDeleteWatchlist}
-                            onSelect={onSelectWatchlist}
-                            selected={selectedGroup?._id === group._id}
-                          />
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              ) : null}
 
               {/* Edit Watchlist Modal (centered) */}
               <Dialog

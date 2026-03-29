@@ -5,6 +5,7 @@ import { Skeleton } from "@v1/ui/skeleton"
 import { useSpotTakerBuySellVolumeHistory } from "@/hooks/use-spot-taker-buy-sell-volume-history"
 import { cn } from "@v1/ui/cn"
 import { useIsomorphicTheme } from "@/hooks/use-isomorphic-theme"
+import { motion, useReducedMotion } from "motion/react"
 
 interface InlineSpotTakerBuySellVolumeChartProps {
   baseSymbol: string
@@ -51,6 +52,7 @@ export function InlineSpotTakerBuySellVolumeChart({
   className,
 }: InlineSpotTakerBuySellVolumeChartProps) {
   const { isDarkMode } = useIsomorphicTheme()
+  const shouldReduceMotion = useReducedMotion()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [isInView, setIsInView] = useState(false)
 
@@ -196,6 +198,101 @@ export function InlineSpotTakerBuySellVolumeChart({
   const barWidth = count > 0 ? (width - gap * Math.max(0, count - 1)) / count : 0
   const futuresWidth = Math.max(0, barWidth)
 
+  const bars = Array.from({ length: count }, (_, i) => {
+    const maxVolume = series.maxVolume
+
+    const futuresBuy = series.futuresBuy[i] ?? 0
+    const futuresSell = series.futuresSell[i] ?? 0
+    const spotBuy = series.spotBuy[i] ?? 0
+    const spotSell = series.spotSell[i] ?? 0
+
+    const futuresBuyH = clamp(maxVolume > 0 ? (futuresBuy / maxVolume) * barMax : 0, 0, barMax)
+    const futuresSellH = clamp(maxVolume > 0 ? (futuresSell / maxVolume) * barMax : 0, 0, barMax)
+    const spotBuyH = clamp(
+      maxVolume > 0 ? ((spotBuy * series.spotScale) / maxVolume) * barMax : 0,
+      0,
+      barMax,
+    )
+    const spotSellH = clamp(
+      maxVolume > 0 ? ((spotSell * series.spotScale) / maxVolume) * barMax : 0,
+      0,
+      barMax,
+    )
+
+    const x = i * (barWidth + gap)
+    const futuresX = x
+    const futuresCapInset = Math.min(0.4, futuresWidth / 2)
+    const futuresCapX1 = futuresX + futuresCapInset
+    const futuresCapX2 = futuresX + Math.max(0, futuresWidth) - futuresCapInset
+    const futuresCapStrokeWidth = 0.5
+
+    return (
+      <g key={i}>
+        {/* Spot (faint, behind) */}
+        <rect
+          x={x}
+          y={baselineY - spotBuyH}
+          width={Math.max(0, barWidth)}
+          height={spotBuyH}
+          fill={buyColor}
+          opacity={0.9}
+        />
+        <rect
+          x={x}
+          y={baselineY}
+          width={Math.max(0, barWidth)}
+          height={spotSellH}
+          fill={sellColor}
+          opacity={0.9}
+        />
+
+        {/* Futures (solid, on top) */}
+        <rect
+          x={futuresX}
+          y={baselineY - futuresBuyH}
+          width={Math.max(0, futuresWidth)}
+          height={futuresBuyH}
+          fill={buyColor}
+          opacity={0.28}
+        />
+        {futuresBuyH > 0 && futuresCapX2 > futuresCapX1 ? (
+          <line
+            x1={futuresCapX1}
+            y1={baselineY - futuresBuyH}
+            x2={futuresCapX2}
+            y2={baselineY - futuresBuyH}
+            stroke={buyColor}
+            strokeOpacity={1}
+            strokeWidth={futuresCapStrokeWidth}
+            strokeLinecap="butt"
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : null}
+        <rect
+          x={futuresX}
+          y={baselineY}
+          width={Math.max(0, futuresWidth)}
+          height={futuresSellH}
+          fill={sellColor}
+          opacity={0.28}
+        />
+        {futuresSellH > 0 && futuresCapX2 > futuresCapX1 ? (
+          <line
+            x1={futuresCapX1}
+            y1={baselineY + futuresSellH}
+            x2={futuresCapX2}
+            y2={baselineY + futuresSellH}
+            stroke={sellColor}
+            strokeOpacity={1}
+            strokeWidth={futuresCapStrokeWidth}
+            strokeLinecap="butt"
+            vectorEffect="non-scaling-stroke"
+          />
+        ) : null}
+      </g>
+    )
+  })
+
   return (
     <div
       ref={containerRef}
@@ -209,100 +306,18 @@ export function InlineSpotTakerBuySellVolumeChart({
         className="size-full"
         shapeRendering="crispEdges"
       >
-        {Array.from({ length: count }, (_, i) => {
-          const maxVolume = series.maxVolume
-
-          const futuresBuy = series.futuresBuy[i] ?? 0
-          const futuresSell = series.futuresSell[i] ?? 0
-          const spotBuy = series.spotBuy[i] ?? 0
-          const spotSell = series.spotSell[i] ?? 0
-
-          const futuresBuyH = clamp(maxVolume > 0 ? (futuresBuy / maxVolume) * barMax : 0, 0, barMax)
-          const futuresSellH = clamp(maxVolume > 0 ? (futuresSell / maxVolume) * barMax : 0, 0, barMax)
-          const spotBuyH = clamp(
-            maxVolume > 0 ? ((spotBuy * series.spotScale) / maxVolume) * barMax : 0,
-            0,
-            barMax,
-          )
-          const spotSellH = clamp(
-            maxVolume > 0 ? ((spotSell * series.spotScale) / maxVolume) * barMax : 0,
-            0,
-            barMax,
-          )
-
-          const x = i * (barWidth + gap)
-          const futuresX = x
-          const futuresCapInset = Math.min(0.4, futuresWidth / 2)
-          const futuresCapX1 = futuresX + futuresCapInset
-          const futuresCapX2 = futuresX + Math.max(0, futuresWidth) - futuresCapInset
-          const futuresCapStrokeWidth = 0.5
-
-          return (
-            <g key={i}>
-              {/* Spot (faint, behind) */}
-              <rect
-                x={x}
-                y={baselineY - spotBuyH}
-                width={Math.max(0, barWidth)}
-                height={spotBuyH}
-                fill={buyColor}
-                opacity={0.9}
-              />
-              <rect
-                x={x}
-                y={baselineY}
-                width={Math.max(0, barWidth)}
-                height={spotSellH}
-                fill={sellColor}
-                opacity={0.9}
-              />
-
-              {/* Futures (solid, on top) */}
-              <rect
-                x={futuresX}
-                y={baselineY - futuresBuyH}
-                width={Math.max(0, futuresWidth)}
-                height={futuresBuyH}
-                fill={buyColor}
-                opacity={0.28}
-              />
-              {futuresBuyH > 0 && futuresCapX2 > futuresCapX1 ? (
-                <line
-                  x1={futuresCapX1}
-                  y1={baselineY - futuresBuyH}
-                  x2={futuresCapX2}
-                  y2={baselineY - futuresBuyH}
-                  stroke={buyColor}
-                  strokeOpacity={1}
-                  strokeWidth={futuresCapStrokeWidth}
-                  strokeLinecap="butt"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ) : null}
-              <rect
-                x={futuresX}
-                y={baselineY}
-                width={Math.max(0, futuresWidth)}
-                height={futuresSellH}
-                fill={sellColor}
-                opacity={0.28}
-              />
-              {futuresSellH > 0 && futuresCapX2 > futuresCapX1 ? (
-                <line
-                  x1={futuresCapX1}
-                  y1={baselineY + futuresSellH}
-                  x2={futuresCapX2}
-                  y2={baselineY + futuresSellH}
-                  stroke={sellColor}
-                  strokeOpacity={1}
-                  strokeWidth={futuresCapStrokeWidth}
-                  strokeLinecap="butt"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ) : null}
-            </g>
-          )
-        })}
+        {shouldReduceMotion ? (
+          <g>{bars}</g>
+        ) : (
+          <motion.g
+            initial={{ scaleY: 0, opacity: 0 }}
+            animate={{ scaleY: 1, opacity: 1 }}
+            transition={{ duration: 0.22, ease: "easeOut" }}
+            style={{ transformBox: "view-box", transformOrigin: "50% 50%" }}
+          >
+            {bars}
+          </motion.g>
+        )}
       </svg>
     </div>
   )

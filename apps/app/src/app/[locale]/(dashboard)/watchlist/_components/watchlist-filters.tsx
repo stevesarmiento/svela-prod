@@ -345,7 +345,7 @@ export function WatchlistFilters({
                 <Badge
                   key={filter.key}
                   variant="secondary"
-                  className="gap-1 pr-1 py-0 bg-primary/5 text-primary/50 hover:text-primary cursor-crosshair border-border border-dashed flex-shrink-0"
+                  className="h-6 gap-1 pr-1 py-0 bg-primary/5 text-primary/50 hover:text-primary cursor-crosshair border-border border-dashed flex-shrink-0"
                 >
                   <span className="text-xs font-medium opacity-50">{filter.label}</span>
                   <div className="h-[24px] w-[1px] bg-border mx-1" />
@@ -360,8 +360,8 @@ export function WatchlistFilters({
                   </Button>
                 </Badge>
               ))}
-              <span className="text-[10px] uppercase text-muted-foreground/60 ml-1">
-                press <Kbd>esc</Kbd> to clear
+              <span className="text-[10px] uppercase text-muted-foreground ml-1">
+                press <Kbd className="font-bold w-8">esc</Kbd> to clear
               </span>
             </div>
           )}
