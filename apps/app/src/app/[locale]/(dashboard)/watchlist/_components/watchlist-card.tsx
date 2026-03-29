@@ -226,8 +226,9 @@ export function WatchlistCard({
         <div className="relative flex flex-col justify-between h-full z-10">
           {/* Header with watchlist info and actions */}
           <div className="flex items-start justify-between mb-3">
-            <div 
-              className="flex items-center gap-3 flex-1 cursor-pointer"
+            <button
+              type="button"
+              className="flex items-center gap-3 flex-1 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded-lg"
               onClick={() => {
                 if (!onSelect) return
                 if (!isPersistedWatchlistGroup(group)) return
@@ -260,9 +261,10 @@ export function WatchlistCard({
                   </div>
                 </div>
               </div>
-            </div>
+            </button>
 
             {/* Actions menu */}
+            {isPersistedWatchlistGroup(group) && (onEdit || onDelete) ? (
               <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -276,39 +278,40 @@ export function WatchlistCard({
                       <IconEllipsis className="h-4 w-4 fill-white" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent 
-                    align="end" 
+                  <DropdownMenuContent
+                    align="end"
                     sideOffset={-15}
                     className="w-[130px] p-2 rounded-xl bg-zinc-900 border-zinc-800"
                   >
-                    <DropdownMenuItem 
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        if (!onEdit) return
-                        if (!isPersistedWatchlistGroup(group)) return
-                        onEdit(group)
-                      }}
-                      className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-zinc-800 focus:bg-zinc-800"
-                    >
-                      <IconPencilTipCropCircle className="h-3.5 w-3.5 fill-muted-foreground group-hover:fill-foreground" />
-                      <span>Edit</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator className="my-2 bg-zinc-800" />
-                    <DropdownMenuItem 
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        if (!onDelete) return
-                        if (!isPersistedWatchlistGroup(group)) return
-                        onDelete(group)
-                      }}
-                      className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-red-500/10 focus:bg-red-500/10"
-                    >
-                      <IconTrashFill className="h-3.5 w-3.5 fill-red-400 group-hover:fill-red-400" />
-                      <span className="text-red-400 hover:text-red-400">Delete</span>
-                    </DropdownMenuItem>
+                    {onEdit ? (
+                      <DropdownMenuItem
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onEdit(group)
+                        }}
+                        className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-zinc-800 focus:bg-zinc-800"
+                      >
+                        <IconPencilTipCropCircle className="h-3.5 w-3.5 fill-muted-foreground group-hover:fill-foreground" />
+                        <span>Edit</span>
+                      </DropdownMenuItem>
+                    ) : null}
+                    {onEdit && onDelete ? <DropdownMenuSeparator className="my-2 bg-zinc-800" /> : null}
+                    {onDelete ? (
+                      <DropdownMenuItem
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onDelete(group)
+                        }}
+                        className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-red-500/10 focus:bg-red-500/10"
+                      >
+                        <IconTrashFill className="h-3.5 w-3.5 fill-red-400 group-hover:fill-red-400" />
+                        <span className="text-red-400 hover:text-red-400">Delete</span>
+                      </DropdownMenuItem>
+                    ) : null}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+            ) : null}
           </div>
 
           {/* Chart or Empty State */}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from "react"
+import { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, useState } from "react"
 import { Button } from "@v1/ui/button"
 import { Input } from "@v1/ui/input"
 import { toast } from "@v1/ui/use-toast"
@@ -10,15 +10,33 @@ function isValidSolanaAddress(address: string): boolean {
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address)
 }
 
-export function AddWalletForm() {
+export interface AddWalletFormRef {
+  focusAddress: () => void
+}
+
+export interface AddWalletFormProps {
+  onSuccess?: () => void
+}
+
+export const AddWalletForm = forwardRef<AddWalletFormRef, AddWalletFormProps>(function AddWalletForm(
+  props,
+  ref,
+) {
   const { addWallet, isPending } = useAddPortfolioWallet()
 
+  const addressInputRef = useRef<HTMLInputElement | null>(null)
   const [address, setAddress] = useState("")
   const [name, setName] = useState("")
   const [localError, setLocalError] = useState<string | null>(null)
 
   const trimmedAddress = useMemo(() => address.trim(), [address])
   const trimmedName = useMemo(() => name.trim(), [name])
+
+  const focusAddress = useCallback(() => {
+    addressInputRef.current?.focus()
+  }, [])
+
+  useImperativeHandle(ref, () => ({ focusAddress }), [focusAddress])
 
   const onSubmit = useCallback(async () => {
     setLocalError(null)
@@ -41,11 +59,12 @@ export function AddWalletForm() {
         title: "Wallet added",
         description: "Initial sync has been scheduled.",
       })
+      props.onSuccess?.()
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to add wallet"
       setLocalError(message)
     }
-  }, [addWallet, trimmedAddress, trimmedName])
+  }, [addWallet, props, trimmedAddress, trimmedName])
 
   return (
     <div className="grid gap-3">
@@ -55,6 +74,7 @@ export function AddWalletForm() {
         </label>
         <Input
           id="portfolio-wallet-address"
+          ref={addressInputRef}
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           autoComplete="off"
@@ -87,5 +107,5 @@ export function AddWalletForm() {
       </div>
     </div>
   )
-}
+})
 

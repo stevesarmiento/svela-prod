@@ -84,6 +84,19 @@ export function PortfolioWalletCard({ wallet }: PortfolioWalletCardProps) {
     )
   }
 
+  if (quotes.isLoading) {
+    return (
+      <Card className="w-full">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner className="h-4 w-4" />
+            <span>Loading prices…</span>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return <WatchlistCard group={groupPreview} coins={quotes.data} />
 }
 
