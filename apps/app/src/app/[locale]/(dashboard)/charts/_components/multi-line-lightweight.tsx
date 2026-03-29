@@ -438,11 +438,11 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                   >
                     <Link
                       href={`/charts/${coin.id}`}
-                      className="flex flex-1 items-center gap-2 overflow-hidden"
+                      className="flex h-8 flex-1 items-center gap-2 overflow-hidden border border-zinc-200 dark:border-zinc-800/70 rounded-lg"
                     >
-                      <div className="h-9 w-1 rounded-full" style={{ backgroundColor: realCoin.color }} />
-                      <div className="ml-2 flex flex-1 flex-row items-center gap-2 overflow-hidden">
-                        <span className="text-xs font-medium">{realCoin.symbol.toUpperCase()}</span>
+                      <div className="absolute left-1.5 h-3 w-1.5 rounded-full border border-black" style={{ backgroundColor: realCoin.color }} />
+                      <div className="flex flex-1 flex-row items-center gap-2 overflow-hidden">
+                        <span className="ml-4.5 text-xs font-medium">{realCoin.symbol.toUpperCase()}</span>
                         <span className="truncate text-xs font-diatype-mono text-muted-foreground">
                           {realCoin.name}
                         </span>
@@ -453,7 +453,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                       type="button"
                       aria-label={`Remove ${realCoin.name} from watchlist`}
                       className={cn(
-                        "absolute right-2 rounded-full p-1 opacity-0 transition-opacity duration-200 hover:bg-red-500/20 group-hover:opacity-100 group-focus-within:opacity-100",
+                        "absolute right-2 rounded-full p-1 opacity-0 transition-all duration-200 hover:bg-red-500/20 group-hover:opacity-100 group-focus-within:opacity-100",
                         hoveredRemoveId === coin.id.toString() ? "bg-red-500/30" : "",
                       )}
                       onMouseEnter={() => {

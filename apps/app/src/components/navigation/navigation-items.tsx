@@ -26,8 +26,6 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
       case "/watchlist":
       case "/overview":
         return navigation.overview;
-      case "/settings":
-        return navigation.settings;
       default:
         return item.href;
     }
@@ -65,7 +63,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
           item.href === "/charts"
             ? "Aggregate"
             : isActive
-              ? item.href === "/watchlist" || item.href === "/overview"
+              ? item.href === "/watchlist"
                 ? "Watchlists"
                 : `Search ${item.title}`
               : item.title;
@@ -74,6 +72,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
           <Tooltip delayDuration={500} key={item.title}>
             <TooltipTrigger asChild>
               <button
+                type="button"
                 onClick={handleItemClick(item, isActive)}
                 className={`group p-3 rounded-[14px] transition-colors duration-200 hover:bg-transparent ${
                   isActive 

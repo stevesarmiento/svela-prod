@@ -84,6 +84,7 @@ interface CoinGeckoWatchlistCoin {
 interface WatchlistCardProps {
   group: WatchlistCardGroup
   coins: CoinGeckoWatchlistCoin[]
+  isLoading?: boolean
   onEdit?: (group: WatchlistGroup) => void
   onDelete?: (group: WatchlistGroup) => void
   onSelect?: (group: WatchlistGroup) => void
@@ -96,6 +97,7 @@ interface WatchlistCardProps {
 export function WatchlistCard({ 
   group, 
   coins = [],
+  isLoading = false,
   onEdit,
   onDelete,
   onSelect,
@@ -183,6 +185,8 @@ export function WatchlistCard({
     sampleAggregateData: aggregateData.slice(0, 3)
   })
 
+  const shouldShowLoadingState = isLoading || isChartLoading
+
   return (
     <Card 
       className={cn(
@@ -201,7 +205,7 @@ export function WatchlistCard({
       {/* Inject loading shine CSS only once per card */}
       <style>{loadingShineStyle}</style>
       {/* Loading shine overlay */}
-      {isChartLoading && (
+      {shouldShowLoadingState && (
         <div className="ck-qr-shine" />
       )}
       <div
@@ -226,8 +230,9 @@ export function WatchlistCard({
         <div className="relative flex flex-col justify-between h-full z-10">
           {/* Header with watchlist info and actions */}
           <div className="flex items-start justify-between mb-3">
-            <div 
-              className="flex items-center gap-3 flex-1 cursor-pointer"
+            <button
+              type="button"
+              className="flex items-center gap-3 flex-1 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded-lg"
               onClick={() => {
                 if (!onSelect) return
                 if (!isPersistedWatchlistGroup(group)) return
@@ -247,22 +252,23 @@ export function WatchlistCard({
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
                       <span className="text-white font-diatype-mono">
-                        {stats.positiveCount} 
+                        {isLoading ? "—" : stats.positiveCount}
                       </span>
                       <span className="text-white/50">up</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
                       <span className="text-white font-diatype-mono">
-                        {stats.negativeCount} 
+                        {isLoading ? "—" : stats.negativeCount}
                       </span>
                       <span className="text-white/50">down</span>
                   </div>
                 </div>
               </div>
-            </div>
+            </button>
 
             {/* Actions menu */}
+            {isPersistedWatchlistGroup(group) && (onEdit || onDelete) ? (
               <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -276,56 +282,57 @@ export function WatchlistCard({
                       <IconEllipsis className="h-4 w-4 fill-white" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent 
-                    align="end" 
+                  <DropdownMenuContent
+                    align="end"
                     sideOffset={-15}
                     className="w-[130px] p-2 rounded-xl bg-zinc-900 border-zinc-800"
                   >
-                    <DropdownMenuItem 
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        if (!onEdit) return
-                        if (!isPersistedWatchlistGroup(group)) return
-                        onEdit(group)
-                      }}
-                      className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-zinc-800 focus:bg-zinc-800"
-                    >
-                      <IconPencilTipCropCircle className="h-3.5 w-3.5 fill-muted-foreground group-hover:fill-foreground" />
-                      <span>Edit</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator className="my-2 bg-zinc-800" />
-                    <DropdownMenuItem 
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        if (!onDelete) return
-                        if (!isPersistedWatchlistGroup(group)) return
-                        onDelete(group)
-                      }}
-                      className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-red-500/10 focus:bg-red-500/10"
-                    >
-                      <IconTrashFill className="h-3.5 w-3.5 fill-red-400 group-hover:fill-red-400" />
-                      <span className="text-red-400 hover:text-red-400">Delete</span>
-                    </DropdownMenuItem>
+                    {onEdit ? (
+                      <DropdownMenuItem
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onEdit(group)
+                        }}
+                        className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-zinc-800 focus:bg-zinc-800"
+                      >
+                        <IconPencilTipCropCircle className="h-3.5 w-3.5 fill-muted-foreground group-hover:fill-foreground" />
+                        <span>Edit</span>
+                      </DropdownMenuItem>
+                    ) : null}
+                    {onEdit && onDelete ? <DropdownMenuSeparator className="my-2 bg-zinc-800" /> : null}
+                    {onDelete ? (
+                      <DropdownMenuItem
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          onDelete(group)
+                        }}
+                        className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-red-500/10 focus:bg-red-500/10"
+                      >
+                        <IconTrashFill className="h-3.5 w-3.5 fill-red-400 group-hover:fill-red-400" />
+                        <span className="text-red-400 hover:text-red-400">Delete</span>
+                      </DropdownMenuItem>
+                    ) : null}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+            ) : null}
           </div>
 
           {/* Chart or Empty State */}
           <div className="w-full">
-            {coins.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <p className="text-md text-white/60 max-w-[180px] mx-auto">
-                  To add tokens, press <Kbd className=" bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md text-white/80">Shift</Kbd> + <Kbd className=" bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md text-white/80">A</Kbd>
-                </p>
-              </div>
-            ) : isChartLoading ? (
+            {shouldShowLoadingState ? (
               <div className="flex items-center justify-center h-full relative">
                 <div className="flex items-center gap-2 z-10 h-[70px]">
                   <span className="text-white/50 text-xs sr-only">
                     Cache: {performance.cacheHitRate.toFixed(0)}%
                   </span>
                 </div>
+              </div>
+            ) : coins.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <p className="text-md text-white/60 max-w-[180px] mx-auto">
+                  To add tokens, press <Kbd className=" bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md text-white/80">Shift</Kbd> + <Kbd className=" bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md text-white/80">A</Kbd>
+                </p>
               </div>
             ) : (
               <div

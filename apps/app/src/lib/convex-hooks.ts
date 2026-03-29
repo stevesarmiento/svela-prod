@@ -103,9 +103,9 @@ export function useWatchlistBySlug(slug?: string) {
   return data;
 }
 
-export function useAllWatchlistCoinIds() {
+export function useAllWatchlistCoinIds(options?: { enabled?: boolean }) {
   const { user, isLoaded } = useUser();
-  const enabled = Boolean(isLoaded && user?.id);
+  const enabled = Boolean((options?.enabled ?? true) && isLoaded && user?.id);
 
   const { data } = useQuery<Array<string>>({
     queryKey: ["watchlists", "all-coin-ids"],

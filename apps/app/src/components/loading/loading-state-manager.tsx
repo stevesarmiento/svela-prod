@@ -11,6 +11,13 @@ interface LoadingStateManagerProps {
   children: React.ReactNode
   timeoutMs?: number
   maxWaitMs?: number
+  /**
+   * Only queries whose `queryKey[0]` matches one of these prefixes will be treated as
+   * "blocking" for the global stuck-loading overlay.
+   *
+   * This prevents background enrichment (charts, quotes, etc.) from flashing the overlay.
+   */
+  blockingQueryKeyPrefixes?: ReadonlyArray<string>
 }
 
 interface LoadingState {
@@ -23,10 +30,21 @@ interface LoadingState {
 export function LoadingStateManager({ 
   children, 
   timeoutMs = 10000, // 10 seconds 
-  maxWaitMs = 30000  // 30 seconds max wait
+  maxWaitMs = 30000,  // 30 seconds max wait
+  blockingQueryKeyPrefixes = ["watchlists"],
 }: LoadingStateManagerProps) {
   const queryClient = useQueryClient()
-  const isFetching = useIsFetching()
+
+  function isBlockingQueryKey(queryKey: readonly unknown[]): boolean {
+    const first = queryKey[0]
+    if (typeof first !== "string") return false
+    return blockingQueryKeyPrefixes.includes(first)
+  }
+
+  // Only count "blocking" queries so background requests don't trigger the overlay.
+  const isFetching = useIsFetching({
+    predicate: (query) => isBlockingQueryKey(query.queryKey),
+  })
   const isLoading = isFetching > 0
 
   const stuckSinceRef = useRef<number | null>(null)

@@ -18,7 +18,6 @@ export function useWatchlistPreservingNavigation() {
     watchlist: buildUrl('/watchlist'),
     watchlistComparison: buildUrl('/watchlist?wt=chart'),
     overview: buildUrl('/watchlist'),
-    settings: buildUrl('/settings'),
     buildUrl
   }
 }

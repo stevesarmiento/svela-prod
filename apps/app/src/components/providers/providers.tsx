@@ -1,13 +1,17 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
-import { ClerkProvider } from "@clerk/nextjs";
+import { ClerkProvider, useUser } from "@clerk/nextjs";
+import {
+  QueryClient,
+  type Query,
+} from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import dynamic from "next/dynamic";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
+import React, { useMemo } from "react";
 import { ConvexProvider } from "./convex-provider";
 import { WatchlistProvider } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context"; // cspell:disable-line
-import { ThemeProvider } from "./theme-provider";
 import { NotifToaster } from "@v1/ui/sonner-notif";
 
 const ReactQueryDevtools =
@@ -25,21 +29,71 @@ interface ProvidersProps {
   children: React.ReactNode;
 }
 
-export function Providers({ children }: ProvidersProps) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            staleTime: 5 * 60 * 1000,
-            refetchInterval: 60 * 1000,
-            refetchOnWindowFocus: true,
-            retry: 3,
-          },
-        },
-      })
-  );
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
+function shouldPersistQuery(query: Query): boolean {
+  if (query.state.status !== "success") return false;
+  const key0 = query.queryKey[0];
+  if (key0 === "watchlists") return true;
+  if (key0 === "coingecko-quotes") return true;
+  if (key0 === "coingecko-quote") return true;
+  return false;
+}
+
+function PersistedQueryProvider({ children }: ProvidersProps) {
+  const { user } = useUser();
+  const userId = user?.id ?? "anonymous";
+
+  const queryClient = useMemo(() => {
+    return new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 5 * 60 * 1000,
+          refetchOnWindowFocus: true,
+          retry: 3,
+          gcTime: ONE_DAY_MS,
+        },
+      },
+    });
+  }, [userId]);
+
+  const persister = useMemo(() => {
+    const storage = typeof window !== "undefined" ? window.localStorage : undefined;
+    return createAsyncStoragePersister({
+      storage,
+      key: `REACT_QUERY_OFFLINE_CACHE:${userId}`,
+    });
+  }, [userId]);
+
+  const buster =
+    process.env.NEXT_PUBLIC_APP_BUSTER ??
+    process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ??
+    process.env.NEXT_PUBLIC_BUILD_ID ??
+    "local";
+
+  return (
+    <PersistQueryClientProvider
+      // Remount per user to avoid any cross-user cache bleed.
+      key={userId}
+      client={queryClient}
+      persistOptions={{
+        persister,
+        maxAge: ONE_DAY_MS,
+        buster,
+        dehydrateOptions: {
+          shouldDehydrateQuery: shouldPersistQuery,
+        },
+      }}
+      onSuccess={() => {
+        void queryClient.resumePausedMutations();
+      }}
+    >
+      {children}
+    </PersistQueryClientProvider>
+  );
+}
+
+export function Providers({ children }: ProvidersProps) {
   return (
     <ClerkProvider
       publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!}
@@ -49,21 +103,17 @@ export function Providers({ children }: ProvidersProps) {
         },
       }}
     >
-      <QueryClientProvider client={queryClient}>
+      <PersistedQueryProvider>
         <NuqsAdapter>
           <ConvexProvider>
             <WatchlistProvider>
-              <ThemeProvider>
-                {children}
-                <NotifToaster position="top-center" offset={-10} />
-                {ReactQueryDevtools ? (
-                  <ReactQueryDevtools initialIsOpen={false} />
-                ) : null}
-              </ThemeProvider>
+              {children}
+              <NotifToaster position="top-center" offset={-10} />
+              {ReactQueryDevtools ? <ReactQueryDevtools initialIsOpen={false} /> : null}
             </WatchlistProvider>
           </ConvexProvider>
         </NuqsAdapter>
-      </QueryClientProvider>
+      </PersistedQueryProvider>
     </ClerkProvider>
   );
 }

@@ -23,7 +23,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 import { SignOutButton, useClerk } from "@clerk/nextjs";
 import { Fingerprint, LogOut } from "lucide-react";
-import { IconChevronBackward, IconGearshapeFill } from 'symbols-react';
+import { IconChevronBackward } from 'symbols-react';
 import { SvelaLogo } from "@v1/ui/svela-logo";
 import { useTokenHeader } from "@/hooks/use-token-header";
 import { WatchlistButton } from "./watchlist-button";
@@ -65,7 +65,6 @@ function getRouteGreeting(pathname: string): string {
   
   const routeGreetings: Record<string, string> = {
     '/charts': 'Charts & Graphs',
-    '/settings': 'Settings',
     '/portfolio': 'Portfolio',
   };
 
@@ -106,7 +105,6 @@ function getStaticRouteGreeting(pathname: string): string | null {
 
   const routeGreetings: Record<string, string> = {
     '/charts': 'Charts & Graphs',
-    '/settings': 'Settings',
     '/portfolio': 'Portfolio',
   };
 
@@ -329,10 +327,6 @@ export function TopNav() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => router.push('/settings')} className="cursor-pointer rounded-xl">
-                  <IconGearshapeFill className="mr-2 h-4 w-4 fill-primary/50" />
-                  Settings
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleProfileClick} className="cursor-pointer rounded-xl">
                   <Fingerprint className="mr-2 h-4 w-4 text-primary/50" />
                   Authentication

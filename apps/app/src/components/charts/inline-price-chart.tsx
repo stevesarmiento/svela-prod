@@ -8,14 +8,16 @@ import { runPromise } from "@/lib/effect/runtime-coingecko"
 import type { CoinMarketData } from '@/types/coins'
 import { Liveline } from "liveline"
 import type { LivelinePoint } from "liveline"
-import { useTheme } from "next-themes"
+import { cn } from "@v1/ui/cn"
 
 interface InlinePriceChartProps {
   coingeckoId: string // CoinGecko ID to fetch real data
   percentChange24h: number // Fallback when series unavailable
   symbol?: string // For debugging
+  sparkline7d?: ReadonlyArray<number> // Prefer quotes sparkline to avoid per-row market-chart requests
   initialData: CoinMarketData['quote']['USD'] // Required for useCoinGeckoChartData
   onError?: () => void
+  className?: string
 }
 
 type InlineChartTimeScale = "1d" | "7d" | "30d" | "max" | "2y"
@@ -61,6 +63,28 @@ function buildFallbackSeries(args: {
   return out
 }
 
+function buildSparklineSeries(args: {
+  sparkline: ReadonlyArray<number>
+  timeScale: InlineChartTimeScale
+  nowMs?: number
+}): Array<{ time: number; value: number }> {
+  const raw = args.sparkline
+  if (!raw || raw.length < 2) return []
+
+  const cleaned = raw.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
+  if (cleaned.length < 2) return []
+
+  const nowMs = args.nowMs ?? Date.now()
+  const days = Number(INLINE_TIME_SCALE_DAYS[args.timeScale] ?? "7")
+  const startMs = nowMs - days * 24 * 60 * 60 * 1000
+  const stepMs = (nowMs - startMs) / Math.max(1, cleaned.length - 1)
+
+  return cleaned.map((value, i) => ({
+    time: Math.floor((startMs + i * stepMs) / 1000),
+    value,
+  }))
+}
+
 function toTimeScale(range: string | undefined): InlineChartTimeScale {
   if (range === "1d" || range === "7d" || range === "30d" || range === "max" || range === "2y") return range
   return "7d"
@@ -69,6 +93,7 @@ function toTimeScale(range: string | undefined): InlineChartTimeScale {
 function useInlineMarketChartSeries(args: {
   coingeckoId: string
   timeScale: InlineChartTimeScale
+  enabled?: boolean
 }) {
   const days = INLINE_TIME_SCALE_DAYS[args.timeScale] ?? "7"
 
@@ -120,7 +145,7 @@ function useInlineMarketChartSeries(args: {
       if (points < 2) return 5_000
       return 2 * 60 * 1000
     },
-    enabled: args.coingeckoId.length > 0,
+    enabled: (args.enabled ?? true) && args.coingeckoId.length > 0,
     retry: 1,
     refetchOnWindowFocus: true,
   })
@@ -130,25 +155,32 @@ export function InlinePriceChart({
   coingeckoId,
   percentChange24h,
   symbol = '',
+  sparkline7d,
   initialData,
   onError: _onError,
+  className,
 }: InlinePriceChartProps) {
-  const { resolvedTheme } = useTheme()
-
   const timeScale = "7d" as const
   const basePrice = initialData?.price && initialData.price > 0 ? initialData.price : 0
   const fallbackTrendPct =
     typeof initialData?.percent_change_7d === "number" ? initialData.percent_change_7d : percentChange24h
 
+  const sparklineSeries = useMemo(
+    () => buildSparklineSeries({ sparkline: sparkline7d ?? [], timeScale: toTimeScale(timeScale) }),
+    [sparkline7d, timeScale],
+  )
+  const hasSparkline = sparklineSeries.length >= 2
+
   const marketChartQuery = useInlineMarketChartSeries({
     coingeckoId,
     timeScale: toTimeScale(timeScale),
+    enabled: !hasSparkline,
   })
 
-  const rawChartData = marketChartQuery.data?.points ?? []
+  const rawChartData = hasSparkline ? sparklineSeries : (marketChartQuery.data?.points ?? [])
   const chartData =
     rawChartData.length >= 2 ? rawChartData : buildFallbackSeries({ timeScale: toTimeScale(timeScale), basePrice })
-  const isLoading = marketChartQuery.isLoading
+  const isLoading = hasSparkline ? false : marketChartQuery.isLoading
 
   // Filter and prepare chart data
   const validChartData = useMemo(() => {
@@ -181,11 +213,11 @@ export function InlinePriceChart({
   // Prepare tooltip text
   const tooltipText = useMemo(() => {
     const changeText = `${trendPct > 0 ? "+" : ""}${trendPct.toFixed(2)}%`
-    const dataInfo = marketChartQuery.data?.cached ? "cached data" : "live data"
+    const dataInfo = hasSparkline ? "sparkline" : marketChartQuery.data?.cached ? "cached data" : "live data"
     const pointsInfo = `${validChartData.length} points`
     
     return `${symbol} 7d trend: ${changeText} | ${dataInfo} | ${pointsInfo}`
-  }, [symbol, trendPct, validChartData.length, marketChartQuery.data?.cached])
+  }, [symbol, trendPct, validChartData.length, marketChartQuery.data?.cached, hasSparkline])
 
   const points = useMemo((): LivelinePoint[] => {
     const result: LivelinePoint[] = []
@@ -207,13 +239,16 @@ export function InlinePriceChart({
     return Math.max(30, last - first)
   }, [points])
 
-  const livelineTheme = resolvedTheme === "light" ? "light" : "dark"
+  const livelineTheme = "dark"
 
   const livelineValue = points.length > 0 ? latestValue : basePrice
 
   return (
     <div 
-      className="w-56 h-8 rounded-sm overflow-hidden bg-transparent"
+      className={cn(
+        "h-8 rounded-sm overflow-hidden bg-transparent",
+        className ?? "w-56",
+      )}
       title={
         isLoading
           ? `${symbol} loading data...`

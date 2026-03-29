@@ -37,11 +37,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@v1/ui/popover'
-import { IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmarkFill } from 'symbols-react'
+import { IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmark, IconWalletBifold } from 'symbols-react'
 import { CreateWatchlist } from './create-watchlist'
 import { Kbd } from "@v1/ui/kbd"
 import { useLatest } from "@/hooks/use-latest"
 import { useReducedMotion } from "motion/react"
+import { AddWalletDialog } from "@/app/[locale]/(dashboard)/portfolio/_components/add-wallet-dialog"
+import { Separator } from "@v1/ui/separator"
 
 interface WatchlistProps {
   activeTimeScale?: string;
@@ -65,6 +67,27 @@ interface WatchlistTableSectionProps {
   onCoinSelect: (coinId: string, selected: boolean) => void;
   onSelectAll: (checked: boolean, coinIds?: string[]) => void;
   onInlineChartError?: () => void;
+}
+
+function createLoadingCoins(rowCount: number): Array<CoinMarketData> {
+  return Array.from({ length: rowCount }, (_, i) => ({
+    id: `loading-${i}`,
+    name: "",
+    symbol: "",
+    image: "",
+    slug: "",
+    cmc_rank: 0,
+    circulating_supply: 0,
+    max_supply: null,
+    quote: {
+      USD: {
+        price: 0,
+        volume_24h: 0,
+        market_cap: 0,
+        percent_change_24h: 0,
+      },
+    },
+  })) as Array<CoinMarketData>
 }
 
 function WatchlistTableSection({
@@ -151,6 +174,7 @@ export function Watchlist({
   const searchParams = useSearchParams()
   const [sorting, setSorting] = useState<SortingState>([])
   const [isCreatingWatchlist, setIsCreatingWatchlist] = useState(false)
+  const [isAddWalletOpen, setIsAddWalletOpen] = useState(false)
   const coinSearchRef = useRef<CoinSearchRef>(null)
 
   // Get current watchlist group parameter to preserve it in navigation (same as chart-table and top-nav)
@@ -159,9 +183,11 @@ export function Watchlist({
   // Use selected group coins if available, otherwise fall back to legacy watchlist
   const currentWatchlist = selectedGroup ? selectedGroupCoins : watchlist;
 
-  const allCoinIds = useAllWatchlistCoinIds()
+  const allCoinIds = useAllWatchlistCoinIds({ enabled: contentMode === "table" })
   const tableCoinIds = allCoinIds ?? []
   const watchlistForTable = contentMode === "table" ? tableCoinIds : currentWatchlist
+  const isTableCoinIdsLoading = contentMode === "table" && allCoinIds === undefined
+  const loadingCoins = useMemo(() => createLoadingCoins(10), [])
   
   // Use extracted data and selection hooks
   const { 
@@ -201,6 +227,7 @@ export function Watchlist({
   // Keyboard shortcuts handler (stable subscription, latest state via refs)
   useEffect(() => {
     const addTokenShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'focusAddToken')
+    const addWalletShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'openAddWallet')
 
     const handleKeyDown = (event: KeyboardEvent) => {
       // Ignore if typing in an input or textarea
@@ -212,6 +239,12 @@ export function Watchlist({
         event.preventDefault()
         coinSearchRef.current?.open()
         return;
+      }
+
+      if (addWalletShortcut && matchesShortcut(event, addWalletShortcut)) {
+        event.preventDefault()
+        setIsAddWalletOpen(true)
+        return
       }
 
       if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
@@ -287,7 +320,7 @@ export function Watchlist({
                 <TooltipTrigger asChild>
                 <TabsList className="grid w-full grid-cols-2 p-0.5">
                   <TabsTrigger value="grid" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Watchlists (W)">
-                    <IconBookmarkFill className="size-3 fill-muted-foreground" />
+                    <IconBookmark className="size-3 fill-muted-foreground" />
                     Watchlists
                   </TabsTrigger>
                   <TabsTrigger value="chart" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Comparison (C)">
@@ -372,7 +405,7 @@ export function Watchlist({
                   <IconEllipsis className="size-3.5 fill-muted-foreground group-hover:fill-primary rotate-90" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-64 p-1 rounded-xl bg-white dark:bg-zinc-900" align="end" side="bottom">
+              <PopoverContent className="w-64 p-1 rounded-xl bg-white dark:bg-zinc-900 overflow-hidden" align="end" side="bottom">
                 <div className="space-y-1">
                    <Button
                      variant="ghost"
@@ -385,10 +418,11 @@ export function Watchlist({
                      <IconWidgetSmallBadgePlus className="h-3.5 w-3.5 fill-muted-foreground" />
                      <span>Create Watchlist</span>
                      <div className="ml-auto flex items-center gap-1">
-                       <Kbd className="text-xs">Shift</Kbd>
-                       <Kbd className="text-xs">N</Kbd>
+                       <Kbd className="text-[10px]">Shift</Kbd>
+                       <Kbd className="text-[10px] font-diatype-bold">N</Kbd>
                      </div>
                    </Button>
+
                    <Button
                      variant="ghost"
                      size="sm"
@@ -397,11 +431,27 @@ export function Watchlist({
                      }}
                      className="w-full justify-start gap-2 rounded-md"
                    >
-                     <IconBookmarkFill className="h-3.5 w-3.5 fill-muted-foreground" />
+                     <IconBookmark className="h-3.5 w-3.5 fill-muted-foreground" />
                      <span>Add Token</span>
                      <div className="ml-auto flex items-center gap-1">
-                       <Kbd className="text-xs">Shift</Kbd>
-                       <Kbd className="text-xs">A</Kbd>
+                       <Kbd className="text-[10px]">Shift</Kbd>
+                       <Kbd className="text-[10px] font-diatype-bold">A</Kbd>
+                     </div>
+                   </Button>
+                    <Separator className="my-1 scale-x-110" />
+                   <Button
+                     variant="ghost"
+                     size="sm"
+                     onClick={() => {
+                       setIsAddWalletOpen(true)
+                     }}
+                     className="w-full justify-start gap-2 rounded-md"
+                   >
+                     <IconWalletBifold className="h-3.5 w-3.5 fill-muted-foreground" />
+                     <span>Import from Wallet</span>
+                     <div className="ml-auto flex items-center gap-1">
+                       <Kbd className="text-[10px]">Shift</Kbd>
+                       <Kbd className="text-[10px] font-diatype-bold">M</Kbd>
                      </div>
                    </Button>
                 </div>
@@ -438,7 +488,21 @@ export function Watchlist({
         /* Table Mode - Direct render without tabs, filters now in header */
         <div className="space-y-4">
           {/* Show empty state if no coins after filtering */}
-          {watchlistForTable.length === 0 ? (
+          {isTableCoinIdsLoading ? (
+            <WatchlistTableSection
+              coins={loadingCoins}
+              sorting={sorting}
+              onSortingChange={setSorting}
+              selectedCoins={selectedCoins}
+              watchlistGroup={watchlistGroup}
+              removingCoins={removingCoins}
+              hasSelectedCoins={hasSelectedCoins}
+              onRemove={handleRemove}
+              onCoinSelect={handleCoinSelect}
+              onSelectAll={handleSelectAll}
+              onInlineChartError={onInlineChartError}
+            />
+          ) : watchlistForTable.length === 0 ? (
             <WatchlistEmptyState type="no-coins" />
           ) : filteredCoins.length === 0 ? (
             <WatchlistEmptyState type="no-filtered-coins" onClearFilters={handleClearAllFilters} />
@@ -465,6 +529,8 @@ export function Watchlist({
           isOpen={isCreatingWatchlist} 
           onClose={() => setIsCreatingWatchlist(false)} 
         />
+
+        <AddWalletDialog open={isAddWalletOpen} onOpenChange={setIsAddWalletOpen} />
 
         {/* Hidden CoinSearch for ref access */}
         <div className="sr-only">

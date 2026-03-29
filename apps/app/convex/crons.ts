@@ -85,6 +85,21 @@ crons.interval(
   { batchSize: 200 },
 );
 
+// CoinGlass spot taker buy/sell volume history (cached in DB; low cadence).
+crons.interval(
+  "coinglass_refresh_spot_taker_buy_sell_volume_4h",
+  { minutes: 10 },
+  internal.coinglassJobs.refreshTrackedSpotTakerBuySellVolumeHistoryBatch,
+  { exchange: "Binance", interval: "4h", batchSize: 10, limit: 42 },
+);
+
+crons.interval(
+  "coinglass_refresh_futures_taker_buy_sell_volume_4h",
+  { minutes: 10 },
+  internal.coinglassJobs.refreshTrackedFuturesTakerBuySellVolumeHistoryBatch,
+  { exchange: "Binance", interval: "4h", batchSize: 10, limit: 42 },
+);
+
 // Sync CoinGecko's coin universe (new listings) into `coingeckoCoins`.
 crons.interval(
   "coingecko_sync_coins_list",

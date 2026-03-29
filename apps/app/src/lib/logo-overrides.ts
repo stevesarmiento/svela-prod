@@ -172,6 +172,7 @@ const SYMBOL_TO_FILENAME: Record<string, string> = {
 const POPULAR_SYMBOL_TO_FILENAME: Record<string, string> = {
     btc: "bitcoin",
     bitcoin: "bitcoin",
+    wbtc: "bitcoin",
     eth: "ethereum",
     ethereum: "ethereum",
     sol: "solana",
@@ -185,6 +186,7 @@ const POPULAR_SYMBOL_TO_FILENAME: Record<string, string> = {
     tether: "tether",
     apt: "aptos",
     aptos: "aptos",
+    sui: "sui",
     bp: "backpack",
     jto: "jito",
     hype: "hyperliquid",

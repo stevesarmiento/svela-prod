@@ -25,13 +25,15 @@ export default defineSchema({
     description: v.optional(v.string()),
     icon: v.optional(v.string()), // Emoji or icon name from symbols-react
     color: v.optional(v.string()), // Background color for the card
+    portfolioWalletId: v.optional(v.id("portfolioWallets")),
     isDefault: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_user_default", ["userId", "isDefault"])
-    .index("by_user_slug", ["userId", "slug"]),
+    .index("by_user_slug", ["userId", "slug"])
+    .index("by_user_and_portfolio_wallet", ["userId", "portfolioWalletId"]),
 
   watchlists: defineTable({
     userId: v.id("users"),
@@ -113,6 +115,56 @@ export default defineSchema({
     .index("by_symbol", ["symbol"])
     .index("by_active", ["isActive"]),
 
+  coinglassSpotTakerBuySellVolumeHistory: defineTable({
+    exchange: v.string(), // e.g. "Binance"
+    symbol: v.string(), // e.g. "BTCUSDT"
+    interval: v.string(), // e.g. "4h"
+    timestamp: v.number(), // ms
+    takerBuyVolumeUsd: v.number(),
+    takerSellVolumeUsd: v.number(),
+    dataSource: v.string(), // e.g. "coinglass-cron-spot-taker"
+    lastUpdated: v.number(),
+  })
+    .index("by_exchange_and_symbol_and_interval", ["exchange", "symbol", "interval"])
+    .index("by_exchange_and_symbol_and_interval_and_timestamp", [
+      "exchange",
+      "symbol",
+      "interval",
+      "timestamp",
+    ])
+    .index("by_exchange_and_symbol_and_interval_and_last_updated", [
+      "exchange",
+      "symbol",
+      "interval",
+      "lastUpdated",
+    ])
+    .index("by_last_updated", ["lastUpdated"]),
+
+  coinglassFuturesTakerBuySellVolumeHistory: defineTable({
+    exchange: v.string(), // e.g. "Binance"
+    symbol: v.string(), // e.g. "BTCUSDT"
+    interval: v.string(), // e.g. "4h"
+    timestamp: v.number(), // ms
+    takerBuyVolumeUsd: v.number(),
+    takerSellVolumeUsd: v.number(),
+    dataSource: v.string(), // e.g. "coinglass-cron-futures-taker"
+    lastUpdated: v.number(),
+  })
+    .index("by_exchange_and_symbol_and_interval", ["exchange", "symbol", "interval"])
+    .index("by_exchange_and_symbol_and_interval_and_timestamp", [
+      "exchange",
+      "symbol",
+      "interval",
+      "timestamp",
+    ])
+    .index("by_exchange_and_symbol_and_interval_and_last_updated", [
+      "exchange",
+      "symbol",
+      "interval",
+      "lastUpdated",
+    ])
+    .index("by_last_updated", ["lastUpdated"]),
+
   trackedCoins: defineTable({
     coingeckoId: v.string(),
     reason: v.string(), // "top" | "watchlist" (string to keep migrations simple)
@@ -124,6 +176,40 @@ export default defineSchema({
     .index("by_reason", ["reason"])
     .index("by_last_seen", ["lastSeen"])
     .index("by_coingecko_id_and_reason", ["coingeckoId", "reason"]),
+
+  portfolioWallets: defineTable({
+    userId: v.id("users"),
+    address: v.string(),
+    name: v.optional(v.string()),
+    isActive: v.boolean(),
+    lastSyncedAt: v.optional(v.number()),
+    lastSyncError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_address", ["userId", "address"])
+    .index("by_active", ["isActive", "updatedAt"]),
+
+  portfolioWalletCoins: defineTable({
+    userId: v.id("users"),
+    walletId: v.id("portfolioWallets"),
+    coingeckoId: v.string(),
+    mint: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_wallet", ["walletId"])
+    .index("by_wallet_coingecko", ["walletId", "coingeckoId"])
+    .index("by_coingecko", ["coingeckoId"])
+    .index("by_user_wallet", ["userId", "walletId"]),
+
+  portfolioMintMappings: defineTable({
+    mint: v.string(),
+    coingeckoId: v.string(),
+    source: v.string(), // "birdeye"
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_mint", ["mint"]),
 
   jobState: defineTable({
     jobKey: v.string(),

@@ -19,7 +19,7 @@ export default function DashboardLayout({
           <div className="flex flex-grow flex-col max-w-7xl mx-auto">
             <TopNav />
             <main className="flex flex-grow w-full pb-20">
-              <LoadingStateManager>
+              <LoadingStateManager blockingQueryKeyPrefixes={["watchlists"]}>
                 <RateLimitErrorBoundary>
                   {children}
                 </RateLimitErrorBoundary>

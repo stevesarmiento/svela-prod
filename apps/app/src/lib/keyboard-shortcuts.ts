@@ -26,7 +26,6 @@ export const SEQUENTIAL_SHORTCUTS = {
     'w': '/watchlist',       // go to watchlist  
     'c': '/charts',          // go to charts
     'p': '/portfolio',       // go to portfolio
-    's': '/settings',        // go to settings
     'n': '/news',           // go to news
   }
 } as const;
@@ -58,6 +57,14 @@ export const GLOBAL_SHORTCUTS: KeyboardShortcut[] = [
     category: 'actions',
     handler: 'focusAddToken',
     component: 'CoinSearch'
+  },
+  {
+    key: 'm',
+    combination: ['shift'],
+    description: 'Add wallet',
+    category: 'actions',
+    handler: 'openAddWallet',
+    component: 'AddWalletDialog'
   },
   {
     key: 'Escape',
@@ -139,7 +146,6 @@ export const NAVIGATION_SHORTCUTS = {
   '/watchlist': 'g + h', 
   '/charts': 'g + c',
   '/portfolio': 'g + p',
-  '/settings': 'g + s',
   '/news': 'g + n',
 } as const;
 

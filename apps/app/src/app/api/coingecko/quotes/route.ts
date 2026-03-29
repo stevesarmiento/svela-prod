@@ -19,6 +19,9 @@ interface CoinGeckoMarketsRow {
   symbol: string;
   name: string;
   image: string;
+  sparkline_in_7d?: {
+    price?: number[];
+  };
   current_price?: number;
   market_cap?: number;
   market_cap_rank?: number;
@@ -66,7 +69,8 @@ async function fetchCoinGeckoMarkets(args: {
   url.searchParams.set("order", "market_cap_desc");
   url.searchParams.set("per_page", String(Math.min(250, Math.max(1, args.perPage))));
   url.searchParams.set("page", "1");
-  url.searchParams.set("sparkline", "false");
+  // Needed to render Watchlist inline charts without per-coin market-chart fan-out.
+  url.searchParams.set("sparkline", "true");
   url.searchParams.set("price_change_percentage", "1h,24h,7d,30d");
 
   if (args.ids && args.ids.length > 0) {
@@ -119,6 +123,26 @@ async function fetchCoinGeckoCoin(args: {
   const data = (await response.json()) as unknown;
   if (typeof data !== "object" || data === null) return null;
   return data as CoinGeckoCoinResponse;
+}
+
+function chunk<T>(items: ReadonlyArray<T>, size: number): Array<Array<T>> {
+  const out: Array<Array<T>> = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+interface CoingeckoMarketUpsertItem {
+  coingeckoId: string;
+  symbol: string;
+  name: string;
+  image: string;
+  currentPrice?: number;
+  marketCap?: number;
+  marketCapRank?: number;
+  totalVolume?: number;
+  circulatingSupply?: number;
+  maxSupply?: number;
+  lastUpdated: string;
 }
 
 export async function GET(request: NextRequest) {
@@ -185,6 +209,11 @@ export async function GET(request: NextRequest) {
       });
 
       for (const row of rows) {
+        const sparkline7d =
+          Array.isArray(row.sparkline_in_7d?.price) && row.sparkline_in_7d.price.length >= 2
+            ? row.sparkline_in_7d.price.filter((v) => typeof v === "number" && Number.isFinite(v))
+            : undefined;
+
         data[row.id] = {
           id: row.id,
           name: row.name,
@@ -201,6 +230,7 @@ export async function GET(request: NextRequest) {
           circulating_supply: row.circulating_supply ?? null,
           max_supply: row.max_supply ?? null,
           last_updated: row.last_updated ?? new Date().toISOString(),
+          sparkline7d,
         };
       }
 
@@ -250,6 +280,51 @@ export async function GET(request: NextRequest) {
 
           // If we successfully filled some via fallback, keep the warmup set minimal.
           void fallbackCoins;
+        }
+
+        // Persist what we *did* fetch into Convex so portfolio/watchlist rendering works even
+        // when clients later fall back to cached DB data.
+        const marketItems: CoingeckoMarketUpsertItem[] = [];
+        for (const id of resolvedIds) {
+          const row = data[id] as
+            | {
+                id: string;
+                name: string;
+                symbol: string;
+                image: string;
+                current_price: number | null;
+                market_cap: number | null;
+                market_cap_rank: number | null;
+                total_volume: number | null;
+                circulating_supply: number | null;
+                max_supply: number | null;
+                last_updated: string;
+              }
+            | undefined;
+          if (!row) continue;
+          marketItems.push({
+            coingeckoId: row.id,
+            symbol: row.symbol,
+            name: row.name,
+            image: row.image,
+            currentPrice: row.current_price ?? undefined,
+            marketCap: row.market_cap ?? undefined,
+            marketCapRank:
+              row.market_cap_rank !== null && row.market_cap_rank > 0 ? row.market_cap_rank : undefined,
+            totalVolume: row.total_volume ?? undefined,
+            circulatingSupply: row.circulating_supply ?? undefined,
+            maxSupply: row.max_supply ?? undefined,
+            lastUpdated: row.last_updated,
+          });
+        }
+
+        if (marketItems.length > 0) {
+          for (const itemChunk of chunk(marketItems, 100)) {
+            await convex.mutation(api.coingeckoMarkets.upsertMarketDataBatch, {
+              serverToken,
+              items: itemChunk,
+            });
+          }
         }
       }
     } else {

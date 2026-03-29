@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from "react-dom/client"
-import { useTheme } from 'next-themes'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
@@ -171,13 +170,7 @@ export function WatchlistMultiLineChart({
   const [hoveredWatchlist, setHoveredWatchlist] = useState<WatchlistGroupId | null>(null)
   const [watchlistData, setWatchlistData] = useState<Map<WatchlistGroupId, WatchlistSeries>>(new Map())
   
-  // ✅ IMPROVED: Handle theme directly without hydration flag
-  // Use next-themes for proper theme detection (handles manual overrides correctly)
-  const { resolvedTheme } = useTheme()
-  
-  // Get theme state from next-themes (this respects manual theme selection)
-  // No need for hydration flag - React will handle SSR/CSR differences
-  const isDarkMode = resolvedTheme === 'dark'
+  const isDarkMode = true
   
   
   const watchlistGroupsData = useWatchlistGroups() as WatchlistGroup[] | undefined
