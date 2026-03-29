@@ -11,16 +11,40 @@ import { PortfolioWalletComparison } from "@/app/[locale]/(dashboard)/portfolio/
 import { IconCircleDottedAndCircle, IconWalletBifoldFill } from "symbols-react"
 import { Preloaded, usePreloadedQuery } from "convex/react"
 import { api } from "../../../../../../convex/_generated/api"
+import { usePortfolioWallets } from "@/hooks/use-portfolio-wallets"
 
 const portfolioTabValues = ["wallets", "comparison"] as const
 const portfolioTabParser = parseAsStringLiteral(portfolioTabValues).withDefault("wallets")
 
 export function Portfolio(props: {
+  preloadedWallets?: Preloaded<typeof api.portfolio.listMyPortfolioWallets>
+}) {
+  if (props.preloadedWallets) {
+    return <PortfolioPreloaded preloadedWallets={props.preloadedWallets} />
+  }
+  return <PortfolioLive />
+}
+
+function PortfolioPreloaded(props: {
   preloadedWallets: Preloaded<typeof api.portfolio.listMyPortfolioWallets>
 }) {
   const wallets = usePreloadedQuery(props.preloadedWallets)
-  const isLoadingState = false
-  const errorState = null as Error | null
+  return <PortfolioView wallets={wallets} isLoading={false} error={null as Error | null} />
+}
+
+function PortfolioLive() {
+  const { wallets, isLoading, error } = usePortfolioWallets()
+  return <PortfolioView wallets={wallets} isLoading={isLoading} error={error} />
+}
+
+function PortfolioView(props: {
+  wallets: Array<PortfolioWallet>
+  isLoading: boolean
+  error: Error | null
+}) {
+  const wallets = props.wallets
+  const isLoadingState = props.isLoading
+  const errorState = props.error
 
   const [tab, setTab] = useQueryState("pt", portfolioTabParser)
   const [selectedWalletId, setSelectedWalletId] = useQueryState("pw", {

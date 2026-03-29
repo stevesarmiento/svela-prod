@@ -6,7 +6,7 @@ import type { Preloaded } from "convex/react"
 import { api } from "../../../../../../convex/_generated/api"
 
 function PortfolioContent(props: {
-  preloadedWallets: Preloaded<typeof api.portfolio.listMyPortfolioWallets>
+  preloadedWallets?: Preloaded<typeof api.portfolio.listMyPortfolioWallets>
 }) {
   return (
     <div className="w-full px-4">
@@ -16,7 +16,7 @@ function PortfolioContent(props: {
 }
 
 export function PortfolioClient(props: {
-  preloadedWallets: Preloaded<typeof api.portfolio.listMyPortfolioWallets>
+  preloadedWallets?: Preloaded<typeof api.portfolio.listMyPortfolioWallets>
 }) {
   return (
     <Suspense fallback={<div>Loading portfolio...</div>}>

@@ -17,11 +17,9 @@ export default async function PortfolioPage() {
   }
 
   const token = await getAuthToken();
-  const preloadedWallets = await preloadQuery(
-    api.portfolio.listMyPortfolioWallets,
-    {},
-    { token },
-  );
+  const preloadedWallets = token
+    ? await preloadQuery(api.portfolio.listMyPortfolioWallets, {}, { token })
+    : null;
 
-  return <PortfolioClient preloadedWallets={preloadedWallets} />;
+  return <PortfolioClient preloadedWallets={preloadedWallets ?? undefined} />;
 }

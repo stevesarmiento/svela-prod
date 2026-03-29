@@ -16,7 +16,9 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const token = await getAuthToken();
-  const preloadedWatchlist = await preloadQuery(api.watchlists.getMyWatchlistBootstrap, {}, { token });
+  const preloadedWatchlist = token
+    ? await preloadQuery(api.watchlists.getMyWatchlistBootstrap, {}, { token })
+    : null;
   const WatchlistProviderWithBootstrap =
     WatchlistProvider as unknown as React.ComponentType<{
       children: React.ReactNode;
@@ -33,9 +35,13 @@ export default async function DashboardLayout({
             <main className="flex flex-grow w-full pb-20">
               <LoadingStateManager blockingQueryKeyPrefixes={["watchlists"]}>
                 <RateLimitErrorBoundary>
-                  <WatchlistProviderWithBootstrap preloadedBootstrap={preloadedWatchlist}>
-                    {children}
-                  </WatchlistProviderWithBootstrap>
+                  {preloadedWatchlist ? (
+                    <WatchlistProviderWithBootstrap preloadedBootstrap={preloadedWatchlist}>
+                      {children}
+                    </WatchlistProviderWithBootstrap>
+                  ) : (
+                    children
+                  )}
                 </RateLimitErrorBoundary>
               </LoadingStateManager>
             </main>
