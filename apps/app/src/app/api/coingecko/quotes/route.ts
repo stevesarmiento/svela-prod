@@ -121,6 +121,26 @@ async function fetchCoinGeckoCoin(args: {
   return data as CoinGeckoCoinResponse;
 }
 
+function chunk<T>(items: ReadonlyArray<T>, size: number): Array<Array<T>> {
+  const out: Array<Array<T>> = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+interface CoingeckoMarketUpsertItem {
+  coingeckoId: string;
+  symbol: string;
+  name: string;
+  image: string;
+  currentPrice?: number;
+  marketCap?: number;
+  marketCapRank?: number;
+  totalVolume?: number;
+  circulatingSupply?: number;
+  maxSupply?: number;
+  lastUpdated: string;
+}
+
 export async function GET(request: NextRequest) {
   let userId: string | null = null;
   try {
@@ -250,6 +270,51 @@ export async function GET(request: NextRequest) {
 
           // If we successfully filled some via fallback, keep the warmup set minimal.
           void fallbackCoins;
+        }
+
+        // Persist what we *did* fetch into Convex so portfolio/watchlist rendering works even
+        // when clients later fall back to cached DB data.
+        const marketItems: CoingeckoMarketUpsertItem[] = [];
+        for (const id of resolvedIds) {
+          const row = data[id] as
+            | {
+                id: string;
+                name: string;
+                symbol: string;
+                image: string;
+                current_price: number | null;
+                market_cap: number | null;
+                market_cap_rank: number | null;
+                total_volume: number | null;
+                circulating_supply: number | null;
+                max_supply: number | null;
+                last_updated: string;
+              }
+            | undefined;
+          if (!row) continue;
+          marketItems.push({
+            coingeckoId: row.id,
+            symbol: row.symbol,
+            name: row.name,
+            image: row.image,
+            currentPrice: row.current_price ?? undefined,
+            marketCap: row.market_cap ?? undefined,
+            marketCapRank:
+              row.market_cap_rank !== null && row.market_cap_rank > 0 ? row.market_cap_rank : undefined,
+            totalVolume: row.total_volume ?? undefined,
+            circulatingSupply: row.circulating_supply ?? undefined,
+            maxSupply: row.max_supply ?? undefined,
+            lastUpdated: row.last_updated,
+          });
+        }
+
+        if (marketItems.length > 0) {
+          for (const itemChunk of chunk(marketItems, 100)) {
+            await convex.mutation(api.coingeckoMarkets.upsertMarketDataBatch, {
+              serverToken,
+              items: itemChunk,
+            });
+          }
         }
       }
     } else {

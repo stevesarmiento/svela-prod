@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { action, mutation, query } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
 import { internal } from "./_generated/api";
 import type { QueryCtx } from "./_generated/server";
@@ -101,6 +101,30 @@ export const getPortfolioWalletCoinIds = query({
   },
 });
 
+export const previewPortfolioWalletCandidates = action({
+  args: { serverToken: v.string(), walletAddress: v.string() },
+  returns: v.object({
+    candidates: v.array(
+      v.object({
+        mint: v.string(),
+        coingeckoId: v.string(),
+      }),
+    ),
+    unresolvedCount: v.number(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ candidates: Array<{ mint: string; coingeckoId: string }>; unresolvedCount: number }> => {
+    requireServerToken(args.serverToken);
+    const result: { candidates: Array<{ mint: string; coingeckoId: string }>; unresolvedCount: number } =
+      await ctx.runAction(internal.portfolioJobs.previewWalletCandidates, {
+      walletAddress: args.walletAddress,
+    });
+    return result;
+  },
+});
+
 export const addPortfolioWallet = mutation({
   args: {
     serverToken: v.string(),
@@ -143,8 +167,71 @@ export const addPortfolioWallet = mutation({
       });
     }
 
-    // Kick off an initial sync right away so the UI gets data quickly.
-    await ctx.scheduler.runAfter(0, internal.portfolioJobs.syncWallet, { walletId });
+    return walletId;
+  },
+});
+
+export const upsertPortfolioWalletSelection = mutation({
+  args: {
+    serverToken: v.string(),
+    clerkId: v.string(),
+    address: v.string(),
+    name: v.optional(v.string()),
+    selected: v.array(
+      v.object({
+        mint: v.string(),
+        coingeckoId: v.string(),
+      }),
+    ),
+  },
+  returns: v.id("portfolioWallets"),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const userId = await getUserIdByClerkId(ctx, args.clerkId);
+    if (!userId) throw new Error("User not found");
+
+    const address = normalizeWalletAddress(args.address);
+    if (!isValidSolanaAddress(address)) throw new Error("Invalid wallet address");
+
+    const now = Date.now();
+
+    const existing = await ctx.db
+      .query("portfolioWallets")
+      .withIndex("by_user_address", (q) => q.eq("userId", userId).eq("address", address))
+      .first();
+
+    const walletId = existing
+      ? existing._id
+      : await ctx.db.insert("portfolioWallets", {
+          userId,
+          address,
+          name: args.name?.trim() || undefined,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        name: args.name?.trim() || existing.name,
+        isActive: true,
+        updatedAt: now,
+      });
+    }
+
+    const diff = await ctx.runMutation(internal.portfolioJobs._reconcileWalletCoins, {
+      walletId,
+      userId,
+      next: args.selected,
+      syncedAt: now,
+      syncError: null,
+    });
+
+    await ctx.runMutation(internal.portfolioJobs._touchTrackedCoinsForPortfolio, {
+      coingeckoIds: diff.nextCoingeckoIds,
+      removedCoingeckoIds: diff.removedCoingeckoIds,
+    });
+
     return walletId;
   },
 });

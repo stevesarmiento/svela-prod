@@ -7,6 +7,7 @@ import { WatchlistCard } from "../../watchlist/_components/watchlist-card"
 import { usePortfolioWalletCoinIds } from "@/hooks/use-portfolio-wallet-coin-ids"
 import type { PortfolioWallet } from "@/lib/portfolio-api"
 import { useCoinGeckoWatchlistCoins } from "@/hooks/use-coingecko-watchlist-coins"
+import { cn } from "@v1/ui/cn"
 
 function formatAddress(address: string): string {
   const trimmed = address.trim()
@@ -16,9 +17,11 @@ function formatAddress(address: string): string {
 
 export interface PortfolioWalletCardProps {
   wallet: PortfolioWallet
+  isSelected?: boolean
+  onSelect?: () => void
 }
 
-export function PortfolioWalletCard({ wallet }: PortfolioWalletCardProps) {
+export function PortfolioWalletCard({ wallet, isSelected, onSelect }: PortfolioWalletCardProps) {
   const { coinIds, isLoading, error } = usePortfolioWalletCoinIds(wallet._id)
   const quotes = useCoinGeckoWatchlistCoins(coinIds)
 
@@ -77,7 +80,7 @@ export function PortfolioWalletCard({ wallet }: PortfolioWalletCardProps) {
         <CardContent className="p-6">
           <div className="text-sm font-medium">{wallet.name ?? formatAddress(wallet.address)}</div>
           <div className="text-sm text-muted-foreground text-pretty mt-2">
-            No tracked tokens yet. The first sync may take a bit on new wallets.
+            No tracked tokens yet for this wallet.
           </div>
         </CardContent>
       </Card>
@@ -97,6 +100,22 @@ export function PortfolioWalletCard({ wallet }: PortfolioWalletCardProps) {
     )
   }
 
-  return <WatchlistCard group={groupPreview} coins={quotes.data} />
+  return (
+    <div
+      role={onSelect ? "button" : undefined}
+      tabIndex={onSelect ? 0 : undefined}
+      className={cn(onSelect ? "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-[20px]" : "")}
+      onClick={() => onSelect?.()}
+      onKeyDown={(e) => {
+        if (!onSelect) return
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
+    >
+      <WatchlistCard group={groupPreview} coins={quotes.data} selected={Boolean(isSelected)} />
+    </div>
+  )
 }
 

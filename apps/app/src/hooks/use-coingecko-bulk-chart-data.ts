@@ -197,7 +197,18 @@ export function useCoinGeckoBulkChartData(
       }
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
-    refetchInterval: 5 * 60 * 1000, // 5 minutes
+    refetchInterval: (query) => {
+      const result = query.state.data as { series: CoinSeries[]; cacheHitRate: number } | undefined
+      if (!result) return 2_000
+
+      // If any coin has insufficient chart points, we likely just scheduled a warmup fetch.
+      // Poll faster for a short period so the UI fills in quickly.
+      for (const row of result.series) {
+        if ((row.data?.length ?? 0) < 2) return 5_000
+      }
+
+      return 5 * 60 * 1000 // 5 minutes
+    },
     enabled: coinIds.length > 0,
     retry: 1, // Limited retry for bulk operations
   })

@@ -1,47 +1,84 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { parseAsStringLiteral, useQueryState } from "nuqs"
 import type { PortfolioWallet } from "@/lib/portfolio-api"
-import { AddWalletForm, type AddWalletFormRef } from "./add-wallet-form"
 import { PortfolioWalletCard } from "./portfolio-wallet-card"
 import { PortfolioEmptyState } from "./portfolio-empty-state"
 import { usePortfolioWallets } from "@/hooks/use-portfolio-wallets"
 import { Spinner } from "@v1/ui/spinner"
 import { Button } from "@v1/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@v1/ui/popover"
-import { IconEllipsis, IconWalletBifoldFill } from "symbols-react"
+import { AddWalletDialog } from "./add-wallet-dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@v1/ui/tabs"
+import { PortfolioWalletComparison } from "@/app/[locale]/(dashboard)/portfolio/_components/portfolio-wallet-comparison"
+import {
+  IconCircleDottedAndCircle,
+  IconEllipsis,
+  IconWalletBifoldFill,
+  IconWidgetSmallBadgePlus,
+} from "symbols-react"
+
+const portfolioTabValues = ["wallets", "comparison"] as const
+const portfolioTabParser = parseAsStringLiteral(portfolioTabValues).withDefault("wallets")
 
 export function Portfolio() {
   const { wallets, isLoading, error } = usePortfolioWallets()
-  const addWalletRef = useRef<AddWalletFormRef>(null)
   const [isActionsOpen, setIsActionsOpen] = useState(false)
+  const [isAddWalletOpen, setIsAddWalletOpen] = useState(false)
+
+  const [tab, setTab] = useQueryState("pt", portfolioTabParser)
+  const [selectedWalletId, setSelectedWalletId] = useQueryState("pw", {
+    defaultValue: "",
+    shallow: false,
+  })
 
   const activeWallets = useMemo<Array<PortfolioWallet>>(
     () => wallets.filter((w) => w.isActive),
     [wallets],
   )
 
+  const selectedWallet = useMemo(() => {
+    if (!selectedWalletId) return null
+    return activeWallets.find((w) => w._id === selectedWalletId) ?? null
+  }, [activeWallets, selectedWalletId])
+
   useEffect(() => {
-    if (!isActionsOpen) return
-    const id = window.setTimeout(() => {
-      addWalletRef.current?.focusAddress()
-    }, 0)
-    return () => window.clearTimeout(id)
-  }, [isActionsOpen])
+    if (selectedWalletId) return
+    const first = activeWallets[0]
+    if (!first) return
+    void setSelectedWalletId(first._id)
+  }, [activeWallets, selectedWalletId, setSelectedWalletId])
+
+  const isLoadingState = isLoading
+  const errorState = error
+  const hasNoWallets = !isLoadingState && !errorState && activeWallets.length === 0
 
   return (
     <div className="space-y-6 px-4">
       {/* Unified Header */}
       <div className="flex items-center justify-between py-1">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <IconWalletBifoldFill className="size-4 fill-muted-foreground shrink-0" />
-            <div className="font-semibold text-balance truncate">Portfolio</div>
-          </div>
-          <div className="text-xs text-muted-foreground tabular-nums">
-            {activeWallets.length} wallet{activeWallets.length === 1 ? "" : "s"}
-          </div>
-        </div>
+        <Tabs
+          value={tab}
+          onValueChange={(value) => {
+            const next = value as (typeof portfolioTabValues)[number]
+            void setTab(next)
+          }}
+        >
+          <TabsList className="grid w-full grid-cols-2 p-0.5">
+            <TabsTrigger value="wallets" className="flex items-center gap-2 p-0.5 px-2">
+              <IconWalletBifoldFill className="size-3 fill-muted-foreground" />
+              Wallets
+              <span className="ml-1 text-xs text-muted-foreground tabular-nums">
+                {activeWallets.length}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger value="comparison" className="flex items-center gap-2 p-0.5 px-2">
+              <IconCircleDottedAndCircle className="size-4 fill-muted-foreground" />
+              Comparison
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         <div className="flex items-center gap-2">
           <Popover open={isActionsOpen} onOpenChange={setIsActionsOpen}>
@@ -57,54 +94,96 @@ export function Portfolio() {
               </Button>
             </PopoverTrigger>
             <PopoverContent
-              className="w-80 p-3 rounded-xl bg-white dark:bg-zinc-900"
+              className="w-64 p-1 rounded-xl bg-white dark:bg-zinc-900"
               align="end"
               side="bottom"
             >
-              <div className="space-y-3">
-                <div>
-                  <div className="text-sm font-semibold text-balance">Add wallet</div>
-                  <div className="text-xs text-muted-foreground text-pretty mt-1">
-                    We’ll index the top tokens for this address and refresh daily.
-                  </div>
-                </div>
-                <AddWalletForm
-                  ref={addWalletRef}
-                  onSuccess={() => {
-                    setIsActionsOpen(false)
-                  }}
-                />
-              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setIsActionsOpen(false)
+                  setIsAddWalletOpen(true)
+                }}
+                className="w-full justify-start gap-2 rounded-md"
+              >
+                <IconWidgetSmallBadgePlus className="h-3.5 w-3.5 fill-muted-foreground" />
+                <span>Add wallet</span>
+              </Button>
             </PopoverContent>
           </Popover>
         </div>
       </div>
 
       {/* Main Content */}
-      {isLoading ? (
-        <div className="rounded-lg border bg-card p-6">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner className="h-4 w-4" />
-            <span>Loading wallets…</span>
-          </div>
-        </div>
-      ) : error ? (
-        <div className="rounded-lg border bg-card p-6">
-          <div className="text-sm text-destructive text-pretty">{error.message}</div>
-        </div>
-      ) : activeWallets.length === 0 ? (
-        <PortfolioEmptyState
-          onAddWallet={() => {
-            setIsActionsOpen(true)
-          }}
-        />
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {activeWallets.map((wallet) => (
-            <PortfolioWalletCard key={wallet._id} wallet={wallet} />
-          ))}
-        </div>
-      )}
+      <Tabs value={tab}>
+        <TabsContent value="wallets" className="mt-0">
+          {isLoadingState ? (
+            <div className="rounded-lg border bg-card p-6">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Spinner className="h-4 w-4" />
+                <span>Loading wallets…</span>
+              </div>
+            </div>
+          ) : errorState ? (
+            <div className="rounded-lg border bg-card p-6">
+              <div className="text-sm text-destructive text-pretty">{errorState.message}</div>
+            </div>
+          ) : activeWallets.length === 0 ? (
+            <PortfolioEmptyState
+              onAddWallet={() => {
+                setIsAddWalletOpen(true)
+              }}
+            />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {activeWallets.map((wallet) => (
+                <PortfolioWalletCard
+                  key={wallet._id}
+                  wallet={wallet}
+                  isSelected={wallet._id === selectedWalletId}
+                  onSelect={() => {
+                    void setSelectedWalletId(wallet._id)
+                    void setTab("comparison")
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="comparison" className="mt-0">
+          {isLoadingState ? (
+            <div className="rounded-lg border bg-card p-6">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Spinner className="h-4 w-4" />
+                <span>Loading wallets…</span>
+              </div>
+            </div>
+          ) : errorState ? (
+            <div className="rounded-lg border bg-card p-6">
+              <div className="text-sm text-destructive text-pretty">{errorState.message}</div>
+            </div>
+          ) : hasNoWallets ? (
+            <PortfolioEmptyState
+              onAddWallet={() => {
+                setIsAddWalletOpen(true)
+              }}
+            />
+          ) : selectedWallet ? (
+            <PortfolioWalletComparison wallet={selectedWallet} />
+          ) : (
+            <div className="rounded-lg border bg-card p-6">
+              <div className="text-sm text-muted-foreground text-pretty">
+                Select a wallet to compare its tokens.
+              </div>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      <AddWalletDialog open={isAddWalletOpen} onOpenChange={setIsAddWalletOpen} />
     </div>
   )
 }

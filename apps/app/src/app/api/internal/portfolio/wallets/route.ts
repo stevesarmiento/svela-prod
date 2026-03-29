@@ -38,19 +38,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = (await req.json()) as { address?: string; name?: string };
+  const body = (await req.json()) as {
+    address?: string;
+    name?: string;
+    selected?: Array<{ mint?: string; coingeckoId?: string }>;
+  };
   const address = body.address?.trim();
 
   if (!address) {
     return NextResponse.json({ error: "address is required" }, { status: 400 });
   }
 
+  const selected = Array.isArray(body.selected) ? body.selected : null;
+  if (!selected) {
+    return NextResponse.json({ error: "selected is required" }, { status: 400 });
+  }
+
   try {
-    const id = await convex.mutation(api.portfolio.addPortfolioWallet, {
+    const id = await convex.mutation(api.portfolio.upsertPortfolioWalletSelection, {
       serverToken: getServerToken(),
       clerkId,
       address,
       name: body.name?.trim() || undefined,
+      selected: selected.map((row) => ({
+        mint: row.mint?.trim() ?? "",
+        coingeckoId: row.coingeckoId?.trim() ?? "",
+      })),
     });
     return NextResponse.json({ id });
   } catch (error) {

@@ -13,6 +13,11 @@ export interface PortfolioWallet {
   updatedAt: number
 }
 
+export interface PortfolioWalletCandidate {
+  mint: string
+  coingeckoId: string
+}
+
 const PortfolioWalletSchema = z.object({
   _id: z.string(),
   _creationTime: z.number(),
@@ -31,6 +36,16 @@ const WalletListSchema = z.array(PortfolioWalletSchema)
 const AddWalletResponseSchema = z.object({ id: z.string() })
 
 const CoinIdsResponseSchema = z.object({ coinIds: z.array(z.string()) })
+
+const PortfolioWalletCandidateSchema = z.object({
+  mint: z.string(),
+  coingeckoId: z.string(),
+})
+
+const PreviewWalletResponseSchema = z.object({
+  candidates: z.array(PortfolioWalletCandidateSchema),
+  unresolvedCount: z.number(),
+})
 
 function getErrorMessage(body: unknown): string | null {
   if (!body) return null
@@ -80,6 +95,38 @@ export async function listPortfolioWallets(): Promise<Array<PortfolioWallet>> {
 export async function addPortfolioWallet(input: {
   address: string
   name?: string
+}): Promise<{ id: string }> {
+  return await requestJson({
+    endpoint: "/api/internal/portfolio/wallets",
+    init: {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...input, selected: [] }),
+    },
+    parse: (data) => AddWalletResponseSchema.parse(data),
+  })
+}
+
+export async function previewPortfolioWalletCandidates(address: string): Promise<{
+  candidates: Array<PortfolioWalletCandidate>
+  unresolvedCount: number
+}> {
+  const result = await requestJson({
+    endpoint: "/api/internal/portfolio/wallets/preview",
+    init: {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address }),
+    },
+    parse: (data) => PreviewWalletResponseSchema.parse(data),
+  })
+  return { candidates: result.candidates, unresolvedCount: result.unresolvedCount }
+}
+
+export async function createPortfolioWalletFromSelection(input: {
+  address: string
+  name?: string
+  selected: Array<PortfolioWalletCandidate>
 }): Promise<{ id: string }> {
   return await requestJson({
     endpoint: "/api/internal/portfolio/wallets",

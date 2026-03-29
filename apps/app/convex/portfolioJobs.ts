@@ -487,6 +487,74 @@ export const _touchTrackedCoinsForPortfolio = internalMutation({
   },
 });
 
+export const previewWalletCandidates = internalAction({
+  args: { walletAddress: v.string() },
+  returns: v.object({
+    candidates: v.array(
+      v.object({
+        mint: v.string(),
+        coingeckoId: v.string(),
+      }),
+    ),
+    unresolvedCount: v.number(),
+  }),
+  handler: async (ctx, args): Promise<{ candidates: Array<{ mint: string; coingeckoId: string }>; unresolvedCount: number }> => {
+    const walletAddress = args.walletAddress.trim();
+    if (!walletAddress || !isBase58Address(walletAddress)) throw new Error("Invalid wallet address");
+
+    const heliusApiKey = getHeliusApiKey();
+    const birdeyeApiKey = getBirdeyeApiKey();
+
+    // DAS-only for stable ordering and fewer intermittent Wallet API failures.
+    const rawMints = await fetchHeliusDasWalletTopMints({
+      walletAddress,
+      heliusApiKey,
+      limit: 100,
+    });
+
+    const uniqueMints = Array.from(new Set(rawMints));
+    const cached = await ctx.runQuery(internal.portfolioJobs._getMintMappingsByMints, {
+      mints: uniqueMints,
+    });
+
+    const missing = uniqueMints.filter((m) => !cached[m]);
+    const resolvedFromBirdeye: Array<{ mint: string; coingeckoId: string }> = [];
+
+    for (const mintChunk of chunk(missing, 5)) {
+      const results = await Promise.all(
+        mintChunk.map(async (mint) => {
+          const coingeckoId = await fetchBirdeyeCoingeckoIdByMint({ mint, birdeyeApiKey });
+          return coingeckoId ? { mint, coingeckoId } : null;
+        }),
+      );
+      for (const r of results) if (r) resolvedFromBirdeye.push(r);
+    }
+
+    if (resolvedFromBirdeye.length > 0) {
+      await ctx.runMutation(internal.portfolioJobs._upsertMintMappings, {
+        items: resolvedFromBirdeye.map((r) => ({ ...r, source: "birdeye" })),
+      });
+    }
+
+    const allResolvedByMint: Record<string, string> = { ...cached };
+    for (const r of resolvedFromBirdeye) allResolvedByMint[r.mint] = r.coingeckoId;
+
+    // Preserve DAS ordering (already sorted by USD total_price) for a better picker default.
+    const candidates = uniqueMints
+      .map((mint) => {
+        const coingeckoId = allResolvedByMint[mint];
+        if (!coingeckoId) return null;
+        return { mint, coingeckoId };
+      })
+      .filter((x): x is { mint: string; coingeckoId: string } => x !== null);
+
+    return {
+      candidates,
+      unresolvedCount: uniqueMints.length - candidates.length,
+    };
+  },
+});
+
 export const syncWallet = internalAction({
   args: { walletId: v.id("portfolioWallets") },
   returns: v.object({
