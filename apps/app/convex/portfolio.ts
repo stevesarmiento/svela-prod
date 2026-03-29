@@ -425,3 +425,286 @@ export const deletePortfolioWallet = mutation({
   },
 });
 
+async function getAuthedUserId(ctx: QueryCtx): Promise<Id<"users">> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Not authenticated");
+
+  const user = await ctx.db
+    .query("users")
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+    .first();
+  if (!user) throw new Error("User not found");
+  return user._id;
+}
+
+export const listMyPortfolioWallets = query({
+  args: {},
+  returns: v.array(walletValidator),
+  handler: async (ctx) => {
+    const userId = await getAuthedUserId(ctx);
+
+    return await ctx.db
+      .query("portfolioWallets")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .order("desc")
+      .collect();
+  },
+});
+
+export const getMyPortfolioWalletCoinIds = query({
+  args: { walletId: v.id("portfolioWallets") },
+  returns: v.array(v.string()),
+  handler: async (ctx, args) => {
+    const userId = await getAuthedUserId(ctx);
+
+    const wallet = await ctx.db.get(args.walletId);
+    if (!wallet || wallet.userId !== userId) return [];
+
+    const rows = await ctx.db
+      .query("portfolioWalletCoins")
+      .withIndex("by_wallet", (q) => q.eq("walletId", args.walletId))
+      .collect();
+    return rows.map((r) => r.coingeckoId);
+  },
+});
+
+export const previewMyPortfolioWalletCandidates = action({
+  args: { walletAddress: v.string() },
+  returns: v.object({
+    candidates: v.array(
+      v.object({
+        mint: v.string(),
+        coingeckoId: v.string(),
+      }),
+    ),
+    unresolvedCount: v.number(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ candidates: Array<{ mint: string; coingeckoId: string }>; unresolvedCount: number }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const result: { candidates: Array<{ mint: string; coingeckoId: string }>; unresolvedCount: number } =
+      await ctx.runAction(internal.portfolioJobs.previewWalletCandidates, {
+        walletAddress: args.walletAddress,
+      });
+    return result;
+  },
+});
+
+export const upsertMyPortfolioWalletSelection = mutation({
+  args: {
+    address: v.string(),
+    name: v.optional(v.string()),
+    selected: v.array(
+      v.object({
+        mint: v.string(),
+        coingeckoId: v.string(),
+      }),
+    ),
+  },
+  returns: v.id("portfolioWallets"),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const userId = await getUserIdByClerkId(ctx, identity.subject);
+    if (!userId) throw new Error("User not found");
+
+    const address = normalizeWalletAddress(args.address);
+    if (!isValidSolanaAddress(address)) throw new Error("Invalid wallet address");
+
+    const now = Date.now();
+
+    const existing = await ctx.db
+      .query("portfolioWallets")
+      .withIndex("by_user_address", (q) => q.eq("userId", userId).eq("address", address))
+      .first();
+
+    const walletId = existing
+      ? existing._id
+      : await ctx.db.insert("portfolioWallets", {
+          userId,
+          address,
+          name: args.name?.trim() || undefined,
+          isActive: true,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        name: args.name?.trim() || existing.name,
+        isActive: true,
+        updatedAt: now,
+      });
+    }
+
+    const diff = await ctx.runMutation(internal.portfolioJobs._reconcileWalletCoins, {
+      walletId,
+      userId,
+      next: args.selected,
+      syncedAt: now,
+      syncError: null,
+    });
+
+    await ctx.runMutation(internal.portfolioJobs._touchTrackedCoinsForPortfolio, {
+      coingeckoIds: diff.nextCoingeckoIds,
+      removedCoingeckoIds: diff.removedCoingeckoIds,
+    });
+
+    const displayName = (args.name?.trim() || existing?.name || "").trim() || formatAddress(address);
+
+    const existingGroup = await ctx.db
+      .query("watchlistGroups")
+      .withIndex("by_user_and_portfolio_wallet", (q) =>
+        q.eq("userId", userId).eq("portfolioWalletId", walletId),
+      )
+      .first();
+
+    let groupId: Id<"watchlistGroups">;
+    let createdBaseSlug: string | null = null;
+
+    if (existingGroup) {
+      groupId = existingGroup._id;
+      await ctx.db.patch(existingGroup._id, {
+        name: `Wallet: ${displayName}`,
+        updatedAt: now,
+      });
+    } else {
+      let baseSlug = generateSlug(displayName);
+      if (!baseSlug) baseSlug = "wallet";
+      createdBaseSlug = baseSlug;
+
+      groupId = await ctx.db.insert("watchlistGroups", {
+        userId,
+        name: `Wallet: ${displayName}`,
+        slug: baseSlug,
+        description: `Wallet ${formatAddress(address)}`,
+        icon: "bookmark",
+        color: "default",
+        portfolioWalletId: walletId,
+        isDefault: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    if (!existingGroup && createdBaseSlug) {
+      const group = await ctx.db.get(groupId);
+      if (group) {
+        let slug = group.slug;
+        let counter = 1;
+        while (true) {
+          const found = await ctx.db
+            .query("watchlistGroups")
+            .withIndex("by_user_slug", (q) => q.eq("userId", userId).eq("slug", slug))
+            .first();
+          if (!found || found._id === groupId) break;
+          slug = `${createdBaseSlug}-${counter}`;
+          counter += 1;
+        }
+        if (slug !== group.slug) await ctx.db.patch(groupId, { slug });
+      }
+    }
+
+    const nextIds = Array.from(
+      new Set(args.selected.map((row) => row.coingeckoId.trim()).filter((id) => id.length > 0)),
+    );
+    nextIds.sort();
+
+    const existingItems = await ctx.db
+      .query("watchlists")
+      .withIndex("by_group", (q) => q.eq("watchlistGroupId", groupId))
+      .collect();
+
+    const existingByCoinId = new Map<string, Id<"watchlists">>();
+    for (const item of existingItems) existingByCoinId.set(item.coinId, item._id);
+
+    for (const coinId of nextIds) {
+      if (existingByCoinId.has(coinId)) continue;
+      const already = await ctx.db
+        .query("watchlists")
+        .withIndex("by_group_coin", (q) => q.eq("watchlistGroupId", groupId).eq("coinId", coinId))
+        .first();
+      if (already) continue;
+      await ctx.db.insert("watchlists", {
+        userId,
+        watchlistGroupId: groupId,
+        coinId,
+      });
+    }
+
+    const nextSet = new Set(nextIds);
+    for (const item of existingItems) {
+      if (nextSet.has(item.coinId)) continue;
+      await ctx.db.delete(item._id);
+    }
+
+    return walletId;
+  },
+});
+
+export const deleteMyPortfolioWallet = mutation({
+  args: { walletId: v.id("portfolioWallets") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await getAuthedUserId(ctx);
+
+    const wallet = await ctx.db.get(args.walletId);
+    if (!wallet) return null;
+    if (wallet.userId !== userId) return null;
+
+    const walletCoins = await ctx.db
+      .query("portfolioWalletCoins")
+      .withIndex("by_wallet", (q) => q.eq("walletId", args.walletId))
+      .collect();
+
+    const removedCoingeckoIds = Array.from(new Set(walletCoins.map((row) => row.coingeckoId)));
+
+    await Promise.all(walletCoins.map((row) => ctx.db.delete(row._id)));
+
+    const walletGroup = await ctx.db
+      .query("watchlistGroups")
+      .withIndex("by_user_and_portfolio_wallet", (q) =>
+        q.eq("userId", userId).eq("portfolioWalletId", args.walletId),
+      )
+      .first();
+
+    if (walletGroup) {
+      const watchlistItems = await ctx.db
+        .query("watchlists")
+        .withIndex("by_group", (q) => q.eq("watchlistGroupId", walletGroup._id))
+        .collect();
+
+      const watchlistCoinIds = Array.from(new Set(watchlistItems.map((row) => row.coinId)));
+      await Promise.all(watchlistItems.map((row) => ctx.db.delete(row._id)));
+
+      await Promise.all(
+        watchlistCoinIds.map(async (coinId) => {
+          const remaining = await ctx.db
+            .query("watchlists")
+            .withIndex("by_coin", (q) => q.eq("coinId", coinId))
+            .first();
+          if (remaining) return;
+          await ctx.runMutation(internal.coingeckoState._removeTrackedCoinReason, {
+            coingeckoId: coinId,
+            reason: "watchlist",
+          });
+        }),
+      );
+
+      await ctx.db.delete(walletGroup._id);
+    }
+
+    await ctx.db.delete(args.walletId);
+
+    await ctx.runMutation(internal.portfolioJobs._touchTrackedCoinsForPortfolio, {
+      coingeckoIds: [],
+      removedCoingeckoIds,
+    });
+
+    return null;
+  },
+});
+

@@ -5,12 +5,26 @@ import { BottomNavProvider } from "@/components/navigation/bottom-nav-context"
 import { RateLimitErrorBoundary } from "@/components/error-boundary/rate-limit-error-boundary"
 import { LoadingStateManager } from "@/components/loading/loading-state-manager"
 import { TooltipProvider } from "@v1/ui/tooltip";
+import { WatchlistProvider } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context";
+import { preloadQuery } from "convex/nextjs";
+import { getAuthToken } from "@/lib/auth";
+import { api } from "../../../../convex/_generated/api";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const token = await getAuthToken();
+  const preloadedWatchlist = token
+    ? await preloadQuery(api.watchlists.getMyWatchlistBootstrap, {}, { token })
+    : null;
+  const WatchlistProviderWithBootstrap =
+    WatchlistProvider as unknown as React.ComponentType<{
+      children: React.ReactNode;
+      preloadedBootstrap: typeof preloadedWatchlist;
+    }>;
+
   return (
     <BottomNavProvider>
       <SidebarProvider defaultOpen>
@@ -21,7 +35,13 @@ export default function DashboardLayout({
             <main className="flex flex-grow w-full pb-20">
               <LoadingStateManager blockingQueryKeyPrefixes={["watchlists"]}>
                 <RateLimitErrorBoundary>
-                  {children}
+                  {preloadedWatchlist ? (
+                    <WatchlistProviderWithBootstrap preloadedBootstrap={preloadedWatchlist}>
+                      {children}
+                    </WatchlistProviderWithBootstrap>
+                  ) : (
+                    children
+                  )}
                 </RateLimitErrorBoundary>
               </LoadingStateManager>
             </main>

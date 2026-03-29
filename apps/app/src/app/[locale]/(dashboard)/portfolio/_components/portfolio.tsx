@@ -5,17 +5,46 @@ import { parseAsStringLiteral, useQueryState } from "nuqs"
 import type { PortfolioWallet } from "@/lib/portfolio-api"
 import { PortfolioWalletCard } from "./portfolio-wallet-card"
 import { PortfolioEmptyState } from "./portfolio-empty-state"
-import { usePortfolioWallets } from "@/hooks/use-portfolio-wallets"
 import { Spinner } from "@v1/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@v1/ui/tabs"
 import { PortfolioWalletComparison } from "@/app/[locale]/(dashboard)/portfolio/_components/portfolio-wallet-comparison"
 import { IconCircleDottedAndCircle, IconWalletBifoldFill } from "symbols-react"
+import { Preloaded, usePreloadedQuery } from "convex/react"
+import { api } from "../../../../../../convex/_generated/api"
+import { usePortfolioWallets } from "@/hooks/use-portfolio-wallets"
 
 const portfolioTabValues = ["wallets", "comparison"] as const
 const portfolioTabParser = parseAsStringLiteral(portfolioTabValues).withDefault("wallets")
 
-export function Portfolio() {
+export function Portfolio(props: {
+  preloadedWallets?: Preloaded<typeof api.portfolio.listMyPortfolioWallets>
+}) {
+  if (props.preloadedWallets) {
+    return <PortfolioPreloaded preloadedWallets={props.preloadedWallets} />
+  }
+  return <PortfolioLive />
+}
+
+function PortfolioPreloaded(props: {
+  preloadedWallets: Preloaded<typeof api.portfolio.listMyPortfolioWallets>
+}) {
+  const wallets = usePreloadedQuery(props.preloadedWallets)
+  return <PortfolioView wallets={wallets} isLoading={false} error={null as Error | null} />
+}
+
+function PortfolioLive() {
   const { wallets, isLoading, error } = usePortfolioWallets()
+  return <PortfolioView wallets={wallets} isLoading={isLoading} error={error} />
+}
+
+function PortfolioView(props: {
+  wallets: Array<PortfolioWallet>
+  isLoading: boolean
+  error: Error | null
+}) {
+  const wallets = props.wallets
+  const isLoadingState = props.isLoading
+  const errorState = props.error
 
   const [tab, setTab] = useQueryState("pt", portfolioTabParser)
   const [selectedWalletId, setSelectedWalletId] = useQueryState("pw", {
@@ -40,8 +69,6 @@ export function Portfolio() {
     void setSelectedWalletId(first._id)
   }, [activeWallets, selectedWalletId, setSelectedWalletId])
 
-  const isLoadingState = isLoading
-  const errorState = error
   const hasNoWallets = !isLoadingState && !errorState && activeWallets.length === 0
 
   return (

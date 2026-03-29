@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Effect, Exit, Cause } from "effect"
 import { Button } from "@v1/ui/button"
 import { X } from "lucide-react"
 import Link from "next/link"
@@ -15,8 +14,7 @@ import { AvatarCircles } from '@v1/ui/token-stacks'
 import { useWatchlistGroups, useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
-import { useWatchlistOperations } from '@/hooks/use-watchlist-effect'
-import { runPromiseExit } from '@/lib/effect/runtime-watchlist'
+import { useDeleteWatchlistGroup } from '@/lib/convex-hooks'
 import type { WatchlistGroup } from './watchlist-context'
 import { getTokenLogoURL } from '@/lib/logo-overrides'
 
@@ -268,7 +266,7 @@ function WatchlistCard({
 }
 
 export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
-  const { deleteGroup } = useWatchlistOperations()
+  const deleteGroup = useDeleteWatchlistGroup()
   const [removingWatchlists, setRemovingWatchlists] = useState<Set<WatchlistGroupId>>(
     new Set(),
   )
@@ -280,50 +278,20 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
   const handleRemove = async (watchlistId: WatchlistGroupId) => {
     setRemovingWatchlists(prev => new Set([...prev, watchlistId]))
     
-    const program = deleteGroup(watchlistId).pipe(
-      Effect.catchTags({
-        WatchlistAuthError: (e) =>
-          Effect.sync(() => {
-            toast({
-              title: "Authentication Error",
-              description: e.message,
-              variant: "destructive",
-            })
-          }).pipe(Effect.flatMap(() => Effect.fail(e))),
-        WatchlistNotFoundError: (e) =>
-          Effect.sync(() => {
-            toast({
-              title: "Not Found",
-              description: e.message,
-              variant: "destructive",
-            })
-          }).pipe(Effect.flatMap(() => Effect.fail(e))),
-        WatchlistValidationError: (e) =>
-          Effect.sync(() => {
-            toast({
-              title: "Validation Error",
-              description: `${e.field}: ${e.reason}`,
-              variant: "destructive",
-            })
-          }).pipe(Effect.flatMap(() => Effect.fail(e))),
-        ApiRequestError: (e) =>
-          Effect.sync(() => {
-            toast({
-              title: "Request Error",
-              description: e.message,
-              variant: "destructive",
-            })
-          }).pipe(Effect.flatMap(() => Effect.fail(e))),
-      }),
-      Effect.tap(() => Effect.sync(() => {
+    try {
+      await deleteGroup(watchlistId)
         toast({
           title: "Removed",
           description: "Watchlist removed successfully",
         })
-      }))
-    )
-
-    const exit = await runPromiseExit(program)
+    } catch (error) {
+      toast({
+        title: "Request Error",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      })
+      if (isDebug) console.error("Failed to remove watchlist:", error)
+    }
     
     // Clean up removing state
     setRemovingWatchlists(prev => {
@@ -331,10 +299,6 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
       newSet.delete(watchlistId)
       return newSet
     })
-    
-    if (isDebug && Exit.isFailure(exit)) {
-      console.error("Failed to remove watchlist:", Cause.pretty(exit.cause))
-    }
   }
 
   if (!typedWatchlistGroupsData?.length) {

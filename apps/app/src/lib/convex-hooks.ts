@@ -1,11 +1,10 @@
 "use client";
 
 import { useUser, useClerk, useSignIn } from "@clerk/nextjs";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { WatchlistApi } from "@/lib/effect/watchlist-api";
-import { runPromise } from "@/lib/effect/runtime-watchlist";
+import { useMutation, useQuery, useConvexAuth } from "convex/react";
 import type { WatchlistGroup, WatchlistItem } from "@/lib/effect/watchlist-models";
 import { useCallback } from "react";
+import { api } from "../../convex/_generated/api";
 
 interface AuthUser {
   id: string;
@@ -53,220 +52,122 @@ export function useAuth() {
 
 export function useWatchlist() {
   const { user, isLoaded } = useUser();
-  const enabled = Boolean(isLoaded && user?.id);
+  const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
+  const enabled = Boolean(isLoaded && user?.id && isAuthenticated && !isConvexAuthLoading);
 
-  const { data } = useQuery<Array<WatchlistItem>>({
-    queryKey: ["watchlists", "default"],
-    queryFn: async () => runPromise(WatchlistApi.listItems()),
-    enabled,
-  });
+  const data = useQuery(
+    api.watchlists.getMyDefaultWatchlist,
+    enabled ? {} : "skip",
+  ) as Array<WatchlistItem> | undefined;
 
   return data;
 }
 
 export function useWatchlistGroups() {
   const { user, isLoaded } = useUser();
-  const enabled = Boolean(isLoaded && user?.id);
+  const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
+  const enabled = Boolean(isLoaded && user?.id && isAuthenticated && !isConvexAuthLoading);
 
-  const { data } = useQuery<Array<WatchlistGroup>>({
-    queryKey: ["watchlists", "groups"],
-    queryFn: async () => runPromise(WatchlistApi.listGroups()),
-    enabled,
-  });
+  const data = useQuery(
+    api.watchlists.listMyWatchlistGroups,
+    enabled ? {} : "skip",
+  ) as Array<WatchlistGroup> | undefined;
 
   return data;
 }
 
 export function useWatchlistByGroup(groupId?: string) {
   const { user, isLoaded } = useUser();
-  const enabled = Boolean(isLoaded && user?.id && groupId);
+  const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
+  const enabled = Boolean(isLoaded && user?.id && groupId && isAuthenticated && !isConvexAuthLoading);
 
-  const { data } = useQuery<Array<WatchlistItem>>({
-    queryKey: ["watchlists", "group", groupId],
-    queryFn: async () => runPromise(WatchlistApi.listItems(String(groupId))),
-    enabled,
-  });
+  const data = useQuery(
+    api.watchlists.getMyWatchlistByGroup,
+    enabled ? { groupId: groupId as any } : "skip",
+  ) as Array<WatchlistItem> | undefined;
 
   return data;
 }
 
 export function useWatchlistBySlug(slug?: string) {
   const { user, isLoaded } = useUser();
-  const enabled = Boolean(isLoaded && user?.id && slug);
+  const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
+  const enabled = Boolean(isLoaded && user?.id && slug && isAuthenticated && !isConvexAuthLoading);
 
-  const { data } = useQuery<{ group: WatchlistGroup; items: Array<WatchlistItem> } | null>({
-    queryKey: ["watchlists", "slug", slug],
-    queryFn: async () => runPromise(WatchlistApi.getBySlug(String(slug))),
-    enabled,
-  });
+  const data = useQuery(
+    api.watchlists.getMyWatchlistBySlug,
+    enabled ? { slug: String(slug) } : "skip",
+  ) as { group: WatchlistGroup; items: Array<WatchlistItem> } | null | undefined;
 
   return data;
 }
 
 export function useAllWatchlistCoinIds(options?: { enabled?: boolean }) {
   const { user, isLoaded } = useUser();
-  const enabled = Boolean((options?.enabled ?? true) && isLoaded && user?.id);
+  const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
+  const enabled = Boolean(
+    (options?.enabled ?? true) &&
+      isLoaded &&
+      user?.id &&
+      isAuthenticated &&
+      !isConvexAuthLoading,
+  );
 
-  const { data } = useQuery<Array<string>>({
-    queryKey: ["watchlists", "all-coin-ids"],
-    queryFn: async () => runPromise(WatchlistApi.listAllCoinIds()),
-    enabled,
-  });
+  const data = useQuery(
+    api.watchlists.getMyAllWatchlistCoinIds,
+    enabled ? {} : "skip",
+  ) as Array<string> | undefined;
 
   return data;
 }
 
 export function useCreateWatchlistGroup() {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: async (input: {
-      name: string;
-      description?: string;
-      icon?: string;
-      color?: string;
-    }) => runPromise(WatchlistApi.createGroup(input)),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
-    },
-  });
-
+  const create = useMutation(api.watchlists.createMyWatchlistGroup);
   return (name: string, description?: string, icon?: string, color?: string) =>
-    mutation.mutateAsync({ name, description, icon, color });
+    create({ name, description, icon, color });
 }
 
 export function useUpdateWatchlistGroup() {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: async (input: {
-      groupId: string;
-      name?: string;
-      description?: string;
-      icon?: string;
-      color?: string;
-    }) =>
-      runPromise(
-        WatchlistApi.updateGroup(String(input.groupId), {
-          name: input.name,
-          description: input.description,
-          icon: input.icon,
-          color: input.color,
-        }),
-      ),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
-    },
-  });
-
+  const update = useMutation(api.watchlists.updateMyWatchlistGroup);
   return (
     groupId: string,
     name?: string,
     description?: string,
     icon?: string,
     color?: string,
-  ) => mutation.mutateAsync({ groupId, name, description, icon, color });
+  ) => update({ groupId: groupId as any, name, description, icon, color });
 }
 
 export function useDeleteWatchlistGroup() {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: async (input: { groupId: string }) =>
-      runPromise(WatchlistApi.deleteGroup(String(input.groupId))),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
-    },
-  });
-
-  return (groupId: string) => mutation.mutateAsync({ groupId });
+  const del = useMutation(api.watchlists.deleteMyWatchlistGroup);
+  return (groupId: string) => del({ groupId: groupId as any });
 }
 
 export function useAddToWatchlistGroup() {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: async (input: { coinId: string; groupId?: string }) =>
-      runPromise(
-        WatchlistApi.addItem({
-          coinId: input.coinId,
-          groupId: input.groupId ? String(input.groupId) : undefined,
-        }),
-      ),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
-    },
-  });
-
+  const add = useMutation(api.watchlists.addToMyWatchlist);
   return (coinId: string, groupId?: string) =>
-    mutation.mutateAsync({ coinId, groupId });
+    add({ coinId, groupId: groupId ? (groupId as any) : undefined });
 }
 
 export function useRemoveFromWatchlistGroup() {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: async (input: { coinId: string; groupId?: string }) =>
-      runPromise(
-        WatchlistApi.removeItem({
-          coinId: input.coinId,
-          groupId: input.groupId ? String(input.groupId) : undefined,
-        }),
-      ),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
-    },
-  });
-
+  const remove = useMutation(api.watchlists.removeFromMyWatchlist);
   return (coinId: string, groupId?: string) =>
-    mutation.mutateAsync({ coinId, groupId });
+    remove({ coinId, groupId: groupId ? (groupId as any) : undefined });
 }
 
 export function useRemoveBulkFromWatchlist() {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: async (input: { coinIds: string[]; groupId?: string }) =>
-      runPromise(
-        WatchlistApi.removeItemsBulk({
-          coinIds: input.coinIds,
-          groupId: input.groupId ? String(input.groupId) : undefined,
-        }),
-      ),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
-    },
-  });
-
+  const bulkRemove = useMutation(api.watchlists.removeBulkFromMyWatchlist);
   return (coinIds: string[], groupId?: string) =>
-    mutation.mutateAsync({ coinIds, groupId });
+    bulkRemove({ coinIds, groupId: groupId ? (groupId as any) : undefined });
 }
 
 export function useRemoveFromAllWatchlists() {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: async (input: { coinId: string }) =>
-      runPromise(WatchlistApi.removeItemEverywhere({ coinId: input.coinId })),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
-    },
-  });
-
-  return useCallback((coinId: string) => mutation.mutateAsync({ coinId }), [mutation.mutateAsync]);
+  const removeEverywhere = useMutation(api.watchlists.removeFromAllMyWatchlists);
+  return useCallback((coinId: string) => removeEverywhere({ coinId }), [removeEverywhere]);
 }
 
 export function useRemoveBulkFromAllWatchlists() {
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: async (input: { coinIds: string[] }) =>
-      runPromise(WatchlistApi.removeItemsBulkEverywhere({ coinIds: input.coinIds })),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["watchlists"] });
-    },
-  });
-
-  return useCallback((coinIds: string[]) => mutation.mutateAsync({ coinIds }), [mutation.mutateAsync]);
+  const bulk = useMutation(api.watchlists.removeBulkFromAllMyWatchlists);
+  return useCallback((coinIds: string[]) => bulk({ coinIds }), [bulk]);
 }
 
