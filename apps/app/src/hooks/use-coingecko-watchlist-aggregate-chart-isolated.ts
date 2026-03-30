@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useLayoutEffect, useMemo } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
 import { Effect } from "effect"
 import { CoinGeckoApi } from "@/lib/effect/coingecko-api"
@@ -52,6 +52,10 @@ interface UseCoinGeckoWatchlistAggregateChartIsolatedProps {
 interface CoinGeckoWatchlistAggregateIsolatedResult {
   aggregateData: AggregateDataPoint[]
   isLoading: boolean
+  isFetching: boolean
+  isPlaceholderData: boolean
+  /** True when interval has no chart aggregate (e.g. 2Y — same idea as chart-table N/A). */
+  isChangeUnavailable: boolean
   currentAggregateChange: number
   coinsCount: number
   performance: {
@@ -71,7 +75,7 @@ interface HistoricalDataResult {
   }
 }
 
-function getRangeDaysFromTimeScale(timeScale: string): number {
+export function getRangeDaysFromTimeScale(timeScale: string): number {
   switch (timeScale) {
     case "1d":
       return 1
@@ -81,12 +85,15 @@ function getRangeDaysFromTimeScale(timeScale: string): number {
       return 30
     case "max":
       return 365
+    case "2y":
+      // CoinGecko list charts are capped; align window with `max` fetch below.
+      return 730
     default:
       return 7
   }
 }
 
-function getBucketMsFromTimeScale(timeScale: string): number {
+export function getBucketMsFromTimeScale(timeScale: string): number {
   switch (timeScale) {
     // Keep buckets coarse enough to avoid hundreds/thousands of points.
     case "1d":
@@ -97,13 +104,24 @@ function getBucketMsFromTimeScale(timeScale: string): number {
       return 12 * 60 * 60 * 1000 // 12h
     case "max":
       return 24 * 60 * 60 * 1000 // 1d
+    case "2y":
+      return 24 * 60 * 60 * 1000 // 1d
     default:
       return 2 * 60 * 60 * 1000 // 2h
   }
 }
 
-function floorToBucket(timeMs: number, bucketMs: number): number {
+export function floorToBucket(timeMs: number, bucketMs: number): number {
   return Math.floor(timeMs / bucketMs) * bucketMs
+}
+
+/** Shared range end for list rows / charts so bucket windows line up. */
+export function getWatchlistAggregateRangeEndMs(
+  timeScale: string,
+  nowMs: number = Date.now(),
+): number {
+  const bucketMs = getBucketMsFromTimeScale(timeScale)
+  return floorToBucket(nowMs, bucketMs)
 }
 
 function toEpochSeconds(timeMs: number): number {
@@ -152,15 +170,23 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
       case '7d': return '7'
       case '30d': return '30'
       case 'max': return '365'
+      case '2y': return 'max'
       default: return '7'
     }
   }
 
   const days = getDaysFromTimeScale(timeScale)
+  const isChangeUnavailable = timeScale === '2y'
+  const historicalQueryEnabled = coinIds.length > 0 && !isChangeUnavailable
 
   // Fetch historical market chart data for all coins in the watchlist
-  const { data: historicalData, isLoading } = useQuery<HistoricalDataResult>({
-    queryKey: ['watchlist-aggregate-historical', coinIdsKey, timeScale],
+  const {
+    data: historicalData,
+    isLoading,
+    isFetching,
+    isPlaceholderData,
+  } = useQuery<HistoricalDataResult>({
+    queryKey: ['watchlist-aggregate-historical', coinIdsKey, timeScale, rangeEndTimeMs ?? 'now'],
     queryFn: async () => {
       const emptyData: Record<string, CoinHistoricalData[]> = {}
       if (!coinIds.length) return { data: emptyData, performance: { cacheHits: 0, cacheMisses: 0, totalQueries: 0 } }
@@ -222,14 +248,21 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
         return { data: emptyData, performance: { cacheHits: 0, cacheMisses: 0, totalQueries: 1 } }
       }
     },
-    enabled: coinIds.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchInterval: 15 * 60 * 1000, // 15 minutes
+    enabled: historicalQueryEnabled,
+    staleTime: 60 * 60 * 1000, // 1 hour
+    refetchInterval: 60 * 60 * 1000, // 1 hour
+    placeholderData: keepPreviousData,
   })
 
-  // Aggregate historical data into a combined price line
-  useEffect(() => {
-    if (!historicalData?.data || !coins.length) {
+  // Aggregate historical data into a combined price line (layout effect avoids one frame of stale %).
+  useLayoutEffect(() => {
+    // Do not mix previous query `data` (keepPreviousData) with a new timeScale / coin set.
+    if (
+      isChangeUnavailable ||
+      isPlaceholderData ||
+      !historicalData?.data ||
+      !coins.length
+    ) {
       setAggregateData([])
       return
     }
@@ -318,7 +351,14 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
       console.error('Error processing watchlist aggregate data:', error)
       setAggregateData([])
     }
-  }, [historicalData, coins, timeScale, rangeEndTimeMs])
+  }, [
+    historicalData,
+    coins,
+    timeScale,
+    rangeEndTimeMs,
+    isChangeUnavailable,
+    isPlaceholderData,
+  ])
 
   // Calculate current aggregate performance for display
   const currentAggregateChange = useMemo(() => {
@@ -339,7 +379,10 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
 
   return {
     aggregateData,
-    isLoading,
+    isLoading: historicalQueryEnabled ? isLoading : false,
+    isFetching: historicalQueryEnabled ? isFetching : false,
+    isPlaceholderData: historicalQueryEnabled ? isPlaceholderData : false,
+    isChangeUnavailable,
     currentAggregateChange,
     coinsCount: coins.length,
     performance

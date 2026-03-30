@@ -14,7 +14,6 @@ import { IconCommand, IconReturn } from "symbols-react";
 import { useBottomNav } from "@/components/navigation/bottom-nav-context"
 import { useReducedMotion } from "motion/react"
 import { cn } from "@v1/ui/cn"
-import NumberFlow from "@/components/number-flow"
 
 interface FilterChip {
   key: string;
@@ -82,27 +81,42 @@ function clamp01(n: number): number {
   return n
 }
 
-interface RefreshRingProps {
-  progress: number
+function formatCountdownMmSs(remainingMs: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${String(seconds).padStart(2, "0")}`
+}
+
+interface RefreshDualRingProps {
+  /** Progress through the full poll interval (green, top layer). */
+  intervalProgress: number
+  /** Progress through the current wall-clock minute 0–1 (yellow, under green). */
+  minuteProgress: number
   sizePx?: number
   strokeWidthPx?: number
   className?: string
+  /** When true, yellow minute arc is omitted (motion safety). */
+  hideMinuteArc?: boolean
 }
 
-interface RefreshCountdownRingProps extends RefreshRingProps {
-  value: number
-  valueClassName?: string
-}
-
-function RefreshRing({
-  progress,
-  sizePx = 16,
-  strokeWidthPx = 2,
+/** Single ring: grey track, bright yellow arc, bright green arc on top (same path, z-stacked). */
+function RefreshDualRing({
+  intervalProgress,
+  minuteProgress,
+  sizePx = 28,
+  strokeWidthPx = 3.5,
   className,
-}: RefreshRingProps) {
+  hideMinuteArc = false,
+}: RefreshDualRingProps) {
+  const cx = sizePx / 2
+  const cy = sizePx / 2
   const r = (sizePx - strokeWidthPx) / 2
   const c = 2 * Math.PI * r
-  const dashOffset = c * (1 - clamp01(progress))
+  const dashOffsetGreen = c * (1 - clamp01(intervalProgress))
+  const dashOffsetYellow = c * (1 - clamp01(minuteProgress))
+
+  const ringRotate = { transform: "rotate(-90deg)", transformOrigin: "50% 50%" } as const
 
   return (
     <svg
@@ -112,66 +126,47 @@ function RefreshRing({
       aria-hidden="true"
       className={cn("shrink-0", className)}
     >
+      {/* 1. Track (back) */}
       <circle
-        cx={sizePx / 2}
-        cy={sizePx / 2}
+        cx={cx}
+        cy={cy}
         r={r}
         fill="none"
         stroke="currentColor"
         strokeWidth={strokeWidthPx}
         className="text-primary/20"
       />
+      {/* 2. Minute sweep (middle) */}
+      {!hideMinuteArc ? (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={strokeWidthPx}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={dashOffsetYellow}
+          className="text-amber-400 shadow-sm"
+          style={ringRotate}
+        />
+      ) : null}
+      {/* 3. Poll interval (front) */}
       <circle
-        cx={sizePx / 2}
-        cy={sizePx / 2}
+        cx={cx}
+        cy={cy}
         r={r}
         fill="none"
         stroke="currentColor"
         strokeWidth={strokeWidthPx}
         strokeLinecap="round"
         strokeDasharray={c}
-        strokeDashoffset={dashOffset}
-        className="text-emerald-500/70"
-        style={{
-          transform: "rotate(-90deg)",
-          transformOrigin: "50% 50%",
-        }}
+        strokeDashoffset={dashOffsetGreen}
+        className="text-emerald-500/70 shadow-sm"
+        style={ringRotate}
       />
     </svg>
-  )
-}
-
-function RefreshCountdownRing({
-  progress,
-  value,
-  sizePx = 24,
-  strokeWidthPx = 2,
-  className,
-  valueClassName,
-}: RefreshCountdownRingProps) {
-  return (
-    <div
-      className={cn("relative shrink-0", className)}
-      style={{ width: `${sizePx}px`, height: `${sizePx}px` }}
-      aria-hidden="true"
-    >
-      <RefreshRing
-        progress={progress}
-        sizePx={sizePx}
-        strokeWidthPx={strokeWidthPx}
-        className="text-primary/80"
-      />
-      <div className="absolute inset-0 flex items-center justify-center">
-        <NumberFlow
-          value={value}
-          willChange
-          className={cn(
-            "font-berkeley-mono text-[10px] font-semibold tabular-nums text-foreground",
-            valueClassName,
-          )}
-        />
-      </div>
-    </div>
   )
 }
 
@@ -361,10 +356,10 @@ export function WatchlistFilters({
     const lastUpdatedAtMs = autoRefreshStatus.lastUpdatedAtMs
     if (!lastUpdatedAtMs) {
       return {
-        lastUpdatedTitle: "Last updated",
         lastUpdatedValue: "—",
-        secondsRemaining: 0,
+        countdownLabel: "0:00",
         progress: 0,
+        minuteProgress: 0,
       }
     }
 
@@ -372,12 +367,13 @@ export function WatchlistFilters({
     const nextAtMs = lastUpdatedAtMs + intervalMs
     const remainingMs = nextAtMs - nowMs
 
-    const lastUpdatedTitle = "Last updated"
     const lastUpdatedValue = lastUpdatedFormatter.format(new Date(lastUpdatedAtMs))
     const progress = clamp01(1 - remainingMs / intervalMs)
-    const secondsRemaining = Math.max(0, Math.ceil(remainingMs / 1000))
+    // Inner ring: one full sweep per wall-clock minute (vs slow outer poll interval).
+    const minuteProgress = clamp01((nowMs % 60_000) / 60_000)
+    const countdownLabel = formatCountdownMmSs(remainingMs)
 
-    return { lastUpdatedTitle, lastUpdatedValue, secondsRemaining, progress }
+    return { lastUpdatedValue, countdownLabel, progress, minuteProgress }
   }, [autoRefreshStatus, nowMs])
 
   useEffect(() => {
@@ -536,23 +532,33 @@ export function WatchlistFilters({
 
         {refreshUi ? (
           <div className="ml-3 flex shrink-0 items-center gap-2">
-            <div className="hidden md:flex flex-col items-end leading-tight">
-              <span className="text-[10px] text-primary/40">{refreshUi.lastUpdatedTitle}</span>
-              <span className="text-[11px] tabular-nums text-primary/80">
-                {refreshUi.lastUpdatedValue}
-              </span>
-            </div>
             <div
               className={cn(
                 "flex items-center gap-2 rounded-md px-2 py-1",
                 autoRefreshStatus?.isRefreshing && "bg-primary/5",
               )}
-              aria-label={`${refreshUi.lastUpdatedTitle} ${refreshUi.lastUpdatedValue}`}
+              aria-label={`Refreshes in ${refreshUi.countdownLabel}. Last updated ${refreshUi.lastUpdatedValue}.`}
             >
-              <RefreshCountdownRing
-                progress={refreshUi.progress}
-                value={refreshUi.secondsRemaining}
-                valueClassName={autoRefreshStatus?.isRefreshing ? "text-primary/70" : undefined}
+              <div className="flex flex-col items-end leading-tight">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-primary/40">Refreshes in:</span>
+                  <span className="text-[11px] tabular-nums text-primary/80">
+                    {refreshUi.countdownLabel}
+                  </span>
+                </div>
+                <div className="hidden md:flex items-center gap-1">
+                  <span className="text-[10px] text-primary/40">Last updated:</span>
+                  <span className="text-[11px] tabular-nums text-primary/80">
+                    {refreshUi.lastUpdatedValue}
+                  </span>
+                </div>
+              </div>
+
+              <RefreshDualRing
+                intervalProgress={refreshUi.progress}
+                minuteProgress={refreshUi.minuteProgress}
+                hideMinuteArc={shouldReduceMotion}
+                className="text-primary/80"
               />
             </div>
           </div>

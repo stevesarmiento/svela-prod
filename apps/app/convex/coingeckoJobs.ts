@@ -284,32 +284,6 @@ export const refreshTopMarkets = internalAction({
     const items = mapMarketRows(all).slice(0, topN);
     await ctx.runMutation(internal.coingeckoWriters._upsertMarketDataBatch, { items });
 
-    const nextTopIds = new Set(items.map((i) => i.coingeckoId));
-    const prevTopIds = await ctx.runQuery(internal.coingeckoState._listTrackedCoinIdsByReason, {
-      reason: "top",
-      limit: 5000,
-    });
-
-    // Touch membership for current top set (batch + sequential to avoid commit throttling).
-    const touchIds = items.map((item) => item.coingeckoId);
-    const touchLastSeen = Date.now();
-    for (const idChunk of chunk(touchIds, 100)) {
-      await ctx.runMutation(internal.coingeckoState._touchTrackedCoinsBatch, {
-        coingeckoIds: idChunk,
-        reason: "top",
-        lastSeen: touchLastSeen,
-      });
-    }
-
-    // Remove stale top membership.
-    const stale = prevTopIds.filter((id) => !nextTopIds.has(id));
-    for (const idChunk of chunk(stale, 200)) {
-      await ctx.runMutation(internal.coingeckoState._removeTrackedCoinsReasonBatch, {
-        coingeckoIds: idChunk,
-        reason: "top",
-      });
-    }
-
     return { count: items.length };
   },
 });

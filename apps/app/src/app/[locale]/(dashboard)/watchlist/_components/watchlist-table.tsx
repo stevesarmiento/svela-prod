@@ -13,7 +13,10 @@ import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { AvatarCircles } from '@v1/ui/token-stacks'
 import { useWatchlistGroups, useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
-import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
+import {
+  useCoinGeckoWatchlistAggregateChartIsolated,
+  getWatchlistAggregateRangeEndMs,
+} from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
 import { useDeleteWatchlistGroup } from '@/lib/convex-hooks'
 import type { WatchlistGroup } from './watchlist-context'
 import { getTokenLogoURL } from '@/lib/logo-overrides'
@@ -30,6 +33,12 @@ interface WatchlistData {
   icon?: string
   coinsCount: number
   aggregateChange: number
+  /** True while market-chart aggregate is not ready (show skeleton unless quote estimate is shown). */
+  aggregateChangeLoading: boolean
+  /** Equal-weight quote % fallback when chart is loading or chart series empty. */
+  aggregateChangeIsEstimate: boolean
+  /** No chart aggregate for this interval (e.g. 2Y). */
+  aggregateChangeUnavailable: boolean
   totalMarketCap: number
   totalVolume: number
   coinImages: Array<{ imageUrl: string; profileUrl: string }>
@@ -40,12 +49,64 @@ interface WatchlistData {
   isLoading?: boolean
 }
 
+/** Coin row shape needed for equal-weight quote % fallback (matches useCoinGeckoWatchlistCoins). */
+interface QuoteChangeCoin {
+  quote: {
+    USD: {
+      percent_change_24h: number
+      percent_change_7d?: number
+      percent_change_30d?: number
+    }
+  }
+}
+
+function pickQuoteIntervalChange(coin: QuoteChangeCoin, timeScale: string): number | null {
+  const u = coin.quote.USD
+  switch (timeScale) {
+    case '1d':
+      return Number.isFinite(u.percent_change_24h) ? u.percent_change_24h : null
+    case '7d': {
+      const v = u.percent_change_7d ?? u.percent_change_24h
+      return typeof v === 'number' && Number.isFinite(v) ? v : null
+    }
+    case '30d': {
+      const v = u.percent_change_30d ?? u.percent_change_7d ?? u.percent_change_24h
+      return typeof v === 'number' && Number.isFinite(v) ? v : null
+    }
+    case 'max': {
+      const v = u.percent_change_30d ?? u.percent_change_7d ?? u.percent_change_24h
+      return typeof v === 'number' && Number.isFinite(v) ? v : null
+    }
+    default:
+      return Number.isFinite(u.percent_change_24h) ? u.percent_change_24h : null
+  }
+}
+
+/** Fast equal-weight % from quote fields (approximates chart aggregate while charts load). */
+function approximateEqualWeightQuoteChange(
+  coins: QuoteChangeCoin[],
+  timeScale: string,
+): number | null {
+  if (timeScale === '2y') return null
+  const vals: number[] = []
+  for (const c of coins) {
+    const p = pickQuoteIntervalChange(c, timeScale)
+    if (p !== null) vals.push(p)
+  }
+  if (vals.length === 0) return null
+  return vals.reduce((s, x) => s + x, 0) / vals.length
+}
+
 interface WatchlistTableProps {
   activeTimeScale: string
 }
 
 // ✅ IMPROVED: Convert to custom hook that returns data instead of using callback pattern
-function useWatchlistData(groupId: WatchlistGroupId): WatchlistData | null {
+function useWatchlistData(
+  groupId: WatchlistGroupId,
+  activeTimeScale: string,
+  rangeEndTimeMs: number,
+): WatchlistData | null {
   // Get watchlist coins for this group
   const groupWatchlist = useWatchlistByGroup(groupId)
   
@@ -58,15 +119,51 @@ function useWatchlistData(groupId: WatchlistGroupId): WatchlistData | null {
   // Get coin data using CoinGecko
   const { data: coins } = useCoinGeckoWatchlistCoins(coinIds)
   
-  // Get aggregate chart data using isolated CoinGecko hook
-  const { aggregateData } = useCoinGeckoWatchlistAggregateChartIsolated({
-    coins: coins || []
+  // Get aggregate chart data using isolated CoinGecko hook (time scale matches column header).
+  const {
+    aggregateData,
+    isLoading: histLoading,
+    isFetching: histFetching,
+    isPlaceholderData: histPlaceholder,
+    isChangeUnavailable,
+  } = useCoinGeckoWatchlistAggregateChartIsolated({
+    coins: coins || [],
+    timeScale: activeTimeScale,
+    rangeEndTimeMs,
   })
+
+  const quoteEstimate = useMemo(
+    () => approximateEqualWeightQuoteChange(coins ?? [], activeTimeScale),
+    [coins, activeTimeScale],
+  )
 
   // ✅ IMPROVED: Calculate data with useMemo instead of useEffect + callback
   const watchlistData = useMemo((): WatchlistData | null => {
     if (!coins?.length) {
       return null
+    }
+
+    const chartAggregateReady =
+      !isChangeUnavailable &&
+      !histPlaceholder &&
+      aggregateData.length > 0
+
+    const aggregateChangeLoading =
+      !isChangeUnavailable &&
+      coins.length > 0 &&
+      !chartAggregateReady &&
+      (histLoading || histFetching || histPlaceholder)
+
+    let aggregateChange = 0
+    let aggregateChangeIsEstimate = false
+
+    if (isChangeUnavailable) {
+      aggregateChange = 0
+    } else if (chartAggregateReady) {
+      aggregateChange = aggregateData[aggregateData.length - 1]?.value ?? 0
+    } else if (quoteEstimate !== null) {
+      aggregateChange = quoteEstimate
+      aggregateChangeIsEstimate = true
     }
 
     // Spot USD by coin id (ignore invalid / loading placeholder prices)
@@ -93,7 +190,6 @@ function useWatchlistData(groupId: WatchlistGroupId): WatchlistData | null {
     // Calculate aggregates from coin data
     const totalMarketCap = coins.reduce((sum, coin) => sum + (coin.quote.USD.market_cap || 0), 0)
     const totalVolume = coins.reduce((sum, coin) => sum + (coin.quote.USD.volume_24h || 0), 0)
-    const latestChange = aggregateData?.[aggregateData.length - 1]?.value || 0
 
     // Create coin images array for token stacks
     const coinImages = (coins || [])
@@ -116,7 +212,10 @@ function useWatchlistData(groupId: WatchlistGroupId): WatchlistData | null {
       id: groupId,
       name: '', // Will be set by parent component
       coinsCount: coins.length,
-      aggregateChange: latestChange,
+      aggregateChange,
+      aggregateChangeLoading,
+      aggregateChangeIsEstimate,
+      aggregateChangeUnavailable: isChangeUnavailable,
       totalMarketCap,
       totalVolume,
       coinImages,
@@ -124,7 +223,17 @@ function useWatchlistData(groupId: WatchlistGroupId): WatchlistData | null {
       holdingsPositionsCount,
       isLoading: false
     }
-  }, [groupId, coins, aggregateData, groupWatchlist])
+  }, [
+    groupId,
+    coins,
+    aggregateData,
+    groupWatchlist,
+    isChangeUnavailable,
+    histLoading,
+    histFetching,
+    histPlaceholder,
+    quoteEstimate,
+  ])
 
   return watchlistData
 }
@@ -133,19 +242,21 @@ function useWatchlistData(groupId: WatchlistGroupId): WatchlistData | null {
 function WatchlistCard({ 
   group, 
   activeTimeScale,
+  rangeEndTimeMs,
   onRemove,
   isRemoving,
   onHoldingsValueKnown,
 }: { 
   group: WatchlistGroup
   activeTimeScale: string
+  rangeEndTimeMs: number
   onRemove: (groupId: WatchlistGroupId) => void
   isRemoving: boolean
   /** Fired when quote/holdings data is ready so parent can sort rows by holdings value (desc). */
   onHoldingsValueKnown: (groupId: WatchlistGroupId, holdingsValueUsd: number | null) => void
 }) {
   // Use our custom hook to get watchlist data
-  const watchlistData = useWatchlistData(group._id)
+  const watchlistData = useWatchlistData(group._id, activeTimeScale, rangeEndTimeMs)
 
   useEffect(() => {
     if (watchlistData !== null) {
@@ -168,6 +279,9 @@ function WatchlistCard({
       icon: group.icon,
       coinsCount: 0,
       aggregateChange: 0,
+      aggregateChangeLoading: true,
+      aggregateChangeIsEstimate: false,
+      aggregateChangeUnavailable: false,
       totalMarketCap: 0,
       totalVolume: 0,
       coinImages: [],
@@ -288,36 +402,55 @@ function WatchlistCard({
               )}
             </div>
 
-            {/* Aggregate Change */}
+            {/* Aggregate Change (chart aggregate, or quote est. while loading / if chart empty) */}
             <div className="flex items-center justify-end">
-              {(() => {
-                const change = watchlist.aggregateChange
-                const isPositive = change > 0
-                const isNegative = change < 0
-                const isNeutral = !isPositive && !isNegative
+              {watchlist.aggregateChangeUnavailable ? (
+                <span className="font-berkeley-mono text-xs tabular-nums text-muted-foreground">
+                  N/A
+                </span>
+              ) : watchlist.aggregateChangeLoading &&
+                !watchlist.aggregateChangeIsEstimate ? (
+                <Skeleton className="h-3 w-10 rounded-full" />
+              ) : (
+                (() => {
+                  const change = watchlist.aggregateChange
+                  const isPositive = change > 0
+                  const isNegative = change < 0
+                  const isNeutral = !isPositive && !isNegative
 
-                return (
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1 font-berkeley-mono text-xs tabular-nums",
-                      isPositive && "text-emerald-500",
-                      isNegative && "text-rose-500",
-                      isNeutral && "text-muted-foreground",
-                    )}
-                  >
-                    <IconTriangleFill
-                      aria-hidden="true"
+                  return (
+                    <span
                       className={cn(
-                        "size-2 shrink-0 mr-1",
-                        isPositive && "fill-emerald-500",
-                        isNegative && "fill-rose-500 rotate-180",
-                        isNeutral && "fill-zinc-500/60",
+                        "inline-flex items-center gap-1 font-berkeley-mono text-xs tabular-nums",
+                        isPositive && "text-emerald-500",
+                        isNegative && "text-rose-500",
+                        isNeutral && "text-muted-foreground",
                       )}
-                    />
-                    {(isNegative ? Math.abs(change) : change).toFixed(2)}%
-                  </span>
-                )
-              })()}
+                      title={
+                        watchlist.aggregateChangeIsEstimate
+                          ? "Approximate equal-weight % from quote data; refines when chart data loads."
+                          : undefined
+                      }
+                    >
+                      <IconTriangleFill
+                        aria-hidden="true"
+                        className={cn(
+                          "size-2 shrink-0 mr-1",
+                          isPositive && "fill-emerald-500",
+                          isNegative && "fill-rose-500 rotate-180",
+                          isNeutral && "fill-zinc-500/60",
+                        )}
+                      />
+                      {(isNegative ? Math.abs(change) : change).toFixed(2)}%
+                      {watchlist.aggregateChangeIsEstimate ? (
+                        <span className="text-[10px] font-normal text-muted-foreground">
+                          est.
+                        </span>
+                      ) : null}
+                    </span>
+                  )
+                })()
+              )}
             </div>
 
             {/* Remove */}
@@ -372,6 +505,11 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
   const watchlistGroupsData = useWatchlistGroups()
   // TanStack Query generics can get lost across module boundaries in this file; keep this typed for build.
   const typedWatchlistGroupsData = watchlistGroupsData as Array<WatchlistGroup> | undefined
+
+  const rangeEndTimeMs = useMemo(
+    () => getWatchlistAggregateRangeEndMs(activeTimeScale),
+    [activeTimeScale],
+  )
 
   const sortedWatchlistGroups = useMemo((): WatchlistGroup[] => {
     if (!typedWatchlistGroupsData?.length) return []
@@ -440,6 +578,7 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
           key={group._id}
           group={group}
           activeTimeScale={activeTimeScale}
+          rangeEndTimeMs={rangeEndTimeMs}
           onRemove={handleRemove}
           isRemoving={removingWatchlists.has(group._id)}
           onHoldingsValueKnown={registerHoldingsValue}

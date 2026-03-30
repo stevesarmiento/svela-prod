@@ -78,6 +78,20 @@ interface CoinGeckoChartDataResult {
 
 const LATEST_POINT_UPSERT_WINDOW_SECONDS = 5 * 60
 
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function estimateAverageIntervalSeconds(epochSeconds: number[]): number | null {
+  if (epochSeconds.length < 2) return null
+  const sorted = epochSeconds.slice().sort((a, b) => a - b)
+  const first = sorted[0]!
+  const last = sorted[sorted.length - 1]!
+  const span = last - first
+  if (span <= 0) return null
+  return span / (sorted.length - 1)
+}
+
 /**
  * Parse OHLC data from /api/coingecko/ohlc route
  */
@@ -89,11 +103,12 @@ function parseOHLCData(data: OHLCAPIResponse): ParsedChartData | null {
   try {
     const ohlcPoints = data.data.map((point: OHLCDataPoint) => ({
       time: Math.floor(point.timestamp / 1000) as Time,
-      open: point.open || 0,
-      high: point.high || 0,
-      low: point.low || 0,
-      close: point.close || 0
+      open: point.open ?? point.close ?? 0,
+      high: point.high ?? point.close ?? 0,
+      low: point.low ?? point.close ?? 0,
+      close: point.close ?? 0,
     }))
+    ohlcPoints.sort((a, b) => Number(a.time) - Number(b.time))
 
     // Generate line chart from close prices
     const lineChart = ohlcPoints.map((point: { time: Time; open: number; high: number; low: number; close: number }) => ({
@@ -130,36 +145,74 @@ function parseMarketChartData(data: MarketChartAPIResponse): ParsedChartData | n
   try {
     const { prices, volumes = [] } = data.data
 
-    // Parse line chart data
-    const lineChart = prices.map((point: MarketChartPoint) => ({
-      time: Math.floor(point.time) as Time,
-      value: point.value || 0
-    }))
+    const lineChart = prices
+      .map((point: MarketChartPoint) => ({
+        time: Math.floor(point.time) as Time,
+        value: point.value ?? 0,
+      }))
+      .filter((point) => Number.isFinite(Number(point.time)) && Number.isFinite(point.value) && point.value > 0)
+      .sort((a, b) => Number(a.time) - Number(b.time))
 
     // Parse volume data
-    const volumeChart = volumes.map((point: MarketChartPoint) => ({
-      time: point.time as Time,
-      value: point.value || 0,
-      color: '#ffffff40'
+    const volumeByEpoch = new Map<number, number>()
+    for (const point of volumes) {
+      const time = Math.floor(point.time) as Time
+      const value = point.value ?? 0
+      if (!Number.isFinite(Number(time))) continue
+      if (!Number.isFinite(value) || value < 0) continue
+      volumeByEpoch.set(Number(time), value)
+    }
+
+    const volumeChart = lineChart.map((point) => ({
+      time: point.time,
+      value: volumeByEpoch.get(Number(point.time)) ?? 0,
+      color: '#ffffff40',
     }))
 
-    // Generate simple OHLC data from line chart for tooltip (no synthetic candlesticks)
-    const ohlcData = lineChart.map((point: { time: Time; value: number }) => {
-      const price = point.value
-      
+    // Build rolling-window OHLC from the price series so tooltips show real ranges.
+    // (Market-chart is a single price series; this approximates OHLC over a recent window.)
+    const epochSeconds = lineChart.map((p) => Number(p.time))
+    const avgIntervalSeconds = estimateAverageIntervalSeconds(epochSeconds) ?? 0
+    const spanSeconds = epochSeconds.length ? epochSeconds[epochSeconds.length - 1]! - epochSeconds[0]! : 0
+    const spanDays = spanSeconds > 0 ? spanSeconds / (24 * 60 * 60) : 0
+
+    const targetWindowSeconds =
+      spanDays <= 14 ? 6 * 60 * 60 : spanDays <= 120 ? 24 * 60 * 60 : 7 * 24 * 60 * 60
+
+    const rawWindowSize =
+      avgIntervalSeconds > 0 ? Math.round(targetWindowSeconds / avgIntervalSeconds) : 0
+    const windowSize = clampNumber(rawWindowSize || 2, 2, 96)
+
+    const ohlcData = lineChart.map((point, idx) => {
+      const start = Math.max(0, idx - windowSize + 1)
+      const open = lineChart[start]!.value
+      const close = point.value
+
+      let high = Number.NEGATIVE_INFINITY
+      let low = Number.POSITIVE_INFINITY
+      for (let i = start; i <= idx; i++) {
+        const v = lineChart[i]!.value
+        if (v > high) high = v
+        if (v < low) low = v
+      }
+
+      // Fallback safety for unexpected empty ranges
+      if (!Number.isFinite(high)) high = close
+      if (!Number.isFinite(low)) low = close
+
       return {
         time: point.time,
-        open: price,
-        high: price,
-        low: price,
-        close: price
+        open,
+        high,
+        low,
+        close,
       }
     })
 
     return {
       lineChart,
       volumeChart,
-      ohlcData // Simple OHLC for tooltip (all values = current price)
+      ohlcData,
     }
   } catch (error) {
     console.error('Failed to parse market chart data:', error)
@@ -291,13 +344,12 @@ function upsertLatestPricePoint(parsedData: ParsedChartData, latestPrice: number
 
     const ohlcData = parsedData.ohlcData.slice()
     if (ohlcData.length > 0) {
-      ohlcData[ohlcData.length - 1] = {
-        time: nextTime,
-        open: latestPrice,
-        high: latestPrice,
-        low: latestPrice,
-        close: latestPrice,
-      }
+      const prev = ohlcData[ohlcData.length - 1]!
+      const open = Number.isFinite(prev.open) && prev.open > 0 ? prev.open : latestPrice
+      const high = Number.isFinite(prev.high) ? Math.max(prev.high, latestPrice) : latestPrice
+      const low = Number.isFinite(prev.low) ? Math.min(prev.low, latestPrice) : latestPrice
+
+      ohlcData[ohlcData.length - 1] = { time: nextTime, open, high, low, close: latestPrice }
     }
 
     return {

@@ -71,8 +71,8 @@ export function useCoinGeckoMarketData(coinGeckoId: string) {
 
       return marketData || null
     },
-    staleTime: 1 * 60 * 1000, // 1 minute
-    refetchInterval: 2 * 60 * 1000, // 2 minutes
+    staleTime: 60 * 60 * 1000, // 1 hour
+    refetchInterval: 60 * 60 * 1000, // 1 hour
     enabled: !!coinGeckoId,
     retry: 3,
   })

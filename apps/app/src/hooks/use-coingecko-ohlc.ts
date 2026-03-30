@@ -50,8 +50,8 @@ export function useCoinGeckoOHLC(
       return response.json()
     },
     enabled: !!coinId,
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    refetchInterval: 5 * 60 * 1000, // 5 minutes
+    staleTime: 60 * 60 * 1000, // 1 hour
+    refetchInterval: 60 * 60 * 1000, // 1 hour
   })
 
   return {

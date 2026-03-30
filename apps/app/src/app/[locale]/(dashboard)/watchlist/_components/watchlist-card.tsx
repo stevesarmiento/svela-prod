@@ -12,7 +12,12 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator
 } from "@v1/ui/dropdown-menu"
-import { IconEllipsis, IconPencilTipCropCircle, IconTrashFill } from "symbols-react"
+import {
+  IconEllipsis,
+  IconPencilTipCropCircle,
+  IconTrashFill,
+  IconTriangleFill,
+} from "symbols-react"
 import { AvatarCircles } from "@v1/ui/token-stacks"
 import { useCoinGeckoWatchlistAggregateChartIsolated } from "@/hooks/use-coingecko-watchlist-aggregate-chart-isolated"
 import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
@@ -250,18 +255,24 @@ export function WatchlistCard({
                 <h3 className="font-semibold text-white text-lg truncate">{displayName}</h3>
                 <div className="flex text-[10px] flex-row items-center gap-2">
                   <div className="flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                      <span className="text-white font-berkeley-mono">
-                        {isLoading ? "—" : stats.positiveCount}
-                      </span>
-                      <span className="text-white/50">up</span>
+                    <IconTriangleFill
+                      aria-hidden
+                      className="size-2 shrink-0 fill-green-500"
+                    />
+                    <span className="text-white font-berkeley-mono">
+                      {isLoading ? "—" : stats.positiveCount}
+                    </span>
+                    <span className="text-white/50">up</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
-                      <span className="text-white font-berkeley-mono">
-                        {isLoading ? "—" : stats.negativeCount}
-                      </span>
-                      <span className="text-white/50">down</span>
+                    <IconTriangleFill
+                      aria-hidden
+                      className="size-2 shrink-0 fill-red-500 rotate-180"
+                    />
+                    <span className="text-white font-berkeley-mono">
+                      {isLoading ? "—" : stats.negativeCount}
+                    </span>
+                    <span className="text-white/50">down</span>
                   </div>
                 </div>
               </div>

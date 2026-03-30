@@ -18,7 +18,7 @@ import {
   useRemoveFromAllWatchlists,
 } from "@/lib/convex-hooks"
 
-const SCREENER_REFRESH_INTERVAL_MS = 60_000
+const SCREENER_REFRESH_INTERVAL_MS = 60 * 60 * 1000
 
 export function ScreenerPageView() {
   const [sorting, setSorting] = useState<SortingState>([])

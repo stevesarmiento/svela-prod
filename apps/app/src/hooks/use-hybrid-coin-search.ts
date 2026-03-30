@@ -213,8 +213,8 @@ export function useHybridTopCoins(limit = 25) {
       return data.data || {};
     },
     enabled: true,
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    staleTime: 60 * 60 * 1000,
+    refetchInterval: 60 * 60 * 1000,
   });
 
   // Step 2: Combine API data directly (API provides the real-time top coins)

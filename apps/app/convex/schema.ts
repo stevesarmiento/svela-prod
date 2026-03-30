@@ -262,7 +262,7 @@ export default defineSchema({
 
   trackedCoins: defineTable({
     coingeckoId: v.string(),
-    reason: v.string(), // "top" | "watchlist" (string to keep migrations simple)
+    reason: v.string(), // "watchlist" | "portfolio" (string to keep migrations simple)
     lastSeen: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),

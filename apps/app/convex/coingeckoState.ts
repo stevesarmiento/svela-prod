@@ -187,6 +187,31 @@ export const _removeTrackedCoinsReasonBatch = internalMutation({
   },
 });
 
+export const _deleteTrackedCoinsByReasonBatch = internalMutation({
+  args: {
+    reason: v.string(),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    deleted: v.number(),
+    hasMore: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = Math.min(5000, Math.max(1, args.batchSize ?? 500));
+
+    const rows = await ctx.db
+      .query("trackedCoins")
+      .withIndex("by_reason", (q) => q.eq("reason", args.reason))
+      .take(batchSize);
+
+    if (rows.length === 0) return { deleted: 0, hasMore: false };
+
+    await Promise.all(rows.map((row) => ctx.db.delete(row._id)));
+
+    return { deleted: rows.length, hasMore: rows.length === batchSize };
+  },
+});
+
 const trackedCoinRowValidator = v.object({
   _id: v.id("trackedCoins"),
   _creationTime: v.number(),

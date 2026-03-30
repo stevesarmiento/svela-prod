@@ -32,11 +32,11 @@ export const AvatarCircles = ({
       {filteredUrls.map((url, index) => (
         <div
           key={url.imageUrl}
-          className="relative size-8 rounded-full border dark:border-white/5 border-zinc-950/10 bg-background backdrop-blur-xl shadow-sm shadow-black/10"
+          className="relative size-8 overflow-hidden rounded-full bg-muted/30 shadow-sm shadow-black/10"
           style={{ zIndex: stackDepth - index }}
         >
           <Image
-            className="rounded-full"
+            className="size-full object-cover"
             src={url.imageUrl}
             width={50}
             height={50}
@@ -45,6 +45,11 @@ export const AvatarCircles = ({
               const target = e.target as HTMLImageElement;
               target.style.display = "none";
             }}
+          />
+          {/* Inset translucent rim: tints with each token’s colors (no fixed border color). */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_0_0_1.25px_rgba(0,0,0,0.55)] dark:shadow-[inset_0_0_0_0.7px_rgba(0,0,0,0.40)]"
           />
         </div>
       ))}

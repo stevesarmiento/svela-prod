@@ -82,7 +82,7 @@ export const AddWalletForm = forwardRef<AddWalletFormRef, AddWalletFormProps>(fu
           spellCheck={false}
         />
         <div className="text-xs text-muted-foreground text-pretty">
-          We’ll index the top 100 tokens for this wallet (by USD value) and refresh daily.
+          We’ll index the top 100 tokens for this wallet (by USD value) and refresh about every 4 hours.
         </div>
       </div>
 

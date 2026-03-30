@@ -24,14 +24,18 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 function getStaleWindowMs(timeframe: string): number {
   const base = timeframe.replace(/_ohlc$/, "");
-  if (base === "1") return 5 * 60 * 1000;
-  if (base === "7") return 10 * 60 * 1000;
-  if (base === "30") return 60 * 60 * 1000;
-  if (base === "90") return 60 * 60 * 1000;
-  if (base === "365") return 6 * 60 * 60 * 1000;
-  if (base === "730") return 12 * 60 * 60 * 1000;
-  if (base === "1825") return 12 * 60 * 60 * 1000;
-  if (base === "max") return 12 * 60 * 60 * 1000;
+  // Stale windows are tuned to our cron cadence:
+  // - Quotes/charts: ~hourly
+  // - Medium windows: ~4h
+  // - Long windows / OHLC: ~daily
+  if (base === "1") return 60 * 60 * 1000;
+  if (base === "7") return 60 * 60 * 1000;
+  if (base === "30") return 4 * 60 * 60 * 1000;
+  if (base === "90") return 4 * 60 * 60 * 1000;
+  if (base === "365") return 24 * 60 * 60 * 1000;
+  if (base === "730") return 24 * 60 * 60 * 1000;
+  if (base === "1825") return 24 * 60 * 60 * 1000;
+  if (base === "max") return 24 * 60 * 60 * 1000;
   return 10 * 60 * 1000;
 }
 

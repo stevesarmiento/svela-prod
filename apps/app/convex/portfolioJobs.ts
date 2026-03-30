@@ -9,6 +9,7 @@ interface PortfolioWalletForSync {
   userId: Id<"users">;
   address: string;
   isActive: boolean;
+  lastSyncedAt?: number;
 }
 
 interface ActiveWalletsPage {
@@ -258,6 +259,7 @@ export const _getPortfolioWalletById = internalQuery({
       userId: v.id("users"),
       address: v.string(),
       isActive: v.boolean(),
+      lastSyncedAt: v.optional(v.number()),
     }),
     v.null(),
   ),
@@ -269,6 +271,7 @@ export const _getPortfolioWalletById = internalQuery({
       userId: wallet.userId,
       address: wallet.address,
       isActive: wallet.isActive,
+      lastSyncedAt: wallet.lastSyncedAt,
     };
   },
 });
@@ -556,7 +559,7 @@ export const previewWalletCandidates = internalAction({
 });
 
 export const syncWallet = internalAction({
-  args: { walletId: v.id("portfolioWallets") },
+  args: { walletId: v.id("portfolioWallets"), force: v.optional(v.boolean()) },
   returns: v.object({
     walletId: v.id("portfolioWallets"),
     resolvedCount: v.number(),
@@ -577,6 +580,12 @@ export const syncWallet = internalAction({
       return { walletId: args.walletId, resolvedCount: 0, unresolvedCount: 0 };
     }
     if (!wallet.isActive) {
+      return { walletId: args.walletId, resolvedCount: 0, unresolvedCount: 0 };
+    }
+
+    const isForce = args.force === true;
+    const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+    if (!isForce && typeof wallet.lastSyncedAt === "number" && Date.now() - wallet.lastSyncedAt < FOUR_HOURS_MS) {
       return { walletId: args.walletId, resolvedCount: 0, unresolvedCount: 0 };
     }
 

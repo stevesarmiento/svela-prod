@@ -18,14 +18,15 @@ const historyPointValidator = v.object({
 const MAX_RETURN_POINTS = 512;
 
 function getStaleWindowMs(interval: string): number {
-  if (interval === "1m") return 2 * 60 * 1000;
-  if (interval === "5m") return 5 * 60 * 1000;
-  if (interval === "15m") return 10 * 60 * 1000;
-  if (interval === "30m") return 15 * 60 * 1000;
-  if (interval === "1h") return 20 * 60 * 1000;
-  if (interval === "4h") return 45 * 60 * 1000;
-  if (interval === "1d") return 3 * 60 * 60 * 1000;
-  return 45 * 60 * 1000;
+  // Stale windows are tuned to our cron cadence (generally 4h) and the natural data interval.
+  if (interval === "1m") return 10 * 60 * 1000;
+  if (interval === "5m") return 30 * 60 * 1000;
+  if (interval === "15m") return 60 * 60 * 1000;
+  if (interval === "30m") return 2 * 60 * 60 * 1000;
+  if (interval === "1h") return 2 * 60 * 60 * 1000;
+  if (interval === "4h") return 4 * 60 * 60 * 1000;
+  if (interval === "1d") return 24 * 60 * 60 * 1000;
+  return 4 * 60 * 60 * 1000;
 }
 
 export const getSpotTakerBuySellVolumeHistorySeries = query({
