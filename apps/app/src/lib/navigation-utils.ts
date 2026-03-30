@@ -14,7 +14,9 @@ export function useWatchlistPreservingNavigation() {
   }
 
   return {
-    charts: buildUrl('/charts'),
+    // Screener is an aggregate view across all watchlists; it should NOT
+    // preserve an individual watchlist selection.
+    screener: '/screener',
     watchlist: buildUrl('/watchlist'),
     watchlistComparison: buildUrl('/watchlist?wt=chart'),
     overview: buildUrl('/watchlist'),

@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useWatchlistPreservingNavigation } from "@/lib/navigation-utils";
 import { 
   IconHouseFill, 
-  IconDistributeHorizontalCenterFill,  
+  IconSafariFill,  
 } from "symbols-react";
 import {
   Sidebar,
@@ -37,9 +37,9 @@ const menuItems = [
     icon: IconHouseFill,
   },
   {
-    title: "Price Charts",
-    href: "/charts",
-    icon: IconDistributeHorizontalCenterFill,
+    title: "Screener",
+    href: "/screener",
+    icon: IconSafariFill,
   },
 ];
 
@@ -51,8 +51,8 @@ export function SideNav() {
   // Get correct URL for menu items with watchlist preservation
   const getMenuItemUrl = (href: string) => {
     switch (href) {
-      case "/charts":
-        return navigation.charts;
+      case "/screener":
+        return navigation.screener;
       case "/overview":
         return navigation.overview;
       default:

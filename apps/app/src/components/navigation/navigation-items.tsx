@@ -27,8 +27,8 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
   // Map menu items to their preserved URLs
   const getItemUrl = useCallback((item: MenuItem) => {
     switch (item.href) {
-      case "/charts":
-        return navigation.charts;
+      case "/screener":
+        return navigation.screener;
       case "/watchlist":
       case "/overview":
         return navigation.overview;
@@ -49,7 +49,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
 
         // Screener is a focused view; for now we don't show a secondary contextual menu
         // on re-click. (We can enable this later by wiring a charts context here.)
-        if (item.href === "/charts") {
+        if (item.href === "/screener") {
           return;
         }
 
@@ -66,7 +66,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
         const isActive = getCleanPath(pathname) === item.href;
         const shortcut = getShortcutForRoute(item.href);
         const tooltipLabel =
-          item.href === "/charts"
+          item.href === "/screener"
             ? "Screener"
             : isActive
               ? item.href === "/watchlist"

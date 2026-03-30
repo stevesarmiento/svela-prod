@@ -1,10 +1,5 @@
-import { ScreenerClient } from "./_components/screener-client"
-import type { Metadata } from "next"
-
-export const metadata: Metadata = {
-  title: "Screener",
-}
+import { redirect } from "next/navigation"
 
 export default function ChartsPage() {
-  return <ScreenerClient />
+  redirect("/screener")
 }

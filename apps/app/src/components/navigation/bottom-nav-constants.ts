@@ -11,7 +11,7 @@ import { getShortcutForRoute } from "@/lib/keyboard-shortcuts";
 export const BASE_ROUTES = {
   overview: "/watchlist",
   watchlist: "/watchlist", 
-  charts: "/charts",
+  screener: "/screener",
 } as const;
   
 export const MENU_ITEMS = isAlphaFeaturesEnabled()
@@ -23,7 +23,7 @@ export const MENU_ITEMS = isAlphaFeaturesEnabled()
       },
       {
         title: "Screener",
-        href: "/charts",
+        href: "/screener",
         icon: IconSafariFill,
       },
     ] as const)
@@ -35,7 +35,7 @@ export const MENU_ITEMS = isAlphaFeaturesEnabled()
       },
       {
         title: "Screener",
-        href: "/charts",
+        href: "/screener",
         icon: IconSafariFill,
       },
     ] as const);
@@ -55,9 +55,9 @@ export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
           {
             title: "Screener",
             subtitle: "Filter and browse all watchlist coins",
-            href: "/charts",
+            href: "/screener",
             icon: IconSafariFill,
-            shortcut: getShortcutForRoute("/charts"),
+            shortcut: getShortcutForRoute("/screener"),
           },
         ],
       },
@@ -83,9 +83,9 @@ export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
           {
             title: "Screener",
             subtitle: "Filter and browse all watchlist coins",
-            href: "/charts",
+            href: "/screener",
             icon: IconSafariFill,
-            shortcut: getShortcutForRoute("/charts"),
+            shortcut: getShortcutForRoute("/screener"),
           },
         ],
       },
