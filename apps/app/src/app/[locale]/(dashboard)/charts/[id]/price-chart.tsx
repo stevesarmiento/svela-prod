@@ -21,6 +21,7 @@ import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
 import { getUsdPriceFormatOptions } from '@/lib/format-usd'
 import type { Format } from '@/lib/number-flow/lite'
 import type { Time } from 'lightweight-charts'
+import { cleanTokenName, getTokenLogoURL } from '@/lib/logo-overrides'
 
 interface PriceChartProps {
   coinId: string;
@@ -321,9 +322,13 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
     highlightRange,
   })
 
-  // Get coin info from CoinGecko database
-  const coinName = coingeckoCoinData?.name || 'Loading...'
-  const coinImage = coingeckoCoinData?.logoUrl
+  // Get coin info from CoinGecko database, with local logo overrides.
+  const coinName = cleanTokenName(coingeckoCoinData?.name || 'Loading...')
+  const coinLogoUrl = getTokenLogoURL(coingeckoCoinData?.symbol, coingeckoCoinData?.logoUrl)
+  const safeCoinLogoUrl =
+    coinLogoUrl && (coinLogoUrl.startsWith('http') || coinLogoUrl.startsWith('/'))
+      ? coinLogoUrl
+      : '/favicon.ico'
   
   // React 19: Show pending states and optimize price display
   const basePrice = ohlcvDataForChart[0]?.open || ohlcvDataForChart[0]?.close || null
@@ -363,21 +368,21 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
             <CardHeader className="flex flex-row items-start justify-between p-6 pl-6">
               {/* Left side - Coin info */}
               <div className="flex gap-3 justify-between items-start w-full">
-                <div className="flex flex-col space-y-1">
+                <div className="flex flex-col">
                   <div className="flex items-center gap-2">
                     <Image 
-                      src={coinImage?.startsWith('http') || coinImage?.startsWith('/') ? coinImage : '/favicon.ico'} 
+                      src={safeCoinLogoUrl} 
                       alt={coinName} 
-                      width={20} 
-                      height={20}
-                      className="rounded-full w-3 h-3"
+                      width={24} 
+                      height={24}
+                      className="rounded-full w-4 h-4"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         target.src = '/favicon.ico';
                       }}
                     />
-                    <span className="text-gray-900 dark:text-white font-bold text-xs">{coinName}</span>
-                    <span className="text-muted-foreground text-xs">is currently</span>
+                    <span className="text-gray-900 dark:text-white font-bold text-sm">{coinName}</span>
+                    <span className="text-primary/60 text-sm">is currently</span>
                     </div>
                     <div className="flex items-center">
                       <NumberFlow
@@ -385,7 +390,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                         format={getUsdPriceFormatOptions(currentPrice) as Format}
                         willChange
                         className={cn(
-                          "text-3xl font-bold font-sans text-gray-900 dark:text-white",
+                          "text-4xl font-bold font-sans text-gray-900 dark:text-white",
                           showPending && "animate-pulse motion-reduce:animate-none",
                         )}
                       />

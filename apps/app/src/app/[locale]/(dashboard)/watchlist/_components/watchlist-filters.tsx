@@ -9,9 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@v1/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { ListFilter, X } from "lucide-react";
-import { Separator } from "@v1/ui/separator";
 import { Kbd } from "@v1/ui/kbd";
-import { IconReturn } from "symbols-react";
+import { IconCommand, IconReturn } from "symbols-react";
 import { useBottomNav } from "@/components/navigation/bottom-nav-context"
 
 interface FilterChip {
@@ -267,15 +266,15 @@ export function WatchlistFilters({
                   className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs"
                 >
                   <span>Filters</span>
-                  <Kbd>Cmd</Kbd>
+                  <Kbd><IconCommand className="h-2.5 w-2.5 fill-primary/70" /></Kbd>
                   <span>+</span>
                   <Kbd>F</Kbd>
                 </TooltipContent>
               </Tooltip>
             <PopoverContent
-              className="rounded-xl bg-white dark:bg-zinc-900 p-0 mr-2"
-              align={align === "right" ? "start" : "start"}
-              side={align === "right" ? "right" : "right"}
+              className="rounded-xl bg-white dark:bg-zinc-900 p-2 ml-2"
+              align={align === "right" ? "end" : "start"}
+              side={align === "right" ? "left" : "right"}
             >
               {/* Search Input - Top Level */}
               <div className="">
@@ -286,15 +285,13 @@ export function WatchlistFilters({
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
-                    className="h-8 border-none"
+                    className="h-8"
                   />
                   <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
                     <Kbd className="text-xs"><IconReturn className="h-2.5 w-2.5 fill-zinc-900 dark:fill-white/50" /></Kbd>
                   </div>
                 </div>
               </div>
-
-              <Separator />
 
               {/* Filter Options */}
               <div className="p-2.5 space-y-3">

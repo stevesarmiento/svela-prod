@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useState } from 'react'
-import { Watchlist } from "./watchlist"
+import { WatchlistPageView } from "./watchlist-page-view"
 import { parseAsStringLiteral, useQueryState } from "nuqs"
 
 const watchlistTabValues = ["grid", "chart"] as const
@@ -28,16 +28,13 @@ function WatchlistContent() {
 
   return (
     <div className="w-full px-4">
-      <Watchlist
+      <WatchlistPageView
         activeTimeScale={activeTimeScale}
         onTimeScaleChange={setActiveTimeScale}
         gridViewMode={viewMode}
         onGridViewModeChange={handleViewModeChange}
         contentMode={contentMode}
         onContentModeChange={handleContentModeChange}
-        onInlineChartError={() => {
-          setContentMode('cards')
-        }}
       />
     </div>
   )

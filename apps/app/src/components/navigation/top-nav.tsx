@@ -50,7 +50,7 @@ import { useRouter } from "next/navigation";
 // ];
 
 function getRouteGreeting(pathname: string): string {
-  // Remove locale prefix if present (e.g., /en/charts -> /charts)
+  // Remove locale prefix if present (e.g., /en/screener -> /screener)
   const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
   
   // Special case: Use time-based greeting for watchlist (now the default overview)
@@ -64,7 +64,9 @@ function getRouteGreeting(pathname: string): string {
   }
   
   const routeGreetings: Record<string, string> = {
-    '/charts': 'Compare Watchlists',
+    '/screener': 'Market Screener',
+    // Back-compat: `/charts` now redirects to `/screener`.
+    '/charts': 'Market Screener',
   };
 
   // Check for exact matches first
@@ -88,7 +90,7 @@ function getRouteGreeting(pathname: string): string {
 }
 
 function getStaticRouteGreeting(pathname: string): string | null {
-  // Remove locale prefix if present (e.g., /en/charts -> /charts)
+  // Remove locale prefix if present (e.g., /en/screener -> /screener)
   const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
 
   // Overview/watchlist uses time-based greeting (handled client-side to avoid hydration mismatch)
@@ -103,7 +105,9 @@ function getStaticRouteGreeting(pathname: string): string | null {
   }
 
   const routeGreetings: Record<string, string> = {
-    '/charts': 'Compare Watchlists',
+    '/screener': 'Market Screener',
+    // Back-compat: `/charts` now redirects to `/screener`.
+    '/charts': 'Market Screener',
   };
 
   if (routeGreetings[cleanPath]) {
