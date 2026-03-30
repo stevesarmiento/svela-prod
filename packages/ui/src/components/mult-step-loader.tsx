@@ -90,9 +90,13 @@ const LoaderCore = ({
             </div>
             <span
               className={cn(
-                variant === "fullscreen" ? "text-black dark:text-white" : "text-white",
+                variant === "fullscreen"
+                  ? "text-black dark:text-white"
+                  : "text-white",
                 isCurrentStep &&
-                  (variant === "fullscreen" ? "text-black dark:text-white" : "text-white"),
+                  (variant === "fullscreen"
+                    ? "text-black dark:text-white"
+                    : "text-white"),
                 isCompletedStep &&
                   (variant === "fullscreen"
                     ? "text-black dark:text-white/70"

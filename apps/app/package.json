@@ -17,9 +17,9 @@
     "import-in-the-middle": "1.11.2"
   },
   "dependencies": {
-    "@ai-sdk/react": "^3.0.143",
     "@ai-sdk/google": "^3.0.53",
     "@ai-sdk/openai": "^3.0.48",
+    "@ai-sdk/react": "^3.0.143",
     "@clerk/nextjs": "^6.39.1",
     "@convex-dev/auth": "^0.0.87",
     "@effect/platform": "^0.92.1",

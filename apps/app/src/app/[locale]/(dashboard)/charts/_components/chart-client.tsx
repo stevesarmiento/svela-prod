@@ -40,7 +40,7 @@ const ChartsContent = memo(function ChartsContent() {
 
   if (isInitialized && !hasWatchlistItems) {
     return (
-      <div className="space-y-6 w-full z-0 p-8">
+      <div className="space-y-6 w-full px-4">
         {/* Selected Group Header */}
         {selectedGroup && (
           <div className="flex items-center justify-between mb-6">
@@ -74,7 +74,7 @@ const ChartsContent = memo(function ChartsContent() {
   }
 
   return (
-    <div className="space-y-6 w-full z-0 p-0">
+    <div className="space-y-6 w-full px-4">
       <div className="space-y-14">
         {/* React 19: Show loading state during transitions */}
         <div className={isPending ? 'opacity-60 transition-opacity duration-200' : ''}>
@@ -123,7 +123,7 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
   render() {
     if (this.state.hasError) {
       return (
-        <div className="space-y-6 w-full z-08">
+        <div className="space-y-6 w-full px-4">
           <div className="flex flex-col items-center justify-center py-12">
             <div className="text-center">
               <h3 className="text-lg font-medium mb-2">Something went wrong</h3>
@@ -144,7 +144,7 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
     }
 
     return (
-      <div className="space-y-6 w-full z-0">
+      <div className="space-y-6 w-full px-4">
         {this.props.children}
       </div>
     );
@@ -154,7 +154,7 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
 // React 19: Optimized suspense fallback
 const ChartSkeleton = memo(function ChartSkeleton() {
   return (
-    <div className="space-y-6 w-full z-0 p-0">
+    <div className="space-y-6 w-full px-4">
       <div className="space-y-14">
         <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/50 overflow-hidden p-1">
           <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2" />
@@ -189,7 +189,7 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent() {
 
   if (!isInitialized) {
     return (
-      <div className="space-y-6 w-full z-0 p-0">
+      <div className="space-y-6 w-full px-4">
         <div className="space-y-14">
           <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/50 overflow-hidden p-1">
             <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2" />
@@ -205,7 +205,7 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent() {
   }
 
   return (
-    <div className="space-y-6 w-full z-0 p-0">
+    <div className="space-y-6 w-full px-4">
       <div className="space-y-4">
         {/* Comparison of all watchlists */}
         <WatchlistsGrid
