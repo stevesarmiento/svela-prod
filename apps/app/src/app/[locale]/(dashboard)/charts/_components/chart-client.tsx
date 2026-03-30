@@ -74,7 +74,7 @@ const ChartsContent = memo(function ChartsContent() {
   }
 
   return (
-    <div className="space-y-6 w-full px-4">
+    <div className="space-y-6 w-full">
       <div className="space-y-14">
         {/* React 19: Show loading state during transitions */}
         <div className={isPending ? 'opacity-60 transition-opacity duration-200' : ''}>
@@ -144,7 +144,7 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
     }
 
     return (
-      <div className="space-y-6 w-full px-4">
+      <div className="space-y-6 w-full">
         {this.props.children}
       </div>
     );
@@ -206,7 +206,7 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent() {
 
   return (
     <div className="space-y-6 w-full px-4">
-      <div className="space-y-4">
+      <div className="space-y-4 px-4">
         {/* Comparison of all watchlists */}
         <WatchlistsGrid
           onSelectWatchlist={(group) => {
