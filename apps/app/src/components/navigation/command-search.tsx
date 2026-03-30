@@ -192,7 +192,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   };
 
   return (
-    <div className="group relative rounded-[20px] bg-zinc-900/95 backdrop-blur-md border border-transparent overflow-hidden px-2 py-0 hover:bg-zinc-800/80 transition-colors duration-150 cursor-pointer
+    <div className="group relative rounded-[20px] bg-zinc-800/80 backdrop-blur-md border border-transparent overflow-hidden px-2 py-0 hover:bg-zinc-800/90 transition-colors duration-150 cursor-pointer
                    shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
       
       {/* React 19: Optimized shared background pattern */}

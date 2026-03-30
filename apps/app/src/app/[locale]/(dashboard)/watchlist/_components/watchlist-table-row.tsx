@@ -24,7 +24,7 @@ export function WatchlistTableRow({
   const hasAnySelections = selectedCoins.size > 0;
   
   const className = cn(
-    "grid gap-4 px-4 py-2.5 border-b last:border-b-0 transition-opacity duration-200",
+    "grid gap-4 px-4 py-2.5 border-b last:border-b-0 hover:ring-2 hover:ring-white/20 hover:rounded-[7px] transition-opacity duration-200",
     isLoadingRow ? "cursor-default" : "hover:bg-primary/[0.02] cursor-pointer",
     hasAnySelections ? (isSelected ? "opacity-100" : "opacity-40") : "opacity-100",
   )

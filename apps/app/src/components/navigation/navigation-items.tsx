@@ -80,9 +80,9 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
               <button
                 type="button"
                 onClick={handleItemClick(item, isActive)}
-                className={`group p-3 rounded-[14px] transition-colors duration-200 hover:bg-transparent ${
+                className={`group p-3 rounded-[13px] transition-colors duration-100 cursor-pointer active:scale-[0.98] hover:bg-transparent ${
                   isActive 
-                    ? "bg-black/10 hover:bg-black/5 dark:bg-white/10 dark:hover:bg-white/5" 
+                    ? "bg-black/10 hover:bg-black/15 dark:bg-white/10 dark:hover:bg-white/15" 
                     : ""
                 }`}
               >
