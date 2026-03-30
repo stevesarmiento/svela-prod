@@ -10,12 +10,27 @@ import { Checkbox } from "@v1/ui/checkbox"
 import type { ColumnDef } from '@tanstack/react-table'
 import { motion } from "motion/react"
 import { Spinner } from "@v1/ui/spinner"
+import dynamic from "next/dynamic"
 import type { CoinMarketData } from '@/types/coins'
 import { InlinePriceChart } from "@/components/charts/inline-price-chart"
 import { InlineSpotTakerBuySellVolumeChart } from "@/components/charts/inline-spot-taker-buy-sell-volume-chart"
 import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
 import { formatUsdPrice } from "@/lib/format-usd"
+
+function loadAnalysisDialog() {
+  return import("@/components/navigation/analysis-dialog")
+}
+
+const AnalysisDialog = dynamic(
+  () => loadAnalysisDialog().then((module) => module.AnalysisDialog),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-6 w-6 rounded-lg bg-zinc-950/10 dark:bg-white/10" />
+    ),
+  },
+)
 
 interface Ref<T> {
   current: T;
@@ -311,34 +326,59 @@ export function createWatchlistColumns({
       id: 'actions',
       header: () => (
         <div className="flex items-center justify-end gap-1">
-          Action
+          Actions
         </div>
       ),
-      cell: ({ row }) => (
-        <div className="flex items-center justify-end">
-          {row.original.quote.USD.price > 0 ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.preventDefault(); // Prevent row link navigation
-                e.stopPropagation();
-                handleRemove(row.original.id);
-              }}
-              disabled={removingCoinsRef.current.has(row.original.id.toString())}
-              className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
-              >
-              {removingCoinsRef.current.has(row.original.id.toString()) ? (
-                <Spinner size={16} />
-              ) : (
-                <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
-              )}
-            </Button>
-          ) : (
-            <Skeleton className="h-6 w-6 rounded-lg" />
-          )}
-        </div>
-      ),
+      cell: ({ row }) => {
+        const isRowLoading = row.original.quote.USD.price <= 0
+        const tokenName = cleanTokenName(row.original.name)
+        const tokenLogoUrl = getTokenLogoURL(row.original.symbol, row.original.image)
+        const safeTokenLogoUrl =
+          tokenLogoUrl && (tokenLogoUrl.startsWith("http") || tokenLogoUrl.startsWith("/"))
+            ? tokenLogoUrl
+            : undefined
+
+        return (
+          <div className="flex items-center justify-end gap-1.5">
+            {isRowLoading ? (
+              <Skeleton className="h-6 w-16 rounded-lg" />
+            ) : (
+              <>
+                <AnalysisDialog
+                  coinId={String(row.original.id)}
+                  tokenData={{
+                    name: tokenName,
+                    symbol: row.original.symbol,
+                    id: String(row.original.id),
+                    logoUrl: safeTokenLogoUrl,
+                  }}
+                  triggerVariant="icon"
+                  triggerTooltip="Analyze with AI"
+                  triggerAriaLabel="Analyze with AI"
+                />
+                {/* <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleRemove(row.original.id)
+                  }}
+                  disabled={removingCoinsRef.current.has(row.original.id.toString())}
+                  aria-label="Remove from watchlist"
+                  className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
+                >
+                  {removingCoinsRef.current.has(row.original.id.toString()) ? (
+                    <Spinner size={16} />
+                  ) : (
+                    <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
+                  )}
+                </Button> */}
+              </>
+            )}
+          </div>
+        )
+      },
     },
   ];
 }

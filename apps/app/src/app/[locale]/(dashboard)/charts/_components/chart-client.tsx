@@ -151,10 +151,14 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
   }
 }
 
+interface ChartSkeletonProps {
+  inset?: boolean;
+}
+
 // React 19: Optimized suspense fallback
-const ChartSkeleton = memo(function ChartSkeleton() {
+const ChartSkeleton = memo(function ChartSkeleton({ inset = true }: ChartSkeletonProps) {
   return (
-    <div className="space-y-6 w-full px-4">
+    <div className={`space-y-6 w-full ${inset ? 'px-4' : ''}`}>
       <div className="space-y-14">
         <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/50 overflow-hidden p-1">
           <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2" />
@@ -170,7 +174,11 @@ const ChartSkeleton = memo(function ChartSkeleton() {
 })
 
 // Comparison view component for /chart page
-const ComparisonChartsContent = memo(function ComparisonChartsContent() {
+interface ComparisonChartsContentProps {
+  inset?: boolean;
+}
+
+const ComparisonChartsContent = memo(function ComparisonChartsContent({ inset = true }: ComparisonChartsContentProps) {
   const {
     activeTimeScale,
     setActiveTimeScale,
@@ -205,8 +213,8 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent() {
   }
 
   return (
-    <div className="space-y-6 w-full px-4">
-      <div className="space-y-4 px-4">
+    <div className={`space-y-6 w-full ${inset ? 'px-4' : ''}`}>
+      <div className={`space-y-4 ${inset ? 'px-4' : ''}`}>
         {/* Comparison of all watchlists */}
         <WatchlistsGrid
           onSelectWatchlist={(group) => {
@@ -234,11 +242,15 @@ export const ChartsClient = memo(function ChartsClient() {
   )
 })
 
-export const ComparisonChartsClient = memo(function ComparisonChartsClient() {
+interface ComparisonChartsClientProps {
+  inset?: boolean;
+}
+
+export const ComparisonChartsClient = memo(function ComparisonChartsClient({ inset = true }: ComparisonChartsClientProps) {
   return (
     <ChartErrorBoundary>
-      <Suspense fallback={<ChartSkeleton />}>
-        <ComparisonChartsContent />
+      <Suspense fallback={<ChartSkeleton inset={inset} />}>
+        <ComparisonChartsContent inset={inset} />
       </Suspense>
     </ChartErrorBoundary>
   )

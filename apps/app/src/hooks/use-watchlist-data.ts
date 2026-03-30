@@ -39,44 +39,13 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     performance
   } = useCoinGeckoWatchlistCoins(watchlist);
 
-  // Create optimistic loading coins while data is being fetched
-  const isOptimisticLoading = watchlist.length > 0 && isCoinsLoading && coins.length === 0
-  const optimisticCoins = useMemo(() => {
-    if (isOptimisticLoading) {
-      // Show skeleton rows during initial load
-      return watchlist.map(coinId => ({
-        id: coinId,
-        name: 'Loading...',
-        symbol: 'Loading...',
-        image: '', // Empty image triggers skeleton loading
-        slug: `coin-${coinId}`,
-        cmc_rank: 0,
-        circulating_supply: 0,
-        max_supply: null,
-        quote: {
-          USD: {
-            price: 0, // 0 price triggers skeleton loading
-            volume_24h: 0,
-            market_cap: 0,
-            percent_change_24h: 0,
-          }
-        }
-      } as CoinMarketData))
-    }
-    return coins
-  }, [isOptimisticLoading, coins, watchlist])
-
   // Filter and sort coins based on filter state
   const filteredCoins = useMemo(() => {
-    if (!optimisticCoins.length) return [];
-
-    // While CoinGecko quotes are still loading, don't show an empty-state flicker.
-    // Render skeleton rows immediately; apply filters once real quotes arrive.
-    if (isOptimisticLoading) return optimisticCoins
+    if (!coins.length) return [];
     
     const searchLower = filters.searchText ? filters.searchText.toLowerCase() : null
 
-    const filtered = optimisticCoins.filter(coin => {
+    const filtered = coins.filter(coin => {
       const usd = coin.quote.USD
       const price = usd.price
       const marketCap = usd.market_cap
@@ -147,7 +116,7 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     });
     
     return filtered;
-  }, [optimisticCoins, filters, isOptimisticLoading]);
+  }, [coins, filters]);
 
   // Filter handlers
   const handleClearAllFilters = useCallback(() => {

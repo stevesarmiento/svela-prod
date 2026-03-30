@@ -450,14 +450,14 @@ export function WatchlistMultiLineChart({
       ))}
       
       {/* Legend */}
-      <div className="flex flex-col col-span-3 p-6 pt-6 space-y-2">           
-        <div className="flex flex-col gap-2 space-y-3">
+      <div className="flex flex-col col-span-3 p-4 space-y-2">           
+        <div className="flex flex-col gap-1">
           {latestValues.map((watchlist) => (
             <div key={watchlist.id}>
               <button
                 type="button"
                 className={cn(
-                  "relative -m-2 flex w-full items-center gap-2 overflow-hidden rounded-lg p-0 text-left group hover:bg-foreground/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                  "relative flex h-8 w-full flex-1 items-center gap-1 overflow-hidden border border-zinc-200 dark:border-zinc-800/70 rounded-lg",
                   hoveredWatchlist && hoveredWatchlist !== watchlist.id ? "opacity-40" : "opacity-100",
                   hoveredWatchlist === watchlist.id ? "bg-foreground/5" : ""
                 )}
@@ -469,10 +469,11 @@ export function WatchlistMultiLineChart({
                 onClick={() => onSelectWatchlist?.(watchlist.id)}
               >
                 <div 
-                  className="w-1 h-9 rounded-full"
+                  className="absolute left-1.5 h-3 w-1.5 rounded-full border border-black"
                   style={{ backgroundColor: watchlist.color }}
                 />
-                <div className="flex flex-row items-center gap-2 flex-1 ml-2">
+                
+                <div className="flex flex-row items-center gap-2 flex-1 ml-6">
                   <WatchlistGroupIcon 
                     icon={watchlist.icon} 
                     className="w-4 h-4 text-foreground/70"

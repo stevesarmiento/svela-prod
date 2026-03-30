@@ -47,7 +47,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
           return;
         }
 
-        // Charts is an aggregate view; for now we don't show a secondary contextual menu
+        // Screener is a focused view; for now we don't show a secondary contextual menu
         // on re-click. (We can enable this later by wiring a charts context here.)
         if (item.href === "/charts") {
           return;
@@ -67,7 +67,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
         const shortcut = getShortcutForRoute(item.href);
         const tooltipLabel =
           item.href === "/charts"
-            ? "Aggregate"
+            ? "Screener"
             : isActive
               ? item.href === "/watchlist"
                 ? "Watchlists"

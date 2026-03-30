@@ -1,9 +1,8 @@
 import { 
   // IconCompassDrawing, 
   IconBookmarkFill, 
-  IconDistributeHorizontalCenterFill, 
   IconWalletBifoldFill, 
-  IconChartLineUptrendXyaxis, 
+  IconSafariFill, 
   IconCaptionsBubbleFill } from "symbols-react";
 import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
 import { getShortcutForRoute } from "@/lib/keyboard-shortcuts";
@@ -23,9 +22,9 @@ export const MENU_ITEMS = isAlphaFeaturesEnabled()
         icon: IconBookmarkFill,
       },
       {
-        title: "Charts",
+        title: "Screener",
         href: "/charts",
-        icon: IconDistributeHorizontalCenterFill,
+        icon: IconSafariFill,
       },
     ] as const)
   : ([
@@ -35,9 +34,9 @@ export const MENU_ITEMS = isAlphaFeaturesEnabled()
         icon: IconBookmarkFill,
       },
       {
-        title: "Charts",
+        title: "Screener",
         href: "/charts",
-        icon: IconDistributeHorizontalCenterFill,
+        icon: IconSafariFill,
       },
     ] as const);
   
@@ -54,10 +53,10 @@ export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
             shortcut: getShortcutForRoute("/watchlist"),
           },
           {
-            title: "Charts",
-            subtitle: "Price charts and market data",
+            title: "Screener",
+            subtitle: "Filter and browse all watchlist coins",
             href: "/charts",
-            icon: IconDistributeHorizontalCenterFill,
+            icon: IconSafariFill,
             shortcut: getShortcutForRoute("/charts"),
           },
         ],
@@ -82,10 +81,10 @@ export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
             shortcut: getShortcutForRoute("/watchlist"),
           },
           {
-            title: "Charts",
-            subtitle: "Price charts and market data",
+            title: "Screener",
+            subtitle: "Filter and browse all watchlist coins",
             href: "/charts",
-            icon: IconDistributeHorizontalCenterFill,
+            icon: IconSafariFill,
             shortcut: getShortcutForRoute("/charts"),
           },
         ],
@@ -97,13 +96,13 @@ export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
             title: "Bitcoin Price",
             subtitle: "Get current BTC price",
             action: "bitcoin-price",
-            icon: IconChartLineUptrendXyaxis,
+            icon: IconSafariFill,
           },
           {
             title: "Ethereum Price",
             subtitle: "Get current ETH price",
             action: "ethereum-price",
-            icon: IconChartLineUptrendXyaxis,
+            icon: IconSafariFill,
           },
           {
             title: "Market Overview",
