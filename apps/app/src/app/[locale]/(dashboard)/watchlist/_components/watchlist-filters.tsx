@@ -91,6 +91,175 @@ function formatCountdownMmSs(remainingMs: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`
 }
 
+function normalizeFilterQuery(input: string): string {
+  return input.trim().toLowerCase().replace(/\s+/g, " ")
+}
+
+function stripLeadingThe(input: string): string {
+  return input.replace(/^the\s+/, "")
+}
+
+function splitFilterClauses(input: string): Array<string> {
+  return input
+    .split(/[,;]+/g)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+}
+
+function levenshteinDistance(a: string, b: string): number {
+  if (a === b) return 0
+  if (a.length === 0) return b.length
+  if (b.length === 0) return a.length
+
+  const prev: Array<number> = Array.from({ length: b.length + 1 }, (_, i) => i)
+  const curr: Array<number> = Array.from({ length: b.length + 1 }, () => 0)
+
+  for (let i = 1; i <= a.length; i += 1) {
+    curr[0] = i
+    const ai = a.charCodeAt(i - 1)
+    for (let j = 1; j <= b.length; j += 1) {
+      const cost = ai === b.charCodeAt(j - 1) ? 0 : 1
+      curr[j] = Math.min(
+        prev[j] + 1, // deletion
+        curr[j - 1] + 1, // insertion
+        prev[j - 1] + cost, // substitution
+      )
+    }
+    for (let j = 0; j <= b.length; j += 1) prev[j] = curr[j]
+  }
+
+  return prev[b.length] ?? Math.max(a.length, b.length)
+}
+
+type NaturalLanguageAction =
+  | { kind: "watchlist"; watchlistGroupId: string }
+  | { kind: "change"; value: "all" | "positive" | "negative" }
+  | { kind: "sortBy"; value: "name" | "price" | "change" | "marketCap" | "volume" }
+  | { kind: "sortOrder"; value: "asc" | "desc" }
+
+function parseNaturalLanguageActions(args: {
+  rawInput: string
+  watchlistGroupIndex: Array<{
+    id: string
+    name: string
+    normalizedName: string
+    normalizedNameNoThe: string
+  }>
+}): Array<NaturalLanguageAction> {
+  const clauses = splitFilterClauses(args.rawInput)
+  const actions: Array<NaturalLanguageAction> = []
+
+  for (const clauseRaw of clauses) {
+    const clause = normalizeFilterQuery(clauseRaw)
+    if (!clause) continue
+    const clauseNoThe = stripLeadingThe(clause)
+
+    // 1) Watchlist name match (exact -> startsWith -> small typo tolerance)
+    if (clause.length >= 2) {
+      const exact = args.watchlistGroupIndex.filter(
+        (g) => g.normalizedName === clause || g.normalizedNameNoThe === clauseNoThe,
+      )
+      if (exact.length === 1) {
+        actions.push({ kind: "watchlist", watchlistGroupId: exact[0]!.id })
+        continue
+      }
+
+      const prefix = args.watchlistGroupIndex.filter(
+        (g) => g.normalizedName.startsWith(clause) || g.normalizedNameNoThe.startsWith(clauseNoThe),
+      )
+      if (prefix.length === 1) {
+        actions.push({ kind: "watchlist", watchlistGroupId: prefix[0]!.id })
+        continue
+      }
+
+      // Example: watchlist name "the majors" should match query "majors"
+      if (clauseNoThe.length >= 3) {
+        const contains = args.watchlistGroupIndex.filter(
+          (g) => g.normalizedName.includes(clause) || g.normalizedNameNoThe.includes(clauseNoThe),
+        )
+        if (contains.length === 1) {
+          actions.push({ kind: "watchlist", watchlistGroupId: contains[0]!.id })
+          continue
+        }
+      }
+
+      // Helpful for small typos (e.g. "ownerhip" -> "ownership")
+      if (clause.length >= 6) {
+        let best: { id: string; dist: number } | null = null
+        let bestIsTied = false
+
+        for (const g of args.watchlistGroupIndex) {
+          const dist = Math.min(
+            levenshteinDistance(clause, g.normalizedName),
+            levenshteinDistance(clauseNoThe, g.normalizedNameNoThe),
+          )
+          if (dist > 2) continue
+          if (!best || dist < best.dist) {
+            best = { id: g.id, dist }
+            bestIsTied = false
+          } else if (best && dist === best.dist) {
+            bestIsTied = true
+          }
+        }
+
+        if (best && !bestIsTied) {
+          actions.push({ kind: "watchlist", watchlistGroupId: best.id })
+          continue
+        }
+      }
+    }
+
+    // 2) 24h change
+    if (["positive", "pos", "up", "+", "green"].includes(clause)) {
+      actions.push({ kind: "change", value: "positive" })
+      continue
+    }
+    if (["negative", "neg", "down", "-", "red"].includes(clause)) {
+      actions.push({ kind: "change", value: "negative" })
+      continue
+    }
+    if (["all", "any"].includes(clause)) {
+      actions.push({ kind: "change", value: "all" })
+      continue
+    }
+
+    // 3) Sort phrases. Support:
+    // - "sort marketcap desc"
+    // - "marketcap descending"
+    // - "market cap decending" (common misspelling)
+    const clauseForSort = clause.replace(/^sort(\s+by)?\s+/, "")
+
+    const sortOrderValue =
+      clauseForSort.includes("descending") ||
+      clauseForSort.includes("desc") ||
+      clauseForSort.includes("decending")
+        ? ("desc" as const)
+        : clauseForSort.includes("ascending") || clauseForSort.includes("asc")
+          ? ("asc" as const)
+          : null
+
+    const sortByValue = /\bmarket\s*cap\b|\bmarketcap\b|\bmcap\b/.test(clauseForSort)
+      ? ("marketCap" as const)
+      : /\bvolume\b|\bvol\b/.test(clauseForSort)
+        ? ("volume" as const)
+        : /\bprice\b/.test(clauseForSort)
+          ? ("price" as const)
+          : /\bchange\b|\b24h\b/.test(clauseForSort)
+            ? ("change" as const)
+            : /\bname\b/.test(clauseForSort)
+              ? ("name" as const)
+              : null
+
+    if (sortByValue || sortOrderValue) {
+      if (sortByValue) actions.push({ kind: "sortBy", value: sortByValue })
+      if (sortOrderValue) actions.push({ kind: "sortOrder", value: sortOrderValue })
+      continue
+    }
+  }
+
+  return actions
+}
+
 interface RefreshDualRingProps {
   /** Progress through the full poll interval (green, top layer). */
   intervalProgress: number
@@ -202,11 +371,23 @@ export function WatchlistFilters({
 }: WatchlistFiltersProps) {
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [inputValue, setInputValue] = useState(searchText);
+  const [isInterpreting, setIsInterpreting] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const { setNavigationMode, setSelectionMode } = useBottomNav()
   const shouldReduceMotion = useReducedMotion() ?? false
   const [nowMs, setNowMs] = useState(() => Date.now())
+
+  const intentConfidenceThreshold = 0.6
+
+  const watchlistGroupIndex = useMemo(() => {
+    return watchlistGroupOptions.map((g) => ({
+      id: g.id,
+      name: g.name,
+      normalizedName: normalizeFilterQuery(g.name),
+      normalizedNameNoThe: stripLeadingThe(normalizeFilterQuery(g.name)),
+    }))
+  }, [watchlistGroupOptions])
 
   const selectedWatchlistGroupName = useMemo(() => {
     if (!watchlistGroupId) return null
@@ -373,8 +554,138 @@ export function WatchlistFilters({
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      onSearchTextChange(inputValue);
-      setIsFilterPopoverOpen(false);
+      e.preventDefault()
+      const raw = inputValue.trim()
+      if (!raw) {
+        setIsFilterPopoverOpen(false)
+        return
+      }
+
+      if (isInterpreting) return
+
+      const actions = parseNaturalLanguageActions({
+        rawInput: raw,
+        watchlistGroupIndex,
+      })
+
+      let didApplyNonSearchAction = false
+      for (const action of actions) {
+        if (action.kind === "watchlist") {
+          onWatchlistGroupIdChange(action.watchlistGroupId)
+          didApplyNonSearchAction = true
+          continue
+        }
+        if (action.kind === "change") {
+          onChangeFilterChange(action.value)
+          didApplyNonSearchAction = true
+          continue
+        }
+        if (action.kind === "sortBy") {
+          onSortByChange(action.value)
+          didApplyNonSearchAction = true
+          continue
+        }
+        if (action.kind === "sortOrder") {
+          onSortOrderChange(action.value)
+          didApplyNonSearchAction = true
+        }
+      }
+
+      if (didApplyNonSearchAction) {
+        setInputValue("")
+        setIsFilterPopoverOpen(false)
+        return
+      }
+
+      // If the local fast-path can’t map intent, ask the server interpreter.
+      setIsInterpreting(true)
+      void (async () => {
+        try {
+          const res = await fetch("/api/watchlist-filters", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              text: raw,
+              watchlistGroups: watchlistGroupOptions,
+              current: {
+                watchlistGroupId,
+                changeFilter,
+                sortBy,
+                sortOrder,
+              },
+            }),
+          })
+
+          if (!res.ok) {
+            onSearchTextChange(raw)
+            setIsFilterPopoverOpen(false)
+            return
+          }
+
+          const data = (await res.json()) as unknown
+          const obj = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null
+          const confidence = typeof obj?.confidence === "number" ? obj.confidence : 0
+          const serverActions = Array.isArray(obj?.actions) ? (obj?.actions as Array<unknown>) : []
+          const fallbackSearchText =
+            typeof obj?.fallbackSearchText === "string" ? obj.fallbackSearchText : null
+
+          if (serverActions.length === 0 || confidence < intentConfidenceThreshold) {
+            onSearchTextChange(fallbackSearchText ?? raw)
+            setIsFilterPopoverOpen(false)
+            return
+          }
+
+          let didApply = false
+          for (const a of serverActions) {
+            if (typeof a !== "object" || a === null) continue
+            const kind = (a as Record<string, unknown>).kind
+            const value = (a as Record<string, unknown>).value
+
+            if (kind === "watchlistGroupId") {
+              if (value === null || typeof value === "string") {
+                onWatchlistGroupIdChange(value)
+                didApply = true
+              }
+              continue
+            }
+            if (kind === "changeFilter") {
+              if (value === "all" || value === "positive" || value === "negative") {
+                onChangeFilterChange(value)
+                didApply = true
+              }
+              continue
+            }
+            if (kind === "sortBy") {
+              if (
+                value === "name" ||
+                value === "price" ||
+                value === "change" ||
+                value === "marketCap" ||
+                value === "volume"
+              ) {
+                onSortByChange(value)
+                didApply = true
+              }
+              continue
+            }
+            if (kind === "sortOrder") {
+              if (value === "asc" || value === "desc") {
+                onSortOrderChange(value)
+                didApply = true
+              }
+            }
+          }
+
+          if (didApply) setInputValue("")
+          else onSearchTextChange(raw)
+          setIsFilterPopoverOpen(false)
+        } catch {
+          onSearchTextChange(raw)
+          setIsFilterPopoverOpen(false)
+        } finally {
+          setIsInterpreting(false)
+        }
+      })()
     } else if (e.key === 'Escape') {
       setIsFilterPopoverOpen(false);
     }
@@ -468,14 +779,21 @@ export function WatchlistFilters({
                 <div className="relative">
                   <Input
                     ref={inputRef}
-                    placeholder="Search coins by name or symbol..."
+                    placeholder='Search coins, or type “majors”, “ownership”, “marketcap descending”…'
                     value={inputValue}
+                    disabled={isInterpreting}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={handleSearchKeyDown}
                     className="h-8"
                   />
                   <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
-                    <Kbd className="text-xs"><IconReturn className="h-2.5 w-2.5 fill-zinc-900 dark:fill-white/50" /></Kbd>
+                    {isInterpreting ? (
+                      <span className="text-[10px] text-muted-foreground">Interpreting…</span>
+                    ) : (
+                      <Kbd className="text-xs">
+                        <IconReturn className="h-2.5 w-2.5 fill-zinc-900 dark:fill-white/50" />
+                      </Kbd>
+                    )}
                   </div>
                 </div>
               </div>
