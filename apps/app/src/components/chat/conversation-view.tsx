@@ -2,12 +2,12 @@
 
 import { ChatMessageList } from "./chat-message-list";
 import { ChatInput } from "./chat-input";
-import type { Message } from "ai";
+import type { UIMessage } from "ai";
 
 import type { ComponentData } from "./types";
 
 interface ConversationViewProps {
-  messages: Message[];
+  messages: UIMessage[];
   input: string;
   isLoading: boolean;
   isDataLoading: boolean;

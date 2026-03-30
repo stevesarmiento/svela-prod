@@ -495,7 +495,7 @@ export async function POST(req: Request) {
         content: prompt 
       }],
       temperature: 0.3, // Lower temperature for more focused technical analysis
-      maxTokens: 5000, // Increased for more detailed analysis
+      maxOutputTokens: 5000, // Increased for more detailed analysis
       onFinish: ({ text, finishReason }) => {
         console.log('Finish reason:', finishReason) // This will tell you why it stopped
         console.log('Response length:', text.length)

@@ -419,7 +419,7 @@ export class EnhancedChatHandler {
       contextMessageLength: contextualMessage.length,
       model: 'gemini-2.5-flash',
       temperature: 0.3,
-      maxTokens: 1000
+      maxOutputTokens: 1000
     });
 
     try {
@@ -430,7 +430,7 @@ export class EnhancedChatHandler {
           { role: 'user', content: contextualMessage }
         ],
         temperature: 0.3,
-        maxTokens: 1000,
+        maxOutputTokens: 1000,
       });
 
       console.log('📡 Streaming response from Gemini...');

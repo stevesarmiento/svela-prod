@@ -1,4 +1,4 @@
-import { streamText } from 'ai';
+import { streamText, convertToModelMessages, type ModelMessage, type UIMessage } from 'ai';
 import { gemini } from '@/lib/gemini';
 import { capxMemoryService, type CapxMemory } from '@/lib/capx-memory';
 // Removed storeMemoryWithMetadata import - using direct service instead
@@ -12,23 +12,57 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Feature not available' }, { status: 403 });
   }
   try {
-    const { messages, userId } = await req.json();
+    const body = (await req.json()) as {
+      messages: unknown;
+      userId?: string | null;
+    };
+
+    const { messages: rawMessages, userId } = body;
     
-    if (!Array.isArray(messages)) {
-      console.error('Invalid messages format - not an array:', messages);
+    if (!Array.isArray(rawMessages)) {
+      console.error('Invalid messages format - not an array:', rawMessages);
       return NextResponse.json({ error: 'Invalid messages format' }, { status: 400 });
     }
     
-    console.log('📩 Received chat request with', messages.length, 'messages');
-    
-    const latestUserMessage = messages.filter(m => m.role === 'user').pop();
-    
-    if (!latestUserMessage) {
+    const isUIMessage = (value: unknown): value is UIMessage =>
+      typeof value === 'object' &&
+      value !== null &&
+      typeof (value as { role?: unknown }).role === 'string' &&
+      Array.isArray((value as { parts?: unknown }).parts);
+
+    const uiMessages = rawMessages.every(isUIMessage) ? (rawMessages as UIMessage[]) : null;
+    const modelMessages: ModelMessage[] = uiMessages
+      ? await convertToModelMessages(
+          uiMessages.map(({ id: _id, ...rest }) => rest),
+        )
+      : (rawMessages as ModelMessage[]);
+
+    console.log('📩 Received chat request with', modelMessages.length, 'messages');
+
+    const latestUserTextOrNull = (() => {
+      if (uiMessages) {
+        const message = uiMessages.filter((m) => m.role === 'user').pop()
+        if (!message) return null
+        return message.parts
+          .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
+          .map((part) => part.text)
+          .join('')
+      }
+
+      const message = modelMessages.filter((m) => m.role === 'user').pop()
+      if (!message) return null
+
+      return typeof message.content === 'string' ? message.content : ''
+    })()
+
+    if (latestUserTextOrNull === null) {
       console.error('No user message found in request');
       return NextResponse.json({ error: 'No user message found' }, { status: 400 });
     }
-    
-    console.log('🔍 Processing user message:', latestUserMessage.content);
+
+    const latestUserText = latestUserTextOrNull
+
+    console.log('🔍 Processing user message:', latestUserText);
     
     // Retrieve relevant memories if userId is provided and API key is available
     const memoryUserId =
@@ -43,7 +77,7 @@ export async function POST(req: Request) {
       ? capxMemoryService
           .retrieveContext(
             memoryUserId!,
-            latestUserMessage.content,
+            latestUserText,
             5, // Get up to 5 relevant memories
           )
           .then((memoryContext) => memoryContext.memories)
@@ -59,7 +93,7 @@ export async function POST(req: Request) {
     try {
       const enhancedResponsePromise = import('@/lib/enhanced-chat-handler').then(
         ({ enhancedChatHandler }) =>
-          enhancedChatHandler.processChat(latestUserMessage.content),
+          enhancedChatHandler.processChat(latestUserText),
       );
 
       const [enhancedResponse, relevantMemories] = await Promise.all([
@@ -133,18 +167,16 @@ ${enhancedResponse.textResponse}${memoryContext}`;
           },
           {
             role: 'user',
-            content: latestUserMessage.content,
+            content: latestUserText,
           },
         ],
         temperature: 0.1, // Very low temperature since content is pre-generated
-        maxTokens: 3000,
+        maxOutputTokens: 3000,
       });
 
-      const response = result.toDataStreamResponse({
+      const response = result.toUIMessageStreamResponse({
+        originalMessages: uiMessages ?? undefined,
         headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Cache-Control': 'no-cache, no-transform',
-          'X-Content-Type-Options': 'nosniff',
           'X-Enhanced-Chat': 'true',
         },
       });
@@ -178,7 +210,7 @@ ${enhancedResponse.textResponse}${memoryContext}`;
             const [userMemoryResult, responseMemoryResult] = await Promise.all([
               capxMemoryService.addMemory(
                 userIdForMemory,
-                `User asked: "${latestUserMessage.content}"`,
+                `User asked: "${latestUserText}"`,
                 {
                   category: 'chat',
                   source: 'chat',
@@ -289,18 +321,14 @@ ${fallbackMemoryContext}Provide clear, concise, and helpful responses about cryp
             role: 'system',
             content: basicSystemPrompt,
           },
-          ...messages,
+          ...modelMessages,
         ],
         temperature: 0.3,
-        maxTokens: 3000,
+        maxOutputTokens: 3000,
       });
 
-      const response = result.toDataStreamResponse({
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Cache-Control': 'no-cache, no-transform',
-          'X-Content-Type-Options': 'nosniff',
-        },
+      const response = result.toUIMessageStreamResponse({
+        originalMessages: uiMessages ?? undefined,
       });
 
       // Store the conversation in memory for fallback case
@@ -313,7 +341,7 @@ ${fallbackMemoryContext}Provide clear, concise, and helpful responses about cryp
             // Store the user's query with fallback context
             await capxMemoryService.addMemory(
               userIdForMemory,
-              `User asked: "${latestUserMessage.content}"`,
+              `User asked: "${latestUserText}"`,
               {
                 source: 'chat_query_fallback',
                 timestamp: Date.now(),

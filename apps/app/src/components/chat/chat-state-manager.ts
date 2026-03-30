@@ -1,8 +1,8 @@
-import type { Message } from "ai";
+import type { UIMessage } from "ai";
 import type { ComponentData } from "./types";
 
 export interface ChatState {
-  messages: Message[];
+  messages: UIMessage[];
   isLoading: boolean;
   isDataLoading: boolean;
   messageComponents: Record<string, ComponentData>;
