@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { Input } from "@v1/ui/input";
 import { Button } from "@v1/ui/button";
 import { Badge } from "@v1/ui/badge";
@@ -12,11 +12,23 @@ import { ListFilter, X } from "lucide-react";
 import { Kbd } from "@v1/ui/kbd";
 import { IconCommand, IconReturn } from "symbols-react";
 import { useBottomNav } from "@/components/navigation/bottom-nav-context"
+import { useReducedMotion } from "motion/react"
+import { cn } from "@v1/ui/cn"
+import NumberFlow from "@/components/number-flow"
 
 interface FilterChip {
   key: string;
   label: string;
   value: string;
+}
+
+interface AutoRefreshStatus {
+  /** Milliseconds since epoch; typically from TanStack Query `dataUpdatedAt`. */
+  lastUpdatedAtMs: number | null;
+  /** Expected poll interval for the underlying data source. */
+  refreshIntervalMs: number;
+  /** Optional: whether a refresh is currently in-flight. */
+  isRefreshing?: boolean;
 }
 
 interface WatchlistFiltersProps {
@@ -52,6 +64,115 @@ interface WatchlistFiltersProps {
 
   // Layout
   align?: "left" | "right";
+
+  // Optional: auto-refresh indicator (top-right).
+  autoRefreshStatus?: AutoRefreshStatus;
+}
+
+const lastUpdatedFormatter = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "2-digit",
+  hour: "numeric",
+  minute: "2-digit",
+})
+
+function clamp01(n: number): number {
+  if (n < 0) return 0
+  if (n > 1) return 1
+  return n
+}
+
+interface RefreshRingProps {
+  progress: number
+  sizePx?: number
+  strokeWidthPx?: number
+  className?: string
+}
+
+interface RefreshCountdownRingProps extends RefreshRingProps {
+  value: number
+  valueClassName?: string
+}
+
+function RefreshRing({
+  progress,
+  sizePx = 16,
+  strokeWidthPx = 2,
+  className,
+}: RefreshRingProps) {
+  const r = (sizePx - strokeWidthPx) / 2
+  const c = 2 * Math.PI * r
+  const dashOffset = c * (1 - clamp01(progress))
+
+  return (
+    <svg
+      width={sizePx}
+      height={sizePx}
+      viewBox={`0 0 ${sizePx} ${sizePx}`}
+      aria-hidden="true"
+      className={cn("shrink-0", className)}
+    >
+      <circle
+        cx={sizePx / 2}
+        cy={sizePx / 2}
+        r={r}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidthPx}
+        className="text-primary/20"
+      />
+      <circle
+        cx={sizePx / 2}
+        cy={sizePx / 2}
+        r={r}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidthPx}
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={dashOffset}
+        className="text-emerald-500/70"
+        style={{
+          transform: "rotate(-90deg)",
+          transformOrigin: "50% 50%",
+        }}
+      />
+    </svg>
+  )
+}
+
+function RefreshCountdownRing({
+  progress,
+  value,
+  sizePx = 24,
+  strokeWidthPx = 2,
+  className,
+  valueClassName,
+}: RefreshCountdownRingProps) {
+  return (
+    <div
+      className={cn("relative shrink-0", className)}
+      style={{ width: `${sizePx}px`, height: `${sizePx}px` }}
+      aria-hidden="true"
+    >
+      <RefreshRing
+        progress={progress}
+        sizePx={sizePx}
+        strokeWidthPx={strokeWidthPx}
+        className="text-primary/80"
+      />
+      <div className="absolute inset-0 flex items-center justify-center">
+        <NumberFlow
+          value={value}
+          willChange
+          className={cn(
+            "font-berkeley-mono text-[10px] font-semibold tabular-nums text-foreground",
+            valueClassName,
+          )}
+        />
+      </div>
+    </div>
+  )
 }
 
 export function WatchlistFilters({
@@ -76,12 +197,15 @@ export function WatchlistFilters({
   onRemoveSelected,
   isRemoving,
   align = "left",
+  autoRefreshStatus,
 }: WatchlistFiltersProps) {
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [inputValue, setInputValue] = useState(searchText);
   const inputRef = useRef<HTMLInputElement>(null);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const { setNavigationMode, setSelectionMode } = useBottomNav()
+  const shouldReduceMotion = useReducedMotion() ?? false
+  const [nowMs, setNowMs] = useState(() => Date.now())
 
   // Keyboard shortcut handler
   useEffect(() => {
@@ -231,6 +355,39 @@ export function WatchlistFilters({
   const hasActiveFilters = activeFilters.length > 0;
   const hasSelectedCoins = selectedCoins.size > 0;
 
+  const refreshUi = useMemo(() => {
+    if (!autoRefreshStatus) return null
+
+    const lastUpdatedAtMs = autoRefreshStatus.lastUpdatedAtMs
+    if (!lastUpdatedAtMs) {
+      return {
+        lastUpdatedTitle: "Last updated",
+        lastUpdatedValue: "—",
+        secondsRemaining: 0,
+        progress: 0,
+      }
+    }
+
+    const intervalMs = Math.max(5_000, autoRefreshStatus.refreshIntervalMs)
+    const nextAtMs = lastUpdatedAtMs + intervalMs
+    const remainingMs = nextAtMs - nowMs
+
+    const lastUpdatedTitle = "Last updated"
+    const lastUpdatedValue = lastUpdatedFormatter.format(new Date(lastUpdatedAtMs))
+    const progress = clamp01(1 - remainingMs / intervalMs)
+    const secondsRemaining = Math.max(0, Math.ceil(remainingMs / 1000))
+
+    return { lastUpdatedTitle, lastUpdatedValue, secondsRemaining, progress }
+  }, [autoRefreshStatus, nowMs])
+
+  useEffect(() => {
+    if (!autoRefreshStatus?.lastUpdatedAtMs) return
+    const tickMs = shouldReduceMotion ? 1000 : 250
+    setNowMs(Date.now())
+    const id = window.setInterval(() => setNowMs(Date.now()), tickMs)
+    return () => window.clearInterval(id)
+  }, [autoRefreshStatus?.lastUpdatedAtMs, autoRefreshStatus?.refreshIntervalMs, shouldReduceMotion])
+
   return (
     <div className="flex items-center gap-2 flex-wrap">
       {/* Regular Filter UI */}
@@ -376,6 +533,30 @@ export function WatchlistFilters({
             </div>
           )}
         </div>
+
+        {refreshUi ? (
+          <div className="ml-3 flex shrink-0 items-center gap-2">
+            <div className="hidden md:flex flex-col items-end leading-tight">
+              <span className="text-[10px] text-primary/40">{refreshUi.lastUpdatedTitle}</span>
+              <span className="text-[11px] tabular-nums text-primary/80">
+                {refreshUi.lastUpdatedValue}
+              </span>
+            </div>
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-md px-2 py-1",
+                autoRefreshStatus?.isRefreshing && "bg-primary/5",
+              )}
+              aria-label={`${refreshUi.lastUpdatedTitle} ${refreshUi.lastUpdatedValue}`}
+            >
+              <RefreshCountdownRing
+                progress={refreshUi.progress}
+                value={refreshUi.secondsRemaining}
+                valueClassName={autoRefreshStatus?.isRefreshing ? "text-primary/70" : undefined}
+              />
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

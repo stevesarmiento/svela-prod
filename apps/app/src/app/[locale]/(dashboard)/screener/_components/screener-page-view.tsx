@@ -11,11 +11,14 @@ import { WatchlistEmptyState } from "../../watchlist/_components/watchlist-empty
 import { WatchlistTableSection } from "../../watchlist/_components/watchlist-table-section"
 import { useWatchlistData } from "@/hooks/use-watchlist-data"
 import { useWatchlistSelection } from "@/hooks/use-watchlist-selection"
+import { useCoinGeckoQuotesBulk } from "@/hooks/use-coingecko-quotes"
 import {
   useAllWatchlistCoinIds,
   useRemoveBulkFromAllWatchlists,
   useRemoveFromAllWatchlists,
 } from "@/lib/convex-hooks"
+
+const SCREENER_REFRESH_INTERVAL_MS = 60_000
 
 export function ScreenerPageView() {
   const [sorting, setSorting] = useState<SortingState>([])
@@ -23,6 +26,8 @@ export function ScreenerPageView() {
   const allCoinIds = useAllWatchlistCoinIds()
   const isCoinIdsLoading = allCoinIds === undefined
   const coinIds = allCoinIds ?? []
+  const quotesQuery = useCoinGeckoQuotesBulk(coinIds)
+  const lastUpdatedAtMs = quotesQuery.dataUpdatedAt ? quotesQuery.dataUpdatedAt : null
 
   const {
     filters,
@@ -77,6 +82,11 @@ export function ScreenerPageView() {
             sortOrder={filters.sortOrder}
             selectedCoins={selectedCoins}
             totalCoins={filteredCoins.length}
+            autoRefreshStatus={{
+              lastUpdatedAtMs,
+              refreshIntervalMs: SCREENER_REFRESH_INTERVAL_MS,
+              isRefreshing: quotesQuery.isFetching,
+            }}
             onSearchTextChange={(value) => setFilters(prev => ({ ...prev, searchText: value }))}
             onPriceRangeChange={(range) => setFilters(prev => ({ ...prev, priceRange: range }))}
             onMarketCapRangeChange={(range) => setFilters(prev => ({ ...prev, marketCapRange: range }))}
