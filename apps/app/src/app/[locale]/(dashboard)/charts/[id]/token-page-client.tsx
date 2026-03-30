@@ -11,6 +11,7 @@ import { OpenInterestChart } from './open-interest-chart'
 import { TakerBuySell } from './taker-buy-sell'
 import { MarketVisionChart } from './marketvision-chart'
 import { BollingerBandsChart } from './bollinger-bands-chart'
+import { BBWPChart } from './bbwp-chart'
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
 import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
@@ -196,6 +197,37 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
                 multiplier: 2.0,
                 lineWidth: 2,
                 fillOpacity: 0.1
+              }}
+              height={250}
+              showTimeAxis={false}
+            />
+          )}
+        </div>
+
+        <div className="col-span-12">
+          {isLoading ? (
+            <div className={`h-[250px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center ${showPending ? 'opacity-60' : ''}`}>
+              <div className="text-center">
+                <div className="animate-spin motion-reduce:animate-none rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">Loading BBWP data...</p>
+              </div>
+            </div>
+          ) : (
+            <BBWPChart
+              data={indicatorData}
+              config={{
+                priceSource: 'close',
+                basisType: 'SMA',
+                basisLength: 7,
+                lookback: 100,
+                maType: 'SMA',
+                maLength: 5,
+                extremeHigh: 98,
+                extremeLow: 2,
+                colorType: 'Spectrum',
+                spectrumPreset: '5point',
+                lineWidth: 2,
+                maWidth: 2,
               }}
               height={250}
               showTimeAxis={false}

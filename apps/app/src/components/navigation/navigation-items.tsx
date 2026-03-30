@@ -8,6 +8,12 @@ import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
 
 type CommandContext = 'overview' | 'watchlist' | 'charts';
 
+interface MenuItem {
+  href: string
+  title: string
+  icon: React.ComponentType<{ className?: string }>
+}
+
 interface NavigationItemsProps {
   onOpenCommandSearch: (context: CommandContext | null) => void;
 }
@@ -19,7 +25,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
   const navigation = useWatchlistPreservingNavigation();
 
   // Map menu items to their preserved URLs
-  const getItemUrl = useCallback((item: { href: string; title: string; icon: React.ComponentType<{ className?: string }> }) => {
+  const getItemUrl = useCallback((item: MenuItem) => {
     switch (item.href) {
       case "/charts":
         return navigation.charts;
@@ -31,7 +37,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
     }
   }, [navigation]);
 
-  const handleItemClick = useCallback((item: typeof MENU_ITEMS[number], isActive: boolean) => {
+  const handleItemClick = useCallback((item: MenuItem, isActive: boolean) => {
     return () => {
       if (isActive) {
         // Re-clicking the Overview (watchlist) tab should open the same
@@ -56,7 +62,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
 
   return (
     <div className="flex items-center gap-2">
-      {MENU_ITEMS.map((item) => {
+      {(MENU_ITEMS as readonly MenuItem[]).map((item) => {
         const isActive = getCleanPath(pathname) === item.href;
         const shortcut = getShortcutForRoute(item.href);
         const tooltipLabel =

@@ -30,20 +30,29 @@ import {
   useRemoveBulkFromAllWatchlists,
   useRemoveFromAllWatchlists,
 } from "@/lib/convex-hooks"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@v1/ui/tabs'
+import { Tabs, TabsContent } from '@v1/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@v1/ui/tooltip'
 import { 
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@v1/ui/popover'
-import { IconCircleDottedAndCircle, IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmark, IconWalletBifold } from 'symbols-react'
+import { IconRectangleGrid2x2Fill, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmark, IconWalletBifold, IconBookmarkFill } from 'symbols-react'
 import { CreateWatchlist } from './create-watchlist'
 import { Kbd } from "@v1/ui/kbd"
 import { useLatest } from "@/hooks/use-latest"
 import { useReducedMotion } from "motion/react"
 import { AddWalletDialog } from "@/app/[locale]/(dashboard)/portfolio/_components/add-wallet-dialog"
 import { Separator } from "@v1/ui/separator"
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@v1/ui/breadcrumb"
+import { WatchlistGroupIcon } from "@/components/watchlist-group-icon"
 
 interface WatchlistProps {
   activeTimeScale?: string;
@@ -312,31 +321,57 @@ export function Watchlist({
           {/* Left side - Tabs in cards mode, Filters in table mode */}
           {contentMode === 'cards' ? (
             <div className="flex items-center gap-4">          
-              <Tabs value={gridViewMode} onValueChange={(value) => {
-                const newMode = value as 'grid' | 'chart'
-                onGridViewModeChange?.(newMode)
-              }}>
-                <Tooltip>
+              <Tooltip>
                 <TooltipTrigger asChild>
-                <TabsList className="grid w-full grid-cols-2 p-0.5">
-                  <TabsTrigger value="grid" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Watchlists (W)">
-                    <IconBookmark className="size-3 fill-muted-foreground" />
-                    Watchlists
-                  </TabsTrigger>
-                  <TabsTrigger value="chart" className="flex items-center gap-2 p-0.5 px-2" title="Switch to Comparison (C)">
-                    <IconCircleDottedAndCircle className="size-4 fill-muted-foreground" />
-                    Comparison
-                  </TabsTrigger>
-                </TabsList>
+                  <div className="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+                    <Breadcrumb>
+                      <BreadcrumbList>
+                        <BreadcrumbItem>
+                          {gridViewMode === "chart" ? (
+                            <BreadcrumbLink asChild>
+                              <button
+                                type="button"
+                                onClick={() => onGridViewModeChange?.("grid")}
+                                className="inline-flex items-center gap-2 rounded-md transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                              >
+                                <IconBookmarkFill className="size-4 fill-muted-foreground" />
+                                <span>Watchlists</span>
+                              </button>
+                            </BreadcrumbLink>
+                          ) : (
+                            <BreadcrumbPage className="inline-flex items-center gap-2">
+                              <IconBookmarkFill className="size-4 fill-muted-foreground" />
+                              <span>Watchlists</span>
+                            </BreadcrumbPage>
+                          )}
+                        </BreadcrumbItem>
+
+                        {gridViewMode === "chart" && selectedGroup ? (
+                          <>
+                            <BreadcrumbSeparator />
+                            <BreadcrumbItem>
+                              <BreadcrumbPage className="inline-flex items-center gap-2">
+                                <WatchlistGroupIcon
+                                  icon={selectedGroup.icon}
+                                  className="text-muted-foreground"
+                                  size={17}
+                                />
+                                <span className="max-w-[220px] truncate">{selectedGroup.name}</span>
+                              </BreadcrumbPage>
+                            </BreadcrumbItem>
+                          </>
+                        ) : null}
+                      </BreadcrumbList>
+                    </Breadcrumb>
+                  </div>
                 </TooltipTrigger>
-                <TooltipContent side="right" align="center" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
+                <TooltipContent side="right" align="center" className="flex items-center gap-2 p-1 pl-2 ml-2 rounded-md text-xs">
                   <span>Switch between Watchlists and Comparison</span>
                   <Kbd>W</Kbd>
                   <span>or</span>
                   <Kbd>E</Kbd>
                 </TooltipContent>
               </Tooltip>
-              </Tabs>
         </div>
       ) : (
           /* Table mode - Show filters on the left */
