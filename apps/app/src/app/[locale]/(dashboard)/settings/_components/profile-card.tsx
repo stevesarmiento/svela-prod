@@ -436,7 +436,7 @@ export function ProfileCard() {
                 <IconDistributeHorizontalCenter className="size-6 fill-white/30" />
                 <IconSparkleMagnifyingglass className="size-6 fill-white/30" />
               </div>
-              <h2 className="text-5xl font-bold font-diatype-mono tracking-tight text-white leading-none">
+              <h2 className="text-5xl font-bold font-berkeley-mono tracking-tight text-white leading-none">
                 {displayName}
               </h2>
             </div>
@@ -447,7 +447,7 @@ export function ProfileCard() {
                 <div className="text-[8px] font-bold text-white/40 uppercase tracking-[0.2em]">
                   Member ID
                 </div>
-                <div className="text-xs font-diatype-mono text-white/80 tabular-nums">
+                <div className="text-xs font-berkeley-mono text-white/80 tabular-nums">
                   {memberId}
                 </div>
               </div>
@@ -455,7 +455,7 @@ export function ProfileCard() {
                 <div className="text-[8px] font-bold text-white/40 uppercase tracking-[0.2em]">
                   Issued
                 </div>
-                <div className="text-xs font-diatype-mono text-white/80 tabular-nums">
+                <div className="text-xs font-berkeley-mono text-white/80 tabular-nums">
                   {issuedLabel ?? '—'}
                 </div>
               </div>

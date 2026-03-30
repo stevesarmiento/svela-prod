@@ -26,7 +26,7 @@ export function TooltipContent({ coinData, timestamp }: TooltipContentProps) {
                   <span className="text-gray-500 dark:text-zinc-500">{coin.name}</span>
                 </span>
               </div>
-              <span className="font-diatype-mono text-[11px] font-bold text-gray-900 dark:text-white">
+              <span className="font-berkeley-mono text-[11px] font-bold text-gray-900 dark:text-white">
                 {coin.value > 0 ? "+" : ""}
                 {coin.value.toFixed(2)}%
               </span>

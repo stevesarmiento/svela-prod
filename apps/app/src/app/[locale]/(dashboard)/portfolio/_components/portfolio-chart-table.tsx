@@ -124,23 +124,23 @@ export function PortfolioChartTable({ coins, activeTimeScale }: PortfolioChartTa
               <div className="flex items-center gap-2">
                 <span className="font-bold text-xs">{coin.symbol.toUpperCase()}</span>
                 <span className="text-primary/40 text-xs">price is currently</span>
-                <span className="font-diatype-mono text-xs font-semibold">
+                <span className="font-berkeley-mono text-xs font-semibold">
                   {formatUsdPrice(coin.quote.USD.price)}
                 </span>
               </div>
 
               <div className="flex items-center justify-end">
-                <span className="font-diatype-mono text-xs">${formatLargeNumber(coin.quote.USD.volume_24h || 0)}</span>
+                <span className="font-berkeley-mono text-xs">${formatLargeNumber(coin.quote.USD.volume_24h || 0)}</span>
               </div>
 
               <div className="flex items-center justify-end">
                 {Number.isNaN((coin as unknown as { intervalChange?: number }).intervalChange) ? (
-                  <span className="font-diatype-mono text-xs text-muted-foreground">N/A</span>
+                  <span className="font-berkeley-mono text-xs text-muted-foreground">N/A</span>
                 ) : (
                   <span
                     className={cn(
-                      "font-diatype-mono text-xs",
-                      (coin as unknown as { intervalChange: number }).intervalChange > 0 ? "text-green-600" : "text-red-600",
+                      "font-berkeley-mono text-xs",
+                      (coin as unknown as { intervalChange: number }).intervalChange > 0 ? "text-emerald-500" : "text-rose-500",
                     )}
                   >
                     {(coin as unknown as { intervalChange: number }).intervalChange > 0 ? "+" : ""}

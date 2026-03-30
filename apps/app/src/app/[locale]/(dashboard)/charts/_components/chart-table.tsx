@@ -29,6 +29,7 @@ import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
 import { formatUsdPrice } from "@/lib/format-usd"
 import { useSetWatchlistItemHoldings } from "@/lib/convex-hooks"
 import { Badge } from "@v1/ui/badge"
+import { IconTriangleFill } from "symbols-react"
 
 function loadAnalysisDialog() {
   return import("@/components/navigation/analysis-dialog")
@@ -217,7 +218,7 @@ const ChartHoldingsCell = memo(function ChartHoldingsCell({
             inputMode="decimal"
             disabled={showPending}
             aria-label="Token holdings quantity"
-            className="h-7 w-[5.5rem] px-2 py-0 text-right font-diatype-mono text-xs tabular-nums"
+            className="h-7 w-[5.5rem] px-2 py-0 text-right font-berkeley-mono text-xs tabular-nums"
           />
         ) : (
           <button
@@ -227,7 +228,7 @@ const ChartHoldingsCell = memo(function ChartHoldingsCell({
               if (canEdit) setEditing(true)
             }}
             className={cn(
-              "-mx-1 rounded px-1 py-0.5 text-right font-diatype-mono text-xs tabular-nums",
+              "-mx-1 rounded px-1 py-0.5 text-right font-berkeley-mono text-xs tabular-nums",
               displayStr ? "text-foreground" : "text-muted-foreground",
               canEdit && !showPending && "cursor-text hover:bg-primary/10",
               (!canEdit || showPending) && "cursor-default",
@@ -519,14 +520,14 @@ export const ChartTable = memo(function ChartTable({
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-xs">{coin.symbol.toUpperCase()}</span>
                   <span className="text-primary/40 text-xs">price is currently</span>
-                  <span className="font-diatype-mono text-xs font-semibold">
+                  <span className="font-berkeley-mono text-xs font-semibold">
                     {formatUsdPrice(coin.quote.USD.price)}
                   </span>
                 </div>
 
                 {/* 24h Volume */}
                 <div className="flex items-center justify-end">
-                  <span className="font-diatype-mono text-xs">
+                  <span className="font-berkeley-mono text-xs">
                     ${formatLargeNumber(coin.quote.USD.volume_24h || 0)}
                   </span>
                 </div>
@@ -534,16 +535,38 @@ export const ChartTable = memo(function ChartTable({
                 {/* Interval Change */}
                 <div className="flex items-center justify-end">
                   {Number.isNaN(coin.intervalChange) ? (
-                    <span className="font-diatype-mono text-xs text-muted-foreground">
+                    <span className="font-berkeley-mono text-xs text-muted-foreground">
                       N/A
                     </span>
                   ) : (
-                    <span className={cn(
-                      "font-diatype-mono text-xs",
-                      coin.intervalChange > 0 ? 'text-green-600' : 'text-red-600'
-                    )}>
-                      {coin.intervalChange > 0 ? '+' : ''}{coin.intervalChange.toFixed(2)}%
-                    </span>
+                    (() => {
+                      const change = coin.intervalChange
+                      const isPositive = change > 0
+                      const isNegative = change < 0
+                      const isNeutral = !isPositive && !isNegative
+
+                      return (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 font-berkeley-mono text-xs tabular-nums",
+                            isPositive && "text-emerald-500",
+                            isNegative && "text-rose-500",
+                            isNeutral && "text-muted-foreground",
+                          )}
+                        >
+                          <IconTriangleFill
+                            aria-hidden="true"
+                            className={cn(
+                              "size-2 shrink-0 mr-1",
+                              isPositive && "fill-emerald-500",
+                              isNegative && "fill-rose-500 rotate-180",
+                              isNeutral && "fill-zinc-500/60",
+                            )}
+                          />
+                          {(isNegative ? Math.abs(change) : change).toFixed(2)}%
+                        </span>
+                      )
+                    })()
                   )}
                 </div>
 
@@ -580,8 +603,8 @@ export const ChartTable = memo(function ChartTable({
                       logoUrl: safeTokenLogoUrl,
                     }}
                     triggerVariant="icon"
-                    triggerTooltip="Analyze with AI"
-                    triggerAriaLabel="Analyze with AI"
+                    triggerTooltip="Deep Analysis"
+                    triggerAriaLabel="Deep Analysis"
                   />
                   <div
                     aria-hidden="true"

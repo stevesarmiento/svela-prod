@@ -33,7 +33,7 @@ export function OpenInterest({ cmcId }: OpenInterestProps) {
         <span className="text-[11px] text-muted-foreground font-medium mb-2">
           Open Interest
         </span>
-        <span className="text-md font-diatype-mono text-muted-foreground">
+        <span className="text-md font-berkeley-mono text-muted-foreground">
           N/A
         </span>
       </div>
@@ -51,7 +51,7 @@ export function OpenInterest({ cmcId }: OpenInterestProps) {
         <span className="text-[11px] text-muted-foreground font-medium mb-2">
           Open Interest
         </span>
-        <span className="text-md font-diatype-mono text-muted-foreground">
+        <span className="text-md font-berkeley-mono text-muted-foreground">
           No Data
         </span>
       </div>
@@ -66,7 +66,7 @@ export function OpenInterest({ cmcId }: OpenInterestProps) {
         </span>
       </div>
       
-      <div className="text-md font-diatype-mono text-center text-foreground">
+      <div className="text-md font-berkeley-mono text-center text-foreground">
         ${formatLargeNumber(currentOpenInterest || 0)}
       </div>
       

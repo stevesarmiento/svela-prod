@@ -36,7 +36,7 @@ export function WatchlistMultiLineTooltipContent({
                   {watchlist.name}
                 </span>
               </div>
-              <span className="font-diatype-mono text-[11px] font-bold text-foreground">
+              <span className="font-berkeley-mono text-[11px] font-bold text-foreground">
                 {watchlist.value === null ? (
                   <span className="text-muted-foreground">—</span>
                 ) : (

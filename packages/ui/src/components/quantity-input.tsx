@@ -51,7 +51,7 @@ export function QuantityInput({
   return (
     <div
       className={cn(
-        "group flex items-stretch transition-[box-shadow] font-diatype-mono",
+        "group flex items-stretch transition-[box-shadow] font-berkeley-mono",
         className,
       )}
     >

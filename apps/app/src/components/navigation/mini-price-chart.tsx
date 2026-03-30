@@ -52,7 +52,7 @@ const TooltipContent = ({
             <span className="text-[11px] text-zinc-400">Price</span>
             <div className="flex items-center gap-2">
               <span
-                className={`h-4 rounded px-1.5 font-diatype-mono text-[10px] ${
+                className={`h-4 rounded px-1.5 font-berkeley-mono text-[10px] ${
                   data.change >= 0
                     ? "bg-emerald-500/20 text-emerald-400"
                     : "bg-rose-500/20 text-rose-400"
@@ -61,7 +61,7 @@ const TooltipContent = ({
                 {data.change > 0 ? "+" : ""}
                 {data.change.toFixed(2)}%
               </span>
-              <span className="font-diatype-mono text-[11px] font-bold">
+              <span className="font-berkeley-mono text-[11px] font-bold">
                 {formatPrice(data.price)}
               </span>
             </div>
@@ -70,7 +70,7 @@ const TooltipContent = ({
           {typeof data.hull === "number" && (
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-zinc-400">Hull MA</span>
-              <span className="font-diatype-mono text-[11px] text-blue-300">
+              <span className="font-berkeley-mono text-[11px] text-blue-300">
                 {formatPrice(data.hull)}
               </span>
             </div>
@@ -78,7 +78,7 @@ const TooltipContent = ({
 
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-zinc-400">Volume</span>
-            <span className="font-diatype-mono text-[11px] text-zinc-300">
+            <span className="font-berkeley-mono text-[11px] text-zinc-300">
               {formatVolume(data.volume)}
             </span>
           </div>
@@ -86,7 +86,7 @@ const TooltipContent = ({
           {tokenSymbol && (
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-zinc-400">Token</span>
-              <span className="font-diatype-mono text-[11px] text-zinc-300">
+              <span className="font-berkeley-mono text-[11px] text-zinc-300">
                 {tokenSymbol.toUpperCase()}
               </span>
             </div>

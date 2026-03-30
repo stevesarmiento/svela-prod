@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button } from "@v1/ui/button"
 import { X } from "lucide-react"
 import Link from "next/link"
@@ -17,6 +17,8 @@ import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingec
 import { useDeleteWatchlistGroup } from '@/lib/convex-hooks'
 import type { WatchlistGroup } from './watchlist-context'
 import { getTokenLogoURL } from '@/lib/logo-overrides'
+import { formatUsdPrice } from '@/lib/format-usd'
+import { IconTriangleFill } from "symbols-react"
 
 type WatchlistGroupId = WatchlistGroup["_id"]
 
@@ -31,6 +33,10 @@ interface WatchlistData {
   totalMarketCap: number
   totalVolume: number
   coinImages: Array<{ imageUrl: string; profileUrl: string }>
+  /** Sum of holdings × spot USD for items with holdings set; null if none set. */
+  holdingsValueUsd: number | null
+  /** Count of watchlist rows with a holdings quantity set. */
+  holdingsPositionsCount: number
   isLoading?: boolean
 }
 
@@ -63,6 +69,27 @@ function useWatchlistData(groupId: WatchlistGroupId): WatchlistData | null {
       return null
     }
 
+    // Spot USD by coin id (ignore invalid / loading placeholder prices)
+    const priceUsdByCoinId = new Map<string, number>()
+    for (const coin of coins) {
+      const p = coin.quote?.USD?.price
+      if (typeof p === "number" && Number.isFinite(p) && p > 0) {
+        priceUsdByCoinId.set(coin.id, p)
+      }
+    }
+
+    // Total notional for rows with holdings set (same idea as chart-table holdings badge)
+    let holdingsPositionsCount = 0
+    let holdingsNotionalSum = 0
+    for (const item of groupWatchlist ?? []) {
+      const qty = item.holdings
+      if (typeof qty !== "number" || !Number.isFinite(qty) || qty < 0) continue
+      holdingsPositionsCount += 1
+      const priceUsd = priceUsdByCoinId.get(item.coinId)
+      if (priceUsd !== undefined) holdingsNotionalSum += qty * priceUsd
+    }
+    const holdingsValueUsd = holdingsPositionsCount === 0 ? null : holdingsNotionalSum
+
     // Calculate aggregates from coin data
     const totalMarketCap = coins.reduce((sum, coin) => sum + (coin.quote.USD.market_cap || 0), 0)
     const totalVolume = coins.reduce((sum, coin) => sum + (coin.quote.USD.volume_24h || 0), 0)
@@ -93,9 +120,11 @@ function useWatchlistData(groupId: WatchlistGroupId): WatchlistData | null {
       totalMarketCap,
       totalVolume,
       coinImages,
+      holdingsValueUsd,
+      holdingsPositionsCount,
       isLoading: false
     }
-  }, [groupId, coins, aggregateData])
+  }, [groupId, coins, aggregateData, groupWatchlist])
 
   return watchlistData
 }
@@ -105,15 +134,24 @@ function WatchlistCard({
   group, 
   activeTimeScale,
   onRemove,
-  isRemoving 
+  isRemoving,
+  onHoldingsValueKnown,
 }: { 
   group: WatchlistGroup
   activeTimeScale: string
   onRemove: (groupId: WatchlistGroupId) => void
   isRemoving: boolean
+  /** Fired when quote/holdings data is ready so parent can sort rows by holdings value (desc). */
+  onHoldingsValueKnown: (groupId: WatchlistGroupId, holdingsValueUsd: number | null) => void
 }) {
   // Use our custom hook to get watchlist data
   const watchlistData = useWatchlistData(group._id)
+
+  useEffect(() => {
+    if (watchlistData !== null) {
+      onHoldingsValueKnown(group._id, watchlistData.holdingsValueUsd)
+    }
+  }, [group._id, watchlistData, onHoldingsValueKnown])
   
   // Combine group metadata with fetched data
   const watchlist = useMemo(() => {
@@ -133,6 +171,8 @@ function WatchlistCard({
       totalMarketCap: 0,
       totalVolume: 0,
       coinImages: [],
+      holdingsValueUsd: null,
+      holdingsPositionsCount: 0,
       isLoading: true
     }
   }, [watchlistData, group])
@@ -153,7 +193,7 @@ function WatchlistCard({
       {/* Header with Watchlist Name */}
       <div className="px-3 py-2">
         <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div className="flex items-center gap-2">
               <WatchlistGroupIcon 
                 icon={watchlist.icon} 
@@ -163,6 +203,10 @@ function WatchlistCard({
               <span className="text-muted-foreground">
                 {watchlist.isLoading ? "Loading..." : watchlist.name}
               </span>
+            </div>
+
+            <div className="flex items-center justify-end">
+              Holdings Value
             </div>
 
             <div className="flex items-center gap-1 justify-end">
@@ -179,13 +223,18 @@ function WatchlistCard({
       <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden hover:ring-2 hover:ring-zinc-200/30 transition-all duration-100">
         {watchlist.isLoading ? (
           // Show loading state
-          <div className="grid grid-cols-3 gap-4 px-4 py-2 pr-2 opacity-60">
+          <div className="grid grid-cols-4 gap-4 px-4 py-2 pr-2 opacity-60 w-full">
             {/* Watchlist Name */}
-            <div className="flex items-center gap-2">
+            <div className="flex no-wrap items-center gap-2">
               <Skeleton className="h-3 w-16 rounded-full" />
               <span className="text-primary/40 text-xs">watchlist has</span>
               <Skeleton className="h-3 w-8 rounded-full" />
               <span className="text-primary/40 text-xs">coins</span>
+            </div>
+
+            {/* Holdings Value */}
+            <div className="flex items-center justify-end">
+              <Skeleton className="h-3 w-14 rounded-full" />
             </div>
 
             {/* Change */}
@@ -209,13 +258,13 @@ function WatchlistCard({
           // Show clickable link for real watchlists
           <Link 
             href={group.slug ? `/watchlist?wg=${encodeURIComponent(group.slug)}&wt=chart` : "/watchlist?wt=chart"}
-            className="grid grid-cols-3 gap-4 px-4 py-2 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer"
+            className="grid grid-cols-4 gap-4 px-4 py-2 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer"
           >
             {/* Watchlist Info */}
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-xs">{watchlist.name}</span>
-              <span className="text-primary/40 text-xs">watchlist has</span>
-              <span className="font-diatype-mono text-xs font-semibold bg-primary/5 border border-primary/10 px-1.5 py-0.5 rounded-md">
+            <div className="flex no-wrap items-center gap-2">
+              <span className="font-bold text-nowrap text-xs">{watchlist.name}</span>
+              <span className="text-primary/40 text-nowrap text-xs">watchlist has</span>
+              <span className="font-berkeley-mono text-nowrap text-xs font-semibold bg-black/20 border border-primary/10 px-1 py-0.5 rounded-md">
                 {watchlist.coinsCount}
               </span>
               <span className="text-primary/40 text-xs">{watchlist.coinsCount === 1 ? 'token' : 'tokens'}</span>
@@ -228,14 +277,47 @@ function WatchlistCard({
               )}
             </div>
 
+            {/* Holdings Value (Σ holdings × spot USD when any holdings set) */}
+            <div className="flex min-w-0 items-center justify-end">
+              {watchlist.holdingsValueUsd === null ? (
+                <span className="font-berkeley-mono text-xs tabular-nums text-muted-foreground">—</span>
+              ) : (
+                <span className="font-berkeley-mono text-xs font-semibold tabular-nums">
+                  {formatUsdPrice(watchlist.holdingsValueUsd)}
+                </span>
+              )}
+            </div>
+
             {/* Aggregate Change */}
             <div className="flex items-center justify-end">
-              <span className={cn(
-                "font-diatype-mono text-xs",
-                watchlist.aggregateChange > 0 ? 'text-green-600' : 'text-red-600'
-              )}>
-                {watchlist.aggregateChange > 0 ? '+' : ''}{watchlist.aggregateChange.toFixed(2)}%
-              </span>
+              {(() => {
+                const change = watchlist.aggregateChange
+                const isPositive = change > 0
+                const isNegative = change < 0
+                const isNeutral = !isPositive && !isNegative
+
+                return (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 font-berkeley-mono text-xs tabular-nums",
+                      isPositive && "text-emerald-500",
+                      isNegative && "text-rose-500",
+                      isNeutral && "text-muted-foreground",
+                    )}
+                  >
+                    <IconTriangleFill
+                      aria-hidden="true"
+                      className={cn(
+                        "size-2 shrink-0 mr-1",
+                        isPositive && "fill-emerald-500",
+                        isNegative && "fill-rose-500 rotate-180",
+                        isNeutral && "fill-zinc-500/60",
+                      )}
+                    />
+                    {(isNegative ? Math.abs(change) : change).toFixed(2)}%
+                  </span>
+                )
+              })()}
             </div>
 
             {/* Remove */}
@@ -270,10 +352,47 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
   const [removingWatchlists, setRemovingWatchlists] = useState<Set<WatchlistGroupId>>(
     new Set(),
   )
+  /** Populated by each card when CoinGecko + Convex data is ready; used to sort by holdings value. */
+  const [holdingsValueByGroupId, setHoldingsValueByGroupId] = useState<
+    Map<WatchlistGroupId, number | null>
+  >(() => new Map())
+
+  const registerHoldingsValue = useCallback(
+    (groupId: WatchlistGroupId, holdingsValueUsd: number | null) => {
+      setHoldingsValueByGroupId((prev) => {
+        if (prev.get(groupId) === holdingsValueUsd) return prev
+        const next = new Map(prev)
+        next.set(groupId, holdingsValueUsd)
+        return next
+      })
+    },
+    [],
+  )
   
   const watchlistGroupsData = useWatchlistGroups()
   // TanStack Query generics can get lost across module boundaries in this file; keep this typed for build.
   const typedWatchlistGroupsData = watchlistGroupsData as Array<WatchlistGroup> | undefined
+
+  const sortedWatchlistGroups = useMemo((): WatchlistGroup[] => {
+    if (!typedWatchlistGroupsData?.length) return []
+    const groups = typedWatchlistGroupsData.slice()
+    groups.sort((a, b) => {
+      const aReady = holdingsValueByGroupId.has(a._id)
+      const bReady = holdingsValueByGroupId.has(b._id)
+      if (aReady && !bReady) return -1
+      if (!aReady && bReady) return 1
+      if (!aReady && !bReady) return 0
+
+      const aRaw = holdingsValueByGroupId.get(a._id)
+      const bRaw = holdingsValueByGroupId.get(b._id)
+      if (aRaw === undefined || bRaw === undefined) return 0
+      const aScore = aRaw === null ? Number.NEGATIVE_INFINITY : aRaw
+      const bScore = bRaw === null ? Number.NEGATIVE_INFINITY : bRaw
+      if (bScore !== aScore) return bScore - aScore
+      return 0
+    })
+    return groups
+  }, [typedWatchlistGroupsData, holdingsValueByGroupId])
 
   const handleRemove = async (watchlistId: WatchlistGroupId) => {
     setRemovingWatchlists(prev => new Set([...prev, watchlistId]))
@@ -316,13 +435,14 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
 
   return (
     <div className="space-y-4">
-      {typedWatchlistGroupsData.map(group => (
+      {sortedWatchlistGroups.map(group => (
         <WatchlistCard
           key={group._id}
           group={group}
           activeTimeScale={activeTimeScale}
           onRemove={handleRemove}
           isRemoving={removingWatchlists.has(group._id)}
+          onHoldingsValueKnown={registerHoldingsValue}
         />
       ))}
     </div>

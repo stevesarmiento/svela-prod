@@ -183,8 +183,8 @@ export const PortfolioMultiPriceChart = memo(function PortfolioMultiPriceChart({
                 </div>
                 <div
                   className={cn(
-                    "text-xs font-diatype-mono tabular-nums",
-                    meta.latestValue >= 0 ? "text-green-600" : "text-red-600",
+                    "text-xs font-berkeley-mono tabular-nums",
+                    meta.latestValue >= 0 ? "text-emerald-500" : "text-rose-500",
                   )}
                 >
                   {meta.latestValue >= 0 ? "+" : ""}

@@ -18,7 +18,7 @@ export const SelectionContent = React.memo(({ selectionState }: SelectionContent
           checked={selectionState.selectedCoins.size === selectionState.totalCoins && selectionState.totalCoins > 0}
           onCheckedChange={selectionState.onSelectAll}
         />
-        <span className="text-xs font-medium font-diatype-mono text-white">
+        <span className="text-xs font-medium font-berkeley-mono text-white">
           {selectionState.selectedCoins.size} of {selectionState.totalCoins} selected
         </span>
       </div>

@@ -19,34 +19,37 @@ export const AvatarCircles = ({
   className,
   avatarUrls,
 }: AvatarCirclesProps) => {
+  const filteredUrls = avatarUrls.filter(
+    (url) =>
+      url.imageUrl &&
+      (url.imageUrl.startsWith("http") || url.imageUrl.startsWith("/")),
+  );
+  // Overlapping row paints later siblings on top by default; bump z-index for earlier items so the first URL is the visible front token.
+  const stackDepth = filteredUrls.length;
+
   return (
-    <div className={cn("z-10 flex -space-x-4 rtl:space-x-reverse ", className)}>
-      {avatarUrls
-        .filter(
-          (url) =>
-            url.imageUrl &&
-            (url.imageUrl.startsWith("http") || url.imageUrl.startsWith("/")),
-        )
-        .map((url, index) => (
-          <div
-            key={url.imageUrl}
-            className="h-8 w-8 rounded-full border dark:border-white/5 border-zinc-950/10 bg-background backdrop-blur-xl shadow-sm shadow-black/10"
-          >
-            <Image
-              className="rounded-full"
-              src={url.imageUrl}
-              width={50}
-              height={50}
-              alt={`Avatar ${index + 1}`}
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.style.display = "none";
-              }}
-            />
-          </div>
-        ))}
+    <div className={cn("z-10 flex -space-x-2.5 rtl:space-x-reverse ", className)}>
+      {filteredUrls.map((url, index) => (
+        <div
+          key={url.imageUrl}
+          className="relative size-8 rounded-full border dark:border-white/5 border-zinc-950/10 bg-background backdrop-blur-xl shadow-sm shadow-black/10"
+          style={{ zIndex: stackDepth - index }}
+        >
+          <Image
+            className="rounded-full"
+            src={url.imageUrl}
+            width={50}
+            height={50}
+            alt={`Avatar ${index + 1}`}
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.style.display = "none";
+            }}
+          />
+        </div>
+      ))}
       {(numPeople ?? 0) > 0 && (
-        <div className="flex h-8 w-8 items-center justify-center rounded-full border dark:border-white/10 border-zinc-800/10 dark:bg-background bg-zinc-950/5 backdrop-blur-xl text-center text-sm font-bold text-white font-diatype-mono">
+        <div className="flex size-8 items-center justify-center rounded-full border dark:border-white/10 border-zinc-800/10 dark:bg-background bg-zinc-950/5 backdrop-blur-xl text-center text-sm font-bold text-white font-berkeley-mono">
           <span className="opacity-50 text-xs">+</span>
           {numPeople}
         </div>

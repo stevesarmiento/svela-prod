@@ -209,7 +209,7 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
                     {marketData?.name || tokenData?.name || "Token Details"}
                   </h1>
                   <span
-                    className={`text-[11px] font-diatype-mono font-thin ${
+                    className={`text-[11px] font-berkeley-mono font-thin ${
                       (marketData?.price_change_percentage_24h ?? 0) >= 0
                         ? "text-green-400"
                         : "text-red-400"

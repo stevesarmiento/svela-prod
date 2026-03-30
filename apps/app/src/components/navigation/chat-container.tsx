@@ -160,7 +160,7 @@ export function ChatContainer() {
                 </TooltipTrigger>
                 <TooltipContent side="top" sideOffset={5} className="flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border-gray-200 dark:border-zinc-800 border bg-white/95 dark:bg-zinc-900/95 shadow-sm">
                   <span className="text-xs text-gray-600 dark:text-zinc-400">Quick Chat</span>
-                  <kbd className="flex items-center gap-1 rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-gray-700 dark:text-zinc-300 uppercase">
+                  <kbd className="flex items-center gap-1 rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-gray-700 dark:text-zinc-300 uppercase">
                     <IconCommand className="h-2.5 w-2.5 fill-gray-700 dark:fill-zinc-300" />
                     <span>+ J</span>
                   </kbd>

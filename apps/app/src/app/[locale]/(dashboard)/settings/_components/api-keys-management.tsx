@@ -302,7 +302,7 @@ export function ApiKeysManagement() {
                       ) : (
                         <div className="mt-3 space-y-1">
                           <div className="text-[10px] text-primary/30">Stored key</div>
-                          <div className="font-diatype-mono text-[10px] text-primary/30">
+                          <div className="font-berkeley-mono text-[10px] text-primary/30">
                             {"displayKey" in existingKey
                               ? existingKey.displayKey || "key...hidden"
                               : "key...hidden"}

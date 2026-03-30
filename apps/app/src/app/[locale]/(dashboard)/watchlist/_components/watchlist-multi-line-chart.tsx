@@ -480,12 +480,12 @@ export function WatchlistMultiLineChart({
                     size={16}
                   />
                   <span className="text-xs font-medium text-foreground">{watchlist.name}</span>
-                  <span className="text-xs font-diatype-mono text-muted-foreground">({watchlist.coinsCount})</span>
+                  <span className="text-xs font-berkeley-mono text-muted-foreground">({watchlist.coinsCount})</span>
                 </div>
                 
                 {/* Performance */}
                 <div className={cn(
-                  "text-xs font-diatype-mono mr-2",
+                  "text-xs font-berkeley-mono mr-2",
                   watchlist.latestValue > 0 ? 'text-green-500' : 'text-red-500'
                 )}>
                   {watchlist.latestValue > 0 ? '+' : ''}{watchlist.latestValue.toFixed(2)}%

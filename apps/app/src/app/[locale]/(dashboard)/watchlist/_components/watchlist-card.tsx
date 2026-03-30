@@ -251,14 +251,14 @@ export function WatchlistCard({
                 <div className="flex text-[10px] flex-row items-center gap-2">
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                      <span className="text-white font-diatype-mono">
+                      <span className="text-white font-berkeley-mono">
                         {isLoading ? "—" : stats.positiveCount}
                       </span>
                       <span className="text-white/50">up</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <div className="w-1.5 h-1.5 bg-red-500 rounded-full" />
-                      <span className="text-white font-diatype-mono">
+                      <span className="text-white font-berkeley-mono">
                         {isLoading ? "—" : stats.negativeCount}
                       </span>
                       <span className="text-white/50">down</span>
@@ -369,7 +369,7 @@ export function WatchlistCard({
               
               <div className="flex items-center gap-2 mr-2">
                 <div className={cn(
-                  "flex items-center gap-1 text-sm font-bold font-diatype-mono",
+                  "flex items-center gap-1 text-sm font-bold font-berkeley-mono",
                   // Use darker version of the theme color
                   displayColor === 'blue' ? "text-blue-300" :
                   displayColor === 'sky' ? "text-sky-300" :

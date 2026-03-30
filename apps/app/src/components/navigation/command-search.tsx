@@ -222,7 +222,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                     className="dark flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border border-zinc-800 bg-zinc-900/95 shadow-sm"
                   >
                     <span className="text-xs text-zinc-400">Quick Actions</span>
-                        <kbd className="flex items-center gap-1 rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-zinc-200 uppercase">
+                        <kbd className="flex items-center gap-1 rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-zinc-200 uppercase">
                             <IconCommand className="h-2.5 w-2.5 fill-zinc-200" />
                             <span>+ K</span>
                         </kbd>
@@ -282,7 +282,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                       </div>
                       <div className="flex items-center gap-1">
                         {item.shortcut ? (
-                          <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-zinc-200 uppercase">
+                          <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-zinc-200 uppercase">
                             {item.shortcut}
                           </kbd>
                         ) : item.href ? (
@@ -367,10 +367,10 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="text-right">
-                            <div className="text-sm font-diatype-mono text-white">
+                            <div className="text-sm font-berkeley-mono text-white">
                               {formatUsdPrice(coin.quote.USD.price)}
                             </div>
-                            <div className={`text-xs font-diatype-mono ${
+                            <div className={`text-xs font-berkeley-mono ${
                               coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'
                             }`}>
                               {coin.quote.USD.percent_change_24h.toFixed(2)}%
@@ -410,7 +410,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                       </div>
                       <div className="flex items-center gap-1">
                         {'href' in item && item.shortcut ? (
-                          <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-zinc-200 uppercase">
+                          <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-zinc-200 uppercase">
                             {item.shortcut}
                           </kbd>
                         ) : 'href' in item ? (
@@ -431,16 +431,16 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
             <div className="flex items-center justify-between gap-4 px-2 text-xs text-zinc-400">
               <div className="flex items-center gap-1">
                 <span>navigate</span>
-                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-diatype-mono text-zinc-200">↑</kbd>
-                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-diatype-mono text-zinc-200">↓</kbd>
+                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-berkeley-mono text-zinc-200">↑</kbd>
+                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-berkeley-mono text-zinc-200">↓</kbd>
               </div>
               <div className="flex items-center gap-1">
                 <span>select</span>
-                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-diatype-mono text-zinc-200">enter</kbd>
+                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-berkeley-mono text-zinc-200">enter</kbd>
               </div>
               <div className="flex items-center gap-1">
                 <span>close</span>
-                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-diatype-mono text-zinc-200">esc</kbd>
+                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-berkeley-mono text-zinc-200">esc</kbd>
               </div>
             </div>
           </div>

@@ -432,7 +432,7 @@ export function AddWalletDialog({ open, onOpenChange }: AddWalletDialogProps) {
                                 </div>
                               </div>
 
-                              <div className="flex items-center justify-end font-diatype-mono text-xs tabular-nums">
+                              <div className="flex items-center justify-end font-berkeley-mono text-xs tabular-nums">
                                 {quotes.isLoading ? "—" : price > 0 ? formatUsdPrice(price) : "—"}
                               </div>
                             </div>

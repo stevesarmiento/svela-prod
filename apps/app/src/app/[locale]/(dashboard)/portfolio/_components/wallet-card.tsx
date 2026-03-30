@@ -104,7 +104,7 @@ export function WalletCard({
         </div>
       </motion.div>
       {onDisconnect && (
-        <div className="text-[10px] text-gray-600 font-diatype-mono flex items-center gap-2">
+        <div className="text-[10px] text-gray-600 font-berkeley-mono flex items-center gap-2">
           Hit <span className="font-bold inline-flex items-center rounded-md border border-gray-300 bg-white px-1.5 py-0.5 text-gray-700 hover:bg-gray-50 text-[10px]">ESC</span> or press
           <button
             type="button"

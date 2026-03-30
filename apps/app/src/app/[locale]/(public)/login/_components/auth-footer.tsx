@@ -3,7 +3,7 @@ import React from 'react';
 export default function FooterOnboarding() {
   return (
     <div className="flex w-full justify-between items-center p-4">
-      <div className="text-white/40 text-xs font-diatype-mono w-[360px] text-left">
+      <div className="text-white/40 text-xs font-berkeley-mono w-[360px] text-left">
         <p>
             By using Svela you agree to our <br />
           <a

@@ -40,17 +40,17 @@ export function TradePreview({ tradeAction, onExecute, onCancel }: TradePreviewP
       <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
         <div className="flex items-center justify-between gap-3">
           <span className="text-muted-foreground">From</span>
-          <span className="font-diatype-mono">
+          <span className="font-berkeley-mono">
             {tradeAction.amount ?? "—"} {inputTokenInfo?.symbol ?? "—"}
           </span>
         </div>
         <div className="mt-1 flex items-center justify-between gap-3">
           <span className="text-muted-foreground">To</span>
-          <span className="font-diatype-mono">{outputTokenInfo?.symbol ?? "—"}</span>
+          <span className="font-berkeley-mono">{outputTokenInfo?.symbol ?? "—"}</span>
         </div>
         <div className="mt-1 flex items-center justify-between gap-3">
           <span className="text-muted-foreground">Slippage</span>
-          <span className="font-diatype-mono">{tradeAction.slippage ?? "—"}%</span>
+          <span className="font-berkeley-mono">{tradeAction.slippage ?? "—"}%</span>
         </div>
       </div>
 

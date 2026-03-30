@@ -17,6 +17,7 @@ import { InlineSpotTakerBuySellVolumeChart } from "@/components/charts/inline-sp
 import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
 import { formatUsdPrice } from "@/lib/format-usd"
+import { IconTriangleFill } from "symbols-react"
 
 function loadAnalysisDialog() {
   return import("@/components/navigation/analysis-dialog")
@@ -181,9 +182,9 @@ export function createWatchlistColumns({
                     <Skeleton className="h-4 w-8 rounded" />
                   )}
                 </div>
-                <div className="">
+                <div className=" translate-y-[-1px]">
                   {row.original.quote.USD.price > 0 ? (
-                    <span className="text-muted-foreground font-diatype-mono text-xs">{tokenName}</span>
+                    <span className="text-muted-foreground font-diatype-medium text-xs">{tokenName}</span>
                   ) : (
                     <Skeleton className="h-3 w-16 rounded" />
                   )}
@@ -216,7 +217,7 @@ export function createWatchlistColumns({
         </div>
       ),
       cell: ({ row }) => (
-        <span className="font-diatype-mono text-xs">
+        <span className="font-berkeley-mono text-xs">
           {row.original.quote.USD.price > 0 ? (
             formatUsdPrice(row.original.quote.USD.price)
           ) : (
@@ -236,12 +237,34 @@ export function createWatchlistColumns({
       ),
       cell: ({ row }) => (
         row.original.quote.USD.price > 0 ? (
-          <span className={cn(
-            "font-diatype-mono text-xs",
-            row.original.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'
-          )}>
-            {row.original.quote.USD.percent_change_24h.toFixed(2)}%
-          </span>
+          (() => {
+            const change24h = row.original.quote.USD.percent_change_24h
+            const isPositive = change24h > 0
+            const isNegative = change24h < 0
+            const isNeutral = !isPositive && !isNegative
+
+            return (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 font-berkeley-mono text-xs tabular-nums",
+                  isPositive && "text-emerald-500",
+                  isNegative && "text-rose-500",
+                  isNeutral && "text-muted-foreground",
+                )}
+              >
+                <IconTriangleFill
+                  aria-hidden="true"
+                  className={cn(
+                    "size-2 shrink-0 mr-1",
+                    isPositive && "fill-emerald-500",
+                    isNegative && "fill-rose-500 rotate-180",
+                    isNeutral && "fill-zinc-500/60",
+                  )}
+                />
+                {(isNegative ? Math.abs(change24h) : change24h).toFixed(2)}%
+              </span>
+            )
+          })()
         ) : (
           <Skeleton className="h-4 w-12 rounded-full" />
         )
@@ -257,7 +280,7 @@ export function createWatchlistColumns({
         </div>
       ),
       cell: ({ row }) => (
-        <span className="font-diatype-mono text-xs">
+        <span className="font-berkeley-mono text-xs">
           {row.original.quote.USD.price > 0 ? (
             `$${formatLargeNumber(row.original.quote.USD.volume_24h || 0)}`
           ) : (

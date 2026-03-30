@@ -168,7 +168,7 @@ export function InlineSpotTakerBuySellVolumeChart({
         ref={containerRef}
         className={cn(
           "h-8 text-center rounded-sm overflow-hidden bg-transparent flex items-center justify-center",
-          "text-[10px] font-medium text-muted-foreground/70 font-diatype-mono",
+          "text-[10px] font-medium text-muted-foreground/70 font-berkeley-mono",
           className ?? "w-full",
         )}
         title={title}
