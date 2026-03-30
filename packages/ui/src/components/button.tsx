@@ -4,16 +4,16 @@ import * as React from "react";
 import { cn } from "../utils";
 
 const buttonVariants = cva(
-  "inline-flex cursor-pointer backdrop-blur-sm items-center justify-center font-semibold outline outline-2 outline-offset-4 outline-transparent transition-all duration-150 ease-in-out active:scale-[0.98] disabled:opacity-80 disabled:cursor-not-allowed transition-all duration-150 ease-in-out",
+  "inline-flex cursor-pointer backdrop-blur-sm items-center justify-center font-semibold outline outline-2 outline-offset-4 outline-transparent transition-all duration-150 ease-in-out active:scale-[0.98] disabled:opacity-80 disabled:cursor-not-allowed transition-all duration-75 ease-in-out rounded-full",
   {
     variants: {
       variant: {
         default:
-          "rounded-lg border-white/20 bg-zinc-800/50 hover:bg-zinc-800/80 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-zinc-700/80 dark:ring-zinc-700/80 text-white transition-colors duration-200 ease-in-out",
+          "border-white/20 bg-zinc-800/50 hover:bg-zinc-800/80 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-zinc-700/80 dark:ring-zinc-700/80 text-white",
         destructive:
-          "border-t rounded-lg border-white/40 bg-gradient-to-b from-rose-500 to-rose-500 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-rose-700 dark:ring-rose-700 text-white",
+          "border-t border-white/40 bg-gradient-to-b from-rose-500 to-rose-500 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-rose-700 dark:ring-rose-700 text-white",
         outline:
-          "border rounded-lg border bg-transparent hover:bg-accent hover:text-accent-foreground",
+          "border border bg-transparent hover:bg-accent hover:text-accent-foreground",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-primary/5",
