@@ -49,7 +49,10 @@ export const getSpotTakerBuySellVolumeHistorySeries = query({
     const latest = await ctx.db
       .query("coinglassSpotTakerBuySellVolumeHistory")
       .withIndex("by_exchange_and_symbol_and_interval_and_last_updated", (q) =>
-        q.eq("exchange", args.exchange).eq("symbol", args.symbol).eq("interval", args.interval),
+        q
+          .eq("exchange", args.exchange)
+          .eq("symbol", args.symbol)
+          .eq("interval", args.interval),
       )
       .order("desc")
       .first();
@@ -61,7 +64,10 @@ export const getSpotTakerBuySellVolumeHistorySeries = query({
     const latestPoints = await ctx.db
       .query("coinglassSpotTakerBuySellVolumeHistory")
       .withIndex("by_exchange_and_symbol_and_interval_and_timestamp", (q) =>
-        q.eq("exchange", args.exchange).eq("symbol", args.symbol).eq("interval", args.interval),
+        q
+          .eq("exchange", args.exchange)
+          .eq("symbol", args.symbol)
+          .eq("interval", args.interval),
       )
       .order("desc")
       .take(limit);
@@ -111,7 +117,10 @@ export const getFuturesTakerBuySellVolumeHistorySeries = query({
     const latest = await ctx.db
       .query("coinglassFuturesTakerBuySellVolumeHistory")
       .withIndex("by_exchange_and_symbol_and_interval_and_last_updated", (q) =>
-        q.eq("exchange", args.exchange).eq("symbol", args.symbol).eq("interval", args.interval),
+        q
+          .eq("exchange", args.exchange)
+          .eq("symbol", args.symbol)
+          .eq("interval", args.interval),
       )
       .order("desc")
       .first();
@@ -123,7 +132,10 @@ export const getFuturesTakerBuySellVolumeHistorySeries = query({
     const latestPoints = await ctx.db
       .query("coinglassFuturesTakerBuySellVolumeHistory")
       .withIndex("by_exchange_and_symbol_and_interval_and_timestamp", (q) =>
-        q.eq("exchange", args.exchange).eq("symbol", args.symbol).eq("interval", args.interval),
+        q
+          .eq("exchange", args.exchange)
+          .eq("symbol", args.symbol)
+          .eq("interval", args.interval),
       )
       .order("desc")
       .take(limit);
@@ -139,3 +151,224 @@ export const getFuturesTakerBuySellVolumeHistorySeries = query({
   },
 });
 
+const openInterestPointValidator = v.object({
+  _id: v.id("coinglassOpenInterestHistory"),
+  _creationTime: v.number(),
+  symbol: v.string(),
+  interval: v.string(),
+  unit: v.string(),
+  timestamp: v.number(),
+  open: v.number(),
+  high: v.number(),
+  low: v.number(),
+  close: v.number(),
+  dataSource: v.string(),
+  lastUpdated: v.number(),
+});
+
+export const getOpenInterestHistorySeries = query({
+  args: {
+    serverToken: v.string(),
+    symbol: v.string(),
+    interval: v.string(),
+    unit: v.string(),
+    limit: v.optional(v.number()),
+    startTime: v.optional(v.number()),
+    endTime: v.optional(v.number()),
+  },
+  returns: v.object({
+    data: v.array(openInterestPointValidator),
+    lastUpdated: v.number(),
+    stale: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const now = Date.now();
+    const limit = Math.min(MAX_RETURN_POINTS, Math.max(2, args.limit ?? 50));
+
+    const latest = await ctx.db
+      .query("coinglassOpenInterestHistory")
+      .withIndex("by_symbol_and_interval_and_unit_and_last_updated", (q) =>
+        q
+          .eq("symbol", args.symbol)
+          .eq("interval", args.interval)
+          .eq("unit", args.unit),
+      )
+      .order("desc")
+      .first();
+
+    if (!latest) return { data: [], lastUpdated: 0, stale: true };
+
+    const latestPoints = await ctx.db
+      .query("coinglassOpenInterestHistory")
+      .withIndex("by_symbol_and_interval_and_unit_and_timestamp", (q) => {
+        const base = q
+          .eq("symbol", args.symbol)
+          .eq("interval", args.interval)
+          .eq("unit", args.unit);
+        if (args.startTime !== undefined && args.endTime !== undefined) {
+          return base
+            .gte("timestamp", args.startTime)
+            .lte("timestamp", args.endTime);
+        }
+        if (args.startTime !== undefined)
+          return base.gte("timestamp", args.startTime);
+        if (args.endTime !== undefined)
+          return base.lte("timestamp", args.endTime);
+        return base;
+      })
+      .order("desc")
+      .take(limit);
+
+    const data = latestPoints.slice().reverse();
+    const staleWindowMs = getStaleWindowMs(args.interval);
+    return {
+      data,
+      lastUpdated: latest.lastUpdated,
+      stale: latest.lastUpdated <= now - staleWindowMs,
+    };
+  },
+});
+
+const liquidationPointValidator = v.object({
+  _id: v.id("coinglassLiquidationHistory"),
+  _creationTime: v.number(),
+  symbol: v.string(),
+  interval: v.string(),
+  exchangeList: v.string(),
+  timestamp: v.number(),
+  longLiquidations: v.number(),
+  shortLiquidations: v.number(),
+  totalLiquidations: v.number(),
+  dataSource: v.string(),
+  lastUpdated: v.number(),
+});
+
+export const getLiquidationHistorySeries = query({
+  args: {
+    serverToken: v.string(),
+    symbol: v.string(),
+    interval: v.string(),
+    exchangeList: v.string(),
+    limit: v.optional(v.number()),
+    startTime: v.optional(v.number()),
+    endTime: v.optional(v.number()),
+  },
+  returns: v.object({
+    data: v.array(liquidationPointValidator),
+    lastUpdated: v.number(),
+    stale: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const now = Date.now();
+    const limit = Math.min(MAX_RETURN_POINTS, Math.max(2, args.limit ?? 30));
+
+    const latest = await ctx.db
+      .query("coinglassLiquidationHistory")
+      .withIndex(
+        "by_symbol_and_interval_and_exchange_list_and_last_updated",
+        (q) =>
+          q
+            .eq("symbol", args.symbol)
+            .eq("interval", args.interval)
+            .eq("exchangeList", args.exchangeList),
+      )
+      .order("desc")
+      .first();
+
+    if (!latest) return { data: [], lastUpdated: 0, stale: true };
+
+    const latestPoints = await ctx.db
+      .query("coinglassLiquidationHistory")
+      .withIndex(
+        "by_symbol_and_interval_and_exchange_list_and_timestamp",
+        (q) => {
+          const base = q
+            .eq("symbol", args.symbol)
+            .eq("interval", args.interval)
+            .eq("exchangeList", args.exchangeList);
+          if (args.startTime !== undefined && args.endTime !== undefined) {
+            return base
+              .gte("timestamp", args.startTime)
+              .lte("timestamp", args.endTime);
+          }
+          if (args.startTime !== undefined)
+            return base.gte("timestamp", args.startTime);
+          if (args.endTime !== undefined)
+            return base.lte("timestamp", args.endTime);
+          return base;
+        },
+      )
+      .order("desc")
+      .take(limit);
+
+    const data = latestPoints.slice().reverse();
+    const staleWindowMs = getStaleWindowMs(args.interval);
+    return {
+      data,
+      lastUpdated: latest.lastUpdated,
+      stale: latest.lastUpdated <= now - staleWindowMs,
+    };
+  },
+});
+
+const takerBuySellSnapshotValidator = v.object({
+  _id: v.id("coinglassTakerBuySellExchangeListSnapshots"),
+  _creationTime: v.number(),
+  symbol: v.string(),
+  range: v.string(),
+  overall: v.object({
+    buyRatio: v.number(),
+    sellRatio: v.number(),
+    buyVolumeUsd: v.number(),
+    sellVolumeUsd: v.number(),
+    totalVolumeUsd: v.number(),
+  }),
+  exchanges: v.array(
+    v.object({
+      exchange: v.string(),
+      buyRatio: v.number(),
+      sellRatio: v.number(),
+      buyVolumeUsd: v.number(),
+      sellVolumeUsd: v.number(),
+      totalVolumeUsd: v.number(),
+    }),
+  ),
+  dataSource: v.string(),
+  lastUpdated: v.number(),
+});
+
+export const getTakerBuySellExchangeListSnapshot = query({
+  args: {
+    serverToken: v.string(),
+    symbol: v.string(),
+    range: v.string(),
+  },
+  returns: v.object({
+    data: v.union(takerBuySellSnapshotValidator, v.null()),
+    lastUpdated: v.number(),
+    stale: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const now = Date.now();
+    const staleWindowMs = 2 * 60 * 1000;
+
+    const latest = await ctx.db
+      .query("coinglassTakerBuySellExchangeListSnapshots")
+      .withIndex("by_symbol_and_range_and_last_updated", (q) =>
+        q.eq("symbol", args.symbol).eq("range", args.range),
+      )
+      .order("desc")
+      .first();
+
+    if (!latest) return { data: null, lastUpdated: 0, stale: true };
+
+    return {
+      data: latest,
+      lastUpdated: latest.lastUpdated,
+      stale: latest.lastUpdated <= now - staleWindowMs,
+    };
+  },
+});

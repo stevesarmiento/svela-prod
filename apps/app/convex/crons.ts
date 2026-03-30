@@ -100,6 +100,36 @@ crons.interval(
   { exchange: "Binance", interval: "4h", batchSize: 10, limit: 42 },
 );
 
+// CoinGlass open interest (cached in DB).
+crons.interval(
+  "coinglass_refresh_open_interest_4h",
+  { minutes: 10 },
+  internal.coinglassJobs.refreshTrackedOpenInterestHistoryBatch,
+  { interval: "4h", unit: "usd", batchSize: 10, limit: 50 },
+);
+
+// CoinGlass liquidation history (cached in DB).
+crons.interval(
+  "coinglass_refresh_liquidations_1d",
+  { minutes: 20 },
+  internal.coinglassJobs.refreshTrackedLiquidationHistoryBatch,
+  {
+    interval: "1d",
+    exchangeList:
+      "Binance, Bybit, OKX, Gate, HTX, Hyperliquid, CoinEx, Bitmex, Bitfinex",
+    batchSize: 8,
+    limit: 30,
+  },
+);
+
+// CoinGlass taker buy/sell (exchange list snapshot; cached in DB).
+crons.interval(
+  "coinglass_refresh_taker_exchange_list_24h",
+  { minutes: 10 },
+  internal.coinglassJobs.refreshTrackedTakerBuySellExchangeListSnapshotBatch,
+  { range: "24h", batchSize: 10 },
+);
+
 // Sync CoinGecko's coin universe (new listings) into `coingeckoCoins`.
 crons.interval(
   "coingecko_sync_coins_list",
@@ -117,4 +147,3 @@ crons.interval(
 );
 
 export default crons;
-

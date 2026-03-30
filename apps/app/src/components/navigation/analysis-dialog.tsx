@@ -1,54 +1,55 @@
-'use client'
+"use client";
 
-import React from 'react'
-import dynamic from "next/dynamic"
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
+import { Button } from "@v1/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
   DialogTrigger,
-} from '@v1/ui/dialog'
-import { Button } from '@v1/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
+} from "@v1/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
+import dynamic from "next/dynamic";
+import React from "react";
 
-import { ScrollArea } from '@v1/ui/scroll-area'
-import Image from 'next/image'
-import { IconBookPages, IconSparkles, IconTextAppend } from 'symbols-react'
-import { useAnalysisData } from '@/hooks/use-analysis-data'
+import { useAnalysisData } from "@/hooks/use-analysis-data";
+import { ScrollArea } from "@v1/ui/scroll-area";
+import Image from "next/image";
+import { IconBookPages, IconSparkles, IconTextAppend } from "symbols-react";
 
 function loadMarketMetricsSidebar() {
-  return import("./market-metrics-sidebar")
+  return import("./market-metrics-sidebar");
 }
 
 function loadAnalysisResult() {
-  return import("./analysis-result")
+  return import("./analysis-result");
 }
 
 const MarketMetricsSidebar = dynamic(
-  () => loadMarketMetricsSidebar().then((module) => module.MarketMetricsSidebar),
+  () =>
+    loadMarketMetricsSidebar().then((module) => module.MarketMetricsSidebar),
   {
     ssr: false,
     loading: () => <div className="p-4" />,
   },
-)
+);
 
 const AnalysisResult = dynamic(
   () => loadAnalysisResult().then((module) => module.AnalysisResult),
   { ssr: false, loading: () => null },
-)
+);
 
 interface AnalysisDialogProps {
-  coinId: string
+  coinId: string;
   tokenData: {
-    name?: string
-    symbol?: string
-    id?: string
-    logoUrl?: string
-  } | null
-  triggerVariant?: "default" | "icon"
-  triggerTooltip?: string
-  triggerAriaLabel?: string
+    name?: string;
+    symbol?: string;
+    id?: string;
+    logoUrl?: string;
+  } | null;
+  triggerVariant?: "default" | "icon";
+  triggerTooltip?: string;
+  triggerAriaLabel?: string;
 }
 
 export function AnalysisDialog({
@@ -58,13 +59,13 @@ export function AnalysisDialog({
   triggerTooltip,
   triggerAriaLabel,
 }: AnalysisDialogProps) {
-  const [isDialogOpen, setIsDialogOpen] = React.useState(false)
+  const [isDialogOpen, setIsDialogOpen] = React.useState(false);
 
   // Preload heavy dialog chunks on user intent (hover/focus).
   const preloadDialogChunks = React.useCallback(() => {
-    void loadMarketMetricsSidebar()
-    void loadAnalysisResult()
-  }, [])
+    void loadMarketMetricsSidebar();
+    void loadAnalysisResult();
+  }, []);
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -76,7 +77,10 @@ export function AnalysisDialog({
               onFocus={preloadDialogChunks}
               onTouchStart={preloadDialogChunks}
               onClick={() => setIsDialogOpen(true)}
-              aria-label={triggerAriaLabel ?? (triggerVariant === "icon" ? "Deep analysis" : undefined)}
+              aria-label={
+                triggerAriaLabel ??
+                (triggerVariant === "icon" ? "Deep analysis" : undefined)
+              }
               variant="ghost"
               size="sm"
               className={
@@ -97,14 +101,19 @@ export function AnalysisDialog({
           </DialogTrigger>
         </TooltipTrigger>
         <TooltipContent className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
-          <span>{triggerTooltip ?? (triggerVariant === "icon" ? "Deep analysis" : "Analyze")}</span>
+          <span>
+            {triggerTooltip ??
+              (triggerVariant === "icon" ? "Deep analysis" : "Analyze")}
+          </span>
         </TooltipContent>
       </Tooltip>
       <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
-        {isDialogOpen ? <AnalysisDialogBody coinId={coinId} tokenData={tokenData} /> : null}
+        {isDialogOpen ? (
+          <AnalysisDialogBody coinId={coinId} tokenData={tokenData} />
+        ) : null}
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
@@ -120,19 +129,23 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
     isAnalysisLoading,
     analysisResult,
     handleAnalyze,
-  } = useAnalysisData({ coinId, tokenData, shouldCalculate: true })
+  } = useAnalysisData({ coinId, tokenData, shouldCalculate: true });
 
   // Kick off analysis once we have market data (required for prepareAnalysisData()).
-  const hasStartedAnalysisRef = React.useRef(false)
+  const hasStartedAnalysisRef = React.useRef(false);
   React.useEffect(() => {
-    if (!marketData || hasStartedAnalysisRef.current) return
-    hasStartedAnalysisRef.current = true
-    void handleAnalyze()
-  }, [marketData, handleAnalyze])
+    // Avoid firing analysis before we have enough history to produce meaningful indicators.
+    // CoinGecko chart + volume data often arrive after marketData, and early runs can produce 0/1-period artifacts.
+    const hasEnoughHistory = chartData.length >= 30 && volumeData.length >= 30;
+    if (!marketData || !hasEnoughHistory || hasStartedAnalysisRef.current)
+      return;
+    hasStartedAnalysisRef.current = true;
+    void handleAnalyze();
+  }, [marketData, chartData.length, volumeData.length, handleAnalyze]);
 
   // Transform CoinGecko marketData to expected format for MarketMetricsSidebar
   const transformedMarketData = React.useMemo(() => {
-    if (!marketData) return {}
+    if (!marketData) return {};
 
     return {
       quote: {
@@ -143,8 +156,8 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
           percent_change_24h: marketData.price_change_percentage_24h || 0,
         },
       },
-    }
-  }, [marketData])
+    };
+  }, [marketData]);
 
   return (
     <>
@@ -166,8 +179,8 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
                 placeholder="blur"
                 blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGBkbHB0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
                 onError={(e) => {
-                  const target = e.target as HTMLImageElement
-                  target.src = "/favicon.ico"
+                  const target = e.target as HTMLImageElement;
+                  target.src = "/favicon.ico";
                 }}
               />
               <div className="flex flex-col gap-0">
@@ -182,7 +195,9 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
                         : "text-red-400"
                     }`}
                   >
-                    {(marketData?.price_change_percentage_24h ?? 0) >= 0 ? "+" : ""}
+                    {(marketData?.price_change_percentage_24h ?? 0) >= 0
+                      ? "+"
+                      : ""}
                     {marketData?.price_change_percentage_24h?.toFixed(2)}%
                   </span>
                 </div>
@@ -215,7 +230,10 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
                 volumeData={volumeData || []}
                 bbData={bbData || { indicator: [], upper: [], lower: [] }}
                 marketVisionData={
-                  marketVisionData || { moneyFlow: { fast: [] }, waveTrend: { wt1: [], wt2: [] } }
+                  marketVisionData || {
+                    moneyFlow: { fast: [] },
+                    waveTrend: { wt1: [], wt2: [] },
+                  }
                 }
                 openInterestData={openInterestData || {}}
                 liquidationData={liquidationData || {}}
@@ -244,5 +262,5 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
         </div>
       </div>
     </>
-  )
+  );
 }
