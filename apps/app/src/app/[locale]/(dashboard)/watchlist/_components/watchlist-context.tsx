@@ -4,7 +4,10 @@ import type React from 'react'
 import { createContext, useContext, useEffect, useCallback, useMemo, type ReactNode } from 'react'
 import { useUser } from '@clerk/nextjs'
 import { useQueryState } from 'nuqs'
-import type { WatchlistGroup as WatchlistGroupModel } from '@/lib/effect/watchlist-models'
+import type {
+  WatchlistGroup as WatchlistGroupModel,
+  WatchlistItem as WatchlistItemModel,
+} from '@/lib/effect/watchlist-models'
 import { env } from '@/env.mjs'
 import type { Preloaded } from "convex/react"
 import { usePreloadedQuery, useQuery } from "convex/react"
@@ -21,6 +24,12 @@ import {
 
 export type WatchlistGroup = WatchlistGroupModel
 
+/** Coin rows for the selected group (includes optional token quantity for charts). */
+export interface SelectedWatchlistItemRow {
+  coinId: string
+  holdings?: number
+}
+
 interface WatchlistContextType {
   // MIGRATED TO COINGECKO: Now uses string IDs instead of numeric IDs
   watchlist: string[] // CoinGecko string IDs (e.g., ["bitcoin", "ethereum"])
@@ -34,6 +43,7 @@ interface WatchlistContextType {
   watchlistGroups: WatchlistGroup[]
   selectedGroup: WatchlistGroup | null
   selectedGroupCoins: string[] // CoinGecko string IDs
+  selectedGroupItems: SelectedWatchlistItemRow[]
   isGroupsLoading: boolean
   selectWatchlistGroup: (group: WatchlistGroup | null) => void
   addToSelectedGroup: (coinId: string) => Promise<void> // CoinGecko string ID
@@ -101,11 +111,19 @@ function WatchlistProviderPreloaded(props: {
   const selectedGroupData = useQuery(
     api.watchlists.getMyWatchlistBySlug,
     !shouldUseBootstrapItems && selectedGroupSlug ? { slug: selectedGroupSlug } : "skip",
-  ) as { group: WatchlistGroup; items: Array<{ coinId: string }> } | null | undefined
+  ) as { group: WatchlistGroup; items: SelectedWatchlistItemRow[] } | null | undefined
 
   const effectiveWatchlist = shouldUseBootstrapItems
     ? defaultWatchlistItems
     : selectedGroupData?.items
+
+  const selectedGroupItems = useMemo((): SelectedWatchlistItemRow[] => {
+    if (!effectiveWatchlist || !Array.isArray(effectiveWatchlist)) return []
+    return effectiveWatchlist.map((item) => ({
+      coinId: item.coinId,
+      ...(item.holdings !== undefined ? { holdings: item.holdings } : {}),
+    }))
+  }, [effectiveWatchlist])
 
   const selectedGroupCoins = useMemo(() => {
     if (effectiveWatchlist && Array.isArray(effectiveWatchlist)) return effectiveWatchlist.map(item => item.coinId)
@@ -161,6 +179,7 @@ function WatchlistProviderPreloaded(props: {
     watchlistGroups: watchlistGroups || [],
     selectedGroup,
     selectedGroupCoins,
+    selectedGroupItems,
     isGroupsLoading,
     selectWatchlistGroup,
     addToSelectedGroup,
@@ -168,7 +187,7 @@ function WatchlistProviderPreloaded(props: {
     removeBulkFromSelectedGroup
   }), [
     watchlist, isLoading, isInitialized, addToWatchlist, removeFromWatchlist, removeBulkFromWatchlist,
-    watchlistGroups, selectedGroup, selectedGroupCoins, isGroupsLoading,
+    watchlistGroups, selectedGroup, selectedGroupCoins, selectedGroupItems, isGroupsLoading,
     selectWatchlistGroup, addToSelectedGroup, removeFromSelectedGroup, removeBulkFromSelectedGroup
   ])
 
@@ -184,7 +203,7 @@ function WatchlistProviderLive({ children }: { children: React.ReactNode }) {
   const { user, isLoaded } = useUser()
   
   // Legacy hooks
-  const convexWatchlist = useConvexWatchlist() as Array<{ coinId: string }> | undefined
+  const convexWatchlist = useConvexWatchlist() as Array<WatchlistItemModel> | undefined
   const addToConvexWatchlistGroup = useAddToWatchlistGroup()
   const removeFromConvexWatchlistGroup = useRemoveFromWatchlistGroup()
   const removeBulkFromConvexWatchlist = useRemoveBulkFromWatchlist()
@@ -221,14 +240,24 @@ function WatchlistProviderLive({ children }: { children: React.ReactNode }) {
   }, [selectedGroupSlug, watchlistGroups])
   
   const selectedGroupData = useWatchlistBySlug(selectedGroupSlug) as
-    | { group: WatchlistGroup; items: Array<{ coinId: string }> }
+    | { group: WatchlistGroup; items: WatchlistItemModel[] }
     | null
     | undefined
   const selectedGroupWatchlist = selectedGroupData?.items
 
-  const selectedGroupWatchlistById = useWatchlistByGroup(selectedGroup?._id) as Array<{ coinId: string }> | undefined
+  const selectedGroupWatchlistById = useWatchlistByGroup(selectedGroup?._id) as
+    | WatchlistItemModel[]
+    | undefined
   
   const effectiveWatchlist = selectedGroupWatchlist || selectedGroupWatchlistById
+
+  const selectedGroupItems = useMemo((): SelectedWatchlistItemRow[] => {
+    if (!effectiveWatchlist || !Array.isArray(effectiveWatchlist)) return []
+    return effectiveWatchlist.map((item) => ({
+      coinId: item.coinId,
+      ...(item.holdings !== undefined ? { holdings: item.holdings } : {}),
+    }))
+  }, [effectiveWatchlist])
   
   const selectedGroupCoins = useMemo(() => {
     
@@ -363,6 +392,7 @@ function WatchlistProviderLive({ children }: { children: React.ReactNode }) {
     watchlistGroups: watchlistGroups || [],
     selectedGroup,
     selectedGroupCoins,
+    selectedGroupItems,
     isGroupsLoading,
     selectWatchlistGroup,
     addToSelectedGroup,
@@ -370,7 +400,7 @@ function WatchlistProviderLive({ children }: { children: React.ReactNode }) {
     removeBulkFromSelectedGroup
   }), [
     watchlist, isLoading, isInitialized, addToWatchlist, removeFromWatchlist, removeBulkFromWatchlist,
-    watchlistGroups, selectedGroup, selectedGroupCoins, isGroupsLoading,
+    watchlistGroups, selectedGroup, selectedGroupCoins, selectedGroupItems, isGroupsLoading,
     selectWatchlistGroup, addToSelectedGroup, removeFromSelectedGroup, removeBulkFromSelectedGroup
   ])
 

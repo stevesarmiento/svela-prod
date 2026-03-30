@@ -1,10 +1,21 @@
 'use client'
 
-import { useMemo, useTransition, useDeferredValue, memo, useCallback } from 'react'
+import {
+  useMemo,
+  useTransition,
+  useDeferredValue,
+  memo,
+  useCallback,
+  useState,
+  useEffect,
+  useRef,
+} from 'react'
 import { useSearchParams } from "next/navigation"
 import dynamic from "next/dynamic"
+import { useUser } from "@clerk/nextjs"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { Button } from "@v1/ui/button"
+import { Input } from "@v1/ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { X } from "lucide-react"
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
@@ -16,6 +27,8 @@ import { Skeleton } from "@v1/ui/skeleton"
 import { Spinner } from "@v1/ui/spinner"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
 import { formatUsdPrice } from "@/lib/format-usd"
+import { useSetWatchlistItemHoldings } from "@/lib/convex-hooks"
+import { Badge } from "@v1/ui/badge"
 
 function loadAnalysisDialog() {
   return import("@/components/navigation/analysis-dialog")
@@ -48,7 +61,194 @@ interface OptimisticCoinData {
     };
   };
   isOptimistic?: boolean;
+  /** Token quantity from Convex watchlist row (optional). */
+  holdings?: number;
 }
+
+interface ChartHoldingsCellProps {
+  coinId: string
+  holdings: number | undefined
+  /** Spot USD price for notional (holdings × price). */
+  priceUsd: number
+  isOptimistic: boolean
+  showPending: boolean
+  groupId: string | null
+  canEdit: boolean
+}
+
+function parseDraftQty(draft: string): number | undefined {
+  const t = draft.trim()
+  if (t === "") return undefined
+  const n = Number(t.replace(/,/g, ""))
+  if (!Number.isFinite(n) || n < 0) return undefined
+  return n
+}
+
+function notionalUsdForCell(
+  editing: boolean,
+  draft: string,
+  holdings: number | undefined,
+  priceUsd: number,
+): number | null {
+  if (!Number.isFinite(priceUsd) || priceUsd <= 0) return null
+  const qty = editing ? parseDraftQty(draft) : holdings
+  if (qty === undefined) return null
+  return qty * priceUsd
+}
+
+const holdingsDisplayFormatter = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 8,
+})
+
+const ChartHoldingsCell = memo(function ChartHoldingsCell({
+  coinId,
+  holdings,
+  priceUsd,
+  isOptimistic,
+  showPending,
+  groupId,
+  canEdit,
+}: ChartHoldingsCellProps) {
+  const setHoldings = useSetWatchlistItemHoldings()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!editing) {
+      setDraft(holdings !== undefined ? String(holdings) : "")
+    }
+  }, [holdings, editing])
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus()
+  }, [editing])
+
+  const commit = useCallback(async () => {
+    if (!canEdit || !groupId) return
+    const t = draft.trim()
+    if (t === "") {
+      try {
+        await setHoldings(groupId, coinId, null)
+        setEditing(false)
+      } catch {
+        toast({
+          title: "Could not update holdings",
+          description: "Try again in a moment.",
+          variant: "destructive",
+        })
+      }
+      return
+    }
+    const n = Number(t.replace(/,/g, ""))
+    if (!Number.isFinite(n) || n < 0) {
+      toast({
+        title: "Invalid amount",
+        description: "Enter a non-negative number or leave empty to clear.",
+        variant: "destructive",
+      })
+      setDraft(holdings !== undefined ? String(holdings) : "")
+      setEditing(false)
+      return
+    }
+    try {
+      await setHoldings(groupId, coinId, n)
+      setEditing(false)
+    } catch {
+      toast({
+        title: "Could not update holdings",
+        description: "Try again in a moment.",
+        variant: "destructive",
+      })
+    }
+  }, [canEdit, groupId, coinId, draft, holdings, setHoldings])
+
+  const cancel = useCallback(() => {
+    setDraft(holdings !== undefined ? String(holdings) : "")
+    setEditing(false)
+  }, [holdings])
+
+  if (isOptimistic) {
+    return (
+      <div className="flex items-center justify-end">
+        <Skeleton className="h-3 w-14 rounded-full" />
+      </div>
+    )
+  }
+
+  const displayStr =
+    holdings !== undefined ? holdingsDisplayFormatter.format(holdings) : null
+
+  const notionalUsd = notionalUsdForCell(editing, draft, holdings, priceUsd)
+
+  return (
+    <div
+      className="flex min-w-0 items-center justify-end gap-1.5"
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+    >
+      <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5">
+        {editing ? (
+          <Input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => {
+              void commit()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                void commit()
+              }
+              if (e.key === "Escape") {
+                e.preventDefault()
+                cancel()
+              }
+            }}
+            inputMode="decimal"
+            disabled={showPending}
+            aria-label="Token holdings quantity"
+            className="h-7 w-[5.5rem] px-2 py-0 text-right font-diatype-mono text-xs tabular-nums"
+          />
+        ) : (
+          <button
+            type="button"
+            disabled={!canEdit || showPending}
+            onClick={() => {
+              if (canEdit) setEditing(true)
+            }}
+            className={cn(
+              "-mx-1 rounded px-1 py-0.5 text-right font-diatype-mono text-xs tabular-nums",
+              displayStr ? "text-foreground" : "text-muted-foreground",
+              canEdit && !showPending && "cursor-text hover:bg-primary/10",
+              (!canEdit || showPending) && "cursor-default",
+            )}
+          >
+            {displayStr ?? "—"}
+          </button>
+        )}
+        {notionalUsd !== null ? (
+          <Badge
+            variant="outline"
+            className="h-5 max-w-[6.5rem] shrink-0 truncate border-primary/5 bg-primary/5 px-1.5 text-[10px] font-normal leading-none tabular-nums text-white/60"
+            title="USD notional (holdings × spot price)"
+          >
+            {formatUsdPrice(notionalUsd)}
+          </Badge>
+        ) : null}
+      </div>
+    </div>
+  )
+})
 
 interface ChartTableProps {
   coins: OptimisticCoinData[]
@@ -62,6 +262,7 @@ export const ChartTable = memo(function ChartTable({
   isPending 
 }: ChartTableProps) {
   const { removeFromSelectedGroup, selectedGroup } = useWatchlist()
+  const { user } = useUser()
   const searchParams = useSearchParams()
   const [isRemovePending, startRemoveTransition] = useTransition()
   
@@ -112,22 +313,6 @@ export const ChartTable = memo(function ChartTable({
             // Default to 24h real data
             intervalChange = coin.quote.USD.percent_change_24h ?? 0
         }
-      }
-
-      // Debug: Always log what data we're using to ensure it's real
-      if (!coin.isOptimistic) {
-        console.log(`📈 ${coin.symbol} (${deferredTimeScale}):`, {
-          selectedChange: Number.isNaN(intervalChange) ? 'N/A - No real data available' : intervalChange,
-          timeScale: deferredTimeScale,
-          realDataAvailable: {
-            percent_change_1h: coin.quote?.USD?.percent_change_1h,
-            percent_change_24h: coin.quote?.USD?.percent_change_24h,
-            percent_change_7d: coin.quote?.USD?.percent_change_7d,
-            percent_change_30d: coin.quote?.USD?.percent_change_30d,
-          },
-          dataSource: 'Pure CoinGecko API',
-          usingRealData: !Number.isNaN(intervalChange)
-        })
       }
 
       return {
@@ -185,6 +370,8 @@ export const ChartTable = memo(function ChartTable({
 
   // React 19: Show pending states
   const showPending = isPending || isRemovePending
+  const holdingsGroupId = selectedGroup?._id ?? null
+  const canEditHoldings = Boolean(user && selectedGroup)
 
   if (!coins.length) return null
 
@@ -212,7 +399,7 @@ export const ChartTable = memo(function ChartTable({
           {/* Header with Token Name */}
           <div className="px-3 py-2">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-5 gap-4">
                 <div className="flex items-center gap-2">
                   <div className="relative">
                     {safeTokenLogoUrl ? (
@@ -254,6 +441,9 @@ export const ChartTable = memo(function ChartTable({
                 <div className="flex items-center gap-1 justify-end">
                   {getTimeScaleLabel(activeTimeScale)} Change
                 </div>
+                <div className="flex items-center justify-end">
+                  Holdings
+                </div>
                 <div className="flex items-center justify-end gap-1">
                   Actions
                 </div>
@@ -265,7 +455,7 @@ export const ChartTable = memo(function ChartTable({
           <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden hover:ring-2 hover:ring-zinc-200/30 transition-all duration-100">
             {coin.isOptimistic ? (
               // Show non-clickable loading state for optimistic coins
-              <div className="grid grid-cols-4 gap-4 px-4 py-2 pr-2 opacity-60">
+              <div className="grid grid-cols-5 gap-4 px-4 py-2 pr-2 opacity-60">
                 {/* Price */}
                 <div className="flex items-center gap-2">
                   <Skeleton className="h-3 w-8 rounded-full" />
@@ -282,6 +472,17 @@ export const ChartTable = memo(function ChartTable({
                 <div className="flex items-center justify-end">
                   <Skeleton className="h-3 w-10 rounded-full" />
                 </div>
+
+                {/* Holdings */}
+                <ChartHoldingsCell
+                  coinId={String(coin.id)}
+                  holdings={coin.holdings}
+                  priceUsd={coin.quote.USD.price}
+                  isOptimistic
+                  showPending={showPending}
+                  groupId={holdingsGroupId}
+                  canEdit={canEditHoldings}
+                />
 
                 {/* Remove */}
                 <div className="flex items-center justify-end">
@@ -312,7 +513,7 @@ export const ChartTable = memo(function ChartTable({
               // Show clickable link for real coins
               <Link 
                 href={watchlistGroup ? `/charts/${coin.id}?wg=${watchlistGroup}` : `/charts/${coin.id}`}
-                className="grid grid-cols-4 gap-4 px-4 py-2 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer"
+                className="grid grid-cols-5 gap-4 px-4 py-2 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer"
               >
                 {/* Price */}
                 <div className="flex items-center gap-2">
@@ -345,6 +546,17 @@ export const ChartTable = memo(function ChartTable({
                     </span>
                   )}
                 </div>
+
+                {/* Holdings (editable token quantity) */}
+                <ChartHoldingsCell
+                  coinId={String(coin.id)}
+                  holdings={coin.holdings}
+                  priceUsd={coin.quote.USD.price}
+                  isOptimistic={false}
+                  showPending={showPending}
+                  groupId={holdingsGroupId}
+                  canEdit={canEditHoldings}
+                />
 
                 {/* Remove */}
                 <div 

@@ -60,7 +60,6 @@ function getPriceSeries(data: OHLCVDataPoint[], source: BBWPPriceSource): number
       return data.map((d) => d.low)
     case 'hlc3':
       return data.map((d) => (d.high + d.low + d.close) / 3)
-    case 'close':
     default:
       return data.map((d) => d.close)
   }

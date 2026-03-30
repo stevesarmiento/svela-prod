@@ -24,6 +24,7 @@ const watchlistItemValidator = v.object({
   userId: v.id("users"),
   watchlistGroupId: v.id("watchlistGroups"),
   coinId: v.string(),
+  holdings: v.optional(v.number()),
 });
 
 async function getCurrentUser(ctx: QueryCtx | MutationCtx) {
@@ -1178,6 +1179,47 @@ export const removeFromMyWatchlist = mutation({
       });
     }
 
+    return null;
+  },
+});
+
+/** Set or clear token quantity for a coin in a watchlist group (includes wallet-mirrored groups). */
+export const setMyWatchlistItemHoldings = mutation({
+  args: {
+    groupId: v.id("watchlistGroups"),
+    coinId: v.string(),
+    holdings: v.union(v.number(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const group = await ctx.db.get(args.groupId);
+    if (!group || group.userId !== user._id) throw new Error("Watchlist group not found");
+
+    const row = await ctx.db
+      .query("watchlists")
+      .withIndex("by_group_coin", (q) =>
+        q.eq("watchlistGroupId", args.groupId).eq("coinId", args.coinId),
+      )
+      .first();
+    if (!row || row.userId !== user._id) throw new Error("Watchlist item not found");
+
+    if (args.holdings === null) {
+      await ctx.db.replace(row._id, {
+        userId: row.userId,
+        watchlistGroupId: row.watchlistGroupId,
+        coinId: row.coinId,
+      });
+      return null;
+    }
+
+    if (!Number.isFinite(args.holdings) || args.holdings < 0) {
+      throw new Error("Holdings must be a non-negative number");
+    }
+
+    await ctx.db.patch(row._id, { holdings: args.holdings });
     return null;
   },
 });

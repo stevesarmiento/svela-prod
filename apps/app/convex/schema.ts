@@ -38,6 +38,8 @@ export default defineSchema({
     userId: v.id("users"),
     watchlistGroupId: v.id("watchlistGroups"),
     coinId: v.string(),
+    /** Optional token quantity for this row (manual watchlist or wallet-mirrored group). */
+    holdings: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_user_coin", ["userId", "coinId"])

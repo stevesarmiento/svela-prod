@@ -162,6 +162,16 @@ export function useRemoveBulkFromWatchlist() {
     bulkRemove({ coinIds, groupId: groupId ? (groupId as Id<"watchlistGroups">) : undefined });
 }
 
+export function useSetWatchlistItemHoldings() {
+  const setHoldings = useMutation(api.watchlists.setMyWatchlistItemHoldings);
+  return (groupId: string, coinId: string, holdings: number | null) =>
+    setHoldings({
+      groupId: groupId as Id<"watchlistGroups">,
+      coinId,
+      holdings,
+    });
+}
+
 export function useRemoveFromAllWatchlists() {
   const removeEverywhere = useMutation(api.watchlists.removeFromAllMyWatchlists);
   return useCallback((coinId: string) => removeEverywhere({ coinId }), [removeEverywhere]);

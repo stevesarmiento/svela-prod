@@ -24,7 +24,8 @@ export function useOptimizedChartsData() {
     watchlist, 
     isInitialized,
     selectedGroup,
-    selectedGroupCoins
+    selectedGroupCoins,
+    selectedGroupItems,
   } = useWatchlist()
   
   const [activeTimeScale, setActiveTimeScale] = useState<string>("1d")
@@ -40,11 +41,20 @@ export function useOptimizedChartsData() {
   const idsForQuotes = useMemo(() => (isInitialized ? currentWatchlist : []), [currentWatchlist, isInitialized])
   const quotesQuery = useCoinGeckoQuotesBulk(idsForQuotes)
 
+  const holdingsByCoinId = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const row of selectedGroupItems) {
+      if (row.holdings !== undefined) m.set(row.coinId, row.holdings)
+    }
+    return m
+  }, [selectedGroupItems])
+
   const coins = useMemo(() => {
     const quotesById = quotesQuery.data
     if (!quotesById) return []
 
     return idsForQuotes.map((coinId) => {
+      const h = holdingsByCoinId.get(coinId)
       const coin = quotesById[coinId]
       if (!coin) {
         return {
@@ -64,6 +74,7 @@ export function useOptimizedChartsData() {
               volume_24h: 0,
             },
           },
+          ...(h !== undefined ? { holdings: h } : {}),
         }
       }
 
@@ -84,9 +95,10 @@ export function useOptimizedChartsData() {
             volume_24h: coin.total_volume ?? 0,
           },
         },
+        ...(h !== undefined ? { holdings: h } : {}),
       }
     })
-  }, [idsForQuotes, quotesQuery.data])
+  }, [idsForQuotes, quotesQuery.data, holdingsByCoinId])
 
     // Use the fetched coins directly (simplified approach like watchlist)
   const optimisticCoins = useMemo(() => {
@@ -94,7 +106,9 @@ export function useOptimizedChartsData() {
     
     // If still loading, show loading coins with complete structure
     if (quotesQuery.isLoading && !quotesQuery.data) {
-      return currentWatchlist.map(coinId => ({
+      return currentWatchlist.map(coinId => {
+        const h = holdingsByCoinId.get(coinId)
+        return {
         id: coinId,
         name: 'Loading...',
         symbol: 'Loading...',
@@ -111,8 +125,9 @@ export function useOptimizedChartsData() {
             market_cap: 0
           } 
         },
+        ...(h !== undefined ? { holdings: h } : {}),
         isOptimistic: true
-      }));
+      }});
     }
     
          // Return real coin data
@@ -120,13 +135,7 @@ export function useOptimizedChartsData() {
        ...coin,
        isOptimistic: false
      }));
-  }, [coins, currentWatchlist, isInitialized, quotesQuery.data, quotesQuery.isLoading]);
-
-  // Debug logging
-  console.log('🚀 useOptimizedChartsData - selectedGroup:', selectedGroup?.name, 'coins:', selectedGroupCoins.length)
-  console.log('🚀 useOptimizedChartsData - legacy watchlist coins:', watchlist.length)
-  console.log('🚀 useOptimizedChartsData - currentWatchlist coins:', currentWatchlist.length)
-  console.log('🚀 useOptimizedChartsData - coins.length:', optimisticCoins.length)
+  }, [coins, currentWatchlist, isInitialized, quotesQuery.data, quotesQuery.isLoading, holdingsByCoinId]);
 
   return {
     optimisticCoins,
