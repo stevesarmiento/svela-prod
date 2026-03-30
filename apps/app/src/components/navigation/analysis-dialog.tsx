@@ -16,6 +16,7 @@ import { useAnalysisData } from "@/hooks/use-analysis-data";
 import { ScrollArea } from "@v1/ui/scroll-area";
 import Image from "next/image";
 import { IconBookPages, IconSparkles, IconTextAppend } from "symbols-react";
+import { MultiStepLoader } from "@v1/ui/mult-step-loader";
 
 function loadMarketMetricsSidebar() {
   return import("./market-metrics-sidebar");
@@ -131,6 +132,25 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
     handleAnalyze,
   } = useAnalysisData({ coinId, tokenData, shouldCalculate: true });
 
+  const analysisSteps = React.useMemo(
+    () => [
+      { text: "Analyzing price data" },
+      { text: "Looking at trend" },
+      { text: "Understanding orderflow" },
+      { text: "Considering liquidations" },
+      { text: "Looking at open interest" },
+      { text: "Understanding the market" },
+      { text: "Thinking..." },
+      { text: "Writing out thoughts" },
+      { text: "I have a lot of thoughts..." },
+      { text: "Im embarassed to be taking this long..." },
+      { text: "Pardon my tardiness..." },
+      { text: "I'm just a little bit nervous..." },
+      { text: "You're so awesome :)" },
+    ],
+    [],
+  );
+
   // Kick off analysis once we have market data (required for prepareAnalysisData()).
   const hasStartedAnalysisRef = React.useRef(false);
   React.useEffect(() => {
@@ -160,7 +180,7 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
   }, [marketData]);
 
   return (
-    <>
+    <div className="relative">
       {/* Header */}
       <DialogHeader className="border-b border-gray-200 dark:border-zinc-800/50 pb-4">
         <DialogTitle className="flex items-center justify-between">
@@ -261,6 +281,16 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
           </div>
         </div>
       </div>
-    </>
+
+      {isAnalysisLoading ? (
+        <MultiStepLoader
+          loadingStates={analysisSteps}
+          loading={true}
+          duration={2000}
+          loop={true}
+          variant="dialog"
+        />
+      ) : null}
+    </div>
   );
 }

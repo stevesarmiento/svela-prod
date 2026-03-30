@@ -488,7 +488,7 @@ export async function POST(req: Request) {
       throw new Error('Gemini client not configured')
     }
 
-    const result = await streamText({
+    const result = streamText({
       model: gemini('gemini-2.5-flash'), // Using Gemini Pro for complex technical analysis
       messages: [{ 
         role: 'user', 
@@ -496,6 +496,7 @@ export async function POST(req: Request) {
       }],
       temperature: 0.3, // Lower temperature for more focused technical analysis
       maxOutputTokens: 5000, // Increased for more detailed analysis
+      abortSignal: req.signal,
       onFinish: ({ text, finishReason }) => {
         console.log('Finish reason:', finishReason) // This will tell you why it stopped
         console.log('Response length:', text.length)
@@ -503,34 +504,14 @@ export async function POST(req: Request) {
           console.warn('Response was truncated due to token limit!')
         }
       }
-    })
+    } as Parameters<typeof streamText>[0])
 
-    // Create a custom readable stream for simpler parsing
-    const encoder = new TextEncoder()
-    const readable = new ReadableStream({
-      async start(controller) {
-        try {
-          let totalChunks = 0
-          for await (const chunk of result.textStream) {
-            totalChunks++
-            controller.enqueue(encoder.encode(chunk))
-          }
-          console.log(`Streamed ${totalChunks} chunks successfully`)
-        } catch (error) {
-          console.error('Streaming error:', error)
-          controller.error(error)
-        } finally {
-          controller.close()
-        }
-      }
-    })
-
-    return new Response(readable, {
+    return result.toTextStreamResponse({
       headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
-        'X-Content-Type-Options': 'nosniff'
-      }
+        'X-Accel-Buffering': 'no',
+        'X-Content-Type-Options': 'nosniff',
+      },
     })
   } catch (error) {
     console.error('Analysis error:', error)

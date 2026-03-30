@@ -33,7 +33,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-[100] bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl data-[state=open]:animate-in  data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-[10000] bg-white/80 dark:bg-zinc-950/80 backdrop-blur-xl data-[state=open]:animate-in  data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
     )}
     {...props}
@@ -84,7 +84,7 @@ const DialogContent = React.forwardRef<
           onEscapeKeyDown={handleOnEscapeKeyDown}
           ref={ref}
           className={cn(
-            "fixed left-[50%] top-[50%] z-[1001] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-2xl border border-zinc-800/50 bg-background/60 backdrop-blur-sm duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-down-1/2 data-[state=closed]:slide-out-to-down-[48%] data-[state=open]:slide-in-from-down-1/2 data-[state=open]:slide-in-from-top-[48%] data-[state=closed]:blur-xl",
+            "fixed left-[50%] top-[50%] z-[10001] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] rounded-2xl border border-zinc-800/50 bg-background/60 backdrop-blur-sm duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-down-1/2 data-[state=closed]:slide-out-to-down-[48%] data-[state=open]:slide-in-from-down-1/2 data-[state=open]:slide-in-from-top-[48%] data-[state=closed]:blur-xl",
             "before-content[''] before:absolute before:-top-[0.5px] before:left-1/2 before:h-[1px] before:w-5/6 before:-translate-x-1/2",
             "after-content[''] after:absolute after:-bottom-[0.5px] after:left-1/2 after:h-[1px] after:w-5/6 after:-translate-x-1/2",
             "before:bg-gradient-to-r before:from-transparent before:via-primary-600/80 before:to-transparent",

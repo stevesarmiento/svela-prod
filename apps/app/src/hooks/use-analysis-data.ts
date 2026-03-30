@@ -8,9 +8,10 @@ import { useCoinGeckoChartData } from "@/hooks/use-coingecko-chart-data";
 import { useLiquidationHistory } from "@/hooks/use-liquidation-history";
 import { useOpenInterest } from "@/hooks/use-open-interest";
 import { useTakerBuySell } from "@/hooks/use-taker-buy-sell";
+import { useCompletion } from "@ai-sdk/react";
 import { useQuery } from "@tanstack/react-query";
 import type { Time } from "lightweight-charts";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 
 interface UseAnalysisDataProps {
   coinId: string;
@@ -28,8 +29,27 @@ export function useAnalysisData({
   tokenData,
   shouldCalculate,
 }: UseAnalysisDataProps) {
-  const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState("");
+  const {
+    complete,
+    completion: analysisResult,
+    isLoading: isAnalysisLoading,
+    stop: stopAnalysis,
+    setCompletion: setAnalysisResult,
+  } = useCompletion({
+    api: "/api/analyze",
+    streamProtocol: "text",
+    experimental_throttle: 60,
+    onError: (error: Error) => {
+      console.error("Analysis failed:", error);
+      setAnalysisResult("Failed to generate analysis. Please try again.");
+    },
+  });
+
+  useEffect(() => {
+    return () => {
+      stopAnalysis();
+    };
+  }, [stopAnalysis]);
 
   const activeTimeScale = "30d";
   const EMPTY_ARRAY = useMemo(() => [], []);
@@ -572,52 +592,18 @@ export function useAnalysisData({
   // Handle analysis API call
   const handleAnalyze = async () => {
     try {
-      setIsAnalysisLoading(true);
       setAnalysisResult("");
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      stopAnalysis();
 
       const analysisData = prepareAnalysisData();
       if (!analysisData) {
         setAnalysisResult("Unable to prepare analysis data. Please try again.");
         return;
       }
-
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(analysisData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Analysis failed: ${response.statusText}`);
-      }
-
-      if (response.body) {
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let analysisText = "";
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            const chunk = decoder.decode(value, { stream: true });
-            analysisText += chunk;
-            setAnalysisResult(analysisText);
-          }
-        } finally {
-          reader.releaseLock();
-        }
-      }
+      await complete(JSON.stringify(analysisData));
     } catch (error) {
       console.error("Analysis failed:", error);
       setAnalysisResult("Failed to generate analysis. Please try again.");
-    } finally {
-      setIsAnalysisLoading(false);
     }
   };
 

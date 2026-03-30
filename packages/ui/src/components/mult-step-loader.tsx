@@ -43,9 +43,11 @@ type LoadingState = {
 const LoaderCore = ({
   loadingStates,
   value = 0,
+  variant = "fullscreen",
 }: {
   loadingStates: LoadingState[];
   value?: number;
+  variant?: "fullscreen" | "dialog";
 }) => {
   return (
     <div className="flex relative justify-start max-w-xl mx-auto flex-col mt-40">
@@ -88,9 +90,13 @@ const LoaderCore = ({
             </div>
             <span
               className={cn(
-                "text-black dark:text-white",
-                isCurrentStep && "text-black dark:text-white",
-                isCompletedStep && "text-black dark:text-white/70",
+                variant === "fullscreen" ? "text-black dark:text-white" : "text-white",
+                isCurrentStep &&
+                  (variant === "fullscreen" ? "text-black dark:text-white" : "text-white"),
+                isCompletedStep &&
+                  (variant === "fullscreen"
+                    ? "text-black dark:text-white/70"
+                    : "text-white/70"),
               )}
             >
               {loadingState.text}
@@ -107,11 +113,13 @@ export const MultiStepLoader = ({
   loading,
   duration = 2000,
   loop = true,
+  variant = "fullscreen",
 }: {
   loadingStates: LoadingState[];
   loading?: boolean;
   duration?: number;
   loop?: boolean;
+  variant?: "fullscreen" | "dialog";
 }) => {
   const [currentState, setCurrentState] = useState(0);
 
@@ -132,6 +140,12 @@ export const MultiStepLoader = ({
 
     return () => clearTimeout(timeout);
   }, [currentState, loading, loop, loadingStates.length, duration]);
+
+  const containerClassName =
+    variant === "fullscreen"
+      ? "w-full h-full fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-2xl"
+      : "w-full h-full fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-2xl";
+
   return (
     <AnimatePresence mode="wait">
       {loading && (
@@ -145,13 +159,19 @@ export const MultiStepLoader = ({
           exit={{
             opacity: 0,
           }}
-          className="w-full h-full fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-2xl"
+          className={containerClassName}
         >
           <div className="h-96  relative">
-            <LoaderCore value={currentState} loadingStates={loadingStates} />
+            <LoaderCore
+              value={currentState}
+              loadingStates={loadingStates}
+              variant={variant}
+            />
           </div>
 
-          <div className="bg-gradient-to-t inset-x-0 z-20 bottom-0 bg-white dark:bg-black h-full absolute [mask-image:radial-gradient(900px_at_center,transparent_30%,white)]" />
+          {variant === "fullscreen" ? (
+            <div className="bg-gradient-to-t inset-x-0 z-20 bottom-0 bg-white dark:bg-black h-full absolute [mask-image:radial-gradient(900px_at_center,transparent_30%,white)]" />
+          ) : null}
         </motion.div>
       )}
     </AnimatePresence>
