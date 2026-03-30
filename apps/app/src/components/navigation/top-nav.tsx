@@ -65,7 +65,6 @@ function getRouteGreeting(pathname: string): string {
   
   const routeGreetings: Record<string, string> = {
     '/charts': 'Compare Watchlists',
-    '/portfolio': 'Portfolio',
   };
 
   // Check for exact matches first
@@ -105,7 +104,6 @@ function getStaticRouteGreeting(pathname: string): string | null {
 
   const routeGreetings: Record<string, string> = {
     '/charts': 'Compare Watchlists',
-    '/portfolio': 'Portfolio',
   };
 
   if (routeGreetings[cleanPath]) {

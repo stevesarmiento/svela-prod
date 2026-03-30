@@ -13,7 +13,7 @@ import { NavigationDock } from "./navigation-dock";
 import { BackButton } from "./back-button";
 import { CommandSearch } from "./command-search";
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | null;
 
 export function BottomNav() {
   // React 19: Use selective context hooks for better performance

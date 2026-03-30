@@ -25,7 +25,7 @@ import { BackgroundPattern } from './background-pattern';
 import { formatUsdPrice } from "@/lib/format-usd";
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides";
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | null;
 
 interface CommandSearchProps {
   isOpen: boolean;
@@ -187,7 +187,6 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   const getPlaceholder = () => {
     if (context === 'watchlist') return "Search tokens or manage watchlist...";
     if (context === 'charts') return "Search charts or add tokens...";
-    if (context === 'portfolio') return "Search portfolio...";
     if (context === 'overview') return "Search market data and insights...";
     return "Navigate or search tokens...";
   };

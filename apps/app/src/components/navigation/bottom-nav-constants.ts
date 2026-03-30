@@ -13,7 +13,6 @@ export const BASE_ROUTES = {
   overview: "/watchlist",
   watchlist: "/watchlist", 
   charts: "/charts",
-  portfolio: "/portfolio"
 } as const;
   
 export const MENU_ITEMS = isAlphaFeaturesEnabled()
@@ -27,11 +26,6 @@ export const MENU_ITEMS = isAlphaFeaturesEnabled()
         title: "Charts",
         href: "/charts",
         icon: IconDistributeHorizontalCenterFill,
-      },
-      {
-        title: "Portfolio",
-        href: "/portfolio",
-        icon: IconWalletBifoldFill,
       },
     ] as const)
   : ([
@@ -65,13 +59,6 @@ export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
             href: "/charts",
             icon: IconDistributeHorizontalCenterFill,
             shortcut: getShortcutForRoute("/charts"),
-          },
-          {
-            title: "Portfolio",
-            subtitle: "Your cryptocurrency portfolio",
-            href: "/portfolio",
-            icon: IconWalletBifoldFill,
-            shortcut: getShortcutForRoute("/portfolio"),
           },
         ],
       },

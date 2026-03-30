@@ -6,7 +6,7 @@ import { usePathHelper } from './bottom-nav-hooks';
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
 import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio';
+type CommandContext = 'overview' | 'watchlist' | 'charts';
 
 interface NavigationItemsProps {
   onOpenCommandSearch: (context: CommandContext | null) => void;
