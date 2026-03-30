@@ -4,11 +4,7 @@ import React, { useState, useTransition, useDeferredValue, useCallback, memo } f
 import { PriceChart } from "./price-chart"
 import { MarketMetrics } from "./market-metrics"
 import type { CoinMarketData } from '@/types/coins'
-import { LiquidationHistoryChart } from "./liquidation-history-chart"
 import { SectionHeader } from "../_components/section-header"
-import { IconBinocularsFill, IconDropFill, IconCircleDottedAndCircle } from "symbols-react"
-import { OpenInterestChart } from './open-interest-chart'
-import { TakerBuySell } from './taker-buy-sell'
 import { MarketVisionChart } from './marketvision-chart'
 import { BollingerBandsChart } from './bollinger-bands-chart'
 import { BBWPChart } from './bbwp-chart'
@@ -49,6 +45,11 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
   // Local state for active time scale (this is fine - it's not derived from props)
   const [activeTimeScale, setActiveTimeScale] = useState<string>("30d")
   const deferredTimeScale = useDeferredValue(activeTimeScale)
+  const indicatorWindowDays = React.useMemo(() => {
+    if (deferredTimeScale === '2y') return 60
+    if (deferredTimeScale === 'max') return 30
+    return 3
+  }, [deferredTimeScale])
 
   // React 19: Use deferred values for data fetching
   const { volumeData, ohlcData, isLoading } = useCoinGeckoChartData(
@@ -133,7 +134,6 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
             />              
           </div>
         </div>
-        
         <div className="col-span-12">
           {metricsData ? (
             <MarketMetrics data={metricsData} isPending={showPending} />
@@ -156,9 +156,10 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
           )}
         </div>
 
-        <SectionHeader title="Market Vision" icon={IconCircleDottedAndCircle} className="col-span-12 mt-24" />
-
-        <div className="col-span-12">
+        <SectionHeader title="Indicators" className="col-span-12 mt-16" />
+        
+          
+        <div className="col-span-6">
           {isLoading ? (
             <div className={`h-[250px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center ${showPending ? 'opacity-60' : ''}`}>
               <div className="text-center">
@@ -172,11 +173,12 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
               config={marketVisionConfig}
               height={250}
               showTimeAxis={false}
+              initialWindowDays={indicatorWindowDays}
             />
           )}
         </div>
 
-        <div className="col-span-12">
+        <div className="col-span-6">
           {isLoading ? (
             <div className={`h-[250px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center ${showPending ? 'opacity-60' : ''}`}>
               <div className="text-center">
@@ -200,6 +202,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
               }}
               height={250}
               showTimeAxis={false}
+              initialWindowDays={indicatorWindowDays}
             />
           )}
         </div>
@@ -231,37 +234,9 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
               }}
               height={250}
               showTimeAxis={false}
+              initialWindowDays={indicatorWindowDays}
             />
           )}
-        </div>
-
-        <SectionHeader title="Liquidation & Open Interest" icon={IconDropFill} className="col-span-12 mt-24" />
-
-        <div className={`col-span-12 ${showPending ? 'opacity-90' : ''}`}>
-          <LiquidationHistoryChart
-            coinId={deferredId}
-            interval="1d"
-            exchangeList="Binance, Bybit, OKX, Gate, HTX, Hyperliquid, CoinEx, Bitmex, Bitfinex"
-            limit={200}
-          />              
-        </div>
-
-        <div className={`col-span-12 ${showPending ? 'opacity-90' : ''}`}>
-        <OpenInterestChart
-          coinId={deferredId}
-          interval="1d"
-          limit={30}
-          unit="usd"
-        />              
-        </div>
-        
-        <SectionHeader title="Buy/Sell Pressure by Exchange" icon={IconBinocularsFill} className="col-span-12 mt-24" />
-
-        <div className={`col-span-12 ${showPending ? 'opacity-90' : ''}`}>
-          <TakerBuySell
-            coinId={deferredId}
-            range="24h"
-          />
         </div>
       </div>
     </main>

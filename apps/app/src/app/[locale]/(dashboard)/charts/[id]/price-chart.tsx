@@ -166,17 +166,17 @@ const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, set
   ]
 
   return (
-    <div className="flex gap-1 bg-white/95 dark:bg-zinc-950/10 backdrop-blur-xl border border-gray-200/50 dark:border-zinc-800/30 rounded-[12px] p-1">
+    <div className="flex gap-1 bg-white/95 dark:bg-black border border-gray-200/50 dark:border-zinc-800/80 rounded-[12px] p-1">
       {scales.map((scale) => (
         <button
           type="button"
           key={scale.value}
           onClick={() => setActiveTimeScale(scale.value)}
           className={cn(
-            "px-2 py-1 text-xs rounded-lg transition-all duration-200",
+            "px-2 py-1 text-xs rounded-lg transition-all duration-100 cursor-pointer ease-in-out",
             activeTimeScale === scale.value
-              ? "bg-gray-200 border border-gray-300 shadow-md shadow-gray-500/20 text-gray-900 dark:bg-zinc-800/50 dark:border-zinc-800/50 dark:shadow-zinc-950/50 dark:text-white"
-              : "bg-transparent text-muted-foreground hover:bg-muted/80"
+              ? "border border-gray-300 shadow-md shadow-gray-500/20 text-gray-900 bg-zinc-800/50 hover:bg-zinc-800/70 dark:border-zinc-800/50 dark:shadow-zinc-950/50 dark:text-white"
+              : "bg-transparent border border-transparent text-muted-foreground hover:bg-muted/70"
           )}
         >
           {scale.label}
@@ -235,8 +235,8 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
 
   // Generate Hull Suite colors - theme-aware
   const hullColors = generatePastelColors(1)
-  const baseHullColor = isDarkMode ? 'hsl(210, 40%, 75%)' : 'hsl(210, 60%, 30%)'
-  const primaryHullColor = addOpacityToColor(hullColors[0] || baseHullColor, isDarkMode ? 0.4 : 0.6)
+  const baseHullColor = isDarkMode ? 'hsl(0, 0.00%, 76.10%)' : 'hsl(210, 22.00%, 57.30%)'
+  const primaryHullColor = addOpacityToColor(hullColors[0] || baseHullColor, isDarkMode ? 0.7 : 0.6)
   
   // Always use line chart - simplified approach
 
@@ -424,8 +424,14 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                   </div>
                 </div>
               </div>
+              <div className="absolute right-4 top-4 z-20 pointer-events-auto">
+                  <TimeScaleSelector
+                    activeTimeScale={deferredTimeScale}
+                    setActiveTimeScale={handleTimeScaleChange}
+                  />
+                </div>
             </CardHeader>
-            <CardContent className="pl-8">
+            <CardContent className="pl-8 pr-6">
               <div className={cn(
                 "p-0 relative will-change-auto",
                 showPending && "opacity-80 transition-opacity duration-300"
@@ -442,17 +448,6 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
             </CardContent>
           </Card>
         </div>
-      </div>
-
-      {/* React 19: Enhanced Chart Controls with optimized handlers */}
-      <div className={cn(
-        "flex items-center justify-between mt-4",
-        showPending && "opacity-80"
-      )}>
-        <TimeScaleSelector
-          activeTimeScale={deferredTimeScale}
-          setActiveTimeScale={handleTimeScaleChange}
-        />
       </div>
     </div>
   )

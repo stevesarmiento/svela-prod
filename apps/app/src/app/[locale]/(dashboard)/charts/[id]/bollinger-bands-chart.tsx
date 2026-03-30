@@ -5,22 +5,17 @@ import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
 import { calculateBollingerBands, type BollingerBandsConfig } from '@/hooks/market-vision/bollinger-bands'
 import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
-import { cn } from '@v1/ui/cn'
 import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
 import { subscribeToWindowResize } from '@/hooks/window-resize-store'
-
-interface BollingerBandsDisplaySettings {
-  showIndicator: boolean
-  showBasis: boolean
-  showBands: boolean
-  showBreaches: boolean
-}
+import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store'
+import { timeToEpochSeconds } from '@/hooks/use-chart-instance/utils'
 
 interface BollingerBandsChartProps {
   data: OHLCVDataPoint[]
   config?: Partial<BollingerBandsConfig>
   height?: number
   showTimeAxis?: boolean
+  initialWindowDays?: number
 }
 
 // Generate consistent pastel colors
@@ -35,35 +30,13 @@ const COLORS = {
   oversold: BB_CHART_COLORS[5] || 'hsl(120, 60%, 70%)',   // Green for oversold
 }
 
-// Define legend items with their properties
-interface LegendItem {
-  key: keyof BollingerBandsDisplaySettings
-  name: string
-  color: string
-}
+// Keep bands visually secondary vs RSI + breach points.
+const BANDS_MUTED_COLOR = 'rgba(161, 161, 170, 0.46)' // zinc-400-ish
+const BANDS_MID_MUTED_COLOR = 'rgba(161, 161, 170, 0.75)'
 
-const LEGEND_ITEMS: LegendItem[] = [
-  {
-    key: 'showIndicator',
-    name: 'RSI/MFI',
-    color: COLORS.rsi
-  },
-  {
-    key: 'showBasis', 
-    name: 'Basis (SMA)',
-    color: COLORS.basis
-  },
-  {
-    key: 'showBands',
-    name: 'Bollinger Bands',
-    color: COLORS.bands
-  },
-  {
-    key: 'showBreaches',
-    name: 'Breach Highlights',
-    color: COLORS.overbought
-  }
-]
+// Extreme breach dots should be the visual focus.
+const EXTREME_OVERBOUGHT_COLOR = 'rgba(244, 63, 94, 0.95)' // rose-500
+const EXTREME_OVERSOLD_COLOR = 'rgba(16, 185, 129, 0.95)' // emerald-500
 
 // Default configuration
 const DEFAULT_CONFIG: BollingerBandsConfig = {
@@ -78,8 +51,8 @@ const DEFAULT_CONFIG: BollingerBandsConfig = {
   fillOpacity: 0.1
 }
 
-function normalizeEpochSeconds(value: number): number | null {
-  if (!Number.isFinite(value)) return null
+function normalizeEpochSeconds(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null
   const seconds = value > 1e10 ? Math.floor(value / 1000) : Math.floor(value)
   return Number.isFinite(seconds) ? seconds : null
 }
@@ -113,26 +86,71 @@ function normalizeSeries(points: Array<{ time: number; value: number }>): Array<
     .map(([, value]) => value)
 }
 
+const SECONDS_PER_DAY = 24 * 60 * 60
+const DEFAULT_WINDOW_DAYS = 3
+const RIGHT_OFFSET_BARS = 12
+
+function getInitialWindowSeconds(initialWindowDays: number | undefined): number {
+  const days = Number.isFinite(initialWindowDays) ? Math.max(1, Math.round(initialWindowDays as number)) : DEFAULT_WINDOW_DAYS
+  return days * SECONDS_PER_DAY
+}
+
+function estimateIntervalSeconds(ohlcvData: OHLCVDataPoint[], lastEpoch: number): number {
+  const prevEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 2]?.time)
+  if (prevEpoch == null) return 0
+  const delta = lastEpoch - prevEpoch
+  return Number.isFinite(delta) && delta > 0 ? delta : 0
+}
+
+function pickDefaultWindowSeconds(spanSeconds: number, windowSeconds: number): number | null {
+  if (!Number.isFinite(spanSeconds) || spanSeconds <= 0) return null
+  if (spanSeconds > windowSeconds) return windowSeconds
+  return null
+}
+
+function applyInitialVisibleRange(chart: IChartApi, ohlcvData: OHLCVDataPoint[], windowSeconds: number): void {
+  const firstEpoch = normalizeEpochSeconds(ohlcvData[0]?.time)
+  const lastEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 1]?.time)
+  if (firstEpoch == null || lastEpoch == null) {
+    chart.timeScale().fitContent()
+    return
+  }
+
+  const spanSeconds = lastEpoch - firstEpoch
+  const requestedWindowSeconds = pickDefaultWindowSeconds(spanSeconds, windowSeconds)
+  if (requestedWindowSeconds == null || spanSeconds <= requestedWindowSeconds) {
+    chart.timeScale().fitContent()
+    return
+  }
+
+  const intervalSeconds = estimateIntervalSeconds(ohlcvData, lastEpoch)
+  const paddedTo = (lastEpoch + intervalSeconds) as Time
+
+  chart.timeScale().setVisibleRange({
+    from: (lastEpoch - requestedWindowSeconds) as Time,
+    to: paddedTo,
+  })
+}
+
 export function BollingerBandsChart({ 
   data, 
   config,
   height = 250,
-  showTimeAxis = false 
+  showTimeAxis = false,
+  initialWindowDays,
 }: BollingerBandsChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRefs = useRef<Map<string, ISeriesApi<'Line' | 'Area'>>>(new Map())
   const lightweightChartsRef = useRef<LightweightChartsModule | null>(null)
+  const hasAppliedInitialRangeRef = useRef(false)
+  const [chartReadyNonce, setChartReadyNonce] = useState(0)
+  const initialWindowSeconds = getInitialWindowSeconds(initialWindowDays)
+  const dataSignature = `${data.length}:${String(data[0]?.time ?? '')}:${String(data[data.length - 1]?.time ?? '')}`
 
-  // State for controlling visibility of each component
-  const [displaySettings, setDisplaySettings] = useState<BollingerBandsDisplaySettings>({
-    showIndicator: true,
-    showBasis: true,
-    showBands: true,
-    showBreaches: true
-  })
-
-  const [hoveredIndicator, setHoveredIndicator] = useState<string | null>(null)
+  useEffect(() => {
+    hasAppliedInitialRangeRef.current = false
+  }, [dataSignature, initialWindowSeconds])
 
   // Merge with default config
   const finalConfig = { ...DEFAULT_CONFIG, ...config }
@@ -140,20 +158,8 @@ export function BollingerBandsChart({
   // Calculate Bollinger Bands
   const bbResult = calculateBollingerBands(normalizeIndicatorOhlcv(data), finalConfig)
 
-  // Toggle indicator visibility
-  const toggleIndicator = (key: keyof BollingerBandsDisplaySettings) => {
-    setDisplaySettings(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }))
-  }
-
   useEffect(() => {
     if (!chartContainerRef.current) return
-
-    // Check if any indicators are enabled
-    const hasActiveIndicators = Object.values(displaySettings).some(Boolean)
-    if (!hasActiveIndicators) return
 
     let isCancelled = false
     let cleanup: (() => void) | null = null
@@ -195,11 +201,63 @@ export function BollingerBandsChart({
           visible: showTimeAxis,
           timeVisible: showTimeAxis,
           secondsVisible: false,
-          borderVisible: false 
+          borderVisible: false,
+          rightOffset: RIGHT_OFFSET_BARS,
         },
       })
 
       chartRef.current = chart
+      hasAppliedInitialRangeRef.current = false
+      if (!isCancelled) setChartReadyNonce((prev) => prev + 1)
+
+      // Shared cross-chart scrub line overlay.
+      chartContainerRef.current.style.position = chartContainerRef.current.style.position || 'relative'
+      const scrubLineEl = document.createElement('div')
+      scrubLineEl.setAttribute('aria-hidden', 'true')
+      scrubLineEl.style.position = 'absolute'
+      scrubLineEl.style.top = '0'
+      scrubLineEl.style.bottom = '0'
+      scrubLineEl.style.width = '1px'
+      scrubLineEl.style.transform = 'translateX(-9999px)'
+      scrubLineEl.style.opacity = '0'
+      scrubLineEl.style.pointerEvents = 'none'
+      scrubLineEl.style.background = 'rgba(255,255,255,0.20)'
+      scrubLineEl.style.zIndex = '5'
+      chartContainerRef.current.appendChild(scrubLineEl)
+
+      const updateScrubLine = () => {
+        const scrub = getChartScrubSnapshot()
+        if (!chartContainerRef.current || scrub.epochSeconds == null || scrub.sourceId === 'bollinger') {
+          scrubLineEl.style.opacity = '0'
+          scrubLineEl.style.transform = 'translateX(-9999px)'
+          return
+        }
+
+        const x = chart.timeScale().timeToCoordinate(scrub.epochSeconds as Time)
+        if (x == null || !Number.isFinite(x)) {
+          scrubLineEl.style.opacity = '0'
+          scrubLineEl.style.transform = 'translateX(-9999px)'
+          return
+        }
+
+        scrubLineEl.style.opacity = '1'
+        scrubLineEl.style.transform = `translateX(${Math.round(x)}px)`
+      }
+
+      const unsubscribeScrub = subscribeToChartScrub(() => updateScrubLine())
+      chart.timeScale().subscribeVisibleTimeRangeChange(updateScrubLine)
+      chart.timeScale().subscribeVisibleLogicalRangeChange(updateScrubLine)
+      updateScrubLine()
+
+      // Publish scrub time from this chart.
+      const handleCrosshairMove = (param: { point?: { x: number; y: number }; time?: Time }) => {
+        if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
+          clearChartScrub()
+          return
+        }
+        setChartScrub(timeToEpochSeconds(param.time) ?? null, 'bollinger')
+      }
+      chart.subscribeCrosshairMove(handleCrosshairMove)
 
       const handleResize = () => {
         if (chartContainerRef.current && chart) {
@@ -231,6 +289,11 @@ export function BollingerBandsChart({
         if (resizeRafId) cancelAnimationFrame(resizeRafId)
         resizeObserver?.disconnect()
         unsubscribeWindowResize?.()
+        chart.unsubscribeCrosshairMove(handleCrosshairMove)
+        chart.timeScale().unsubscribeVisibleTimeRangeChange(updateScrubLine)
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateScrubLine)
+        unsubscribeScrub()
+        if (chartContainerRef.current?.contains(scrubLineEl)) chartContainerRef.current.removeChild(scrubLineEl)
         chart.remove()
         chartRef.current = null
         currentSeriesRefs.clear()
@@ -241,7 +304,7 @@ export function BollingerBandsChart({
       isCancelled = true
       cleanup?.()
     }
-  }, [height, showTimeAxis, displaySettings])
+  }, [height, showTimeAxis])
 
   // Update series based on calculations and display settings
   useEffect(() => {
@@ -266,12 +329,10 @@ export function BollingerBandsChart({
 
 
     // Add Upper Band
-    if (displaySettings.showBands && bbResult.upper.length > 0) {
+    if (bbResult.upper.length > 0) {
       const upperSeries = chart.addSeries(LineSeries, {
-        lineWidth: hoveredIndicator === 'showBands' ? 2 : 1,
-        color: hoveredIndicator && hoveredIndicator !== 'showBands' 
-          ? addOpacityToColor(bbResult.colors.bands, 0.3) 
-          : bbResult.colors.bands,
+        lineWidth: 1,
+        color: BANDS_MUTED_COLOR,
         title: '',
         lineStyle: LineStyle.Dotted,
         lastValueVisible: false,
@@ -282,12 +343,10 @@ export function BollingerBandsChart({
     }
 
     // Add Lower Band
-    if (displaySettings.showBands && bbResult.lower.length > 0) {
+    if (bbResult.lower.length > 0) {
       const lowerSeries = chart.addSeries(LineSeries, {
-        lineWidth: hoveredIndicator === 'showBands' ? 2 : 1,
-        color: hoveredIndicator && hoveredIndicator !== 'showBands'
-          ? addOpacityToColor(bbResult.colors.bands, 0.3)
-          : bbResult.colors.bands,
+        lineWidth: 1,
+        color: BANDS_MUTED_COLOR,
         title: '',
         lineStyle: LineStyle.Dotted,
         lastValueVisible: false,
@@ -298,13 +357,12 @@ export function BollingerBandsChart({
     }
 
     // Add Basis (SMA)
-    if (displaySettings.showBasis && bbResult.basis.length > 0) {
+    if (bbResult.basis.length > 0) {
       const basisSeries = chart.addSeries(LineSeries, {
-        lineWidth: hoveredIndicator === 'showBasis' ? 2 : 1,
-        color: hoveredIndicator && hoveredIndicator !== 'showBasis'
-          ? addOpacityToColor(bbResult.colors.basis, 0.3)
-          : bbResult.colors.basis,
+        lineWidth: 1,
+        color: BANDS_MID_MUTED_COLOR,
         title: '',
+        lineStyle: LineStyle.Dashed,
         lastValueVisible: true,
         priceLineVisible: false,
       })
@@ -313,12 +371,10 @@ export function BollingerBandsChart({
     }
 
     // Add Main Indicator (RSI or MFI)
-    if (displaySettings.showIndicator && bbResult.indicator.length > 0) {
+    if (bbResult.indicator.length > 0) {
       const indicatorSeries = chart.addSeries(LineSeries, {
-        lineWidth: hoveredIndicator === 'showIndicator' ? 3 : 2,
-        color: hoveredIndicator && hoveredIndicator !== 'showIndicator'
-          ? addOpacityToColor(bbResult.colors.indicator, 0.3)
-          : bbResult.colors.indicator,
+        lineWidth: 2,
+        color: bbResult.colors.indicator,
         title: '',
         lastValueVisible: true,
         priceLineVisible: false,
@@ -328,114 +384,52 @@ export function BollingerBandsChart({
     }
 
     // Add Breach Highlighting
-    if (displaySettings.showBreaches) {
-      // Overbought breaches (above upper band)
-      if (bbResult.overboughtBreaches.length > 0) {
-        const obSeries = chart.addSeries(LineSeries, {
-          lineWidth: 3,
-          color: bbResult.colors.overbought,
-          title: '',
-          pointMarkersVisible: true,
-          pointMarkersRadius: 4,
-          lineVisible: false,
-          lastValueVisible: false,
-          priceLineVisible: false,
-        })
-        obSeries.setData(normalizeSeries(bbResult.overboughtBreaches))
-        seriesRefs.current.set('overbought', obSeries)
-      }
-
-      // Oversold breaches (below lower band)
-      if (bbResult.oversoldBreaches.length > 0) {
-        const osSeries = chart.addSeries(LineSeries, {
-          lineWidth: 3,
-          color: bbResult.colors.oversold,
-          title: '',
-          pointMarkersVisible: true,
-          pointMarkersRadius: 4,
-          lineVisible: false,
-          lastValueVisible: false,
-          priceLineVisible: false,
-        })
-        osSeries.setData(normalizeSeries(bbResult.oversoldBreaches))
-        seriesRefs.current.set('oversold', osSeries)
-      }
+    // Overbought breaches (above upper band)
+    if (bbResult.overboughtBreaches.length > 0) {
+      const obSeries = chart.addSeries(LineSeries, {
+        lineWidth: 3,
+        color: EXTREME_OVERBOUGHT_COLOR,
+        title: '',
+        pointMarkersVisible: true,
+        pointMarkersRadius: 4,
+        lineVisible: false,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      })
+      obSeries.setData(normalizeSeries(bbResult.overboughtBreaches))
+      seriesRefs.current.set('overbought', obSeries)
     }
 
-    chart.timeScale().fitContent()
-  }, [bbResult, displaySettings, hoveredIndicator])
+    // Oversold breaches (below lower band)
+    if (bbResult.oversoldBreaches.length > 0) {
+      const osSeries = chart.addSeries(LineSeries, {
+        lineWidth: 3,
+        color: EXTREME_OVERSOLD_COLOR,
+        title: '',
+        pointMarkersVisible: true,
+        pointMarkersRadius: 4,
+        lineVisible: false,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      })
+      osSeries.setData(normalizeSeries(bbResult.oversoldBreaches))
+      seriesRefs.current.set('oversold', osSeries)
+    }
+
+    if (!hasAppliedInitialRangeRef.current) {
+      applyInitialVisibleRange(chart, data, initialWindowSeconds)
+      hasAppliedInitialRangeRef.current = true
+    }
+  }, [bbResult, data, dataSignature, chartReadyNonce, initialWindowSeconds])
 
   // Don't render if no data
   if (!data.length) return null
 
   return (
     <div className="w-full p-1">
-      {/* Legend at top */}
-      <div className="flex flex-wrap items-center gap-2 p-4 pb-2">
-        {LEGEND_ITEMS.map((item) => {
-          const isActive = displaySettings[item.key]
-          const isHovered = hoveredIndicator === item.key
-          const isOtherHovered = hoveredIndicator && hoveredIndicator !== item.key
-          
-          return (
-            <button
-              type="button"
-              key={item.key}
-              className={cn(
-                "flex items-center gap-2 cursor-pointer transition-all duration-200 rounded-lg px-3 py-1 relative group",
-                isHovered ? "bg-white/10" : "hover:bg-white/5",
-                !isActive && "opacity-50",
-                isOtherHovered && "opacity-30"
-              )}
-              style={{ 
-                backgroundColor: isHovered ? addOpacityToColor(item.color, 0.1) : undefined 
-              }}
-              aria-pressed={isActive}
-              onMouseEnter={() => setHoveredIndicator(item.key)}
-              onMouseLeave={() => setHoveredIndicator(null)}
-              onClick={() => toggleIndicator(item.key)}
-            >
-              <div 
-                className="w-1 h-4 rounded-full transition-all duration-200"
-                style={{ 
-                  backgroundColor: isActive ? item.color : addOpacityToColor(item.color, 0.3)
-                }}
-              />
-              <span className={cn(
-                "text-sm font-medium transition-colors duration-200",
-                isActive ? "text-white" : "text-muted-foreground"
-              )}>
-                {item.name}
-              </span>
-              
-              {/* Active indicator */}
-              <div className={cn(
-                "w-2 h-2 rounded-full transition-all duration-200",
-                isActive ? "bg-white" : "bg-transparent"
-              )} />
-            </button>
-          )
-        })}
-      </div>
-      
-      {/* Chart Content - Full Width */}
-      <div className="">
-        <div className="p-0 relative">
-            {/* Check if no indicators are active */}
-            {Object.values(displaySettings).some(Boolean) ? (
-              <div ref={chartContainerRef} className="w-full" style={{ height: `${height}px` }} />
-            ) : (
-              <div className="flex items-center justify-center w-full" style={{ height: `${height}px` }}>
-                <div className="text-center">
-                  <p className="text-sm text-muted-foreground">Select indicators to display</p>
-                </div>
-              </div>
-            )}
-        </div>
+      <div className="p-0 relative">
+        <div ref={chartContainerRef} className="w-full" style={{ height: `${height}px` }} />
       </div>
     </div>
   )
 }
-
-// Export types for use in other components
-export type { BollingerBandsDisplaySettings } 

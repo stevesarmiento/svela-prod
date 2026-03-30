@@ -4,10 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { IChartApi, ISeriesApi, LineData, Time } from 'lightweight-charts'
 import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import { calculateBBWP, type BBWPConfig, DEFAULT_BBWP_CONFIG } from '@/hooks/market-vision/bbwp'
-import { cn } from '@v1/ui/cn'
-import { addOpacityToColor } from '@/lib/chart-colors'
 import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
 import { subscribeToWindowResize } from '@/hooks/window-resize-store'
+import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store'
+import { timeToEpochSeconds } from '@/hooks/use-chart-instance/utils'
 
 type SpectrumPreset = '2point' | '3point' | '5point'
 type ColorType = 'Spectrum' | 'Solid'
@@ -41,18 +41,12 @@ export interface BBWPChartConfig extends Partial<BBWPConfig> {
   extremeWidth?: ChartLineWidth
 }
 
-interface BBWPDisplaySettings {
-  showBBWP: boolean
-  showMA: boolean
-  showScale: boolean
-  showExtremes: boolean
-}
-
 interface BBWPChartProps {
   data: OHLCVDataPoint[]
   config?: BBWPChartConfig
   height?: number
   showTimeAxis?: boolean
+  initialWindowDays?: number
 }
 
 const DEFAULT_COLORS: Required<BBWPSpectrumColors> & {
@@ -78,14 +72,8 @@ const DEFAULT_COLORS: Required<BBWPSpectrumColors> & {
   extremeLow: '#0000FF',
 }
 
-interface LegendItem {
-  key: keyof BBWPDisplaySettings
-  name: string
-  color: string
-}
-
-function normalizeEpochSeconds(value: number): number | null {
-  if (!Number.isFinite(value)) return null
+function normalizeEpochSeconds(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null
   const seconds = value > 1e10 ? Math.floor(value / 1000) : Math.floor(value)
   return Number.isFinite(seconds) ? seconds : null
 }
@@ -117,6 +105,52 @@ function normalizeSeries(points: Array<{ time: number; value: number }>): Array<
   return Array.from(byEpoch.entries())
     .sort((a, b) => a[0] - b[0])
     .map(([, value]) => value)
+}
+
+const SECONDS_PER_DAY = 24 * 60 * 60
+const DEFAULT_WINDOW_DAYS = 3
+const RIGHT_OFFSET_BARS = 12
+
+function getInitialWindowSeconds(initialWindowDays: number | undefined): number {
+  const days = Number.isFinite(initialWindowDays) ? Math.max(1, Math.round(initialWindowDays as number)) : DEFAULT_WINDOW_DAYS
+  return days * SECONDS_PER_DAY
+}
+
+function estimateIntervalSeconds(ohlcvData: OHLCVDataPoint[], lastEpoch: number): number {
+  const prevEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 2]?.time)
+  if (prevEpoch == null) return 0
+  const delta = lastEpoch - prevEpoch
+  return Number.isFinite(delta) && delta > 0 ? delta : 0
+}
+
+function pickDefaultWindowSeconds(spanSeconds: number, windowSeconds: number): number | null {
+  if (!Number.isFinite(spanSeconds) || spanSeconds <= 0) return null
+  if (spanSeconds > windowSeconds) return windowSeconds
+  return null
+}
+
+function applyInitialVisibleRange(chart: IChartApi, ohlcvData: OHLCVDataPoint[], windowSeconds: number): void {
+  const firstEpoch = normalizeEpochSeconds(ohlcvData[0]?.time)
+  const lastEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 1]?.time)
+  if (firstEpoch == null || lastEpoch == null) {
+    chart.timeScale().fitContent()
+    return
+  }
+
+  const spanSeconds = lastEpoch - firstEpoch
+  const requestedWindowSeconds = pickDefaultWindowSeconds(spanSeconds, windowSeconds)
+  if (requestedWindowSeconds == null || spanSeconds <= requestedWindowSeconds) {
+    chart.timeScale().fitContent()
+    return
+  }
+
+  const intervalSeconds = estimateIntervalSeconds(ohlcvData, lastEpoch)
+  const paddedTo = (lastEpoch + intervalSeconds) as Time
+
+  chart.timeScale().setVisibleRange({
+    from: (lastEpoch - requestedWindowSeconds) as Time,
+    to: paddedTo,
+  })
 }
 
 function clampInt(value: number, min: number, max: number): number {
@@ -162,6 +196,34 @@ function interpolateHex(a: string, b: string, t: number): string {
   })
 }
 
+function clampAlpha(alpha: number): number {
+  if (!Number.isFinite(alpha)) return 1
+  return Math.max(0, Math.min(1, alpha))
+}
+
+function withAlpha(color: string, alpha: number): string {
+  const a = clampAlpha(alpha)
+  const trimmed = color.trim()
+
+  if (trimmed.startsWith('#')) {
+    const rgb = hexToRgb(trimmed)
+    if (rgb) return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})`
+  }
+
+  const rgbaMatch =
+    /^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)$/i.exec(trimmed) ??
+    /^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i.exec(trimmed)
+
+  if (rgbaMatch) {
+    const r = Number.parseInt(rgbaMatch[1] ?? '', 10)
+    const g = Number.parseInt(rgbaMatch[2] ?? '', 10)
+    const b = Number.parseInt(rgbaMatch[3] ?? '', 10)
+    if ([r, g, b].every((n) => Number.isFinite(n))) return `rgba(${r}, ${g}, ${b}, ${a})`
+  }
+
+  return color
+}
+
 function buildColorMap(preset: SpectrumPreset, colors: Required<BBWPSpectrumColors>): string[] {
   const map: string[] = []
 
@@ -192,20 +254,19 @@ function buildColorMap(preset: SpectrumPreset, colors: Required<BBWPSpectrumColo
   return map
 }
 
-export function BBWPChart({ data, config, height = 200, showTimeAxis = false }: BBWPChartProps) {
+export function BBWPChart({ data, config, height = 200, showTimeAxis = false, initialWindowDays }: BBWPChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
   const lightweightChartsRef = useRef<LightweightChartsModule | null>(null)
+  const hasAppliedInitialRangeRef = useRef(false)
+  const [chartReadyNonce, setChartReadyNonce] = useState(0)
+  const initialWindowSeconds = getInitialWindowSeconds(initialWindowDays)
+  const dataSignature = `${data.length}:${String(data[0]?.time ?? '')}:${String(data[data.length - 1]?.time ?? '')}`
 
-  const [displaySettings, setDisplaySettings] = useState<BBWPDisplaySettings>({
-    showBBWP: true,
-    showMA: true,
-    showScale: true,
-    showExtremes: true,
-  })
-
-  const [hoveredKey, setHoveredKey] = useState<keyof BBWPDisplaySettings | null>(null)
+  useEffect(() => {
+    hasAppliedInitialRangeRef.current = false
+  }, [dataSignature, initialWindowSeconds])
 
   const finalConfig = useMemo(() => {
     const merged = { ...DEFAULT_BBWP_CONFIG, ...(config ?? {}) }
@@ -237,26 +298,6 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = false }: 
   const normalizedData = useMemo(() => normalizeIndicatorOhlcv(data), [data])
   const bbwpResult = useMemo(() => calculateBBWP(normalizedData, finalConfig), [normalizedData, finalConfig])
 
-  const legendItems: LegendItem[] = useMemo(
-    () => [
-      { key: 'showBBWP', name: 'BBWP', color: finalConfig.colorType === 'Solid' ? finalConfig.solidColor : DEFAULT_COLORS.midHigh },
-      { key: 'showMA', name: 'MA', color: finalConfig.maColor },
-      { key: 'showScale', name: '0 / 50 / 100', color: finalConfig.scaleMidColor },
-      { key: 'showExtremes', name: 'Extremes', color: finalConfig.extremeHighColor },
-    ],
-    [
-      finalConfig.colorType,
-      finalConfig.solidColor,
-      finalConfig.maColor,
-      finalConfig.scaleMidColor,
-      finalConfig.extremeHighColor,
-    ],
-  )
-
-  const toggle = (key: keyof BBWPDisplaySettings) => {
-    setDisplaySettings((prev) => ({ ...prev, [key]: !prev[key] }))
-  }
-
   const colorMap = useMemo(() => {
     if (finalConfig.colorType !== 'Spectrum') return null
     return buildColorMap(finalConfig.spectrumPreset, finalConfig.spectrumColors)
@@ -264,9 +305,6 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = false }: 
 
   useEffect(() => {
     if (!chartContainerRef.current) return
-
-    const hasActive = Object.values(displaySettings).some(Boolean)
-    if (!hasActive) return
 
     let isCancelled = false
     let cleanup: (() => void) | null = null
@@ -306,10 +344,62 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = false }: 
           timeVisible: showTimeAxis,
           secondsVisible: false,
           borderVisible: false,
+          rightOffset: RIGHT_OFFSET_BARS,
         },
       })
 
       chartRef.current = chart
+      hasAppliedInitialRangeRef.current = false
+      if (!isCancelled) setChartReadyNonce((prev) => prev + 1)
+
+      // Shared cross-chart scrub line overlay.
+      chartContainerRef.current.style.position = chartContainerRef.current.style.position || 'relative'
+      const scrubLineEl = document.createElement('div')
+      scrubLineEl.setAttribute('aria-hidden', 'true')
+      scrubLineEl.style.position = 'absolute'
+      scrubLineEl.style.top = '0'
+      scrubLineEl.style.bottom = '0'
+      scrubLineEl.style.width = '1px'
+      scrubLineEl.style.transform = 'translateX(-9999px)'
+      scrubLineEl.style.opacity = '0'
+      scrubLineEl.style.pointerEvents = 'none'
+      scrubLineEl.style.background = 'rgba(255,255,255,0.20)'
+      scrubLineEl.style.zIndex = '5'
+      chartContainerRef.current.appendChild(scrubLineEl)
+
+      const updateScrubLine = () => {
+        const scrub = getChartScrubSnapshot()
+        if (!chartContainerRef.current || scrub.epochSeconds == null || scrub.sourceId === 'bbwp') {
+          scrubLineEl.style.opacity = '0'
+          scrubLineEl.style.transform = 'translateX(-9999px)'
+          return
+        }
+
+        const x = chart.timeScale().timeToCoordinate(scrub.epochSeconds as Time)
+        if (x == null || !Number.isFinite(x)) {
+          scrubLineEl.style.opacity = '0'
+          scrubLineEl.style.transform = 'translateX(-9999px)'
+          return
+        }
+
+        scrubLineEl.style.opacity = '1'
+        scrubLineEl.style.transform = `translateX(${Math.round(x)}px)`
+      }
+
+      const unsubscribeScrub = subscribeToChartScrub(() => updateScrubLine())
+      chart.timeScale().subscribeVisibleTimeRangeChange(updateScrubLine)
+      chart.timeScale().subscribeVisibleLogicalRangeChange(updateScrubLine)
+      updateScrubLine()
+
+      // Publish scrub time from this chart.
+      const handleCrosshairMove = (param: { point?: { x: number; y: number }; time?: Time }) => {
+        if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
+          clearChartScrub()
+          return
+        }
+        setChartScrub(timeToEpochSeconds(param.time) ?? null, 'bbwp')
+      }
+      chart.subscribeCrosshairMove(handleCrosshairMove)
 
       const handleResize = () => {
         if (chartContainerRef.current && chart) {
@@ -340,6 +430,11 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = false }: 
         if (resizeRafId) cancelAnimationFrame(resizeRafId)
         resizeObserver?.disconnect()
         unsubscribeWindowResize?.()
+        chart.unsubscribeCrosshairMove(handleCrosshairMove)
+        chart.timeScale().unsubscribeVisibleTimeRangeChange(updateScrubLine)
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateScrubLine)
+        unsubscribeScrub()
+        if (chartContainerRef.current?.contains(scrubLineEl)) chartContainerRef.current.removeChild(scrubLineEl)
         chart.remove()
         chartRef.current = null
         currentSeriesRefs.clear()
@@ -350,7 +445,7 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = false }: 
       isCancelled = true
       cleanup?.()
     }
-  }, [height, showTimeAxis, displaySettings])
+  }, [height, showTimeAxis])
 
   useEffect(() => {
     if (!chartRef.current) return
@@ -370,79 +465,77 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = false }: 
     })
     seriesRefs.current.clear()
 
-    const isOtherHovered = (key: keyof BBWPDisplaySettings) => hoveredKey != null && hoveredKey !== key
+    const scaleEdgeColor = withAlpha(finalConfig.scaleHighColor, 0.16)
+    const scaleMidColor = withAlpha(finalConfig.scaleMidColor, 0.22)
+    const scaleLowColor = withAlpha(finalConfig.scaleLowColor, 0.16)
+    const extremeHighColor = withAlpha(finalConfig.extremeHighColor, 0.18)
+    const extremeLowColor = withAlpha(finalConfig.extremeLowColor, 0.18)
+    const maColor = withAlpha(finalConfig.maColor, 0.55)
 
     // Scale lines (0/50/100)
-    if (displaySettings.showScale) {
-      const highSeries = chart.addSeries(LineSeries, {
-        lineWidth: finalConfig.scaleWidth,
-        color: isOtherHovered('showScale') ? addOpacityToColor(finalConfig.scaleHighColor, 0.3) : finalConfig.scaleHighColor,
-        title: '',
-        lineStyle: LineStyle.Solid,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      highSeries.setData(normalizeSeries(bbwpResult.levels.high) as { time: Time; value: number }[])
-      seriesRefs.current.set('scaleHigh', highSeries)
+    const highSeries = chart.addSeries(LineSeries, {
+      lineWidth: finalConfig.scaleWidth,
+      color: scaleEdgeColor,
+      title: '',
+      lineStyle: LineStyle.Solid,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    highSeries.setData(normalizeSeries(bbwpResult.levels.high) as { time: Time; value: number }[])
+    seriesRefs.current.set('scaleHigh', highSeries)
 
-      const midSeries = chart.addSeries(LineSeries, {
-        lineWidth: finalConfig.scaleWidth,
-        color: isOtherHovered('showScale') ? addOpacityToColor(finalConfig.scaleMidColor, 0.25) : finalConfig.scaleMidColor,
-        title: '',
-        lineStyle: LineStyle.Dashed,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      midSeries.setData(normalizeSeries(bbwpResult.levels.mid) as { time: Time; value: number }[])
-      seriesRefs.current.set('scaleMid', midSeries)
+    const midSeries = chart.addSeries(LineSeries, {
+      lineWidth: finalConfig.scaleWidth,
+      color: scaleMidColor,
+      title: '',
+      lineStyle: LineStyle.Dashed,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    midSeries.setData(normalizeSeries(bbwpResult.levels.mid) as { time: Time; value: number }[])
+    seriesRefs.current.set('scaleMid', midSeries)
 
-      const lowSeries = chart.addSeries(LineSeries, {
-        lineWidth: finalConfig.scaleWidth,
-        color: isOtherHovered('showScale') ? addOpacityToColor(finalConfig.scaleLowColor, 0.3) : finalConfig.scaleLowColor,
-        title: '',
-        lineStyle: LineStyle.Solid,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      lowSeries.setData(normalizeSeries(bbwpResult.levels.low) as { time: Time; value: number }[])
-      seriesRefs.current.set('scaleLow', lowSeries)
-    }
+    const lowSeries = chart.addSeries(LineSeries, {
+      lineWidth: finalConfig.scaleWidth,
+      color: scaleLowColor,
+      title: '',
+      lineStyle: LineStyle.Solid,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    lowSeries.setData(normalizeSeries(bbwpResult.levels.low) as { time: Time; value: number }[])
+    seriesRefs.current.set('scaleLow', lowSeries)
 
     // Extremes
-    if (displaySettings.showExtremes) {
-      const high = chart.addSeries(LineSeries, {
-        lineWidth: finalConfig.extremeWidth,
-        color: isOtherHovered('showExtremes') ? addOpacityToColor(finalConfig.extremeHighColor, 0.3) : finalConfig.extremeHighColor,
-        title: '',
-        lineStyle: LineStyle.Dotted,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      high.setData(normalizeSeries(bbwpResult.levels.extremeHigh) as { time: Time; value: number }[])
-      seriesRefs.current.set('extremeHigh', high)
+    const high = chart.addSeries(LineSeries, {
+      lineWidth: finalConfig.extremeWidth,
+      color: extremeHighColor,
+      title: '',
+      lineStyle: LineStyle.Dotted,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    high.setData(normalizeSeries(bbwpResult.levels.extremeHigh) as { time: Time; value: number }[])
+    seriesRefs.current.set('extremeHigh', high)
 
-      const low = chart.addSeries(LineSeries, {
-        lineWidth: finalConfig.extremeWidth,
-        color: isOtherHovered('showExtremes') ? addOpacityToColor(finalConfig.extremeLowColor, 0.3) : finalConfig.extremeLowColor,
-        title: '',
-        lineStyle: LineStyle.Dotted,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      low.setData(normalizeSeries(bbwpResult.levels.extremeLow) as { time: Time; value: number }[])
-      seriesRefs.current.set('extremeLow', low)
-    }
+    const low = chart.addSeries(LineSeries, {
+      lineWidth: finalConfig.extremeWidth,
+      color: extremeLowColor,
+      title: '',
+      lineStyle: LineStyle.Dotted,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    low.setData(normalizeSeries(bbwpResult.levels.extremeLow) as { time: Time; value: number }[])
+    seriesRefs.current.set('extremeLow', low)
 
     // BBWP series
-    if (displaySettings.showBBWP && bbwpResult.bbwp.length > 0) {
-      const bbwpLineWidth = hoveredKey === 'showBBWP' ? clampLineWidth(finalConfig.lineWidth + 1, 2) : finalConfig.lineWidth
+    if (bbwpResult.bbwp.length > 0) {
       const bbwpSeries = chart.addSeries(LineSeries, {
-        lineWidth: bbwpLineWidth,
+        lineWidth: finalConfig.lineWidth,
         color:
           finalConfig.colorType === 'Solid'
-            ? isOtherHovered('showBBWP')
-              ? addOpacityToColor(finalConfig.solidColor, 0.3)
-              : finalConfig.solidColor
+            ? finalConfig.solidColor
             : DEFAULT_COLORS.midHigh,
         title: '',
         lastValueVisible: true,
@@ -464,12 +557,12 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = false }: 
     }
 
     // MA overlay
-    if (displaySettings.showMA && bbwpResult.ma.length > 0) {
-      const maLineWidth = hoveredKey === 'showMA' ? clampLineWidth(finalConfig.maWidth + 1, 2) : finalConfig.maWidth
+    if (bbwpResult.ma.length > 0) {
       const maSeries = chart.addSeries(LineSeries, {
-        lineWidth: maLineWidth,
-        color: isOtherHovered('showMA') ? addOpacityToColor(finalConfig.maColor, 0.3) : finalConfig.maColor,
+        lineWidth: finalConfig.maWidth,
+        color: maColor,
         title: '',
+        lineStyle: LineStyle.Dashed,
         lastValueVisible: true,
         priceLineVisible: false,
       })
@@ -477,59 +570,18 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = false }: 
       seriesRefs.current.set('ma', maSeries)
     }
 
-    chart.timeScale().fitContent()
-  }, [bbwpResult, displaySettings, hoveredKey, finalConfig, colorMap])
+    if (!hasAppliedInitialRangeRef.current) {
+      applyInitialVisibleRange(chart, data, initialWindowSeconds)
+      hasAppliedInitialRangeRef.current = true
+    }
+  }, [bbwpResult, finalConfig, colorMap, data, dataSignature, chartReadyNonce, initialWindowSeconds])
 
-  const hasActiveIndicators = Object.values(displaySettings).some(Boolean)
-  if (!hasActiveIndicators || !data.length) return null
+  if (!data.length) return null
 
   return (
     <div className="w-full p-1">
-      <div className="flex flex-wrap items-center gap-2 p-4 pb-2">
-        {legendItems.map((item) => {
-          const isActive = displaySettings[item.key]
-          const isHovered = hoveredKey === item.key
-          const isOther = hoveredKey != null && hoveredKey !== item.key
-
-          return (
-            <button
-              type="button"
-              key={item.key}
-              className={cn(
-                'flex items-center gap-2 cursor-pointer transition-all duration-200 rounded-lg px-3 py-1 relative group',
-                isHovered ? 'bg-white/10' : 'hover:bg-white/5',
-                !isActive && 'opacity-50',
-                isOther && 'opacity-30',
-              )}
-              style={{ backgroundColor: isHovered ? addOpacityToColor(item.color, 0.1) : undefined }}
-              aria-pressed={isActive}
-              onMouseEnter={() => setHoveredKey(item.key)}
-              onMouseLeave={() => setHoveredKey(null)}
-              onClick={() => toggle(item.key)}
-            >
-              <div
-                className="w-1 h-4 rounded-full transition-all duration-200"
-                style={{ backgroundColor: isActive ? item.color : addOpacityToColor(item.color, 0.3) }}
-              />
-              <span className={cn('text-sm font-medium transition-colors duration-200', isActive ? 'text-white' : 'text-muted-foreground')}>
-                {item.name}
-              </span>
-              <div className={cn('w-2 h-2 rounded-full transition-all duration-200', isActive ? 'bg-white' : 'bg-transparent')} />
-            </button>
-          )
-        })}
-      </div>
-
       <div className="p-0 relative">
-        {Object.values(displaySettings).some(Boolean) ? (
-          <div ref={chartContainerRef} className="w-full" style={{ height: `${height}px` }} />
-        ) : (
-          <div className="flex items-center justify-center w-full" style={{ height: `${height}px` }}>
-            <div className="text-center">
-              <p className="text-sm text-muted-foreground">Select indicators to display</p>
-            </div>
-          </div>
-        )}
+        <div ref={chartContainerRef} className="w-full" style={{ height: `${height}px` }} />
       </div>
     </div>
   )

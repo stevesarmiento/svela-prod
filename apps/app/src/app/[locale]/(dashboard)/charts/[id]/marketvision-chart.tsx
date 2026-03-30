@@ -1,74 +1,21 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
-import type { IChartApi, ISeriesApi, LineData, Time } from 'lightweight-charts'
-import { createRoot } from 'react-dom/client'
+import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
 import { useMarketVisionB, type MarketVisionBConfig } from '@/hooks/market-vision'
 import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
-import { cn } from '@v1/ui/cn'
 import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
 import { subscribeToWindowResize } from '@/hooks/window-resize-store'
-
-interface MarketVisionDisplaySettings {
-  showOscillator1: boolean
-  showOscillator2: boolean
-  showWaveTrend: boolean
-  showMoneyFlow: boolean
-  showLevels: boolean
-}
+import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store'
+import { timeToEpochSeconds } from '@/hooks/use-chart-instance/utils'
 
 interface MarketVisionChartProps {
   data: OHLCVDataPoint[]
   config?: Partial<MarketVisionBConfig>
   height?: number
   showTimeAxis?: boolean
-}
-
-interface TooltipIndicatorData {
-  name: string
-  color: string
-  value: number
-}
-
-const TooltipContent = ({
-  indicatorData,
-  timestamp,
-}: {
-  indicatorData: TooltipIndicatorData[]
-  timestamp: number
-}) => {
-  return (
-    <div className="flex flex-col gap-1 overflow-hidden">
-      <div className="px-4 py-3">
-        <div className="mb-3 text-[11px] text-zinc-400 font-medium">
-          {new Date(timestamp).toLocaleDateString(undefined, {
-            month: 'long',
-            day: 'numeric'
-          })}
-        </div>
-        <div className="w-full h-[1px] mb-3 bg-zinc-700/50 scale-125" />
-        <div className="flex flex-col gap-2">
-          {indicatorData.map((indicator) => (
-            <div key={indicator.name} className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div
-                  className="h-3 w-1 rounded-full"
-                  style={{ backgroundColor: indicator.color }}
-                />
-                <span className="text-[11px] text-zinc-400">
-                  {indicator.name}
-                </span>
-              </div>
-              <span className="text-[11px] font-diatype-mono text-white font-bold">
-                {indicator.value.toFixed(2)}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
+  initialWindowDays?: number
 }
 
 // Generate consistent pastel colors for MarketVision indicators
@@ -84,80 +31,89 @@ const COLORS = {
   levels: addOpacityToColor(MARKETVISION_COLORS[7] || 'hsl(120, 38%, 72%)', 0.3), // Soft sage for levels
 }
 
-// Define legend items with their properties
-interface LegendItem {
-  key: keyof MarketVisionDisplaySettings
-  name: string
-  color: string
+const SECONDS_PER_DAY = 24 * 60 * 60
+const DEFAULT_WINDOW_DAYS = 3
+const RIGHT_OFFSET_BARS = 12
+
+// Visual hierarchy: keep lines subtle, make signal dots pop.
+const WT_LINE_OPACITY = 0.55
+const SECONDARY_LINE_OPACITY = 0.35
+const SIGNAL_BULLISH_COLOR = 'rgba(16, 185, 129, 0.95)' // emerald-500
+const SIGNAL_BEARISH_COLOR = 'rgba(244, 63, 94, 0.95)' // rose-500
+
+function getInitialWindowSeconds(initialWindowDays: number | undefined): number {
+  const days = Number.isFinite(initialWindowDays) ? Math.max(1, Math.round(initialWindowDays as number)) : DEFAULT_WINDOW_DAYS
+  return days * SECONDS_PER_DAY
 }
 
-const LEGEND_ITEMS: LegendItem[] = [
-  {
-    key: 'showWaveTrend',
-    name: 'Wave Trend',
-    color: COLORS.wt1
-  },
-  {
-    key: 'showMoneyFlow', 
-    name: 'Money Flow',
-    color: COLORS.moneyFlow
-  },
-  {
-    key: 'showOscillator1',
-    name: 'RSI Oscillator',
-    color: COLORS.oscillator1
-  },
-  {
-    key: 'showOscillator2',
-    name: 'MFI Oscillator',
-    color: COLORS.oscillator2
-  },
-  {
-    key: 'showLevels',
-    name: 'Reference Levels',
-    color: COLORS.levels
+function normalizeEpochSeconds(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return value > 1e10 ? Math.floor(value / 1000) : Math.floor(value)
+}
+
+function estimateIntervalSeconds(ohlcvData: OHLCVDataPoint[], lastEpoch: number): number {
+  const prevEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 2]?.time)
+  if (prevEpoch == null) return 0
+  const delta = lastEpoch - prevEpoch
+  return Number.isFinite(delta) && delta > 0 ? delta : 0
+}
+
+function pickDefaultWindowSeconds(spanSeconds: number, windowSeconds: number): number | null {
+  if (!Number.isFinite(spanSeconds) || spanSeconds <= 0) return null
+
+  if (spanSeconds > windowSeconds) return windowSeconds
+  return null
+}
+
+function applyInitialVisibleRange(chart: IChartApi, ohlcvData: OHLCVDataPoint[], windowSeconds: number): void {
+  const firstEpoch = normalizeEpochSeconds(ohlcvData[0]?.time)
+  const lastEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 1]?.time)
+  if (firstEpoch == null || lastEpoch == null) {
+    chart.timeScale().fitContent()
+    return
   }
-]
+
+  const spanSeconds = lastEpoch - firstEpoch
+  const requestedWindowSeconds = pickDefaultWindowSeconds(spanSeconds, windowSeconds)
+  if (requestedWindowSeconds == null || spanSeconds <= requestedWindowSeconds) {
+    chart.timeScale().fitContent()
+    return
+  }
+
+  const intervalSeconds = estimateIntervalSeconds(ohlcvData, lastEpoch)
+  const paddedTo = (lastEpoch + intervalSeconds) as Time
+
+  chart.timeScale().setVisibleRange({
+    from: (lastEpoch - requestedWindowSeconds) as Time,
+    to: paddedTo,
+  })
+}
 
 export function MarketVisionChart({ 
   data, 
   config,
   height = 200,
-  showTimeAxis = false 
+  showTimeAxis = false,
+  initialWindowDays,
 }: MarketVisionChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
   const lightweightChartsRef = useRef<LightweightChartsModule | null>(null)
+  const hasAppliedInitialRangeRef = useRef(false)
+  const [chartReadyNonce, setChartReadyNonce] = useState(0)
+  const initialWindowSeconds = getInitialWindowSeconds(initialWindowDays)
+  const dataSignature = `${data.length}:${String(data[0]?.time ?? '')}:${String(data[data.length - 1]?.time ?? '')}`
 
-  // State for controlling visibility of each indicator
-  const [displaySettings, setDisplaySettings] = useState<MarketVisionDisplaySettings>({
-    showOscillator1: true,
-    showOscillator2: true,
-    showWaveTrend: true,
-    showMoneyFlow: true,
-    showLevels: false
-  })
-
-  const [hoveredIndicator, setHoveredIndicator] = useState<string | null>(null)
+  useEffect(() => {
+    hasAppliedInitialRangeRef.current = false
+  }, [dataSignature, initialWindowSeconds])
 
   // Calculate all MarketVision B indicators
   const calculations = useMarketVisionB(data, config)
 
-  // Toggle indicator visibility
-  const toggleIndicator = (key: keyof MarketVisionDisplaySettings) => {
-    setDisplaySettings(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }))
-  }
-
   useEffect(() => {
     if (!chartContainerRef.current) return
-
-    // Check if any indicators are enabled
-    const hasActiveIndicators = Object.values(displaySettings).some(Boolean)
-    if (!hasActiveIndicators) return
 
     let isCancelled = false
     let cleanup: (() => void) | null = null
@@ -199,11 +155,14 @@ export function MarketVisionChart({
           visible: showTimeAxis,
           timeVisible: showTimeAxis,
           secondsVisible: false,
-          borderVisible: false 
+          borderVisible: false,
+          rightOffset: RIGHT_OFFSET_BARS,
         },
       })
 
       chartRef.current = chart
+      hasAppliedInitialRangeRef.current = false
+      if (!isCancelled) setChartReadyNonce((prev) => prev + 1)
 
       const handleResize = () => {
         if (chartContainerRef.current && chart) {
@@ -231,129 +190,64 @@ export function MarketVisionChart({
 
       handleResize()
 
-      // Add tooltip
-      const tooltipEl = document.createElement("div")
-      const tooltipRoot = createRoot(tooltipEl)
-      tooltipEl.className = "fixed hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out"
-      document.body.appendChild(tooltipEl)
+      // Shared cross-chart scrub line overlay.
+      chartContainerRef.current.style.position = chartContainerRef.current.style.position || 'relative'
+      const scrubLineEl = document.createElement('div')
+      scrubLineEl.setAttribute('aria-hidden', 'true')
+      scrubLineEl.style.position = 'absolute'
+      scrubLineEl.style.top = '0'
+      scrubLineEl.style.bottom = '0'
+      scrubLineEl.style.width = '1px'
+      scrubLineEl.style.transform = 'translateX(-9999px)'
+      scrubLineEl.style.opacity = '0'
+      scrubLineEl.style.pointerEvents = 'none'
+      scrubLineEl.style.background = 'rgba(255,255,255,0.20)'
+      scrubLineEl.style.zIndex = '5'
+      chartContainerRef.current.appendChild(scrubLineEl)
 
-      // Subscribe to crosshair move
-      chart.subscribeCrosshairMove((param) => {
-        if (
-          param.point === undefined ||
-          !param.time ||
-          param.point.x < 0 ||
-          param.point.y < 0
-        ) {
-          tooltipEl.style.display = "none"
+      const updateScrubLine = () => {
+        const scrub = getChartScrubSnapshot()
+        if (!chartContainerRef.current || scrub.epochSeconds == null || scrub.sourceId === 'marketvision') {
+          scrubLineEl.style.opacity = '0'
+          scrubLineEl.style.transform = 'translateX(-9999px)'
           return
         }
 
-        if (!chartContainerRef.current) return
-        const chartRect = chartContainerRef.current.getBoundingClientRect()
-
-        const indicatorData: TooltipIndicatorData[] = []
-        
-        // Get values from active series
-        seriesRefs.current.forEach((series, key) => {
-          const seriesData = param.seriesData.get(series) as LineData<Time>
-          if (seriesData && typeof seriesData.value === 'number') {
-            let name = ''
-            let color = ''
-            
-            // Map series keys to display names and colors
-            switch (key) {
-              case 'wt1Line':
-                name = 'WT1'
-                color = COLORS.wt1
-                break
-              case 'wt2Line':
-                name = 'WT2'
-                color = COLORS.wt2
-                break
-              case 'fastMF':
-                name = 'Money Flow'
-                color = COLORS.moneyFlow
-                break
-              case 'slowMF':
-                name = 'Slow MF'
-                color = COLORS.moneyFlow
-                break
-              case 'osc1':
-                name = config?.oscillator1?.type || 'RSI'
-                color = COLORS.oscillator1
-                break
-              case 'osc2':
-                name = config?.oscillator2?.type || 'MFI'
-                color = COLORS.oscillator2
-                break
-              default:
-                return // Skip reference lines and other series
-            }
-            
-            if (name) {
-              indicatorData.push({
-                name,
-                color,
-                value: seriesData.value,
-              })
-            }
-          }
-        })
-
-        if (indicatorData.length === 0) {
-          tooltipEl.style.display = "none"
+        const x = chart.timeScale().timeToCoordinate(scrub.epochSeconds as Time)
+        if (x == null || !Number.isFinite(x)) {
+          scrubLineEl.style.opacity = '0'
+          scrubLineEl.style.transform = 'translateX(-9999px)'
           return
         }
 
-        tooltipEl.style.display = "block"
-        tooltipRoot.render(
-          <TooltipContent
-            indicatorData={indicatorData}
-            timestamp={Number(param.time) * 1000}
-          />
-        )
+        scrubLineEl.style.opacity = '1'
+        scrubLineEl.style.transform = `translateX(${Math.round(x)}px)`
+      }
 
-        const tooltipWidth = tooltipEl.offsetWidth
-        const tooltipHeight = tooltipEl.offsetHeight
+      const unsubscribeScrub = subscribeToChartScrub(() => updateScrubLine())
+      chart.timeScale().subscribeVisibleTimeRangeChange(updateScrubLine)
+      chart.timeScale().subscribeVisibleLogicalRangeChange(updateScrubLine)
+      updateScrubLine()
 
-        // Position tooltip
-        let left = chartRect.left + param.point.x + 15
-        let top = chartRect.top + param.point.y - tooltipHeight / 2
-
-        // Adjust if tooltip goes beyond right edge
-        if (left + tooltipWidth > window.innerWidth - 10) {
-          left = chartRect.left + param.point.x - tooltipWidth - 15
+      // Publish scrub time from this chart.
+      const handleCrosshairMove = (param: { point?: { x: number; y: number }; time?: Time }) => {
+        if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
+          clearChartScrub()
+          return
         }
-
-        // Adjust if tooltip goes beyond bottom edge
-        if (top + tooltipHeight > window.innerHeight - 10) {
-          top = window.innerHeight - tooltipHeight - 10
-        }
-
-        // Adjust if tooltip goes beyond top edge
-        if (top < 10) {
-          top = 10
-        }
-
-        tooltipEl.style.left = `${left}px`
-        tooltipEl.style.top = `${top}px`
-      })
+        setChartScrub(timeToEpochSeconds(param.time) ?? null, 'marketvision')
+      }
+      chart.subscribeCrosshairMove(handleCrosshairMove)
 
       cleanup = () => {
         if (resizeRafId) cancelAnimationFrame(resizeRafId)
         resizeObserver?.disconnect()
         unsubscribeWindowResize?.()
-        requestAnimationFrame(() => {
-          try {
-            tooltipRoot.unmount()
-          } catch {
-            // noop
-          }
-          if (document.body.contains(tooltipEl)) {
-            document.body.removeChild(tooltipEl)
-          }
-        })
+        chart.unsubscribeCrosshairMove(handleCrosshairMove)
+        chart.timeScale().unsubscribeVisibleTimeRangeChange(updateScrubLine)
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateScrubLine)
+        unsubscribeScrub()
+        if (chartContainerRef.current?.contains(scrubLineEl)) chartContainerRef.current.removeChild(scrubLineEl)
         chart.remove()
         chartRef.current = null
         currentSeriesRefs.clear()
@@ -364,7 +258,7 @@ export function MarketVisionChart({
       isCancelled = true
       cleanup?.()
     }
-  }, [height, showTimeAxis, displaySettings, config])
+  }, [height, showTimeAxis, config])
 
   // Update series based on calculations and display settings
   useEffect(() => {
@@ -374,22 +268,16 @@ export function MarketVisionChart({
     if (!lightweightCharts) return
     const { LineSeries, LineStyle } = lightweightCharts
 
-    // Check if we have any data to display
-    const hasWaveTrendData = displaySettings.showWaveTrend && 
-      calculations.waveTrend && 
-      calculations.waveTrend.wt1 && 
-      calculations.waveTrend.wt1.length > 0
-    
-    const hasMoneyFlowData = displaySettings.showMoneyFlow && 
-      calculations.moneyFlow && 
-      calculations.moneyFlow.fast && 
-      calculations.moneyFlow.fast.length > 0
-    
-    const hasOtherData = displaySettings.showOscillator1 || displaySettings.showOscillator2
+    const hasAnyData =
+      Boolean(calculations.waveTrend?.wt1?.length) ||
+      Boolean(calculations.waveTrend?.wt2?.length) ||
+      Boolean(calculations.moneyFlow?.fast?.length) ||
+      Boolean(calculations.moneyFlow?.slow?.length) ||
+      Boolean(calculations.oscillator1?.length) ||
+      Boolean(calculations.oscillator2?.length) ||
+      Boolean(calculations.levels?.zero?.length)
 
-    if (!hasWaveTrendData && !hasMoneyFlowData && !hasOtherData) {
-      return
-    }
+    if (!hasAnyData) return
 
     const chart = chartRef.current
     
@@ -418,7 +306,8 @@ export function MarketVisionChart({
     }
 
     // Add other reference levels (background)
-    if (displaySettings.showLevels && calculations.levels) {
+    const showLevels = false
+    if (showLevels && calculations.levels) {
 
       // Add overbought/oversold levels
       if (calculations.levels.overbought1?.length) {
@@ -449,94 +338,82 @@ export function MarketVisionChart({
     }
 
     // WaveTrend Line Charts
-    if (displaySettings.showWaveTrend) {
-      // WT1 Line (Soft blue)
-      if (calculations.waveTrend.wt1?.length) {
-        const wt1LineSeries = chart.addSeries(LineSeries, {
-          lineWidth: hoveredIndicator === 'showWaveTrend' ? 2 : 1,
-          color: hoveredIndicator && hoveredIndicator !== 'showWaveTrend' 
-            ? addOpacityToColor(COLORS.wt1, 0.3) 
-            : COLORS.wt1,
-          title: '',
-          lastValueVisible: true,
-          priceLineVisible: false,
-        })
-        wt1LineSeries.setData(calculations.waveTrend.wt1 as { time: Time; value: number }[])
-        seriesRefs.current.set('wt1Line', wt1LineSeries)
-      }
+    // WT1 Line (Soft blue)
+    if (calculations.waveTrend.wt1?.length) {
+      const wt1LineSeries = chart.addSeries(LineSeries, {
+        lineWidth: 1,
+        color: addOpacityToColor(COLORS.wt1, WT_LINE_OPACITY),
+        title: '',
+        lastValueVisible: true,
+        priceLineVisible: false,
+      })
+      wt1LineSeries.setData(calculations.waveTrend.wt1 as { time: Time; value: number }[])
+      seriesRefs.current.set('wt1Line', wt1LineSeries)
+    }
 
-      // WT2 Line (Soft pink)
-      if (calculations.waveTrend.wt2?.length) {
-        const wt2LineSeries = chart.addSeries(LineSeries, {
-          lineWidth: hoveredIndicator === 'showWaveTrend' ? 2 : 1,
-          color: hoveredIndicator && hoveredIndicator !== 'showWaveTrend'
-            ? addOpacityToColor(COLORS.wt2, 0.3)
-            : COLORS.wt2,
-          title: '',
-          lastValueVisible: true,
-          priceLineVisible: false,
-        })
-        wt2LineSeries.setData(calculations.waveTrend.wt2 as { time: Time; value: number }[])
-        seriesRefs.current.set('wt2Line', wt2LineSeries)
-      }
+    // WT2 Line (Soft pink)
+    if (calculations.waveTrend.wt2?.length) {
+      const wt2LineSeries = chart.addSeries(LineSeries, {
+        lineWidth: 1,
+        color: addOpacityToColor(COLORS.wt2, WT_LINE_OPACITY),
+        title: '',
+        lastValueVisible: true,
+        priceLineVisible: false,
+      })
+      wt2LineSeries.setData(calculations.waveTrend.wt2 as { time: Time; value: number }[])
+      seriesRefs.current.set('wt2Line', wt2LineSeries)
+    }
 
-      // WaveTrend Cross Dots (dots only, no connecting lines)
-      if (calculations.waveTrend.positiveCrosses?.length) {
-        const positiveCrossSeries = chart.addSeries(LineSeries, {
-          lineWidth: 1,               // Minimum line width
-          color: 'transparent',       // Transparent line
-          title: '',
-          lineVisible: false,
-          pointMarkersVisible: true,
-          pointMarkersRadius: hoveredIndicator === 'showWaveTrend' ? 5 : 4,      // Dot size
-          lastValueVisible: true,
-          priceLineVisible: false,
-        })
-        positiveCrossSeries.setData(calculations.waveTrend.positiveCrosses.map(point => ({
-          ...point,
-          time: point.time as Time,
-          color: hoveredIndicator && hoveredIndicator !== 'showWaveTrend'
-            ? addOpacityToColor(COLORS.crossUp, 0.3)
-            : COLORS.crossUp,   
-          lineVisible: false,
-        })))
-        seriesRefs.current.set('wtPositiveCross', positiveCrossSeries)
-      }
+    // WaveTrend Cross Dots (dots only, no connecting lines)
+    if (calculations.waveTrend.positiveCrosses?.length) {
+      const positiveCrossSeries = chart.addSeries(LineSeries, {
+        lineWidth: 1,
+        color: 'transparent',
+        title: '',
+        lineVisible: false,
+        pointMarkersVisible: true,
+        pointMarkersRadius: 5,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      })
+      positiveCrossSeries.setData(calculations.waveTrend.positiveCrosses.map(point => ({
+        ...point,
+        time: point.time as Time,
+        color: SIGNAL_BULLISH_COLOR,
+        lineVisible: false,
+      })))
+      seriesRefs.current.set('wtPositiveCross', positiveCrossSeries)
+    }
 
-      if (calculations.waveTrend.negativeCrosses?.length) {
-        const negativeCrossSeries = chart.addSeries(LineSeries, {
-          lineWidth: 1,               // Minimum line width  
-          color: 'transparent',       // Transparent line
-          title: '',
-          lineVisible: false,
-          pointMarkersVisible: true,
-          pointMarkersRadius: hoveredIndicator === 'showWaveTrend' ? 5 : 4,      // Dot size
-          lastValueVisible: true,
-          priceLineVisible: false,
-        })
-        negativeCrossSeries.setData(calculations.waveTrend.negativeCrosses.map(point => ({
-          ...point,
-          time: point.time as Time,
-          color: hoveredIndicator && hoveredIndicator !== 'showWaveTrend'
-            ? addOpacityToColor(COLORS.crossDown, 0.3)
-            : COLORS.crossDown,   
-          lineVisible: false,
-        })))
-        seriesRefs.current.set('wtNegativeCross', negativeCrossSeries)
-      }
+    if (calculations.waveTrend.negativeCrosses?.length) {
+      const negativeCrossSeries = chart.addSeries(LineSeries, {
+        lineWidth: 1,
+        color: 'transparent',
+        title: '',
+        lineVisible: false,
+        pointMarkersVisible: true,
+        pointMarkersRadius: 5,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      })
+      negativeCrossSeries.setData(calculations.waveTrend.negativeCrosses.map(point => ({
+        ...point,
+        time: point.time as Time,
+        color: SIGNAL_BEARISH_COLOR,
+        lineVisible: false,
+      })))
+      seriesRefs.current.set('wtNegativeCross', negativeCrossSeries)
     }
 
     // Money Flow indicators
-    if (displaySettings.showMoneyFlow && calculations.moneyFlow) {
+    if (calculations.moneyFlow) {
       // Show fast money flow if enabled and exists
       if ((config?.moneyFlow?.showFast ?? true) && calculations.moneyFlow.fast && calculations.moneyFlow.fast.length) {
         console.log('✅ Adding Money Flow series:', calculations.moneyFlow.fast.length, 'points')
         const fastMFSeries = chart.addSeries(LineSeries, {
-          lineWidth: hoveredIndicator === 'showMoneyFlow' ? 1 : 1,
+          lineWidth: 1,
           lineStyle: LineStyle.Dashed,
-          color: hoveredIndicator && hoveredIndicator !== 'showMoneyFlow'
-            ? addOpacityToColor(COLORS.moneyFlow, 0.3)
-            : COLORS.moneyFlow,
+          color: addOpacityToColor(COLORS.moneyFlow, SECONDARY_LINE_OPACITY),
           title: '',
           lastValueVisible: true,
           priceLineVisible: false,
@@ -548,10 +425,8 @@ export function MarketVisionChart({
       // Show slow money flow if enabled and exists
       if ((config?.moneyFlow?.showSlow ?? false) && calculations.moneyFlow.slow && calculations.moneyFlow.slow.length) {
         const slowMFSeries = chart.addSeries(LineSeries, {
-          lineWidth: hoveredIndicator === 'showMoneyFlow' ? 2 : 1,
-          color: hoveredIndicator && hoveredIndicator !== 'showMoneyFlow'
-            ? addOpacityToColor(addOpacityToColor(COLORS.moneyFlow, 0.7), 0.3)
-            : addOpacityToColor(COLORS.moneyFlow, 0.7),
+          lineWidth: 1,
+          color: addOpacityToColor(COLORS.moneyFlow, SECONDARY_LINE_OPACITY),
           title: '',
           lastValueVisible: true,
           priceLineVisible: false,
@@ -562,12 +437,10 @@ export function MarketVisionChart({
     }
 
     // Oscillator 1 (RSI, MFI, etc.)
-    if (displaySettings.showOscillator1 && calculations.oscillator1 && calculations.oscillator1.length) {
+    if (calculations.oscillator1 && calculations.oscillator1.length) {
       const osc1Series = chart.addSeries(LineSeries, {
-        lineWidth: hoveredIndicator === 'showOscillator1' ? 2 : 1,
-        color: hoveredIndicator && hoveredIndicator !== 'showOscillator1'
-          ? addOpacityToColor(COLORS.oscillator1, 0.3)
-          : COLORS.oscillator1,
+        lineWidth: 1,
+        color: addOpacityToColor(COLORS.oscillator1, SECONDARY_LINE_OPACITY),
         title: '',
         lastValueVisible: true,
         priceLineVisible: false,
@@ -577,12 +450,10 @@ export function MarketVisionChart({
     }
 
     // Oscillator 2
-    if (displaySettings.showOscillator2 && calculations.oscillator2 && calculations.oscillator2.length) {
+    if (calculations.oscillator2 && calculations.oscillator2.length) {
       const osc2Series = chart.addSeries(LineSeries, {
-        lineWidth: hoveredIndicator === 'showOscillator2' ? 2 : 1,
-        color: hoveredIndicator && hoveredIndicator !== 'showOscillator2'
-          ? addOpacityToColor(COLORS.oscillator2, 0.3)
-          : COLORS.oscillator2,
+        lineWidth: 1,
+        color: addOpacityToColor(COLORS.oscillator2, SECONDARY_LINE_OPACITY),
         title: '',
         lastValueVisible: true,
         priceLineVisible: false,
@@ -591,93 +462,27 @@ export function MarketVisionChart({
       seriesRefs.current.set('osc2', osc2Series)
     }
 
-    chart.timeScale().fitContent()
-  }, [calculations, displaySettings, config, hoveredIndicator])
+    if (!hasAppliedInitialRangeRef.current) {
+      applyInitialVisibleRange(chart, data, initialWindowSeconds)
+      hasAppliedInitialRangeRef.current = true
+    }
+  }, [calculations, config, data, dataSignature, chartReadyNonce, initialWindowSeconds])
 
   // Don't render if no data
   if (!data.length) return null
 
   return (
-    <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/20 overflow-hidden p-1">
-      {/* Legend */}
-      <div className="flex flex-col col-span-3 p-4 space-y-2">           
-        <div className="flex flex-col gap-2 space-y-1">
-          {LEGEND_ITEMS.map((item) => {
-            const isActive = displaySettings[item.key]
-            const isHovered = hoveredIndicator === item.key
-            const isOtherHovered = hoveredIndicator && hoveredIndicator !== item.key
-            
-            return (
-              <button
-                type="button"
-                key={item.key}
-                className={cn(
-                  "flex overflow-hidden items-center gap-2 cursor-pointer transition-all duration-200 rounded-lg p-2 -m-1 relative group",
-                  isHovered ? "bg-white/10" : "hover:bg-white/5",
-                  !isActive && "opacity-50",
-                  isOtherHovered && "opacity-40"
-                )}
-                style={{ 
-                  backgroundColor: isHovered ? addOpacityToColor(item.color, 0.1) : undefined 
-                }}
-                aria-pressed={isActive}
-                onMouseEnter={() => setHoveredIndicator(item.key)}
-                onMouseLeave={() => setHoveredIndicator(null)}
-                onClick={() => toggleIndicator(item.key)}
-              >
-                <div 
-                  className="w-1 h-6 rounded-full transition-all duration-200"
-                  style={{ 
-                    backgroundColor: isActive ? item.color : addOpacityToColor(item.color, 0.3)
-                  }}
-                />
-                <div className="flex items-center flex-1 ml-2">
-                  <span className={cn(
-                    "text-sm font-medium transition-colors duration-200",
-                    isActive ? "text-white" : "text-muted-foreground"
-                  )}>
-                    {item.name}
-                  </span>
-                </div>
-                
-                {/* Active indicator */}
-                <div className={cn(
-                  "w-2 h-2 rounded-full transition-all duration-200",
-                  isActive ? "bg-white" : "bg-transparent"
-                )} />
-              </button>
-            )
-          })}
-        </div>
-      </div>
-      
-      <div className="col-span-9 pl-4 border border-zinc-800/30 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
-        {/* Chart Content */}
+    <div className="overflow-hidden p-1">
         <div className="p-0 relative">
           <div
             className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
             style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
-                backgroundRepeat: "repeat",
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
+              backgroundRepeat: "repeat",
             }}
           />
-          <div className="relative">
-            {/* Check if no indicators are active */}
-            {Object.values(displaySettings).some(Boolean) ? (
-              <div ref={chartContainerRef} className="w-full" style={{ height: `${height}px` }} />
-            ) : (
-              <div className="flex items-center justify-center w-full" style={{ height: `${height}px` }}>
-                <div className="text-center">
-                  <p className="text-sm text-muted-foreground">Select indicators to display</p>
-                </div>
-              </div>
-            )}
-          </div>
+          <div ref={chartContainerRef} className="w-full" style={{ height: `${height}px` }} />
         </div>
-      </div>
     </div>
   )
 }
-
-// Export types for use in other components
-export type { MarketVisionDisplaySettings } 
