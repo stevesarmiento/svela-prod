@@ -338,7 +338,16 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
       : null
 
   const liveChange24h = liveQuote?.price_change_percentage_24h ?? calculatePercentageChange ?? 0
-  const livePrice = liveQuote?.current_price ?? deferredInitialData?.price ?? displayPrice ?? 0
+  const chartLastPrice =
+    chartData.length > 0 ? chartData[chartData.length - 1]?.value ?? null : null
+  const livePrice =
+    (typeof chartLastPrice === "number" && Number.isFinite(chartLastPrice) && chartLastPrice > 0
+      ? chartLastPrice
+      : null) ??
+    deferredInitialData?.price ??
+    displayPrice ??
+    liveQuote?.current_price ??
+    0
   const currentPrice = crosshairPrice ?? livePrice
   const priceChange24h = scrubPriceChange ?? liveChange24h
 

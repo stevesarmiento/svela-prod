@@ -39,6 +39,8 @@ interface WatchlistFiltersProps {
   changeFilter: "all" | "positive" | "negative";
   sortBy: "name" | "price" | "change" | "marketCap" | "volume";
   sortOrder: "asc" | "desc";
+  watchlistGroupId: string | null;
+  watchlistGroupOptions: Array<{ id: string; name: string }>;
   
   // Selection state
   selectedCoins: Set<string>;
@@ -52,6 +54,7 @@ interface WatchlistFiltersProps {
   onChangeFilterChange: (value: "all" | "positive" | "negative") => void;
   onSortByChange: (value: "name" | "price" | "change" | "marketCap" | "volume") => void;
   onSortOrderChange: (value: "asc" | "desc") => void;
+  onWatchlistGroupIdChange: (value: string | null) => void;
   onClearAllFilters: () => void;
   
   // Selection handlers
@@ -178,6 +181,8 @@ export function WatchlistFilters({
   changeFilter,
   sortBy,
   sortOrder,
+  watchlistGroupId,
+  watchlistGroupOptions,
   selectedCoins,
   totalCoins,
   onSearchTextChange,
@@ -187,6 +192,7 @@ export function WatchlistFilters({
   onChangeFilterChange,
   onSortByChange,
   onSortOrderChange,
+  onWatchlistGroupIdChange,
   onClearAllFilters,
   onSelectAll,
   onRemoveSelected,
@@ -202,6 +208,11 @@ export function WatchlistFilters({
   const shouldReduceMotion = useReducedMotion() ?? false
   const [nowMs, setNowMs] = useState(() => Date.now())
 
+  const selectedWatchlistGroupName = useMemo(() => {
+    if (!watchlistGroupId) return null
+    return watchlistGroupOptions.find((o) => o.id === watchlistGroupId)?.name ?? null
+  }, [watchlistGroupId, watchlistGroupOptions])
+
   // Keyboard shortcut handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -215,9 +226,10 @@ export function WatchlistFilters({
       // Calculate hasActiveFilters inside the effect to avoid dependency issues
       const currentHasActiveFilters = !!(
         searchText ||
+        watchlistGroupId ||
         priceRange[0] > 0 || priceRange[1] < 1000000 ||
-        marketCapRange[0] > 0 || marketCapRange[1] < 1000000000000 ||
-        volumeRange[0] > 0 || volumeRange[1] < 1000000000 ||
+        marketCapRange[0] > 0 || marketCapRange[1] < 10000000000000 ||
+        volumeRange[0] > 0 || volumeRange[1] < 1000000000000 ||
         changeFilter !== "all" ||
         // Default sort is volume desc (highest volume first)
         sortBy !== "volume" || sortOrder !== "desc"
@@ -233,7 +245,18 @@ export function WatchlistFilters({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isFilterPopoverOpen, searchText, priceRange, marketCapRange, volumeRange, changeFilter, sortBy, sortOrder, onClearAllFilters]);
+  }, [
+    isFilterPopoverOpen,
+    searchText,
+    watchlistGroupId,
+    priceRange,
+    marketCapRange,
+    volumeRange,
+    changeFilter,
+    sortBy,
+    sortOrder,
+    onClearAllFilters,
+  ]);
 
   // Focus input when popover opens
   useEffect(() => {
@@ -268,6 +291,14 @@ export function WatchlistFilters({
       chips.push({ key: "searchText", label: "Search", value: searchText });
     }
 
+    if (watchlistGroupId) {
+      chips.push({
+        key: "watchlistGroup",
+        label: "Watchlist",
+        value: selectedWatchlistGroupName ?? "Selected",
+      })
+    }
+
     if (priceRange[0] > 0 || priceRange[1] < 1000000) {
       chips.push({
         key: "priceRange",
@@ -276,7 +307,7 @@ export function WatchlistFilters({
       });
     }
 
-    if (marketCapRange[0] > 0 || marketCapRange[1] < 1000000000000) {
+    if (marketCapRange[0] > 0 || marketCapRange[1] < 10000000000000) {
       chips.push({
         key: "marketCapRange",
         label: "Market Cap",
@@ -284,7 +315,7 @@ export function WatchlistFilters({
       });
     }
 
-    if (volumeRange[0] > 0 || volumeRange[1] < 1000000000) {
+    if (volumeRange[0] > 0 || volumeRange[1] < 1000000000000) {
       chips.push({
         key: "volumeRange",
         label: "Volume",
@@ -317,14 +348,17 @@ export function WatchlistFilters({
         onSearchTextChange("");
         setInputValue("");
         break;
+      case "watchlistGroup":
+        onWatchlistGroupIdChange(null)
+        break
       case "priceRange":
         onPriceRangeChange([0, 1000000]);
         break;
       case "marketCapRange":
-        onMarketCapRangeChange([0, 1000000000000]);
+        onMarketCapRangeChange([0, 10000000000000]);
         break;
       case "volumeRange":
-        onVolumeRangeChange([0, 1000000000]);
+        onVolumeRangeChange([0, 1000000000000]);
         break;
       case "changeFilter":
         onChangeFilterChange("all");
@@ -451,6 +485,37 @@ export function WatchlistFilters({
                 <div className="flex items-center gap-1">
                   <ListFilter className="h-2.5 w-2.5 text-primary/30" />
                   <h4 className="font-medium text-xs text-primary/50 uppercase">Filters</h4>
+                </div>
+
+                {/* Watchlist Filter */}
+                <div className="space-y-2">
+                  <Label className="text-[11px] text-primary/80 uppercase flex items-center gap-1">
+                    Watchlist
+                  </Label>
+                  <Select
+                    value={watchlistGroupId ?? "__all__"}
+                    onValueChange={(value) =>
+                      onWatchlistGroupIdChange(value === "__all__" ? null : value)
+                    }
+                  >
+                    <SelectTrigger className="h-8 rounded-lg">
+                      <SelectValue placeholder="All watchlists" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover rounded-lg" side="right">
+                      <SelectItem value="__all__">All watchlists</SelectItem>
+                      {watchlistGroupOptions.length === 0 ? (
+                        <SelectItem value="__none__" disabled>
+                          No watchlists
+                        </SelectItem>
+                      ) : (
+                        watchlistGroupOptions.map((o) => (
+                          <SelectItem key={o.id} value={o.id}>
+                            {o.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {/* 24h Change Filter */}

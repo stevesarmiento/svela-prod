@@ -87,7 +87,7 @@ export function createWatchlistColumns({
       id: 'select',
       header: () => (
         <div className={cn(
-          "transition-opacity duration-200",
+          "transition-opacity duration-200 uppercase",
           hasSelectedCoinsRef.current ? "opacity-100" : "opacity-0"
         )}>
           <Checkbox
@@ -223,8 +223,8 @@ export function createWatchlistColumns({
       id: 'token-sort',
       accessorKey: 'name',
       header: () => (
-        <div className="text-left flex items-center gap-1">
-          Token
+        <div className="text-left !uppercase flex items-center gap-1">
+          TOKEN
         </div>
       ),
       cell: () => null,
@@ -235,7 +235,7 @@ export function createWatchlistColumns({
       accessorKey: 'quote.USD.price',
       header: () => (
         <div className="text-left flex items-center justify-start gap-1">
-          Price
+          PRICE
         </div>
       ),
       cell: ({ row }) => (
@@ -257,7 +257,7 @@ export function createWatchlistColumns({
           percentChange: row.quote.USD.percent_change_24h,
         }) ?? 0,
       header: () => (
-        <div className="text-left flex items-center justify-start gap-1">
+        <div className="text-left uppercase flex items-center justify-start gap-1">
           24h $ Change
         </div>
       ),
@@ -296,7 +296,7 @@ export function createWatchlistColumns({
       id: 'change24h',
       accessorKey: 'quote.USD.percent_change_24h',
       header: () => (
-        <div className="text-left flex items-center justify-start gap-1">
+        <div className="text-left uppercase flex items-center justify-start gap-1">
           24h % Change
         </div>
       ),
@@ -338,7 +338,7 @@ export function createWatchlistColumns({
       id: 'volume',
       accessorKey: 'quote.USD.volume_24h',
       header: () => (
-        <div className="text-left flex items-center justify-start gap-1">
+        <div className="text-left uppercase flex items-center justify-start gap-1">
           Volume 24h
         </div>
       ),
@@ -356,7 +356,7 @@ export function createWatchlistColumns({
     {
       id: 'takerBuySellVolume',
       header: () => (
-        <div className="text-left flex items-center justify-start gap-1">
+        <div className="text-left uppercase flex items-center justify-start gap-1">
           Taker Buy/Sell Vol
         </div>
       ),
@@ -377,7 +377,7 @@ export function createWatchlistColumns({
     {
       id: 'chart',
       header: () => (
-        <div className="text-left flex items-center justify-start gap-1">
+        <div className="text-left uppercase flex items-center justify-start gap-1">
           7d Chart
         </div>
       ),
@@ -411,7 +411,7 @@ export function createWatchlistColumns({
     {
       id: 'actions',
       header: () => (
-        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+        <div className="flex uppercase items-center justify-end gap-1 whitespace-nowrap">
           Actions
         </div>
       ),

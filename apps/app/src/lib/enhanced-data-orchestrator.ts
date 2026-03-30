@@ -10,6 +10,28 @@ import type {
 import { api } from "../../convex/_generated/api";
 import { convex, getServerToken } from "@/lib/convex-server";
 
+function getLastHistoricalPriceUsd(
+  prices: CoinHistoricalData["prices"] | null | undefined,
+): number | null {
+  if (!prices?.length) return null;
+
+  let bestTimestamp = Number.NEGATIVE_INFINITY;
+  let bestPrice: number | null = null;
+
+  for (const point of prices) {
+    const ts = point?.timestamp;
+    const price = point?.price;
+    if (typeof ts !== "number" || !Number.isFinite(ts)) continue;
+    if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) continue;
+    if (ts >= bestTimestamp) {
+      bestTimestamp = ts;
+      bestPrice = price;
+    }
+  }
+
+  return bestPrice;
+}
+
 interface CoinSearchResult {
   coinId: string; // Changed to string for CoinGecko IDs
   name: string;
@@ -713,25 +735,41 @@ export class EnhancedDataOrchestrator {
     const sources = this.getDataSources(intent.dataTypes);
     const quality = this.calculateDataQuality(results);
     const coverage = this.calculateDataCoverage(intent, results);
-      
-      return {
-        intent,
-      priceData: results.priceData[0] || undefined,
+
+    // Align spot prices to the last historical chart datapoint when available.
+    // This keeps chat price cards consistent with the chart component output.
+    const alignedPriceByCoinId = new Map<string, number>();
+    for (const h of results.historicalData) {
+      const aligned = getLastHistoricalPriceUsd(h?.prices);
+      if (aligned !== null) alignedPriceByCoinId.set(h.coingeckoId, aligned);
+    }
+
+    const alignedPriceData: CoinPriceData[] = results.priceData.map((row) => {
+      const aligned = alignedPriceByCoinId.get(row.coingeckoId);
+      if (aligned === undefined) return row;
+      if (!Number.isFinite(aligned) || aligned <= 0) return row;
+      if (row.currentPrice === aligned) return row;
+      return { ...row, currentPrice: aligned };
+    });
+
+    return {
+      intent,
+      priceData: alignedPriceData[0] || undefined,
       historicalData: results.historicalData[0] || undefined,
       technicalData: results.technicalData[0] || undefined,
       marketStructureData: results.marketStructureData[0] || undefined,
-      multiCoinData: results.priceData.length > 1 ? { 
-          priceData: results.priceData,
-          historicalData: results.historicalData,
-          marketStructureData: results.marketStructureData
+      multiCoinData: alignedPriceData.length > 1 ? {
+        priceData: alignedPriceData,
+        historicalData: results.historicalData,
+        marketStructureData: results.marketStructureData,
       } : undefined,
       comparisonData: results.comparisonData || undefined,
       metadata: {
         sources,
         quality,
         coverage,
-        fetchTime: Date.now() - startTime
-      }
+        fetchTime: Date.now() - startTime,
+      },
     };
   }
 

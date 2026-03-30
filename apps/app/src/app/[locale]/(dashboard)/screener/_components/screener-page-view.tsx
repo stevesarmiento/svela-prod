@@ -36,6 +36,7 @@ export function ScreenerPageView() {
     isInitialCoinsLoading,
     error,
     handleClearAllFilters,
+    watchlistGroupOptions,
   } = useWatchlistData({ watchlist: coinIds })
 
   const removeFromAllWatchlists = useRemoveFromAllWatchlists()
@@ -80,6 +81,8 @@ export function ScreenerPageView() {
             changeFilter={filters.changeFilter}
             sortBy={filters.sortBy}
             sortOrder={filters.sortOrder}
+            watchlistGroupId={filters.watchlistGroupId}
+            watchlistGroupOptions={watchlistGroupOptions}
             selectedCoins={selectedCoins}
             totalCoins={filteredCoins.length}
             autoRefreshStatus={{
@@ -94,6 +97,7 @@ export function ScreenerPageView() {
             onChangeFilterChange={(value) => setFilters(prev => ({ ...prev, changeFilter: value }))}
             onSortByChange={(value) => setFilters(prev => ({ ...prev, sortBy: value }))}
             onSortOrderChange={(value) => setFilters(prev => ({ ...prev, sortOrder: value }))}
+            onWatchlistGroupIdChange={(value) => setFilters(prev => ({ ...prev, watchlistGroupId: value }))}
             onClearAllFilters={handleClearAllFilters}
             onSelectAll={(checked) => handleSelectAll(checked, filteredCoins.map((coin) => coin.id.toString()))}
             onRemoveSelected={handleRemoveSelected}

@@ -13,6 +13,7 @@ import dynamic from "next/dynamic";
 import React from "react";
 
 import { useAnalysisData } from "@/hooks/use-analysis-data";
+import { getAlignedPriceFromChartPoints } from "@/lib/aligned-price";
 import { ScrollArea } from "@v1/ui/scroll-area";
 import Image from "next/image";
 import { IconBookPages, IconSparkles, IconTextAppend } from "symbols-react";
@@ -167,17 +168,22 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
   const transformedMarketData = React.useMemo(() => {
     if (!marketData) return {};
 
+    const alignedPrice =
+      getAlignedPriceFromChartPoints(chartData) ??
+      marketData.current_price ??
+      0;
+
     return {
       quote: {
         USD: {
-          price: marketData.current_price || 0,
+          price: alignedPrice,
           market_cap: marketData.market_cap || 0,
           volume_24h: marketData.total_volume || 0,
           percent_change_24h: marketData.price_change_percentage_24h || 0,
         },
       },
     };
-  }, [marketData]);
+  }, [marketData, chartData]);
 
   return (
     <div className="relative">

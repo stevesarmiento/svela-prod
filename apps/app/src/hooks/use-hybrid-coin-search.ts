@@ -36,6 +36,7 @@ interface CoinGeckoPricingData {
   market_cap: number;
   total_volume: number;
   image: string;
+  sparkline7d?: ReadonlyArray<number>;
 }
 
 // Interface for the final combined result
@@ -134,7 +135,7 @@ export function useHybridCoinSearch(
           cmc_rank: pricing?.market_cap_rank || 0, // From API (live ranking)
           quote: {
             USD: {
-              price: pricing?.current_price || 0, // From API (live price)
+              price: pricing?.current_price ?? 0,
               percent_change_24h: pricing?.price_change_percentage_24h || 0, // From API (live)
               percent_change_1h: pricing?.price_change_percentage_1h_in_currency ?? undefined, // From API (live)
               percent_change_7d: pricing?.price_change_percentage_7d_in_currency ?? undefined, // From API (live)
@@ -230,7 +231,7 @@ export function useHybridTopCoins(limit = 25) {
         cmc_rank: pricing.market_cap_rank,
         quote: {
           USD: {
-            price: pricing.current_price,
+            price: pricing.current_price ?? 0,
             percent_change_24h: pricing.price_change_percentage_24h,
             percent_change_1h: pricing.price_change_percentage_1h_in_currency,
             percent_change_7d: pricing.price_change_percentage_7d_in_currency,

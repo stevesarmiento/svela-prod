@@ -12,6 +12,7 @@ import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
 import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
 import { useScrollThreshold } from '@/hooks/use-scroll-effect'
+import { getAlignedPriceFromChartPoints } from '@/lib/aligned-price'
 
 function toEpochSeconds(time: unknown): number | null {
   if (typeof time === "number") return Math.floor(time > 1e10 ? time / 1000 : time)
@@ -52,7 +53,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
   }, [deferredTimeScale])
 
   // React 19: Use deferred values for data fetching
-  const { volumeData, ohlcData, isLoading } = useCoinGeckoChartData(
+  const { chartData, volumeData, ohlcData, isLoading } = useCoinGeckoChartData(
     deferredId, 
     deferredTimeScale, 
     deferredTokenData.quote.USD
@@ -65,8 +66,12 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
     const quote = quoteQuery.data
     if (!quote) return null
 
+    const alignedPrice =
+      getAlignedPriceFromChartPoints(chartData) ??
+      quote.current_price
+
     return {
-      current_price: quote.current_price,
+      current_price: alignedPrice,
       total_volume: quote.total_volume,
       market_cap: quote.market_cap,
       price_change_percentage_24h: quote.price_change_percentage_24h,
@@ -75,7 +80,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
       max_supply: quote.max_supply ?? null,
       symbol: quote.symbol,
     }
-  }, [quoteQuery.data])
+  }, [quoteQuery.data, chartData])
 
   // React 19: Enhanced time scale change handler with transition
   const handleTimeScaleChange = useCallback((scale: string) => {

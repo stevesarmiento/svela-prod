@@ -85,6 +85,17 @@ function buildSparklineSeries(args: {
   }))
 }
 
+function upsertLatestValue(
+  series: ReadonlyArray<{ time: number; value: number }>,
+  latestValue: number,
+): Array<{ time: number; value: number }> {
+  if (!Number.isFinite(latestValue) || latestValue <= 0) return series.slice()
+  if (series.length === 0) return []
+  const next = series.slice()
+  next[next.length - 1] = { ...next[next.length - 1]!, value: latestValue }
+  return next
+}
+
 function toTimeScale(range: string | undefined): InlineChartTimeScale {
   if (range === "1d" || range === "7d" || range === "30d" || range === "max" || range === "2y") return range
   return "7d"
@@ -166,8 +177,12 @@ export function InlinePriceChart({
     typeof initialData?.percent_change_7d === "number" ? initialData.percent_change_7d : percentChange24h
 
   const sparklineSeries = useMemo(
-    () => buildSparklineSeries({ sparkline: sparkline7d ?? [], timeScale: toTimeScale(timeScale) }),
-    [sparkline7d, timeScale],
+    () =>
+      upsertLatestValue(
+        buildSparklineSeries({ sparkline: sparkline7d ?? [], timeScale: toTimeScale(timeScale) }),
+        basePrice,
+      ),
+    [sparkline7d, timeScale, basePrice],
   )
   const hasSparkline = sparklineSeries.length >= 2
 
@@ -178,8 +193,14 @@ export function InlinePriceChart({
   })
 
   const rawChartData = hasSparkline ? sparklineSeries : (marketChartQuery.data?.points ?? [])
+  const rawChartDataWithLatest = useMemo(
+    () => upsertLatestValue(rawChartData, basePrice),
+    [rawChartData, basePrice],
+  )
   const chartData =
-    rawChartData.length >= 2 ? rawChartData : buildFallbackSeries({ timeScale: toTimeScale(timeScale), basePrice })
+    rawChartDataWithLatest.length >= 2
+      ? rawChartDataWithLatest
+      : buildFallbackSeries({ timeScale: toTimeScale(timeScale), basePrice })
   const isLoading = hasSparkline ? false : marketChartQuery.isLoading
 
   // Filter and prepare chart data

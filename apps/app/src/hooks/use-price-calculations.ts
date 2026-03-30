@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { CoinMarketData } from '@/types/coins'
 import type { Time } from 'lightweight-charts'
+import { getAlignedPriceFromChartPoints } from '@/lib/aligned-price'
 
 interface PriceDataPoint {
   time: Time
@@ -28,7 +29,12 @@ export function usePriceCalculations(
     setIsHydrated(true)
   }, [])
 
-  const displayPrice = activePrice ?? (tokenData?.marketData?.price || initialData.price)
+  const alignedChartPrice = useMemo(() => getAlignedPriceFromChartPoints(chartData), [chartData])
+  const displayPrice =
+    activePrice ??
+    alignedChartPrice ??
+    tokenData?.marketData?.price ??
+    initialData.price
   
   const calculatePercentageChange = useMemo(() => {
     if (!isHydrated) {

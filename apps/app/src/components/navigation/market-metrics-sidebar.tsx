@@ -24,6 +24,7 @@ import { formatNumber, getTrendBadgeVariant, getBuySellPressure, calculateDiverg
 import { formatUsdPrice } from "@/lib/format-usd"
 import { MiniPriceChart } from './mini-price-chart'
 import type { Time } from 'lightweight-charts'
+import { getAlignedPriceFromChartPoints } from '@/lib/aligned-price'
 
 interface MarketData {
   quote?: {
@@ -169,10 +170,15 @@ export function MarketMetricsSidebar({
     const volumeTrend = recentVolume > previousVolume * 1.2 ? 'up' : 
                        recentVolume < previousVolume * 0.8 ? 'down' : 'stable'
     
+    const alignedSpotPrice =
+      getAlignedPriceFromChartPoints(chartData) ??
+      marketData?.quote?.USD?.price ??
+      0
+
     // Support/resistance calculation
     const priceHistory = chartData?.map(d => d.value) || []
     const recentPriceData = priceHistory.slice(-21)
-    const { support, resistance } = calculateSupportResistance(recentPriceData, marketData?.quote?.USD?.price || 0)
+    const { support, resistance } = calculateSupportResistance(recentPriceData, alignedSpotPrice)
     
     // Latest indicators
     const latestBBIndicator = bbData.indicator?.length > 0 ? bbData.indicator[bbData.indicator.length - 1] : null
@@ -211,6 +217,7 @@ export function MarketMetricsSidebar({
       previousOI,
       latestLiquidations,
       priceHistory,
+      alignedSpotPrice,
     }
   }, [marketData, chartData, volumeData, bbData, marketVisionData, openInterestData, liquidationData])
 
@@ -257,7 +264,7 @@ export function MarketMetricsSidebar({
         <MiniPriceChart 
           coinId={coinId}
           tokenSymbol={tokenSymbol}
-          currentPrice={marketData?.quote?.USD?.price}
+          currentPrice={calculations.alignedSpotPrice}
         />
         
         <div className="w-full h-[1px] mb-3 bg-zinc-800/50 scale-125" />
@@ -267,7 +274,7 @@ export function MarketMetricsSidebar({
           <MetricRow
             icon={<IconDollarsign className="w-3 h-3 fill-zinc-100" />}
             label="Current Price"
-            value={formatUsdPrice(marketData?.quote?.USD?.price ?? 0)}
+            value={formatUsdPrice(calculations.alignedSpotPrice ?? 0)}
           />
           
           <MetricRow
