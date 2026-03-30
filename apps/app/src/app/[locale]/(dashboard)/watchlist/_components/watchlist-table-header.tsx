@@ -26,7 +26,7 @@ export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
                 className="flex min-w-0 items-center gap-2 cursor-pointer select-none hover:text-foreground"
                 onClick={() => table.getColumn('token-sort')?.toggleSorting()} // Sort by token
               >
-                <span>Token</span>
+                <span>TOKEN</span>
                 {{
                   asc: ' ↑',
                   desc: ' ↓',
