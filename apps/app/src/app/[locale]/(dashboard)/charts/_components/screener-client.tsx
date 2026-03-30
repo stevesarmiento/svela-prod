@@ -17,6 +17,8 @@ export function ScreenerClient() {
         onContentModeChange={() => {}}
         showContentModeToggle={false}
         enableContentModeShortcuts={false}
+        headerVariant="screener"
+        enableQuickActions={false}
       />
     </div>
   )

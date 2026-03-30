@@ -353,8 +353,8 @@ export function createWatchlistColumns({
                     logoUrl: safeTokenLogoUrl,
                   }}
                   triggerVariant="icon"
-                  triggerTooltip="Analyze with AI"
-                  triggerAriaLabel="Analyze with AI"
+                  triggerTooltip="Deep Analysis"
+                  triggerAriaLabel="Deep Analysis"
                 />
                 {/* <Button
                   variant="ghost"

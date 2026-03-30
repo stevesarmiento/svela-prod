@@ -50,6 +50,9 @@ interface WatchlistFiltersProps {
   
   // Loading states
   isRemoving?: boolean;
+
+  // Layout
+  align?: "left" | "right";
 }
 
 export function WatchlistFilters({
@@ -73,6 +76,7 @@ export function WatchlistFilters({
   onSelectAll,
   onRemoveSelected,
   isRemoving,
+  align = "left",
 }: WatchlistFiltersProps) {
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [inputValue, setInputValue] = useState(searchText);
@@ -233,7 +237,9 @@ export function WatchlistFilters({
       {/* Regular Filter UI */}
       <div className="flex items-center justify-between w-full">
         {/* Filter Button and Active Filters Row */}
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div
+          className={`flex items-center gap-2 flex-1 min-w-0 ${align === "right" ? "flex-row-reverse justify-start" : ""}`}
+        >
           <Popover open={isFilterPopoverOpen} onOpenChange={setIsFilterPopoverOpen}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -256,14 +262,21 @@ export function WatchlistFilters({
                     </Button>
                   </PopoverTrigger>
                 </TooltipTrigger>
-                <TooltipContent side="right" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
+                <TooltipContent
+                  side={align === "right" ? "left" : "right"}
+                  className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs"
+                >
                   <span>Filters</span>
                   <Kbd>Cmd</Kbd>
                   <span>+</span>
                   <Kbd>F</Kbd>
                 </TooltipContent>
               </Tooltip>
-            <PopoverContent className="rounded-xl bg-white dark:bg-zinc-900  p-0" align="start" side="right">
+            <PopoverContent
+              className="rounded-xl bg-white dark:bg-zinc-900 p-0 mr-2"
+              align={align === "right" ? "start" : "start"}
+              side={align === "right" ? "right" : "right"}
+            >
               {/* Search Input - Top Level */}
               <div className="">
                 <div className="relative">

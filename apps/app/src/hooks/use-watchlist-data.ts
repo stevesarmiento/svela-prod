@@ -39,6 +39,8 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     performance
   } = useCoinGeckoWatchlistCoins(watchlist);
 
+  const isInitialCoinsLoading = watchlist.length > 0 && isCoinsLoading && coins.length === 0
+
   // Filter and sort coins based on filter state
   const filteredCoins = useMemo(() => {
     if (!coins.length) return [];
@@ -137,6 +139,7 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     setFilters,
     filteredCoins,
     isCoinsLoading,
+    isInitialCoinsLoading,
     error,
     performance,
     handleClearAllFilters,

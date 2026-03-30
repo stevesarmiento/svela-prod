@@ -38,7 +38,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@v1/ui/popover'
-import { IconBinoculars, IconRectangleGrid1x2Fill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmark, IconWalletBifold, IconBookmarkFill, IconBinocularsFill } from 'symbols-react'
+import { IconBinoculars, IconSafariFill, IconEllipsis, IconWidgetSmallBadgePlus, IconBookmark, IconWalletBifold, IconBookmarkFill, IconBinocularsFill } from 'symbols-react'
 import { CreateWatchlist } from './create-watchlist'
 import { Kbd } from "@v1/ui/kbd"
 import { useLatest } from "@/hooks/use-latest"
@@ -65,6 +65,8 @@ interface WatchlistProps {
   onInlineChartError?: () => void;
   showContentModeToggle?: boolean;
   enableContentModeShortcuts?: boolean;
+  headerVariant?: "default" | "screener";
+  enableQuickActions?: boolean;
 }
 
 interface WatchlistTableSectionProps {
@@ -120,6 +122,7 @@ function WatchlistTableSection({
   const table = useReactTable({
     data: coins,
     columns,
+    getRowId: (row) => row.id.toString(),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -147,6 +150,8 @@ export function Watchlist({
   onInlineChartError,
   showContentModeToggle = true,
   enableContentModeShortcuts = true,
+  headerVariant = "default",
+  enableQuickActions = true,
 }: WatchlistProps) {
   const {
     // Legacy for backward compatibility
@@ -186,10 +191,12 @@ export function Watchlist({
     filters,
     setFilters,
     filteredCoins,
-    isCoinsLoading,
+    isInitialCoinsLoading,
     error,
     handleClearAllFilters,
   } = useWatchlistData({ watchlist: watchlistForTable });
+
+  const isScreenerHeader = contentMode === "table" && headerVariant === "screener"
 
   const removeFromAllWatchlists = useRemoveFromAllWatchlists()
   const removeBulkFromAllWatchlists = useRemoveBulkFromAllWatchlists()
@@ -228,16 +235,18 @@ export function Watchlist({
         return;
       }
 
-      if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
-        event.preventDefault()
-        coinSearchRef.current?.open()
-        return;
-      }
+      if (enableQuickActions) {
+        if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
+          event.preventDefault()
+          coinSearchRef.current?.open()
+          return;
+        }
 
-      if (addWalletShortcut && matchesShortcut(event, addWalletShortcut)) {
-        event.preventDefault()
-        setIsAddWalletOpen(true)
-        return
+        if (addWalletShortcut && matchesShortcut(event, addWalletShortcut)) {
+          event.preventDefault()
+          setIsAddWalletOpen(true)
+          return
+        }
       }
 
       if (enableContentModeShortcuts) {
@@ -275,7 +284,7 @@ export function Watchlist({
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [enableQuickActions, enableContentModeShortcuts, contentModeRef, onContentModeChangeRef, onGridViewModeChangeRef])
 
   const handleSelectAllWrapper = useCallback((checked: boolean) => {
     const coinIds = checked ? filteredCoins.map(coin => coin.id.toString()) : [];
@@ -361,31 +370,38 @@ export function Watchlist({
         </div>
       ) : (
           contentMode === 'table' ? (
-            /* Screener mode - Show filters on the left */
-            <div className="flex items-center gap-2">
-              <WatchlistFilters
-                searchText={filters.searchText}
-                priceRange={filters.priceRange}
-                marketCapRange={filters.marketCapRange}
-                volumeRange={filters.volumeRange}
-                changeFilter={filters.changeFilter}
-                sortBy={filters.sortBy}
-                sortOrder={filters.sortOrder}
-                selectedCoins={selectedCoins}
-                totalCoins={filteredCoins.length}
-                onSearchTextChange={(value) => setFilters(prev => ({ ...prev, searchText: value }))}
-                onPriceRangeChange={(range) => setFilters(prev => ({ ...prev, priceRange: range }))}
-                onMarketCapRangeChange={(range) => setFilters(prev => ({ ...prev, marketCapRange: range }))}
-                onVolumeRangeChange={(range) => setFilters(prev => ({ ...prev, volumeRange: range }))}
-                onChangeFilterChange={(value) => setFilters(prev => ({ ...prev, changeFilter: value }))}
-                onSortByChange={(value) => setFilters(prev => ({ ...prev, sortBy: value }))}
-                onSortOrderChange={(value) => setFilters(prev => ({ ...prev, sortOrder: value }))}
-                onClearAllFilters={handleClearAllFilters}
-                onSelectAll={handleSelectAllWrapper}
-                onRemoveSelected={handleRemoveSelected}
-                isRemoving={removingCoins.size > 0}
-              />
-            </div>
+            isScreenerHeader ? (
+              <div className="inline-flex items-center gap-2 text-md text-white px-4">
+                <IconSafariFill className="size-4 fill-muted-foreground" />
+                <span>Market screener</span>
+              </div>
+            ) : (
+              /* Table mode - Show filters on the left */
+              <div className="flex items-center gap-2">
+                <WatchlistFilters
+                  searchText={filters.searchText}
+                  priceRange={filters.priceRange}
+                  marketCapRange={filters.marketCapRange}
+                  volumeRange={filters.volumeRange}
+                  changeFilter={filters.changeFilter}
+                  sortBy={filters.sortBy}
+                  sortOrder={filters.sortOrder}
+                  selectedCoins={selectedCoins}
+                  totalCoins={filteredCoins.length}
+                  onSearchTextChange={(value) => setFilters(prev => ({ ...prev, searchText: value }))}
+                  onPriceRangeChange={(range) => setFilters(prev => ({ ...prev, priceRange: range }))}
+                  onMarketCapRangeChange={(range) => setFilters(prev => ({ ...prev, marketCapRange: range }))}
+                  onVolumeRangeChange={(range) => setFilters(prev => ({ ...prev, volumeRange: range }))}
+                  onChangeFilterChange={(value) => setFilters(prev => ({ ...prev, changeFilter: value }))}
+                  onSortByChange={(value) => setFilters(prev => ({ ...prev, sortBy: value }))}
+                  onSortOrderChange={(value) => setFilters(prev => ({ ...prev, sortOrder: value }))}
+                  onClearAllFilters={handleClearAllFilters}
+                  onSelectAll={handleSelectAllWrapper}
+                  onRemoveSelected={handleRemoveSelected}
+                  isRemoving={removingCoins.size > 0}
+                />
+              </div>
+            )
           ) : (
             /* Aggregate mode - Breadcrumb */
             <div className="flex items-center gap-4">
@@ -416,102 +432,132 @@ export function Watchlist({
         )}
         
         {/* Right side - Action buttons and shortcuts */}
-      <div className="flex items-center justify-between gap-4 flex-1 py-1">
-          <div className="flex items-center gap-2" />
-          {/* Action buttons - right side */}
-          <div className="flex items-center gap-2">
-            {/* Content Mode Toggle */}
-              {showContentModeToggle ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
+        {isScreenerHeader ? (
+          <div className="flex-1 min-w-0 py-1 px-4">
+            <WatchlistFilters
+              searchText={filters.searchText}
+              priceRange={filters.priceRange}
+              marketCapRange={filters.marketCapRange}
+              volumeRange={filters.volumeRange}
+              changeFilter={filters.changeFilter}
+              sortBy={filters.sortBy}
+              sortOrder={filters.sortOrder}
+              selectedCoins={selectedCoins}
+              totalCoins={filteredCoins.length}
+              onSearchTextChange={(value) => setFilters(prev => ({ ...prev, searchText: value }))}
+              onPriceRangeChange={(range) => setFilters(prev => ({ ...prev, priceRange: range }))}
+              onMarketCapRangeChange={(range) => setFilters(prev => ({ ...prev, marketCapRange: range }))}
+              onVolumeRangeChange={(range) => setFilters(prev => ({ ...prev, volumeRange: range }))}
+              onChangeFilterChange={(value) => setFilters(prev => ({ ...prev, changeFilter: value }))}
+              onSortByChange={(value) => setFilters(prev => ({ ...prev, sortBy: value }))}
+              onSortOrderChange={(value) => setFilters(prev => ({ ...prev, sortOrder: value }))}
+              onClearAllFilters={handleClearAllFilters}
+              onSelectAll={handleSelectAllWrapper}
+              onRemoveSelected={handleRemoveSelected}
+              isRemoving={removingCoins.size > 0}
+              align="right"
+            />
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-4 flex-1 py-1">
+            <div className="flex items-center gap-2" />
+            {/* Action buttons - right side */}
+            <div className="flex items-center gap-2">
+              {/* Content Mode Toggle */}
+                {showContentModeToggle ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onContentModeChange?.(contentMode === 'cards' ? 'aggregate' : 'cards')}
+                        className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
+                      >
+                        {contentMode === 'cards' ? (
+                          <IconBinoculars className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
+                        ) : (
+                          <IconBinocularsFill className="h-4 w-4 fill-primary" />
+                        )}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" align="center" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
+                      <span>Switch between Watchlists and Aggregate</span>
+                        <Kbd>[</Kbd>
+                        <span>/</span>
+                        <Kbd>]</Kbd>
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
+              {/* Actions Menu */}
+              {enableQuickActions ? (
+                <Popover>
+                  <PopoverTrigger asChild>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onContentModeChange?.(contentMode === 'cards' ? 'aggregate' : 'cards')}
                       className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
                     >
-                      {contentMode === 'cards' ? (
-                        <IconBinoculars className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
-                      ) : (
-                        <IconBinocularsFill className="h-4 w-4 fill-primary" />
-                      )}
+                      <IconEllipsis className="size-3.5 fill-muted-foreground group-hover:fill-primary rotate-90" />
                     </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left" align="center" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
-                    <span>Switch between Watchlists and Aggregate</span>
-                      <Kbd>[</Kbd>
-                      <span>/</span>
-                      <Kbd>]</Kbd>
-                  </TooltipContent>
-                </Tooltip>
-              ) : null}
-            {/* Actions Menu */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
-                >
-                  <IconEllipsis className="size-3.5 fill-muted-foreground group-hover:fill-primary rotate-90" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-64 p-1 rounded-xl bg-white dark:bg-zinc-900 overflow-hidden" align="end" side="bottom">
-                <div className="space-y-1">
-                   <Button
-                     variant="ghost"
-                     size="sm"
-                     onClick={() => {
-                       setIsCreatingWatchlist(true)
-                     }}
-                     className="w-full justify-start gap-2 rounded-md"
-                   >
-                     <IconWidgetSmallBadgePlus className="h-3.5 w-3.5 fill-muted-foreground" />
-                     <span>Create Watchlist</span>
-                     <div className="ml-auto flex items-center gap-1">
-                       <Kbd className="text-[10px]">Shift</Kbd>
-                       <Kbd className="text-[10px] font-diatype-bold">N</Kbd>
-                     </div>
-                   </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-1 rounded-xl bg-white dark:bg-zinc-900 overflow-hidden" align="end" side="bottom">
+                    <div className="space-y-1">
+                       <Button
+                         variant="ghost"
+                         size="sm"
+                         onClick={() => {
+                           setIsCreatingWatchlist(true)
+                         }}
+                         className="w-full justify-start gap-2 rounded-md"
+                       >
+                         <IconWidgetSmallBadgePlus className="h-3.5 w-3.5 fill-muted-foreground" />
+                         <span>Create Watchlist</span>
+                         <div className="ml-auto flex items-center gap-1">
+                           <Kbd className="text-[10px]">Shift</Kbd>
+                           <Kbd className="text-[10px] font-diatype-bold">N</Kbd>
+                         </div>
+                       </Button>
 
-                   <Button
-                     variant="ghost"
-                     size="sm"
-                     onClick={() => {
-                       coinSearchRef.current?.open()
-                     }}
-                     className="w-full justify-start gap-2 rounded-md"
-                   >
-                     <IconBookmark className="h-3.5 w-3.5 fill-muted-foreground" />
-                     <span>Add Token</span>
-                     <div className="ml-auto flex items-center gap-1">
-                       <Kbd className="text-[10px]">Shift</Kbd>
-                       <Kbd className="text-[10px] font-diatype-bold">A</Kbd>
-                     </div>
-                   </Button>
-                    <Separator className="my-1 scale-x-110" />
-                   <Button
-                     variant="ghost"
-                     size="sm"
-                     onClick={() => {
-                       setIsAddWalletOpen(true)
-                     }}
-                     className="w-full justify-start gap-2 rounded-md"
-                   >
-                     <IconWalletBifold className="h-3.5 w-3.5 fill-muted-foreground" />
-                     <span>Import from Wallet</span>
-                     <div className="ml-auto flex items-center gap-1">
-                       <Kbd className="text-[10px]">Shift</Kbd>
-                       <Kbd className="text-[10px] font-diatype-bold">M</Kbd>
-                     </div>
-                   </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
-          
+                       <Button
+                         variant="ghost"
+                         size="sm"
+                         onClick={() => {
+                           coinSearchRef.current?.open()
+                         }}
+                         className="w-full justify-start gap-2 rounded-md"
+                       >
+                         <IconBookmark className="h-3.5 w-3.5 fill-muted-foreground" />
+                         <span>Add Token</span>
+                         <div className="ml-auto flex items-center gap-1">
+                           <Kbd className="text-[10px]">Shift</Kbd>
+                           <Kbd className="text-[10px] font-diatype-bold">A</Kbd>
+                         </div>
+                       </Button>
+                        <Separator className="my-1 scale-x-110" />
+                       <Button
+                         variant="ghost"
+                         size="sm"
+                         onClick={() => {
+                           setIsAddWalletOpen(true)
+                         }}
+                         className="w-full justify-start gap-2 rounded-md"
+                       >
+                         <IconWalletBifold className="h-3.5 w-3.5 fill-muted-foreground" />
+                         <span>Import from Wallet</span>
+                         <div className="ml-auto flex items-center gap-1">
+                           <Kbd className="text-[10px]">Shift</Kbd>
+                           <Kbd className="text-[10px] font-diatype-bold">M</Kbd>
+                         </div>
+                       </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              ) : null}
+            </div>
           </div>
+        )}
+
         </div>
-      </div>
 
       {/* Main Content */}
       {contentMode === 'cards' ? (
@@ -539,8 +585,8 @@ export function Watchlist({
           <ComparisonChartsClient inset={false} />
         ) : (
           /* Screener Mode - Direct render without tabs, filters now in header */
-          <div className="space-y-4">
-            {isTableCoinIdsLoading || isCoinsLoading ? (
+          <div className="space-y-4 px-4">
+            {isTableCoinIdsLoading || isInitialCoinsLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Spinner size={24} />
               </div>
@@ -566,18 +612,22 @@ export function Watchlist({
           </div>
         )}
 
-        {/* Create Watchlist Modal */}
-        <CreateWatchlist 
-          isOpen={isCreatingWatchlist} 
-          onClose={() => setIsCreatingWatchlist(false)} 
-        />
+        {enableQuickActions ? (
+          <>
+            {/* Create Watchlist Modal */}
+            <CreateWatchlist 
+              isOpen={isCreatingWatchlist} 
+              onClose={() => setIsCreatingWatchlist(false)} 
+            />
 
-        <AddWalletDialog open={isAddWalletOpen} onOpenChange={setIsAddWalletOpen} />
+            <AddWalletDialog open={isAddWalletOpen} onOpenChange={setIsAddWalletOpen} />
 
-        {/* Hidden CoinSearch for ref access */}
-        <div className="sr-only">
-          <CoinSearch ref={coinSearchRef} />
-        </div>
+            {/* Hidden CoinSearch for ref access */}
+            <div className="sr-only">
+              <CoinSearch ref={coinSearchRef} />
+            </div>
+          </>
+        ) : null}
     </div>
   )
 }
