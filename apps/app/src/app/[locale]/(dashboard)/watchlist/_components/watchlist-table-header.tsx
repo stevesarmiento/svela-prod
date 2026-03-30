@@ -39,7 +39,9 @@ export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
               const className = cn(
                 "flex min-w-0 items-center gap-1",
                 canSort ? "cursor-pointer select-none hover:text-foreground" : "",
-                header.column.id === 'actions' ? "justify-end" : "justify-start"
+                header.column.id === 'actions'
+                  ? "justify-end whitespace-nowrap"
+                  : "justify-start"
               )
 
               const content = (

@@ -77,7 +77,7 @@ export function WatchlistTableRow({
 
       {/* Actions cell - prevent navigation */}
       <div
-        className="flex min-w-0 items-center justify-end"
+        className="flex min-w-[72px] items-center justify-end flex-nowrap whitespace-nowrap"
         onClick={(e) => {
           if (isLoadingRow) return
           e.preventDefault();

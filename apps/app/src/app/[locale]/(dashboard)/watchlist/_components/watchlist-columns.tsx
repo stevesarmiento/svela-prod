@@ -2,6 +2,7 @@
 
 import { formatLargeNumber } from "@v1/ui/format-numbers";
 import { Button } from "@v1/ui/button"
+import { Badge } from "@v1/ui/badge"
 import { X } from "lucide-react"
 import Image from "next/image"
 import { cn } from "@v1/ui/cn"
@@ -47,6 +48,27 @@ interface WatchlistColumnsProps {
   hasSelectedCoinsRef: Ref<boolean>;
   shouldReduceMotion?: boolean;
   onInlineChartError?: () => void;
+}
+
+function deriveUsdMoveFromPercentChange(args: {
+  priceUsd: number
+  percentChange: number
+}): number | null {
+  const priceUsd = args.priceUsd
+  const percentChange = args.percentChange
+
+  if (!Number.isFinite(priceUsd) || priceUsd <= 0) return null
+  if (!Number.isFinite(percentChange)) return null
+
+  const r = percentChange / 100
+  const denom = 1 + r
+  if (!Number.isFinite(denom) || denom <= 0) return null
+
+  const previousPrice = priceUsd / denom
+  const deltaUsd = priceUsd - previousPrice
+  if (!Number.isFinite(deltaUsd)) return null
+
+  return deltaUsd
 }
 
 export function createWatchlistColumns({
@@ -109,7 +131,7 @@ export function createWatchlistColumns({
         
         return (
           <motion.div
-            className="relative w-full h-full flex items-center justify-start"
+            className="relative h-full flex items-center justify-start"
             // Ensure non-hovered rows animate when selection mode flips on/off.
             // Some table updates can remount cells; starting from `"rest"` prevents "jump-to-endstate".
             variants={cellVariants}
@@ -228,11 +250,54 @@ export function createWatchlistColumns({
       enableSorting: true,
     },
     {
+      id: "change24hUsd",
+      accessorFn: (row) =>
+        deriveUsdMoveFromPercentChange({
+          priceUsd: row.quote.USD.price,
+          percentChange: row.quote.USD.percent_change_24h,
+        }) ?? 0,
+      header: () => (
+        <div className="text-left flex items-center justify-start gap-1">
+          24h $ Change
+        </div>
+      ),
+      cell: ({ row }) =>
+        row.original.quote.USD.price > 0 ? (
+          (() => {
+            const change24h = row.original.quote.USD.percent_change_24h
+            const isPositive = change24h > 0
+            const isNegative = change24h < 0
+            const isNeutral = !isPositive && !isNegative
+            const usdMove = deriveUsdMoveFromPercentChange({
+              priceUsd: row.original.quote.USD.price,
+              percentChange: change24h,
+            })
+            const usdSign = isPositive ? "+" : isNegative ? "-" : ""
+
+            return (
+              <span
+                className={cn(
+                  "inline-flex items-center font-berkeley-mono text-xs tabular-nums",
+                  isPositive && "text-emerald-400",
+                  isNegative && "text-rose-400",
+                  isNeutral && "text-muted-foreground",
+                )}
+              >
+                {usdMove === null ? "—" : `${usdSign}${formatUsdPrice(Math.abs(usdMove))}`}
+              </span>
+            )
+          })()
+        ) : (
+          <Skeleton className="h-4 w-14 rounded-full" />
+        ),
+      enableSorting: true,
+    },
+    {
       id: 'change24h',
       accessorKey: 'quote.USD.percent_change_24h',
       header: () => (
         <div className="text-left flex items-center justify-start gap-1">
-          24h Change
+          24h % Change
         </div>
       ),
       cell: ({ row }) => (
@@ -242,27 +307,25 @@ export function createWatchlistColumns({
             const isPositive = change24h > 0
             const isNegative = change24h < 0
             const isNeutral = !isPositive && !isNegative
+            const pctSign = isPositive ? "+" : isNegative ? "-" : ""
 
             return (
-              <span
+              <Badge
+                variant={isPositive ? "success" : isNegative ? "destructive" : "outline"}
                 className={cn(
-                  "inline-flex items-center gap-1 font-berkeley-mono text-xs tabular-nums",
-                  isPositive && "text-emerald-500",
-                  isNegative && "text-rose-500",
-                  isNeutral && "text-muted-foreground",
+                  "h-5 px-1 font-berkeley-mono text-[10px] tabular-nums gap-1",
+                  isNeutral && "border-zinc-200/60 text-muted-foreground dark:border-white/10",
                 )}
               >
                 <IconTriangleFill
                   aria-hidden="true"
                   className={cn(
-                    "size-2 shrink-0 mr-1",
-                    isPositive && "fill-emerald-500",
-                    isNegative && "fill-rose-500 rotate-180",
-                    isNeutral && "fill-zinc-500/60",
+                    "size-1.5 shrink-0 fill-current",
+                    isNegative && "rotate-180",
                   )}
                 />
-                {(isNegative ? Math.abs(change24h) : change24h).toFixed(2)}%
-              </span>
+                {pctSign}{Math.abs(change24h).toFixed(2)}%
+              </Badge>
             )
           })()
         ) : (
@@ -348,7 +411,7 @@ export function createWatchlistColumns({
     {
       id: 'actions',
       header: () => (
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
           Actions
         </div>
       ),
@@ -362,7 +425,7 @@ export function createWatchlistColumns({
             : undefined
 
         return (
-          <div className="flex items-center justify-end gap-1.5">
+          <div className="flex items-center justify-end gap-1.5 flex-nowrap whitespace-nowrap">
             {isRowLoading ? (
               <Skeleton className="h-6 w-16 rounded-lg" />
             ) : (
@@ -402,6 +465,9 @@ export function createWatchlistColumns({
           </div>
         )
       },
+      enableSorting: false,
+      size: 80,
+      minSize: 72,
     },
   ];
 }
