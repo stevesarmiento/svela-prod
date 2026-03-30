@@ -1,6 +1,6 @@
 import { 
   // IconCompassDrawing, 
-  IconBinocularsFill, 
+  IconBookmarkFill, 
   IconDistributeHorizontalCenterFill, 
   IconWalletBifoldFill, 
   IconChartLineUptrendXyaxis, 
@@ -21,7 +21,7 @@ export const MENU_ITEMS = isAlphaFeaturesEnabled()
       {
         title: "Watchlist",
         href: "/watchlist",
-        icon: IconBinocularsFill,
+        icon: IconBookmarkFill,
       },
       {
         title: "Charts",
@@ -38,7 +38,7 @@ export const MENU_ITEMS = isAlphaFeaturesEnabled()
       {
         title: "Watchlist",
         href: "/watchlist",
-        icon: IconBinocularsFill,
+        icon: IconBookmarkFill,
       },
       {
         title: "Charts",
@@ -56,7 +56,7 @@ export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
             title: "Watchlist",
             subtitle: "Your cryptocurrency watchlist",
             href: "/watchlist",
-            icon: IconBinocularsFill,
+            icon: IconBookmarkFill,
             shortcut: getShortcutForRoute("/watchlist"),
           },
           {
@@ -91,7 +91,7 @@ export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
             title: "Watchlist",
             subtitle: "Your cryptocurrency watchlist",
             href: "/watchlist",
-            icon: IconBinocularsFill,
+            icon: IconBookmarkFill,
             shortcut: getShortcutForRoute("/watchlist"),
           },
           {
