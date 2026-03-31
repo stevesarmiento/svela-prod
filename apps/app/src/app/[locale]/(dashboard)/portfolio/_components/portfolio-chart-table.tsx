@@ -2,12 +2,12 @@
 
 import { useDeferredValue, useMemo } from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { cn } from "@v1/ui/cn"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
 import { formatUsdPrice } from "@/lib/format-usd"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
 import type { CoinMarketData } from "@/types/coins"
+import { TokenLogo } from "@/components/token-logo"
 
 interface PortfolioChartTableProps {
   coins: CoinMarketData[]
@@ -88,23 +88,14 @@ export function PortfolioChartTable({ coins, activeTimeScale }: PortfolioChartTa
                 <div className="grid grid-cols-3 gap-4">
                   <div className="flex items-center gap-2">
                     <div className="relative">
-                      {safeTokenLogoUrl ? (
-                        <Image
-                          src={safeTokenLogoUrl}
-                          alt={tokenName}
-                          className="size-4 rounded-full ring-1 ring-zinc-200 dark:ring-black/80"
-                          width={16}
-                          height={16}
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement
-                            target.src = "/favicon.ico"
-                          }}
-                        />
-                      ) : (
-                        <div className="w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center text-[8px] font-bold text-primary/70">
-                          {coin.symbol?.charAt(0) || "?"}
-                        </div>
-                      )}
+                      <TokenLogo
+                        src={safeTokenLogoUrl}
+                        alt={tokenName}
+                        sizePx={16}
+                        fallbackText={coin.symbol}
+                        className="ring-1 ring-zinc-200 dark:ring-black/80"
+                        quality={70}
+                      />
                     </div>
                     <span className="text-muted-foreground">{tokenName}</span>
                   </div>

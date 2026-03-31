@@ -38,8 +38,9 @@ export const AvatarCircles = ({
           <Image
             className="size-full object-cover"
             src={url.imageUrl}
-            width={50}
-            height={50}
+            width={32}
+            height={32}
+            sizes="32px"
             alt={`Avatar ${index + 1}`}
             onError={(e) => {
               const target = e.target as HTMLImageElement;

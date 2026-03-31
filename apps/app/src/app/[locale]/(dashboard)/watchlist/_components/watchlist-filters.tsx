@@ -120,12 +120,12 @@ function levenshteinDistance(a: string, b: string): number {
     for (let j = 1; j <= b.length; j += 1) {
       const cost = ai === b.charCodeAt(j - 1) ? 0 : 1
       curr[j] = Math.min(
-        prev[j] + 1, // deletion
-        curr[j - 1] + 1, // insertion
-        prev[j - 1] + cost, // substitution
+        (prev[j] ?? 0) + 1, // deletion
+        (curr[j - 1] ?? 0) + 1, // insertion
+        (prev[j - 1] ?? 0) + cost, // substitution
       )
     }
-    for (let j = 0; j <= b.length; j += 1) prev[j] = curr[j]
+    for (let j = 0; j <= b.length; j += 1) prev[j] = curr[j] ?? 0
   }
 
   return prev[b.length] ?? Math.max(a.length, b.length)

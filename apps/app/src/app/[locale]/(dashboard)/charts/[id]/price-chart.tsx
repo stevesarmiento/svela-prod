@@ -12,7 +12,6 @@ import type { CoinMarketData } from '@/types/coins'
 import { useHullSuite } from '@/hooks/use-hull-suite'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { IconArrowUpRight } from 'symbols-react'
-import Image from 'next/image'
 import NumberFlow from '@/components/number-flow'
 import { useQuery as useTanStackQuery } from '@tanstack/react-query'
 import { CoinsInternalApi } from '@/lib/effect/coins-internal-api'
@@ -22,6 +21,7 @@ import { getUsdPriceFormatOptions } from '@/lib/format-usd'
 import type { Format } from '@/lib/number-flow/lite'
 import type { Time } from 'lightweight-charts'
 import { cleanTokenName, getTokenLogoURL } from '@/lib/logo-overrides'
+import { TokenLogo } from "@/components/token-logo"
 
 interface PriceChartProps {
   coinId: string;
@@ -379,16 +379,13 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
               <div className="flex gap-3 justify-between items-start w-full">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
-                    <Image 
-                      src={safeCoinLogoUrl} 
-                      alt={coinName} 
-                      width={24} 
-                      height={24}
-                      className="rounded-full w-4 h-4"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = '/favicon.ico';
-                      }}
+                    <TokenLogo
+                      src={safeCoinLogoUrl}
+                      alt={coinName}
+                      sizePx={16}
+                      fallbackText={coingeckoCoinData?.symbol}
+                      className="ring-0 bg-transparent"
+                      quality={70}
                     />
                     <span className="text-gray-900 dark:text-white font-bold text-sm">{coinName}</span>
                     <span className="text-primary/60 text-sm">is currently</span>

@@ -20,7 +20,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { X } from "lucide-react"
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import Link from "next/link"
-import Image from "next/image"
 import { cn } from "@v1/ui/cn"
 import { toast } from "@v1/ui/use-toast"
 import { Skeleton } from "@v1/ui/skeleton"
@@ -30,6 +29,7 @@ import { formatUsdPrice } from "@/lib/format-usd"
 import { useSetWatchlistItemHoldings } from "@/lib/convex-hooks"
 import { Badge } from "@v1/ui/badge"
 import { IconTriangleFill } from "symbols-react"
+import { TokenLogo } from "@/components/token-logo"
 
 function loadAnalysisDialog() {
   return import("@/components/navigation/analysis-dialog")
@@ -404,19 +404,16 @@ export const ChartTable = memo(function ChartTable({
                 <div className="flex items-center gap-2">
                   <div className="relative">
                     {safeTokenLogoUrl ? (
-                      <Image
+                      <TokenLogo
                         src={safeTokenLogoUrl}
                         alt={tokenName}
+                        sizePx={16}
+                        fallbackText={coin.symbol}
                         className={cn(
-                          "size-4 rounded-full ring-1 ring-zinc-200 dark:ring-black/80",
-                          coin.isOptimistic && "opacity-50"
+                          "ring-1 ring-zinc-200 dark:ring-black/80",
+                          coin.isOptimistic && "opacity-50",
                         )}
-                        width={16}
-                        height={16}
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = '/favicon.ico';
-                        }}
+                        quality={70}
                       />
                     ) : (
                       <div className={cn(

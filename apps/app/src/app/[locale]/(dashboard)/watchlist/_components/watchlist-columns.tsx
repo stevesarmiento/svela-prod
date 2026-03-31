@@ -1,18 +1,20 @@
 'use client'
 
+import type { ReactNode } from "react"
 import { formatLargeNumber } from "@v1/ui/format-numbers";
 import { Button } from "@v1/ui/button"
 import { Badge } from "@v1/ui/badge"
 import { X } from "lucide-react"
-import Image from "next/image"
 import { cn } from "@v1/ui/cn"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Checkbox } from "@v1/ui/checkbox"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import type { ColumnDef } from '@tanstack/react-table'
 import { motion } from "motion/react"
 import { Spinner } from "@v1/ui/spinner"
 import dynamic from "next/dynamic"
 import type { CoinMarketData } from '@/types/coins'
+import { TokenLogo } from "@/components/token-logo"
 import { InlinePriceChart } from "@/components/charts/inline-price-chart"
 import { InlineSpotTakerBuySellVolumeChart } from "@/components/charts/inline-spot-taker-buy-sell-volume-chart"
 import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
@@ -69,6 +71,29 @@ function deriveUsdMoveFromPercentChange(args: {
   if (!Number.isFinite(deltaUsd)) return null
 
   return deltaUsd
+}
+
+/** Hover hint for dense table headers (provider is on dashboard layout). */
+function ColumnHeaderTooltip({
+  children,
+  text,
+}: {
+  children: ReactNode
+  text: string
+}) {
+  return (
+    <Tooltip delayDuration={500}>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center">{children}</span>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        className="max-w-xs text-pretty text-xs font-normal normal-case tracking-normal"
+      >
+        {text}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 export function createWatchlistColumns({
@@ -164,30 +189,14 @@ export function createWatchlistColumns({
             >
               <div className="relative">
                 {row.original.quote.USD.price > 0 ? (
-                  // Use CoinGecko image if available, otherwise fallback to letter
-                  safeTokenLogoUrl ? (
-                    <Image
-                      src={safeTokenLogoUrl}
-                      alt={tokenName}
-                      className="w-[20px] h-[20px] rounded-full mr-1 border-[1.5px] border-zinc-200 dark:border-black/60"
-                      width={14}
-                      height={24}
-                      onError={(e) => {
-                        // Fallback to letter-based avatar on image error
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        const parent = target.parentElement;
-                        if (parent) {
-                          parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
-                        }
-                      }}
-                    />
-                  ) : (
-                    // Fallback for missing image
-                    <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
-                      {row.original.symbol.charAt(0).toUpperCase()}
-                    </div>
-                  )
+                  <TokenLogo
+                    src={safeTokenLogoUrl}
+                    alt={tokenName}
+                    sizePx={20}
+                    fallbackText={row.original.symbol}
+                    className="mr-1 ring-0 bg-primary/20 border-[1.5px] border-zinc-200 dark:border-black/60"
+                    quality={70}
+                  />
                 ) : (
                   <Skeleton className="w-[20px] h-[20px] rounded-full" />
                 )}
@@ -235,7 +244,9 @@ export function createWatchlistColumns({
       accessorKey: 'quote.USD.price',
       header: () => (
         <div className="text-left flex items-center justify-start gap-1">
-          PRICE
+          <ColumnHeaderTooltip text="Spot price in USD from aggregated market data (typically via CoinGecko). Not an executable quote.">
+            PRICE
+          </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) => (
@@ -258,7 +269,9 @@ export function createWatchlistColumns({
         }) ?? 0,
       header: () => (
         <div className="text-left uppercase flex items-center justify-start gap-1">
-          24h $ Change
+          <ColumnHeaderTooltip text="How many USD the price moved over the last rolling 24 hours, inferred from the current USD price and the 24h percent change (same basis as the % column, expressed in dollars).">
+            24h $ Change
+          </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) =>
@@ -297,7 +310,9 @@ export function createWatchlistColumns({
       accessorKey: 'quote.USD.percent_change_24h',
       header: () => (
         <div className="text-left uppercase flex items-center justify-start gap-1">
-          24h % Change
+          <ColumnHeaderTooltip text="Rolling 24-hour change in USD price versus the price roughly one day ago, as reported by the market data source.">
+            24h % Change
+          </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) => (
@@ -339,7 +354,9 @@ export function createWatchlistColumns({
       accessorKey: 'quote.USD.volume_24h',
       header: () => (
         <div className="text-left uppercase flex items-center justify-start gap-1">
-          Volume 24h
+          <ColumnHeaderTooltip text="Total notional USD traded across tracked venues in the last 24 hours. Higher volume usually means more liquidity and tighter spreads.">
+            Volume 24h
+          </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) => (
@@ -357,7 +374,9 @@ export function createWatchlistColumns({
       id: 'takerBuySellVolume',
       header: () => (
         <div className="text-left uppercase flex items-center justify-start gap-1">
-          Taker Buy/Sell Vol
+          <ColumnHeaderTooltip text="Taker volume on Binance spot (USDT pair): market orders hitting the book. Buy stack vs sell stack over recent 4h slices—more aggressive buying lifts the buy side; more aggressive selling lifts the sell side.">
+            Taker Buy/Sell Vol
+          </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) => (
@@ -378,7 +397,9 @@ export function createWatchlistColumns({
       id: 'chart',
       header: () => (
         <div className="text-left uppercase flex items-center justify-start gap-1">
-          7d Chart
+          <ColumnHeaderTooltip text="Seven-day USD price trail (sparkline). Uses live chart data when loaded; may fall back to the 7d series bundled with market snapshots.">
+            7d Chart
+          </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) => (

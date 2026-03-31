@@ -2,6 +2,7 @@
 
 import { flexRender, type Table } from '@tanstack/react-table'
 import { cn } from "@v1/ui/cn"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import type { CoinMarketData } from '@/types/coins'
 import { WATCHLIST_TABLE_GRID_TEMPLATE_COLUMNS } from "./watchlist-table-layout"
 
@@ -20,18 +21,27 @@ export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
             style={{ gridTemplateColumns: WATCHLIST_TABLE_GRID_TEMPLATE_COLUMNS }}
           >
             {headerGroup.headers.slice(0, 1).map(header => ( // Show first header (select/token merged)
-              <button
-                type="button"
-                key={header.id}
-                className="flex min-w-0 items-center gap-2 cursor-pointer select-none hover:text-foreground"
-                onClick={() => table.getColumn('token-sort')?.toggleSorting()} // Sort by token
-              >
-                <span>TOKEN</span>
-                {{
-                  asc: ' ↑',
-                  desc: ' ↓',
-                }[table.getColumn('token-sort')?.getIsSorted() as string] ?? null}
-              </button>
+              <Tooltip key={header.id} delayDuration={500}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex min-w-0 items-center gap-2 cursor-pointer select-none hover:text-foreground"
+                    onClick={() => table.getColumn('token-sort')?.toggleSorting()} // Sort by token
+                  >
+                    <span>TOKEN</span>
+                    {{
+                      asc: ' ↑',
+                      desc: ' ↓',
+                    }[table.getColumn('token-sort')?.getIsSorted() as string] ?? null}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent
+                  side="top"
+                  className="!rounded-md !p-2 max-w-xs text-pretty text-xs font-normal normal-case tracking-normal"
+                >
+                  Ticker and full name appear in each row. Click to sort alphabetically by asset name.
+                </TooltipContent>
+              </Tooltip>
             ))}
             {headerGroup.headers.slice(2).map(header => { // Skip the hidden token-sort column
               const canSort = header.column.getCanSort()

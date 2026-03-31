@@ -11,7 +11,6 @@ import {
   CommandItem,
   CommandList,
 } from "@v1/ui/command-popover";
-import Image from 'next/image';
 import { Skeleton } from "@v1/ui/skeleton";
 import { useRouter } from 'next/navigation';
 import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
@@ -24,6 +23,7 @@ import { useAddCoinToWatchlist } from '@/hooks/use-add-coin-to-watchlist';
 import { BackgroundPattern } from './background-pattern';
 import { formatUsdPrice } from "@/lib/format-usd";
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides";
+import { TokenLogo } from "@/components/token-logo";
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | null;
 
@@ -345,19 +345,16 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                       <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
                         <div className="flex items-center gap-3 pr-5">
                           <div className="relative">
-                            <Image
+                            <TokenLogo
                               src={(() => {
                                 const logoUrl = getTokenLogoURL(coin.symbol, coin.image)
-                                return logoUrl?.startsWith("http") || logoUrl?.startsWith("/") ? logoUrl : "/favicon.ico"
+                                return logoUrl?.startsWith("http") || logoUrl?.startsWith("/") ? logoUrl : undefined
                               })()}
                               alt={cleanTokenName(coin.name)}
-                              className="w-6 h-6 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800 shadow-sm shadow-zinc-950"
-                              width={24}
-                              height={24}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = '/favicon.ico';
-                              }}
+                              sizePx={24}
+                              fallbackText={coin.symbol}
+                              className="ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800 shadow-sm shadow-zinc-950"
+                              quality={70}
                             />
                           </div>
                           <div className="flex flex-col">
