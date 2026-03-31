@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef } from 'react'
-import { useCompletion } from 'ai/react'
+import { useCompletion } from '@ai-sdk/react'
 import { Skeleton } from "@v1/ui/skeleton"
 import { toast } from "@v1/ui/use-toast"
 
@@ -24,6 +24,7 @@ export function TokenAnalysis({ tokenData }: TokenAnalysisProps) {
 
   const { complete, completion, isLoading } = useCompletion({
     api: '/api/analyze',
+    streamProtocol: 'text',
     onError: (error) => {
       console.error('Analysis error:', error)
       toast({
@@ -32,7 +33,7 @@ export function TokenAnalysis({ tokenData }: TokenAnalysisProps) {
         variant: "destructive",
       })
     },
-    onFinish: (completion) => {
+    onFinish: (_prompt, completion) => {
       console.log('Analysis completed:', completion)
       analysisRequested.current = true
     }

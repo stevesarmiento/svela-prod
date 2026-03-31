@@ -185,6 +185,7 @@ const OHLCApiResponseSchema = Schema.Struct({
 })
 
 export interface CoinGeckoQuotesStatus {
+  timestamp?: string
   error_code?: number
   error_message?: string
 }
@@ -195,6 +196,7 @@ export interface CoinGeckoQuoteMarketData {
   symbol: string
   market_cap_rank: number | null
   image: string
+  sparkline7d?: ReadonlyArray<number>
   current_price: number | null
   market_cap: number | null
   total_volume: number | null
@@ -202,6 +204,9 @@ export interface CoinGeckoQuoteMarketData {
   price_change_percentage_1h_in_currency?: number | null
   price_change_percentage_7d_in_currency?: number | null
   price_change_percentage_30d_in_currency?: number | null
+  circulating_supply?: number | null
+  max_supply?: number | null
+  last_updated?: string
 }
 
 export interface CoinGeckoQuotesApiResponse {
@@ -215,6 +220,7 @@ const CoinGeckoQuoteMarketDataSchema = Schema.Struct({
   symbol: Schema.String,
   market_cap_rank: Schema.NullOr(Schema.Number),
   image: Schema.String,
+  sparkline7d: Schema.optional(Schema.Array(Schema.Number)),
   current_price: Schema.NullOr(Schema.Number),
   market_cap: Schema.NullOr(Schema.Number),
   total_volume: Schema.NullOr(Schema.Number),
@@ -222,9 +228,13 @@ const CoinGeckoQuoteMarketDataSchema = Schema.Struct({
   price_change_percentage_1h_in_currency: Schema.optional(Schema.NullOr(Schema.Number)),
   price_change_percentage_7d_in_currency: Schema.optional(Schema.NullOr(Schema.Number)),
   price_change_percentage_30d_in_currency: Schema.optional(Schema.NullOr(Schema.Number)),
+  circulating_supply: Schema.optional(Schema.NullOr(Schema.Number)),
+  max_supply: Schema.optional(Schema.NullOr(Schema.Number)),
+  last_updated: Schema.optional(Schema.String),
 })
 
 const CoinGeckoQuotesStatusSchema = Schema.Struct({
+  timestamp: Schema.optional(Schema.String),
   error_code: Schema.optional(Schema.Number),
   error_message: Schema.optional(Schema.String),
 })

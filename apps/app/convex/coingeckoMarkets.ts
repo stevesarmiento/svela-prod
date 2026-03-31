@@ -81,7 +81,7 @@ export const upsertMarketData = mutation({
         updatedAt: now,
       })
       return existing._id
-    } else {
+    }
       // Create new record
       const id = await ctx.db.insert("coingeckoMarkets", {
         ...args,
@@ -89,7 +89,6 @@ export const upsertMarketData = mutation({
         updatedAt: now,
       })
       return id
-    }
   },
 })
 
@@ -176,7 +175,7 @@ export const getTopMarketDataByRank = query({
     const limit = args.limit ?? 100
     return await ctx.db
       .query("coingeckoMarkets")
-      .withIndex("by_market_cap_rank")
+      .withIndex("by_market_cap_rank", (q) => q.gte("marketCapRank", 1))
       .order("asc")
       .take(limit)
   },

@@ -1,6 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
 import { CoinGeckoApi, type CoinGeckoQuoteMarketData } from "@/lib/effect/coingecko-api";
 import { runPromise } from "@/lib/effect/runtime-coingecko";
 
@@ -33,6 +34,55 @@ export interface CoinGeckoSearchParams {
   limit?: number;
 }
 
+function makeStableKeyPart(values: ReadonlyArray<string> | undefined): string {
+  if (!values?.length) return ""
+  const unique = Array.from(
+    new Set(values.map((value) => value.trim()).filter((value) => value.length > 0)),
+  )
+  unique.sort()
+  return unique.join(",")
+}
+
+export const coingeckoQuoteQueryKeys = {
+  bulk: (stableIdsKey: string) => ["coingecko-quotes", stableIdsKey] as const,
+  single: (coinId: string) => ["coingecko-quote", coinId] as const,
+  search: (params: CoinGeckoSearchParams) =>
+    [
+      "coingecko-search",
+      makeStableKeyPart(params.ids),
+      makeStableKeyPart(params.symbols),
+      makeStableKeyPart(params.names),
+      params.category ?? "",
+      String(params.limit ?? 100),
+    ] as const,
+} as const
+
+const COINGECKO_QUOTES_QUERY_OPTIONS = {
+  staleTime: 60 * 60 * 1000, // 1 hour
+  refetchInterval: 60 * 60 * 1000, // 1 hour
+  refetchOnWindowFocus: true,
+  refetchIntervalInBackground: false,
+} as const
+
+function isSameQuote(a: CoinGeckoQuoteMarketData | undefined, b: CoinGeckoQuoteMarketData | undefined): boolean {
+  if (!a || !b) return false
+
+  const aSpark = a.sparkline7d
+  const bSpark = b.sparkline7d
+  if ((aSpark?.length ?? 0) !== (bSpark?.length ?? 0)) return false
+  const aSparkLast = aSpark && aSpark.length > 0 ? aSpark[aSpark.length - 1] : undefined
+  const bSparkLast = bSpark && bSpark.length > 0 ? bSpark[bSpark.length - 1] : undefined
+  if (aSparkLast !== bSparkLast) return false
+
+  return (
+    a.last_updated === b.last_updated &&
+    a.current_price === b.current_price &&
+    a.total_volume === b.total_volume &&
+    a.market_cap === b.market_cap &&
+    a.price_change_percentage_24h === b.price_change_percentage_24h
+  )
+}
+
 function formatCoinGeckoError(error: unknown): string {
   if (error && typeof error === "object" && "_tag" in error) {
     const tagged = error as { _tag: string; message?: unknown; status?: unknown }
@@ -44,6 +94,141 @@ function formatCoinGeckoError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+export function useCoinGeckoQuote(coinId: string | null | undefined) {
+  const queryClient = useQueryClient()
+
+  const query = useQuery<CoinGeckoQuoteMarketData | null, Error>({
+    queryKey: coingeckoQuoteQueryKeys.single(coinId ?? ""),
+    queryFn: async (): Promise<CoinGeckoQuoteMarketData | null> => {
+      if (!coinId) return null
+
+      try {
+        const result = await runPromise(CoinGeckoApi.getQuotes({ ids: [coinId] }))
+        if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
+          throw new Error(result.status.error_message || "API error")
+        }
+        return result.data[coinId] ?? null
+      } catch (error) {
+        throw new Error(formatCoinGeckoError(error))
+      }
+    },
+    enabled: !!coinId,
+    retry: 1,
+    ...COINGECKO_QUOTES_QUERY_OPTIONS,
+  })
+
+  useEffect(() => {
+    if (!coinId) return
+    const coin = query.data
+    if (!coin) return
+
+    // Keep ALL bulk quote maps consistent with the canonical per-coin quote.
+    const bulkQueries = queryClient.getQueryCache().findAll({ queryKey: ["coingecko-quotes"] })
+    for (const bulkQuery of bulkQueries) {
+      const key = bulkQuery.queryKey
+      const stableIdsKey = typeof key[1] === "string" ? (key[1] as string) : null
+      if (!stableIdsKey) continue
+
+      queryClient.setQueryData<Record<string, CoinGeckoQuoteMarketData> | undefined>(key, (old) => {
+        if (!old) return old
+        if (!(coinId in old)) return old
+        if (isSameQuote(old[coinId], coin)) return old
+        return { ...old, [coinId]: coin }
+      })
+    }
+  }, [coinId, query.data, queryClient])
+
+  return query
+}
+
+export function useCoinGeckoQuotesBulk(coingeckoIds: ReadonlyArray<string>) {
+  const queryClient = useQueryClient()
+
+  const stableIds = useMemo(() => {
+    const unique = Array.from(new Set(coingeckoIds)).filter((id) => id.length > 0)
+    unique.sort()
+    return unique
+  }, [coingeckoIds])
+
+  const stableIdsKey = useMemo(() => stableIds.join(","), [stableIds])
+
+  const query = useQuery<Record<string, CoinGeckoQuoteMarketData>, Error>({
+    queryKey: coingeckoQuoteQueryKeys.bulk(stableIdsKey),
+    queryFn: async (): Promise<Record<string, CoinGeckoQuoteMarketData>> => {
+      if (!stableIds.length) return {}
+
+      try {
+        const result = await runPromise(CoinGeckoApi.getQuotes({ ids: stableIds }))
+        if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
+          throw new Error(result.status.error_message || "API error")
+        }
+        return result.data
+      } catch (error) {
+        throw new Error(formatCoinGeckoError(error))
+      }
+    },
+    enabled: stableIds.length > 0,
+    retry: 1,
+    ...COINGECKO_QUOTES_QUERY_OPTIONS,
+    refetchInterval: (q) => {
+      const data = q.state.data as Record<string, CoinGeckoQuoteMarketData> | undefined
+      const error = q.state.error
+      const errorMessage = error instanceof Error ? error.message.toLowerCase() : ""
+      if (errorMessage.includes("429") || errorMessage.includes("rate")) {
+        return 60_000
+      }
+
+      const failureCount = q.state.fetchFailureCount ?? 0
+      const backoffMs = Math.min(60_000, 10_000 * Math.max(1, failureCount))
+
+      if (!data) return backoffMs
+
+      for (const id of stableIds) {
+        if (!data[id]) return Math.max(20_000, backoffMs)
+      }
+
+      return COINGECKO_QUOTES_QUERY_OPTIONS.refetchInterval
+    },
+  })
+
+  useEffect(() => {
+    const data = query.data
+    if (!data) return
+
+    // Keep per-coin cache warm so table → token page renders identical cached price instantly.
+    for (const [id, coin] of Object.entries(data)) {
+      if (!coin) continue
+      queryClient.setQueryData(coingeckoQuoteQueryKeys.single(id), coin)
+    }
+
+    // Also keep ALL bulk quote maps in sync so different tables never drift for the same coin.
+    const bulkQueries = queryClient.getQueryCache().findAll({ queryKey: ["coingecko-quotes"] })
+    for (const bulkQuery of bulkQueries) {
+      const key = bulkQuery.queryKey
+      const otherStableIdsKey = typeof key[1] === "string" ? (key[1] as string) : null
+      if (!otherStableIdsKey) continue
+      if (otherStableIdsKey === stableIdsKey) continue
+
+      queryClient.setQueryData<Record<string, CoinGeckoQuoteMarketData> | undefined>(key, (old) => {
+        if (!old) return old
+
+        let didChange = false
+        const next: Record<string, CoinGeckoQuoteMarketData> = { ...old }
+        for (const [id, coin] of Object.entries(data)) {
+          if (!(id in old)) continue
+          if (isSameQuote(old[id], coin)) continue
+          next[id] = coin
+          didChange = true
+        }
+
+        return didChange ? next : old
+      })
+    }
+  }, [query.data, queryClient])
+
+  return query
+}
+
 // Original hook for backward compatibility - searches by CoinGecko IDs
 export function useCoinGeckoQuotes(coingeckoIds: string[]) {
   return useCoinGeckoSearch({ ids: coingeckoIds });
@@ -52,19 +237,9 @@ export function useCoinGeckoQuotes(coingeckoIds: string[]) {
 // Enhanced hook that supports multiple search methods
 export function useCoinGeckoSearch(searchParams: CoinGeckoSearchParams) {
   const { ids, symbols, names, category, limit = 100 } = searchParams;
-  
-  // Create a stable cache key
-  const cacheKey = [
-    "coingecko-search",
-    ids ? [...ids].sort().join(",") : "",
-    symbols ? [...symbols].sort().join(",") : "",
-    names ? [...names].sort().join(",") : "",
-    category || "",
-    limit.toString()
-  ].filter(Boolean).join("|");
 
-  return useQuery({
-    queryKey: [cacheKey],
+  return useQuery<CoinGeckoQuoteData[], Error>({
+    queryKey: coingeckoQuoteQueryKeys.search({ ids, symbols, names, category, limit }),
     queryFn: async (): Promise<CoinGeckoQuoteData[]> => {
       // Validate that at least one search parameter is provided OR it's a top coins request
       if (!ids?.length && !symbols?.length && !names?.length && !category && !limit) {
@@ -109,9 +284,8 @@ export function useCoinGeckoSearch(searchParams: CoinGeckoSearchParams) {
       }
     },
     enabled: true, // Always enabled - API handles the logic for top coins vs search
-    staleTime: 30 * 1000, // 30 seconds
-    refetchInterval: 60 * 1000, // 1 minute
-    refetchOnWindowFocus: true,
+    retry: 1,
+    ...COINGECKO_QUOTES_QUERY_OPTIONS,
   });
 }
 

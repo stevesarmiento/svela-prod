@@ -112,7 +112,7 @@ export class EnhancedChatHandler {
       };
       
       console.log(`✅ Enhanced chat processing completed in ${response.processingTime}ms`);
-      console.log(`📝 Response summary:`, {
+      console.log("📝 Response summary:", {
         textLength: textResponse.length,
         componentCount: components.length,
         suggestionCount: followUpSuggestions.length
@@ -354,7 +354,7 @@ export class EnhancedChatHandler {
       type: 'market_structure',
       priority: 10,
       size: 'medium',
-      title: `Market Structure Comparison`,
+      title: "Market Structure Comparison",
       subtitle: coinNames,
       data: {
         comparison: marketStructureData.map(data => ({
@@ -419,7 +419,7 @@ export class EnhancedChatHandler {
       contextMessageLength: contextualMessage.length,
       model: 'gemini-2.5-flash',
       temperature: 0.3,
-      maxTokens: 1000
+      maxOutputTokens: 1000
     });
 
     try {
@@ -430,7 +430,7 @@ export class EnhancedChatHandler {
           { role: 'user', content: contextualMessage }
         ],
         temperature: 0.3,
-        maxTokens: 1000,
+        maxOutputTokens: 1000,
       });
 
       console.log('📡 Streaming response from Gemini...');
@@ -447,7 +447,7 @@ export class EnhancedChatHandler {
         responseLength: fullResponse.length,
         chunksReceived: chunkCount,
         hasMarkdown: fullResponse.includes('**') || fullResponse.includes('##'),
-        responsePreview: fullResponse.substring(0, 100) + '...'
+        responsePreview: `${fullResponse.substring(0, 100)}...`
       });
       
       return fullResponse;
@@ -539,14 +539,14 @@ Since visual components will also be shown, focus your text response on insights
     if (comprehensiveData) {
       console.log('✅ Using comprehensive data format with enhanced analysis');
       console.log('📊 Comprehensive data prepared:', {
-        name: comprehensiveData['name'],
-        symbol: comprehensiveData['symbol'],
-        timeframe: comprehensiveData['timeframe'],
-        hasPriceContext: !!comprehensiveData['priceContext'],
-        hasVolumeAnalysis: !!comprehensiveData['volumeAnalysis'],
-        hasLiquidationData: !!comprehensiveData['liquidationData'],
-        hasOrderFlow: !!comprehensiveData['orderFlow'],
-        hasPriceAction: !!comprehensiveData['priceAction']
+        name: comprehensiveData.name,
+        symbol: comprehensiveData.symbol,
+        timeframe: comprehensiveData.timeframe,
+        hasPriceContext: !!comprehensiveData.priceContext,
+        hasVolumeAnalysis: !!comprehensiveData.volumeAnalysis,
+        hasLiquidationData: !!comprehensiveData.liquidationData,
+        hasOrderFlow: !!comprehensiveData.orderFlow,
+        hasPriceAction: !!comprehensiveData.priceAction
       });
       
       // Use the same formatting logic as the analyze route
@@ -584,7 +584,7 @@ Since visual components will also be shown, focus your text response on insights
       console.log('📈 Adding basic historical data to context:', {
         timeframe: historicalData.timeframe,
         dataPoints: prices.length,
-        periodChange: change.toFixed(2) + '%'
+        periodChange: `${change.toFixed(2)}%`
       });
       
       context += `\n**Historical Performance (${historicalData.timeframe})**\n`;
@@ -595,7 +595,7 @@ Since visual components will also be shown, focus your text response on insights
     // Market structure context
     if (marketStructureData) {
       console.log('🏗️ Adding market structure data to context');
-      context += `\n**Market Structure Analysis**\n`;
+      context += "\n**Market Structure Analysis**\n";
       
       if (marketStructureData.fundingRate) {
         context += `- Funding Rate: ${(marketStructureData.fundingRate.current * 100).toFixed(4)}%\n`;
@@ -636,7 +636,7 @@ Since visual components will also be shown, focus your text response on insights
     
     // Price comparison
     if (priceData.length > 0) {
-      context += `\n**Price Comparison:**\n`;
+      context += "\n**Price Comparison:**\n";
       priceData.forEach((coin, index) => {
         context += `\n**${coin.name} (${coin.symbol})**\n`;
         context += `- Current Price: $${coin.currentPrice.toLocaleString()}\n`;
@@ -808,7 +808,7 @@ Since visual components will also be shown, focus your text response on insights
     sections.push(`User Query: "${userMessage}"\n\n🔴 COMPREHENSIVE LIVE MARKET ANALYSIS - USE THIS EXACT DATA:\n`);
 
     // Enhanced market data with historical context
-    const quote = data['quote'] as Record<string, Record<string, number>> | undefined;
+    const quote = data.quote as Record<string, Record<string, number>> | undefined;
     sections.push(`
 **🔥 CURRENT MARKET OVERVIEW (LIVE DATA - USE THESE EXACT VALUES):**
 ${data.name} (${data.symbol})
@@ -819,54 +819,54 @@ ${data.name} (${data.symbol})
 ⏰ Data Timestamp: ${new Date().toISOString()} (LIVE - NOT HISTORICAL DATA)`);
 
     // Enhanced price context
-    if (data['priceContext']) {
-      const priceContext = data['priceContext'] as Record<string, unknown>;
-      const priceRange = `$${Number(priceContext['support'])?.toLocaleString() || 'N/A'} - $${Number(priceContext['resistance'])?.toLocaleString() || 'N/A'}`;
-      const historicalCount = (priceContext['priceHistory'] as number[])?.length || 0;
+    if (data.priceContext) {
+      const priceContext = data.priceContext as Record<string, unknown>;
+      const priceRange = `$${Number(priceContext.support)?.toLocaleString() || 'N/A'} - $${Number(priceContext.resistance)?.toLocaleString() || 'N/A'}`;
+      const historicalCount = (priceContext.priceHistory as number[])?.length || 0;
       sections.push(`
 **Price Context (${historicalCount} periods):**
-Momentum: ${priceContext['momentum'] || 'N/A'}, Volatility: ${priceContext['volatility'] || 'N/A'}
+Momentum: ${priceContext.momentum || 'N/A'}, Volatility: ${priceContext.volatility || 'N/A'}
 Support/Resistance Range: ${priceRange}`);
     }
 
     // Enhanced volume analysis
-    if (data['volumeAnalysis']) {
-      const volumeAnalysis = data['volumeAnalysis'] as Record<string, unknown>;
-      const currentVolume = Number(volumeAnalysis['currentVolume']) || 0;
-      const averageVolume = Number(volumeAnalysis['averageVolume']) || 0;
+    if (data.volumeAnalysis) {
+      const volumeAnalysis = data.volumeAnalysis as Record<string, unknown>;
+      const currentVolume = Number(volumeAnalysis.currentVolume) || 0;
+      const averageVolume = Number(volumeAnalysis.averageVolume) || 0;
       const volumeChange = averageVolume > 0 ? ((currentVolume - averageVolume) / averageVolume * 100).toFixed(1) : '0';
       sections.push(`
 **Volume Analysis:**
-Trend: ${volumeAnalysis['volumeTrend'] || 'N/A'}, Volume vs Average: ${volumeChange > '0' ? '+' : ''}${volumeChange}%
-${volumeAnalysis['volumeSpike'] ? 'VOLUME SPIKE DETECTED' : 'Normal volume activity'}`);
+Trend: ${volumeAnalysis.volumeTrend || 'N/A'}, Volume vs Average: ${volumeChange > '0' ? '+' : ''}${volumeChange}%
+${volumeAnalysis.volumeSpike ? 'VOLUME SPIKE DETECTED' : 'Normal volume activity'}`);
     }
 
     // Market Structure Section
-    if (data['liquidationData'] || data['orderFlow']) {
+    if (data.liquidationData || data.orderFlow) {
       const marketStructure: string[] = [];
       
-      if (data['liquidationData']) {
-        const liquidationData = data['liquidationData'] as Record<string, unknown>;
-        const longLiquidations = Number(liquidationData['longLiquidations']);
-        const shortLiquidations = Number(liquidationData['shortLiquidations']);
-        if (!isNaN(longLiquidations) && !isNaN(shortLiquidations)) {
+      if (data.liquidationData) {
+        const liquidationData = data.liquidationData as Record<string, unknown>;
+        const longLiquidations = Number(liquidationData.longLiquidations);
+        const shortLiquidations = Number(liquidationData.shortLiquidations);
+        if (!Number.isNaN(longLiquidations) && !Number.isNaN(shortLiquidations)) {
           const total = longLiquidations + shortLiquidations;
           const longRatio = total > 0 ? (longLiquidations / total * 100).toFixed(1) : '0';
-          marketStructure.push(`Liquidations: ${longRatio}% long, ${(100 - parseFloat(longRatio)).toFixed(1)}% short`);
+          marketStructure.push(`Liquidations: ${longRatio}% long, ${(100 - Number.parseFloat(longRatio)).toFixed(1)}% short`);
         }
-        const openInterest = Number(liquidationData['openInterest']);
-        if (!isNaN(openInterest)) {
-          const openInterestChange = Number(liquidationData['openInterestChange']);
-          const changeText = !isNaN(openInterestChange) ? ` (${openInterestChange > 0 ? '+' : ''}${openInterestChange.toFixed(1)}%)` : '';
+        const openInterest = Number(liquidationData.openInterest);
+        if (!Number.isNaN(openInterest)) {
+          const openInterestChange = Number(liquidationData.openInterestChange);
+          const changeText = !Number.isNaN(openInterestChange) ? ` (${openInterestChange > 0 ? '+' : ''}${openInterestChange.toFixed(1)}%)` : '';
           marketStructure.push(`Open Interest: $${formatLargeNumber(openInterest)}${changeText}`);
         }
       }
       
-      if (data['orderFlow']) {
-        const orderFlow = data['orderFlow'] as Record<string, unknown>;
-        const takerBuyRatio = Number(orderFlow['takerBuyRatio']);
-        if (!isNaN(takerBuyRatio)) {
-          marketStructure.push(`Taker Buy Ratio: ${(takerBuyRatio * 100).toFixed(1)}% (${orderFlow['netFlow'] || 'neutral'})`);
+      if (data.orderFlow) {
+        const orderFlow = data.orderFlow as Record<string, unknown>;
+        const takerBuyRatio = Number(orderFlow.takerBuyRatio);
+        if (!Number.isNaN(takerBuyRatio)) {
+          marketStructure.push(`Taker Buy Ratio: ${(takerBuyRatio * 100).toFixed(1)}% (${orderFlow.netFlow || 'neutral'})`);
         }
       }
       
@@ -876,15 +876,15 @@ ${volumeAnalysis['volumeSpike'] ? 'VOLUME SPIKE DETECTED' : 'Normal volume activ
     }
 
     // Price Action Context
-    if (data['priceAction']) {
-      const priceAction = data['priceAction'] as Record<string, unknown>;
-      const priceLevel = priceAction['priceLevel'];
+    if (data.priceAction) {
+      const priceAction = data.priceAction as Record<string, unknown>;
+      const priceLevel = priceAction.priceLevel;
       const priceLevelText = priceLevel && priceLevel !== 'neutral' ? `, Price Level: ${priceLevel}` : '';
-      sections.push(`\n**Price Action:**\nTrend: ${priceAction['trend'] || 'N/A'}, Volatility: ${priceAction['volatility'] || 'N/A'}, Volume: ${priceAction['volume_profile'] || 'N/A'}${priceLevelText}`);
+      sections.push(`\n**Price Action:**\nTrend: ${priceAction.trend || 'N/A'}, Volatility: ${priceAction.volatility || 'N/A'}, Volume: ${priceAction.volume_profile || 'N/A'}${priceLevelText}`);
     }
 
     // Add strong footer emphasizing real-time data usage
-    sections.push(`\n\n🚨 CRITICAL REMINDER: All data above is LIVE and CURRENT. Use ONLY these specific values in your analysis. Do NOT reference outdated price ranges or training data. The prices shown are the REAL current market prices.`);
+    sections.push("\n\n🚨 CRITICAL REMINDER: All data above is LIVE and CURRENT. Use ONLY these specific values in your analysis. Do NOT reference outdated price ranges or training data. The prices shown are the REAL current market prices.");
     
     return sections.join('\n');
   }
@@ -944,7 +944,7 @@ ${volumeAnalysis['volumeSpike'] ? 'VOLUME SPIKE DETECTED' : 'Normal volume activ
         suggestions.push(
           `Show me liquidation data for ${coinName}`,
           `What's the market sentiment for ${coinName}?`,
-          `Compare this with Bitcoin`
+          "Compare this with Bitcoin"
         );
         break;
       case 'comparison':
@@ -1063,7 +1063,7 @@ ${volumeAnalysis['volumeSpike'] ? 'VOLUME SPIKE DETECTED' : 'Normal volume activ
       responseText += "This might be a trading request, but I'd like to confirm the details. ";
     }
     
-    responseText += `Let me get you the best quote from Jupiter and other DEXs.\n\n⚡ **Trade Details:**\n`;
+    responseText += "Let me get you the best quote from Jupiter and other DEXs.\n\n⚡ **Trade Details:**\n";
     responseText += `- Action: ${type.toUpperCase()}\n`;
     responseText += `- Amount: ${amount || 'To be specified'} ${inputTokenDisplay}\n`;
     responseText += `- Target: ${outputTokenDisplay}\n`;
@@ -1120,7 +1120,7 @@ ${volumeAnalysis['volumeSpike'] ? 'VOLUME SPIKE DETECTED' : 'Normal volume activ
     console.error('Enhanced chat error for query:', userMessage, error);
     
     return {
-      textResponse: `I encountered an issue processing your request. Please try rephrasing your question or try again in a moment.`,
+      textResponse: "I encountered an issue processing your request. Please try rephrasing your question or try again in a moment.",
       components: [],
       followUpSuggestions: [
         'What is Bitcoin doing today?',

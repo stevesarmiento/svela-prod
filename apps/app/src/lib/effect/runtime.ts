@@ -1,4 +1,4 @@
-import { Effect, Exit, Fiber, Layer } from "effect"
+import { Effect, type Exit, type Fiber, Layer } from "effect"
 import { WatchlistApi } from "./watchlist-api"
 import { CoinGeckoApi } from "./coingecko-api"
 import { CoinGlassApi } from "./coinglass-api"

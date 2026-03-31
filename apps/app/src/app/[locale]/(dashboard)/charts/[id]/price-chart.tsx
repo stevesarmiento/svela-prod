@@ -12,12 +12,16 @@ import type { CoinMarketData } from '@/types/coins'
 import { useHullSuite } from '@/hooks/use-hull-suite'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { IconArrowUpRight } from 'symbols-react'
-import Image from 'next/image'
 import NumberFlow from '@/components/number-flow'
 import { useQuery as useTanStackQuery } from '@tanstack/react-query'
 import { CoinsInternalApi } from '@/lib/effect/coins-internal-api'
 import { runPromise } from '@/lib/effect/runtime-coins-internal'
+import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
+import { getUsdPriceFormatOptions } from '@/lib/format-usd'
+import type { Format } from '@/lib/number-flow/lite'
 import type { Time } from 'lightweight-charts'
+import { cleanTokenName, getTokenLogoURL } from '@/lib/logo-overrides'
+import { TokenLogo } from "@/components/token-logo"
 
 interface PriceChartProps {
   coinId: string;
@@ -162,16 +166,17 @@ const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, set
   ]
 
   return (
-    <div className="flex gap-1 bg-white/95 dark:bg-zinc-950/10 backdrop-blur-xl border border-gray-200/50 dark:border-zinc-800/30 rounded-[12px] p-1">
+    <div className="flex gap-1 bg-white/95 dark:bg-black border border-gray-200/50 dark:border-zinc-800/80 rounded-[12px] p-1">
       {scales.map((scale) => (
         <button
+          type="button"
           key={scale.value}
           onClick={() => setActiveTimeScale(scale.value)}
           className={cn(
-            "px-2 py-1 text-xs rounded-lg transition-all duration-200",
+            "px-2 py-1 text-xs rounded-lg transition-all duration-100 cursor-pointer ease-in-out",
             activeTimeScale === scale.value
-              ? "bg-gray-200 border border-gray-300 shadow-md shadow-gray-500/20 text-gray-900 dark:bg-zinc-800/50 dark:border-zinc-800/50 dark:shadow-zinc-950/50 dark:text-white"
-              : "bg-transparent text-muted-foreground hover:bg-muted/80"
+              ? "border border-gray-300 shadow-md shadow-gray-500/20 text-gray-900 bg-zinc-800/50 hover:bg-zinc-800/70 dark:border-zinc-800/50 dark:shadow-zinc-950/50 dark:text-white"
+              : "bg-transparent border border-transparent text-muted-foreground hover:bg-muted/70"
           )}
         >
           {scale.label}
@@ -216,19 +221,9 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
     staleTime: 10 * 60 * 1000,
   })
   
-  // Get live price data from CoinGecko API
-  const { data: livePrice, isLoading: isPriceLoading } = useTanStackQuery({
-    queryKey: ['coingecko-price', deferredCoinId],
-    queryFn: async () => {
-      const response = await fetch(`/api/coingecko/quotes?ids=${deferredCoinId}`)
-      if (!response.ok) throw new Error('Failed to fetch price')
-      const data = await response.json()
-      return data.data[deferredCoinId]
-    },
-    enabled: !!deferredCoinId,
-    staleTime: 30 * 1000, // 30 seconds
-    refetchInterval: 60 * 1000, // 1 minute
-  })
+  // Canonical quote source (shared cache across token page + tables).
+  const quoteQuery = useCoinGeckoQuote(deferredCoinId)
+  const liveQuote = quoteQuery.data
   
   // React 19: Get line chart data with OHLC data for tooltips using deferred values
   const { chartData, volumeData, ohlcData, isLoading, tokenData } = useCoinGeckoChartData(deferredCoinId, deferredTimeScale, deferredInitialData)
@@ -240,8 +235,8 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
 
   // Generate Hull Suite colors - theme-aware
   const hullColors = generatePastelColors(1)
-  const baseHullColor = isDarkMode ? 'hsl(210, 40%, 75%)' : 'hsl(210, 60%, 30%)'
-  const primaryHullColor = addOpacityToColor(hullColors[0] || baseHullColor, isDarkMode ? 0.4 : 0.6)
+  const baseHullColor = isDarkMode ? 'hsl(0, 0.00%, 76.10%)' : 'hsl(210, 22.00%, 57.30%)'
+  const primaryHullColor = addOpacityToColor(hullColors[0] || baseHullColor, isDarkMode ? 0.7 : 0.6)
   
   // Always use line chart - simplified approach
 
@@ -327,9 +322,13 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
     highlightRange,
   })
 
-  // Get coin info from CoinGecko database
-  const coinName = coingeckoCoinData?.name || 'Loading...'
-  const coinImage = coingeckoCoinData?.logoUrl
+  // Get coin info from CoinGecko database, with local logo overrides.
+  const coinName = cleanTokenName(coingeckoCoinData?.name || 'Loading...')
+  const coinLogoUrl = getTokenLogoURL(coingeckoCoinData?.symbol, coingeckoCoinData?.logoUrl)
+  const safeCoinLogoUrl =
+    coinLogoUrl && (coinLogoUrl.startsWith('http') || coinLogoUrl.startsWith('/'))
+      ? coinLogoUrl
+      : '/favicon.ico'
   
   // React 19: Show pending states and optimize price display
   const basePrice = ohlcvDataForChart[0]?.open || ohlcvDataForChart[0]?.close || null
@@ -338,10 +337,21 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
       ? ((crosshairPrice - basePrice) / basePrice) * 100
       : null
 
-  const liveChange24h = livePrice?.price_change_percentage_24h ?? calculatePercentageChange ?? 0
-  const currentPrice = crosshairPrice ?? livePrice?.current_price ?? displayPrice ?? 0
+  const liveChange24h = liveQuote?.price_change_percentage_24h ?? calculatePercentageChange ?? 0
+  const chartLastPrice =
+    chartData.length > 0 ? chartData[chartData.length - 1]?.value ?? null : null
+  const livePrice =
+    (typeof chartLastPrice === "number" && Number.isFinite(chartLastPrice) && chartLastPrice > 0
+      ? chartLastPrice
+      : null) ??
+    deferredInitialData?.price ??
+    displayPrice ??
+    liveQuote?.current_price ??
+    0
+  const currentPrice = crosshairPrice ?? livePrice
   const priceChange24h = scrubPriceChange ?? liveChange24h
-  const isLoadingPrice = isPriceLoading || isLoading
+
+  const isLoadingPrice = quoteQuery.isLoading || isLoading
   const showPending = isPending || isDataPending || isLoadingPrice
   const shouldReduceMotion = useReducedMotion()
 
@@ -366,35 +376,27 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
           <Card className="border-none bg-transparent">
             <CardHeader className="flex flex-row items-start justify-between p-6 pl-6">
               {/* Left side - Coin info */}
-              <div className="flex gap-3 justify-between items-start w-full">
-                <div className="flex flex-col space-y-1">
+              <div className="relative flex gap-3 justify-between items-start w-full">
+                <div className="absolute left-0 flex flex-col">
                   <div className="flex items-center gap-2">
-                    <Image 
-                      src={coinImage?.startsWith('http') || coinImage?.startsWith('/') ? coinImage : '/favicon.ico'} 
-                      alt={coinName} 
-                      width={20} 
-                      height={20}
-                      className="rounded-full w-3 h-3"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.src = '/favicon.ico';
-                      }}
+                    <TokenLogo
+                      src={safeCoinLogoUrl}
+                      alt={coinName}
+                      sizePx={16}
+                      fallbackText={coingeckoCoinData?.symbol}
+                      className="ring-0 bg-transparent"
+                      quality={70}
                     />
-                    <span className="text-gray-900 dark:text-white font-bold text-xs">{coinName}</span>
-                    <span className="text-muted-foreground text-xs">is currently</span>
+                    <span className="text-gray-900 dark:text-white font-bold text-sm">{coinName}</span>
+                    <span className="text-primary/60 text-sm">is currently</span>
                     </div>
                     <div className="flex items-center">
                       <NumberFlow
                         value={currentPrice}
-                        format={{
-                          style: "currency",
-                          currency: "USD",
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        }}
+                        format={getUsdPriceFormatOptions(currentPrice) as Format}
                         willChange
                         className={cn(
-                          "text-3xl font-bold font-sans text-gray-900 dark:text-white",
+                          "text-4xl font-bold font-sans text-gray-900 dark:text-white",
                           showPending && "animate-pulse motion-reduce:animate-none",
                         )}
                       />
@@ -405,8 +407,8 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                       )}
                     </div>
 
-                  <div className={`text-xs font-bold font-diatype-mono ${isNaN(priceChange24h) ? 'text-muted-foreground' : priceChange24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {isNaN(priceChange24h) ? (
+                  <div className={`text-xs font-bold font-berkeley-mono ${Number.isNaN(priceChange24h) ? 'text-muted-foreground' : priceChange24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {Number.isNaN(priceChange24h) ? (
                       <span>N/A</span>
                     ) : (
                       <>
@@ -428,8 +430,14 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                   </div>
                 </div>
               </div>
+              <div className="absolute right-4 top-4 z-20 pointer-events-auto">
+                  <TimeScaleSelector
+                    activeTimeScale={deferredTimeScale}
+                    setActiveTimeScale={handleTimeScaleChange}
+                  />
+                </div>
             </CardHeader>
-            <CardContent className="pl-8">
+            <CardContent className="pl-8 pr-6">
               <div className={cn(
                 "p-0 relative will-change-auto",
                 showPending && "opacity-80 transition-opacity duration-300"
@@ -446,17 +454,6 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
             </CardContent>
           </Card>
         </div>
-      </div>
-
-      {/* React 19: Enhanced Chart Controls with optimized handlers */}
-      <div className={cn(
-        "flex items-center justify-between mt-4",
-        showPending && "opacity-80"
-      )}>
-        <TimeScaleSelector
-          activeTimeScale={deferredTimeScale}
-          setActiveTimeScale={handleTimeScaleChange}
-        />
       </div>
     </div>
   )

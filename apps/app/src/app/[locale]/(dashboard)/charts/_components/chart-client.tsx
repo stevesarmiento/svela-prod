@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useTransition, useDeferredValue, memo, Component, ErrorInfo } from 'react'
+import { Suspense, useTransition, useDeferredValue, memo, Component, type ErrorInfo } from 'react'
 import { MultiPriceChartLightweight } from "./multi-line-lightweight"
 import { ChartTable } from "./chart-table"
 import { useOptimizedChartsData } from '@/hooks/use-optimized-charts-data'
@@ -40,7 +40,7 @@ const ChartsContent = memo(function ChartsContent() {
 
   if (isInitialized && !hasWatchlistItems) {
     return (
-      <div className="space-y-6 w-full z-0 p-8">
+      <div className="space-y-6 w-full px-4">
         {/* Selected Group Header */}
         {selectedGroup && (
           <div className="flex items-center justify-between mb-6">
@@ -74,7 +74,7 @@ const ChartsContent = memo(function ChartsContent() {
   }
 
   return (
-    <div className="space-y-6 w-full z-0 p-0">
+    <div className="space-y-6 w-full">
       <div className="space-y-14">
         {/* React 19: Show loading state during transitions */}
         <div className={isPending ? 'opacity-60 transition-opacity duration-200' : ''}>
@@ -123,14 +123,15 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
   render() {
     if (this.state.hasError) {
       return (
-        <div className="space-y-6 w-full z-08">
+        <div className="space-y-6 w-full px-4">
           <div className="flex flex-col items-center justify-center py-12">
             <div className="text-center">
               <h3 className="text-lg font-medium mb-2">Something went wrong</h3>
               <p className="text-muted-foreground mb-4">
                 An error occurred while loading the charts. Please try refreshing the page.
               </p>
-              <button 
+              <button
+                type="button"
                 onClick={() => this.setState({ hasError: false })}
                 className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
               >
@@ -143,17 +144,21 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
     }
 
     return (
-      <div className="space-y-6 w-full z-0">
+      <div className="space-y-6 w-full">
         {this.props.children}
       </div>
     );
   }
 }
 
+interface ChartSkeletonProps {
+  inset?: boolean;
+}
+
 // React 19: Optimized suspense fallback
-const ChartSkeleton = memo(function ChartSkeleton() {
+const ChartSkeleton = memo(function ChartSkeleton({ inset = true }: ChartSkeletonProps) {
   return (
-    <div className="space-y-6 w-full z-0 p-0">
+    <div className={`space-y-6 w-full ${inset ? 'px-4' : ''}`}>
       <div className="space-y-14">
         <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/50 overflow-hidden p-1">
           <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2" />
@@ -169,7 +174,11 @@ const ChartSkeleton = memo(function ChartSkeleton() {
 })
 
 // Comparison view component for /chart page
-const ComparisonChartsContent = memo(function ComparisonChartsContent() {
+interface ComparisonChartsContentProps {
+  inset?: boolean;
+}
+
+const ComparisonChartsContent = memo(function ComparisonChartsContent({ inset = true }: ComparisonChartsContentProps) {
   const {
     activeTimeScale,
     setActiveTimeScale,
@@ -188,7 +197,7 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent() {
 
   if (!isInitialized) {
     return (
-      <div className="space-y-6 w-full z-0 p-0">
+      <div className="space-y-6 w-full px-4">
         <div className="space-y-14">
           <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/50 overflow-hidden p-1">
             <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2" />
@@ -204,8 +213,8 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent() {
   }
 
   return (
-    <div className="space-y-6 w-full z-0 p-0">
-      <div className="space-y-4">
+    <div className={`space-y-6 w-full ${inset ? 'px-4' : ''}`}>
+      <div className={`space-y-4 ${inset ? 'px-4' : ''}`}>
         {/* Comparison of all watchlists */}
         <WatchlistsGrid
           onSelectWatchlist={(group) => {
@@ -233,11 +242,15 @@ export const ChartsClient = memo(function ChartsClient() {
   )
 })
 
-export const ComparisonChartsClient = memo(function ComparisonChartsClient() {
+interface ComparisonChartsClientProps {
+  inset?: boolean;
+}
+
+export const ComparisonChartsClient = memo(function ComparisonChartsClient({ inset = true }: ComparisonChartsClientProps) {
   return (
     <ChartErrorBoundary>
-      <Suspense fallback={<ChartSkeleton />}>
-        <ComparisonChartsContent />
+      <Suspense fallback={<ChartSkeleton inset={inset} />}>
+        <ComparisonChartsContent inset={inset} />
       </Suspense>
     </ChartErrorBoundary>
   )

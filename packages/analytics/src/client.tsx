@@ -1,7 +1,4 @@
-import {
-  OpenPanelComponent,
-  useOpenPanel,
-} from "@openpanel/nextjs";
+import { OpenPanelComponent, useOpenPanel } from "@openpanel/nextjs";
 import { logger } from "@v1/logger";
 
 const isProd = process.env.NODE_ENV === "production";

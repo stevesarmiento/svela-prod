@@ -190,7 +190,7 @@ export function calculateBollingerBands(
   }
   
   // Check for invalid values
-  const validIndicatorValues = indicatorValues.filter(v => v != null && !isNaN(v) && isFinite(v))
+  const validIndicatorValues = indicatorValues.filter(v => v != null && !Number.isNaN(v) && Number.isFinite(v))
   
   if (validIndicatorValues.length === 0) {
     console.warn('⚠️ Bollinger Bands: No valid indicator values calculated')
@@ -207,7 +207,7 @@ export function calculateBollingerBands(
     const basisValue = basis[i]
     const deviation = standardDev[i]
     
-    if (basisValue != null && deviation != null && !isNaN(basisValue) && !isNaN(deviation)) {
+    if (basisValue != null && deviation != null && !Number.isNaN(basisValue) && !Number.isNaN(deviation)) {
       upper[i] = basisValue + (finalConfig.multiplier * deviation)
       lower[i] = basisValue - (finalConfig.multiplier * deviation)
     }
@@ -220,7 +220,7 @@ export function calculateBollingerBands(
     for (let i = 0; i < times.length; i++) {
       const value = values[i]
       const time = times[i]
-      if (value != null && time != null && !isNaN(value) && isFinite(value)) {
+      if (value != null && time != null && !Number.isNaN(value) && Number.isFinite(value)) {
         result.push({ time, value })
       }
     }
@@ -238,11 +238,11 @@ export function calculateBollingerBands(
     const lowerBand = lower[i]
     const time = times[i]
     
-    if (indicator != null && time != null && !isNaN(indicator) && isFinite(indicator)) {
-      if (upperBand != null && !isNaN(upperBand) && isFinite(upperBand) && indicator > upperBand) {
+    if (indicator != null && time != null && !Number.isNaN(indicator) && Number.isFinite(indicator)) {
+      if (upperBand != null && !Number.isNaN(upperBand) && Number.isFinite(upperBand) && indicator > upperBand) {
         overboughtBreaches.push({ time, value: indicator })
       }
-      if (lowerBand != null && !isNaN(lowerBand) && isFinite(lowerBand) && indicator < lowerBand) {
+      if (lowerBand != null && !Number.isNaN(lowerBand) && Number.isFinite(lowerBand) && indicator < lowerBand) {
         oversoldBreaches.push({ time, value: indicator })
       }
     }

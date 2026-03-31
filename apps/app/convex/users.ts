@@ -91,3 +91,43 @@ export const updateUser = mutation({
     return null;
   },
 });
+
+export const upsertCurrentUser = mutation({
+  args: {
+    email: v.string(),
+    fullName: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+  },
+  returns: v.id("users"),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const clerkId = identity.subject;
+    const email = args.email.trim();
+    if (!email) throw new Error("Email is required");
+
+    const existing = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", clerkId))
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        email,
+        fullName: args.fullName,
+        avatarUrl: args.avatarUrl,
+      });
+      return existing._id;
+    }
+
+    const id = await ctx.db.insert("users", {
+      clerkId,
+      email,
+      fullName: args.fullName,
+      avatarUrl: args.avatarUrl,
+    });
+    if (isDebug) console.log("[users.upsertCurrentUser] inserted", { userId: id });
+    return id;
+  },
+});

@@ -1,11 +1,13 @@
 'use client'
 
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
 import { Effect } from "effect"
 import { CoinGeckoApi } from "@/lib/effect/coingecko-api"
 import { runPromise } from "@/lib/effect/runtime-coingecko"
+import { useCoinGeckoQuote } from './use-coingecko-quotes'
 
 // Map time scales to optimal CoinGecko parameters
 // Strategy: ≤90 days = prefer OHLC+volume for real candlesticks, >90 days = prefer market-chart for better granularity
@@ -74,6 +76,22 @@ interface CoinGeckoChartDataResult {
   }
 }
 
+const LATEST_POINT_UPSERT_WINDOW_SECONDS = 5 * 60
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function estimateAverageIntervalSeconds(epochSeconds: number[]): number | null {
+  if (epochSeconds.length < 2) return null
+  const sorted = epochSeconds.slice().sort((a, b) => a - b)
+  const first = sorted[0]!
+  const last = sorted[sorted.length - 1]!
+  const span = last - first
+  if (span <= 0) return null
+  return span / (sorted.length - 1)
+}
+
 /**
  * Parse OHLC data from /api/coingecko/ohlc route
  */
@@ -84,12 +102,13 @@ function parseOHLCData(data: OHLCAPIResponse): ParsedChartData | null {
 
   try {
     const ohlcPoints = data.data.map((point: OHLCDataPoint) => ({
-      time: (point.timestamp / 1000) as Time,
-      open: point.open || 0,
-      high: point.high || 0,
-      low: point.low || 0,
-      close: point.close || 0
+      time: Math.floor(point.timestamp / 1000) as Time,
+      open: point.open ?? point.close ?? 0,
+      high: point.high ?? point.close ?? 0,
+      low: point.low ?? point.close ?? 0,
+      close: point.close ?? 0,
     }))
+    ohlcPoints.sort((a, b) => Number(a.time) - Number(b.time))
 
     // Generate line chart from close prices
     const lineChart = ohlcPoints.map((point: { time: Time; open: number; high: number; low: number; close: number }) => ({
@@ -126,36 +145,74 @@ function parseMarketChartData(data: MarketChartAPIResponse): ParsedChartData | n
   try {
     const { prices, volumes = [] } = data.data
 
-    // Parse line chart data
-    const lineChart = prices.map((point: MarketChartPoint) => ({
-      time: point.time as Time,
-      value: point.value || 0
-    }))
+    const lineChart = prices
+      .map((point: MarketChartPoint) => ({
+        time: Math.floor(point.time) as Time,
+        value: point.value ?? 0,
+      }))
+      .filter((point) => Number.isFinite(Number(point.time)) && Number.isFinite(point.value) && point.value > 0)
+      .sort((a, b) => Number(a.time) - Number(b.time))
 
     // Parse volume data
-    const volumeChart = volumes.map((point: MarketChartPoint) => ({
-      time: point.time as Time,
-      value: point.value || 0,
-      color: '#ffffff40'
+    const volumeByEpoch = new Map<number, number>()
+    for (const point of volumes) {
+      const time = Math.floor(point.time) as Time
+      const value = point.value ?? 0
+      if (!Number.isFinite(Number(time))) continue
+      if (!Number.isFinite(value) || value < 0) continue
+      volumeByEpoch.set(Number(time), value)
+    }
+
+    const volumeChart = lineChart.map((point) => ({
+      time: point.time,
+      value: volumeByEpoch.get(Number(point.time)) ?? 0,
+      color: '#ffffff40',
     }))
 
-    // Generate simple OHLC data from line chart for tooltip (no synthetic candlesticks)
-    const ohlcData = lineChart.map((point: { time: Time; value: number }) => {
-      const price = point.value
-      
+    // Build rolling-window OHLC from the price series so tooltips show real ranges.
+    // (Market-chart is a single price series; this approximates OHLC over a recent window.)
+    const epochSeconds = lineChart.map((p) => Number(p.time))
+    const avgIntervalSeconds = estimateAverageIntervalSeconds(epochSeconds) ?? 0
+    const spanSeconds = epochSeconds.length ? epochSeconds[epochSeconds.length - 1]! - epochSeconds[0]! : 0
+    const spanDays = spanSeconds > 0 ? spanSeconds / (24 * 60 * 60) : 0
+
+    const targetWindowSeconds =
+      spanDays <= 14 ? 6 * 60 * 60 : spanDays <= 120 ? 24 * 60 * 60 : 7 * 24 * 60 * 60
+
+    const rawWindowSize =
+      avgIntervalSeconds > 0 ? Math.round(targetWindowSeconds / avgIntervalSeconds) : 0
+    const windowSize = clampNumber(rawWindowSize || 2, 2, 96)
+
+    const ohlcData = lineChart.map((point, idx) => {
+      const start = Math.max(0, idx - windowSize + 1)
+      const open = lineChart[start]!.value
+      const close = point.value
+
+      let high = Number.NEGATIVE_INFINITY
+      let low = Number.POSITIVE_INFINITY
+      for (let i = start; i <= idx; i++) {
+        const v = lineChart[i]!.value
+        if (v > high) high = v
+        if (v < low) low = v
+      }
+
+      // Fallback safety for unexpected empty ranges
+      if (!Number.isFinite(high)) high = close
+      if (!Number.isFinite(low)) low = close
+
       return {
         time: point.time,
-        open: price,
-        high: price,
-        low: price,
-        close: price
+        open,
+        high,
+        low,
+        close,
       }
     })
 
     return {
       lineChart,
       volumeChart,
-      ohlcData // Simple OHLC for tooltip (all values = current price)
+      ohlcData,
     }
   } catch (error) {
     console.error('Failed to parse market chart data:', error)
@@ -172,8 +229,9 @@ function generateFallbackData(
   initialData: CoinMarketData['quote']['USD']
 ): ParsedChartData {
   const config = TIMEFRAME_CONFIG[timeframe as keyof typeof TIMEFRAME_CONFIG] || TIMEFRAME_CONFIG['7d']
-  const days = parseInt(config.days)
-  const dataPoints = Math.min(days, 90) // Limit fallback data points
+  const days = Number.parseInt(config.days)
+  // Ensure at least 2 points so tiny charts don't render "No data".
+  const dataPoints = Math.max(2, Math.min(days, 90)) // Limit fallback data points
   const basePrice = initialData?.price
 
   // If we don't have a real price to anchor on, return empty data (no fake charting).
@@ -221,7 +279,7 @@ function combineOHLCWithVolume(
   try {
     // Parse real OHLC data
     const ohlcPoints = ohlcData.data.map((point: OHLCDataPoint) => ({
-      time: (point.timestamp / 1000) as Time,
+      time: Math.floor(point.timestamp / 1000) as Time,
       open: point.open || 0,
       high: point.high || 0,
       low: point.low || 0,
@@ -234,6 +292,8 @@ function combineOHLCWithVolume(
       value: point.value || 0,
       color: '#ffffff40'
     }))
+
+    if (ohlcPoints.length < 2) return null
 
     // Generate line chart from OHLC close prices
     const lineChart = ohlcPoints.map(point => ({
@@ -252,12 +312,71 @@ function combineOHLCWithVolume(
   }
 }
 
+function toEpochSeconds(time: Time): number | null {
+  if (typeof time === 'number') return time > 1e10 ? Math.floor(time / 1000) : Math.floor(time)
+  if (typeof time === 'string') {
+    const parsed = Date.parse(time)
+    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null
+  }
+  return null
+}
+
+function upsertLatestPricePoint(parsedData: ParsedChartData, latestPrice: number, latestTimestampSeconds: number): ParsedChartData {
+  if (!Number.isFinite(latestPrice) || latestPrice <= 0) return parsedData
+
+  const lastLinePoint = parsedData.lineChart[parsedData.lineChart.length - 1]
+  const lastSeconds = lastLinePoint ? toEpochSeconds(lastLinePoint.time) : null
+  const nextTime = latestTimestampSeconds as Time
+
+  // No history yet; seed a single point with the latest quote.
+  if (parsedData.lineChart.length === 0 || lastSeconds == null) {
+    return {
+      lineChart: [{ time: nextTime, value: latestPrice }],
+      volumeChart: [{ time: nextTime, value: 0, color: '#ffffff40' }],
+      ohlcData: [{ time: nextTime, open: latestPrice, high: latestPrice, low: latestPrice, close: latestPrice }],
+    }
+  }
+
+  // If we already have a very recent bar, update it instead of appending.
+  if (Math.abs(latestTimestampSeconds - lastSeconds) <= LATEST_POINT_UPSERT_WINDOW_SECONDS) {
+    const lineChart = parsedData.lineChart.slice()
+    lineChart[lineChart.length - 1] = { time: nextTime, value: latestPrice }
+
+    const ohlcData = parsedData.ohlcData.slice()
+    if (ohlcData.length > 0) {
+      const prev = ohlcData[ohlcData.length - 1]!
+      const open = Number.isFinite(prev.open) && prev.open > 0 ? prev.open : latestPrice
+      const high = Number.isFinite(prev.high) ? Math.max(prev.high, latestPrice) : latestPrice
+      const low = Number.isFinite(prev.low) ? Math.min(prev.low, latestPrice) : latestPrice
+
+      ohlcData[ohlcData.length - 1] = { time: nextTime, open, high, low, close: latestPrice }
+    }
+
+    return {
+      lineChart,
+      volumeChart: parsedData.volumeChart,
+      ohlcData,
+    }
+  }
+
+  // Otherwise append a new point so startup always reflects the latest quote.
+  return {
+    lineChart: [...parsedData.lineChart, { time: nextTime, value: latestPrice }],
+    volumeChart: [...parsedData.volumeChart, { time: nextTime, value: 0, color: '#ffffff40' }],
+    ohlcData: [
+      ...parsedData.ohlcData,
+      { time: nextTime, open: latestPrice, high: latestPrice, low: latestPrice, close: latestPrice },
+    ],
+  }
+}
+
 export function useCoinGeckoChartData(
   coinId: string,
   activeTimeScale: string,
   initialData: CoinMarketData['quote']['USD']
 ): CoinGeckoChartDataResult {
   const config = TIMEFRAME_CONFIG[activeTimeScale as keyof typeof TIMEFRAME_CONFIG] || TIMEFRAME_CONFIG['7d']
+  const quoteQuery = useCoinGeckoQuote(coinId)
 
   // Fetch data from both routes with intelligent prioritization
   const { data: combinedData, isLoading } = useQuery({
@@ -266,7 +385,7 @@ export function useCoinGeckoChartData(
       let primaryResult: DataSourceResult | null = null
 
       try {
-        const shouldPreferMarketChart = parseInt(config.days) > 90 || activeTimeScale === '30d'
+        const shouldPreferMarketChart = Number.parseInt(config.days) > 90 || activeTimeScale === '30d'
         const swallowToNull = (_: unknown) => Effect.succeed(null)
 
         const ohlcEffect = CoinGeckoApi.getOHLC({
@@ -360,7 +479,12 @@ export function useCoinGeckoChartData(
       }
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
-    refetchInterval: 5 * 60 * 1000, // 5 minutes
+    refetchInterval: (query) => {
+      const points = query.state.data?.data?.lineChart?.length ?? 0
+      // When warmup is in-flight, poll quickly so token pages don't stay empty.
+      if (points < 2) return 5_000
+      return 5 * 60 * 1000
+    },
     enabled: !!coinId,
     retry: 1, // Don't retry too much, fallback handles failures
   })
@@ -377,7 +501,7 @@ export function useCoinGeckoChartData(
     cached = combinedData.cached;
   } else if (combinedData?.error) {
     // Only generate fallback data if we have some initial pricing data to work with
-    if (initialData && initialData.price && initialData.price > 0) {
+    if (initialData?.price && initialData.price > 0) {
       parsedData = generateFallbackData(coinId, activeTimeScale, initialData);
     } else {
       // Return empty data instead of fake data
@@ -396,7 +520,7 @@ export function useCoinGeckoChartData(
     };
   } else {
     // No data and not loading - only use fallback if we have valid initial data
-    if (initialData && initialData.price && initialData.price > 0) {
+    if (initialData?.price && initialData.price > 0) {
       parsedData = generateFallbackData(coinId, activeTimeScale, initialData);
     } else {
       parsedData = {
@@ -407,17 +531,29 @@ export function useCoinGeckoChartData(
     }
   }
 
+  const dataWithLatestQuote = useMemo(() => {
+    const latestPrice = quoteQuery.data?.current_price
+    if (!latestPrice || latestPrice <= 0) return parsedData
+
+    const quoteTimeMs = quoteQuery.data?.last_updated ? Date.parse(quoteQuery.data.last_updated) : Number.NaN
+    const latestTimestampSeconds = Number.isFinite(quoteTimeMs)
+      ? Math.floor(quoteTimeMs / 1000)
+      : Math.floor(Date.now() / 1000)
+
+    return upsertLatestPricePoint(parsedData, latestPrice, latestTimestampSeconds)
+  }, [parsedData, quoteQuery.data?.current_price, quoteQuery.data?.last_updated])
+
   return {
-    chartData: parsedData.lineChart,
-    volumeData: parsedData.volumeChart,
-    ohlcData: parsedData.ohlcData, // OHLC data for tooltip
+    chartData: dataWithLatestQuote.lineChart,
+    volumeData: dataWithLatestQuote.volumeChart,
+    ohlcData: dataWithLatestQuote.ohlcData, // OHLC data for tooltip
     isLoading,
     tokenData: null,
     performance: {
       dataSource,
       cached,
       cacheHitRate: cached ? 100 : 0,
-      dataPoints: parsedData.lineChart.length
+      dataPoints: dataWithLatestQuote.lineChart.length
     }
   }
 }

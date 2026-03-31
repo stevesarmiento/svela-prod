@@ -11,7 +11,6 @@ import {
   CommandItem,
   CommandList,
 } from "@v1/ui/command-popover";
-import Image from 'next/image';
 import { Skeleton } from "@v1/ui/skeleton";
 import { useRouter } from 'next/navigation';
 import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
@@ -22,8 +21,11 @@ import { useHybridCoinSearch, useHybridTopCoins } from '@/hooks/use-hybrid-coin-
 import { useContextualCommands } from '@/hooks/use-contextual-commands';
 import { useAddCoinToWatchlist } from '@/hooks/use-add-coin-to-watchlist';
 import { BackgroundPattern } from './background-pattern';
+import { formatUsdPrice } from "@/lib/format-usd";
+import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides";
+import { TokenLogo } from "@/components/token-logo";
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | null;
 
 interface CommandSearchProps {
   isOpen: boolean;
@@ -74,7 +76,9 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   }, [deferredSearchQuery, isSearchLoading, isTopCoinsLoading]);
 
   const hasSearch = deferredSearchQuery.trim().length > 0;
-  const isCoinResultsContext = context === 'charts' || context === null;
+  const isCoinResultsContext = true;
+  const coinSelectMode: "watchlist-add" | "navigate" =
+    context === "charts" || context === "watchlist" ? "watchlist-add" : "navigate";
   
   const clearSearch = useCallback(() => {
     setSearchQuery('');
@@ -183,13 +187,12 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   const getPlaceholder = () => {
     if (context === 'watchlist') return "Search tokens or manage watchlist...";
     if (context === 'charts') return "Search charts or add tokens...";
-    if (context === 'portfolio') return "Search portfolio...";
     if (context === 'overview') return "Search market data and insights...";
     return "Navigate or search tokens...";
   };
 
   return (
-    <div className="group relative rounded-[20px] bg-zinc-900/95 backdrop-blur-md border border-transparent overflow-hidden px-2 py-0 hover:bg-zinc-800/80 transition-colors duration-150 cursor-pointer
+    <div className="group relative rounded-[20px] bg-zinc-800/80 backdrop-blur-md border border-transparent overflow-hidden px-2 py-0 hover:bg-zinc-800/90 transition-colors duration-150 cursor-pointer
                    shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
       
       {/* React 19: Optimized shared background pattern */}
@@ -219,7 +222,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                     className="dark flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border border-zinc-800 bg-zinc-900/95 shadow-sm"
                   >
                     <span className="text-xs text-zinc-400">Quick Actions</span>
-                        <kbd className="flex items-center gap-1 rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-zinc-200 uppercase">
+                        <kbd className="flex items-center gap-1 rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-zinc-200 uppercase">
                             <IconCommand className="h-2.5 w-2.5 fill-zinc-200" />
                             <span>+ K</span>
                         </kbd>
@@ -228,7 +231,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
               </Button>
               <div 
                 className={`overflow-hidden ${isOpen ? 'w-[420px] opacity-100' : 'w-0 opacity-0'}`}
-                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
               >
                 <CommandInput 
                   ref={inputRef}
@@ -279,7 +282,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                       </div>
                       <div className="flex items-center gap-1">
                         {item.shortcut ? (
-                          <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-zinc-200 uppercase">
+                          <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-zinc-200 uppercase">
                             {item.shortcut}
                           </kbd>
                         ) : item.href ? (
@@ -294,15 +297,23 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
               </CommandGroup>
             ))}
 
-            {/* Charts Token Results - Only show when context is 'charts' */}
-            {context === 'charts' && (coinResultsLoading || coinsToDisplay.length > 0) && (
+            {/* Token Results */}
+            {(coinResultsLoading || coinsToDisplay.length > 0) && (
               <CommandGroup
-                heading={hasSearch ? "Add Tokens" : "Add to Watchlist"}
+                heading={
+                  coinSelectMode === "watchlist-add"
+                    ? hasSearch
+                      ? "Add Tokens"
+                      : "Add to Watchlist"
+                    : hasSearch
+                      ? "Tokens"
+                      : "Popular Tokens"
+                }
                 className="text-white [&_[cmdk-group-heading]]:text-white/60"
               >
                 {coinResultsLoading ? (
-                  Array.from({ length: 5 }).map((_, index) => (
-                    <CommandItem key={`skeleton-${index}`} disabled>
+                  Array.from({ length: 5 }, (_, i) => `skeleton-${i}`).map((skeletonKey) => (
+                    <CommandItem key={skeletonKey} disabled>
                       <div className="flex items-center justify-between w-full bg-transparent p-2 rounded-lg">
                         <div className="flex items-center gap-3 pr-5">
                           <Skeleton className="h-6 w-6 rounded-full" />
@@ -322,7 +333,11 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                   coinsToDisplay.map((coin) => (
                     <CommandItem
                       key={coin.id}
-                      value={`watchlist-add:${coin.id}`}
+                      value={
+                        coinSelectMode === "watchlist-add"
+                          ? `watchlist-add:${coin.id}`
+                          : `coin:${coin.id}`
+                      }
                       onSelect={handleCommandSelect}
                       className="cursor-pointer bg-transparent aria-selected:bg-zinc-800/30 aria-selected:text-white"
                       disabled={isAddingCoin}
@@ -330,100 +345,29 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                       <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
                         <div className="flex items-center gap-3 pr-5">
                           <div className="relative">
-                            <Image
-                              src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
-                              alt={coin.name}
-                              className="w-6 h-6 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800 shadow-sm shadow-zinc-950"
-                              width={24}
-                              height={24}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = '/favicon.ico';
-                              }}
+                            <TokenLogo
+                              src={(() => {
+                                const logoUrl = getTokenLogoURL(coin.symbol, coin.image)
+                                return logoUrl?.startsWith("http") || logoUrl?.startsWith("/") ? logoUrl : undefined
+                              })()}
+                              alt={cleanTokenName(coin.name)}
+                              sizePx={24}
+                              fallbackText={coin.symbol}
+                              className="ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800 shadow-sm shadow-zinc-950"
+                              quality={70}
                             />
                           </div>
                           <div className="flex flex-col">
-                            <span className="font-medium text-white">{coin.name}</span>
+                            <span className="font-medium text-white">{cleanTokenName(coin.name)}</span>
                             <span className="text-xs text-white/60">{coin.symbol.toUpperCase()}</span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="text-right">
-                            <div className="text-sm font-diatype-mono text-white">
-                              ${coin.quote.USD.price.toLocaleString()}
+                            <div className="text-sm font-berkeley-mono text-white">
+                              {formatUsdPrice(coin.quote.USD.price)}
                             </div>
-                            <div className={`text-xs font-diatype-mono ${
-                              coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'
-                            }`}>
-                              {coin.quote.USD.percent_change_24h.toFixed(2)}%
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </CommandItem>
-                  ))
-                )}
-              </CommandGroup>
-            )}
-
-            {/* Regular Coin Results - Only show when there's no context */}
-            {!context && (coinResultsLoading || coinsToDisplay.length > 0) && (
-              <CommandGroup
-                heading={hasSearch ? "Tokens" : "Popular Tokens"}
-                className="text-white [&_[cmdk-group-heading]]:text-white/60"
-              >
-                {coinResultsLoading ? (
-                  Array.from({ length: 5 }).map((_, index) => (
-                    <CommandItem key={`skeleton-${index}`} disabled>
-                      <div className="flex items-center justify-between w-full bg-transparent p-2 rounded-lg">
-                        <div className="flex items-center gap-3 pr-5">
-                          <Skeleton className="h-6 w-6 rounded-full" />
-                          <div className="flex flex-col gap-1">
-                            <Skeleton className="h-4 w-24" />
-                            <Skeleton className="h-3 w-12" />
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <Skeleton className="h-4 w-16" />
-                          <Skeleton className="h-3 w-10" />
-                        </div>
-                      </div>
-                    </CommandItem>
-                  ))
-                ) : (
-                  coinsToDisplay.map((coin) => (
-                    <CommandItem
-                      key={coin.id}
-                      value={`coin:${coin.id}`}
-                      onSelect={handleCommandSelect}
-                      className="cursor-pointer bg-transparent aria-selected:bg-zinc-800/30 aria-selected:text-white"
-                    >
-                      <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
-                        <div className="flex items-center gap-3 pr-5">
-                          <div className="relative">
-                            <Image
-                              src={coin.image?.startsWith('http') || coin.image?.startsWith('/') ? coin.image : '/favicon.ico'}
-                              alt={coin.name}
-                              className="w-6 h-6 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800 shadow-sm shadow-zinc-950"
-                              width={24}
-                              height={24}
-                              onError={(e) => {
-                                const target = e.target as HTMLImageElement;
-                                target.src = '/favicon.ico';
-                              }}
-                            />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-medium text-white">{coin.name}</span>
-                            <span className="text-xs text-white/60">{coin.symbol.toUpperCase()}</span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="text-right">
-                            <div className="text-sm font-diatype-mono text-white">
-                              ${coin.quote.USD.price.toLocaleString()}
-                            </div>
-                            <div className={`text-xs font-diatype-mono ${
+                            <div className={`text-xs font-berkeley-mono ${
                               coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'
                             }`}>
                               {coin.quote.USD.percent_change_24h.toFixed(2)}%
@@ -463,7 +407,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                       </div>
                       <div className="flex items-center gap-1">
                         {'href' in item && item.shortcut ? (
-                          <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-zinc-200 uppercase">
+                          <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-zinc-200 uppercase">
                             {item.shortcut}
                           </kbd>
                         ) : 'href' in item ? (
@@ -484,16 +428,16 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
             <div className="flex items-center justify-between gap-4 px-2 text-xs text-zinc-400">
               <div className="flex items-center gap-1">
                 <span>navigate</span>
-                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-diatype-mono text-zinc-200">↑</kbd>
-                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-diatype-mono text-zinc-200">↓</kbd>
+                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-berkeley-mono text-zinc-200">↑</kbd>
+                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-berkeley-mono text-zinc-200">↓</kbd>
               </div>
               <div className="flex items-center gap-1">
                 <span>select</span>
-                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-diatype-mono text-zinc-200">enter</kbd>
+                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-berkeley-mono text-zinc-200">enter</kbd>
               </div>
               <div className="flex items-center gap-1">
                 <span>close</span>
-                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-diatype-mono text-zinc-200">esc</kbd>
+                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-berkeley-mono text-zinc-200">esc</kbd>
               </div>
             </div>
           </div>

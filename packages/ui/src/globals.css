@@ -15,7 +15,7 @@
 @theme inline {
   --font-departure: var(--font-departure-mono);
   --font-diatype: var(--font-abc-diatype), sans-serif;
-  --font-diatype-mono: var(--font-abc-diatype-mono), monospace;
+  --font-berkeley-mono: var(--font-abc-diatype-mono), monospace;
 }
 
 @theme {

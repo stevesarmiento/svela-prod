@@ -1,10 +1,8 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
 import { useMemo } from "react"
-import { Effect } from "effect"
-import { CoinGeckoApi, type CoinGeckoQuoteMarketData } from "@/lib/effect/coingecko-api"
-import { runPromise } from "@/lib/effect/runtime-coingecko"
+import { useCoinGeckoQuotesBulk } from "@/hooks/use-coingecko-quotes"
+import type { CoinGeckoQuoteMarketData } from "@/lib/effect/coingecko-api"
 
 interface CoinGeckoWatchlistCoin {
   id: string; // CoinGecko string ID
@@ -12,6 +10,7 @@ interface CoinGeckoWatchlistCoin {
   symbol: string;
   slug: string;
   image: string; // CoinGecko image URL
+  sparkline7d?: ReadonlyArray<number>;
   cmc_rank: number;
   circulating_supply: number;
   max_supply: number | null;
@@ -38,67 +37,67 @@ export function useCoinGeckoWatchlistCoins(coinIds: string[]) {
     return unique
   }, [coinIds])
 
-  const stableCoinIdsKey = useMemo(() => stableCoinIds.join(","), [stableCoinIds])
+  const quotesQuery = useCoinGeckoQuotesBulk(stableCoinIds)
 
-  const { data: coins, isLoading, error } = useQuery({
-    queryKey: ['coingecko-watchlist-coins', stableCoinIdsKey],
-    queryFn: async (): Promise<CoinGeckoWatchlistCoin[]> => {
-      if (!stableCoinIds.length) return []
+  const coins = useMemo((): CoinGeckoWatchlistCoin[] => {
+    const quotesById = quotesQuery.data as Record<string, CoinGeckoQuoteMarketData> | undefined
+    if (!quotesById) return []
 
-      const emptyQuotesResponse: { data: Record<string, CoinGeckoQuoteMarketData> } = { data: {} }
-
-      const program = CoinGeckoApi.getQuotes({ ids: stableCoinIds }).pipe(
-        Effect.catchTags({
-          CoinGeckoInvalidParamsError: () => Effect.succeed(emptyQuotesResponse),
-          CoinGeckoUnauthorizedError: () => Effect.succeed(emptyQuotesResponse),
-          CoinGeckoNotFoundError: () => Effect.succeed(emptyQuotesResponse),
-          CoinGeckoRateLimitedError: () => Effect.succeed(emptyQuotesResponse),
-          CoinGeckoApiError: () => Effect.succeed(emptyQuotesResponse),
-          CoinGeckoDecodeError: () => Effect.succeed(emptyQuotesResponse),
-        }),
-      )
-
-      const response = await runPromise(program)
-
-      return stableCoinIds.flatMap((id) => {
-        const coin = response.data[id]
-        if (!coin) return []
-
-        return [
-          {
-            id: coin.id,
-            name: coin.name,
-            symbol: coin.symbol,
-            slug: coin.id,
-            image: coin.image,
-            cmc_rank: coin.market_cap_rank ?? 0,
-            circulating_supply: 0,
-            max_supply: null,
-            quote: {
-              USD: {
-                price: coin.current_price ?? 0,
-                percent_change_24h: coin.price_change_percentage_24h ?? 0,
-                percent_change_1h: coin.price_change_percentage_1h_in_currency ?? 0,
-                percent_change_7d: coin.price_change_percentage_7d_in_currency ?? 0,
-                percent_change_30d: coin.price_change_percentage_30d_in_currency ?? 0,
-                market_cap: coin.market_cap ?? 0,
-                volume_24h: coin.total_volume ?? 0,
-              },
+    return stableCoinIds.map((id) => {
+      const coin = quotesById[id]
+      if (!coin) {
+        return {
+          id,
+          name: id,
+          symbol: "N/A",
+          slug: id,
+          image: "",
+          cmc_rank: 0,
+          circulating_supply: 0,
+          max_supply: null,
+          quote: {
+            USD: {
+              price: 0,
+              percent_change_24h: 0,
+              percent_change_1h: 0,
+              percent_change_7d: 0,
+              percent_change_30d: 0,
+              market_cap: 0,
+              volume_24h: 0,
             },
           },
-        ]
-      })
-    },
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    refetchInterval: 5 * 60 * 1000, // 5 minutes
-    enabled: stableCoinIds.length > 0,
-    retry: 1,
-  });
+        }
+      }
+
+      return {
+        id: coin.id,
+        name: coin.name,
+        symbol: coin.symbol,
+        slug: coin.id,
+        image: coin.image,
+        sparkline7d: coin.sparkline7d,
+        cmc_rank: coin.market_cap_rank ?? 0,
+        circulating_supply: 0,
+        max_supply: null,
+        quote: {
+          USD: {
+            price: coin.current_price ?? 0,
+            percent_change_24h: coin.price_change_percentage_24h ?? 0,
+            percent_change_1h: coin.price_change_percentage_1h_in_currency ?? 0,
+            percent_change_7d: coin.price_change_percentage_7d_in_currency ?? 0,
+            percent_change_30d: coin.price_change_percentage_30d_in_currency ?? 0,
+            market_cap: coin.market_cap ?? 0,
+            volume_24h: coin.total_volume ?? 0,
+          },
+        },
+      }
+    })
+  }, [quotesQuery.data, stableCoinIds])
 
   return {
     data: coins,
-    isLoading,
-    error: error as Error | null,
+    isLoading: quotesQuery.isLoading,
+    error: (quotesQuery.error as Error | null) ?? null,
     performance: { cacheHitRate: 0, apiCalls: stableCoinIds.length > 0 ? 1 : 0, totalCoins: stableCoinIds.length }
   };
 } 

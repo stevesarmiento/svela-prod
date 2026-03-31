@@ -3,7 +3,6 @@
 //import Link from "next/link";
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import dynamic from "next/dynamic";
 import { usePathname, useSearchParams } from "next/navigation";
 // import { 
 //   IconHouseFill, 
@@ -24,26 +23,12 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 import { SignOutButton, useClerk } from "@clerk/nextjs";
 import { Fingerprint, LogOut } from "lucide-react";
-import { IconChevronBackward, IconGearshapeFill } from 'symbols-react';
+import { IconChevronBackward } from 'symbols-react';
 import { SvelaLogo } from "@v1/ui/svela-logo";
 import { useTokenHeader } from "@/hooks/use-token-header";
 import { WatchlistButton } from "./watchlist-button";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-
-function loadAnalysisDialog() {
-  return import("./analysis-dialog");
-}
-
-const AnalysisDialog = dynamic(
-  () => loadAnalysisDialog().then((module) => module.AnalysisDialog),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-8 w-[92px] rounded-xl bg-zinc-950/10 dark:bg-white/10" />
-    ),
-  },
-);
 
 
 // const menuItems = [
@@ -65,7 +50,7 @@ const AnalysisDialog = dynamic(
 // ];
 
 function getRouteGreeting(pathname: string): string {
-  // Remove locale prefix if present (e.g., /en/charts -> /charts)
+  // Remove locale prefix if present (e.g., /en/screener -> /screener)
   const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
   
   // Special case: Use time-based greeting for watchlist (now the default overview)
@@ -79,9 +64,9 @@ function getRouteGreeting(pathname: string): string {
   }
   
   const routeGreetings: Record<string, string> = {
-    '/charts': 'Charts & Graphs',
-    '/settings': 'Settings',
-    '/portfolio': 'Portfolio',
+    '/screener': 'Market Screener',
+    // Back-compat: `/charts` now redirects to `/screener`.
+    '/charts': 'Market Screener',
   };
 
   // Check for exact matches first
@@ -91,7 +76,7 @@ function getRouteGreeting(pathname: string): string {
 
   // Check for partial matches (e.g., /charts/bitcoin -> Charts & Graphs)
   for (const [route, greeting] of Object.entries(routeGreetings)) {
-    if (cleanPath.startsWith(route + '/')) {
+    if (cleanPath.startsWith(`${route}/`)) {
       return greeting;
     }
   }
@@ -105,7 +90,7 @@ function getRouteGreeting(pathname: string): string {
 }
 
 function getStaticRouteGreeting(pathname: string): string | null {
-  // Remove locale prefix if present (e.g., /en/charts -> /charts)
+  // Remove locale prefix if present (e.g., /en/screener -> /screener)
   const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
 
   // Overview/watchlist uses time-based greeting (handled client-side to avoid hydration mismatch)
@@ -120,9 +105,9 @@ function getStaticRouteGreeting(pathname: string): string | null {
   }
 
   const routeGreetings: Record<string, string> = {
-    '/charts': 'Charts & Graphs',
-    '/settings': 'Settings',
-    '/portfolio': 'Portfolio',
+    '/screener': 'Market Screener',
+    // Back-compat: `/charts` now redirects to `/screener`.
+    '/charts': 'Market Screener',
   };
 
   if (routeGreetings[cleanPath]) {
@@ -130,7 +115,7 @@ function getStaticRouteGreeting(pathname: string): string | null {
   }
 
   for (const [route, greeting] of Object.entries(routeGreetings)) {
-    if (cleanPath.startsWith(route + '/')) {
+    if (cleanPath.startsWith(`${route}/`)) {
       return greeting;
     }
   }
@@ -307,10 +292,6 @@ export function TopNav() {
           <div className="flex items-center gap-2">
             {isChartDetailPage && coinId && (
               <>
-                <AnalysisDialog 
-                  coinId={coinId} 
-                  tokenData={tokenData}
-                />
                 <WatchlistButton 
                   coinId={coinId} 
                   coinName={tokenData?.name || tokenData?.symbol}
@@ -348,10 +329,6 @@ export function TopNav() {
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => router.push('/settings')} className="cursor-pointer rounded-xl">
-                  <IconGearshapeFill className="mr-2 h-4 w-4 fill-primary/50" />
-                  Settings
-                </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleProfileClick} className="cursor-pointer rounded-xl">
                   <Fingerprint className="mr-2 h-4 w-4 text-primary/50" />
                   Authentication
@@ -363,7 +340,7 @@ export function TopNav() {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="cursor-pointer w-full rounded-xl" asChild>
                   <SignOutButton>
-                    <button className="w-full text-left flex items-center">
+                    <button type="button" className="w-full text-left flex items-center">
                       <LogOut className="mr-2 h-4 w-4 text-primary/50" />
                       Sign out
                     </button>

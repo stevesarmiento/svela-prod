@@ -1,18 +1,49 @@
 'use client'
 
-import { useMemo, useTransition, useDeferredValue, memo, useCallback } from 'react'
+import {
+  useMemo,
+  useTransition,
+  useDeferredValue,
+  memo,
+  useCallback,
+  useState,
+  useEffect,
+  useRef,
+} from 'react'
 import { useSearchParams } from "next/navigation"
+import dynamic from "next/dynamic"
+import { useUser } from "@clerk/nextjs"
 import { formatLargeNumber } from "@v1/ui/format-numbers"
 import { Button } from "@v1/ui/button"
+import { Input } from "@v1/ui/input"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { X } from "lucide-react"
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import Link from "next/link"
-import Image from "next/image"
 import { cn } from "@v1/ui/cn"
 import { toast } from "@v1/ui/use-toast"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Spinner } from "@v1/ui/spinner"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
+import { formatUsdPrice } from "@/lib/format-usd"
+import { useSetWatchlistItemHoldings } from "@/lib/convex-hooks"
+import { Badge } from "@v1/ui/badge"
+import { IconTriangleFill } from "symbols-react"
+import { TokenLogo } from "@/components/token-logo"
+
+function loadAnalysisDialog() {
+  return import("@/components/navigation/analysis-dialog")
+}
+
+const AnalysisDialog = dynamic(
+  () => loadAnalysisDialog().then((module) => module.AnalysisDialog),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-8 w-[92px] rounded-xl bg-zinc-950/10 dark:bg-white/10" />
+    ),
+  },
+)
 // Accept whatever data format the existing hook provides
 interface OptimisticCoinData {
   id: string | number;
@@ -31,7 +62,194 @@ interface OptimisticCoinData {
     };
   };
   isOptimistic?: boolean;
+  /** Token quantity from Convex watchlist row (optional). */
+  holdings?: number;
 }
+
+interface ChartHoldingsCellProps {
+  coinId: string
+  holdings: number | undefined
+  /** Spot USD price for notional (holdings × price). */
+  priceUsd: number
+  isOptimistic: boolean
+  showPending: boolean
+  groupId: string | null
+  canEdit: boolean
+}
+
+function parseDraftQty(draft: string): number | undefined {
+  const t = draft.trim()
+  if (t === "") return undefined
+  const n = Number(t.replace(/,/g, ""))
+  if (!Number.isFinite(n) || n < 0) return undefined
+  return n
+}
+
+function notionalUsdForCell(
+  editing: boolean,
+  draft: string,
+  holdings: number | undefined,
+  priceUsd: number,
+): number | null {
+  if (!Number.isFinite(priceUsd) || priceUsd <= 0) return null
+  const qty = editing ? parseDraftQty(draft) : holdings
+  if (qty === undefined) return null
+  return qty * priceUsd
+}
+
+const holdingsDisplayFormatter = new Intl.NumberFormat(undefined, {
+  maximumFractionDigits: 8,
+})
+
+const ChartHoldingsCell = memo(function ChartHoldingsCell({
+  coinId,
+  holdings,
+  priceUsd,
+  isOptimistic,
+  showPending,
+  groupId,
+  canEdit,
+}: ChartHoldingsCellProps) {
+  const setHoldings = useSetWatchlistItemHoldings()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!editing) {
+      setDraft(holdings !== undefined ? String(holdings) : "")
+    }
+  }, [holdings, editing])
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus()
+  }, [editing])
+
+  const commit = useCallback(async () => {
+    if (!canEdit || !groupId) return
+    const t = draft.trim()
+    if (t === "") {
+      try {
+        await setHoldings(groupId, coinId, null)
+        setEditing(false)
+      } catch {
+        toast({
+          title: "Could not update holdings",
+          description: "Try again in a moment.",
+          variant: "destructive",
+        })
+      }
+      return
+    }
+    const n = Number(t.replace(/,/g, ""))
+    if (!Number.isFinite(n) || n < 0) {
+      toast({
+        title: "Invalid amount",
+        description: "Enter a non-negative number or leave empty to clear.",
+        variant: "destructive",
+      })
+      setDraft(holdings !== undefined ? String(holdings) : "")
+      setEditing(false)
+      return
+    }
+    try {
+      await setHoldings(groupId, coinId, n)
+      setEditing(false)
+    } catch {
+      toast({
+        title: "Could not update holdings",
+        description: "Try again in a moment.",
+        variant: "destructive",
+      })
+    }
+  }, [canEdit, groupId, coinId, draft, holdings, setHoldings])
+
+  const cancel = useCallback(() => {
+    setDraft(holdings !== undefined ? String(holdings) : "")
+    setEditing(false)
+  }, [holdings])
+
+  if (isOptimistic) {
+    return (
+      <div className="flex items-center justify-end">
+        <Skeleton className="h-3 w-14 rounded-full" />
+      </div>
+    )
+  }
+
+  const displayStr =
+    holdings !== undefined ? holdingsDisplayFormatter.format(holdings) : null
+
+  const notionalUsd = notionalUsdForCell(editing, draft, holdings, priceUsd)
+
+  return (
+    <div
+      className="flex min-w-0 items-center justify-end gap-1.5"
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+    >
+      <div className="flex min-w-0 shrink-0 items-center justify-end gap-1.5">
+        {editing ? (
+          <Input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => {
+              void commit()
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault()
+                void commit()
+              }
+              if (e.key === "Escape") {
+                e.preventDefault()
+                cancel()
+              }
+            }}
+            inputMode="decimal"
+            disabled={showPending}
+            aria-label="Token holdings quantity"
+            className="h-7 w-[5.5rem] px-2 py-0 text-right font-berkeley-mono text-xs tabular-nums"
+          />
+        ) : (
+          <button
+            type="button"
+            disabled={!canEdit || showPending}
+            onClick={() => {
+              if (canEdit) setEditing(true)
+            }}
+            className={cn(
+              "-mx-1 rounded px-1 py-0.5 text-right font-berkeley-mono text-xs tabular-nums",
+              displayStr ? "text-foreground" : "text-muted-foreground",
+              canEdit && !showPending && "cursor-text hover:bg-primary/10",
+              (!canEdit || showPending) && "cursor-default",
+            )}
+          >
+            {displayStr ?? "—"}
+          </button>
+        )}
+        {notionalUsd !== null ? (
+          <Badge
+            variant="outline"
+            className="h-5 max-w-[6.5rem] shrink-0 truncate border-primary/5 bg-primary/5 px-1.5 text-[10px] font-normal leading-none tabular-nums text-white/60"
+            title="USD notional (holdings × spot price)"
+          >
+            {formatUsdPrice(notionalUsd)}
+          </Badge>
+        ) : null}
+      </div>
+    </div>
+  )
+})
 
 interface ChartTableProps {
   coins: OptimisticCoinData[]
@@ -45,6 +263,7 @@ export const ChartTable = memo(function ChartTable({
   isPending 
 }: ChartTableProps) {
   const { removeFromSelectedGroup, selectedGroup } = useWatchlist()
+  const { user } = useUser()
   const searchParams = useSearchParams()
   const [isRemovePending, startRemoveTransition] = useTransition()
   
@@ -89,28 +308,12 @@ export const ChartTable = memo(function ChartTable({
             break
           case '2y':
             // 2Y = CoinMarketCap doesn't provide this data
-            intervalChange = NaN
+            intervalChange = Number.NaN
             break
           default:
             // Default to 24h real data
             intervalChange = coin.quote.USD.percent_change_24h ?? 0
         }
-      }
-
-      // Debug: Always log what data we're using to ensure it's real
-      if (!coin.isOptimistic) {
-        console.log(`📈 ${coin.symbol} (${deferredTimeScale}):`, {
-          selectedChange: isNaN(intervalChange) ? 'N/A - No real data available' : intervalChange,
-          timeScale: deferredTimeScale,
-          realDataAvailable: {
-            percent_change_1h: coin.quote?.USD?.percent_change_1h,
-            percent_change_24h: coin.quote?.USD?.percent_change_24h,
-            percent_change_7d: coin.quote?.USD?.percent_change_7d,
-            percent_change_30d: coin.quote?.USD?.percent_change_30d,
-          },
-          dataSource: 'Pure CoinGecko API',
-          usingRealData: !isNaN(intervalChange)
-        })
       }
 
       return {
@@ -168,6 +371,8 @@ export const ChartTable = memo(function ChartTable({
 
   // React 19: Show pending states
   const showPending = isPending || isRemovePending
+  const holdingsGroupId = selectedGroup?._id ?? null
+  const canEditHoldings = Boolean(user && selectedGroup)
 
   if (!coins.length) return null
 
@@ -195,23 +400,20 @@ export const ChartTable = memo(function ChartTable({
           {/* Header with Token Name */}
           <div className="px-3 py-2">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-5 gap-4">
                 <div className="flex items-center gap-2">
                   <div className="relative">
                     {safeTokenLogoUrl ? (
-                      <Image
+                      <TokenLogo
                         src={safeTokenLogoUrl}
                         alt={tokenName}
+                        sizePx={16}
+                        fallbackText={coin.symbol}
                         className={cn(
-                          "w-4 h-4 rounded-full shadow-sm shadow-zinc-950 ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800",
-                          coin.isOptimistic && "opacity-50"
+                          "ring-1 ring-zinc-200 dark:ring-black/80",
+                          coin.isOptimistic && "opacity-50",
                         )}
-                        width={16}
-                        height={16}
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = '/favicon.ico';
-                        }}
+                        quality={70}
                       />
                     ) : (
                       <div className={cn(
@@ -227,7 +429,7 @@ export const ChartTable = memo(function ChartTable({
                       </div>
                     )}
                   </div>
-                  <span className="text-muted-foreground/70">
+                  <span className="text-muted-foreground">
                     {tokenName}
                   </span>
                 </div>
@@ -237,18 +439,21 @@ export const ChartTable = memo(function ChartTable({
                 <div className="flex items-center gap-1 justify-end">
                   {getTimeScaleLabel(activeTimeScale)} Change
                 </div>
+                <div className="flex items-center justify-end">
+                  Holdings
+                </div>
                 <div className="flex items-center justify-end gap-1">
-                  Action
+                  Actions
                 </div>
               </div>
             </div>
           </div>
 
           {/* Table Body */}
-          <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden">
+          <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden hover:ring-2 hover:ring-zinc-200/30 transition-all duration-100">
             {coin.isOptimistic ? (
               // Show non-clickable loading state for optimistic coins
-              <div className="grid grid-cols-4 gap-4 px-4 py-2 pr-2 opacity-60">
+              <div className="grid grid-cols-5 gap-4 px-4 py-2 pr-2 opacity-60">
                 {/* Price */}
                 <div className="flex items-center gap-2">
                   <Skeleton className="h-3 w-8 rounded-full" />
@@ -266,83 +471,166 @@ export const ChartTable = memo(function ChartTable({
                   <Skeleton className="h-3 w-10 rounded-full" />
                 </div>
 
+                {/* Holdings */}
+                <ChartHoldingsCell
+                  coinId={String(coin.id)}
+                  holdings={coin.holdings}
+                  priceUsd={coin.quote.USD.price}
+                  isOptimistic
+                  showPending={showPending}
+                  groupId={holdingsGroupId}
+                  canEdit={canEditHoldings}
+                />
+
                 {/* Remove */}
                 <div className="flex items-center justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={showPending}
-                    className={cn(
-                      "h-6 w-6 p-0 rounded-lg bg-transparent",
-                      showPending && "opacity-50"
-                    )}
-                  >
-                    <X className="h-4 w-4 text-muted-foreground" />
-                  </Button>
+                  <Tooltip delayDuration={500}>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={showPending}
+                          aria-label="Remove from watchlist"
+                          className={cn(
+                            "h-6 w-6 p-0 rounded-lg bg-transparent",
+                            showPending && "opacity-50"
+                          )}
+                        >
+                          <X className="h-4 w-4 text-zinc-800 dark:text-zinc-800" />
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
+                      <span>Remove from watchlist</span>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             ) : (
               // Show clickable link for real coins
               <Link 
                 href={watchlistGroup ? `/charts/${coin.id}?wg=${watchlistGroup}` : `/charts/${coin.id}`}
-                className="grid grid-cols-4 gap-4 px-4 py-2 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer"
+                className="grid grid-cols-5 gap-4 px-4 py-2 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer"
               >
                 {/* Price */}
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-xs">{coin.symbol.toUpperCase()}</span>
                   <span className="text-primary/40 text-xs">price is currently</span>
-                  <span className="font-diatype-mono text-xs font-semibold">
-                    ${coin.quote.USD.price.toLocaleString()}
+                  <span className="font-berkeley-mono text-xs font-semibold">
+                    {formatUsdPrice(coin.quote.USD.price)}
                   </span>
                 </div>
 
                 {/* 24h Volume */}
                 <div className="flex items-center justify-end">
-                  <span className="font-diatype-mono text-xs">
+                  <span className="font-berkeley-mono text-xs">
                     ${formatLargeNumber(coin.quote.USD.volume_24h || 0)}
                   </span>
                 </div>
 
                 {/* Interval Change */}
                 <div className="flex items-center justify-end">
-                  {isNaN(coin.intervalChange) ? (
-                    <span className="font-diatype-mono text-xs text-muted-foreground">
+                  {Number.isNaN(coin.intervalChange) ? (
+                    <span className="font-berkeley-mono text-xs text-muted-foreground">
                       N/A
                     </span>
                   ) : (
-                    <span className={cn(
-                      "font-diatype-mono text-xs",
-                      coin.intervalChange > 0 ? 'text-green-600' : 'text-red-600'
-                    )}>
-                      {coin.intervalChange > 0 ? '+' : ''}{coin.intervalChange.toFixed(2)}%
-                    </span>
+                    (() => {
+                      const change = coin.intervalChange
+                      const isPositive = change > 0
+                      const isNegative = change < 0
+                      const isNeutral = !isPositive && !isNegative
+
+                      return (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 font-berkeley-mono text-xs tabular-nums",
+                            isPositive && "text-emerald-500",
+                            isNegative && "text-rose-500",
+                            isNeutral && "text-muted-foreground",
+                          )}
+                        >
+                          <IconTriangleFill
+                            aria-hidden="true"
+                            className={cn(
+                              "size-2 shrink-0 mr-1",
+                              isPositive && "fill-emerald-500",
+                              isNegative && "fill-rose-500 rotate-180",
+                              isNeutral && "fill-zinc-500/60",
+                            )}
+                          />
+                          {(isNegative ? Math.abs(change) : change).toFixed(2)}%
+                        </span>
+                      )
+                    })()
                   )}
                 </div>
 
+                {/* Holdings (editable token quantity) */}
+                <ChartHoldingsCell
+                  coinId={String(coin.id)}
+                  holdings={coin.holdings}
+                  priceUsd={coin.quote.USD.price}
+                  isOptimistic={false}
+                  showPending={showPending}
+                  groupId={holdingsGroupId}
+                  canEdit={canEditHoldings}
+                />
+
                 {/* Remove */}
                 <div 
-                  className="flex items-center justify-end"
+                  className="flex items-center justify-end gap-1"
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return
+                    e.preventDefault()
+                    e.stopPropagation()
+                  }}
                 >
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      handleRemove(coin.id)
+                  <AnalysisDialog
+                    coinId={String(coin.id)}
+                    tokenData={{
+                      name: tokenName,
+                      symbol: coin.symbol,
+                      id: String(coin.id),
+                      logoUrl: safeTokenLogoUrl,
                     }}
-                    disabled={showPending}
-                    className={cn(
-                      "h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group",
-                      showPending && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
-                  </Button>
+                    triggerVariant="icon"
+                    triggerTooltip="Deep Analysis"
+                    triggerAriaLabel="Deep Analysis"
+                  />
+                  <div
+                    aria-hidden="true"
+                    className="mx-1 h-4 w-px shrink-0 bg-zinc-200/70 dark:bg-zinc-700/70"
+                  />
+                  <Tooltip delayDuration={500}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleRemove(coin.id)
+                        }}
+                        disabled={showPending}
+                        aria-label="Remove from watchlist"
+                        className={cn(
+                          "h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/15 transition-colors group",
+                          showPending && "opacity-50 cursor-not-allowed"
+                        )}
+                      >
+                        <X className="h-4 w-4 text-zinc-600 dark:text-zinc-400 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
+                      <span>Remove from watchlist</span>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </Link>
             )}

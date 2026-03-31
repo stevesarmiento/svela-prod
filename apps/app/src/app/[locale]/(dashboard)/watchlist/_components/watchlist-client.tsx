@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useState } from 'react'
-import { Watchlist } from "./watchlist"
+import { WatchlistPageView } from "./watchlist-page-view"
 import { parseAsStringLiteral, useQueryState } from "nuqs"
 
 const watchlistTabValues = ["grid", "chart"] as const
@@ -10,7 +10,7 @@ const watchlistTabParser = parseAsStringLiteral(watchlistTabValues).withDefault(
 function WatchlistContent() {
   const [viewMode, setViewMode] = useQueryState("wt", watchlistTabParser)
   const [activeTimeScale, setActiveTimeScale] = useState<string>('7d')
-  const [contentMode, setContentMode] = useState<'cards' | 'table'>('cards')
+  const [contentMode, setContentMode] = useState<'cards' | 'aggregate'>('cards')
 
   // Handle view mode changes from the WatchlistsGrid tabs
   const handleViewModeChange = (mode: 'grid' | 'chart') => {
@@ -18,22 +18,23 @@ function WatchlistContent() {
   }
 
   // Handle content mode changes (cards vs table)
-  const handleContentModeChange = (mode: 'cards' | 'table') => {
+  const handleContentModeChange = (mode: 'cards' | 'table' | 'aggregate') => {
+    if (mode === 'table') {
+      setContentMode('aggregate')
+      return
+    }
     setContentMode(mode)
   }
 
   return (
     <div className="w-full px-4">
-      <Watchlist
+      <WatchlistPageView
         activeTimeScale={activeTimeScale}
         onTimeScaleChange={setActiveTimeScale}
         gridViewMode={viewMode}
         onGridViewModeChange={handleViewModeChange}
         contentMode={contentMode}
         onContentModeChange={handleContentModeChange}
-        onInlineChartError={() => {
-          setContentMode('cards')
-        }}
       />
     </div>
   )

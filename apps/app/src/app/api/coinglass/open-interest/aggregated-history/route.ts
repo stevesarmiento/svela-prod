@@ -1,156 +1,147 @@
-import { NextResponse } from "next/server";
-import { z } from "zod";
+import { convex, getServerToken } from "@/lib/convex-server";
+import { type NextRequest, NextResponse } from "next/server";
+import { api } from "../../../../../../convex/_generated/api";
 
-const BASE_URL = "https://open-api-v4.coinglass.com/api";
-const API_KEY = process.env.CG_API_KEY || process.env['CG-API-KEY'];
+export const dynamic = "force-dynamic";
 
-// Simple mapping for coin IDs to symbols
-const COIN_ID_TO_SYMBOL: Record<number, string> = {
-  1: 'BTC',
-  1027: 'ETH',
-  5426: 'SOL',
-  52: 'XRP',
-  74: 'DOGE',
-  // Add more as needed
-};
+function isProbablyCoinGeckoId(value: string): boolean {
+  return value.includes("-") || value.toLowerCase() === value;
+}
 
-// Updated validation schema to handle both strings and numbers
-const OpenInterestDataSchema = z.object({
-  time: z.number(),
-  open: z.union([z.string(), z.number()]), // Accept both string and number
-  high: z.union([z.string(), z.number()]), // Accept both string and number
-  low: z.union([z.string(), z.number()]),  // Accept both string and number
-  close: z.union([z.string(), z.number()]), // Accept both string and number
-});
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const rawSymbol = (searchParams.get("symbol") || "").trim();
+  const interval = (searchParams.get("interval") || "12h").trim();
+  const unit = (searchParams.get("unit") || "usd").trim();
+  const limit = Math.min(
+    512,
+    Math.max(2, Number(searchParams.get("limit") || 30)),
+  );
+  const startTimeParam = searchParams.get("start_time");
+  const endTimeParam = searchParams.get("end_time");
+  const startTime = startTimeParam ? Number(startTimeParam) : undefined;
+  const endTime = endTimeParam ? Number(endTimeParam) : undefined;
 
-const CoinglassOpenInterestResponseSchema = z.object({
-  code: z.string(),
-  msg: z.string().optional(),
-  data: z.array(OpenInterestDataSchema),
-});
+  if (!rawSymbol) {
+    return NextResponse.json(
+      { success: false, error: "Symbol parameter is required" },
+      { status: 400 },
+    );
+  }
 
-export async function GET(request: Request) {
-  try {
-    // Check API key first
-    if (!API_KEY) {
-      console.error("CoinGlass API key not configured");
-      return NextResponse.json(
-        { error: 'CoinGlass API key not configured', success: false },
-        { status: 500 }
-      );
-    }
+  const serverToken = getServerToken();
 
-    const { searchParams } = new URL(request.url);
-    const rawSymbol = searchParams.get('symbol');
-    const interval = searchParams.get('interval') || '12h';
-    const unit = searchParams.get('unit') || 'usd';
-    const limit = searchParams.get('limit') || '30';
+  // Resolve user input into a CoinGlass base symbol.
+  let symbol = rawSymbol.toUpperCase();
+  let coinInfo: {
+    symbol: string;
+    name: string;
+    coinId: number;
+    isSupported: boolean;
+  } | null = null;
 
-    if (!rawSymbol) {
-      return NextResponse.json(
-        { error: 'Symbol parameter is required', success: false },
-        { status: 400 }
-      );
-    }
-
-    // Handle coin ID to symbol conversion
-    let symbol = rawSymbol;
-    let coinInfo = null;
-
-    const coinId = parseInt(rawSymbol);
-    if (!isNaN(coinId)) {
-      const mappedSymbol = COIN_ID_TO_SYMBOL[coinId];
-      if (mappedSymbol) {
-        symbol = mappedSymbol;
-        coinInfo = {
-          coinId,
-          symbol: mappedSymbol,
-          name: 'Unknown',
-          isSupported: true
-        };
-      } else {
-        console.error("Coin ID not found in mapping:", coinId);
-        return NextResponse.json(
-          { 
-            error: `Coin with ID ${coinId} not supported`,
-            success: false,
-            availableCoins: Object.keys(COIN_ID_TO_SYMBOL)
-          },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Build API URL
-    const apiUrl = `${BASE_URL}/futures/open-interest/aggregated-history?symbol=${symbol}&interval=${interval}&unit=${unit}&limit=${limit}`;
-
-    // Make API request
-    const response = await fetch(apiUrl, {
-      headers: {
-        'CG-API-KEY': API_KEY,
-        'Content-Type': 'application/json',
-      },
+  // If numeric input, treat as CoinMarketCap-style coinId and resolve via Convex.
+  const numericCoinId = Number.parseInt(rawSymbol, 10);
+  if (!Number.isNaN(numericCoinId)) {
+    const resolved = await convex.query(api.coins.getCoinglassSymbolByCoinId, {
+      serverToken,
+      coinId: numericCoinId,
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("CoinGlass API error:", response.status, errorText);
+    if (!resolved) {
       return NextResponse.json(
-        { 
-          error: `CoinGlass API error: ${response.status}`,
-          details: errorText,
-          success: false 
+        {
+          success: false,
+          error: `Coin with ID ${numericCoinId} not found or not supported by CoinGlass`,
         },
-        { status: 500 }
+        { status: 400 },
       );
     }
-
-    const data = await response.json();
-
-    // Validate response
-    const validatedData = CoinglassOpenInterestResponseSchema.parse(data);
-
-    if (validatedData.code !== "0") {
-      console.error("CoinGlass API returned error:", validatedData.msg);
-      return NextResponse.json(
-        { 
-          error: `CoinGlass API error: ${validatedData.msg || 'Unknown error'}`,
-          success: false 
-        },
-        { status: 500 }
-      );
+    symbol = resolved.symbol.toUpperCase();
+    coinInfo = {
+      symbol,
+      name: resolved.name,
+      coinId: resolved.coinId,
+      isSupported: resolved.isSupported,
+    };
+  } else if (isProbablyCoinGeckoId(rawSymbol)) {
+    const coin = await convex.query(api.coins.getCoinGeckoCoinById, {
+      serverToken,
+      coingeckoId: rawSymbol.toLowerCase(),
+    });
+    if (coin) {
+      symbol = coin.symbol.toUpperCase();
     }
+  }
 
-    // Transform data - convert all values to numbers consistently
-    const transformedData = validatedData.data.map(item => ({
-      timestamp: item.time,
-      open: typeof item.open === 'string' ? parseFloat(item.open) : item.open,
-      high: typeof item.high === 'string' ? parseFloat(item.high) : item.high,
-      low: typeof item.low === 'string' ? parseFloat(item.low) : item.low,
-      close: typeof item.close === 'string' ? parseFloat(item.close) : item.close,
-    }));
+  const isSupported = await convex.query(api.coins.isCoinglassSupported, {
+    serverToken,
+    symbol,
+  });
+  if (!isSupported) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Symbol ${symbol} is not supported by CoinGlass`,
+        inputSymbol: rawSymbol,
+      },
+      { status: 400 },
+    );
+  }
 
-    return NextResponse.json({
+  const series = await convex.query(
+    api.coinglassReads.getOpenInterestHistorySeries,
+    {
+      serverToken,
+      symbol,
+      interval,
+      unit,
+      limit,
+      startTime:
+        typeof startTime === "number" && Number.isFinite(startTime)
+          ? startTime
+          : undefined,
+      endTime:
+        typeof endTime === "number" && Number.isFinite(endTime)
+          ? endTime
+          : undefined,
+    },
+  );
+
+  if (series.data.length < 2 || series.stale) {
+    void convex
+      .mutation(api.coinglassWarmup.requestOpenInterestHistoryRefresh, {
+        serverToken,
+        symbol,
+        interval,
+        unit,
+        limit,
+      })
+      .catch(() => null);
+  }
+
+  return NextResponse.json(
+    {
       success: true,
-      data: transformedData,
-      count: transformedData.length,
+      data: series.data.map((point) => ({
+        timestamp: point.timestamp,
+        open: point.open,
+        high: point.high,
+        low: point.low,
+        close: point.close,
+      })),
+      count: series.data.length,
       symbol,
       interval,
       unit,
       originalInput: rawSymbol,
       coinInfo,
-      lastUpdated: new Date().toISOString(),
-    });
-
-  } catch (error) {
-    console.error("Open interest route error:", error);
-    
-    return NextResponse.json(
-      { 
-        error: error instanceof Error ? error.message : 'Unknown server error',
-        success: false 
+      lastUpdated: new Date(series.lastUpdated || 0).toISOString(),
+    },
+    {
+      status: 200,
+      headers: {
+        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
       },
-      { status: 500 }
-    );
-  }
+    },
+  );
 }

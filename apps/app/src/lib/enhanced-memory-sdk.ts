@@ -148,7 +148,7 @@ export class EnhancedMemorySDK {
   // Retrieve memories by category
   async getMemoriesByCategory(
     category: StructuredMetadata['category'],
-    limit: number = 10
+    limit = 10
   ): Promise<{ memories: unknown[]; count: number }> {
     return await retrieveMemoriesWithIntent(
       this.userId,
@@ -164,7 +164,7 @@ export class EnhancedMemorySDK {
   }
 
   // Retrieve recent conversations
-  async getRecentConversations(limit: number = 10): Promise<{ memories: unknown[]; count: number }> {
+  async getRecentConversations(limit = 10): Promise<{ memories: unknown[]; count: number }> {
     return await retrieveMemoriesWithIntent(
       this.userId,
       '',

@@ -10,5 +10,7 @@ export const client = new Redis({
 
 // Add a check function to verify if Redis is properly configured
 export const isRedisConfigured = () => {
-  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+  return !!(
+    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+  );
 };

@@ -78,7 +78,6 @@ export function calculateOscillator1(
       case 'high': return d.high
       case 'low': return d.low
       case 'hlc3': return (d.high + d.low + d.close) / 3
-      case 'close':
       default: return d.close
     }
   })
@@ -95,7 +94,7 @@ export function calculateOscillator1(
   switch (type) {
     case 'RSI':
       values = rsi(sourceData, length)
-      signalLine = linearRegression(values.filter(v => !isNaN(v) && isFinite(v)), 21)
+      signalLine = linearRegression(values.filter(v => !Number.isNaN(v) && Number.isFinite(v)), 21)
       break
       
     case 'MFI':
@@ -106,17 +105,19 @@ export function calculateOscillator1(
       values = ultimateOscillator(highs, lows, closes, 7, 14, 28)
       break
       
-    case 'Williams %R':
+    case 'Williams %R': {
       const williamsValues = williamsR(highs, lows, closes, length)
       values = williamsValues.map(v => v + 100) // Shift up by 100
       break
+    }
       
-    case 'Double RSI':
+    case 'Double RSI': {
       const doubleRsiResult = doubleRSI(highs, lows, closes)
       values = doubleRsiResult.fast
       signalLine = doubleRsiResult.slow
       crossovers = doubleRsiResult.crossover
       break
+    }
   }
 
   // Calculate overbought/oversold levels
@@ -125,7 +126,7 @@ export function calculateOscillator1(
   
   for (let i = 0; i < values.length; i++) {
     const value = values[i]
-    if (value != null && !isNaN(value) && isFinite(value)) {
+    if (value != null && !Number.isNaN(value) && Number.isFinite(value)) {
       if (type === 'Ultimate Oscillator') {
         obLevels[i] = value > overbought - 1 ? 1 : 0
         osLevels[i] = value < oversold + 1 ? 1 : 0
@@ -176,7 +177,7 @@ export function calculateOscillators(
     oscillator1 = osc1Result.values
       .map((value, i) => {
         const time = times[i]
-        if (value != null && time != null && !isNaN(value) && isFinite(value)) {
+        if (value != null && time != null && !Number.isNaN(value) && Number.isFinite(value)) {
           // Normalize to center around 0 for display (-50 to +50 range)
           const normalizedValue = value - 50
           return { time, value: normalizedValue }
@@ -201,7 +202,7 @@ export function calculateOscillators(
     oscillator2 = osc2Result.values
       .map((value, i) => {
         const time = times[i]
-        if (value != null && time != null && !isNaN(value) && isFinite(value)) {
+        if (value != null && time != null && !Number.isNaN(value) && Number.isFinite(value)) {
           // Normalize to center around 0 for display (-50 to +50 range)
           const normalizedValue = value - 50
           return { time, value: normalizedValue }
@@ -239,13 +240,13 @@ export function oscillatorToSeriesData(
     if (!time) continue
     
     const value = oscillatorResult.values[i]
-    if (value != null && !isNaN(value) && isFinite(value)) {
+    if (value != null && !Number.isNaN(value) && Number.isFinite(value)) {
       main.push({ time, value })
     }
 
     if (oscillatorResult.signalLine) {
       const signalValue = oscillatorResult.signalLine[i]
-      if (signalValue != null && !isNaN(signalValue) && isFinite(signalValue)) {
+      if (signalValue != null && !Number.isNaN(signalValue) && Number.isFinite(signalValue)) {
         signal.push({ time, value: signalValue })
       }
     }
@@ -270,7 +271,7 @@ export function oscillatorToSeriesData(
 }
 
 // Fast MACD for trend meters
-export function fastMACD(data: number[], fastLength: number = 8, slowLength: number = 21, signalLength: number = 5): {
+export function fastMACD(data: number[], fastLength = 8, slowLength = 21, signalLength = 5): {
   macdLine: number[]
   signalLine: number[]
   histogram: number[]

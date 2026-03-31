@@ -121,7 +121,6 @@ export function calculateWaveTrend(
       case 'open': return d.open
       case 'high': return d.high
       case 'low': return d.low
-      case 'hlc3':
       default: return (d.high + d.low + d.close) / 3
     }
   })
@@ -188,7 +187,7 @@ export function calculateWaveTrend(
     for (let i = 0; i < times.length; i++) {
       const value = values[i]
       const time = times[i]
-      if (value != null && time != null && !isNaN(value) && isFinite(value)) {
+      if (value != null && time != null && !Number.isNaN(value) && Number.isFinite(value)) {
         result.push({ time, value })
       }
     }

@@ -1,5 +1,5 @@
-import React from 'react'
-import { LucideIcon } from 'lucide-react'
+import type React from 'react'
+import type { LucideIcon } from 'lucide-react'
 
 interface SectionHeaderProps {
   title: string
@@ -17,7 +17,7 @@ export function SectionHeader({ title, icon: Icon, className }: SectionHeaderPro
       
       {/* Header content */}
       <div className="relative flex items-center gap-3 bg-background px-2 rounded-full">        
-        <span className="text-xs text-white font-diatype-mono flex items-center gap-2">
+        <span className="text-xs text-white font-berkeley-mono flex items-center gap-2">
           {Icon && <Icon className="w-5 h-5 fill-foreground/30" />}
           {title}
         </span>

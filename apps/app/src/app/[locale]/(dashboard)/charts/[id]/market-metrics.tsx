@@ -38,29 +38,47 @@ export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: Ma
   }
 
   // React 19: Memoized metrics calculation using deferred data
-  const metrics: { label: string; value: string; className?: string; }[] = useMemo(() => [
-    { 
-      label: 'Market Cap', 
-      value: deferredData.market_cap ? `$${formatLargeNumber(deferredData.market_cap)}` : 'N/A',
-    },
-    { 
-      label: '24h Volume', 
-      value: deferredData.total_volume ? `$${formatLargeNumber(deferredData.total_volume)}` : 'N/A',
-    },
-    { 
-      label: '24h Change', 
-      value: deferredData.price_change_percentage_24h ? `${deferredData.price_change_percentage_24h.toFixed(2)}%` : 'N/A',
-      className: deferredData.price_change_percentage_24h && deferredData.price_change_percentage_24h > 0 ? 'text-emerald-500' : 'text-rose-500',
-    },
-    { 
-      label: 'Circulating Supply', 
-      value: deferredData.circulating_supply ? `${deferredData.circulating_supply.toLocaleString()}` : 'N/A',
-    },
-    { 
-      label: 'Max Supply', 
-      value: deferredData.max_supply ? `${deferredData.max_supply.toLocaleString()}` : 'Unlimited',
-    },
-  ], [deferredData])
+  const metrics: { label: string; value: string; className?: string }[] = useMemo(() => {
+    const marketCap =
+      deferredData.market_cap != null && Number.isFinite(deferredData.market_cap)
+        ? `$${formatLargeNumber(deferredData.market_cap)}`
+        : "N/A"
+
+    const volume24h =
+      deferredData.total_volume != null && Number.isFinite(deferredData.total_volume)
+        ? `$${formatLargeNumber(deferredData.total_volume)}`
+        : "N/A"
+
+    const change24h =
+      deferredData.price_change_percentage_24h != null && Number.isFinite(deferredData.price_change_percentage_24h)
+        ? `${deferredData.price_change_percentage_24h.toFixed(2)}%`
+        : "N/A"
+
+    const change24hClassName =
+      deferredData.price_change_percentage_24h != null && Number.isFinite(deferredData.price_change_percentage_24h)
+        ? deferredData.price_change_percentage_24h >= 0
+          ? "text-emerald-500"
+          : "text-rose-500"
+        : "text-muted-foreground"
+
+    const circulatingSupply =
+      deferredData.circulating_supply != null && Number.isFinite(deferredData.circulating_supply)
+        ? deferredData.circulating_supply.toLocaleString()
+        : "N/A"
+
+    const maxSupply =
+      deferredData.max_supply != null && Number.isFinite(deferredData.max_supply)
+        ? deferredData.max_supply.toLocaleString()
+        : "Unlimited"
+
+    return [
+      { label: "Market Cap", value: marketCap },
+      { label: "24h Volume", value: volume24h },
+      { label: "24h Change", value: change24h, className: change24hClassName },
+      { label: "Circulating Supply", value: circulatingSupply },
+      { label: "Max Supply", value: maxSupply },
+    ]
+  }, [deferredData])
 
   // React 19: Memoized development logging
   if (process.env.NODE_ENV === 'development') {
@@ -99,7 +117,7 @@ export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: Ma
           <div className="flex flex-col items-center">
             <span className="text-[11px] uppercase text-muted-foreground font-medium">Rank</span>
             <span className={cn(
-              "text-2xl font-diatype-mono text-white",
+              "text-2xl font-berkeley-mono text-white",
               showPending && "animate-pulse motion-reduce:animate-none"
             )}>
               {deferredData.market_cap_rank || 'N/A'}
@@ -132,7 +150,7 @@ export const MarketMetrics = memo(function MarketMetrics({ data, isPending }: Ma
               
               {/* Value - Centered with pending animation */}
               <div className={cn(
-                "text-md font-diatype-mono text-center",
+                "text-md font-berkeley-mono text-center",
                 metric.className || "text-foreground",
                 showPending && "animate-pulse motion-reduce:animate-none"
               )}>

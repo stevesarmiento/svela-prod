@@ -112,13 +112,13 @@ export function ChatMessage({
                     const isInline = !className;
                     if (isInline) {
                       return (
-                        <code className="bg-gray-100 text-gray-800 dark:bg-zinc-800/50 dark:text-zinc-200 px-1.5 py-0.5 rounded text-xs font-diatype-mono">
+                        <code className="bg-gray-100 text-gray-800 dark:bg-zinc-800/50 dark:text-zinc-200 px-1.5 py-0.5 rounded text-xs font-berkeley-mono">
                           {children}
                         </code>
                       );
                     }
                     return (
-                      <code className="block bg-gray-100 text-gray-800 dark:bg-zinc-900/50 dark:text-zinc-200 p-2 rounded text-xs font-diatype-mono overflow-x-auto">
+                      <code className="block bg-gray-100 text-gray-800 dark:bg-zinc-900/50 dark:text-zinc-200 p-2 rounded text-xs font-berkeley-mono overflow-x-auto">
                         {children}
                       </code>
                     );

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, DependencyList } from 'react'
+import { useMemo, type DependencyList } from 'react'
 
 /**
  * Hook to properly handle derived state calculations

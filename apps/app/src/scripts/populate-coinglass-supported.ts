@@ -1,7 +1,7 @@
 import { config } from 'dotenv';
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
-import path from 'path';
+import path from 'node:path';
 
 // Load environment variables from multiple possible locations
 config({ path: path.join(process.cwd(), '.env.local') });
@@ -47,7 +47,7 @@ async function populateCoinglassSupportedCoins() {
     console.log('Fetching supported coins from CoinGlass...');
     
     const response = await fetch(
-      `https://open-api-v4.coinglass.com/api/futures/supported-coins`,
+      "https://open-api-v4.coinglass.com/api/futures/supported-coins",
       {
         headers: {
           'CG-API-KEY': apiKeyConfirmed,

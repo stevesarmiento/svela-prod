@@ -1,7 +1,8 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useDeferredValue } from 'react'
-import { useChat } from 'ai/react'
+import { useChat } from '@ai-sdk/react'
+import { DefaultChatTransport, type UIMessage } from 'ai'
 import { useAuth } from '@/lib/convex-hooks'
 import { toast } from 'sonner'
 import { motion, useReducedMotion } from 'motion/react'
@@ -229,7 +230,7 @@ export function useChatToast() {
         </div>
       );
     }, {
-      duration: Infinity,
+      duration: Number.POSITIVE_INFINITY,
       position: 'top-center',
       onDismiss: async () => {
         // Immediate UI updates for responsiveness
@@ -282,6 +283,7 @@ export function useChatState() {
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [messageComponents, setMessageComponents] = useState<Record<string, ComponentData>>({});
   const [isStopped, setIsStopped] = useState(false);
+  const [input, setInput] = useState('');
   const lastDataQueryRef = useRef<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const stopResetFiberRef = useRef<Fiber.RuntimeFiber<void, never> | null>(null)
@@ -293,95 +295,72 @@ export function useChatState() {
   // React 19: Defer expensive message components for better performance
   const deferredMessageComponents = useDeferredValue(messageComponents);
 
-  const {
-    messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    isLoading,
-    error,
-    stop,
-  } = useChat({
-    api: '/api/chat',
-    body: {
-      userId: user?.id || null, // 🚀 Add userId for memory functionality
-    },
-    onResponse: async (response) => {
-      // Check if this is an enhanced response
-      const isEnhancedResponse = response.headers.get('X-Enhanced-Chat') === 'true';
-      
-      if (isEnhancedResponse) {
-        // Handle enhanced response from headers
-        const componentDataHeader = response.headers.get('X-Component-Data');
-        
-        if (componentDataHeader && lastDataQueryRef.current) {
-          try {
-            const componentData = JSON.parse(componentDataHeader);
-            console.log('📦 Enhanced component data received:', componentData);
-            
-            setMessageComponents(prev => {
-              const newComponents = {
+  const transport = React.useMemo(
+    () =>
+      new DefaultChatTransport<UIMessage>({
+        api: '/api/chat',
+        body: () => ({
+          userId: user?.id || null,
+        }),
+        fetch: async (input, init) => {
+          const response = await globalThis.fetch(input, init)
+
+          const isEnhancedResponse = response.headers.get('X-Enhanced-Chat') === 'true'
+          const componentDataHeader = response.headers.get('X-Component-Data')
+
+          if (componentDataHeader && lastDataQueryRef.current) {
+            try {
+              const parsedComponentData = JSON.parse(componentDataHeader) as ComponentData
+
+              if (isEnhancedResponse) {
+                console.log('📦 Enhanced component data received:', parsedComponentData)
+              }
+
+              setMessageComponents((prev) => ({
                 ...prev,
-                [`temp_${lastDataQueryRef.current}`]: componentData
-              };
-              
-              console.log('📦 Storing component data with temp key:', `temp_${lastDataQueryRef.current}`);
-              // Note: chatManager.setChatState will be called via useEffect when messageComponents updates
-              return newComponents;
-            });
-          } catch (err) {
-            console.error('Failed to parse enhanced component data:', err);
+                [`temp_${lastDataQueryRef.current}`]: parsedComponentData,
+              }))
+            } catch (err) {
+              console.error('Failed to parse component data:', err)
+            }
           }
-        }
-      } else {
-        // Handle basic response format (legacy)
-      const componentDataHeader = response.headers.get('X-Component-Data');
-      
-      if (componentDataHeader && lastDataQueryRef.current) {
-        try {
-          const parsedComponentData = JSON.parse(componentDataHeader);
-          setMessageComponents(prev => {
-            const newComponents = {
-              ...prev,
-              [`temp_${lastDataQueryRef.current}`]: parsedComponentData
-            };
-            
-            // Note: chatManager.setChatState will be called via useEffect when messageComponents updates
-            return newComponents;
-          });
-        } catch (err) {
-          console.error('Failed to parse component data:', err);
-          }
-        }
-      }
-    },
-    onFinish: async (message) => {
-      setIsDataLoading(false);
-      setIsStopped(false);
-      abortControllerRef.current = null;
-      
-      // Move component data from temp key to actual message ID
+
+          return response
+        },
+      }),
+    [user?.id],
+  )
+
+  const { messages, status, error, sendMessage, stop } = useChat({
+    transport,
+    onFinish: ({ message }) => {
+      setIsDataLoading(false)
+      setIsStopped(false)
+      abortControllerRef.current = null
+
       if (message.role === 'assistant' && lastDataQueryRef.current) {
-        const tempKey = `temp_${lastDataQueryRef.current}`;
-        console.log('🔄 Moving component data from temp key to message ID:', { tempKey, messageId: message.id });
-        
-        setMessageComponents(prev => {
-          const componentData = prev[tempKey];
-          console.log('📦 Component data found for temp key:', !!componentData, componentData?.type);
-          if (componentData) {
-            const newComponents = { ...prev };
-            delete newComponents[tempKey];
-            newComponents[message.id] = componentData;
-            console.log('✅ Component data moved to message ID:', message.id);
-            return newComponents;
-          }
-          console.log('❌ No component data found for temp key:', tempKey);
-          return prev;
-        });
-        lastDataQueryRef.current = null;
+        const tempKey = `temp_${lastDataQueryRef.current}`
+
+        setMessageComponents((prev) => {
+          const componentData = prev[tempKey]
+          if (!componentData) return prev
+
+          const next = { ...prev }
+          delete next[tempKey]
+          next[message.id] = componentData
+          return next
+        })
+
+        lastDataQueryRef.current = null
       }
     },
-  });
+  })
+
+  const isLoading = status === 'submitted' || status === 'streaming'
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(e.target.value)
+  }
 
   // ✅ OPTIMIZED: Direct state updates instead of useEffect synchronization
   // React batches these automatically for better performance
@@ -453,12 +432,13 @@ Examples:
         lastDataQueryRef.current = null;
       }
       
-      handleSubmit(e);
+      await sendMessage({ text: input });
+      setInput('');
     }
   };
 
   const handleStop = () => {
-    stop();
+    void stop();
     
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();

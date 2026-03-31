@@ -140,7 +140,7 @@ export async function archiveOldMemories(
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`❌ [Background Job] Archive failed:`, error);
+    console.error("❌ [Background Job] Archive failed:", error);
     result.errors.push(errorMessage);
   }
 

@@ -84,7 +84,7 @@ function doesAnyValueCrossUp(
   startTime: number,
   endValue: number,
   endTime: number,
-  diff: number = 1.05,
+  diff = 1.05,
   valueColumn: 'close' | 'rsi' = 'close',
   rsiValues?: number[]
 ): boolean {
@@ -116,7 +116,7 @@ function doesAnyValueCrossDown(
   startTime: number,
   endValue: number,
   endTime: number,
-  diff: number = 1.05,
+  diff = 1.05,
   valueColumn: 'close' | 'rsi' = 'close',
   rsiValues?: number[]
 ): boolean {
@@ -145,7 +145,7 @@ function doesAnyValueCrossDown(
 function getRSIDivergences(
   data: OHLCVDataPoint[],
   rsiValues: number[],
-  currentCandleIndex: number = -1
+  currentCandleIndex = -1
 ): DivergencePoint[] {
   const divergences: DivergencePoint[] = []
   
@@ -185,7 +185,7 @@ function getRSIDivergences(
   }
   
   // Check all divergence conditions with detailed logging
-  console.log(`🔍 Checking divergence conditions:`)
+  console.log("🔍 Checking divergence conditions:")
   console.log(`  Bullish: RSI ≤ 37 (${currentRSI} ≤ 37) AND RSI change < 0 (${currentRSIChange} < 0) = ${currentRSI <= 37 && currentRSIChange < 0}`)
   console.log(`  Bearish: RSI ≥ 63 (${currentRSI} ≥ 63) AND RSI change > 0 (${currentRSIChange} > 0) = ${currentRSI >= 63 && currentRSIChange > 0}`)
   console.log(`  H.Bearish: 50 < RSI ≤ 70 (${currentRSI}) AND RSI change > 0 (${currentRSIChange}) = ${currentRSI > 50 && currentRSI <= 70 && currentRSIChange > 0}`)
@@ -476,7 +476,7 @@ function getAllRSIDivergences(data: OHLCVDataPoint[], rsiValues: number[]): Dive
 }
 
 // On Balance Volume calculation
-export function onBalanceVolume(data: OHLCVDataPoint[], useStandardCandles: boolean = false): number[] {
+export function onBalanceVolume(data: OHLCVDataPoint[], useStandardCandles = false): number[] {
   const result: number[] = []
   let cumulative = 0
   
@@ -553,9 +553,9 @@ export function calculateRSIStochastic(
 // Double Stochastic calculations
 export function calculateDoubleStochastic(
   data: OHLCVDataPoint[],
-  kPeriod: number = 21,
-  dPeriod: number = 4,
-  smoothing: number = 10
+  kPeriod = 21,
+  dPeriod = 4,
+  smoothing = 10
 ): { k: number[], d: number[] } {
   const highs = data.map(d => d.high)
   const lows = data.map(d => d.low)
@@ -567,10 +567,10 @@ export function calculateDoubleStochastic(
 // Double RSI Stochastic (long term)
 export function calculateDoubleRSIStochastic(
   data: OHLCVDataPoint[],
-  rsiLength: number = 14,
-  stochLength: number = 14,
-  kSmoothing: number = 3,
-  dSmoothing: number = 3
+  rsiLength = 14,
+  stochLength = 14,
+  kSmoothing = 3,
+  dSmoothing = 3
 ): { k: number[], d: number[] } {
   const closes = data.map(d => d.close)
   return calculateRSIStochastic(closes, rsiLength, stochLength, kSmoothing, dSmoothing)
@@ -662,7 +662,7 @@ export function calculateStochasticIndicator(
     for (let i = 0; i < times.length; i++) {
       const value = values[i]
       const time = times[i]
-      if (value != null && time != null && !isNaN(value) && isFinite(value)) {
+      if (value != null && time != null && !Number.isNaN(value) && Number.isFinite(value)) {
         result.push({ time, value })
       }
     }

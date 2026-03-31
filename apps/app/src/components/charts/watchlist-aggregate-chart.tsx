@@ -1,11 +1,10 @@
 'use client'
 
-import React, { useRef } from "react"
-import type { IChartApi, ISeriesApi, Time as LightweightTime } from 'lightweight-charts'
-import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
-import { subscribeToWindowResize } from '@/hooks/window-resize-store'
-import { Effect } from "effect"
-import { useEffectScoped } from "@/lib/effect/react"
+import type React from "react"
+import { useMemo } from "react"
+import type { Time as LightweightTime } from "lightweight-charts"
+import { Liveline } from "liveline"
+import type { LivelinePoint } from "liveline"
 
 interface AggregateDataPoint {
   time: LightweightTime
@@ -19,150 +18,57 @@ interface WatchlistAggregateChartProps {
   height?: number
 }
 
+function toUnixSeconds(time: LightweightTime): number | null {
+  if (typeof time === "number") return Number.isFinite(time) ? time : null
+
+  if (typeof time === "string") {
+    const [year, month, day] = time.split("-").map((part) => Number(part))
+    if (!year || !month || !day) return null
+    return Math.floor(Date.UTC(year, month - 1, day) / 1000)
+  }
+
+  if (typeof time === "object" && time) {
+    const maybe = time as { year?: unknown; month?: unknown; day?: unknown }
+    const year = typeof maybe.year === "number" ? maybe.year : null
+    const month = typeof maybe.month === "number" ? maybe.month : null
+    const day = typeof maybe.day === "number" ? maybe.day : null
+    if (!year || !month || !day) return null
+    return Math.floor(Date.UTC(year, month - 1, day) / 1000)
+  }
+
+  return null
+}
+
 export function WatchlistAggregateChart({ 
   data, 
-  isPositive, 
+  isPositive: _isPositive, 
   width = 0, 
   height = 0 
 }: WatchlistAggregateChartProps) {
-  const chartContainerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<IChartApi | null>(null)
-  const lineSeriesRef = useRef<ISeriesApi<"Line"> | null>(null)
-  const hasData = data.length > 0
+  const resolvedTheme = "dark"
 
-  useEffectScoped(
-    () => {
-      const container = chartContainerRef.current
-      if (!container || !hasData) return Effect.void
+  const points = useMemo((): LivelinePoint[] => {
+    const result: LivelinePoint[] = []
+    for (const point of data) {
+      const time = toUnixSeconds(point.time)
+      if (time === null) continue
+      if (!Number.isFinite(point.value)) continue
+      result.push({ time, value: point.value })
+    }
+    return result
+  }, [data])
 
-      return Effect.acquireRelease(
-        Effect.gen(function* () {
-          // Clean up any previous instance before creating a new one.
-          yield* Effect.sync(() => {
-            if (!chartRef.current) return
-            try {
-              chartRef.current.remove()
-            } catch (error) {
-              // Ignore cleanup errors.
-            }
-            chartRef.current = null
-            lineSeriesRef.current = null
-          })
+  const latestValue = points[points.length - 1]?.value ?? 0
 
-          const { createChart, ColorType, LineStyle, LineSeries } = yield* Effect.tryPromise({
-            try: () => loadLightweightCharts(),
-            catch: (error) => error,
-          })
+  const windowSecs = useMemo(() => {
+    if (points.length < 2) return 30
+    const first = points[0]?.time
+    const last = points[points.length - 1]?.time
+    if (typeof first !== "number" || typeof last !== "number") return 30
+    return Math.max(30, last - first)
+  }, [points])
 
-          const chart = yield* Effect.try({
-            try: () =>
-              createChart(container, {
-                layout: {
-                  background: { type: ColorType.Solid, color: "transparent" },
-                  textColor: "transparent",
-                  fontSize: 0,
-                  attributionLogo: false,
-                },
-                width,
-                height,
-                rightPriceScale: {
-                  visible: false,
-                },
-                leftPriceScale: {
-                  visible: false,
-                },
-                timeScale: {
-                  visible: false,
-                  borderVisible: false,
-                },
-                grid: {
-                  vertLines: { visible: false },
-                  horzLines: { visible: false },
-                },
-                crosshair: {
-                  mode: 0, // Disabled
-                  vertLine: { visible: false },
-                  horzLine: { visible: false },
-                },
-                handleScroll: false,
-                handleScale: false,
-              }),
-            catch: (error) => error,
-          })
-
-          const lineSeries = chart.addSeries(LineSeries, {
-            // color: isPositive ? "#10B981" : "#EF4444", // Green for positive, red for negative
-            color: "#ffffff50",
-            lineWidth: 2,
-            priceLineVisible: false,
-            lastValueVisible: false,
-            lineStyle: LineStyle.Solid,
-          })
-
-          lineSeries.setData(data)
-          chart.timeScale().fitContent()
-
-          chartRef.current = chart
-          lineSeriesRef.current = lineSeries
-
-          const resizeRafIdRef: { current: number | null } = { current: null }
-          let resizeObserver: ResizeObserver | null = null
-          let unsubscribeWindowResize: (() => void) | null = null
-
-          const handleResize = () => {
-            if (!chartContainerRef.current) return
-            chart.applyOptions({
-              width: chartContainerRef.current.clientWidth,
-              height,
-            })
-          }
-
-          if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
-            resizeObserver = new ResizeObserver(() => {
-              if (resizeRafIdRef.current) cancelAnimationFrame(resizeRafIdRef.current)
-              resizeRafIdRef.current = requestAnimationFrame(() => handleResize())
-            })
-            resizeObserver.observe(chartContainerRef.current)
-          } else {
-            unsubscribeWindowResize = subscribeToWindowResize(handleResize)
-          }
-
-          handleResize()
-
-          return { chart, resizeObserver, unsubscribeWindowResize, resizeRafIdRef } as const
-        }),
-        ({ chart, resizeObserver, unsubscribeWindowResize, resizeRafIdRef }) =>
-          Effect.sync(() => {
-            if (resizeRafIdRef.current) cancelAnimationFrame(resizeRafIdRef.current)
-            resizeObserver?.disconnect()
-            unsubscribeWindowResize?.()
-            try {
-              chart.remove()
-            } catch (error) {
-              // Ignore cleanup errors.
-            }
-            chartRef.current = null
-            lineSeriesRef.current = null
-          }),
-      ).pipe(
-        Effect.flatMap(() => Effect.never),
-        Effect.asVoid,
-      )
-    },
-    [hasData, isPositive, width, height],
-  )
-
-  React.useEffect(() => {
-    if (!hasData) return
-    const series = lineSeriesRef.current
-    const chart = chartRef.current
-    if (!series || !chart) return
-
-    series.setData(data)
-    chart.timeScale().fitContent()
-  }, [data, hasData])
-
-  if (data.length === 0) {
+  if (points.length === 0) {
     return (
       <div 
         style={{ width, height }} 
@@ -173,9 +79,34 @@ export function WatchlistAggregateChart({
     )
   }
 
+  const wrapperStyle: React.CSSProperties = {
+    height,
+    ...(width > 0 ? { width } : null),
+  }
+
+  const livelineTheme = "dark"
+  const livelineColor = "#e5e7eb"
+  const opacityClassName = "opacity-60"
+
   return (
-    <div className="w-full relative">
-      <div ref={chartContainerRef} className="w-full" style={{ height }} />
+    <div className="w-full relative" style={wrapperStyle}>
+      <Liveline
+        data={points}
+        value={latestValue}
+        theme={livelineTheme}
+        color={livelineColor}
+        lineWidth={2}
+        window={windowSecs}
+        formatTime={() => ""}
+        exaggerate
+        grid={false}
+        badge={false}
+        fill={false}
+        pulse={false}
+        scrub={false}
+        momentum={false}
+        className={`size-full ${opacityClassName}`}
+      />
     </div>
   )
 } 

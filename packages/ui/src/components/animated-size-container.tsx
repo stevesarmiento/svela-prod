@@ -1,13 +1,19 @@
-import { motion, type HTMLMotionProps } from "motion/react";
+import { type HTMLMotionProps, motion } from "motion/react";
 
-import { type ComponentType, type PropsWithChildren, forwardRef, useRef } from "react";
+import {
+  type ComponentType,
+  type PropsWithChildren,
+  forwardRef,
+  useRef,
+} from "react";
 import { useResizeObserver } from "../hooks";
 import { cn } from "../utils";
 
 type AnimatedSizeContainerProps = PropsWithChildren<{
   width?: boolean;
   height?: boolean;
-}> & Omit<HTMLMotionProps<"div">, "animate" | "children">;
+}> &
+  Omit<HTMLMotionProps<"div">, "animate" | "children">;
 
 const MotionDiv = motion.div as ComponentType<HTMLMotionProps<"div">>;
 

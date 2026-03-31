@@ -1,4 +1,4 @@
-import { Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect"
+import { type Effect, type Exit, type Fiber, Layer, ManagedRuntime } from "effect"
 import { CacheQueue } from "./cache-queue"
 
 /**

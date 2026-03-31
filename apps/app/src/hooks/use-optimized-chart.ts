@@ -174,7 +174,7 @@ export function useOptimizedChart(options: UseOptimizedChartOptions = {}) {
 /**
  * Simplified hook for basic line charts
  */
-export function useLineChart(height: number = 400) {
+export function useLineChart(height = 400) {
   return useOptimizedChart({ 
     height, 
     showGrid: false, 
@@ -185,7 +185,7 @@ export function useLineChart(height: number = 400) {
 /**
  * Hook for trading charts with full features
  */
-export function useTradingChart(height: number = 400) {
+export function useTradingChart(height = 400) {
   return useOptimizedChart({ 
     height, 
     showGrid: true, 

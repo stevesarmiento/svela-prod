@@ -8,7 +8,6 @@ if (!apiKey) {
 
 export const openai = apiKey ? createOpenAI({
   apiKey,
-  compatibility: 'strict',
 }) : null
 
 export const isOpenAIAvailable = !!apiKey

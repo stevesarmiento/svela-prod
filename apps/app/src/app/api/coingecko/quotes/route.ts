@@ -1,242 +1,394 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getCoinsMarketData } from '@/lib/coingecko'
-import { auth } from '@clerk/nextjs/server'
-import { getUserApiKey } from '@/lib/user-api-keys'
+import { NextResponse, type NextRequest } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { api } from "../../../../../convex/_generated/api";
+import { convex, getServerToken } from "@/lib/convex-server";
+import { getUserApiKey } from "@/lib/user-api-keys";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
-interface CoinGeckoMarketData {
-  id: string
-  name: string
-  symbol: string
-  market_cap_rank: number
-  image: string
-  current_price: number
-  market_cap: number
-  fully_diluted_valuation: number | null
-  total_volume: number
-  high_24h: number
-  low_24h: number
-  price_change_24h: number
-  price_change_percentage_24h: number
-  price_change_percentage_7d_in_currency: number | null
-  price_change_percentage_14d_in_currency: number | null
-  price_change_percentage_30d_in_currency: number | null
-  price_change_percentage_200d_in_currency: number | null
-  price_change_percentage_1y_in_currency: number | null
-  price_change_percentage_1h_in_currency: number | null
-  market_cap_change_24h: number
-  market_cap_change_percentage_24h: number
-  circulating_supply: number
-  total_supply: number | null
-  max_supply: number | null
-  ath: number
-  ath_change_percentage: number
-  ath_date: string
-  atl: number
-  atl_change_percentage: number
-  atl_date: string
-  roi: { times: number; currency: string; percentage: number } | null
-  last_updated: string
-  sparkline_in_7d: { price: number[] }
+function parseCsv(value: string | null): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v.length > 0);
 }
 
-interface SearchParams {
-  ids?: string
-  symbols?: string
-  names?: string
-  category?: string
-  limit?: number
+interface CoinGeckoMarketsRow {
+  id: string;
+  symbol: string;
+  name: string;
+  image: string;
+  sparkline_in_7d?: {
+    price?: number[];
+  };
+  current_price?: number;
+  market_cap?: number;
+  market_cap_rank?: number;
+  total_volume?: number;
+  price_change_percentage_24h?: number;
+  price_change_percentage_1h_in_currency?: number;
+  price_change_percentage_7d_in_currency?: number;
+  price_change_percentage_30d_in_currency?: number;
+  circulating_supply?: number;
+  max_supply?: number | null;
+  last_updated?: string;
+}
+
+interface CoinGeckoCoinResponse {
+  id: string;
+  symbol: string;
+  name: string;
+  image?: {
+    thumb?: string;
+    small?: string;
+    large?: string;
+  };
+  market_data?: {
+    current_price?: { usd?: number };
+    market_cap?: { usd?: number };
+    total_volume?: { usd?: number };
+    market_cap_rank?: number;
+    price_change_percentage_24h?: number;
+    price_change_percentage_1h_in_currency?: { usd?: number };
+    price_change_percentage_7d_in_currency?: { usd?: number };
+    price_change_percentage_30d_in_currency?: { usd?: number };
+    circulating_supply?: number;
+    max_supply?: number | null;
+    last_updated?: string;
+  };
+}
+
+async function fetchCoinGeckoMarkets(args: {
+  apiKey: string;
+  ids?: ReadonlyArray<string>;
+  perPage: number;
+}): Promise<CoinGeckoMarketsRow[]> {
+  const url = new URL("https://pro-api.coingecko.com/api/v3/coins/markets");
+  url.searchParams.set("vs_currency", "usd");
+  url.searchParams.set("order", "market_cap_desc");
+  url.searchParams.set("per_page", String(Math.min(250, Math.max(1, args.perPage))));
+  url.searchParams.set("page", "1");
+  // Needed to render Watchlist inline charts without per-coin market-chart fan-out.
+  url.searchParams.set("sparkline", "true");
+  url.searchParams.set("price_change_percentage", "1h,24h,7d,30d");
+
+  if (args.ids && args.ids.length > 0) {
+    url.searchParams.set("ids", args.ids.join(","));
+    url.searchParams.set("per_page", String(Math.min(250, args.ids.length)));
+  }
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      "x-cg-pro-api-key": args.apiKey,
+      Accept: "application/json",
+    },
+    next: { revalidate: 30 },
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`CoinGecko request failed (${response.status}): ${body.slice(0, 200)}`);
+  }
+
+  const data = (await response.json()) as unknown;
+  if (!Array.isArray(data)) return [];
+  return data as CoinGeckoMarketsRow[];
+}
+
+async function fetchCoinGeckoCoin(args: {
+  apiKey: string;
+  id: string;
+}): Promise<CoinGeckoCoinResponse | null> {
+  const url = new URL(`https://pro-api.coingecko.com/api/v3/coins/${encodeURIComponent(args.id)}`);
+  url.searchParams.set("localization", "false");
+  url.searchParams.set("tickers", "false");
+  url.searchParams.set("market_data", "true");
+  url.searchParams.set("community_data", "false");
+  url.searchParams.set("developer_data", "false");
+  url.searchParams.set("sparkline", "false");
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      "x-cg-pro-api-key": args.apiKey,
+      Accept: "application/json",
+    },
+    next: { revalidate: 30 },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = (await response.json()) as unknown;
+  if (typeof data !== "object" || data === null) return null;
+  return data as CoinGeckoCoinResponse;
+}
+
+function chunk<T>(items: ReadonlyArray<T>, size: number): Array<Array<T>> {
+  const out: Array<Array<T>> = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+interface CoingeckoMarketUpsertItem {
+  coingeckoId: string;
+  symbol: string;
+  name: string;
+  image: string;
+  currentPrice?: number;
+  marketCap?: number;
+  marketCapRank?: number;
+  totalVolume?: number;
+  circulatingSupply?: number;
+  maxSupply?: number;
+  lastUpdated: string;
 }
 
 export async function GET(request: NextRequest) {
+  let userId: string | null = null;
   try {
-    // Get user authentication (optional for API key resolution)
-    // Note: auth() may fail in API routes due to middleware config, so we handle it gracefully
-    let clerkId: string | null = null;
-    try {
-      const authResult = await auth();
-      clerkId = authResult.userId;
-    } catch (error) {
-      // Auth failed, will use environment fallback
-      console.log('Auth not available in API route, using environment fallback:', error instanceof Error ? error.message : 'Unknown error');
-    }
-    
-    // Get API key - user's key takes precedence over environment variable
-    const apiKeyResult = await getUserApiKey(clerkId, 'coingecko', 'X_CG_PRO_API_KEY');
-    
-    if (!apiKeyResult.key) {
-      return NextResponse.json(
-        { error: 'CoinGecko API key not available. Please add your API key in settings or configure X_CG_PRO_API_KEY environment variable.' },
-        { status: 500 }
+    userId = (await auth()).userId;
+  } catch {
+    userId = null;
+  }
+
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const ids = parseCsv(searchParams.get("ids"));
+    const symbols = parseCsv(searchParams.get("symbols"));
+    const names = parseCsv(searchParams.get("names"));
+    const category = searchParams.get("category");
+    const limit = Math.min(250, Math.max(1, Number(searchParams.get("limit") ?? "100")));
+
+    const serverToken = getServerToken();
+
+    let resolvedIds: string[] = [];
+    let warning: string | null = null;
+
+    if (ids.length > 0) {
+      resolvedIds = ids;
+    } else if (symbols.length > 0) {
+      const symbolMatches = await Promise.all(
+        symbols.map(async (symbol) => {
+          return await convex.query(api.coins.getCoinGeckoCoinsBySymbol, {
+            serverToken,
+            symbol,
+          });
+        }),
       );
-    }
-    
-    const searchParams = request.nextUrl.searchParams
-    
-    // Extract all possible search parameters
-    const params: SearchParams = {
-      ids: searchParams.get('ids') || undefined,
-      symbols: searchParams.get('symbols') || undefined,
-      names: searchParams.get('names') || undefined,
-      category: searchParams.get('category') || undefined,
-      limit: searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 100
-    }
-
-    // If no search parameters are provided, default to top coins by market cap
-    
-    // Build the query parameters for CoinGecko API
-    let idsArray: string[] = []
-    let useDirectAPI = false
-
-    if (params.ids) {
-      idsArray = params.ids.split(',').map(id => id.trim())
-    } else {
-      // For symbol, name, category searches, or top coins request, we'll use the markets endpoint directly
-      useDirectAPI = true
+      resolvedIds = symbolMatches.flat().map((c) => c.coingeckoId);
+    } else if (names.length > 0) {
+      const nameMatches = await Promise.all(
+        names.map(async (name) => {
+          const results = await convex.query(api.coins.searchCoinGeckoCoins, {
+            serverToken,
+            query: name,
+            limit: Math.min(25, limit),
+          });
+          return results;
+        }),
+      );
+      resolvedIds = nameMatches.flat().map((c) => c.coingeckoId);
+    } else if (category) {
+      warning = "Category filtering is not yet available; returning top coins.";
     }
 
-    if (idsArray.length === 0 && !useDirectAPI) {
-      return NextResponse.json(
-        { data: {} },
-        { 
-          status: 200,
-          headers: {
-            'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60'
+    resolvedIds = Array.from(new Set(resolvedIds)).slice(0, limit);
+
+    const data: Record<string, unknown> = {};
+
+    const apiKeyResult = await getUserApiKey(userId, "coingecko", "X_CG_PRO_API_KEY");
+    const apiKey = apiKeyResult.key;
+
+    if (apiKey) {
+      const rows = await fetchCoinGeckoMarkets({
+        apiKey,
+        ids: resolvedIds.length > 0 ? resolvedIds : undefined,
+        perPage: resolvedIds.length > 0 ? resolvedIds.length : limit,
+      });
+
+      for (const row of rows) {
+        const sparkline7d =
+          Array.isArray(row.sparkline_in_7d?.price) && row.sparkline_in_7d.price.length >= 2
+            ? row.sparkline_in_7d.price.filter((v) => typeof v === "number" && Number.isFinite(v))
+            : undefined;
+
+        data[row.id] = {
+          id: row.id,
+          name: row.name,
+          symbol: row.symbol?.toUpperCase?.() ? row.symbol.toUpperCase() : row.symbol,
+          market_cap_rank: row.market_cap_rank ?? null,
+          image: row.image,
+          current_price: row.current_price ?? null,
+          market_cap: row.market_cap ?? null,
+          total_volume: row.total_volume ?? null,
+          price_change_percentage_24h: row.price_change_percentage_24h ?? null,
+          price_change_percentage_1h_in_currency: row.price_change_percentage_1h_in_currency ?? null,
+          price_change_percentage_7d_in_currency: row.price_change_percentage_7d_in_currency ?? null,
+          price_change_percentage_30d_in_currency: row.price_change_percentage_30d_in_currency ?? null,
+          circulating_supply: row.circulating_supply ?? null,
+          max_supply: row.max_supply ?? null,
+          last_updated: row.last_updated ?? new Date().toISOString(),
+          sparkline7d,
+        };
+      }
+
+      if (resolvedIds.length > 0) {
+        const missingIds = resolvedIds.filter((id) => data[id] === undefined);
+        if (missingIds.length > 0) {
+          // Fallback: some valid CoinGecko ids occasionally don't show up in `coins/markets`.
+          // Try the per-coin endpoint to avoid blank watchlist rows.
+          const fallbackCoins = await Promise.all(
+            missingIds.map(async (id) => {
+              const coin = await fetchCoinGeckoCoin({ apiKey, id });
+              if (!coin) return null;
+              const md = coin.market_data;
+              const image = coin.image?.large ?? coin.image?.small ?? coin.image?.thumb ?? "";
+
+              data[id] = {
+                id: coin.id ?? id,
+                name: coin.name ?? id,
+                symbol: coin.symbol?.toUpperCase?.() ? coin.symbol.toUpperCase() : coin.symbol ?? "N/A",
+                market_cap_rank: md?.market_cap_rank ?? null,
+                image,
+                current_price: md?.current_price?.usd ?? null,
+                market_cap: md?.market_cap?.usd ?? null,
+                total_volume: md?.total_volume?.usd ?? null,
+                price_change_percentage_24h: md?.price_change_percentage_24h ?? null,
+                price_change_percentage_1h_in_currency:
+                  md?.price_change_percentage_1h_in_currency?.usd ?? null,
+                price_change_percentage_7d_in_currency:
+                  md?.price_change_percentage_7d_in_currency?.usd ?? null,
+                price_change_percentage_30d_in_currency:
+                  md?.price_change_percentage_30d_in_currency?.usd ?? null,
+                circulating_supply: md?.circulating_supply ?? null,
+                max_supply: md?.max_supply ?? null,
+                last_updated: md?.last_updated ?? new Date().toISOString(),
+              };
+
+              return id;
+            }),
+          );
+
+          const stillMissing = missingIds.filter((id) => data[id] === undefined);
+
+          await convex.mutation(api.coingeckoWarmup.requestMarketsRefresh, {
+            serverToken,
+            coingeckoIds: stillMissing,
+          });
+
+          // If we successfully filled some via fallback, keep the warmup set minimal.
+          void fallbackCoins;
+        }
+
+        // Persist what we *did* fetch into Convex so portfolio/watchlist rendering works even
+        // when clients later fall back to cached DB data.
+        const marketItems: CoingeckoMarketUpsertItem[] = [];
+        for (const id of resolvedIds) {
+          const row = data[id] as
+            | {
+                id: string;
+                name: string;
+                symbol: string;
+                image: string;
+                current_price: number | null;
+                market_cap: number | null;
+                market_cap_rank: number | null;
+                total_volume: number | null;
+                circulating_supply: number | null;
+                max_supply: number | null;
+                last_updated: string;
+              }
+            | undefined;
+          if (!row) continue;
+          marketItems.push({
+            coingeckoId: row.id,
+            symbol: row.symbol,
+            name: row.name,
+            image: row.image,
+            currentPrice: row.current_price ?? undefined,
+            marketCap: row.market_cap ?? undefined,
+            marketCapRank:
+              row.market_cap_rank !== null && row.market_cap_rank > 0 ? row.market_cap_rank : undefined,
+            totalVolume: row.total_volume ?? undefined,
+            circulatingSupply: row.circulating_supply ?? undefined,
+            maxSupply: row.max_supply ?? undefined,
+            lastUpdated: row.last_updated,
+          });
+        }
+
+        if (marketItems.length > 0) {
+          for (const itemChunk of chunk(marketItems, 100)) {
+            await convex.mutation(api.coingeckoMarkets.upsertMarketDataBatch, {
+              serverToken,
+              items: itemChunk,
+            });
           }
         }
-      )
-    }
-
-    let marketData: CoinGeckoMarketData[]
-
-    if (useDirectAPI) {
-      // Use the enhanced markets endpoint with symbol/name/category search or top coins
-      const apiParams = new URLSearchParams({
-        vs_currency: 'usd',
-        order: 'market_cap_desc',
-        per_page: Math.min(params.limit || 100, 250).toString(),
-        page: '1',
-        sparkline: 'true',
-        price_change_percentage: '1h,24h,7d,14d,30d,200d,1y'
-      })
-
-      // Add search-specific parameters based on priority (category > names > symbols)
-      // If no search params, this will just get top coins by market cap
-      if (params.category) {
-        apiParams.append('category', params.category)
-      } else if (params.names) {
-        // URL encode names for spaces
-        const encodedNames = params.names.split(',')
-          .map(name => encodeURIComponent(name.trim()))
-          .join(',')
-        apiParams.append('names', encodedNames)
-      } else if (params.symbols) {
-        apiParams.append('symbols', params.symbols.toLowerCase())
-        apiParams.append('include_tokens', 'all') // Include all matching tokens for symbols
       }
-      // If none of the above, it will just fetch top coins by market cap (default behavior)
-
-      // Call CoinGecko API directly with enhanced parameters
-      const response = await fetch(
-        `https://pro-api.coingecko.com/api/v3/coins/markets?${apiParams}`,
-        {
-          headers: {
-            'x-cg-pro-api-key': apiKeyResult.key,
-            'Content-Type': 'application/json',
-          },
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error(`CoinGecko API error: ${response.status}`)
-      }
-
-      marketData = await response.json()
     } else {
-      // Use existing method for ID-based searches
-      marketData = await getCoinsMarketData(
-        idsArray,
-        'usd',
-        'market_cap_desc',
-        Math.min(params.limit || 100, 250),
-        1,
-        true, // include sparkline
-        '1h,24h,7d,14d,30d,200d,1y'
-      ) as CoinGeckoMarketData[]
-    }
+      warning = warning
+        ? `${warning} Missing CoinGecko API key; falling back to cached DB.`
+        : "Missing CoinGecko API key; falling back to cached DB.";
 
-    // Transform CoinGecko data to match our expected format
-    const transformedData: Record<string, CoinGeckoMarketData> = {}
-    
-    marketData.forEach((coin: CoinGeckoMarketData) => {
-      transformedData[coin.id] = {
-        id: coin.id,
-        name: coin.name,
-        symbol: coin.symbol.toUpperCase(),
-        market_cap_rank: coin.market_cap_rank,
-        image: coin.image,
-        current_price: coin.current_price,
-        market_cap: coin.market_cap,
-        fully_diluted_valuation: coin.fully_diluted_valuation,
-        total_volume: coin.total_volume,
-        high_24h: coin.high_24h,
-        low_24h: coin.low_24h,
-        price_change_24h: coin.price_change_24h,
-        price_change_percentage_24h: coin.price_change_percentage_24h,
-        price_change_percentage_7d_in_currency: coin.price_change_percentage_7d_in_currency,
-        price_change_percentage_14d_in_currency: coin.price_change_percentage_14d_in_currency,
-        price_change_percentage_30d_in_currency: coin.price_change_percentage_30d_in_currency,
-        price_change_percentage_200d_in_currency: coin.price_change_percentage_200d_in_currency,
-        price_change_percentage_1y_in_currency: coin.price_change_percentage_1y_in_currency,
-        market_cap_change_24h: coin.market_cap_change_24h,
-        market_cap_change_percentage_24h: coin.market_cap_change_percentage_24h,
-        circulating_supply: coin.circulating_supply,
-        total_supply: coin.total_supply,
-        max_supply: coin.max_supply,
-        ath: coin.ath,
-        ath_change_percentage: coin.ath_change_percentage,
-        ath_date: coin.ath_date,
-        atl: coin.atl,
-        atl_change_percentage: coin.atl_change_percentage,
-        atl_date: coin.atl_date,
-        roi: coin.roi,
-        last_updated: coin.last_updated,
-        sparkline_in_7d: coin.sparkline_in_7d,
-        price_change_percentage_1h_in_currency: coin.price_change_percentage_1h_in_currency
+      const marketDocs =
+        resolvedIds.length > 0
+          ? await Promise.all(
+              resolvedIds.map(async (id) => {
+                return await convex.query(api.coingeckoMarkets.getMarketDataByCoingeckoId, {
+                  serverToken,
+                  coingeckoId: id,
+                });
+              }),
+            )
+          : await convex.query(api.coingeckoMarkets.getTopMarketDataByRank, {
+              serverToken,
+              limit,
+            });
+
+      for (const doc of marketDocs) {
+        if (!doc) continue;
+        data[doc.coingeckoId] = {
+          id: doc.coingeckoId,
+          name: doc.name,
+          symbol: doc.symbol,
+          market_cap_rank: doc.marketCapRank ?? null,
+          image: doc.image,
+          current_price: doc.currentPrice ?? null,
+          market_cap: doc.marketCap ?? null,
+          total_volume: doc.totalVolume ?? null,
+          price_change_percentage_24h: doc.priceChangePercentage24h ?? null,
+          circulating_supply: doc.circulatingSupply ?? null,
+          max_supply: doc.maxSupply ?? null,
+          last_updated: doc.lastUpdated,
+        };
       }
-    })
+    }
 
     return NextResponse.json(
-      { 
-        data: transformedData,
+      {
+        data,
         status: {
           timestamp: new Date().toISOString(),
           error_code: 0,
-          error_message: '',
-          elapsed: 0,
-          credit_count: marketData.length,
-          search_type: useDirectAPI ? 'direct_api' : 'ids',
-          total_results: marketData.length
-        }
+          error_message: warning ?? "",
+        },
       },
-      { 
+      {
         status: 200,
         headers: {
-          'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60'
-        }
-      }
-    )
-
+          "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+        },
+      },
+    );
   } catch (error) {
-    console.error('CoinGecko quotes API error:', error)
-    
     return NextResponse.json(
-      { 
-        error: 'Failed to fetch CoinGecko data',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      }, 
-      { status: 500 }
-    )
+      {
+        error: "Failed to load CoinGecko quotes",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
   }
-} 
+}

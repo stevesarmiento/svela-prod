@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { API_PROVIDERS, type ApiProvider } from "@/constants/api-providers";
 import { getApiHeaders } from "@/lib/user-api-keys";
@@ -85,7 +85,7 @@ async function validateApiKeyWithProvider(
   provider: string, 
   apiKey: string
 ): Promise<{ isValid: boolean; error?: string; details?: object }> {
-  const headers = getApiHeaders(provider, apiKey);
+  let headers = getApiHeaders(provider, apiKey);
   const timeout = 10000; // 10 second timeout
 
   try {
@@ -105,9 +105,12 @@ async function validateApiKeyWithProvider(
         break;
         
       case 'gemini':
-        testUrl = 'https://generativelanguage.googleapis.com/v1beta/models?key=' + apiKey;
+        testUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
         // For Gemini, we pass the key as a query param instead of header
-        delete headers['x-goog-api-key'];
+        {
+          const { "x-goog-api-key": _ignored, ...restHeaders } = headers;
+          headers = restHeaders;
+        }
         break;
         
       // coinmarketcap removed - no longer supported
@@ -136,7 +139,7 @@ async function validateApiKeyWithProvider(
           timestamp: Date.now(),
         }
       };
-    } else {
+    }
       const errorText = await response.text();
       let errorMessage = `HTTP ${response.status}`;
       
@@ -162,7 +165,6 @@ async function validateApiKeyWithProvider(
           timestamp: Date.now(),
         }
       };
-    }
 
   } catch (error) {
     if (error instanceof Error) {

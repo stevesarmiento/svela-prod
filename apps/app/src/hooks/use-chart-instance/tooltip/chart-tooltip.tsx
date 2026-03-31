@@ -38,15 +38,15 @@ export function ChartTooltip({ price, percentageChange, timestampMs, volume, ohl
                         <span className="text-[11px] text-white/80">Price</span>
                         <div className="flex items-center gap-2">
                             <span
-                                className={`text-[10px] font-diatype-mono px-1.5 py-0.5 rounded ${
+                                className={`text-[10px] font-berkeley-mono px-1.5 py-0.5 rounded ${
                                     percentageChange >= 0
                                         ? 'bg-green-500/20 text-green-400'
                                         : 'bg-red-500/20 text-red-400'
                                 }`}
                             >
-                                {(percentageChange > 0 ? '+' : '') + percentageChange.toFixed(2) + '%'}
+                                {`${(percentageChange > 0 ? '+' : '') + percentageChange.toFixed(2)}%`}
                             </span>
-                            <span className="text-[11px] font-diatype-mono font-bold text-white">
+                            <span className="text-[11px] font-berkeley-mono font-bold text-white">
                                 {formatUsdPrice(price)}
                             </span>
                         </div>
@@ -55,7 +55,7 @@ export function ChartTooltip({ price, percentageChange, timestampMs, volume, ohl
                     {volume !== undefined && (
                         <div className="flex items-center justify-between">
                             <span className="text-[11px] text-white/80">Volume (USD)</span>
-                            <span className="text-[11px] font-diatype-mono text-white">{formatUsdVolume(volume)}</span>
+                            <span className="text-[11px] font-berkeley-mono text-white">{formatUsdVolume(volume)}</span>
                         </div>
                     )}
 
@@ -63,25 +63,25 @@ export function ChartTooltip({ price, percentageChange, timestampMs, volume, ohl
                         <>
                             <div className="flex items-center justify-between">
                                 <span className="text-[11px] text-white/80">Open</span>
-                                <span className="text-[11px] font-diatype-mono text-white">
+                                <span className="text-[11px] font-berkeley-mono text-white">
                                     {formatUsdPrice(ohlcData.open)}
                                 </span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-[11px] text-white/80">High</span>
-                                <span className="text-[11px] font-diatype-mono text-green-400">
+                                <span className="text-[11px] font-berkeley-mono text-green-400">
                                     {formatUsdPrice(ohlcData.high)}
                                 </span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-[11px] text-white/80">Low</span>
-                                <span className="text-[11px] font-diatype-mono text-red-400">
+                                <span className="text-[11px] font-berkeley-mono text-red-400">
                                     {formatUsdPrice(ohlcData.low)}
                                 </span>
                             </div>
                             <div className="flex items-center justify-between">
                                 <span className="text-[11px] text-white/80">Close</span>
-                                <span className="text-[11px] font-diatype-mono text-white">
+                                <span className="text-[11px] font-berkeley-mono text-white">
                                     {formatUsdPrice(ohlcData.close)}
                                 </span>
                             </div>

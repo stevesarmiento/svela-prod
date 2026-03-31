@@ -1,25 +1,23 @@
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
-import { Effect, Exit, Cause } from "effect"
 import { WatchlistCard } from './watchlist-card'
 import { WatchlistGroupEditorPanel } from './watchlist-group-editor-panel'
 import { Button } from '@v1/ui/button'
 import { Grid3X3, Plus } from 'lucide-react'
 import { toast } from '@v1/ui/use-toast'
-import { useQueryClient } from "@tanstack/react-query"
 import { env } from '@/env.mjs'
 import { 
   useWatchlistGroups,
   useWatchlistByGroup
 } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
-import { useWatchlistOperations } from '@/hooks/use-watchlist-effect'
 import { useWatchlist, type WatchlistGroup } from './watchlist-context'
 import { Dialog, DialogContent } from '@v1/ui/dialog'
 import { Tabs, TabsContent } from '@v1/ui/tabs'
 import { WatchlistMultiLineChart } from './watchlist-multi-line-chart'
-import { runPromiseExit } from '@/lib/effect/runtime-watchlist'
+import { useDeletePortfolioWallet } from "@/hooks/use-portfolio-wallets"
+import { useUpdateWatchlistGroup, useDeleteWatchlistGroup } from "@/lib/convex-hooks"
 
 const isDebug = env.NODE_ENV === "development"
 
@@ -62,12 +60,13 @@ function WatchlistGroupWithCoins({
   selected
 }: {
   group: WatchlistGroup
-  onEdit: (group: WatchlistGroup) => void
-  onDelete: (group: WatchlistGroup) => void
+  onEdit?: (group: WatchlistGroup) => void
+  onDelete?: (group: WatchlistGroup) => void
   onSelect?: (group: WatchlistGroup) => void
   selected?: boolean
 }) {
   const groupWatchlist = useWatchlistByGroup(group._id) as Array<{ coinId: string }> | undefined
+  const isGroupWatchlistLoading = groupWatchlist === undefined
   
   // For watchlist cards only: Convert to CoinGecko IDs for display
   const coingeckoIds = useMemo(() => {
@@ -77,12 +76,14 @@ function WatchlistGroupWithCoins({
   }, [groupWatchlist])
   
   // Use CoinGecko data only for watchlist card display
-  const { data: coins = [] } = useCoinGeckoWatchlistCoins(coingeckoIds)
+  const { data: coins = [], isLoading: isCoinsLoading } = useCoinGeckoWatchlistCoins(coingeckoIds)
+  const isCardLoading = isGroupWatchlistLoading || (coingeckoIds.length > 0 && isCoinsLoading && coins.length === 0)
 
   return (
     <WatchlistCard
       group={group}
       coins={coins}
+      isLoading={isCardLoading}
       onEdit={onEdit}
       onDelete={onDelete}
       onSelect={onSelect}
@@ -99,7 +100,6 @@ export function WatchlistsGrid({
   onViewModeChange
 }: WatchlistsGridProps) {
   const [editingGroup, setEditingGroup] = useState<WatchlistGroup | null>(null)
-  const queryClient = useQueryClient()
   
   // Current editing values for real-time preview
   const [editingName, setEditingName] = useState('')
@@ -108,8 +108,15 @@ export function WatchlistsGrid({
 
   // Hooks
   const watchlistGroups = useWatchlistGroups() as WatchlistGroup[] | undefined
-  const { updateGroup, deleteGroup } = useWatchlistOperations()
+  const updateGroup = useUpdateWatchlistGroup()
+  const deleteGroup = useDeleteWatchlistGroup()
+  const deleteWallet = useDeletePortfolioWallet()
   const { selectedGroup } = useWatchlist()
+
+  const gridGroups = useMemo(() => {
+    // Keep the existing "newest first" behavior, but render all groups in one grid.
+    return (watchlistGroups ?? []).slice().reverse()
+  }, [watchlistGroups])
 
   const editingGroupWatchlist = useWatchlistByGroup(editingGroup?._id) as Array<{ coinId: string }> | undefined
   const editingCoinIds = useMemo(() => {
@@ -130,78 +137,24 @@ export function WatchlistsGrid({
       return
     }
 
-    const program = updateGroup(editingGroup._id, trimmedName, undefined, icon, color).pipe(
-      Effect.catchTags({
-        WatchlistValidationError: (e) =>
-          Effect.sync(() => {
-            toast({
-              title: "Validation Error",
-              description: `${e.field}: ${e.reason}`,
-              variant: "destructive",
-            })
-          }).pipe(Effect.flatMap(() => Effect.fail(e))),
-        WatchlistAuthError: (e) =>
-          Effect.sync(() => {
-            toast({
-              title: "Authentication Error",
-              description: e.message,
-              variant: "destructive",
-            })
-          }).pipe(Effect.flatMap(() => Effect.fail(e))),
-        WatchlistNotFoundError: (e) =>
-          Effect.sync(() => {
-            toast({
-              title: "Not Found",
-              description: e.message,
-              variant: "destructive",
-            })
-          }).pipe(Effect.flatMap(() => Effect.fail(e))),
-        ApiRequestError: (e) =>
-          Effect.sync(() => {
-            toast({
-              title: "Request Error",
-              description: e.message,
-              variant: "destructive",
-            })
-          }).pipe(Effect.flatMap(() => Effect.fail(e))),
-      }),
-      Effect.tap(() => Effect.sync(() => {
-        toast({
-          title: "Success",
-          description: "Watchlist updated successfully",
-        })
-        setEditingGroup(null)
-        setEditingName('')
-        setEditingIcon('')
-        setEditingColor('')
-      }))
-    )
-
-    const exit = await runPromiseExit(program)
-
-    if (Exit.isSuccess(exit)) {
-      // Optimistically update cached groups so UI updates immediately.
-      queryClient.setQueryData<Array<WatchlistGroup>>(["watchlists", "groups"], (prev) => {
-        if (!prev) return prev
-        return prev.map((g) =>
-          g._id === editingGroup._id
-            ? {
-                ...g,
-                name: trimmedName,
-                icon,
-                color,
-                updatedAt: Date.now(),
-              }
-            : g,
-        )
+    try {
+      await updateGroup(editingGroup._id, trimmedName, undefined, icon, color)
+      toast({
+        title: "Success",
+        description: "Watchlist updated successfully",
       })
-
-      // Revalidate from server to ensure slug/updatedAt stay authoritative.
-      void queryClient.invalidateQueries({ queryKey: ["watchlists"] })
-    }
-    
-    if (isDebug && Exit.isFailure(exit)) {
-      console.error("Failed to update watchlist:", Cause.pretty(exit.cause))
+      setEditingGroup(null)
+      setEditingName('')
+      setEditingIcon('')
+      setEditingColor('')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      toast({
+        title: "Request Error",
+        description: message,
+        variant: "destructive",
+      })
+      if (isDebug) console.error("Failed to update watchlist:", error)
     }
   }, [editingGroup, updateGroup])
 
@@ -222,54 +175,37 @@ export function WatchlistsGrid({
       return
     }
 
-    const program = deleteGroup(group._id).pipe(
-      Effect.tap(() => Effect.sync(() => {
+    if (group.portfolioWalletId) {
+      try {
+        await deleteWallet.deleteWallet(group.portfolioWalletId)
+
         toast({
           title: "Success",
-          description: "Watchlist deleted successfully",
+          description: "Wallet deleted successfully",
         })
-      })),
-      Effect.catchTags({
-        WatchlistAuthError: (e) =>
-          Effect.sync(() => {
-            toast({
-              title: "Authentication Error",
-              description: e.message,
-              variant: "destructive",
-            })
-          }).pipe(Effect.flatMap(() => Effect.fail(e))),
-        WatchlistNotFoundError: (e) =>
-          Effect.sync(() => {
-            toast({
-              title: "Not Found",
-              description: e.message,
-              variant: "destructive",
-            })
-          }).pipe(Effect.flatMap(() => Effect.fail(e))),
-        ApiRequestError: (e) =>
-          Effect.sync(() => {
-            toast({
-              title: "Request Error",
-              description: e.message,
-              variant: "destructive",
-            })
-          }).pipe(Effect.flatMap(() => Effect.fail(e))),
-      })
-    )
-
-    const exit = await runPromiseExit(program)
-
-    if (Exit.isSuccess(exit)) {
-      queryClient.setQueryData<Array<WatchlistGroup>>(["watchlists", "groups"], (prev) => {
-        if (!prev) return prev
-        return prev.filter((g) => g._id !== group._id)
-      })
-
-      void queryClient.invalidateQueries({ queryKey: ["watchlists"] })
+      } catch (error) {
+        toast({
+          title: "Request Error",
+          description: error instanceof Error ? error.message : String(error),
+          variant: "destructive",
+        })
+      }
+      return
     }
-    
-    if (isDebug && Exit.isFailure(exit)) {
-      console.error("Failed to delete watchlist:", Cause.pretty(exit.cause))
+
+    try {
+      await deleteGroup(group._id)
+      toast({
+        title: "Success",
+        description: "Watchlist deleted successfully",
+      })
+    } catch (error) {
+      toast({
+        title: "Request Error",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      })
+      if (isDebug) console.error("Failed to delete watchlist:", error)
     }
   }, [deleteGroup])
 
@@ -313,11 +249,7 @@ export function WatchlistsGrid({
             <>
               {/* Watchlists Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 relative">
-                {/* Existing Watchlists */}
-                {watchlistGroups
-                  .slice()
-                  .reverse()
-                  .map((group) => (
+                {gridGroups.map((group) => (
                   <div key={group._id}>
                     <WatchlistGroupWithCoins
                       group={group}

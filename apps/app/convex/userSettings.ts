@@ -1,4 +1,4 @@
-import { query, mutation } from "./_generated/server";
+import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { requireServerToken } from "./_lib/server_token";
 import type { Id } from "./_generated/dataModel";
@@ -179,7 +179,7 @@ export const upsertUserSettings = mutation({
 
       await ctx.db.replace(existingSettings._id, nextSettings);
       return existingSettings._id;
-    } else {
+    }
       // Create new settings with defaults
       const newSettings = {
         userId: user._id,
@@ -202,7 +202,6 @@ export const upsertUserSettings = mutation({
       };
       
       return await ctx.db.insert("userSettings", newSettings);
-    }
   },
 });
 
@@ -251,7 +250,7 @@ export const updateMemorySettings = mutation({
 
       await ctx.db.patch(existingSettings._id, updateData);
       return existingSettings._id;
-    } else {
+    }
       // Create new settings with defaults
       const newSettings = {
         userId: user._id,
@@ -266,7 +265,6 @@ export const updateMemorySettings = mutation({
       };
       
       return await ctx.db.insert("userSettings", newSettings);
-    }
   },
 });
 
@@ -311,3 +309,129 @@ export const getMemorySettings = query({
     };
   },
 }); 
+
+async function getCurrentUserId(ctx: QueryCtx | MutationCtx): Promise<Id<"users">> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Not authenticated");
+
+  const user = await ctx.db
+    .query("users")
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+    .first();
+  if (!user) throw new Error("User not found");
+  return user._id;
+}
+
+export const getMyUserSettings = query({
+  args: {},
+  returns: userSettingsValueValidator,
+  handler: async (ctx) => {
+    const userId = await getCurrentUserId(ctx);
+
+    const settings = await ctx.db
+      .query("userSettings")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    if (!settings) return defaultUserSettings;
+
+    return {
+      memoryEnabled: settings.memoryEnabled,
+      autoCleanupEnabled: settings.autoCleanupEnabled,
+      retentionDays: settings.retentionDays,
+      theme: settings.theme ?? defaultUserSettings.theme,
+      currency: settings.currency ?? defaultUserSettings.currency,
+      dateFormat: settings.dateFormat ?? defaultUserSettings.dateFormat,
+      emailNotifications: settings.emailNotifications ?? defaultUserSettings.emailNotifications,
+      pushNotifications: settings.pushNotifications ?? defaultUserSettings.pushNotifications,
+      priceAlerts: settings.priceAlerts ?? defaultUserSettings.priceAlerts,
+      analyticsEnabled: settings.analyticsEnabled ?? defaultUserSettings.analyticsEnabled,
+      shareUsageData: settings.shareUsageData ?? defaultUserSettings.shareUsageData,
+    };
+  },
+});
+
+export const upsertMyUserSettings = mutation({
+  args: {
+    memoryEnabled: v.optional(v.boolean()),
+    autoCleanupEnabled: v.optional(v.boolean()),
+    retentionDays: v.optional(v.string()),
+    theme: v.optional(v.string()),
+    currency: v.optional(v.string()),
+    dateFormat: v.optional(v.string()),
+    emailNotifications: v.optional(v.boolean()),
+    pushNotifications: v.optional(v.boolean()),
+    priceAlerts: v.optional(v.boolean()),
+    analyticsEnabled: v.optional(v.boolean()),
+    shareUsageData: v.optional(v.boolean()),
+  },
+  returns: v.id("userSettings"),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserId(ctx);
+    const settingsData = args;
+
+    const existingSettings = await ctx.db
+      .query("userSettings")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .first();
+
+    const now = Date.now();
+
+    if (existingSettings) {
+      const nextSettings: UserSettingsWrite = {
+        userId,
+        memoryEnabled:
+          settingsData.memoryEnabled ??
+          existingSettings.memoryEnabled ??
+          defaultUserSettings.memoryEnabled,
+        autoCleanupEnabled:
+          settingsData.autoCleanupEnabled ??
+          existingSettings.autoCleanupEnabled ??
+          defaultUserSettings.autoCleanupEnabled,
+        retentionDays:
+          settingsData.retentionDays ??
+          existingSettings.retentionDays ??
+          defaultUserSettings.retentionDays,
+        createdAt: existingSettings.createdAt ?? now,
+        updatedAt: now,
+      };
+
+      const theme = settingsData.theme ?? existingSettings.theme;
+      if (theme !== undefined) nextSettings.theme = theme;
+      const currency = settingsData.currency ?? existingSettings.currency;
+      if (currency !== undefined) nextSettings.currency = currency;
+      const dateFormat = settingsData.dateFormat ?? existingSettings.dateFormat;
+      if (dateFormat !== undefined) nextSettings.dateFormat = dateFormat;
+      const emailNotifications = settingsData.emailNotifications ?? existingSettings.emailNotifications;
+      if (emailNotifications !== undefined) nextSettings.emailNotifications = emailNotifications;
+      const pushNotifications = settingsData.pushNotifications ?? existingSettings.pushNotifications;
+      if (pushNotifications !== undefined) nextSettings.pushNotifications = pushNotifications;
+      const priceAlerts = settingsData.priceAlerts ?? existingSettings.priceAlerts;
+      if (priceAlerts !== undefined) nextSettings.priceAlerts = priceAlerts;
+      const analyticsEnabled = settingsData.analyticsEnabled ?? existingSettings.analyticsEnabled;
+      if (analyticsEnabled !== undefined) nextSettings.analyticsEnabled = analyticsEnabled;
+      const shareUsageData = settingsData.shareUsageData ?? existingSettings.shareUsageData;
+      if (shareUsageData !== undefined) nextSettings.shareUsageData = shareUsageData;
+
+      await ctx.db.replace(existingSettings._id, nextSettings);
+      return existingSettings._id;
+    }
+
+    return await ctx.db.insert("userSettings", {
+      userId,
+      memoryEnabled: settingsData.memoryEnabled ?? defaultUserSettings.memoryEnabled,
+      autoCleanupEnabled: settingsData.autoCleanupEnabled ?? defaultUserSettings.autoCleanupEnabled,
+      retentionDays: settingsData.retentionDays ?? defaultUserSettings.retentionDays,
+      theme: settingsData.theme,
+      currency: settingsData.currency,
+      dateFormat: settingsData.dateFormat,
+      emailNotifications: settingsData.emailNotifications,
+      pushNotifications: settingsData.pushNotifications,
+      priceAlerts: settingsData.priceAlerts,
+      analyticsEnabled: settingsData.analyticsEnabled,
+      shareUsageData: settingsData.shareUsageData,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});

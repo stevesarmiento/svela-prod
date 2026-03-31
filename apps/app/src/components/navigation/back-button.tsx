@@ -43,7 +43,7 @@ export const BackButton = React.memo(({ onExitSelection, selectionState }: BackB
               sideOffset={25}
               className="dark flex items-center text-xs p-0 border-none bg-zinc-900/95 shadow-sm"
             >
-              <kbd className="rounded-sm bg-gray-100 dark:bg-border px-1.5 py-0.5 text-xs font-diatype-mono text-gray-700 dark:text-white">
+              <kbd className="rounded-sm bg-gray-100 dark:bg-border px-1.5 py-0.5 text-xs font-berkeley-mono text-gray-700 dark:text-white">
                 ESC
               </kbd>
             </TooltipContent>

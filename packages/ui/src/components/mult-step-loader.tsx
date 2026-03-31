@@ -1,7 +1,7 @@
 "use client";
-import { cn } from "../utils";
 import { AnimatePresence, motion } from "motion/react";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { cn } from "../utils";
 import { Spinner } from "./spinner";
 
 const CheckIcon = ({ className }: { className?: string }) => {
@@ -43,12 +43,20 @@ type LoadingState = {
 const LoaderCore = ({
   loadingStates,
   value = 0,
+  variant = "fullscreen",
 }: {
   loadingStates: LoadingState[];
   value?: number;
+  variant?: "fullscreen" | "dialog" | "inline";
 }) => {
+  const onDarkPanel = variant === "dialog" || variant === "inline";
   return (
-    <div className="flex relative justify-start max-w-xl mx-auto flex-col mt-40">
+    <div
+      className={cn(
+        "flex relative justify-start mx-auto flex-col",
+        variant === "inline" ? "mt-0 max-w-none w-full" : "max-w-xl mt-40",
+      )}
+    >
       {loadingStates.map((loadingState, index) => {
         const distance = Math.abs(index - value);
         const opacity = Math.max(1 - distance * 0.2, 0); // Minimum opacity is 0, keep it 0.2 if you're sane.
@@ -58,7 +66,7 @@ const LoaderCore = ({
 
         return (
           <motion.div
-            key={index}
+            key={loadingState.text}
             className={cn("text-left flex gap-2 mb-4")}
             initial={{ opacity: 0, y: -(value * 40) }}
             animate={{ opacity: opacity, y: -(value * 40) }}
@@ -79,22 +87,22 @@ const LoaderCore = ({
                   <CheckFilled className="text-emerald-500" />
                 </motion.div>
               )}
-              
+
               {/* Show loading spinner for current step */}
-              {isCurrentStep && (
-                <Spinner size={24} className="text-white/70" />
-              )}
-              
+              {isCurrentStep && <Spinner size={24} className="text-white/70" />}
+
               {/* Show nothing for future steps */}
-              {isFutureStep && (
-                <div className="w-6 h-6" />
-              )}
+              {isFutureStep && <div className="w-6 h-6" />}
             </div>
             <span
               className={cn(
-                "text-black dark:text-white",
-                isCurrentStep && "text-black dark:text-white",
-                isCompletedStep && "text-black dark:text-white/70"
+                !onDarkPanel ? "text-black dark:text-white" : "text-white",
+                isCurrentStep &&
+                  (!onDarkPanel ? "text-black dark:text-white" : "text-white"),
+                isCompletedStep &&
+                  (!onDarkPanel
+                    ? "text-black dark:text-white/70"
+                    : "text-white/70"),
               )}
             >
               {loadingState.text}
@@ -111,11 +119,13 @@ export const MultiStepLoader = ({
   loading,
   duration = 2000,
   loop = true,
+  variant = "fullscreen",
 }: {
   loadingStates: LoadingState[];
   loading?: boolean;
   duration?: number;
   loop?: boolean;
+  variant?: "fullscreen" | "dialog" | "inline";
 }) => {
   const [currentState, setCurrentState] = useState(0);
 
@@ -130,12 +140,27 @@ export const MultiStepLoader = ({
           ? prevState === loadingStates.length - 1
             ? 0
             : prevState + 1
-          : Math.min(prevState + 1, loadingStates.length - 1)
+          : Math.min(prevState + 1, loadingStates.length - 1),
       );
     }, duration);
 
     return () => clearTimeout(timeout);
   }, [currentState, loading, loop, loadingStates.length, duration]);
+
+  const containerClassName =
+    variant === "inline"
+      ? "w-full"
+      : variant === "fullscreen"
+        ? "w-full h-full fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-2xl"
+        : "w-full h-full fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-2xl";
+
+  const loaderCoreVariant =
+    variant === "inline"
+      ? "inline"
+      : variant === "dialog"
+        ? "dialog"
+        : "fullscreen";
+
   return (
     <AnimatePresence mode="wait">
       {loading && (
@@ -149,13 +174,24 @@ export const MultiStepLoader = ({
           exit={{
             opacity: 0,
           }}
-          className="w-full h-full fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-2xl"
+          className={containerClassName}
         >
-          <div className="h-96  relative">
-            <LoaderCore value={currentState} loadingStates={loadingStates} />
+          <div
+            className={cn(
+              "relative",
+              variant === "inline" ? "min-h-0 w-full py-2" : "h-96",
+            )}
+          >
+            <LoaderCore
+              value={currentState}
+              loadingStates={loadingStates}
+              variant={loaderCoreVariant}
+            />
           </div>
 
-          <div className="bg-gradient-to-t inset-x-0 z-20 bottom-0 bg-white dark:bg-black h-full absolute [mask-image:radial-gradient(900px_at_center,transparent_30%,white)]" />
+          {variant === "fullscreen" ? (
+            <div className="bg-gradient-to-t inset-x-0 z-20 bottom-0 bg-white dark:bg-black h-full absolute [mask-image:radial-gradient(900px_at_center,transparent_30%,white)]" />
+          ) : null}
         </motion.div>
       )}
     </AnimatePresence>

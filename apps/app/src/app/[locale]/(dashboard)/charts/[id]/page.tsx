@@ -1,6 +1,6 @@
 'use client'
 
-import { CoinMarketData } from '@/types/coins'
+import type { CoinMarketData } from '@/types/coins'
 import Image from "next/image"
 import { TokenPageClient } from './token-page-client'
 import { use, memo, Suspense, useTransition, useDeferredValue } from 'react'

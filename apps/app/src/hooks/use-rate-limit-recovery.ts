@@ -52,8 +52,8 @@ export function useRateLimitRecovery(options: UseRateLimitRecoveryOptions = {}) 
       if (response.status === 429) {
         const retryAfter = response.headers.get('Retry-After')
         const delay = retryAfter 
-          ? parseInt(retryAfter) * 1000 
-          : Math.min(initialDelay * Math.pow(2, retryAttempt), maxDelay)
+          ? Number.parseInt(retryAfter) * 1000 
+          : Math.min(initialDelay * 2 ** retryAttempt, maxDelay)
 
         console.warn(`🚨 Rate limit hit for ${url}. Retrying in ${delay}ms (attempt ${retryAttempt + 1}/${maxRetries})`)
 
@@ -88,7 +88,7 @@ export function useRateLimitRecovery(options: UseRateLimitRecoveryOptions = {}) 
             
             activeTimeoutsRef.current.add(timeout)
           })
-        } else {
+        }
           // Max retries exceeded - clear rate limit state and throw
           setRateLimitState({
             isRateLimited: false,
@@ -96,7 +96,6 @@ export function useRateLimitRecovery(options: UseRateLimitRecoveryOptions = {}) 
             lastRateLimitTime: Date.now()
           })
           throw new Error(`Rate limit exceeded after ${maxRetries} attempts`)
-        }
       }
 
       // Success - clear rate limit state

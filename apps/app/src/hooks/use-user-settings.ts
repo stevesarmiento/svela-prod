@@ -1,8 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAction, useMutation, useQuery, useConvexAuth } from "convex/react";
 import { API_PROVIDERS, type ApiProvider } from "@/constants/api-providers";
 import { useAuth } from "@/lib/convex-hooks";
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, init);
@@ -15,7 +17,8 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
 
 export function useUserSettings() {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
+  const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
+  const enabled = Boolean(user?.id && isAuthenticated && !isConvexAuthLoading);
   
   // Optimistic updates state for API keys
   const [optimisticApiKeys, setOptimisticApiKeys] = useState<Array<{
@@ -26,19 +29,16 @@ export function useUserSettings() {
     isOptimistic?: boolean;
   }>>([]);
   
-  // Get settings from database
-  const { data: settings } = useQuery({
-    queryKey: ["user-settings"],
-    queryFn: async () => fetchJson<any>("/api/internal/user-settings"),
-    enabled: !!user?.id,
-  });
+  const settings = useQuery(
+    api.userSettings.getMyUserSettings,
+    enabled ? {} : "skip",
+  );
   
   // API Key Queries
-  const { data: apiKeysFromDb } = useQuery({
-    queryKey: ["api-keys"],
-    queryFn: async () => fetchJson<any[]>("/api/internal/api-keys"),
-    enabled: !!user?.id,
-  });
+  const apiKeysFromDb = useQuery(
+    api.apiKeys.listMyApiKeys,
+    enabled ? {} : "skip",
+  );
 
   // Combine real API keys with optimistic updates
   const apiKeys = useCallback(() => {
@@ -46,11 +46,18 @@ export function useUserSettings() {
     return [...realKeys, ...optimisticApiKeys];
   }, [apiKeysFromDb, optimisticApiKeys])();
   
-  const { data: apiKeyStats } = useQuery({
-    queryKey: ["api-keys", "stats"],
-    queryFn: async () => fetchJson<any>("/api/internal/api-keys/stats"),
-    enabled: !!user?.id,
-  });
+  const apiKeyStats = useQuery(
+    api.apiKeys.getMyApiKeyStats,
+    enabled ? {} : "skip",
+  );
+
+  const upsertSettings = useMutation(api.userSettings.upsertMyUserSettings).withOptimisticUpdate(
+    (localStore, updates) => {
+      const current = localStore.getQuery(api.userSettings.getMyUserSettings, {});
+      if (!current) return;
+      localStore.setQuery(api.userSettings.getMyUserSettings, {}, { ...current, ...updates });
+    },
+  );
   
   // Update memory-specific settings
   const updateMemory = async (memorySettings: {
@@ -64,13 +71,7 @@ export function useUserSettings() {
     }
 
     try {
-      await fetchJson<{ id: string }>("/api/internal/user-settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(memorySettings),
-      });
-
-      await queryClient.invalidateQueries({ queryKey: ["user-settings"] });
+      await upsertSettings(memorySettings);
       
       // Also sync to localStorage for immediate access (client-side only)
       if (typeof window !== 'undefined') {
@@ -110,13 +111,7 @@ export function useUserSettings() {
     }
 
     try {
-      await fetchJson<{ id: string }>("/api/internal/user-settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newSettings),
-      });
-
-      await queryClient.invalidateQueries({ queryKey: ["user-settings"] });
+      await upsertSettings(newSettings);
       return true;
     } catch (error) {
       console.error("Failed to update settings:", error);
@@ -158,6 +153,24 @@ export function useUserSettings() {
   }, [settings]);
 
   // API Key Management Functions
+  const addApiKeyAction = useAction(api.apiKeysActions.addMyApiKeyWithEncryption);
+  const updateKeyStatus = useMutation(api.apiKeys.updateMyApiKeyStatus).withOptimisticUpdate(
+    (localStore, args) => {
+      const current = localStore.getQuery(api.apiKeys.listMyApiKeys, {});
+      if (!current) return;
+      localStore.setQuery(
+        api.apiKeys.listMyApiKeys,
+        {},
+        current.map((k) => (k._id === args.keyId ? { ...k, isActive: args.isActive } : k)),
+      );
+    },
+  );
+  const deleteKey = useMutation(api.apiKeys.deleteMyApiKey).withOptimisticUpdate((localStore, args) => {
+    const current = localStore.getQuery(api.apiKeys.listMyApiKeys, {});
+    if (!current) return;
+    localStore.setQuery(api.apiKeys.listMyApiKeys, {}, current.filter((k) => k._id !== args.keyId));
+  });
+
   const addApiKey = async (provider: ApiProvider, keyName: string, apiKey: string, isActive = true) => {
     if (!user?.id) {
       toast.error("Please sign in to manage API keys");
@@ -177,15 +190,11 @@ export function useUserSettings() {
     setOptimisticApiKeys(prev => [...prev, optimisticKey]);
 
     try {
-      await fetchJson<{ id: string }>("/api/internal/api-keys", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider,
-          keyName,
-          apiKey,
-          isActive,
-        }),
+      await addApiKeyAction({
+        provider,
+        keyName,
+        apiKey,
+        isActive,
       });
       
       const providerConfig = API_PROVIDERS[provider];
@@ -193,11 +202,6 @@ export function useUserSettings() {
       
       // Remove optimistic update - real data will come from the server
       setOptimisticApiKeys(prev => prev.filter(key => key._id !== optimisticKey._id));
-
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["api-keys"] }),
-        queryClient.invalidateQueries({ queryKey: ["api-keys", "stats"] }),
-      ]);
       
     } catch (error) {
       console.error("Failed to add API key:", error);
@@ -215,17 +219,9 @@ export function useUserSettings() {
     }
 
     try {
-      await fetchJson<{ success: true }>(`/api/internal/api-keys/${encodeURIComponent(keyId)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive }),
-      });
+      await updateKeyStatus({ keyId: keyId as Id<"userApiKeys">, isActive });
       
       toast.success(`API key ${isActive ? 'activated' : 'deactivated'}`);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["api-keys"] }),
-        queryClient.invalidateQueries({ queryKey: ["api-keys", "stats"] }),
-      ]);
     } catch (error) {
       console.error("Failed to update API key status:", error);
       toast.error("Failed to update API key status");
@@ -239,15 +235,9 @@ export function useUserSettings() {
     }
 
     try {
-      await fetchJson<{ success: true }>(`/api/internal/api-keys/${encodeURIComponent(keyId)}`, {
-        method: "DELETE",
-      });
+      await deleteKey({ keyId: keyId as Id<"userApiKeys"> });
       
       toast.success(`${providerName} API key removed`);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["api-keys"] }),
-        queryClient.invalidateQueries({ queryKey: ["api-keys", "stats"] }),
-      ]);
     } catch (error) {
       console.error("Failed to remove API key:", error);
       toast.error("Failed to remove API key");

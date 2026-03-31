@@ -223,6 +223,13 @@ export class WatchlistApi extends Effect.Service<WatchlistApi>()("WatchlistApi",
       })
     })
 
+    const listAllCoinIds = Effect.fn("WatchlistApi.listAllCoinIds")(function* () {
+      return yield* requestJson({
+        endpoint: "/api/internal/watchlists/items/all-coin-ids",
+        decode: (data) => decodeArraySync(Schema.String, data),
+      })
+    })
+
     const getBySlug = Effect.fn("WatchlistApi.getBySlug")(function* (slug: string) {
       return yield* requestJson({
         endpoint: `/api/internal/watchlists/by-slug?slug=${encodeURIComponent(slug)}`,
@@ -281,10 +288,52 @@ export class WatchlistApi extends Effect.Service<WatchlistApi>()("WatchlistApi",
       },
     )
 
+    const removeItemEverywhere = Effect.fn("WatchlistApi.removeItemEverywhere")(
+      function* (input: { coinId: string }) {
+        return yield* requestJson({
+          endpoint: "/api/internal/watchlists/items/remove-everywhere",
+          init: {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(input),
+          },
+          validationField: "coinId",
+          decode: (data) =>
+            decodeSync(
+              Schema.Struct({
+                success: Schema.Boolean,
+              }),
+              data,
+            ),
+        })
+      },
+    )
+
     const removeItemsBulk = Effect.fn("WatchlistApi.removeItemsBulk")(
       function* (input: { coinIds: string[]; groupId?: string }) {
         return yield* requestJson({
           endpoint: "/api/internal/watchlists/items/remove-bulk",
+          init: {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(input),
+          },
+          validationField: "coinIds",
+          decode: (data) =>
+            decodeSync(
+              Schema.Struct({
+                removedCount: Schema.Number,
+              }),
+              data,
+            ),
+        })
+      },
+    )
+
+    const removeItemsBulkEverywhere = Effect.fn("WatchlistApi.removeItemsBulkEverywhere")(
+      function* (input: { coinIds: string[] }) {
+        return yield* requestJson({
+          endpoint: "/api/internal/watchlists/items/remove-bulk-everywhere",
           init: {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -308,10 +357,13 @@ export class WatchlistApi extends Effect.Service<WatchlistApi>()("WatchlistApi",
       updateGroup,
       deleteGroup,
       listItems,
+      listAllCoinIds,
       getBySlug,
       addItem,
       removeItem,
+      removeItemEverywhere,
       removeItemsBulk,
+      removeItemsBulkEverywhere,
     } as const
   }),
 }) {}

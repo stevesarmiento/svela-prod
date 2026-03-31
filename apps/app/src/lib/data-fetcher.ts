@@ -145,7 +145,7 @@ export async function detectAndFetchData(userMessage: string): Promise<DataConte
         const coinData: DetailedCoin = await response.json();
         
         if (!coinData.id) {
-          coinData.id = parseInt(coinIds[0] || '0');
+          coinData.id = Number.parseInt(coinIds[0] || '0');
         }
         
         return {
@@ -153,7 +153,7 @@ export async function detectAndFetchData(userMessage: string): Promise<DataConte
           data: coinData,
           summary: `${intent.intent}: ${coinData.name} is trading at $${coinData.quote?.USD?.price?.toLocaleString()} (${coinData.quote?.USD?.percent_change_24h?.toFixed(2)}% 24h)`
         };
-      } else if (coinIds.length > 1) {
+      }if (coinIds.length > 1) {
         const response = await fetch(`${baseUrl}/api/coinmarketcap/quotes?ids=${coinIds.join(',')}`);
         const quotesData: { data: Record<string, DetailedCoin> } = await response.json();
         

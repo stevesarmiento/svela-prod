@@ -19,14 +19,15 @@ export function WatchlistTableBody({
   onCoinSelect
 }: WatchlistTableBodyProps) {
   return (
-    <div className="rounded-[10px] bg-primary/5 overflow-hidden p-0.5">
-      {/* Header - adjust grid to account for merged columns */}
-      <WatchlistTableHeader table={table} />
+    <div className="rounded-[10px] bg-primary/5 p-0.5">
+      {/* Header: keep the original "on tinted background" styling,
+          but inset by 1px so grid tracks match the bordered body. */}
+      <div className="mx-px">
+        <WatchlistTableHeader table={table} />
+      </div>
 
       {/* Table Body */}
-      <div 
-        className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden cv-auto"
-      >
+      <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm">
         {table.getRowModel().rows.map(row => (
           <WatchlistTableRow
             key={row.id}

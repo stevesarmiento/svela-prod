@@ -11,6 +11,7 @@ import {
     type ISeriesApi,
     type Time,
 } from 'lightweight-charts';
+import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store';
 import type {
     ChartHighlightRange,
     ChartType,
@@ -209,6 +210,23 @@ export function createChartController({
     let ohlcvByEpochSecond = new Map<number, OHLCVDataPoint>();
     let safeOhlcvData: OHLCVDataPoint[] = [];
 
+    function normalizeLineSeries(points: HullSuiteOverlay['mhull']): HullSuiteOverlay['mhull'] {
+        if (!points || points.length === 0) return [];
+
+        const byEpoch = new Map<number, { time: Time; value: number }>();
+        for (const point of points) {
+            if (!point) continue;
+            const epoch = timeToEpochSeconds(point.time);
+            if (epoch == null) continue;
+            if (!Number.isFinite(point.value)) continue;
+            byEpoch.set(epoch, { time: epoch as Time, value: point.value });
+        }
+
+        return Array.from(byEpoch.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map(([, value]) => value);
+    }
+
     // Highlight overlay + Axis overlay
     const highlightOverlay = createHighlightOverlay({
         containerEl,
@@ -265,6 +283,7 @@ export function createChartController({
             onCrosshairMove?.(null);
             onCrosshairTimeMove?.(null);
             axisOverlay.onCrosshairLeave();
+            clearChartScrub();
             return;
         }
 
@@ -313,6 +332,7 @@ export function createChartController({
 
         onCrosshairMove?.(currentPrice);
         onCrosshairTimeMove?.(param.time ?? null);
+        setChartScrub(timeToEpochSeconds(param.time) ?? null, 'price');
 
         axisOverlay.onCrosshairMove({
             price: currentPrice,
@@ -353,6 +373,61 @@ export function createChartController({
     };
     chart.subscribeCrosshairMove(handleCrosshairMove);
 
+    const SECONDS_PER_DAY = 24 * 60 * 60;
+
+    let lastDataBounds: { firstEpoch: number; lastEpoch: number; length: number } | null = null;
+
+    function shouldFitContent(next: { firstEpoch: number; lastEpoch: number; length: number }): boolean {
+        if (!lastDataBounds) return true;
+
+        // Avoid resetting the user's view for append-only updates (e.g. 1 new candle).
+        const lengthRatio = lastDataBounds.length > 0 ? next.length / lastDataBounds.length : 1;
+        if (lengthRatio < 0.75 || lengthRatio > 1.5) return true;
+
+        // If the dataset start shifts a lot, it's almost certainly a timeframe switch.
+        if (Math.abs(next.firstEpoch - lastDataBounds.firstEpoch) > 2 * SECONDS_PER_DAY) return true;
+
+        return false;
+    }
+
+    // Shared scrub line overlay (shows cross-chart time alignment).
+    const scrubLineEl = document.createElement('div');
+    scrubLineEl.setAttribute('aria-hidden', 'true');
+    scrubLineEl.style.position = 'absolute';
+    scrubLineEl.style.top = '0';
+    scrubLineEl.style.bottom = '0';
+    scrubLineEl.style.width = '1px';
+    scrubLineEl.style.transform = 'translateX(-9999px)';
+    scrubLineEl.style.opacity = '0';
+    scrubLineEl.style.pointerEvents = 'none';
+    scrubLineEl.style.background = resolvedIsDarkMode ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.22)';
+    scrubLineEl.style.zIndex = '5';
+    containerEl.appendChild(scrubLineEl);
+
+    function updateScrubLine() {
+        const scrub = getChartScrubSnapshot();
+        if (scrub.epochSeconds == null || scrub.sourceId === 'price') {
+            scrubLineEl.style.opacity = '0';
+            scrubLineEl.style.transform = 'translateX(-9999px)';
+            return;
+        }
+
+        const x = chart.timeScale().timeToCoordinate(scrub.epochSeconds as Time);
+        if (x == null || !Number.isFinite(x)) {
+            scrubLineEl.style.opacity = '0';
+            scrubLineEl.style.transform = 'translateX(-9999px)';
+            return;
+        }
+
+        scrubLineEl.style.opacity = '1';
+        scrubLineEl.style.transform = `translateX(${Math.round(x)}px)`;
+    }
+
+    const unsubscribeScrub = subscribeToChartScrub(() => updateScrubLine());
+    chart.timeScale().subscribeVisibleTimeRangeChange(updateScrubLine);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(updateScrubLine);
+    updateScrubLine();
+
     function setData(ohlcvData: OHLCVDataPoint[]) {
         // Defensive: prevent lightweight-charts from crashing on invalid points.
         safeOhlcvData = ohlcvData.filter(d => {
@@ -366,6 +441,32 @@ export function createChartController({
                 return false;
             return true;
         });
+
+        // Normalize: lightweight-charts requires strictly ascending, unique times.
+        // We coerce all times to epoch-seconds and dedupe by that key.
+        const uniqueByEpoch = new Map<number, OHLCVDataPoint>();
+        for (const d of safeOhlcvData) {
+            const epoch = timeToEpochSeconds(d.time);
+            if (epoch == null) continue;
+
+            const existing = uniqueByEpoch.get(epoch);
+            if (!existing) {
+                uniqueByEpoch.set(epoch, { ...d, time: epoch as Time });
+                continue;
+            }
+
+            // Prefer the latest datapoint while preserving any defined volume.
+            uniqueByEpoch.set(epoch, {
+                ...existing,
+                ...d,
+                time: epoch as Time,
+                volume: d.volume ?? existing.volume,
+            });
+        }
+
+        safeOhlcvData = Array.from(uniqueByEpoch.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map(([, d]) => d);
 
         // Rebuild map for tooltip OHLC lookup.
         ohlcvByEpochSecond = new Map<number, OHLCVDataPoint>();
@@ -405,8 +506,20 @@ export function createChartController({
         axisOverlay.setFallbackValues({ dataLastPrice, dataLastVolume });
         highlightOverlay.setData({ ohlcvData: safeOhlcvData, lineData, volumeData });
 
-        chart.timeScale().fitContent();
+        const firstEpoch = safeOhlcvData.length ? timeToEpochSeconds(safeOhlcvData[0]!.time) : null;
+        const lastEpoch = safeOhlcvData.length ? timeToEpochSeconds(safeOhlcvData[safeOhlcvData.length - 1]!.time) : null;
+
+        if (firstEpoch != null && lastEpoch != null && safeOhlcvData.length >= 2) {
+            const nextBounds = { firstEpoch, lastEpoch, length: safeOhlcvData.length };
+            if (shouldFitContent(nextBounds)) chart.timeScale().fitContent();
+            lastDataBounds = nextBounds;
+        } else {
+            chart.timeScale().fitContent();
+            lastDataBounds = null;
+        }
+
         resize();
+        updateScrubLine();
     }
 
     function setHighlightRange(range: ChartHighlightRange | null) {
@@ -453,8 +566,11 @@ export function createChartController({
             shullSeries.applyOptions({ lineWidth, color, lineStyle, visible: true });
         }
 
-        if (overlay.mhull?.length) mhullSeries.setData(overlay.mhull);
-        if (overlay.shull?.length) shullSeries.setData(overlay.shull);
+        const mhull = overlay.mhull?.length ? normalizeLineSeries(overlay.mhull) : [];
+        const shull = overlay.shull?.length ? normalizeLineSeries(overlay.shull) : [];
+
+        mhullSeries.setData(mhull);
+        shullSeries.setData(shull);
     }
 
     function setCallbacks(next: Pick<UseChartInstanceOptions, 'onCrosshairMove' | 'onCrosshairTimeMove'>) {
@@ -465,6 +581,9 @@ export function createChartController({
     function destroy() {
         chart.timeScale().unsubscribeVisibleTimeRangeChange(handleVisibleRangeChange);
         chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
+        chart.timeScale().unsubscribeVisibleTimeRangeChange(updateScrubLine);
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateScrubLine);
+        unsubscribeScrub();
 
         if (resizeObserver) {
             resizeObserver.disconnect();
@@ -477,6 +596,10 @@ export function createChartController({
         tooltip.destroy();
         axisOverlay.destroy();
         highlightOverlay.destroy();
+
+        if (containerEl.contains(scrubLineEl)) {
+            containerEl.removeChild(scrubLineEl);
+        }
 
         chart.remove();
     }

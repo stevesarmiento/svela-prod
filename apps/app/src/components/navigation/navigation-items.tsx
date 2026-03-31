@@ -6,7 +6,13 @@ import { usePathHelper } from './bottom-nav-hooks';
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
 import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio';
+type CommandContext = 'overview' | 'watchlist' | 'charts';
+
+interface MenuItem {
+  href: string
+  title: string
+  icon: React.ComponentType<{ className?: string }>
+}
 
 interface NavigationItemsProps {
   onOpenCommandSearch: (context: CommandContext | null) => void;
@@ -19,21 +25,19 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
   const navigation = useWatchlistPreservingNavigation();
 
   // Map menu items to their preserved URLs
-  const getItemUrl = useCallback((item: { href: string; title: string; icon: React.ComponentType<{ className?: string }> }) => {
+  const getItemUrl = useCallback((item: MenuItem) => {
     switch (item.href) {
-      case "/charts":
-        return navigation.charts;
+      case "/screener":
+        return navigation.screener;
       case "/watchlist":
       case "/overview":
         return navigation.overview;
-      case "/settings":
-        return navigation.settings;
       default:
         return item.href;
     }
   }, [navigation]);
 
-  const handleItemClick = useCallback((item: typeof MENU_ITEMS[number], isActive: boolean) => {
+  const handleItemClick = useCallback((item: MenuItem, isActive: boolean) => {
     return () => {
       if (isActive) {
         // Re-clicking the Overview (watchlist) tab should open the same
@@ -43,9 +47,9 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
           return;
         }
 
-        // Charts is an aggregate view; for now we don't show a secondary contextual menu
+        // Screener is a focused view; for now we don't show a secondary contextual menu
         // on re-click. (We can enable this later by wiring a charts context here.)
-        if (item.href === "/charts") {
+        if (item.href === "/screener") {
           return;
         }
 
@@ -58,14 +62,14 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
 
   return (
     <div className="flex items-center gap-2">
-      {MENU_ITEMS.map((item) => {
+      {(MENU_ITEMS as readonly MenuItem[]).map((item) => {
         const isActive = getCleanPath(pathname) === item.href;
         const shortcut = getShortcutForRoute(item.href);
         const tooltipLabel =
-          item.href === "/charts"
-            ? "Aggregate"
+          item.href === "/screener"
+            ? "Screener"
             : isActive
-              ? item.href === "/watchlist" || item.href === "/overview"
+              ? item.href === "/watchlist"
                 ? "Watchlists"
                 : `Search ${item.title}`
               : item.title;
@@ -74,10 +78,11 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
           <Tooltip delayDuration={500} key={item.title}>
             <TooltipTrigger asChild>
               <button
+                type="button"
                 onClick={handleItemClick(item, isActive)}
-                className={`group p-3 rounded-[14px] transition-colors duration-200 hover:bg-transparent ${
+                className={`group p-3 rounded-[13px] transition-colors duration-100 cursor-pointer active:scale-[0.98] hover:bg-transparent ${
                   isActive 
-                    ? "bg-black/10 hover:bg-black/5 dark:bg-white/10 dark:hover:bg-white/5" 
+                    ? "bg-black/10 hover:bg-black/15 dark:bg-white/10 dark:hover:bg-white/15" 
                     : ""
                 }`}
               >
@@ -97,7 +102,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
                 {tooltipLabel}
               </span>
               {shortcut && (
-                <kbd className="rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-diatype-mono text-gray-700 dark:text-zinc-300 uppercase">
+                <kbd className="rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-gray-700 dark:text-zinc-300 uppercase">
                   {shortcut}
                 </kbd>
               )}

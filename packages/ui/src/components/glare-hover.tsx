@@ -1,4 +1,5 @@
-import React, { useRef } from 'react';
+import type React from "react";
+import { useRef } from "react";
 
 interface GlareHoverProps {
   width?: string;
@@ -18,32 +19,32 @@ interface GlareHoverProps {
 }
 
 const GlareHover: React.FC<GlareHoverProps> = ({
-  width = '500px',
-  height = '500px',
-  background = '#000',
-  borderRadius = '10px',
-  borderColor = '#333',
+  width = "500px",
+  height = "500px",
+  background = "#000",
+  borderRadius = "10px",
+  borderColor = "#333",
   children,
-  glareColor = '#ffffff',
+  glareColor = "#ffffff",
   glareOpacity = 0.5,
   glareAngle = -45,
   glareSize = 250,
   transitionDuration = 650,
   playOnce = false,
-  className = '',
-  style = {}
+  className = "",
+  style = {},
 }) => {
-  const hex = glareColor.replace('#', '');
+  const hex = glareColor.replace("#", "");
   let rgba = glareColor;
   if (/^[\dA-Fa-f]{6}$/.test(hex)) {
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
+    const r = Number.parseInt(hex.slice(0, 2), 16);
+    const g = Number.parseInt(hex.slice(2, 4), 16);
+    const b = Number.parseInt(hex.slice(4, 6), 16);
     rgba = `rgba(${r}, ${g}, ${b}, ${glareOpacity})`;
   } else if (/^[\dA-Fa-f]{3}$/.test(hex)) {
-    const r = parseInt((hex[0] ?? '0') + (hex[0] ?? '0'), 16);
-    const g = parseInt((hex[1] ?? '0') + (hex[1] ?? '0'), 16);
-    const b = parseInt((hex[2] ?? '0') + (hex[2] ?? '0'), 16);
+    const r = Number.parseInt((hex[0] ?? "0") + (hex[0] ?? "0"), 16);
+    const g = Number.parseInt((hex[1] ?? "0") + (hex[1] ?? "0"), 16);
+    const b = Number.parseInt((hex[2] ?? "0") + (hex[2] ?? "0"), 16);
     rgba = `rgba(${r}, ${g}, ${b}, ${glareOpacity})`;
   }
 
@@ -53,10 +54,10 @@ const GlareHover: React.FC<GlareHoverProps> = ({
     const el = overlayRef.current;
     if (!el) return;
 
-    el.style.transition = 'none';
-    el.style.backgroundPosition = '-100% -100%, 0 0';
+    el.style.transition = "none";
+    el.style.backgroundPosition = "-100% -100%, 0 0";
     el.style.transition = `${transitionDuration}ms ease`;
-    el.style.backgroundPosition = '100% 100%, 0 0';
+    el.style.backgroundPosition = "100% 100%, 0 0";
   };
 
   const animateOut = () => {
@@ -64,25 +65,25 @@ const GlareHover: React.FC<GlareHoverProps> = ({
     if (!el) return;
 
     if (playOnce) {
-      el.style.transition = 'none';
-      el.style.backgroundPosition = '-100% -100%, 0 0';
+      el.style.transition = "none";
+      el.style.backgroundPosition = "-100% -100%, 0 0";
     } else {
       el.style.transition = `${transitionDuration}ms ease`;
-      el.style.backgroundPosition = '-100% -100%, 0 0';
+      el.style.backgroundPosition = "-100% -100%, 0 0";
     }
   };
 
   const overlayStyle: React.CSSProperties = {
-    position: 'absolute',
+    position: "absolute",
     inset: 0,
     background: `linear-gradient(${glareAngle}deg,
         hsla(0,0%,0%,0) 60%,
         ${rgba} 70%,
         hsla(0,0%,0%,0) 100%)`,
     backgroundSize: `${glareSize}% ${glareSize}%, 100% 100%`,
-    backgroundRepeat: 'no-repeat',
-    backgroundPosition: '-100% -100%, 0 0',
-    pointerEvents: 'none'
+    backgroundRepeat: "no-repeat",
+    backgroundPosition: "-100% -100%, 0 0",
+    pointerEvents: "none",
   };
 
   return (
@@ -94,7 +95,7 @@ const GlareHover: React.FC<GlareHoverProps> = ({
         background,
         borderRadius,
         borderColor,
-        ...style
+        ...style,
       }}
       onMouseEnter={animateIn}
       onMouseLeave={animateOut}

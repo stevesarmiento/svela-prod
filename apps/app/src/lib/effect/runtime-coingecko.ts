@@ -1,4 +1,4 @@
-import { Effect, Exit, Fiber } from "effect"
+import { Effect, type Exit, type Fiber } from "effect"
 import { CoinGeckoApi } from "./coingecko-api"
 
 /**

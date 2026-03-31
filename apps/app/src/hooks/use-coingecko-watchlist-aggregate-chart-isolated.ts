@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState, useLayoutEffect, useMemo } from 'react'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
 import { Effect } from "effect"
 import { CoinGeckoApi } from "@/lib/effect/coingecko-api"
@@ -52,6 +52,10 @@ interface UseCoinGeckoWatchlistAggregateChartIsolatedProps {
 interface CoinGeckoWatchlistAggregateIsolatedResult {
   aggregateData: AggregateDataPoint[]
   isLoading: boolean
+  isFetching: boolean
+  isPlaceholderData: boolean
+  /** True when interval has no chart aggregate (e.g. 2Y — same idea as chart-table N/A). */
+  isChangeUnavailable: boolean
   currentAggregateChange: number
   coinsCount: number
   performance: {
@@ -71,7 +75,7 @@ interface HistoricalDataResult {
   }
 }
 
-function getRangeDaysFromTimeScale(timeScale: string): number {
+export function getRangeDaysFromTimeScale(timeScale: string): number {
   switch (timeScale) {
     case "1d":
       return 1
@@ -81,12 +85,15 @@ function getRangeDaysFromTimeScale(timeScale: string): number {
       return 30
     case "max":
       return 365
+    case "2y":
+      // CoinGecko list charts are capped; align window with `max` fetch below.
+      return 730
     default:
       return 7
   }
 }
 
-function getBucketMsFromTimeScale(timeScale: string): number {
+export function getBucketMsFromTimeScale(timeScale: string): number {
   switch (timeScale) {
     // Keep buckets coarse enough to avoid hundreds/thousands of points.
     case "1d":
@@ -97,13 +104,28 @@ function getBucketMsFromTimeScale(timeScale: string): number {
       return 12 * 60 * 60 * 1000 // 12h
     case "max":
       return 24 * 60 * 60 * 1000 // 1d
+    case "2y":
+      return 24 * 60 * 60 * 1000 // 1d
     default:
       return 2 * 60 * 60 * 1000 // 2h
   }
 }
 
-function floorToBucket(timeMs: number, bucketMs: number): number {
+export function floorToBucket(timeMs: number, bucketMs: number): number {
   return Math.floor(timeMs / bucketMs) * bucketMs
+}
+
+/** Shared range end for list rows / charts so bucket windows line up. */
+export function getWatchlistAggregateRangeEndMs(
+  timeScale: string,
+  nowMs: number = Date.now(),
+): number {
+  const bucketMs = getBucketMsFromTimeScale(timeScale)
+  return floorToBucket(nowMs, bucketMs)
+}
+
+function toEpochSeconds(timeMs: number): number {
+  return Math.floor(timeMs / 1000)
 }
 
 function buildBucketTimesMs(args: {
@@ -148,15 +170,23 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
       case '7d': return '7'
       case '30d': return '30'
       case 'max': return '365'
+      case '2y': return 'max'
       default: return '7'
     }
   }
 
   const days = getDaysFromTimeScale(timeScale)
+  const isChangeUnavailable = timeScale === '2y'
+  const historicalQueryEnabled = coinIds.length > 0 && !isChangeUnavailable
 
   // Fetch historical market chart data for all coins in the watchlist
-  const { data: historicalData, isLoading } = useQuery<HistoricalDataResult>({
-    queryKey: ['watchlist-aggregate-historical', coinIdsKey, timeScale],
+  const {
+    data: historicalData,
+    isLoading,
+    isFetching,
+    isPlaceholderData,
+  } = useQuery<HistoricalDataResult>({
+    queryKey: ['watchlist-aggregate-historical', coinIdsKey, timeScale, rangeEndTimeMs ?? 'now'],
     queryFn: async () => {
       const emptyData: Record<string, CoinHistoricalData[]> = {}
       if (!coinIds.length) return { data: emptyData, performance: { cacheHits: 0, cacheMisses: 0, totalQueries: 0 } }
@@ -218,14 +248,21 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
         return { data: emptyData, performance: { cacheHits: 0, cacheMisses: 0, totalQueries: 1 } }
       }
     },
-    enabled: coinIds.length > 0,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    refetchInterval: 15 * 60 * 1000, // 15 minutes
+    enabled: historicalQueryEnabled,
+    staleTime: 60 * 60 * 1000, // 1 hour
+    refetchInterval: 60 * 60 * 1000, // 1 hour
+    placeholderData: keepPreviousData,
   })
 
-  // Aggregate historical data into a combined price line
-  useEffect(() => {
-    if (!historicalData?.data || !coins.length) {
+  // Aggregate historical data into a combined price line (layout effect avoids one frame of stale %).
+  useLayoutEffect(() => {
+    // Do not mix previous query `data` (keepPreviousData) with a new timeScale / coin set.
+    if (
+      isChangeUnavailable ||
+      isPlaceholderData ||
+      !historicalData?.data ||
+      !coins.length
+    ) {
       setAggregateData([])
       return
     }
@@ -241,17 +278,21 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
         return
       }
 
-      // Build a shared, deterministic bucket timeline so series align and end together.
+      // Build a shared bucket timeline so series align and end together.
+      // Important: don't "floor" endTime to a bucket boundary here.
+      // If we floor, our start time shifts earlier than the upstream API range (CoinGecko returns last N days ending at now),
+      // which can move baselines forward by up to one bucket and make returns look "off".
       const rangeDays = getRangeDaysFromTimeScale(timeScale)
       const bucketMs = getBucketMsFromTimeScale(timeScale)
-      const endTimeMs = floorToBucket(rangeEndTimeMs ?? Date.now(), bucketMs)
+      const endTimeMs = rangeEndTimeMs ?? Date.now()
       const startTimeMs = endTimeMs - rangeDays * 24 * 60 * 60 * 1000
       const bucketTimesMs = buildBucketTimesMs({ startTimeMs, endTimeMs, bucketMs })
 
       const sumReturnsByBucket: Array<number> = Array.from({ length: bucketTimesMs.length }, () => 0)
       const countReturnsByBucket: Array<number> = Array.from({ length: bucketTimesMs.length }, () => 0)
 
-      // Equal-weighted % returns: normalize each coin to 0% at range start, then average returns.
+      // Equal-weighted portfolio return: normalize each coin to 0% at range start, then average returns.
+      // This matches "if SOL is -20% and BTC is -10%, aggregate is (-20 + -10) / 2 = -15%" (equal-weight).
       for (const coinId of validCoinIds) {
         const rawSeries = coinDataMap[coinId]
         if (!rawSeries?.length) continue
@@ -259,26 +300,26 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
         const series = [...rawSeries].sort((a, b) => a.time - b.time)
         let cursor = 0
         let lastPrice: number | null = null
-        let baselinePrice: number | null = null
+
+        // Baseline: first known price in the returned range.
+        // We assume CoinGecko's "days" range aligns with our [startTimeMs, endTimeMs] window.
+        const baselinePrice = series[0]?.value && series[0].value > 0 ? series[0].value : null
+        if (baselinePrice === null) continue
 
         for (let i = 0; i < bucketTimesMs.length; i++) {
           const bucketTimeMs = bucketTimesMs[i]!
           // CoinGecko market-chart timestamps are seconds; bucket times are ms.
-          const bucketTimeSec = Math.floor(bucketTimeMs / 1000)
+          const bucketTimeSec = toEpochSeconds(bucketTimeMs)
 
           while (cursor < series.length && series[cursor]!.time <= bucketTimeSec) {
             lastPrice = series[cursor]!.value
             cursor++
           }
 
-          // Set baseline at the first bucket where this coin has a known price in-range.
-          if (baselinePrice === null && lastPrice !== null && lastPrice > 0) {
-            baselinePrice = lastPrice
-          }
-
-          if (baselinePrice === null || lastPrice === null) continue
-
-          const returnPct = ((lastPrice - baselinePrice) / baselinePrice) * 100
+          // If we don't have a price yet for this bucket, assume it's still at baseline.
+          // This keeps the aggregate denominator stable and ensures the series starts at 0%.
+          const priceForBucket = lastPrice ?? baselinePrice
+          const returnPct = ((priceForBucket - baselinePrice) / baselinePrice) * 100
           sumReturnsByBucket[i] = (sumReturnsByBucket[i] ?? 0) + returnPct
           countReturnsByBucket[i] = (countReturnsByBucket[i] ?? 0) + 1
         }
@@ -288,7 +329,7 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
       let lastAggregateValue: number | null = null
       for (let i = 0; i < bucketTimesMs.length; i++) {
         const bucketTimeMs = bucketTimesMs[i]!
-        const bucketTimeSec = Math.floor(bucketTimeMs / 1000)
+        const bucketTimeSec = toEpochSeconds(bucketTimeMs)
         const count = countReturnsByBucket[i] ?? 0
 
         if (count > 0) {
@@ -310,15 +351,19 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
       console.error('Error processing watchlist aggregate data:', error)
       setAggregateData([])
     }
-  }, [historicalData, coins, timeScale, rangeEndTimeMs])
+  }, [
+    historicalData,
+    coins,
+    timeScale,
+    rangeEndTimeMs,
+    isChangeUnavailable,
+    isPlaceholderData,
+  ])
 
   // Calculate current aggregate performance for display
   const currentAggregateChange = useMemo(() => {
-    if (!coins.length) return 0
-    
-    const totalChange = coins.reduce((sum, coin) => sum + coin.quote.USD.percent_change_24h, 0)
-    return totalChange / coins.length
-  }, [coins])
+    return aggregateData[aggregateData.length - 1]?.value ?? 0
+  }, [aggregateData])
 
   const performance = useMemo(() => {
     if (!historicalData?.performance) return { cacheHits: 0, cacheMisses: 0, totalQueries: 0, cacheHitRate: 0 }
@@ -334,7 +379,10 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
 
   return {
     aggregateData,
-    isLoading,
+    isLoading: historicalQueryEnabled ? isLoading : false,
+    isFetching: historicalQueryEnabled ? isFetching : false,
+    isPlaceholderData: historicalQueryEnabled ? isPlaceholderData : false,
+    isChangeUnavailable,
     currentAggregateChange,
     coinsCount: coins.length,
     performance

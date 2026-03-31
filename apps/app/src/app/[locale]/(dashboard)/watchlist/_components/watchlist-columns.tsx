@@ -1,19 +1,40 @@
 'use client'
 
+import type { ReactNode } from "react"
 import { formatLargeNumber } from "@v1/ui/format-numbers";
 import { Button } from "@v1/ui/button"
+import { Badge } from "@v1/ui/badge"
 import { X } from "lucide-react"
-import Image from "next/image"
 import { cn } from "@v1/ui/cn"
 import { Skeleton } from "@v1/ui/skeleton"
 import { Checkbox } from "@v1/ui/checkbox"
-import { type ColumnDef } from '@tanstack/react-table'
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
+import type { ColumnDef } from '@tanstack/react-table'
 import { motion } from "motion/react"
 import { Spinner } from "@v1/ui/spinner"
+import dynamic from "next/dynamic"
 import type { CoinMarketData } from '@/types/coins'
+import { TokenLogo } from "@/components/token-logo"
 import { InlinePriceChart } from "@/components/charts/inline-price-chart"
+import { InlineSpotTakerBuySellVolumeChart } from "@/components/charts/inline-spot-taker-buy-sell-volume-chart"
 import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
+import { formatUsdPrice } from "@/lib/format-usd"
+import { IconTriangleFill } from "symbols-react"
+
+function loadAnalysisDialog() {
+  return import("@/components/navigation/analysis-dialog")
+}
+
+const AnalysisDialog = dynamic(
+  () => loadAnalysisDialog().then((module) => module.AnalysisDialog),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-6 w-6 rounded-lg bg-zinc-950/10 dark:bg-white/10" />
+    ),
+  },
+)
 
 interface Ref<T> {
   current: T;
@@ -29,6 +50,50 @@ interface WatchlistColumnsProps {
   hasSelectedCoinsRef: Ref<boolean>;
   shouldReduceMotion?: boolean;
   onInlineChartError?: () => void;
+}
+
+function deriveUsdMoveFromPercentChange(args: {
+  priceUsd: number
+  percentChange: number
+}): number | null {
+  const priceUsd = args.priceUsd
+  const percentChange = args.percentChange
+
+  if (!Number.isFinite(priceUsd) || priceUsd <= 0) return null
+  if (!Number.isFinite(percentChange)) return null
+
+  const r = percentChange / 100
+  const denom = 1 + r
+  if (!Number.isFinite(denom) || denom <= 0) return null
+
+  const previousPrice = priceUsd / denom
+  const deltaUsd = priceUsd - previousPrice
+  if (!Number.isFinite(deltaUsd)) return null
+
+  return deltaUsd
+}
+
+/** Hover hint for dense table headers (provider is on dashboard layout). */
+function ColumnHeaderTooltip({
+  children,
+  text,
+}: {
+  children: ReactNode
+  text: string
+}) {
+  return (
+    <Tooltip delayDuration={500}>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center">{children}</span>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        className="p-2.5 rounded-md max-w-xs text-pretty text-xs font-normal normal-case tracking-normal"
+      >
+        {text}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 export function createWatchlistColumns({
@@ -47,7 +112,7 @@ export function createWatchlistColumns({
       id: 'select',
       header: () => (
         <div className={cn(
-          "transition-opacity duration-200",
+          "transition-opacity duration-200 uppercase",
           hasSelectedCoinsRef.current ? "opacity-100" : "opacity-0"
         )}>
           <Checkbox
@@ -59,6 +124,7 @@ export function createWatchlistColumns({
       ),
       cell: ({ row }) => {
         const coinId = row.original.id.toString()
+        const isRowLoading = row.original.quote.USD.price <= 0
         const isRowSelected = selectedCoinsRef.current.has(coinId)
         const tokenName = cleanTokenName(row.original.name)
         const tokenLogoUrl = getTokenLogoURL(row.original.symbol, row.original.image)
@@ -90,7 +156,7 @@ export function createWatchlistColumns({
         
         return (
           <motion.div
-            className="relative w-full h-full flex items-center justify-start overflow-hidden"
+            className="relative h-full flex items-center justify-start"
             // Ensure non-hovered rows animate when selection mode flips on/off.
             // Some table updates can remount cells; starting from `"rest"` prevents "jump-to-endstate".
             variants={cellVariants}
@@ -107,7 +173,8 @@ export function createWatchlistColumns({
               <Checkbox
                 data-watchlist-row-checkbox="true"
                 checked={isRowSelected}
-                tabIndex={isSelectionMode ? 0 : -1}
+                disabled={isRowLoading}
+                tabIndex={isSelectionMode && !isRowLoading ? 0 : -1}
                 onCheckedChange={(value) => onCoinSelect(coinId, !!value)}
                 aria-label="Select row"
                 className="mt-[6px] data-[state=checked]:mt-[2px]"
@@ -122,30 +189,14 @@ export function createWatchlistColumns({
             >
               <div className="relative">
                 {row.original.quote.USD.price > 0 ? (
-                  // Use CoinGecko image if available, otherwise fallback to letter
-                  safeTokenLogoUrl ? (
-                    <Image
-                      src={safeTokenLogoUrl}
-                      alt={tokenName}
-                      className="w-[20px] h-[20px] rounded-full"
-                      width={24}
-                      height={24}
-                      onError={(e) => {
-                        // Fallback to letter-based avatar on image error
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        const parent = target.parentElement;
-                        if (parent) {
-                          parent.innerHTML = `<div class="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">${row.original.symbol.charAt(0).toUpperCase()}</div>`;
-                        }
-                      }}
-                    />
-                  ) : (
-                    // Fallback for missing image
-                    <div className="w-[20px] h-[20px] rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
-                      {row.original.symbol.charAt(0).toUpperCase()}
-                    </div>
-                  )
+                  <TokenLogo
+                    src={safeTokenLogoUrl}
+                    alt={tokenName}
+                    sizePx={20}
+                    fallbackText={row.original.symbol}
+                    className="mr-1 ring-0 bg-primary/20 border-[1.5px] border-zinc-200 dark:border-black/60"
+                    quality={70}
+                  />
                 ) : (
                   <Skeleton className="w-[20px] h-[20px] rounded-full" />
                 )}
@@ -162,9 +213,9 @@ export function createWatchlistColumns({
                     <Skeleton className="h-4 w-8 rounded" />
                   )}
                 </div>
-                <div className="">
+                <div className=" translate-y-[-1px]">
                   {row.original.quote.USD.price > 0 ? (
-                    <span className="text-muted-foreground font-diatype-mono text-xs">{tokenName}</span>
+                    <span className="text-muted-foreground font-diatype-medium text-xs">{tokenName}</span>
                   ) : (
                     <Skeleton className="h-3 w-16 rounded" />
                   )}
@@ -181,8 +232,8 @@ export function createWatchlistColumns({
       id: 'token-sort',
       accessorKey: 'name',
       header: () => (
-        <div className="text-left flex items-center gap-1">
-          Token
+        <div className="text-left !uppercase flex items-center gap-1">
+          TOKEN
         </div>
       ),
       cell: () => null,
@@ -192,14 +243,16 @@ export function createWatchlistColumns({
       id: 'price',
       accessorKey: 'quote.USD.price',
       header: () => (
-        <div className="text-left flex items-center justify-end gap-1">
-          Price
+        <div className="text-left flex items-center justify-start gap-1">
+          <ColumnHeaderTooltip text="Spot price in USD from aggregated market data (typically via CoinGecko). Not an executable quote.">
+            PRICE
+          </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) => (
-        <span className="font-diatype-mono text-xs">
+        <span className="font-berkeley-mono text-xs">
           {row.original.quote.USD.price > 0 ? (
-            `$${row.original.quote.USD.price.toLocaleString()}`
+            formatUsdPrice(row.original.quote.USD.price)
           ) : (
             <Skeleton className="h-4 w-16 rounded-full" />
           )}
@@ -208,21 +261,88 @@ export function createWatchlistColumns({
       enableSorting: true,
     },
     {
+      id: "change24hUsd",
+      accessorFn: (row) =>
+        deriveUsdMoveFromPercentChange({
+          priceUsd: row.quote.USD.price,
+          percentChange: row.quote.USD.percent_change_24h,
+        }) ?? 0,
+      header: () => (
+        <div className="text-left uppercase flex items-center justify-start gap-1">
+          <ColumnHeaderTooltip text="How many USD the price moved over the last rolling 24 hours, inferred from the current USD price and the 24h percent change (same basis as the % column, expressed in dollars).">
+            24h $ Change
+          </ColumnHeaderTooltip>
+        </div>
+      ),
+      cell: ({ row }) =>
+        row.original.quote.USD.price > 0 ? (
+          (() => {
+            const change24h = row.original.quote.USD.percent_change_24h
+            const isPositive = change24h > 0
+            const isNegative = change24h < 0
+            const isNeutral = !isPositive && !isNegative
+            const usdMove = deriveUsdMoveFromPercentChange({
+              priceUsd: row.original.quote.USD.price,
+              percentChange: change24h,
+            })
+            const usdSign = isPositive ? "+" : isNegative ? "-" : ""
+
+            return (
+              <span
+                className={cn(
+                  "inline-flex items-center font-berkeley-mono text-xs tabular-nums",
+                  isPositive && "text-emerald-400",
+                  isNegative && "text-rose-400",
+                  isNeutral && "text-muted-foreground",
+                )}
+              >
+                {usdMove === null ? "—" : `${usdSign}${formatUsdPrice(Math.abs(usdMove))}`}
+              </span>
+            )
+          })()
+        ) : (
+          <Skeleton className="h-4 w-14 rounded-full" />
+        ),
+      enableSorting: true,
+    },
+    {
       id: 'change24h',
       accessorKey: 'quote.USD.percent_change_24h',
       header: () => (
-        <div className="text-left flex items-center justify-end gap-1">
-          24h Change
+        <div className="text-left uppercase flex items-center justify-start gap-1">
+          <ColumnHeaderTooltip text="Rolling 24-hour change in USD price versus the price roughly one day ago, as reported by the market data source.">
+            24h % Change
+          </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) => (
         row.original.quote.USD.price > 0 ? (
-          <span className={cn(
-            "font-diatype-mono text-xs",
-            row.original.quote.USD.percent_change_24h > 0 ? 'text-green-600' : 'text-red-600'
-          )}>
-            {row.original.quote.USD.percent_change_24h.toFixed(2)}%
-          </span>
+          (() => {
+            const change24h = row.original.quote.USD.percent_change_24h
+            const isPositive = change24h > 0
+            const isNegative = change24h < 0
+            const isNeutral = !isPositive && !isNegative
+            const pctSign = isPositive ? "+" : isNegative ? "-" : ""
+
+            return (
+              <Badge
+                variant={isPositive ? "success" : isNegative ? "destructive" : "outline"}
+                className={cn(
+                  "h-5 px-1 font-berkeley-mono text-[10px] tabular-nums gap-1",
+                  isNeutral && "border-zinc-200/60 text-muted-foreground dark:border-white/10",
+                )}
+              >
+                <IconTriangleFill
+                  aria-hidden="true"
+                  className={cn(
+                    "size-1.5 shrink-0 fill-current",
+                    isNegative && "rotate-180",
+                  )}
+                />
+                {pctSign}{Math.abs(change24h).toFixed(2)}%
+              </Badge>
+            )
+          })()
         ) : (
           <Skeleton className="h-4 w-12 rounded-full" />
         )
@@ -233,12 +353,14 @@ export function createWatchlistColumns({
       id: 'volume',
       accessorKey: 'quote.USD.volume_24h',
       header: () => (
-        <div className="text-left flex items-center justify-end gap-1">
-          Volume 24h
+        <div className="text-left uppercase flex items-center justify-start gap-1">
+          <ColumnHeaderTooltip text="Total notional USD traded across tracked venues in the last 24 hours. Higher volume usually means more liquidity and tighter spreads.">
+            Volume 24h
+          </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) => (
-        <span className="font-diatype-mono text-xs">
+        <span className="font-berkeley-mono text-xs">
           {row.original.quote.USD.price > 0 ? (
             `$${formatLargeNumber(row.original.quote.USD.volume_24h || 0)}`
           ) : (
@@ -249,32 +371,59 @@ export function createWatchlistColumns({
       enableSorting: true,
     },
     {
-      id: 'chart',
+      id: 'takerBuySellVolume',
       header: () => (
-        <div className="text-center flex items-center justify-center gap-1">
-          24h Chart
+        <div className="text-left uppercase flex items-center justify-start gap-1">
+          <ColumnHeaderTooltip text="Taker volume on Binance spot (USDT pair): market orders hitting the book. Buy stack vs sell stack over recent 4h slices—more aggressive buying lifts the buy side; more aggressive selling lifts the sell side.">
+            Taker Buy/Sell Vol
+          </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) => (
-        <div className="flex items-center justify-center">
+        <div className="flex min-w-0 items-center justify-start">
           {row.original.quote.USD.price > 0 ? (
-            <div 
-              className="[mask-image:linear-gradient(to_right,transparent_0%,black_50%,black_100%)]"
+            <InlineSpotTakerBuySellVolumeChart
+              baseSymbol={row.original.symbol}
+              className="w-full max-w-56"
+            />
+          ) : (
+            <Skeleton className="h-8 w-full max-w-56 rounded-sm" />
+          )}
+        </div>
+      ),
+      enableSorting: false,
+    },
+    {
+      id: 'chart',
+      header: () => (
+        <div className="text-left uppercase flex items-center justify-start gap-1">
+          <ColumnHeaderTooltip text="Seven-day USD price trail (sparkline). Uses live chart data when loaded; may fall back to the 7d series bundled with market snapshots.">
+            7d Chart
+          </ColumnHeaderTooltip>
+        </div>
+      ),
+      cell: ({ row }) => (
+        <div className="flex min-w-0 items-center justify-start">
+          {row.original.quote.USD.price > 0 ? (
+            <div
+              className="w-full max-w-56 overflow-hidden [mask-image:linear-gradient(to_right,transparent_0%,black_12%,black_100%)]"
               style={{
-                WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 50%, black 100%)',
-                maskImage: 'linear-gradient(to right, transparent 0%, black 50%, black 100%)'
+                WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 12%, black 100%)",
+                maskImage: "linear-gradient(to right, transparent 0%, black 12%, black 100%)",
               }}
             >
               <InlinePriceChart 
+                className="w-full"
                 coingeckoId={row.original.id}
                 percentChange24h={row.original.quote.USD.percent_change_24h}
                 symbol={row.original.symbol}
+                sparkline7d={row.original.sparkline7d}
                 initialData={row.original.quote.USD}
                 onError={onInlineChartError}
               />
             </div>
           ) : (
-            <Skeleton className="h-8 w-56 rounded-sm" />
+            <Skeleton className="h-8 w-full max-w-56 rounded-sm" />
           )}
         </div>
       ),
@@ -283,31 +432,63 @@ export function createWatchlistColumns({
     {
       id: 'actions',
       header: () => (
-        <div className="flex items-center justify-end gap-1">
-          Action
+        <div className="flex uppercase items-center justify-end gap-1 whitespace-nowrap">
+          Actions
         </div>
       ),
-      cell: ({ row }) => (
-        <div className="flex items-center justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.preventDefault(); // Prevent row link navigation
-              e.stopPropagation();
-              handleRemove(row.original.id);
-            }}
-            disabled={removingCoinsRef.current.has(row.original.id.toString())}
-            className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
-            >
-            {removingCoinsRef.current.has(row.original.id.toString()) ? (
-              <Spinner size={16} />
+      cell: ({ row }) => {
+        const isRowLoading = row.original.quote.USD.price <= 0
+        const tokenName = cleanTokenName(row.original.name)
+        const tokenLogoUrl = getTokenLogoURL(row.original.symbol, row.original.image)
+        const safeTokenLogoUrl =
+          tokenLogoUrl && (tokenLogoUrl.startsWith("http") || tokenLogoUrl.startsWith("/"))
+            ? tokenLogoUrl
+            : undefined
+
+        return (
+          <div className="flex items-center justify-end gap-1.5 flex-nowrap whitespace-nowrap">
+            {isRowLoading ? (
+              <Skeleton className="h-6 w-16 rounded-lg" />
             ) : (
-              <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
+              <>
+                <AnalysisDialog
+                  coinId={String(row.original.id)}
+                  tokenData={{
+                    name: tokenName,
+                    symbol: row.original.symbol,
+                    id: String(row.original.id),
+                    logoUrl: safeTokenLogoUrl,
+                  }}
+                  triggerVariant="icon"
+                  triggerTooltip="Deep Analysis"
+                  triggerAriaLabel="Deep Analysis"
+                />
+                {/* <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleRemove(row.original.id)
+                  }}
+                  disabled={removingCoinsRef.current.has(row.original.id.toString())}
+                  aria-label="Remove from watchlist"
+                  className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
+                >
+                  {removingCoinsRef.current.has(row.original.id.toString()) ? (
+                    <Spinner size={16} />
+                  ) : (
+                    <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
+                  )}
+                </Button> */}
+              </>
             )}
-          </Button>
-        </div>
-      ),
+          </div>
+        )
+      },
+      enableSorting: false,
+      size: 80,
+      minSize: 72,
     },
   ];
 }

@@ -10,12 +10,10 @@ import {
   IconChartBar,
 
   IconChartLineUptrendXyaxis,
-  IconGear,
-  IconBell,
   IconEye,
   IconTrayAndArrowDown
 } from 'symbols-react';
-import React from 'react';
+import type React from 'react';
 
 interface ContextualCommand {
   title: string;
@@ -31,7 +29,7 @@ interface ContextualCommandGroup {
   items: ContextualCommand[];
 }
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | null;
 
 export function useContextualCommands(searchQuery: string, context: CommandContext = null) {
   const contextualCommands = useMemo((): ContextualCommandGroup[] => {
@@ -124,27 +122,6 @@ export function useContextualCommands(searchQuery: string, context: CommandConte
                 subtitle: "Most viewed charts",
                 icon: IconChartLineUptrendXyaxis,
                 action: "trending-charts"
-              }
-            ]
-          }
-        ];
-
-      case 'portfolio':
-        return [
-          {
-            group: "Settings",
-            items: [
-              {
-                title: "Notifications",
-                subtitle: "Manage notification settings",
-                icon: IconBell,
-                action: "notifications-settings"
-              },
-              {
-                title: "Preferences",
-                subtitle: "App preferences",
-                icon: IconGear,
-                action: "app-preferences"
               }
             ]
           }

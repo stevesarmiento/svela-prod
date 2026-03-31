@@ -1,36 +1,36 @@
 {
-    "name": "@v1/convex",
-    "version": "1.0.0",
-    "private": true,
-    "type": "module",
-    "scripts": {
-      "clean": "rm -rf .turbo node_modules",
-      "lint": "biome check .",
-      "format": "biome format --write .",
-      "typecheck": "tsc --noEmit"
-    },
-    "dependencies": {
-      "@v1/logger": "workspace:*"
-    },
-    "peerDependencies": {
-      "convex": ">=1.28.0",
-      "react": ">=18.0.0"
-    },
-    "devDependencies": {
-      "@clerk/nextjs": "^6.36.10",
-      "@types/node": "^24.0.3",
-      "@types/react": "^19.2.9",
-      "@types/react-dom": "^19.2.3",
-      "typescript": "^5.9.3",
-      "convex": "^1.31.6",
-      "next": "^16.1.5",
-      "react": "^19.2.4",
-      "react-dom": "^19.2.4"
-    },
-    "exports": {
-      "./client": "./src/client.ts",
-      "./provider": "./src/provider.tsx",
-      "./hooks": "./src/hooks.ts",
-      "./types": "./src/types.ts"
-    }
+  "name": "@v1/convex",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "clean": "rm -rf .turbo node_modules",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@v1/logger": "workspace:*"
+  },
+  "peerDependencies": {
+    "convex": ">=1.28.0",
+    "react": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@clerk/nextjs": "^6.39.1",
+    "@types/node": "^24.12.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "convex": "^1.34.1",
+    "next": "^16.2.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "typescript": "^5.9.3"
+  },
+  "exports": {
+    "./client": "./src/client.ts",
+    "./provider": "./src/provider.tsx",
+    "./hooks": "./src/hooks.ts",
+    "./types": "./src/types.ts"
   }
+}

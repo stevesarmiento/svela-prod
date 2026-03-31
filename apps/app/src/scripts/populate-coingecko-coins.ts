@@ -1,5 +1,5 @@
 import { config } from "dotenv";
-import path from "path";
+import path from "node:path";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
 
@@ -84,7 +84,7 @@ async function fetchRealImageUrls(coingeckoIds: string[]): Promise<CoinGeckoApiR
 
       console.log(`  ✅ Got ${Object.keys(allResults).length} image URLs so far`);
     } catch (error) {
-      console.error(`  ❌ Error fetching market data:`, error);
+      console.error("  ❌ Error fetching market data:", error);
     }
 
     // Rate limit friendly delay
@@ -134,7 +134,7 @@ async function populateCoinGeckoCoins() {
           coingeckoId: coin.id,
           name: coin.name,
           symbol: coin.symbol.toUpperCase(),
-          logoUrl: realData?.image || `https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png`, // Fallback
+          logoUrl: realData?.image || "https://coin-images.coingecko.com/coins/images/1/thumb/bitcoin.png", // Fallback
           isActive: true,
           platforms: coin.platforms || {},
           imageUpdated: !!realData?.image, // Mark as updated if we got real image

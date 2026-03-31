@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, Dispatch, SetStateAction, useTransition, useRef } from 'react';
+import { useEffect, useCallback, useState, type Dispatch, type SetStateAction, useTransition, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { COMMAND_ITEMS, type NavigationItem, type ActionItem } from './bottom-nav-constants';
 import { SEQUENTIAL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
@@ -203,7 +203,12 @@ export function useCommandHandler() {
     setIsOpen(false);
     
     // Find the selected item from all command groups
-    const allItems = (COMMAND_ITEMS as { group: string; items: (NavigationItem | ActionItem)[] }[]).flatMap(group => group.items);
+    const allItems = (
+      COMMAND_ITEMS as ReadonlyArray<{
+        group: string;
+        items: ReadonlyArray<NavigationItem | ActionItem>;
+      }>
+    ).flatMap((group) => group.items);
     const selectedItem = allItems.find(item => item.title.toLowerCase() === value.toLowerCase());
     
     if (!selectedItem) return;

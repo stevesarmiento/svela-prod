@@ -19,7 +19,7 @@ import { BROWSER } from '@/lib/number-flow/env'
 const NUMBER_FLOW_TAG = 'svela-number-flow' as const
 const NUMBER_FLOW_REACT_TAG = 'svela-number-flow-react' as const
 
-const REACT_MAJOR = parseInt(React.version.match(/^(\d+)\./)?.[1]!)
+const REACT_MAJOR = Number.parseInt(React.version.match(/^(\d+)\./)?.[1]!)
 const isReact19 = REACT_MAJOR >= 19
 
 // Can't wait to not have to do this in React 19:

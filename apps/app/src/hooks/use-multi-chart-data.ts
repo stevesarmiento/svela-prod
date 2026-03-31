@@ -215,7 +215,8 @@ function getStaleTime(timeScale: string): number {
           item &&
           typeof item.time === "number" &&
           typeof item.value === "number" &&
-          !isNaN(item.value) &&
+          !Number.isNaN(item.value) &&
+          Number.
           isFinite(item.value)
       )
 

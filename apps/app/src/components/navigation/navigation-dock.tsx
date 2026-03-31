@@ -5,7 +5,7 @@ import { SelectionContent } from './selection-content';
 import type { SelectionState } from './bottom-nav-context';
 import { BackgroundPattern } from './background-pattern';
 
-type CommandContext = 'overview' | 'watchlist' | 'charts' | 'portfolio' | null;
+type CommandContext = 'overview' | 'watchlist' | 'charts' | null;
 
 interface NavigationDockProps {
   mode: 'navigation' | 'selection';
@@ -28,7 +28,7 @@ const NavigationDockComponent = ({
            dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.4)]
            ${mode === 'selection' 
              ? 'bg-rose-950 border border-red-200 dark:border-red-800/50' 
-             : 'bg-white/95 border border-gray-200/50 dark:bg-zinc-900 dark:border-transparent'
+             : 'bg-white/95 border border-gray-200/50 dark:bg-zinc-800/80 backdrop-blur-md dark:border-transparent'
            } ${isCommandOpen && mode === 'navigation' ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'}`;
   }, [mode, isCommandOpen]);
 
@@ -44,9 +44,6 @@ const NavigationDockComponent = ({
           mass: 0.3,
         }}
       >
-        {/* React 19: Optimized shared background pattern */}
-        <BackgroundPattern />
-        
         <div className="relative z-10 flex items-center gap-1 p-1 w-auto">
           {mode === 'navigation' && (
             <motion.div

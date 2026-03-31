@@ -15,8 +15,7 @@ export default defineSchema({
     userId: v.id("users"),
     title: v.string(),
     content: v.string(),
-  })
-    .index("by_user", ["userId"]),
+  }).index("by_user", ["userId"]),
 
   watchlistGroups: defineTable({
     userId: v.id("users"),
@@ -25,23 +24,28 @@ export default defineSchema({
     description: v.optional(v.string()),
     icon: v.optional(v.string()), // Emoji or icon name from symbols-react
     color: v.optional(v.string()), // Background color for the card
+    portfolioWalletId: v.optional(v.id("portfolioWallets")),
     isDefault: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_user_default", ["userId", "isDefault"])
-    .index("by_user_slug", ["userId", "slug"]),
+    .index("by_user_slug", ["userId", "slug"])
+    .index("by_user_and_portfolio_wallet", ["userId", "portfolioWalletId"]),
 
   watchlists: defineTable({
     userId: v.id("users"),
     watchlistGroupId: v.id("watchlistGroups"),
     coinId: v.string(),
+    /** Optional token quantity for this row (manual watchlist or wallet-mirrored group). */
+    holdings: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_user_coin", ["userId", "coinId"])
     .index("by_group", ["watchlistGroupId"])
-    .index("by_group_coin", ["watchlistGroupId", "coinId"]),
+    .index("by_group_coin", ["watchlistGroupId", "coinId"])
+    .index("by_coin", ["coinId"]),
 
   coins: defineTable({
     coinId: v.number(),
@@ -78,8 +82,6 @@ export default defineSchema({
     .searchIndex("search_symbol", { searchField: "symbol" })
     .searchIndex("search_coingecko_id", { searchField: "coingeckoId" }),
 
-
-
   // CoinGecko specific metadata table
   coingeckoMetadata: defineTable({
     coingeckoId: v.string(), // CoinGecko ID (e.g., "bitcoin")
@@ -112,32 +114,263 @@ export default defineSchema({
     .index("by_symbol", ["symbol"])
     .index("by_active", ["isActive"]),
 
+  coinglassSpotTakerBuySellVolumeHistory: defineTable({
+    exchange: v.string(), // e.g. "Binance"
+    symbol: v.string(), // e.g. "BTCUSDT"
+    interval: v.string(), // e.g. "4h"
+    timestamp: v.number(), // ms
+    takerBuyVolumeUsd: v.number(),
+    takerSellVolumeUsd: v.number(),
+    dataSource: v.string(), // e.g. "coinglass-cron-spot-taker"
+    lastUpdated: v.number(),
+  })
+    .index("by_exchange_and_symbol_and_interval", [
+      "exchange",
+      "symbol",
+      "interval",
+    ])
+    .index("by_exchange_and_symbol_and_interval_and_timestamp", [
+      "exchange",
+      "symbol",
+      "interval",
+      "timestamp",
+    ])
+    .index("by_exchange_and_symbol_and_interval_and_last_updated", [
+      "exchange",
+      "symbol",
+      "interval",
+      "lastUpdated",
+    ])
+    .index("by_last_updated", ["lastUpdated"]),
+
+  coinglassFuturesTakerBuySellVolumeHistory: defineTable({
+    exchange: v.string(), // e.g. "Binance"
+    symbol: v.string(), // e.g. "BTCUSDT"
+    interval: v.string(), // e.g. "4h"
+    timestamp: v.number(), // ms
+    takerBuyVolumeUsd: v.number(),
+    takerSellVolumeUsd: v.number(),
+    dataSource: v.string(), // e.g. "coinglass-cron-futures-taker"
+    lastUpdated: v.number(),
+  })
+    .index("by_exchange_and_symbol_and_interval", [
+      "exchange",
+      "symbol",
+      "interval",
+    ])
+    .index("by_exchange_and_symbol_and_interval_and_timestamp", [
+      "exchange",
+      "symbol",
+      "interval",
+      "timestamp",
+    ])
+    .index("by_exchange_and_symbol_and_interval_and_last_updated", [
+      "exchange",
+      "symbol",
+      "interval",
+      "lastUpdated",
+    ])
+    .index("by_last_updated", ["lastUpdated"]),
+
+  coinglassOpenInterestHistory: defineTable({
+    symbol: v.string(), // e.g. "SOL"
+    interval: v.string(), // e.g. "4h"
+    unit: v.string(), // "usd" | "coin"
+    timestamp: v.number(), // ms
+    open: v.number(),
+    high: v.number(),
+    low: v.number(),
+    close: v.number(),
+    dataSource: v.string(), // e.g. "coinglass-cron-open-interest"
+    lastUpdated: v.number(),
+  })
+    .index("by_symbol_and_interval_and_unit", ["symbol", "interval", "unit"])
+    .index("by_symbol_and_interval_and_unit_and_timestamp", [
+      "symbol",
+      "interval",
+      "unit",
+      "timestamp",
+    ])
+    .index("by_symbol_and_interval_and_unit_and_last_updated", [
+      "symbol",
+      "interval",
+      "unit",
+      "lastUpdated",
+    ])
+    .index("by_last_updated", ["lastUpdated"]),
+
+  coinglassLiquidationHistory: defineTable({
+    symbol: v.string(), // e.g. "SOL"
+    interval: v.string(), // e.g. "1d"
+    exchangeList: v.string(), // e.g. "Binance, Bybit, OKX"
+    timestamp: v.number(), // ms
+    longLiquidations: v.number(),
+    shortLiquidations: v.number(),
+    totalLiquidations: v.number(),
+    dataSource: v.string(), // e.g. "coinglass-cron-liquidations"
+    lastUpdated: v.number(),
+  })
+    .index("by_symbol_and_interval_and_exchange_list", [
+      "symbol",
+      "interval",
+      "exchangeList",
+    ])
+    .index("by_symbol_and_interval_and_exchange_list_and_timestamp", [
+      "symbol",
+      "interval",
+      "exchangeList",
+      "timestamp",
+    ])
+    .index("by_symbol_and_interval_and_exchange_list_and_last_updated", [
+      "symbol",
+      "interval",
+      "exchangeList",
+      "lastUpdated",
+    ])
+    .index("by_last_updated", ["lastUpdated"]),
+
+  coinglassTakerBuySellExchangeListSnapshots: defineTable({
+    symbol: v.string(), // e.g. "SOL"
+    range: v.string(), // e.g. "24h"
+    overall: v.object({
+      buyRatio: v.number(),
+      sellRatio: v.number(),
+      buyVolumeUsd: v.number(),
+      sellVolumeUsd: v.number(),
+      totalVolumeUsd: v.number(),
+    }),
+    exchanges: v.array(
+      v.object({
+        exchange: v.string(),
+        buyRatio: v.number(),
+        sellRatio: v.number(),
+        buyVolumeUsd: v.number(),
+        sellVolumeUsd: v.number(),
+        totalVolumeUsd: v.number(),
+      }),
+    ),
+    dataSource: v.string(), // e.g. "coinglass-cron-taker-exchange-list"
+    lastUpdated: v.number(),
+  })
+    .index("by_symbol_and_range", ["symbol", "range"])
+    .index("by_symbol_and_range_and_last_updated", [
+      "symbol",
+      "range",
+      "lastUpdated",
+    ])
+    .index("by_last_updated", ["lastUpdated"]),
+
+  trackedCoins: defineTable({
+    coingeckoId: v.string(),
+    reason: v.string(), // "watchlist" | "portfolio" (string to keep migrations simple)
+    lastSeen: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_coingecko_id", ["coingeckoId"])
+    .index("by_reason", ["reason"])
+    .index("by_last_seen", ["lastSeen"])
+    .index("by_coingecko_id_and_reason", ["coingeckoId", "reason"]),
+
+  coingeckoNewsArticles: defineTable({
+    url: v.string(),
+    title: v.string(),
+    type: v.literal("news"),
+    sourceName: v.optional(v.string()),
+    author: v.optional(v.string()),
+    postedAtIso: v.optional(v.string()),
+    postedAtMs: v.number(),
+    image: v.optional(v.string()),
+    fetchedAt: v.number(),
+    sentiment: v.optional(
+      v.union(v.literal("bullish"), v.literal("bearish"), v.literal("neutral")),
+    ),
+    sentimentConfidence: v.optional(v.number()),
+    sentimentUpdatedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_url", ["url"])
+    .index("by_posted_at_ms", ["postedAtMs"]),
+
+  coingeckoNewsCoinLinks: defineTable({
+    coingeckoId: v.string(),
+    articleId: v.id("coingeckoNewsArticles"),
+    postedAtMs: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_coingecko_id", ["coingeckoId"])
+    .index("by_article_id", ["articleId"])
+    .index("by_coingecko_id_and_article_id", ["coingeckoId", "articleId"])
+    .index("by_coingecko_id_and_posted_at_ms", ["coingeckoId", "postedAtMs"]),
+
+  portfolioWallets: defineTable({
+    userId: v.id("users"),
+    address: v.string(),
+    name: v.optional(v.string()),
+    isActive: v.boolean(),
+    lastSyncedAt: v.optional(v.number()),
+    lastSyncError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_address", ["userId", "address"])
+    .index("by_active", ["isActive", "updatedAt"]),
+
+  portfolioWalletCoins: defineTable({
+    userId: v.id("users"),
+    walletId: v.id("portfolioWallets"),
+    coingeckoId: v.string(),
+    mint: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_wallet", ["walletId"])
+    .index("by_wallet_coingecko", ["walletId", "coingeckoId"])
+    .index("by_coingecko", ["coingeckoId"])
+    .index("by_user_wallet", ["userId", "walletId"]),
+
+  portfolioMintMappings: defineTable({
+    mint: v.string(),
+    coingeckoId: v.string(),
+    source: v.string(), // "birdeye"
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_mint", ["mint"]),
+
+  jobState: defineTable({
+    jobKey: v.string(),
+    cursor: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_job_key", ["jobKey"]),
+
   userSettings: defineTable({
     userId: v.id("users"),
     // Memory & AI Settings
     memoryEnabled: v.boolean(),
     autoCleanupEnabled: v.boolean(),
     retentionDays: v.string(), // '7', '30', '90', '365', 'never'
-    
+
     // UI/UX Settings (for future use)
     theme: v.optional(v.string()), // 'light', 'dark', 'system', 'sunrise', 'cherry', 'blueberry'
     currency: v.optional(v.string()), // 'USD', 'EUR', 'BTC', etc.
     dateFormat: v.optional(v.string()), // 'MM/DD/YYYY', 'DD/MM/YYYY', etc.
-    
+
     // Notification Settings (for future use)
     emailNotifications: v.optional(v.boolean()),
     pushNotifications: v.optional(v.boolean()),
     priceAlerts: v.optional(v.boolean()),
-    
+
     // Analytics & Privacy Settings (for future use)
     analyticsEnabled: v.optional(v.boolean()),
     shareUsageData: v.optional(v.boolean()),
-    
+
     // Timestamps
     createdAt: v.number(),
     updatedAt: v.number(),
-  })
-    .index("by_user", ["userId"]),
+  }).index("by_user", ["userId"]),
 
   userApiKeys: defineTable({
     userId: v.id("users"),
@@ -161,7 +394,7 @@ export default defineSchema({
   // Historical price data - optimized for chart rendering (CoinGecko only)
   priceHistory: defineTable({
     coingeckoId: v.string(), // CoinGecko ID
-    timeframe: v.string(), // '7d', '30d', 'max', '2y' 
+    timeframe: v.string(), // '7d', '30d', 'max', '2y'
     timestamp: v.number(), // Unix timestamp
     price: v.number(),
     volume: v.number(),
@@ -176,6 +409,11 @@ export default defineSchema({
     lastUpdated: v.number(),
   })
     .index("by_coingecko_timeframe", ["coingeckoId", "timeframe"])
+    .index("by_coingecko_timeframe_timestamp", [
+      "coingeckoId",
+      "timeframe",
+      "timestamp",
+    ])
     .index("by_coingecko_timeframe_and_last_updated", [
       "coingeckoId",
       "timeframe",

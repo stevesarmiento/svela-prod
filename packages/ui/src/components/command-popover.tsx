@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import * as React from "react"
-import { Command as CommandPrimitive } from "cmdk"
-import { Popover, PopoverContent, PopoverTrigger } from "./popover"
-import { cn } from "../utils"
-import { RefObject, useRef } from "react"
-import useClickOutside from "../hooks/use-click-outside"
+import { Command as CommandPrimitive } from "cmdk";
+import * as React from "react";
+import { type RefObject, useRef } from "react";
+import useClickOutside from "../hooks/use-click-outside";
+import { cn } from "../utils";
+import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
@@ -19,40 +19,38 @@ const Command = React.forwardRef<
     )}
     {...props}
   />
-))
-Command.displayName = CommandPrimitive.displayName
+));
+Command.displayName = CommandPrimitive.displayName;
 
 interface CommandPopoverProps {
-  children: React.ReactNode
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  trigger: React.ReactNode
-  shouldFilter?: boolean
+  children: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  trigger: React.ReactNode;
+  shouldFilter?: boolean;
 }
 
-const CommandPopover = ({ 
-  children, 
-  open, 
-  onOpenChange, 
-  trigger, 
-  shouldFilter = true
+const CommandPopover = ({
+  children,
+  open,
+  onOpenChange,
+  trigger,
+  shouldFilter = true,
 }: CommandPopoverProps) => {
-  const contentRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useClickOutside(contentRef as RefObject<HTMLElement>, (event) => {
     // Prevent closing when clicking on the input
-    const target = event.target as HTMLElement
-    if (target.closest('[cmdk-input-wrapper]')) return
-    
-    if (open) onOpenChange(false)
-  })
+    const target = event.target as HTMLElement;
+    if (target.closest("[cmdk-input-wrapper]")) return;
+
+    if (open) onOpenChange(false);
+  });
 
   return (
     <Command className="relative" shouldFilter={shouldFilter}>
       <Popover open={open} onOpenChange={onOpenChange}>
-        <PopoverTrigger asChild>
-          {trigger}
-        </PopoverTrigger>
+        <PopoverTrigger asChild>{trigger}</PopoverTrigger>
         <PopoverContent
           ref={contentRef}
           className="dark relative rounded-[20px] bg-zinc-900/95 backdrop-blur-md border border-transparent overflow-hidden p-1 w-[499px] z-[1000] data-[state=open]:slide-in-from-bottom-24 data-[state=closed]:slide-out-to-bottom-24
@@ -61,7 +59,8 @@ const CommandPopover = ({
           sideOffset={12}
         >
           {/* Background Pattern - FIRST (behind everything) */}
-          <div className="absolute inset-0 opacity-5 dark:opacity-5 z-0"
+          <div
+            className="absolute inset-0 opacity-5 dark:opacity-5 z-0"
             style={{
               backgroundImage: `
                 radial-gradient(circle at 25% 25%, rgb(0 0 0) 1px, transparent 1px),
@@ -70,7 +69,8 @@ const CommandPopover = ({
               backgroundSize: "24px 24px",
             }}
           />
-          <div className="absolute inset-0 opacity-5 dark:opacity-0 z-0"
+          <div
+            className="absolute inset-0 opacity-5 dark:opacity-0 z-0"
             style={{
               backgroundImage: `
                 radial-gradient(circle at 25% 25%, rgb(255 255 255) 1px, transparent 1px),
@@ -79,14 +79,12 @@ const CommandPopover = ({
               backgroundSize: "24px 24px",
             }}
           />
-          <div className="relative z-10">
-            {children}
-          </div>
+          <div className="relative z-10">{children}</div>
         </PopoverContent>
       </Popover>
     </Command>
-  )
-}
+  );
+};
 
 const CommandInput = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Input>,
@@ -103,8 +101,8 @@ const CommandInput = React.forwardRef<
     />
     <CommandShortcut className="sr-only">⌘K</CommandShortcut>
   </div>
-))
-CommandInput.displayName = CommandPrimitive.Input.displayName
+));
+CommandInput.displayName = CommandPrimitive.Input.displayName;
 
 const CommandList = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.List>,
@@ -115,8 +113,8 @@ const CommandList = React.forwardRef<
     className={cn("max-h-[300px] overflow-y-auto overflow-x-hidden", className)}
     {...props}
   />
-))
-CommandList.displayName = CommandPrimitive.List.displayName
+));
+CommandList.displayName = CommandPrimitive.List.displayName;
 
 const CommandEmpty = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Empty>,
@@ -127,8 +125,8 @@ const CommandEmpty = React.forwardRef<
     className="py-6 text-center text-sm"
     {...props}
   />
-))
-CommandEmpty.displayName = CommandPrimitive.Empty.displayName
+));
+CommandEmpty.displayName = CommandPrimitive.Empty.displayName;
 
 const CommandGroup = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Group>,
@@ -142,8 +140,8 @@ const CommandGroup = React.forwardRef<
     )}
     {...props}
   />
-))
-CommandGroup.displayName = CommandPrimitive.Group.displayName
+));
+CommandGroup.displayName = CommandPrimitive.Group.displayName;
 
 const CommandSeparator = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Separator>,
@@ -154,8 +152,8 @@ const CommandSeparator = React.forwardRef<
     className={cn("-mx-1 h-px bg-border", className)}
     {...props}
   />
-))
-CommandSeparator.displayName = CommandPrimitive.Separator.displayName
+));
+CommandSeparator.displayName = CommandPrimitive.Separator.displayName;
 
 const CommandItem = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Item>,
@@ -169,8 +167,8 @@ const CommandItem = React.forwardRef<
     )}
     {...props}
   />
-))
-CommandItem.displayName = CommandPrimitive.Item.displayName
+));
+CommandItem.displayName = CommandPrimitive.Item.displayName;
 
 const CommandShortcut = ({
   className,
@@ -184,9 +182,9 @@ const CommandShortcut = ({
       )}
       {...props}
     />
-  )
-}
-CommandShortcut.displayName = "CommandShortcut"
+  );
+};
+CommandShortcut.displayName = "CommandShortcut";
 
 export {
   Command,
@@ -198,4 +196,4 @@ export {
   CommandItem,
   CommandSeparator,
   CommandShortcut,
-}
+};

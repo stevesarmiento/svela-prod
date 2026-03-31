@@ -1,204 +1,303 @@
 'use client'
 
-import { useMemo, useRef } from "react"
-import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
-import type { IChartApi } from 'lightweight-charts'
+import { useMemo } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { Effect } from "effect"
+import { CoinGeckoApi } from "@/lib/effect/coingecko-api"
+import { runPromise } from "@/lib/effect/runtime-coingecko"
 import type { CoinMarketData } from '@/types/coins'
-import { loadLightweightCharts } from '@/lib/load-lightweight-charts'
-import { Effect, Schema } from "effect"
-import { useEffectScoped } from "@/lib/effect/react"
+import { Liveline } from "liveline"
+import type { LivelinePoint } from "liveline"
+import { cn } from "@v1/ui/cn"
 
 interface InlinePriceChartProps {
   coingeckoId: string // CoinGecko ID to fetch real data
-  percentChange24h: number // For color determination
+  percentChange24h: number // Fallback when series unavailable
   symbol?: string // For debugging
+  sparkline7d?: ReadonlyArray<number> // Prefer quotes sparkline to avoid per-row market-chart requests
   initialData: CoinMarketData['quote']['USD'] // Required for useCoinGeckoChartData
   onError?: () => void
+  className?: string
 }
 
-class InlinePriceChartInitError extends Schema.TaggedError<InlinePriceChartInitError>()(
-  "InlinePriceChartInitError",
-  {
-    message: Schema.String,
-    coingeckoId: Schema.String,
-    symbol: Schema.String,
-  },
-) {}
+type InlineChartTimeScale = "1d" | "7d" | "30d" | "max" | "2y"
+
+const INLINE_TIME_SCALE_DAYS: Record<InlineChartTimeScale, string> = {
+  "1d": "1",
+  "7d": "7",
+  "30d": "30",
+  "max": "365",
+  "2y": "730",
+} as const
+
+function clampEvenDownsample<T>(items: Array<T>, maxItems: number): Array<T> {
+  if (items.length <= maxItems) return items
+  if (maxItems <= 1) return [items[items.length - 1] as T]
+
+  const step = (items.length - 1) / (maxItems - 1)
+  const out: Array<T> = []
+  for (let i = 0; i < maxItems; i++) {
+    out.push(items[Math.round(i * step)] as T)
+  }
+  return out
+}
+
+function buildFallbackSeries(args: {
+  timeScale: InlineChartTimeScale
+  basePrice: number
+  nowMs?: number
+}): Array<{ time: number; value: number }> {
+  if (!Number.isFinite(args.basePrice) || args.basePrice <= 0) return []
+
+  const nowMs = args.nowMs ?? Date.now()
+  const days = Number(INLINE_TIME_SCALE_DAYS[args.timeScale] ?? "7")
+  const points = Math.max(2, Math.min(7 * 24, days * 24)) // <= 168 points
+  const startMs = nowMs - days * 24 * 60 * 60 * 1000
+  const stepMs = Math.max(60 * 60 * 1000, Math.floor((nowMs - startMs) / (points - 1))) // >= 1h
+
+  const out: Array<{ time: number; value: number }> = []
+  for (let i = 0; i < points; i++) {
+    const t = startMs + i * stepMs
+    out.push({ time: Math.floor(t / 1000), value: args.basePrice })
+  }
+  return out
+}
+
+function buildSparklineSeries(args: {
+  sparkline: ReadonlyArray<number>
+  timeScale: InlineChartTimeScale
+  nowMs?: number
+}): Array<{ time: number; value: number }> {
+  const raw = args.sparkline
+  if (!raw || raw.length < 2) return []
+
+  const cleaned = raw.filter((v) => typeof v === "number" && Number.isFinite(v) && v > 0)
+  if (cleaned.length < 2) return []
+
+  const nowMs = args.nowMs ?? Date.now()
+  const days = Number(INLINE_TIME_SCALE_DAYS[args.timeScale] ?? "7")
+  const startMs = nowMs - days * 24 * 60 * 60 * 1000
+  const stepMs = (nowMs - startMs) / Math.max(1, cleaned.length - 1)
+
+  return cleaned.map((value, i) => ({
+    time: Math.floor((startMs + i * stepMs) / 1000),
+    value,
+  }))
+}
+
+function upsertLatestValue(
+  series: ReadonlyArray<{ time: number; value: number }>,
+  latestValue: number,
+): Array<{ time: number; value: number }> {
+  if (!Number.isFinite(latestValue) || latestValue <= 0) return series.slice()
+  if (series.length === 0) return []
+  const next = series.slice()
+  next[next.length - 1] = { ...next[next.length - 1]!, value: latestValue }
+  return next
+}
+
+function toTimeScale(range: string | undefined): InlineChartTimeScale {
+  if (range === "1d" || range === "7d" || range === "30d" || range === "max" || range === "2y") return range
+  return "7d"
+}
+
+function useInlineMarketChartSeries(args: {
+  coingeckoId: string
+  timeScale: InlineChartTimeScale
+  enabled?: boolean
+}) {
+  const days = INLINE_TIME_SCALE_DAYS[args.timeScale] ?? "7"
+
+  return useQuery({
+    queryKey: ["coingecko-inline-market-chart", args.coingeckoId, args.timeScale],
+    queryFn: async (): Promise<{ points: Array<{ time: number; value: number }>; cached: boolean }> => {
+      const swallowToNull = (_: unknown) => Effect.succeed(null)
+
+      const result = await runPromise(
+        CoinGeckoApi.getMarketChart({
+          coinId: args.coingeckoId,
+          days,
+          vsCurrency: "usd",
+        }).pipe(
+          Effect.catchTags({
+            CoinGeckoInvalidParamsError: swallowToNull,
+            CoinGeckoUnauthorizedError: swallowToNull,
+            CoinGeckoNotFoundError: swallowToNull,
+            CoinGeckoRateLimitedError: swallowToNull,
+            CoinGeckoApiError: swallowToNull,
+            CoinGeckoDecodeError: swallowToNull,
+          }),
+        ),
+      )
+
+      const prices = result?.data?.prices
+      if (!Array.isArray(prices) || prices.length === 0) {
+        return { points: [], cached: false }
+      }
+
+      // De-dupe + ensure strict ascending time ordering.
+      const unique = new Map<number, number>()
+      for (const point of prices) {
+        if (!point) continue
+        if (typeof point.time !== "number") continue
+        if (!Number.isFinite(point.value) || point.value <= 0) continue
+        unique.set(point.time, point.value)
+      }
+
+      const points = Array.from(unique.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([time, value]) => ({ time, value }))
+
+      return { points, cached: result?.status?.cached ?? false }
+    },
+    staleTime: 30 * 1000, // keep inline charts feeling fresh without spamming
+    refetchInterval: (q) => {
+      const points = (q.state.data as { points: Array<{ time: number; value: number }> } | undefined)?.points?.length ?? 0
+      if (points < 2) return 5_000
+      return 2 * 60 * 1000
+    },
+    enabled: (args.enabled ?? true) && args.coingeckoId.length > 0,
+    retry: 1,
+    refetchOnWindowFocus: true,
+  })
+}
 
 export function InlinePriceChart({ 
   coingeckoId,
   percentChange24h,
   symbol = '',
+  sparkline7d,
   initialData,
-  onError,
+  onError: _onError,
+  className,
 }: InlinePriceChartProps) {
-  const isPositive = percentChange24h >= 0
+  const timeScale = "7d" as const
+  const basePrice = initialData?.price && initialData.price > 0 ? initialData.price : 0
+  const fallbackTrendPct =
+    typeof initialData?.percent_change_7d === "number" ? initialData.percent_change_7d : percentChange24h
 
-  // Use the same proven pattern as price-chart.tsx
-  const { chartData, isLoading, performance } = useCoinGeckoChartData(
-    coingeckoId, 
-    '1d', // 24 hours of data
-    initialData
+  const sparklineSeries = useMemo(
+    () =>
+      upsertLatestValue(
+        buildSparklineSeries({ sparkline: sparkline7d ?? [], timeScale: toTimeScale(timeScale) }),
+        basePrice,
+      ),
+    [sparkline7d, timeScale, basePrice],
   )
+  const hasSparkline = sparklineSeries.length >= 2
+
+  const marketChartQuery = useInlineMarketChartSeries({
+    coingeckoId,
+    timeScale: toTimeScale(timeScale),
+    enabled: !hasSparkline,
+  })
+
+  const rawChartData = hasSparkline ? sparklineSeries : (marketChartQuery.data?.points ?? [])
+  const rawChartDataWithLatest = useMemo(
+    () => upsertLatestValue(rawChartData, basePrice),
+    [rawChartData, basePrice],
+  )
+  const chartData =
+    rawChartDataWithLatest.length >= 2
+      ? rawChartDataWithLatest
+      : buildFallbackSeries({ timeScale: toTimeScale(timeScale), basePrice })
+  const isLoading = hasSparkline ? false : marketChartQuery.isLoading
 
   // Filter and prepare chart data
   const validChartData = useMemo(() => {
-    if (!chartData || chartData.length === 0) {
-      return []
-    }
+    if (!chartData || chartData.length === 0) return []
 
-    const filtered = chartData.filter(point => 
-      point && 
-      typeof point.time === 'number' && 
-      typeof point.value === 'number' && 
-      point.value > 0 &&
-      !Number.isNaN(point.value)
+    const filtered = chartData.filter(
+      (point) =>
+        point &&
+        typeof point.time === "number" &&
+        typeof point.value === "number" &&
+        point.value > 0 &&
+        !Number.isNaN(point.value),
     )
 
-    return filtered
-  }, [chartData, symbol, coingeckoId, isLoading, performance])
+    // Liveline is tiny here; keep render cost bounded.
+    return clampEvenDownsample(filtered, 128)
+  }, [chartData])
+
+  const seriesChangePct = useMemo(() => {
+    if (validChartData.length < 2) return null
+    const first = validChartData[0]?.value ?? 0
+    const last = validChartData[validChartData.length - 1]?.value ?? 0
+    if (!Number.isFinite(first) || first <= 0) return null
+    return ((last - first) / first) * 100
+  }, [validChartData])
+
+  const trendPct = seriesChangePct ?? fallbackTrendPct
+  const isPositive = trendPct >= 0
 
   // Prepare tooltip text
   const tooltipText = useMemo(() => {
-    const changeText = `${percentChange24h > 0 ? '+' : ''}${percentChange24h.toFixed(2)}%`
-    const dataInfo = performance.cached ? 'cached data' : 'live data'
+    const changeText = `${trendPct > 0 ? "+" : ""}${trendPct.toFixed(2)}%`
+    const dataInfo = hasSparkline ? "sparkline" : marketChartQuery.data?.cached ? "cached data" : "live data"
     const pointsInfo = `${validChartData.length} points`
     
-    return `${symbol} 24h trend: ${changeText} | ${dataInfo} | ${pointsInfo}`
-  }, [symbol, percentChange24h, validChartData.length, performance.cached])
+    return `${symbol} 7d trend: ${changeText} | ${dataInfo} | ${pointsInfo}`
+  }, [symbol, trendPct, validChartData.length, marketChartQuery.data?.cached, hasSparkline])
 
-  // Use simplified chart creation that waits for data (like useChartInstance pattern)
-  const chartContainerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<IChartApi | null>(null)
+  const points = useMemo((): LivelinePoint[] => {
+    const result: LivelinePoint[] = []
+    for (const point of validChartData) {
+      if (typeof point.time !== "number") continue
+      if (!Number.isFinite(point.value)) continue
+      result.push({ time: Number(point.time), value: point.value })
+    }
+    return result
+  }, [validChartData])
 
-  useEffectScoped(
-    () => {
-      const container = chartContainerRef.current
-      if (!container || validChartData.length === 0) return Effect.void
+  const latestValue = points[points.length - 1]?.value ?? 0
 
-      return Effect.acquireRelease(
-        Effect.gen(function* () {
-          if (!container.isConnected) {
-            yield* Effect.sync(() => onError?.())
-            return null
-          }
+  const windowSecs = useMemo(() => {
+    if (points.length < 2) return 30
+    const first = points[0]?.time
+    const last = points[points.length - 1]?.time
+    if (typeof first !== "number" || typeof last !== "number") return 30
+    return Math.max(30, last - first)
+  }, [points])
 
-          // Clean up any previous instance before creating a new one.
-          yield* Effect.sync(() => {
-            if (!chartRef.current) return
-            try {
-              chartRef.current.remove()
-            } catch {
-              // Ignore cleanup errors
-            }
-            chartRef.current = null
-          })
+  const livelineTheme = "dark"
 
-          const { createChart, LineSeries, ColorType, LastPriceAnimationMode } =
-            yield* Effect.tryPromise({
-              try: () => loadLightweightCharts(),
-              catch: (error) =>
-                new InlinePriceChartInitError({
-                  message: String(error),
-                  coingeckoId,
-                  symbol,
-                }),
-            })
-
-          const chart = yield* Effect.try({
-            try: () =>
-              createChart(container, {
-                height: 32,
-                layout: {
-                  background: { type: ColorType.Solid, color: "transparent" },
-                  textColor: "transparent",
-                  attributionLogo: false,
-                },
-                grid: {
-                  vertLines: { visible: false },
-                  horzLines: { visible: false },
-                },
-                rightPriceScale: { visible: false },
-                timeScale: { visible: false },
-                crosshair: {
-                  mode: 0, // Normal mode
-                  vertLine: { visible: false },
-                  horzLine: { visible: false },
-                },
-                handleScroll: false,
-                handleScale: false,
-              }),
-            catch: (error) =>
-              new InlinePriceChartInitError({
-                message: String(error),
-                coingeckoId,
-                symbol,
-              }),
-          })
-
-          chartRef.current = chart
-
-          const lineSeries = chart.addSeries(LineSeries, {
-            lineWidth: 2,
-            lastValueVisible: false,
-            visible: true,
-            priceLineVisible: false,
-            color: isPositive ? "#10b981" : "#ef4444",
-            lastPriceAnimation: LastPriceAnimationMode.Continuous,
-          })
-
-          lineSeries.setData(validChartData)
-          chart.timeScale().fitContent()
-
-          return chart
-        }),
-        (chart) =>
-          Effect.sync(() => {
-            if (!chart) return
-            try {
-              chart.remove()
-            } catch {
-              // Ignore cleanup errors
-            }
-            chartRef.current = null
-          }),
-      ).pipe(
-        Effect.flatMap((chart) => (chart ? Effect.never : Effect.void)),
-        Effect.catchTag("InlinePriceChartInitError", (error) =>
-          Effect.log("InlinePriceChart failed to create chart", {
-            coingeckoId,
-            symbol,
-            message: error.message,
-          }).pipe(Effect.zipRight(Effect.sync(() => onError?.()))),
-        ),
-        Effect.asVoid,
-      )
-    },
-    [validChartData, isPositive, symbol],
-  )
-
-  // Show loading skeleton while fetching data
-  if (isLoading || validChartData.length === 0) {
-    return (
-      <div 
-        className="w-56 h-8 rounded-sm overflow-hidden bg-transparent flex items-center justify-center"
-        title={`${symbol} ${isLoading ? 'loading data...' : 'no data available'}`}
-      >
-        {isLoading ? (
-          <div className="w-48 h-5 bg-gray-200/60 dark:bg-zinc-700/40 rounded-sm animate-pulse motion-reduce:animate-none" />
-        ) : (
-          <div className="text-xs text-muted-foreground">No data</div>
-        )}
-      </div>
-    )
-  }
+  const livelineValue = points.length > 0 ? latestValue : basePrice
 
   return (
     <div 
-      className="w-56 h-8 rounded-sm overflow-hidden bg-transparent"
-      title={tooltipText}
+      className={cn(
+        "h-8 rounded-sm overflow-hidden bg-transparent",
+        className ?? "w-56",
+      )}
+      title={
+        isLoading
+          ? `${symbol} loading data...`
+          : points.length === 0
+            ? `${symbol} no data available`
+            : tooltipText
+      }
     >
-      <div ref={chartContainerRef} className="w-full h-full" />
+      <Liveline
+        data={points}
+        value={livelineValue}
+        theme={livelineTheme}
+        color={isPositive ? "#10b981" : "#ef4444"}
+        lineWidth={1}
+        window={windowSecs}
+        grid={false}
+        badge={false}
+        fill={false}
+        pulse={false}
+        scrub={false}
+        momentum={false}
+        loading={isLoading}
+        exaggerate
+        emptyText="No data"
+        formatTime={() => ""}
+        padding={{ top: 8, right: 8, bottom: 8, left: 8 }}
+        className="size-full"
+      />
     </div>
   )
 }

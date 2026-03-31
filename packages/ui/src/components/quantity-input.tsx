@@ -51,7 +51,7 @@ export function QuantityInput({
   return (
     <div
       className={cn(
-        "group flex items-stretch transition-[box-shadow] font-diatype-mono",
+        "group flex items-stretch transition-[box-shadow] font-berkeley-mono",
         className,
       )}
     >
@@ -81,7 +81,7 @@ export function QuantityInput({
           autoComplete="off"
           step={0.1}
           value={rawValue}
-          onInput={handleInput}
+          onChange={handleInput}
           onBlur={onBlur}
           onFocus={onFocus}
           inputMode="decimal"

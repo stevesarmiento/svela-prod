@@ -4,12 +4,12 @@ import { ScrollArea } from "@v1/ui/scroll-area";
 import { ChatMessage } from "./chat-message";
 import { ChatLoading } from "./chat-loading";
 import { useAutoScroll } from "./hooks/use-auto-scroll";
-import type { Message } from "ai";
+import { isTextUIPart, type UIMessage } from "ai";
 import type { ComponentData } from "./types";
 
 
 interface ChatMessageListProps {
-  messages: Message[];
+  messages: UIMessage[];
   isLoading: boolean;
   isDataLoading: boolean;
   userImage?: string | null;
@@ -44,12 +44,16 @@ export function ChatMessageList({ messages, isLoading, isDataLoading, messageCom
         {messages.map((message) => {
           // Get component data for this message
           const componentData = messageComponents?.[message.id] || null;
+          const content = message.parts
+            .filter(isTextUIPart)
+            .map((part) => part.text)
+            .join('');
           
           return (
             <ChatMessage
               key={message.id}
-              role={message.role as 'user' | 'assistant' | 'system' | 'data'}
-              content={message.content}
+              role={message.role}
+              content={content}
               componentData={componentData}
             />
           );

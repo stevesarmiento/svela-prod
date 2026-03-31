@@ -1,9 +1,5 @@
-import { ComparisonChartsClient } from "./_components/chart-client"
-
-export const metadata = {
-  title: "Price Charts",
-}
+import { redirect } from "next/navigation"
 
 export default function ChartsPage() {
-  return <ComparisonChartsClient />
+  redirect("/screener")
 }

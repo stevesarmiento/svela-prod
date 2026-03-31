@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { IconSunMaxFill, IconMoonStarsFill } from "symbols-react";
-import { useTheme } from "next-themes";
 import { AnimatePresence, motion } from "motion/react";
+import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
+import { IconMoonStarsFill, IconSunMaxFill } from "symbols-react";
 
 import { Button } from "./button";
 

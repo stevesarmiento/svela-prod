@@ -56,7 +56,7 @@ export function createAxisOverlay({
     const axisTagTransitionHover = prefersReducedMotion ? '' : 'transform 90ms ease-out';
 
     const TAG_CLASS =
-        "relative inline-flex items-center rounded-md bg-white text-zinc-950 px-3 py-1.5 font-diatype-mono text-[11px] leading-none tabular-nums shadow-sm shadow-black/10 ring-1 ring-black/10 before:content-[''] before:absolute before:-left-[6px] before:top-1/2 before:-translate-y-1/2 before:border-y-[10px] before:border-y-transparent before:border-r-[8px] before:border-r-white";
+        "relative inline-flex items-center rounded-md bg-white text-zinc-950 px-3 py-1.5 font-berkeley-mono text-[11px] leading-none tabular-nums shadow-sm shadow-black/10 ring-1 ring-black/10 before:content-[''] before:absolute before:-left-[6px] before:top-1/2 before:-translate-y-1/2 before:border-y-[10px] before:border-y-transparent before:border-r-[8px] before:border-r-white";
 
     const priceLastLabelWrap = document.createElement('div');
     priceLastLabelWrap.className = 'pointer-events-none absolute right-0 top-0';
@@ -146,7 +146,7 @@ export function createAxisOverlay({
         labelEl: HTMLDivElement,
         y: number | null,
         text: string | null,
-        xOffsetPx: number = 0,
+        xOffsetPx = 0,
     ) {
         if (!isMounted || y == null || !Number.isFinite(y) || !text) {
             wrapEl.style.display = 'none';

@@ -31,6 +31,7 @@ export class WatchlistGroup extends Schema.Class<WatchlistGroup>("WatchlistGroup
   description: Schema.optional(Schema.String),
   icon: Schema.optional(Schema.String),
   color: Schema.optional(Schema.String),
+  portfolioWalletId: Schema.optional(Schema.String),
   isDefault: Schema.Boolean,
   createdAt: Schema.Number,
   updatedAt: Schema.Number,
@@ -42,6 +43,7 @@ export class WatchlistItem extends Schema.Class<WatchlistItem>("WatchlistItem")(
   userId: Schema.String,
   watchlistGroupId: Schema.String,
   coinId: Schema.String,
+  holdings: Schema.optional(Schema.Number),
 }) {}
 
 export class CoinGeckoWatchlistCoin extends Schema.Class<CoinGeckoWatchlistCoin>("CoinGeckoWatchlistCoin")({

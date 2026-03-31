@@ -8,10 +8,10 @@ export default function SsoCallbackPage() {
   return (
     <div className="flex items-center justify-center min-h-screen">
       <div className="text-center">
-        <div className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+        <div className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
         <p className="text-muted-foreground">Completing your sign in...</p>
         {/* Required DOM element for Clerk CAPTCHA widget */}
-        <div id="clerk-captcha"></div>
+        <div id="clerk-captcha" />
         <AuthenticateWithRedirectCallback />
       </div>
     </div>

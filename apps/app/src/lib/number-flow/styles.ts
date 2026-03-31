@@ -73,7 +73,7 @@ export const halfMaskHeight = `calc(${maskHeight} / 2)`
 const maskWidth = 'var(--number-flow-mask-width, 0.5em)'
 const scaledMaskWidth = `calc(${maskWidth} / var(--scale-x))`
 
-const cornerGradient = `#000 0, transparent 71%` // or transparent ${maskWidth}
+const cornerGradient = "#000 0, transparent 71%" // or transparent ${maskWidth}
 
 const styles = css`
 	:host {

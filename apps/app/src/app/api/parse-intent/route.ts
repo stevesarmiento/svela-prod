@@ -27,7 +27,7 @@ export async function POST(req: Request) {
         { role: 'user', content: message }
       ],
       temperature: 0.1, // Low temperature for consistent parsing
-      maxTokens: 200,
+      maxOutputTokens: 200,
     });
 
     // Parse the JSON response

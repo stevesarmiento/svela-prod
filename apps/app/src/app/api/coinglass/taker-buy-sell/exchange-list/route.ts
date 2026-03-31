@@ -1,171 +1,133 @@
-import { NextResponse } from "next/server";
-import { z } from "zod";
+import { convex, getServerToken } from "@/lib/convex-server";
+import { type NextRequest, NextResponse } from "next/server";
+import { api } from "../../../../../../convex/_generated/api";
 
-const BASE_URL = "https://open-api-v4.coinglass.com/api";
-const API_KEY = process.env.CG_API_KEY || process.env['CG-API-KEY'];
+export const dynamic = "force-dynamic";
 
-// Simple mapping for coin IDs to symbols
-const COIN_ID_TO_SYMBOL: Record<number, string> = {
-  1: 'BTC',
-  1027: 'ETH',
-  5426: 'SOL',
-  52: 'XRP',
-  74: 'DOGE',
-};
+function isProbablyCoinGeckoId(value: string): boolean {
+  return value.includes("-") || value.toLowerCase() === value;
+}
 
-// Validation schema for exchange data
-const ExchangeDataSchema = z.object({
-  exchange: z.string(),
-  buy_ratio: z.number(),
-  sell_ratio: z.number(),
-  buy_vol_usd: z.number(),
-  sell_vol_usd: z.number(),
-});
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams;
+  const rawSymbol = (searchParams.get("symbol") || "").trim();
+  const range = (searchParams.get("range") || "24h").trim();
 
-const TakerBuySellDataSchema = z.object({
-  symbol: z.string(),
-  buy_ratio: z.number(),
-  sell_ratio: z.number(),
-  buy_vol_usd: z.number(),
-  sell_vol_usd: z.number(),
-  exchange_list: z.array(ExchangeDataSchema),
-});
+  if (!rawSymbol) {
+    return NextResponse.json(
+      { success: false, error: "Symbol parameter is required" },
+      { status: 400 },
+    );
+  }
 
-const CoinglassTakerBuySellResponseSchema = z.object({
-  code: z.string(),
-  msg: z.string().optional(),
-  data: TakerBuySellDataSchema,
-});
+  const serverToken = getServerToken();
 
-export async function GET(request: Request) {
-  try {
-    // Check API key first
-    if (!API_KEY) {
-      console.error("CoinGlass API key not configured");
-      return NextResponse.json(
-        { error: 'CoinGlass API key not configured', success: false },
-        { status: 500 }
-      );
-    }
+  let symbol = rawSymbol.toUpperCase();
+  let coinInfo: {
+    symbol: string;
+    name: string;
+    coinId: number;
+    isSupported: boolean;
+  } | null = null;
 
-    const { searchParams } = new URL(request.url);
-    const rawSymbol = searchParams.get('symbol');
-    const range = searchParams.get('range') || '24h'; // Default to 24h for daily pressure
-
-    if (!rawSymbol) {
-      return NextResponse.json(
-        { error: 'Symbol parameter is required', success: false },
-        { status: 400 }
-      );
-    }
-
-    // Handle coin ID to symbol conversion
-    let symbol = rawSymbol;
-    let coinInfo = null;
-
-    const coinId = parseInt(rawSymbol);
-    if (!isNaN(coinId)) {
-      const mappedSymbol = COIN_ID_TO_SYMBOL[coinId];
-      if (mappedSymbol) {
-        symbol = mappedSymbol;
-        coinInfo = {
-          coinId,
-          symbol: mappedSymbol,
-          name: 'Unknown',
-          isSupported: true
-        };
-      } else {
-        console.error("Coin ID not found in mapping:", coinId);
-        return NextResponse.json(
-          { 
-            error: `Coin with ID ${coinId} not supported`,
-            success: false,
-            availableCoins: Object.keys(COIN_ID_TO_SYMBOL)
-          },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Build API URL
-    const apiUrl = `${BASE_URL}/futures/taker-buy-sell-volume/exchange-list?symbol=${symbol}&range=${range}`;
-
-    // Make API request
-    const response = await fetch(apiUrl, {
-      headers: {
-        'CG-API-KEY': API_KEY,
-        'Content-Type': 'application/json',
-      },
+  const numericCoinId = Number.parseInt(rawSymbol, 10);
+  if (!Number.isNaN(numericCoinId)) {
+    const resolved = await convex.query(api.coins.getCoinglassSymbolByCoinId, {
+      serverToken,
+      coinId: numericCoinId,
     });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("CoinGlass API error:", response.status, errorText);
+    if (!resolved) {
       return NextResponse.json(
-        { 
-          error: `CoinGlass API error: ${response.status}`,
-          details: errorText,
-          success: false 
+        {
+          success: false,
+          error: `Coin with ID ${numericCoinId} not found or not supported by CoinGlass`,
         },
-        { status: 500 }
+        { status: 400 },
       );
     }
-
-    const data = await response.json();
-
-    // Validate response
-    const validatedData = CoinglassTakerBuySellResponseSchema.parse(data);
-
-    if (validatedData.code !== "0") {
-      console.error("CoinGlass API returned error:", validatedData.msg);
-      return NextResponse.json(
-        { 
-          error: `CoinGlass API error: ${validatedData.msg || 'Unknown error'}`,
-          success: false 
-        },
-        { status: 500 }
-      );
-    }
-
-    // Transform data for frontend consumption
-    const transformedData = {
-      symbol: validatedData.data.symbol,
-      overall: {
-        buyRatio: validatedData.data.buy_ratio,
-        sellRatio: validatedData.data.sell_ratio,
-        buyVolumeUsd: validatedData.data.buy_vol_usd,
-        sellVolumeUsd: validatedData.data.sell_vol_usd,
-        totalVolumeUsd: validatedData.data.buy_vol_usd + validatedData.data.sell_vol_usd,
-      },
-      exchanges: validatedData.data.exchange_list.map(exchange => ({
-        exchange: exchange.exchange,
-        buyRatio: exchange.buy_ratio,
-        sellRatio: exchange.sell_ratio,
-        buyVolumeUsd: exchange.buy_vol_usd,
-        sellVolumeUsd: exchange.sell_vol_usd,
-        totalVolumeUsd: exchange.buy_vol_usd + exchange.sell_vol_usd,
-      })),
+    symbol = resolved.symbol.toUpperCase();
+    coinInfo = {
+      symbol,
+      name: resolved.name,
+      coinId: resolved.coinId,
+      isSupported: resolved.isSupported,
     };
+  } else if (isProbablyCoinGeckoId(rawSymbol)) {
+    const coin = await convex.query(api.coins.getCoinGeckoCoinById, {
+      serverToken,
+      coingeckoId: rawSymbol.toLowerCase(),
+    });
+    if (coin) symbol = coin.symbol.toUpperCase();
+  }
 
-    return NextResponse.json({
+  const isSupported = await convex.query(api.coins.isCoinglassSupported, {
+    serverToken,
+    symbol,
+  });
+  if (!isSupported) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Symbol ${symbol} is not supported by CoinGlass`,
+        inputSymbol: rawSymbol,
+      },
+      { status: 400 },
+    );
+  }
+
+  const snapshot = await convex.query(
+    api.coinglassReads.getTakerBuySellExchangeListSnapshot,
+    {
+      serverToken,
+      symbol,
+      range,
+    },
+  );
+
+  if (!snapshot.data || snapshot.stale) {
+    void convex
+      .mutation(
+        api.coinglassWarmup.requestTakerBuySellExchangeListSnapshotRefresh,
+        {
+          serverToken,
+          symbol,
+          range,
+        },
+      )
+      .catch(() => null);
+  }
+
+  return NextResponse.json(
+    {
       success: true,
-      data: transformedData,
+      data: snapshot.data
+        ? {
+            symbol: snapshot.data.symbol,
+            overall: snapshot.data.overall,
+            exchanges: snapshot.data.exchanges,
+          }
+        : {
+            symbol,
+            overall: {
+              buyRatio: 0,
+              sellRatio: 0,
+              buyVolumeUsd: 0,
+              sellVolumeUsd: 0,
+              totalVolumeUsd: 0,
+            },
+            exchanges: [],
+          },
       range,
       symbol,
       originalInput: rawSymbol,
       coinInfo,
-      lastUpdated: new Date().toISOString(),
-    });
-
-  } catch (error) {
-    console.error("Taker buy/sell route error:", error);
-    
-    return NextResponse.json(
-      { 
-        error: error instanceof Error ? error.message : 'Unknown server error',
-        success: false 
+      lastUpdated: new Date(snapshot.lastUpdated || 0).toISOString(),
+    },
+    {
+      status: 200,
+      headers: {
+        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
       },
-      { status: 500 }
-    );
-  }
+    },
+  );
 }

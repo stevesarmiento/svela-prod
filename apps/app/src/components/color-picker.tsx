@@ -32,11 +32,11 @@ export const COLORS = [
   { name: 'Violet', value: 'violet', bg: 'bg-violet-700', border: 'border-violet-600' },
   { name: 'Pink', value: 'pink', bg: 'bg-pink-700', border: 'border-pink-600' },
   { name: 'Rose', value: 'rose', bg: 'bg-rose-700', border: 'border-rose-600' },
-  { name: 'Red', value: 'red', bg: 'bg-red-700', border: 'border-red-600' },
+  { name: 'Red', value: 'red', bg: 'bg-red-700', border: 'border-rose-500' },
 
   // Row 3: Greens and Warm Colors
   { name: 'Emerald', value: 'emerald', bg: 'bg-emerald-700', border: 'border-emerald-600' },
-  { name: 'Green', value: 'green', bg: 'bg-green-700', border: 'border-green-600' },
+  { name: 'Green', value: 'green', bg: 'bg-green-700', border: 'border-emerald-500' },
   { name: 'Lime', value: 'lime', bg: 'bg-lime-700', border: 'border-lime-600' },
   { name: 'Yellow', value: 'yellow', bg: 'bg-yellow-700', border: 'border-yellow-600' },
   { name: 'Amber', value: 'amber', bg: 'bg-amber-700', border: 'border-amber-600' },
@@ -123,11 +123,11 @@ export const COLOR_THEMES = {
   violet: { bg: 'bg-violet-700', border: 'border-violet-600' },
   pink: { bg: 'bg-pink-700', border: 'border-pink-600' },
   rose: { bg: 'bg-rose-700', border: 'border-rose-600' },
-  red: { bg: 'bg-red-700', border: 'border-red-600' },
+  red: { bg: 'bg-red-700', border: 'border-rose-500' },
 
   // Greens and Warm Colors
   emerald: { bg: 'bg-emerald-700', border: 'border-emerald-600' },
-  green: { bg: 'bg-green-700', border: 'border-green-600' },
+  green: { bg: 'bg-green-700', border: 'border-emerald-500' },
   lime: { bg: 'bg-lime-700', border: 'border-lime-600' },
   yellow: { bg: 'bg-yellow-700', border: 'border-yellow-600' },
   amber: { bg: 'bg-amber-700', border: 'border-amber-600' },

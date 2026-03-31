@@ -1,10 +1,28 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "files": {
+    "ignore": [
+      "node_modules",
+      ".next",
+      "**/.react-email/**",
+      "**/convex/_generated/**",
+      "**/*.d.ts"
+    ]
+  },
   "organizeImports": {
     "enabled": true
   },
   "linter": {
-    "ignore": ["node_modules", ".next", "packages/tsconfig"],
+    "ignore": [
+      "node_modules",
+      ".next",
+      "packages/tsconfig",
+      "**/*.d.ts",
+      "**/convex/_generated/**",
+      "**/.react-email/**",
+      "**/src/lib/number-flow/**",
+      "**/src/components/number-flow.tsx"
+    ],
     "enabled": true,
     "rules": {
       "recommended": true,
@@ -14,11 +32,39 @@
       "style": {
         "noNonNullAssertion": "off"
       },
+      "complexity": {
+        "noForEach": "off"
+      },
       "correctness": {
         "useExhaustiveDependencies": "off"
       }
     }
   },
+  "overrides": [
+    {
+      "include": ["**/src/components/icons.tsx"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    },
+    {
+      "include": ["**/src/components/progressive-blur.tsx"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          },
+          "performance": {
+            "noAccumulatingSpread": "off"
+          }
+        }
+      }
+    }
+  ],
   "formatter": {
     "indentStyle": "space"
   }

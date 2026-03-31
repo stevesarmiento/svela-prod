@@ -57,9 +57,8 @@ export function useEnhancedCoinSearch(
     
     if (looksLikeSymbols) {
       return { type: 'symbol' as const, terms, category: undefined };
-    } else {
-      return { type: 'name' as const, terms, category: undefined };
     }
+      return { type: 'name' as const, terms, category: undefined };
   }, [query, category]);
   
   // Primary search based on detected strategy
@@ -108,7 +107,7 @@ export function useEnhancedCoinSearch(
           totalResults: categorySearch.data?.length || 0
         };
         
-      case 'symbol':
+      case 'symbol': {
         // Use fallback if primary search failed and fallback has results
         const useSymbolFallback = enableFallback && 
           symbolSearch.data?.length === 0 && 
@@ -124,6 +123,7 @@ export function useEnhancedCoinSearch(
             fallbackNameSearch.data?.length || 0 : 
             symbolSearch.data?.length || 0
         };
+      }
         
       case 'name':
         return {

@@ -1,7 +1,7 @@
 import "@v1/ui/globals.css";
 import { cn } from "@v1/ui/cn";
 import { Providers } from "@/components/providers/providers";
-import Script from "next/script";
+import { ReactScan } from "@/components/dev/react-scan";
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
@@ -67,15 +67,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        {process.env.NODE_ENV === "development" ? (
-          <Script
-            src="//unpkg.com/react-scan/dist/auto.global.js"
-            strategy="beforeInteractive"
-          />
-        ) : null}
-      </head>
+    <html lang="en" className="dark">
+      <head />
       <body
         className={cn(
           `${GeistSans.variable} ${GeistMono.variable} ${abcDiatype.variable} ${abcDiatypeMono.variable}`,
@@ -83,6 +76,7 @@ export default function RootLayout({
         )}
       >
         <Providers>
+          <ReactScan />
           {children}
         </Providers>
       </body>

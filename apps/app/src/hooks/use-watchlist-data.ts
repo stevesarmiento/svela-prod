@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
+import { useWatchlistByGroup, useWatchlistGroups } from '@/lib/convex-hooks'
 import type { CoinMarketData } from '@/types/coins'
 
 // Filter interface
@@ -13,6 +14,7 @@ export interface FilterState {
   changeFilter: "all" | "positive" | "negative";
   sortBy: "name" | "price" | "change" | "marketCap" | "volume";
   sortOrder: "asc" | "desc";
+  watchlistGroupId: string | null;
 }
 
 interface UseWatchlistDataProps {
@@ -25,12 +27,27 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     searchText: "",
     priceRange: [0, 1000000],
     marketCapRange: [0, 10000000000000],
-    volumeRange: [0, 1000000000],
+    // Default max must be high enough to include majors (BTC/ETH often > $1B daily volume).
+    volumeRange: [0, 1000000000000],
     changeFilter: "all",
     // Default sort: highest volume first
     sortBy: "volume",
     sortOrder: "desc",
+    watchlistGroupId: null,
   })
+
+  const watchlistGroups = useWatchlistGroups()
+  const selectedGroupId = filters.watchlistGroupId ?? undefined
+  const selectedGroupItems = useWatchlistByGroup(selectedGroupId)
+  const isSelectedGroupItemsLoading = Boolean(selectedGroupId && selectedGroupItems === undefined)
+
+  const selectedGroupCoinIdSet = useMemo(() => {
+    return new Set((selectedGroupItems ?? []).map((item) => item.coinId))
+  }, [selectedGroupItems])
+
+  const watchlistGroupOptions = useMemo(() => {
+    return (watchlistGroups ?? []).map((g) => ({ id: g._id, name: g.name }))
+  }, [watchlistGroups])
 
   const { 
     data: coins, 
@@ -39,43 +56,27 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     performance
   } = useCoinGeckoWatchlistCoins(watchlist);
 
-  // Create optimistic loading coins while data is being fetched
-  const optimisticCoins = useMemo(() => {
-    if (isCoinsLoading && !coins) {
-      // Show skeleton rows during initial load
-      return watchlist.map(coinId => ({
-        id: coinId,
-        name: 'Loading...',
-        symbol: 'Loading...',
-        image: '', // Empty image triggers skeleton loading
-        slug: `coin-${coinId}`,
-        cmc_rank: 0,
-        circulating_supply: 0,
-        max_supply: null,
-        quote: {
-          USD: {
-            price: 0, // 0 price triggers skeleton loading
-            volume_24h: 0,
-            market_cap: 0,
-            percent_change_24h: 0,
-          }
-        }
-      } as CoinMarketData))
-    }
-    return coins || []
-  }, [isCoinsLoading, coins, watchlist])
+  const isInitialCoinsLoading =
+    (watchlist.length > 0 && isCoinsLoading && coins.length === 0) || isSelectedGroupItemsLoading
 
   // Filter and sort coins based on filter state
   const filteredCoins = useMemo(() => {
-    if (!optimisticCoins.length) return [];
+    if (!coins.length) return [];
     
     const searchLower = filters.searchText ? filters.searchText.toLowerCase() : null
+    const hasWatchlistGroupFilter = Boolean(selectedGroupId)
 
-    const filtered = optimisticCoins.filter(coin => {
+    const filtered = coins.filter(coin => {
       const usd = coin.quote.USD
       const price = usd.price
       const marketCap = usd.market_cap
+      const volume24h = usd.volume_24h
       const change24h = usd.percent_change_24h
+
+      // Watchlist group filter (screener only)
+      if (hasWatchlistGroupFilter) {
+        if (!selectedGroupCoinIdSet.has(coin.id)) return false
+      }
 
       // Search filter
       if (searchLower) {
@@ -94,6 +95,11 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       if (marketCap < filters.marketCapRange[0] || marketCap > filters.marketCapRange[1]) {
         return false;
       }
+
+      // Volume range filter
+      if (volume24h < filters.volumeRange[0] || volume24h > filters.volumeRange[1]) {
+        return false
+      }
       
       // 24h change filter
       if (filters.changeFilter === "positive" && change24h <= 0) {
@@ -110,7 +116,8 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     filtered.sort((a, b) => {
       const aUsd = a.quote.USD
       const bUsd = b.quote.USD
-      let aValue, bValue;
+      let aValue: number | string;
+      let bValue: number | string;
       
       switch (filters.sortBy) {
         case "price":
@@ -136,13 +143,12 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       
       if (filters.sortOrder === "desc") {
         return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
-      } else {
-        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
       }
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
     });
     
     return filtered;
-  }, [optimisticCoins, filters]);
+  }, [coins, filters, selectedGroupId, selectedGroupCoinIdSet]);
 
   // Filter handlers
   const handleClearAllFilters = useCallback(() => {
@@ -150,11 +156,12 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       searchText: "",
       priceRange: [0, 1000000],
       marketCapRange: [0, 10000000000000],
-      volumeRange: [0, 1000000000],
+      volumeRange: [0, 1000000000000],
       changeFilter: "all",
       // Default sort: highest volume first
       sortBy: "volume",
       sortOrder: "desc",
+      watchlistGroupId: null,
     });
   }, []);
 
@@ -163,8 +170,10 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     setFilters,
     filteredCoins,
     isCoinsLoading,
+    isInitialCoinsLoading,
     error,
     performance,
     handleClearAllFilters,
+    watchlistGroupOptions,
   };
 }

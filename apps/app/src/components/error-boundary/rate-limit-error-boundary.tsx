@@ -84,7 +84,7 @@ class RateLimitErrorBoundaryClass extends React.Component<
     }
 
     // Progressive delay based on retry count
-    const delay = Math.min(1000 * Math.pow(2, this.state.retryCount), 30000)
+    const delay = Math.min(1000 * 2 ** this.state.retryCount, 30000)
     
     this.retryTimeout = setTimeout(() => {
       this.setState(prevState => ({
@@ -148,7 +148,7 @@ function DefaultErrorFallback({
           return
         }
 
-        const delayMs = Math.min(1000 * Math.pow(2, retryCount), 30000)
+        const delayMs = Math.min(1000 * 2 ** retryCount, 30000)
         let remainingSeconds = Math.ceil(delayMs / 1000)
 
         yield* Effect.sync(() => setCountdown(remainingSeconds))

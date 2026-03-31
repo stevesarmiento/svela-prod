@@ -21,8 +21,10 @@ import {
   IconChartLineFlattrendXyaxis
 } from 'symbols-react'
 import { formatNumber, getTrendBadgeVariant, getBuySellPressure, calculateDivergence, calculateSupportResistance } from '@/lib/analysis-utils'
+import { formatUsdPrice } from "@/lib/format-usd"
 import { MiniPriceChart } from './mini-price-chart'
 import type { Time } from 'lightweight-charts'
+import { getAlignedPriceFromChartPoints } from '@/lib/aligned-price'
 
 interface MarketData {
   quote?: {
@@ -119,7 +121,7 @@ function MetricRow({ icon = <IconChartBarXaxis className="w-3 h-3 fill-zinc-100"
       </div>
       <div className="flex items-center gap-1">
         {typeof value === 'string' ? (
-          <span className="font-diatype-mono text-xs text-white">{value}</span>
+          <span className="font-berkeley-mono text-xs text-white">{value}</span>
         ) : value}
         {badge}
       </div>
@@ -168,10 +170,15 @@ export function MarketMetricsSidebar({
     const volumeTrend = recentVolume > previousVolume * 1.2 ? 'up' : 
                        recentVolume < previousVolume * 0.8 ? 'down' : 'stable'
     
+    const alignedSpotPrice =
+      getAlignedPriceFromChartPoints(chartData) ??
+      marketData?.quote?.USD?.price ??
+      0
+
     // Support/resistance calculation
     const priceHistory = chartData?.map(d => d.value) || []
     const recentPriceData = priceHistory.slice(-21)
-    const { support, resistance } = calculateSupportResistance(recentPriceData, marketData?.quote?.USD?.price || 0)
+    const { support, resistance } = calculateSupportResistance(recentPriceData, alignedSpotPrice)
     
     // Latest indicators
     const latestBBIndicator = bbData.indicator?.length > 0 ? bbData.indicator[bbData.indicator.length - 1] : null
@@ -210,6 +217,7 @@ export function MarketMetricsSidebar({
       previousOI,
       latestLiquidations,
       priceHistory,
+      alignedSpotPrice,
     }
   }, [marketData, chartData, volumeData, bbData, marketVisionData, openInterestData, liquidationData])
 
@@ -256,7 +264,7 @@ export function MarketMetricsSidebar({
         <MiniPriceChart 
           coinId={coinId}
           tokenSymbol={tokenSymbol}
-          currentPrice={marketData?.quote?.USD?.price}
+          currentPrice={calculations.alignedSpotPrice}
         />
         
         <div className="w-full h-[1px] mb-3 bg-zinc-800/50 scale-125" />
@@ -266,7 +274,7 @@ export function MarketMetricsSidebar({
           <MetricRow
             icon={<IconDollarsign className="w-3 h-3 fill-zinc-100" />}
             label="Current Price"
-            value={`$${marketData?.quote?.USD?.price?.toLocaleString() || '0.00'}`}
+            value={formatUsdPrice(calculations.alignedSpotPrice ?? 0)}
           />
           
           <MetricRow
@@ -290,12 +298,12 @@ export function MarketMetricsSidebar({
           <MetricRow
             icon={<IconTengesign className="w-3 h-3 fill-red-500" />}
             label="Resistance (21d)"
-            value={<span className="font-diatype-mono text-xs text-red-400">${calculations.resistance.toLocaleString()}</span>}
+            value={<span className="font-berkeley-mono text-xs text-red-400">{formatUsdPrice(calculations.resistance)}</span>}
           />
           <MetricRow
             icon={<IconTengesign className="w-3 h-3 fill-green-500 rotate-180" />}
             label="Support (21d)"
-            value={<span className="font-diatype-mono text-xs text-green-400">${calculations.support.toLocaleString()}</span>}
+            value={<span className="font-berkeley-mono text-xs text-green-400">{formatUsdPrice(calculations.support)}</span>}
           />
         </Section>
 
@@ -344,7 +352,7 @@ export function MarketMetricsSidebar({
                 <MetricRow
                   icon={<IconFibrechannel className="w-3 h-3 fill-zinc-100" />}
                   label="Bands"
-                  value={<span className="font-diatype-mono text-white">
+                  value={<span className="font-berkeley-mono text-white">
                     {calculations.latestBBLower.value.toFixed(1)} - {calculations.latestBBUpper.value.toFixed(1)}
                   </span>}
                   className="text-xs"
@@ -471,7 +479,7 @@ export function MarketMetricsSidebar({
                 <span className="text-xs text-gray-300">
                   {getTrendLabel(marketData?.quote?.USD?.percent_change_24h || 0)}
                 </span>
-                <span className="font-diatype-mono text-xs text-zinc-500">
+                <span className="font-berkeley-mono text-xs text-zinc-500">
                   {Math.abs(marketData?.quote?.USD?.percent_change_24h || 0).toFixed(1)}%
                 </span>
               </div>

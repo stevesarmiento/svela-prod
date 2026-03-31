@@ -6,7 +6,6 @@ import { Table, TableBody, TableCell, TableRow } from "@v1/ui/table"
 import { Button } from "@v1/ui/button"
 import { toast } from "@v1/ui/use-toast"
 import { useHybridCoinSearch, useHybridTopCoins, type HybridCoinSearchResult } from '@/hooks/use-hybrid-coin-search'
-import Image from 'next/image'
 import { IconXmarkCircleFill, IconMagnifyingglass, IconBookmarkFill } from 'symbols-react'
 import { useWatchlist } from "./watchlist-context"
 import { useUser } from '@/hooks/use-user'
@@ -21,13 +20,15 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { Kbd } from "@v1/ui/kbd"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
+import { formatUsdPrice } from "@/lib/format-usd"
+import { TokenLogo } from "@/components/token-logo"
 
 // Skeleton Components
 const CoinSearchSkeleton = ({ rowCount = 5 }: { rowCount?: number }) => (
   <Table>
     <TableBody>
-      {Array.from({ length: rowCount }).map((_, index) => (
-        <TableRow key={index}>
+      {Array.from({ length: rowCount }, (_, i) => `row-${i}`).map((rowKey) => (
+        <TableRow key={rowKey}>
           <TableCell>
             <div className="flex items-center gap-2">
               <Skeleton className="h-6 w-6 rounded-full" />
@@ -250,26 +251,21 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                         // (e.g. xStocks / wrapped tokens / LST naming conventions)
                         <TableRow 
                           key={coin.id}
-                          className="cursor-pointer border-none hover:bg-zinc-800/50 border-zinc-700/30 font-diatype-mono transition-colors group"
+                          className="cursor-pointer border-none hover:bg-zinc-800/50 border-zinc-700/30 font-berkeley-mono transition-colors group"
                           onClick={() => handleAddCoin(coin)}
                         >
                           <TableCell className="text-white rounded-l-xl">
                             <div className="flex items-center gap-3">
-                              <Image
+                              <TokenLogo
                                 src={(() => {
                                   const logoUrl = getTokenLogoURL(coin.symbol, coin.image)
-                                  return logoUrl?.startsWith('http') || logoUrl?.startsWith('/')
-                                    ? logoUrl
-                                    : '/favicon.ico'
+                                  return logoUrl?.startsWith("http") || logoUrl?.startsWith("/") ? logoUrl : undefined
                                 })()}
                                 alt={cleanTokenName(coin.name)}
-                                className="w-6 h-6 rounded-full"
-                                width={24}
-                                height={24}
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.src = '/favicon.ico';
-                                }}
+                                sizePx={24}
+                                fallbackText={coin.symbol}
+                                className="ring-0 bg-transparent"
+                                quality={70}
                               />
                               <div>
                                 <div className="font-semibold font-sans text-sm text-white group-hover:text-white/90 mt-1">{cleanTokenName(coin.name)}</div>
@@ -277,14 +273,14 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="font-diatype-mono text-xs text-white/90">
+                          <TableCell className="font-berkeley-mono text-xs text-white/90">
                             {coin.quote.USD.price > 0 ? (
-                              `$${coin.quote.USD.price.toLocaleString()}`
+                              formatUsdPrice(coin.quote.USD.price)
                             ) : (
                               <Skeleton className="h-4 w-16 bg-zinc-700/50" />
                             )}
                           </TableCell>
-                          <TableCell className="font-diatype-mono rounded-r-xl text-[11px]">
+                          <TableCell className="font-berkeley-mono rounded-r-xl text-[11px]">
                             {coin.quote.USD.price > 0 && coin.quote.USD.percent_change_24h !== null ? (
                               <span className={`${coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'}`}>
                                 {coin.quote.USD.percent_change_24h.toFixed(2)}%

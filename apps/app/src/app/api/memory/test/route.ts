@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { capxMemoryService } from '@/lib/capx-memory';
 import { storeMemoryWithMetadata } from '@/lib/client-memory-utils';
 

@@ -249,3 +249,11 @@ export {
   type BollingerBandsResult,
   DEFAULT_BB_COLORS
 } from './bollinger-bands'
+
+// Export BBWP functionality
+export {
+  calculateBBWP,
+  type BBWPConfig,
+  type BBWPResult,
+  DEFAULT_BBWP_CONFIG,
+} from './bbwp'

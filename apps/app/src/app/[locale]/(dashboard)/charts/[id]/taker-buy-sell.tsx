@@ -169,7 +169,7 @@ export function TakerBuySell({
       },
       tooltip: {
         theme: 'dark',
-        custom: function({ dataPointIndex }: { dataPointIndex: number }) {
+        custom: ({ dataPointIndex }: { dataPointIndex: number }) => {
           const exchange = topExchanges[dataPointIndex]
           if (!exchange) return ''
           // No date available, so just show exchange name at top
@@ -181,15 +181,15 @@ export function TakerBuySell({
                 <div class="flex flex-col gap-2">
                   <div class="flex items-center justify-between">
                     <span class="text-[11px] text-emerald-400">Buy</span>
-                    <span class="text-[11px] font-diatype-mono text-emerald-400 font-bold">${exchange.buyRatio.toFixed(1)}% ($${formatLargeNumber(exchange.buyVolumeUsd)})</span>
+                    <span class="text-[11px] font-berkeley-mono text-emerald-400 font-bold">${exchange.buyRatio.toFixed(1)}% ($${formatLargeNumber(exchange.buyVolumeUsd)})</span>
                   </div>
                   <div class="flex items-center justify-between">
                     <span class="text-[11px] text-rose-400">Sell</span>
-                    <span class="text-[11px] font-diatype-mono text-rose-400 font-bold">${exchange.sellRatio.toFixed(1)}% ($${formatLargeNumber(exchange.sellVolumeUsd)})</span>
+                    <span class="text-[11px] font-berkeley-mono text-rose-400 font-bold">${exchange.sellRatio.toFixed(1)}% ($${formatLargeNumber(exchange.sellVolumeUsd)})</span>
                   </div>
                   <div class="flex items-center justify-between">
                     <span class="text-[11px] text-zinc-400">Total Volume</span>
-                    <span class="text-[11px] font-diatype-mono text-white font-bold">$${formatLargeNumber(exchange.totalVolumeUsd)}</span>
+                    <span class="text-[11px] font-berkeley-mono text-white font-bold">$${formatLargeNumber(exchange.totalVolumeUsd)}</span>
                   </div>
                 </div>
               </div>
@@ -304,7 +304,7 @@ export function TakerBuySell({
                             backgroundColor: addOpacityToColor(colors.sell, 0.2), 
                             borderColor: colors.sell 
                           }}
-                        ></div>
+                        />
                         <span>Sell Pressure (&lt;48%)</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs">
@@ -314,7 +314,7 @@ export function TakerBuySell({
                             backgroundColor: addOpacityToColor(colors.neutral, 0.2), 
                             borderColor: colors.neutral 
                           }}
-                        ></div>
+                        />
                         <span>Neutral (48-52%)</span>
                       </div>
                       <div className="flex items-center gap-2 text-xs">
@@ -324,7 +324,7 @@ export function TakerBuySell({
                             backgroundColor: addOpacityToColor(colors.buy, 0.2), 
                             borderColor: colors.buy 
                           }}
-                        ></div>
+                        />
                         <span>Buy Pressure (&gt;52%)</span>
                       </div>
                     </TooltipContent>

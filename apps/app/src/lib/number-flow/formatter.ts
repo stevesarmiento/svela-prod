@@ -51,8 +51,8 @@ export function formatToData(
 		`${type}:${(counts[type] = (counts[type] ?? -1) + 1)}`
 
 	let valueAsString = ''
-	let seenInteger = false,
-		seenDecimal = false
+	let seenInteger = false
+	let seenDecimal = false
 	for (const part of parts) {
 		valueAsString += part.value
 
@@ -62,7 +62,7 @@ export function formatToData(
 
 		if (type === 'integer') {
 			seenInteger = true
-			_integer.push(...part.value.split('').map((d) => ({ type, value: parseInt(d) })))
+			_integer.push(...part.value.split('').map((d) => ({ type, value: Number.parseInt(d) })))
 		} else if (type === 'group') {
 			_integer.push({ type, value: part.value })
 		} else if (type === 'decimal') {
@@ -72,7 +72,7 @@ export function formatToData(
 			fraction.push(
 				...part.value.split('').map((d) => ({
 					type,
-					value: parseInt(d),
+					value: Number.parseInt(d),
 					key: generateKey(type),
 					pos: -1 - counts[type]!
 				}))
@@ -110,7 +110,7 @@ export function formatToData(
 		fraction,
 		post,
 		valueAsString,
-		value: typeof value == 'string' ? parseFloat(value) : value
+		value: typeof value === 'string' ? Number.parseFloat(value) : value
 	}
 }
 

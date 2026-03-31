@@ -31,7 +31,7 @@ interface MemoryContext {
 async function callWithRetry(
   url: string, 
   options: RequestInit, 
-  maxRetries: number = 3
+  maxRetries = 3
 ): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -39,7 +39,7 @@ async function callWithRetry(
       
       if (response.status === 429) {
         // Rate limited - wait and retry
-        const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+        const delay = Math.min(1000 * 2 ** attempt, 10000);
         console.log(`⏳ Rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
@@ -49,7 +49,7 @@ async function callWithRetry(
     } catch (error) {
       if (attempt === maxRetries) throw error;
       
-      const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+      const delay = Math.min(1000 * 2 ** attempt, 10000);
       console.log(`⚠️ Request failed, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries + 1})`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
@@ -59,7 +59,7 @@ async function callWithRetry(
 }
 
 // Get optimal processing strategy based on content type and user tier
-function getOptimalStrategy(text: string, userTier: string = 'free'): ProcessingStrategy {
+function getOptimalStrategy(text: string, userTier = 'free'): ProcessingStrategy {
   if (userTier === 'free') return 'raw';
   
   if (text.length > 2000) return 'summarize_if_long';

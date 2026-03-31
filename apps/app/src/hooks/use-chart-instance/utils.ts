@@ -11,11 +11,10 @@ export function formatUsdVolume(value: number) {
 export function formatUsdPrice(value: number) {
     if (!Number.isFinite(value)) return '$0.00';
     return (
-        '$' +
-        value.toLocaleString('en-US', {
+        `$${value.toLocaleString('en-US', {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
-        })
+        })}`
     );
 }
 
@@ -82,9 +81,9 @@ export function toRgba(color: string, alpha: number): string {
                   .map(c => c + c)
                   .join('')
             : hex;
-    const r = parseInt(fullHex.slice(0, 2), 16);
-    const g = parseInt(fullHex.slice(2, 4), 16);
-    const b = parseInt(fullHex.slice(4, 6), 16);
+    const r = Number.parseInt(fullHex.slice(0, 2), 16);
+    const g = Number.parseInt(fullHex.slice(2, 4), 16);
+    const b = Number.parseInt(fullHex.slice(4, 6), 16);
     return `rgba(${r}, ${g}, ${b}, ${clampedAlpha})`;
 }
 
