@@ -19,6 +19,14 @@ crons.interval(
   { batchSize: 250 },
 );
 
+// CoinGecko news (cached in DB; rotating batches).
+crons.interval(
+  "coingecko_refresh_news",
+  { hours: 4 },
+  internal.coingeckoNewsJobs.refreshTrackedCoinNewsBatch,
+  { batchSize: 10, perPage: 5 },
+);
+
 // Market chart refresh (DB is source of truth; keep series warm).
 crons.interval(
   "coingecko_refresh_market_chart_1d",

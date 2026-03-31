@@ -12,13 +12,13 @@ import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
 import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
 import { useMarketVisionB, calculateBollingerBands, calculateBBWP } from '@/hooks/market-vision'
-import { useScrollThreshold } from '@/hooks/use-scroll-effect'
 import { getAlignedPriceFromChartPoints } from '@/lib/aligned-price'
 import { getTokenLogoURL } from '@/lib/logo-overrides'
 import { Card, CardContent, CardHeader } from '@v1/ui/card'
 import { Badge } from '@v1/ui/badge'
 import { cn } from '@v1/ui/cn'
 import { IndicatorExplainDialog } from './indicator-explain-dialog'
+import { TokenCoingeckoNews } from './token-coingecko-news'
 
 type IndicatorChipTone = 'neutral' | 'positive' | 'negative'
 
@@ -84,9 +84,6 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
   const deferredId = useDeferredValue(id)
   const deferredTokenData = useDeferredValue(tokenData)
 
-  // Use optimized scroll hook - eliminates useState/useEffect pattern
-  const isSticky = useScrollThreshold(100)
-  
   // Local state for active time scale (this is fine - it's not derived from props)
   const [activeTimeScale, setActiveTimeScale] = useState<string>("30d")
   const deferredTimeScale = useDeferredValue(activeTimeScale)
@@ -343,17 +340,20 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
   const showPending = isPending || isTransitionPending || isLoading || quoteQuery.isLoading
 
   return (
-    <main className={cn("mx-auto py-6 px-4 relative z-10", showPending && "opacity-90 transition-opacity duration-200")}>
+    <main className={cn("mx-auto py-6 relative z-10", showPending && "opacity-90 transition-opacity duration-200")}>
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-        <div className="col-span-12 sm:space-y-0 sticky top-0 z-[100] will-change-transform">
-          <div className={`${isSticky ? 'pt-4' : 'pt-0'}`}>
-            <PriceChart 
+        <div className="col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-8 xl:col-span-8 min-w-0 sm:space-y-0">
+            <PriceChart
               coinId={deferredId}
               initialData={deferredTokenData.quote.USD}
               activeTimeScale={deferredTimeScale}
               setActiveTimeScale={handleTimeScaleChange}
               isPending={showPending}
-            />              
+            />
+          </div>
+          <div className="lg:col-span-4 xl:col-span-4 min-w-0">
+            <TokenCoingeckoNews coinId={deferredId} isPending={showPending} />
           </div>
         </div>
         <div className="col-span-12">
@@ -378,11 +378,11 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
           )}
         </div>
 
-        <SectionHeader title="Indicators" className="col-span-12 mt-16" />
+        <SectionHeader title="Technical Indicators" className="col-span-12 mt-16" />
         
           
         <div className="col-span-12 md:col-span-6">
-          <Card className={cn("border-zinc-800/30 bg-zinc-950/50 overflow-hidden", showPending && "opacity-90")}>
+          <Card className={cn("border-zinc-800/70 bg-black rounded-2xl overflow-hidden", showPending && "opacity-90")}>
             <CardHeader className="flex flex-row items-start justify-between gap-4 p-4 pb-2">
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-white">Momentum &amp; Money Flow</div>
@@ -449,7 +449,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
         </div>
 
         <div className="col-span-12 md:col-span-6">
-          <Card className={cn("border-zinc-800/30 bg-zinc-950/50 overflow-hidden", showPending && "opacity-90")}>
+          <Card className={cn("border-zinc-800/70 bg-black rounded-2xl overflow-hidden", showPending && "opacity-90")}>
             <CardHeader className="flex flex-row items-start justify-between gap-4 p-4 pb-2">
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-white">Bolinger Bands</div>
@@ -519,7 +519,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
         </div>
 
         <div className="col-span-12">
-          <Card className={cn("border-zinc-800/30 bg-zinc-950/50 overflow-hidden", showPending && "opacity-90")}>
+          <Card className={cn("border-zinc-800/70 bg-black rounded-2xl overflow-hidden", showPending && "opacity-90")}>
             <CardHeader className="flex flex-row items-start justify-between gap-4 p-4 pb-2">
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-white">Volatility</div>

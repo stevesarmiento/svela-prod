@@ -376,8 +376,8 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
           <Card className="border-none bg-transparent">
             <CardHeader className="flex flex-row items-start justify-between p-6 pl-6">
               {/* Left side - Coin info */}
-              <div className="flex gap-3 justify-between items-start w-full">
-                <div className="flex flex-col">
+              <div className="relative flex gap-3 justify-between items-start w-full">
+                <div className="absolute left-0 flex flex-col">
                   <div className="flex items-center gap-2">
                     <TokenLogo
                       src={safeCoinLogoUrl}

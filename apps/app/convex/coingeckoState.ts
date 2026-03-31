@@ -243,6 +243,27 @@ export const _getTrackedCoinsPage = internalQuery({
   },
 });
 
+export const _getTrackedCoinsPageByLastSeen = internalQuery({
+  args: {
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: v.object({
+    page: v.array(trackedCoinRowValidator),
+    isDone: v.boolean(),
+    continueCursor: v.union(v.string(), v.null()),
+  }),
+  handler: async (ctx, args) => {
+    const result = await ctx.db
+      .query("trackedCoins")
+      .withIndex("by_last_seen")
+      .order("desc")
+      .paginate(args.paginationOpts);
+
+    const { page, isDone, continueCursor } = result;
+    return { page, isDone, continueCursor };
+  },
+});
+
 export const _listTrackedCoinIdsByReason = internalQuery({
   args: {
     reason: v.string(),

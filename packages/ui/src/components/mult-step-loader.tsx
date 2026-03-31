@@ -47,10 +47,18 @@ const LoaderCore = ({
 }: {
   loadingStates: LoadingState[];
   value?: number;
-  variant?: "fullscreen" | "dialog";
+  variant?: "fullscreen" | "dialog" | "inline";
 }) => {
+  const onDarkPanel = variant === "dialog" || variant === "inline";
   return (
-    <div className="flex relative justify-start max-w-xl mx-auto flex-col mt-40">
+    <div
+      className={cn(
+        "flex relative justify-start mx-auto flex-col",
+        variant === "inline"
+          ? "mt-0 max-w-none w-full"
+          : "max-w-xl mt-40",
+      )}
+    >
       {loadingStates.map((loadingState, index) => {
         const distance = Math.abs(index - value);
         const opacity = Math.max(1 - distance * 0.2, 0); // Minimum opacity is 0, keep it 0.2 if you're sane.
@@ -90,17 +98,11 @@ const LoaderCore = ({
             </div>
             <span
               className={cn(
-                variant === "fullscreen"
-                  ? "text-black dark:text-white"
-                  : "text-white",
+                !onDarkPanel ? "text-black dark:text-white" : "text-white",
                 isCurrentStep &&
-                  (variant === "fullscreen"
-                    ? "text-black dark:text-white"
-                    : "text-white"),
+                  (!onDarkPanel ? "text-black dark:text-white" : "text-white"),
                 isCompletedStep &&
-                  (variant === "fullscreen"
-                    ? "text-black dark:text-white/70"
-                    : "text-white/70"),
+                  (!onDarkPanel ? "text-black dark:text-white/70" : "text-white/70"),
               )}
             >
               {loadingState.text}
@@ -123,7 +125,7 @@ export const MultiStepLoader = ({
   loading?: boolean;
   duration?: number;
   loop?: boolean;
-  variant?: "fullscreen" | "dialog";
+  variant?: "fullscreen" | "dialog" | "inline";
 }) => {
   const [currentState, setCurrentState] = useState(0);
 
@@ -146,9 +148,14 @@ export const MultiStepLoader = ({
   }, [currentState, loading, loop, loadingStates.length, duration]);
 
   const containerClassName =
-    variant === "fullscreen"
-      ? "w-full h-full fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-2xl"
-      : "w-full h-full fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-2xl";
+    variant === "inline"
+      ? "w-full"
+      : variant === "fullscreen"
+        ? "w-full h-full fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-2xl"
+        : "w-full h-full fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-2xl";
+
+  const loaderCoreVariant =
+    variant === "inline" ? "inline" : variant === "dialog" ? "dialog" : "fullscreen";
 
   return (
     <AnimatePresence mode="wait">
@@ -165,11 +172,16 @@ export const MultiStepLoader = ({
           }}
           className={containerClassName}
         >
-          <div className="h-96  relative">
+          <div
+            className={cn(
+              "relative",
+              variant === "inline" ? "min-h-0 w-full py-2" : "h-96",
+            )}
+          >
             <LoaderCore
               value={currentState}
               loadingStates={loadingStates}
-              variant={variant}
+              variant={loaderCoreVariant}
             />
           </div>
 

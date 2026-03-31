@@ -88,7 +88,7 @@ function ColumnHeaderTooltip({
       </TooltipTrigger>
       <TooltipContent
         side="top"
-        className="max-w-xs text-pretty text-xs font-normal normal-case tracking-normal"
+        className="p-2.5 rounded-md max-w-xs text-pretty text-xs font-normal normal-case tracking-normal"
       >
         {text}
       </TooltipContent>

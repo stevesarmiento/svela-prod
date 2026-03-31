@@ -638,7 +638,7 @@ export const refreshTrackedSpotTakerBuySellVolumeHistoryBatch = internalAction({
       },
     );
 
-    const coingeckoIds = page.page.map((row) => row.coingeckoId);
+    const coingeckoIds = page.page.map((row: { coingeckoId: string }) => row.coingeckoId);
     if (coingeckoIds.length === 0) {
       await ctx.runMutation(internal.coingeckoState._setJobCursor, {
         jobKey,
@@ -721,7 +721,7 @@ export const refreshTrackedFuturesTakerBuySellVolumeHistoryBatch =
         },
       );
 
-      const coingeckoIds = page.page.map((row) => row.coingeckoId);
+      const coingeckoIds = page.page.map((row: { coingeckoId: string }) => row.coingeckoId);
       if (coingeckoIds.length === 0) {
         await ctx.runMutation(internal.coingeckoState._setJobCursor, {
           jobKey,
@@ -824,7 +824,7 @@ export const refreshTrackedOpenInterestHistoryBatch = internalAction({
         paginationOpts: { numItems: batchSize, cursor },
       },
     );
-    const coingeckoIds = page.page.map((row) => row.coingeckoId);
+    const coingeckoIds = page.page.map((row: { coingeckoId: string }) => row.coingeckoId);
     if (coingeckoIds.length === 0) {
       await ctx.runMutation(internal.coingeckoState._setJobCursor, {
         jobKey,
@@ -925,7 +925,7 @@ export const refreshTrackedLiquidationHistoryBatch = internalAction({
         paginationOpts: { numItems: batchSize, cursor },
       },
     );
-    const coingeckoIds = page.page.map((row) => row.coingeckoId);
+    const coingeckoIds = page.page.map((row: { coingeckoId: string }) => row.coingeckoId);
     if (coingeckoIds.length === 0) {
       await ctx.runMutation(internal.coingeckoState._setJobCursor, {
         jobKey,
@@ -1015,7 +1015,7 @@ export const refreshTrackedTakerBuySellExchangeListSnapshotBatch =
           paginationOpts: { numItems: batchSize, cursor },
         },
       );
-      const coingeckoIds = page.page.map((row) => row.coingeckoId);
+      const coingeckoIds = page.page.map((row: { coingeckoId: string }) => row.coingeckoId);
       if (coingeckoIds.length === 0) {
         await ctx.runMutation(internal.coingeckoState._setJobCursor, {
           jobKey,

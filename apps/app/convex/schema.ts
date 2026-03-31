@@ -272,6 +272,39 @@ export default defineSchema({
     .index("by_last_seen", ["lastSeen"])
     .index("by_coingecko_id_and_reason", ["coingeckoId", "reason"]),
 
+  coingeckoNewsArticles: defineTable({
+    url: v.string(),
+    title: v.string(),
+    type: v.literal("news"),
+    sourceName: v.optional(v.string()),
+    author: v.optional(v.string()),
+    postedAtIso: v.optional(v.string()),
+    postedAtMs: v.number(),
+    image: v.optional(v.string()),
+    fetchedAt: v.number(),
+    sentiment: v.optional(
+      v.union(v.literal("bullish"), v.literal("bearish"), v.literal("neutral")),
+    ),
+    sentimentConfidence: v.optional(v.number()),
+    sentimentUpdatedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_url", ["url"])
+    .index("by_posted_at_ms", ["postedAtMs"]),
+
+  coingeckoNewsCoinLinks: defineTable({
+    coingeckoId: v.string(),
+    articleId: v.id("coingeckoNewsArticles"),
+    postedAtMs: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_coingecko_id", ["coingeckoId"])
+    .index("by_article_id", ["articleId"])
+    .index("by_coingecko_id_and_article_id", ["coingeckoId", "articleId"])
+    .index("by_coingecko_id_and_posted_at_ms", ["coingeckoId", "postedAtMs"]),
+
   portfolioWallets: defineTable({
     userId: v.id("users"),
     address: v.string(),

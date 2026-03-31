@@ -288,50 +288,113 @@ function formatTokenLabel(token: IndicatorExplainRequest["token"]): string {
   return token.coinId
 }
 
-function buildAnalysisPrompt(validated: IndicatorExplainRequest): string {
+interface BasePromptParts {
+  payload: IndicatorExplainRequest
+  tokenLabel: string
+  derivedCloses: string
+  focus7d: Record<string, unknown> | null
+}
+
+function buildBasePromptParts(validated: IndicatorExplainRequest): BasePromptParts {
   const payload = forPrompt(validated)
-  const derivedCloses = buildDerivedCloseHints(payload)
-  const focus7d = buildLast7DaysFocus(payload)
-  const label = formatTokenLabel(payload.token)
+  return {
+    payload,
+    tokenLabel: formatTokenLabel(payload.token),
+    derivedCloses: buildDerivedCloseHints(payload),
+    focus7d: buildLast7DaysFocus(payload),
+  }
+}
 
-  const indicatorLabel =
-    payload.indicatorType === "marketVision"
-      ? "Momentum (Market Vision): RSI + WaveTrend + money flow vs price."
-      : payload.indicatorType === "bollinger"
-        ? "RSI + Bollinger-style bands on the indicator (stretched vs contained)."
-        : "BBWP: volatility percentile / bandwidth regime vs price."
-
+function buildSharedSections(p: BasePromptParts): string {
   return `
-You are a technical analyst for cryptocurrency charts. The user opened **Explain** on one indicator card.
-
 **Asset / window**
-- Token: ${label} (id: ${payload.token.coinId})
-- Chart timeframe label: ${payload.timeframe}
-- ${indicatorLabel}
+- Token: ${p.tokenLabel} (id: ${p.payload.token.coinId})
+- Chart timeframe label: ${p.payload.timeframe}
 
 **PRIMARY — last ${FOCUS_DAYS} days (calendar-aware when timestamps exist)**  
 Anchor most of your analysis here. Use the longer JSON below only for broader context if it helps.
-${focus7d ? JSON.stringify(focus7d, null, 2) : "(no closeHistory — cannot isolate 7d window)"}
+${p.focus7d ? JSON.stringify(p.focus7d, null, 2) : "(no closeHistory — cannot isolate 7d window)"}
 
 - If \`windowMode\` is \`calendar_utc\`, bars are those with \`closeTimesUtc >= lastBar - ${FOCUS_DAYS} days\`.
 - If \`last_n_bars\`, timestamps were missing/misaligned — treat the window as an **approximation** (often OK for ~daily candles).
 
 **GROUNDING JSON (full trailing payload)** — only numeric facts you may use. Do not invent values. Treat nulls as unknown.
-${JSON.stringify(payload, null, 2)}
+${JSON.stringify(p.payload, null, 2)}
 
 **Broad payload context** (closes; 7d is still primary):
-${derivedCloses || "(no usable closeHistory in payload)"}
+${p.derivedCloses || "(no usable closeHistory in payload)"}
+`.trim()
+}
+
+function buildMarketVisionPrompt(validated: IndicatorExplainRequest & { indicatorType: "marketVision" }): string {
+  const p = buildBasePromptParts(validated)
+  return `
+You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **Market Vision** indicator card.
+
+${buildSharedSections(p)}
+
+**Indicator mechanics (how it works)**
+- **RSI (0–100)**: momentum oscillator; rising RSI = strengthening momentum; falling RSI = weakening. If RSI is outside 0–100, treat it as an invalid print.
+- **WaveTrend (WT1/WT2)**: two smoothed momentum lines; crossings and slope shifts often mark momentum regime changes.
+- **Money flow**: a momentum/flow proxy derived from price/volume behavior; rising vs falling can confirm or contradict price impulse.
 
 **Instructions**
 - Output **Markdown** only. Be concise and trader-focused.
-- **Lead with the last ~${FOCUS_DAYS} days**: price path in that window (\`closeChangePctInWindow\`, histories) vs indicator behavior (momentum, bands, or BBWP regime). Then briefly note if the wider payload conflicts or confirms.
-- For **marketVision**: WT1 vs WT2 vs price in the 7d window; RSI slope vs price; money flow trend vs price.
-- For **bollinger**: RSI vs bands **in the 7d** slice — stretch / reversion vs continuation.
-- For **bbwp**: volatility regime vs price **in the 7d** slice — coiling, expansion risk.
-- If **RSI is outside 0–100**, invalid print — do not label overbought/oversold on that number.
+- Lead with the last ~${FOCUS_DAYS} days: price path in that window (\`closeChangePctInWindow\`) vs **RSI trend**, **WT1 vs WT2**, and **money flow trend** in the 7d slice.
+- Call out **agreement vs disagreement** (e.g. price up but momentum/flow fading).
 - Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
 - Do not dump the JSON back; interpret it.
 `.trim()
+}
+
+function buildBollingerPrompt(validated: IndicatorExplainRequest & { indicatorType: "bollinger" }): string {
+  const p = buildBasePromptParts(validated)
+  return `
+You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **Bollinger-on-indicator** card.
+
+${buildSharedSections(p)}
+
+**Indicator mechanics (how it works)**
+- The payload provides an **indicator value** plus **upper/lower/basis** bands.
+- Bands typically represent a moving average (**basis**) plus/minus a volatility measure (often standard deviation).  
+  Practical read: **near/above upper** = stretched/strong momentum; **near/below lower** = stretched/weak momentum.
+- **Band expansion** suggests increasing volatility in the indicator; **band contraction** suggests compression (often precedes bigger moves).
+
+**Instructions**
+- Output **Markdown** only. Be concise and trader-focused.
+- Lead with the last ~${FOCUS_DAYS} days: how the indicator behaved **relative to its bands** in the 7d slice (stretch vs mean reversion, compression vs expansion).
+- Then relate that to the 7d price window (\`closeChangePctInWindow\`) and whether the indicator is confirming or warning.
+- If the underlying indicator is RSI-like and prints outside 0–100, do not label overbought/oversold on that number.
+- Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
+- Do not dump the JSON back; interpret it.
+`.trim()
+}
+
+function buildBBWPPrompt(validated: IndicatorExplainRequest & { indicatorType: "bbwp" }): string {
+  const p = buildBasePromptParts(validated)
+  return `
+You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **BBWP** (Bollinger BandWidth Percentile) card.
+
+${buildSharedSections(p)}
+
+**Indicator mechanics (how it works)**
+- **BBWP** is a **percentile (0–100)** of Bollinger BandWidth over a lookback window: low = volatility contraction vs history; high = volatility expansion vs history.
+- BBWP is **not directional** by itself; it describes regime (quiet vs active). Direction comes from price + other momentum context.
+- The \`lookback\` setting changes what “percentile” means (shorter = more reactive; longer = more regime-focused).
+
+**Instructions**
+- Output **Markdown** only. Be concise and trader-focused.
+- Lead with the last ~${FOCUS_DAYS} days: identify whether BBWP implies **coiling (low percentile)**, **expanding (rising)**, or **elevated volatility (high)** in the 7d slice.
+- Translate that into a trader-useful read: “expect expansion risk” / “regime already active” and tie it to the 7d price move (\`closeChangePctInWindow\`).
+- Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
+- Do not dump the JSON back; interpret it.
+`.trim()
+}
+
+function buildAnalysisPrompt(validated: IndicatorExplainRequest): string {
+  if (validated.indicatorType === "marketVision") return buildMarketVisionPrompt(validated)
+  if (validated.indicatorType === "bollinger") return buildBollingerPrompt(validated)
+  return buildBBWPPrompt(validated)
 }
 
 export async function POST(request: Request) {

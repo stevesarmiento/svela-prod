@@ -12,9 +12,10 @@ import {
 } from "@v1/ui/dialog"
 import { Button } from "@v1/ui/button"
 import { ScrollArea } from "@v1/ui/scroll-area"
+import { MultiStepLoader } from "@v1/ui/mult-step-loader"
 import { cn } from "@v1/ui/cn"
 import { useCompletion } from "@ai-sdk/react"
-import { IconArrowUpRight, IconTextAppend } from "symbols-react"
+import { IconArrowBackward, IconArrowUpRight, IconChevronBackward, IconTextAppend } from "symbols-react"
 import NumberFlow from "@/components/number-flow"
 import { TokenLogo } from "@/components/token-logo"
 import { cleanTokenName } from "@/lib/logo-overrides"
@@ -122,6 +123,8 @@ function ExplainQuoteHeader(props: {
   priceUsd: number
   change24hPct: number | null
   isPending: boolean
+  /** e.g. back / close control — sits immediately before the token logo */
+  leadingAction?: React.ReactNode
 }) {
   const shouldReduceMotion = useReducedMotion()
   const change = props.change24hPct
@@ -135,13 +138,14 @@ function ExplainQuoteHeader(props: {
       )}
     >
       <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ml-[-32px]">
+          {props.leadingAction}
           <TokenLogo
             src={props.safeLogoSrc}
             alt={props.displayName}
-            sizePx={16}
+            sizePx={20}
             fallbackText={props.fallbackSymbol ?? undefined}
-            className="ring-0 bg-transparent"
+            className="bg-transparent"
             quality={70}
           />
           <span className="text-sm font-bold text-white">{props.displayName}</span>
@@ -250,8 +254,22 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
     await complete(JSON.stringify(body))
   }, [complete, props, setCompletion, stop])
 
+  const explainLoadingSteps = React.useMemo(
+    () => [
+      { text: "Reading indicator values" },
+      { text: "Comparing to recent price action" },
+      { text: "Checking trend and volatility context" },
+      { text: "Thinking through what it implies" },
+      { text: "Writing the explanation" },
+      { text: "Almost there..." },
+    ],
+    [],
+  )
+
   const showPending = Boolean(isLoading)
   const showError = Boolean(error)
+  const showStreamLoader =
+    showPending && completion.trim().length === 0 && !showError
 
   const regenerateButton = (
     <Button
@@ -259,7 +277,7 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
       variant="outline"
       size="sm"
       disabled={showPending}
-      className="flex items-center gap-1.5 shrink-0 h-8 rounded-lg"
+      className="flex items-center gap-1.5 shrink-0 p-1.5 h-7 rounded-lg"
       onClick={() => {
         void run()
       }}
@@ -269,6 +287,20 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
       />
       Regenerate
     </Button>
+  )
+
+  const explainBackButton = (
+    <DialogClose asChild>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="size-6 shrink-0 rounded-lg text-white hover:bg-white/10"
+        aria-label="Back"
+      >
+        <IconArrowBackward className="size-3 fill-current" aria-hidden />
+      </Button>
+    </DialogClose>
   )
 
   return (
@@ -291,9 +323,9 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
           disabled={props.disabled}
           className={cn("flex items-center gap-1.5 shrink-0 h-8 rounded-lg", props.triggerClassName)}
         >
-                <IconTextAppend
-        className="size-3 fill-primary/60"
-      />
+        <IconTextAppend
+          className="size-3 fill-primary/60"
+        />
           Analyze
         </Button>
       </DialogTrigger>
@@ -301,13 +333,14 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
         hideTitle
         hideClose
         title={`${props.indicatorTitle}${props.tokenSymbol ? ` ${props.tokenSymbol.toUpperCase()}` : ""} ${props.timeframe}`}
-        className="max-w-xl w-full overflow-hidden border-0 bg-transparent shadow-none backdrop-blur-none before:hidden after:hidden gap-0 px-4 pb-4 pt-14 sm:rounded-2xl"
+        className="max-w-xl w-full border-0 bg-transparent shadow-none backdrop-blur-none before:hidden after:hidden gap-0 px-4 pb-4 pt-14 sm:rounded-2xl"
       >
         <DialogHeader className="space-y-3 text-left">
           {showQuoteHeader ? (
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <ExplainQuoteHeader
+                  leadingAction={explainBackButton}
                   displayName={displayName}
                   safeLogoSrc={safeLogoSrc}
                   fallbackSymbol={props.tokenSymbol}
@@ -321,20 +354,32 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
               {regenerateButton}
             </div>
           ) : null}
+          {!showQuoteHeader &&
+          !(props.indicatorChart != null || props.indicatorContext != null) ? (
+            <div className="flex items-center justify-between gap-2">
+              {explainBackButton}
+              {regenerateButton}
+            </div>
+          ) : null}
           {props.indicatorChart != null || props.indicatorContext != null ? (
             <div className="">
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0 text-sm font-semibold text-balance text-foreground">
-                  {props.indicatorTitle}
-                  {props.tokenSymbol ? (
-                    <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
-                      analysis for {props.tokenSymbol.toUpperCase()} on a {props.timeframe} timeframe
-                    </span>
-                  ) : (
-                    <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
-                      {props.timeframe}
-                    </span>
-                  )}
+                <div className="flex min-w-0 flex-1 items-start gap-1">
+                  {!showQuoteHeader ? (
+                    <div className="pt-0.5">{explainBackButton}</div>
+                  ) : null}
+                  <div className="min-w-0 text-sm font-semibold text-balance text-foreground">
+                    {props.indicatorTitle}
+                    {props.tokenSymbol ? (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
+                        analysis for {props.tokenSymbol.toUpperCase()} on a {props.timeframe} timeframe
+                      </span>
+                    ) : (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
+                        {props.timeframe}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 {!showQuoteHeader ? regenerateButton : null}
               </div>
@@ -354,14 +399,26 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
 
         <div className="relative">
           <ScrollArea className="h-[min(42vh,20rem)] pr-4 mt-8">
-            <div className="prose prose-invert max-w-none text-pretty">
+            <div className="prose prose-invert max-w-none text-pretty min-h-[min(42vh,20rem)]">
               {showError ? (
                 <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
                   Could not generate an explanation. Try again in a moment.
                 </div>
               ) : null}
 
-              {completion.trim().length > 0 ? (
+              {showStreamLoader ? (
+                <div className="not-prose flex min-h-[min(42vh,20rem)] w-full items-start justify-center py-6">
+                  <MultiStepLoader
+                    loadingStates={explainLoadingSteps}
+                    loading
+                    duration={2000}
+                    loop
+                    variant="inline"
+                  />
+                </div>
+              ) : null}
+
+              {!showStreamLoader && completion.trim().length > 0 ? (
                 <ReactMarkdown
                   components={{
                     h1: ({ children }) => (
@@ -392,24 +449,17 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
                 >
                   {completion}
                 </ReactMarkdown>
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  {showPending ? "Generating explanation…" : "No explanation yet."}
-                </div>
-              )}
+              ) : null}
+
+              {!showStreamLoader &&
+              !showError &&
+              !showPending &&
+              completion.trim().length === 0 ? (
+                <div className="text-sm text-muted-foreground">No explanation yet.</div>
+              ) : null}
             </div>
           </ScrollArea>
-          <DialogClose className="" asChild>
-            <Button type="button" variant="outline" className="mt-6 w-full rounded-lg">
-              Close
-            </Button>
-          </DialogClose>
         </div>
-
-        {!showQuoteHeader &&
-        !(props.indicatorChart != null || props.indicatorContext != null) ? (
-          <div className="flex items-center justify-end pt-2">{regenerateButton}</div>
-        ) : null}
       </DialogContent>
     </Dialog>
   )
