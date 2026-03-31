@@ -42,6 +42,14 @@ export const GLOBAL_SHORTCUTS: KeyboardShortcut[] = [
     component: 'CommandSearch'
   },
   {
+    key: 'n',
+    combination: ['shift'],
+    description: 'Create watchlist',
+    category: 'actions',
+    handler: 'openCreateWatchlist',
+    component: 'WatchlistPageView',
+  },
+  {
     key: 'f',
     combination: ['cmd', 'ctrl'],
     description: 'Open filters',

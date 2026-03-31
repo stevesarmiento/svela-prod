@@ -78,15 +78,24 @@ export function WatchlistPageView({
   const refreshMyDataNow = useMutation(api.refresh.refreshMyDataNow)
 
   const contentModeRef = useLatest(contentMode)
+  const isCreatingWatchlistRef = useLatest(isCreatingWatchlist)
   const onGridViewModeChangeRef = useLatest(onGridViewModeChange)
   const onContentModeChangeRef = useLatest(onContentModeChange)
 
   useEffect(() => {
     const addTokenShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'focusAddToken')
     const addWalletShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'openAddWallet')
+    const createWatchlistShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'openCreateWatchlist')
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+
+      if (createWatchlistShortcut && matchesShortcut(event, createWatchlistShortcut)) {
+        if (isCreatingWatchlistRef.current) return
+        event.preventDefault()
+        setIsCreatingWatchlist(true)
+        return
+      }
 
       if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
         event.preventDefault()
@@ -129,7 +138,7 @@ export function WatchlistPageView({
 
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
-  }, [contentModeRef, onContentModeChangeRef, onGridViewModeChangeRef])
+  }, [contentModeRef, isCreatingWatchlistRef, onContentModeChangeRef, onGridViewModeChangeRef])
 
   // If watchlist context isn’t ready yet, keep the existing spinner behavior.
   if (!isInitialized) {
