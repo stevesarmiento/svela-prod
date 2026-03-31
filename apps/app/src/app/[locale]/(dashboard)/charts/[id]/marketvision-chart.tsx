@@ -437,7 +437,7 @@ export function MarketVisionChart({
     }
 
     // Oscillator 1 (RSI, MFI, etc.)
-    if (calculations.oscillator1 && calculations.oscillator1.length) {
+    if (calculations.oscillator1?.length) {
       const osc1Series = chart.addSeries(LineSeries, {
         lineWidth: 1,
         color: addOpacityToColor(COLORS.oscillator1, SECONDARY_LINE_OPACITY),
@@ -450,7 +450,7 @@ export function MarketVisionChart({
     }
 
     // Oscillator 2
-    if (calculations.oscillator2 && calculations.oscillator2.length) {
+    if (calculations.oscillator2?.length) {
       const osc2Series = chart.addSeries(LineSeries, {
         lineWidth: 1,
         color: addOpacityToColor(COLORS.oscillator2, SECONDARY_LINE_OPACITY),

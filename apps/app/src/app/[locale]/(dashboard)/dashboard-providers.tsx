@@ -7,7 +7,7 @@ import { BottomNavProvider } from "@/components/navigation/bottom-nav-context"
 import { RateLimitErrorBoundary } from "@/components/error-boundary/rate-limit-error-boundary"
 import { LoadingStateManager } from "@/components/loading/loading-state-manager"
 import { WatchlistProvider } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context"
-import { api } from "../../../../convex/_generated/api"
+import type { api } from "../../../../convex/_generated/api"
 
 interface DashboardProvidersProps {
   children: React.ReactNode

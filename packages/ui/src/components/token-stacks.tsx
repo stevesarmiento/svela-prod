@@ -28,7 +28,9 @@ export const AvatarCircles = ({
   const stackDepth = filteredUrls.length;
 
   return (
-    <div className={cn("z-10 flex -space-x-2.5 rtl:space-x-reverse ", className)}>
+    <div
+      className={cn("z-10 flex -space-x-2.5 rtl:space-x-reverse ", className)}
+    >
       {filteredUrls.map((url, index) => (
         <div
           key={url.imageUrl}

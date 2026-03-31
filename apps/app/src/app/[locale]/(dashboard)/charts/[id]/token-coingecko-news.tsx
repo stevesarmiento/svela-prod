@@ -39,6 +39,9 @@ function formatPostedShort(iso: string | undefined): string | null {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+/** Stable keys for static skeleton rows (not derived from map index). */
+const NEWS_SKELETON_ROW_KEYS = ["ng-sk-1", "ng-sk-2", "ng-sk-3", "ng-sk-4", "ng-sk-5"] as const;
+
 function sentimentLabel(s: "bullish" | "bearish" | "neutral"): string {
   if (s === "bullish") return "Bullish";
   if (s === "bearish") return "Bearish";
@@ -164,8 +167,8 @@ export function TokenCoingeckoNews({ coinId, className, isPending }: TokenCoinge
         <CardContent className="px-4">
           {showSkeleton ? (
             <ul className="-mx-4 divide-y divide-white/10" aria-busy="true">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <li key={i} className="space-y-1.5 px-4 py-3">
+              {NEWS_SKELETON_ROW_KEYS.map((rowKey) => (
+                <li key={rowKey} className="space-y-1.5 px-4 py-3">
                   <div className="h-3.5 rounded bg-white/10 w-full" />
                   <div className="h-2.5 rounded bg-white/5 w-1/3" />
                 </li>

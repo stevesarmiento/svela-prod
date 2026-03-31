@@ -54,9 +54,7 @@ const LoaderCore = ({
     <div
       className={cn(
         "flex relative justify-start mx-auto flex-col",
-        variant === "inline"
-          ? "mt-0 max-w-none w-full"
-          : "max-w-xl mt-40",
+        variant === "inline" ? "mt-0 max-w-none w-full" : "max-w-xl mt-40",
       )}
     >
       {loadingStates.map((loadingState, index) => {
@@ -102,7 +100,9 @@ const LoaderCore = ({
                 isCurrentStep &&
                   (!onDarkPanel ? "text-black dark:text-white" : "text-white"),
                 isCompletedStep &&
-                  (!onDarkPanel ? "text-black dark:text-white/70" : "text-white/70"),
+                  (!onDarkPanel
+                    ? "text-black dark:text-white/70"
+                    : "text-white/70"),
               )}
             >
               {loadingState.text}
@@ -155,7 +155,11 @@ export const MultiStepLoader = ({
         : "w-full h-full fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-2xl";
 
   const loaderCoreVariant =
-    variant === "inline" ? "inline" : variant === "dialog" ? "dialog" : "fullscreen";
+    variant === "inline"
+      ? "inline"
+      : variant === "dialog"
+        ? "dialog"
+        : "fullscreen";
 
   return (
     <AnimatePresence mode="wait">

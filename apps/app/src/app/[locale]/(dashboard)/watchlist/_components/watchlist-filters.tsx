@@ -253,7 +253,6 @@ function parseNaturalLanguageActions(args: {
     if (sortByValue || sortOrderValue) {
       if (sortByValue) actions.push({ kind: "sortBy", value: sortByValue })
       if (sortOrderValue) actions.push({ kind: "sortOrder", value: sortOrderValue })
-      continue
     }
   }
 
