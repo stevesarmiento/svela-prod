@@ -31,7 +31,9 @@
         "PRIVY_SECRET",
         "PRIVY_APP_ID",
         "X_CAPI_API_KEY",
-        "V0_API_KEY"
+        "V0_API_KEY",
+        "API_ENCRYPTION_KEY",
+        "INTERNAL_CONVEX_SERVER_TOKEN"
       ],
       "inputs": ["$TURBO_DEFAULT$", ".env", ".env.*"],
       "dependsOn": ["^build"],
