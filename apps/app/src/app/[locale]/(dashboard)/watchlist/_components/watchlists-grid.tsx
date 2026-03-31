@@ -18,6 +18,7 @@ import { Tabs, TabsContent } from '@v1/ui/tabs'
 import { WatchlistMultiLineChart } from './watchlist-multi-line-chart'
 import { useDeletePortfolioWallet } from "@/hooks/use-portfolio-wallets"
 import { useUpdateWatchlistGroup, useDeleteWatchlistGroup } from "@/lib/convex-hooks"
+import { Kbd } from '@v1/ui/kbd'
 
 const isDebug = env.NODE_ENV === "development"
 
@@ -242,7 +243,7 @@ export function WatchlistsGrid({
               </div>
               <h3 className="font-medium mb-2">No watchlists yet</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Create your first watchlist to start tracking coins
+                Press <Kbd>Shift</Kbd> + <Kbd>N</Kbd> to create your first watchlist
               </p>
             </div>
           ) : (
