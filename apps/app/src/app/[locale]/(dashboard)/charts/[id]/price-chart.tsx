@@ -162,6 +162,7 @@ const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, set
   const scales = [
     { value: "30d", label: "1M" },   // 30 days focus with 90 days context
     { value: "max", label: "1Y" },    // 1 year of data
+    { value: "2y", label: "2Y" },    // Maximum data possible
   ]
 
   return (
