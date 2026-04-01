@@ -8,6 +8,7 @@ import { getStaticParams } from "@/locales/server";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import localFont from "next/font/local";
+import { Suspense } from "react";
 
 // ABC Diatype Font Family
 const abcDiatype = localFont({
@@ -105,10 +106,12 @@ export default async function RootLayout({
           "antialiased",
         )}
       >
-        <Providers>
-          <ReactScan />
-          {children}
-        </Providers>
+        <Suspense fallback={null}>
+          <Providers>
+            <ReactScan />
+            {children}
+          </Providers>
+        </Suspense>
       </body>
     </html>
   );
