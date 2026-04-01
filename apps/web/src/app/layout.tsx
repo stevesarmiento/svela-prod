@@ -7,6 +7,7 @@ import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { createWebLayoutMetadata } from "@/lib/metadata";
 
 const DepartureMono = localFont({
   src: "../fonts/DepartureMono-Regular.woff2",
@@ -14,10 +15,10 @@ const DepartureMono = localFont({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://v1.run"),
-  title: "Create v1",
-  description:
-    "A free, open-source starter kit for your next project, built with insights from Midday.",
+  ...createWebLayoutMetadata({
+    description:
+      "A free, open-source starter kit for your next project, built with insights from Midday.",
+  }),
 };
 
 export default function RootLayout({

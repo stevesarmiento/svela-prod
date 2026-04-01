@@ -8,10 +8,21 @@ import {
 } from "@v1/ui/card";
 import { AuthCardDashes } from "./_components/auth-card-dashes";
 import type { Metadata } from "next";
+import { createMetadata } from "@/lib/metadata";
 
-export const metadata: Metadata = {
-  title: "Login",
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  return createMetadata({
+    title: "Login",
+    pathname: "/login",
+    locale,
+    robots: { index: false, follow: false },
+  });
+}
 
 export default function Page() {
   return (

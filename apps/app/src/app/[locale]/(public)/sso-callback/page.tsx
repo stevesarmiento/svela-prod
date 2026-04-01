@@ -1,8 +1,20 @@
 import { AuthenticateWithRedirectCallback } from "@clerk/nextjs";
+import type { Metadata } from "next";
+import { createMetadata } from "@/lib/metadata";
 
-export const metadata = {
-  title: "Completing sign in...",
-};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  return createMetadata({
+    title: "Completing sign in…",
+    pathname: "/sso-callback",
+    locale,
+    robots: { index: false, follow: false },
+  });
+}
 
 export default function SsoCallbackPage() {
   return (
