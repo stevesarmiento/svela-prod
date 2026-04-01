@@ -13,7 +13,7 @@ interface WatchlistTableHeaderProps {
 export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
   return (
     <div className="px-4 py-1">
-      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+      <div className="text-[10px] font-semibold text-muted-foreground tracking-wide">
         {table.getHeaderGroups().map(headerGroup => (
           <div
             key={headerGroup.id}
@@ -25,10 +25,10 @@ export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
                 <TooltipTrigger asChild>
                   <button
                     type="button"
-                    className="flex min-w-0 items-center gap-2 cursor-pointer select-none hover:text-foreground"
+                    className="flex w-full min-w-0 items-center justify-start gap-2 cursor-pointer select-none hover:text-foreground"
                     onClick={() => table.getColumn('token-sort')?.toggleSorting()} // Sort by token
                   >
-                    <span>TOKEN</span>
+                    <span>Token</span>
                     {{
                       asc: ' ↑',
                       desc: ' ↓',
@@ -47,11 +47,9 @@ export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
               const canSort = header.column.getCanSort()
               const onClick = canSort ? header.column.getToggleSortingHandler() : undefined
               const className = cn(
-                "flex min-w-0 items-center gap-1",
+                "flex w-full min-w-0 items-center justify-end gap-1",
                 canSort ? "cursor-pointer select-none hover:text-foreground" : "",
-                header.column.id === 'actions'
-                  ? "justify-end whitespace-nowrap"
-                  : "justify-start"
+                header.column.id === "actions" && "whitespace-nowrap",
               )
 
               const content = (

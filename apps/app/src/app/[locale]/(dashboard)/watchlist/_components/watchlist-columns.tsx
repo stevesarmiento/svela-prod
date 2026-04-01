@@ -112,7 +112,7 @@ export function createWatchlistColumns({
       id: 'select',
       header: () => (
         <div className={cn(
-          "transition-opacity duration-200 uppercase",
+          "transition-opacity duration-200",
           hasSelectedCoinsRef.current ? "opacity-100" : "opacity-0"
         )}>
           <Checkbox
@@ -232,8 +232,8 @@ export function createWatchlistColumns({
       id: 'token-sort',
       accessorKey: 'name',
       header: () => (
-        <div className="text-left !uppercase flex items-center gap-1">
-          TOKEN
+        <div className="text-left flex items-center gap-1">
+          Token
         </div>
       ),
       cell: () => null,
@@ -243,34 +243,51 @@ export function createWatchlistColumns({
       id: 'price',
       accessorKey: 'quote.USD.price',
       header: () => (
-        <div className="text-left flex items-center justify-start gap-1">
+        <div className="flex w-full items-center justify-end gap-1 text-right">
           <ColumnHeaderTooltip text="Spot price in USD from aggregated market data (typically via CoinGecko). Not an executable quote.">
-            PRICE
+            Price
           </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) => (
-        <span className="font-berkeley-mono text-xs">
+        <span className="block w-full text-right font-berkeley-mono text-xs tabular-nums">
           {row.original.quote.USD.price > 0 ? (
             formatUsdPrice(row.original.quote.USD.price)
           ) : (
-            <Skeleton className="h-4 w-16 rounded-full" />
+            <Skeleton className="ms-auto inline-block h-4 w-16 rounded-full" />
           )}
         </span>
       ),
       enableSorting: true,
     },
     {
-      id: "change24hUsd",
-      accessorFn: (row) =>
-        deriveUsdMoveFromPercentChange({
-          priceUsd: row.quote.USD.price,
-          percentChange: row.quote.USD.percent_change_24h,
-        }) ?? 0,
+      id: 'volume',
+      accessorKey: 'quote.USD.volume_24h',
       header: () => (
-        <div className="text-left uppercase flex items-center justify-start gap-1">
-          <ColumnHeaderTooltip text="How many USD the price moved over the last rolling 24 hours, inferred from the current USD price and the 24h percent change (same basis as the % column, expressed in dollars).">
-            24h $ Change
+        <div className="flex w-full items-center justify-end gap-1 text-right">
+          <ColumnHeaderTooltip text="Total notional USD traded across tracked venues in the last 24 hours. Higher volume usually means more liquidity and tighter spreads.">
+            24h volume
+          </ColumnHeaderTooltip>
+        </div>
+      ),
+      cell: ({ row }) => (
+        <span className="block w-full text-right font-berkeley-mono text-xs tabular-nums">
+          {row.original.quote.USD.price > 0 ? (
+            `$${formatLargeNumber(row.original.quote.USD.volume_24h || 0)}`
+          ) : (
+            <Skeleton className="ms-auto inline-block h-4 w-16 rounded-full" />
+          )}
+        </span>
+      ),
+      enableSorting: true,
+    },
+    {
+      id: "dailyPerformance",
+      accessorFn: (row) => row.quote.USD.percent_change_24h ?? 0,
+      header: () => (
+        <div className="flex w-full items-center justify-end gap-1 text-right">
+          <ColumnHeaderTooltip text="Rolling 24-hour performance. Shows the 24h percent change and the inferred USD move (derived from current price + percent change).">
+            Daily performance
           </ColumnHeaderTooltip>
         </div>
       ),
@@ -281,6 +298,7 @@ export function createWatchlistColumns({
             const isPositive = change24h > 0
             const isNegative = change24h < 0
             const isNeutral = !isPositive && !isNegative
+            const pctSign = isPositive ? "+" : isNegative ? "-" : ""
             const usdMove = deriveUsdMoveFromPercentChange({
               priceUsd: row.original.quote.USD.price,
               percentChange: change24h,
@@ -288,99 +306,55 @@ export function createWatchlistColumns({
             const usdSign = isPositive ? "+" : isNegative ? "-" : ""
 
             return (
-              <span
-                className={cn(
-                  "inline-flex items-center font-berkeley-mono text-xs tabular-nums",
-                  isPositive && "text-emerald-400",
-                  isNegative && "text-rose-400",
-                  isNeutral && "text-muted-foreground",
-                )}
-              >
-                {usdMove === null ? "—" : `${usdSign}${formatUsdPrice(Math.abs(usdMove))}`}
-              </span>
-            )
-          })()
-        ) : (
-          <Skeleton className="h-4 w-14 rounded-full" />
-        ),
-      enableSorting: true,
-    },
-    {
-      id: 'change24h',
-      accessorKey: 'quote.USD.percent_change_24h',
-      header: () => (
-        <div className="text-left uppercase flex items-center justify-start gap-1">
-          <ColumnHeaderTooltip text="Rolling 24-hour change in USD price versus the price roughly one day ago, as reported by the market data source.">
-            24h % Change
-          </ColumnHeaderTooltip>
-        </div>
-      ),
-      cell: ({ row }) => (
-        row.original.quote.USD.price > 0 ? (
-          (() => {
-            const change24h = row.original.quote.USD.percent_change_24h
-            const isPositive = change24h > 0
-            const isNegative = change24h < 0
-            const isNeutral = !isPositive && !isNegative
-            const pctSign = isPositive ? "+" : isNegative ? "-" : ""
-
-            return (
-              <Badge
-                variant={isPositive ? "success" : isNegative ? "destructive" : "outline"}
-                className={cn(
-                  "h-5 px-1 font-berkeley-mono text-[10px] tabular-nums gap-1",
-                  isNeutral && "border-zinc-200/60 text-muted-foreground dark:border-white/10",
-                )}
-              >
-                <IconTriangleFill
-                  aria-hidden="true"
+              <div className="inline-flex items-center justify-end gap-2">
+                <span
                   className={cn(
-                    "size-1.5 shrink-0 fill-current",
-                    isNegative && "rotate-180",
+                    "font-berkeley-mono text-[10px] tabular-nums",
+                    isPositive && "text-emerald-400",
+                    isNegative && "text-rose-400",
+                    isNeutral && "text-muted-foreground",
                   )}
-                />
-                {pctSign}{Math.abs(change24h).toFixed(2)}%
-              </Badge>
+                >
+                  {usdMove === null ? "—" : `${usdSign}${formatUsdPrice(Math.abs(usdMove))}`}
+                </span>
+                <Badge
+                  variant={isPositive ? "success" : isNegative ? "destructive" : "outline"}
+                  className={cn(
+                    "h-5 px-1 font-berkeley-mono text-[10px] tabular-nums gap-1",
+                    isNeutral && "border-zinc-200/60 text-muted-foreground dark:border-white/10",
+                  )}
+                >
+                  <IconTriangleFill
+                    aria-hidden="true"
+                    className={cn(
+                      "size-1.5 shrink-0 fill-current",
+                      isNegative && "rotate-180",
+                    )}
+                  />
+                  {pctSign}{Math.abs(change24h).toFixed(2)}%
+                </Badge>
+              </div>
             )
           })()
         ) : (
-          <Skeleton className="h-4 w-12 rounded-full" />
-        )
-      ),
-      enableSorting: true,
-    },
-    {
-      id: 'volume',
-      accessorKey: 'quote.USD.volume_24h',
-      header: () => (
-        <div className="text-left uppercase flex items-center justify-start gap-1">
-          <ColumnHeaderTooltip text="Total notional USD traded across tracked venues in the last 24 hours. Higher volume usually means more liquidity and tighter spreads.">
-            Volume 24h
-          </ColumnHeaderTooltip>
-        </div>
-      ),
-      cell: ({ row }) => (
-        <span className="font-berkeley-mono text-xs">
-          {row.original.quote.USD.price > 0 ? (
-            `$${formatLargeNumber(row.original.quote.USD.volume_24h || 0)}`
-          ) : (
-            <Skeleton className="h-4 w-16 rounded-full" />
-          )}
-        </span>
-      ),
+          <div className="inline-flex items-center justify-end gap-2">
+            <Skeleton className="h-4 w-14 rounded-full" />
+            <Skeleton className="h-4 w-12 rounded-full" />
+          </div>
+        ),
       enableSorting: true,
     },
     {
       id: 'takerBuySellVolume',
       header: () => (
-        <div className="text-left uppercase flex items-center justify-start gap-1">
+        <div className="flex w-full items-center justify-end gap-1 text-right">
           <ColumnHeaderTooltip text="Taker volume on Binance spot (USDT pair): market orders hitting the book. Buy stack vs sell stack over recent 4h slices—more aggressive buying lifts the buy side; more aggressive selling lifts the sell side.">
-            Taker Buy/Sell Vol
+            Taker buy/sell volume
           </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) => (
-        <div className="flex min-w-0 items-center justify-start">
+        <div className="flex min-w-0 w-full items-center justify-end">
           {row.original.quote.USD.price > 0 ? (
             <InlineSpotTakerBuySellVolumeChart
               baseSymbol={row.original.symbol}
@@ -396,14 +370,14 @@ export function createWatchlistColumns({
     {
       id: 'chart',
       header: () => (
-        <div className="text-left uppercase flex items-center justify-start gap-1">
-          <ColumnHeaderTooltip text="Seven-day USD price trail (sparkline). Uses live chart data when loaded; may fall back to the 7d series bundled with market snapshots.">
-            7d Chart
+        <div className="flex w-full items-center justify-end gap-1 text-right">
+          <ColumnHeaderTooltip text="14-day USD price trail. The first 7 days render neutral; the most recent 7 days render green/red based on performance over that window.">
+            2w price trail
           </ColumnHeaderTooltip>
         </div>
       ),
       cell: ({ row }) => (
-        <div className="flex min-w-0 items-center justify-start">
+        <div className="flex min-w-0 w-full items-center justify-end">
           {row.original.quote.USD.price > 0 ? (
             <div
               className="w-full max-w-56 overflow-hidden [mask-image:linear-gradient(to_right,transparent_0%,black_12%,black_100%)]"
@@ -432,7 +406,7 @@ export function createWatchlistColumns({
     {
       id: 'actions',
       header: () => (
-        <div className="flex uppercase items-center justify-end gap-1 whitespace-nowrap">
+        <div className="flex w-full items-center justify-end gap-1 text-right whitespace-nowrap">
           Actions
         </div>
       ),

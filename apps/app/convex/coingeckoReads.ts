@@ -30,6 +30,7 @@ function getStaleWindowMs(timeframe: string): number {
   // - Long windows / OHLC: ~daily
   if (base === "1") return 60 * 60 * 1000;
   if (base === "7") return 60 * 60 * 1000;
+  if (base === "14") return 60 * 60 * 1000;
   if (base === "30") return 4 * 60 * 60 * 1000;
   if (base === "90") return 4 * 60 * 60 * 1000;
   if (base === "365") return 24 * 60 * 60 * 1000;

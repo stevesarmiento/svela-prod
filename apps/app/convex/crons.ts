@@ -43,6 +43,13 @@ crons.interval(
 );
 
 crons.interval(
+  "coingecko_refresh_market_chart_14d",
+  { hours: 1 },
+  internal.coingeckoJobs.refreshTrackedMarketChartBatch,
+  { days: "14", batchSize: 12 },
+);
+
+crons.interval(
   "coingecko_refresh_market_chart_30d",
   { hours: 4 },
   internal.coingeckoJobs.refreshTrackedMarketChartBatch,

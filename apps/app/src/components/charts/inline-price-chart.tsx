@@ -20,15 +20,18 @@ interface InlinePriceChartProps {
   className?: string
 }
 
-type InlineChartTimeScale = "1d" | "7d" | "30d" | "max" | "2y"
+type InlineChartTimeScale = "1d" | "7d" | "14d" | "30d" | "max" | "2y"
 
 const INLINE_TIME_SCALE_DAYS: Record<InlineChartTimeScale, string> = {
   "1d": "1",
   "7d": "7",
+  "14d": "14",
   "30d": "30",
   "max": "365",
   "2y": "730",
 } as const
+
+const DAY_SECONDS = 24 * 60 * 60
 
 function clampEvenDownsample<T>(items: Array<T>, maxItems: number): Array<T> {
   if (items.length <= maxItems) return items
@@ -97,7 +100,7 @@ function upsertLatestValue(
 }
 
 function toTimeScale(range: string | undefined): InlineChartTimeScale {
-  if (range === "1d" || range === "7d" || range === "30d" || range === "max" || range === "2y") return range
+  if (range === "1d" || range === "7d" || range === "14d" || range === "30d" || range === "max" || range === "2y") return range
   return "7d"
 }
 
@@ -166,33 +169,22 @@ export function InlinePriceChart({
   coingeckoId,
   percentChange24h,
   symbol = '',
-  sparkline7d,
   initialData,
   onError: _onError,
   className,
 }: InlinePriceChartProps) {
-  const timeScale = "7d" as const
+  const timeScale = "14d" as const
   const basePrice = initialData?.price && initialData.price > 0 ? initialData.price : 0
   const fallbackTrendPct =
     typeof initialData?.percent_change_7d === "number" ? initialData.percent_change_7d : percentChange24h
 
-  const sparklineSeries = useMemo(
-    () =>
-      upsertLatestValue(
-        buildSparklineSeries({ sparkline: sparkline7d ?? [], timeScale: toTimeScale(timeScale) }),
-        basePrice,
-      ),
-    [sparkline7d, timeScale, basePrice],
-  )
-  const hasSparkline = sparklineSeries.length >= 2
-
   const marketChartQuery = useInlineMarketChartSeries({
     coingeckoId,
     timeScale: toTimeScale(timeScale),
-    enabled: !hasSparkline,
+    enabled: true,
   })
 
-  const rawChartData = hasSparkline ? sparklineSeries : (marketChartQuery.data?.points ?? [])
+  const rawChartData = marketChartQuery.data?.points ?? []
   const rawChartDataWithLatest = useMemo(
     () => upsertLatestValue(rawChartData, basePrice),
     [rawChartData, basePrice],
@@ -201,13 +193,20 @@ export function InlinePriceChart({
     rawChartDataWithLatest.length >= 2
       ? rawChartDataWithLatest
       : buildFallbackSeries({ timeScale: toTimeScale(timeScale), basePrice })
-  const isLoading = hasSparkline ? false : marketChartQuery.isLoading
+  const isLoading = marketChartQuery.isLoading
 
-  // Filter and prepare chart data
-  const validChartData = useMemo(() => {
-    if (!chartData || chartData.length === 0) return []
+  const chartData14dWindow = useMemo(() => {
+    if (!chartData || chartData.length < 2) return []
+    const end = chartData[chartData.length - 1]?.time
+    if (typeof end !== "number" || !Number.isFinite(end)) return []
+    const start = end - 14 * DAY_SECONDS
+    return chartData.filter((p) => typeof p.time === "number" && p.time >= start && p.time <= end)
+  }, [chartData])
 
-    const filtered = chartData.filter(
+  const cleanedChartData = useMemo(() => {
+    if (!chartData14dWindow || chartData14dWindow.length === 0) return []
+
+    const filtered = chartData14dWindow.filter(
       (point) =>
         point &&
         typeof point.time === "number" &&
@@ -216,39 +215,48 @@ export function InlinePriceChart({
         !Number.isNaN(point.value),
     )
 
-    // Liveline is tiny here; keep render cost bounded.
-    return clampEvenDownsample(filtered, 128)
-  }, [chartData])
+    const unique = new Map<number, number>()
+    for (const point of filtered) unique.set(point.time, point.value)
+    return Array.from(unique.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([time, value]) => ({ time, value }))
+  }, [chartData14dWindow])
 
-  const seriesChangePct = useMemo(() => {
-    if (validChartData.length < 2) return null
-    const first = validChartData[0]?.value ?? 0
-    const last = validChartData[validChartData.length - 1]?.value ?? 0
-    if (!Number.isFinite(first) || first <= 0) return null
-    return ((last - first) / first) * 100
-  }, [validChartData])
+  const cleanedChartDataWithLiveTip = useMemo(() => {
+    if (cleanedChartData.length < 2) return cleanedChartData
+    const last = cleanedChartData[cleanedChartData.length - 1]!
+    const nowSec = Math.floor(Date.now() / 1000)
 
-  const trendPct = seriesChangePct ?? fallbackTrendPct
-  const isPositive = trendPct >= 0
+    // If the last point is stale, append a "live" point at now so Liveline doesn't draw a long tail.
+    if (nowSec - last.time <= 90) return cleanedChartData
+    return [...cleanedChartData, { time: nowSec, value: last.value }]
+  }, [cleanedChartData])
 
-  // Prepare tooltip text
-  const tooltipText = useMemo(() => {
-    const changeText = `${trendPct > 0 ? "+" : ""}${trendPct.toFixed(2)}%`
-    const dataInfo = hasSparkline ? "sparkline" : marketChartQuery.data?.cached ? "cached data" : "live data"
-    const pointsInfo = `${validChartData.length} points`
-    
-    return `${symbol} 7d trend: ${changeText} | ${dataInfo} | ${pointsInfo}`
-  }, [symbol, trendPct, validChartData.length, marketChartQuery.data?.cached, hasSparkline])
+  const last7dChangePct = useMemo(() => {
+    const points = cleanedChartDataWithLiveTip
+    if (points.length < 2) return fallbackTrendPct
+    const endTime = points[points.length - 1]!.time
+    const boundaryTime = endTime - 7 * DAY_SECONDS
+
+    let boundaryIdx = points.findIndex((p) => p.time >= boundaryTime)
+    if (boundaryIdx === -1) boundaryIdx = points.length - 1
+    boundaryIdx = Math.min(Math.max(boundaryIdx, 0), points.length - 1)
+
+    const boundaryValue = points[boundaryIdx]?.value ?? 0
+    const lastValue = points[points.length - 1]?.value ?? 0
+    if (!Number.isFinite(boundaryValue) || boundaryValue <= 0) return fallbackTrendPct
+    if (!Number.isFinite(lastValue) || lastValue <= 0) return fallbackTrendPct
+
+    return ((lastValue - boundaryValue) / boundaryValue) * 100
+  }, [cleanedChartDataWithLiveTip, fallbackTrendPct])
+
+  const isPositive = last7dChangePct >= 0
 
   const points = useMemo((): LivelinePoint[] => {
-    const result: LivelinePoint[] = []
-    for (const point of validChartData) {
-      if (typeof point.time !== "number") continue
-      if (!Number.isFinite(point.value)) continue
-      result.push({ time: Number(point.time), value: point.value })
-    }
-    return result
-  }, [validChartData])
+    if (cleanedChartDataWithLiveTip.length === 0) return []
+    const downsampled = clampEvenDownsample(cleanedChartDataWithLiveTip.slice(), 128)
+    return downsampled.map((p) => ({ time: p.time, value: p.value }))
+  }, [cleanedChartDataWithLiveTip])
 
   const latestValue = points[points.length - 1]?.value ?? 0
 
@@ -264,6 +272,13 @@ export function InlinePriceChart({
 
   const livelineValue = points.length > 0 ? latestValue : basePrice
 
+  const tooltipText = useMemo(() => {
+    const changeText = `${last7dChangePct > 0 ? "+" : ""}${last7dChangePct.toFixed(2)}%`
+    const dataInfo = marketChartQuery.data?.cached ? "cached data" : "live data"
+    const pointsInfo = `${points.length} points`
+    return `${symbol} last 7d: ${changeText} | 14d window | ${dataInfo} | ${pointsInfo}`
+  }, [symbol, last7dChangePct, marketChartQuery.data?.cached, points.length])
+
   return (
     <div 
       className={cn(
@@ -278,26 +293,60 @@ export function InlinePriceChart({
             : tooltipText
       }
     >
-      <Liveline
-        data={points}
-        value={livelineValue}
-        theme={livelineTheme}
-        color={isPositive ? "#10b981" : "#ef4444"}
-        lineWidth={1}
-        window={windowSecs}
-        grid={false}
-        badge={false}
-        fill={false}
-        pulse={false}
-        scrub={false}
-        momentum={false}
-        loading={isLoading}
-        exaggerate
-        emptyText="No data"
-        formatTime={() => ""}
-        padding={{ top: 8, right: 8, bottom: 8, left: 8 }}
-        className="size-full"
-      />
+      <div className="relative size-full">
+        {/* Base: full 14d line in neutral */}
+        <div className="absolute inset-0 pointer-events-none">
+          <Liveline
+            data={points}
+            value={livelineValue}
+            theme={livelineTheme}
+            color="#ffffff30"
+            showValue={false}
+            lineWidth={2}
+            window={windowSecs}
+            grid={false}
+            badge={false}
+            fill={false}
+            pulse={false}
+            scrub={false}
+            momentum={false}
+            loading={isLoading}
+            exaggerate
+            emptyText="No data"
+            formatTime={() => ""}
+            padding={{ top: 8, right: 8, bottom: 8, left: 8 }}
+            className="size-full"
+          />
+        </div>
+
+        {/* Overlay: same line, clipped to the most recent 7d half */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ clipPath: "inset(0 0 0 50%)" }}
+        >
+          <Liveline
+            data={points}
+            value={livelineValue}
+            theme={livelineTheme}
+            color={isPositive ? "#10b981" : "#ef4444"}
+            showValue={false}
+            lineWidth={2}
+            window={windowSecs}
+            grid={false}
+            badge={false}
+            fill={false}
+            pulse={false}
+            scrub={false}
+            momentum={false}
+            loading={isLoading}
+            exaggerate
+            emptyText="No data"
+            formatTime={() => ""}
+            padding={{ top: 8, right: 8, bottom: 8, left: 8 }}
+            className="size-full"
+          />
+        </div>
+      </div>
     </div>
   )
 }
