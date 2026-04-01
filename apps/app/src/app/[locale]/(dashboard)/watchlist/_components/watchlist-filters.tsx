@@ -12,22 +12,11 @@ import { ListFilter, X } from "lucide-react";
 import { Kbd } from "@v1/ui/kbd";
 import { IconCommand, IconReturn } from "symbols-react";
 import { useBottomNav } from "@/components/navigation/bottom-nav-context"
-import { useReducedMotion } from "motion/react"
-import { cn } from "@v1/ui/cn"
 
 interface FilterChip {
   key: string;
   label: string;
   value: string;
-}
-
-interface AutoRefreshStatus {
-  /** Milliseconds since epoch; typically from TanStack Query `dataUpdatedAt`. */
-  lastUpdatedAtMs: number | null;
-  /** Expected poll interval for the underlying data source. */
-  refreshIntervalMs: number;
-  /** Optional: whether a refresh is currently in-flight. */
-  isRefreshing?: boolean;
 }
 
 interface WatchlistFiltersProps {
@@ -66,29 +55,6 @@ interface WatchlistFiltersProps {
 
   // Layout
   align?: "left" | "right";
-
-  // Optional: auto-refresh indicator (top-right).
-  autoRefreshStatus?: AutoRefreshStatus;
-}
-
-const lastUpdatedFormatter = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "2-digit",
-  hour: "numeric",
-  minute: "2-digit",
-})
-
-function clamp01(n: number): number {
-  if (n < 0) return 0
-  if (n > 1) return 1
-  return n
-}
-
-function formatCountdownMmSs(remainingMs: number): string {
-  const totalSeconds = Math.max(0, Math.ceil(remainingMs / 1000))
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${minutes}:${String(seconds).padStart(2, "0")}`
 }
 
 function normalizeFilterQuery(input: string): string {
@@ -259,88 +225,6 @@ function parseNaturalLanguageActions(args: {
   return actions
 }
 
-interface RefreshDualRingProps {
-  /** Progress through the full poll interval (green, top layer). */
-  intervalProgress: number
-  /** Progress through the current wall-clock minute 0–1 (yellow, under green). */
-  minuteProgress: number
-  sizePx?: number
-  strokeWidthPx?: number
-  className?: string
-  /** When true, yellow minute arc is omitted (motion safety). */
-  hideMinuteArc?: boolean
-}
-
-/** Single ring: grey track, bright yellow arc, bright green arc on top (same path, z-stacked). */
-function RefreshDualRing({
-  intervalProgress,
-  minuteProgress,
-  sizePx = 28,
-  strokeWidthPx = 3.5,
-  className,
-  hideMinuteArc = false,
-}: RefreshDualRingProps) {
-  const cx = sizePx / 2
-  const cy = sizePx / 2
-  const r = (sizePx - strokeWidthPx) / 2
-  const c = 2 * Math.PI * r
-  const dashOffsetGreen = c * (1 - clamp01(intervalProgress))
-  const dashOffsetYellow = c * (1 - clamp01(minuteProgress))
-
-  const ringRotate = { transform: "rotate(-90deg)", transformOrigin: "50% 50%" } as const
-
-  return (
-    <svg
-      width={sizePx}
-      height={sizePx}
-      viewBox={`0 0 ${sizePx} ${sizePx}`}
-      aria-hidden="true"
-      className={cn("shrink-0", className)}
-    >
-      {/* 1. Track (back) */}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={r}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={strokeWidthPx}
-        className="text-primary/20"
-      />
-      {/* 2. Minute sweep (middle) */}
-      {!hideMinuteArc ? (
-        <circle
-          cx={cx}
-          cy={cy}
-          r={r}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={strokeWidthPx}
-          strokeLinecap="round"
-          strokeDasharray={c}
-          strokeDashoffset={dashOffsetYellow}
-          className="text-amber-400 shadow-sm"
-          style={ringRotate}
-        />
-      ) : null}
-      {/* 3. Poll interval (front) */}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={r}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={strokeWidthPx}
-        strokeLinecap="round"
-        strokeDasharray={c}
-        strokeDashoffset={dashOffsetGreen}
-        className="text-emerald-500/70 shadow-sm"
-        style={ringRotate}
-      />
-    </svg>
-  )
-}
-
 export function WatchlistFilters({
   searchText,
   priceRange,
@@ -366,7 +250,6 @@ export function WatchlistFilters({
   onRemoveSelected,
   isRemoving,
   align = "left",
-  autoRefreshStatus,
 }: WatchlistFiltersProps) {
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [inputValue, setInputValue] = useState(searchText);
@@ -374,8 +257,6 @@ export function WatchlistFilters({
   const inputRef = useRef<HTMLInputElement>(null);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
   const { setNavigationMode, setSelectionMode } = useBottomNav()
-  const shouldReduceMotion = useReducedMotion() ?? false
-  const [nowMs, setNowMs] = useState(() => Date.now())
 
   const intentConfidenceThreshold = 0.6
 
@@ -694,44 +575,10 @@ export function WatchlistFilters({
   const hasActiveFilters = activeFilters.length > 0;
   const hasSelectedCoins = selectedCoins.size > 0;
 
-  const refreshUi = useMemo(() => {
-    if (!autoRefreshStatus) return null
-
-    const lastUpdatedAtMs = autoRefreshStatus.lastUpdatedAtMs
-    if (!lastUpdatedAtMs) {
-      return {
-        lastUpdatedValue: "—",
-        countdownLabel: "0:00",
-        progress: 0,
-        minuteProgress: 0,
-      }
-    }
-
-    const intervalMs = Math.max(5_000, autoRefreshStatus.refreshIntervalMs)
-    const nextAtMs = lastUpdatedAtMs + intervalMs
-    const remainingMs = nextAtMs - nowMs
-
-    const lastUpdatedValue = lastUpdatedFormatter.format(new Date(lastUpdatedAtMs))
-    const progress = clamp01(1 - remainingMs / intervalMs)
-    // Inner ring: one full sweep per wall-clock minute (vs slow outer poll interval).
-    const minuteProgress = clamp01((nowMs % 60_000) / 60_000)
-    const countdownLabel = formatCountdownMmSs(remainingMs)
-
-    return { lastUpdatedValue, countdownLabel, progress, minuteProgress }
-  }, [autoRefreshStatus, nowMs])
-
-  useEffect(() => {
-    if (!autoRefreshStatus?.lastUpdatedAtMs) return
-    const tickMs = shouldReduceMotion ? 1000 : 250
-    setNowMs(Date.now())
-    const id = window.setInterval(() => setNowMs(Date.now()), tickMs)
-    return () => window.clearInterval(id)
-  }, [autoRefreshStatus?.lastUpdatedAtMs, autoRefreshStatus?.refreshIntervalMs, shouldReduceMotion])
-
   return (
     <div className="flex items-center gap-2 flex-wrap">
       {/* Regular Filter UI */}
-      <div className="flex items-center justify-between w-full">
+      <div className="flex items-center w-full">
         {/* Filter Button and Active Filters Row */}
         <div
           className={`flex items-center gap-2 flex-1 min-w-0 ${align === "right" ? "flex-row-reverse justify-start" : ""}`}
@@ -911,40 +758,6 @@ export function WatchlistFilters({
             </div>
           )}
         </div>
-
-        {refreshUi ? (
-          <div className="ml-3 flex shrink-0 items-center gap-2">
-            <div
-              className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-1",
-                autoRefreshStatus?.isRefreshing && "bg-primary/5",
-              )}
-              aria-label={`Refreshes in ${refreshUi.countdownLabel}. Last updated ${refreshUi.lastUpdatedValue}.`}
-            >
-              <div className="flex flex-col items-end leading-tight">
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] text-primary/40">Refreshes in:</span>
-                  <span className="text-[11px] tabular-nums text-primary/80">
-                    {refreshUi.countdownLabel}
-                  </span>
-                </div>
-                <div className="hidden md:flex items-center gap-1">
-                  <span className="text-[10px] text-primary/40">Last updated:</span>
-                  <span className="text-[11px] tabular-nums text-primary/80">
-                    {refreshUi.lastUpdatedValue}
-                  </span>
-                </div>
-              </div>
-
-              <RefreshDualRing
-                intervalProgress={refreshUi.progress}
-                minuteProgress={refreshUi.minuteProgress}
-                hideMinuteArc={shouldReduceMotion}
-                className="text-primary/80"
-              />
-            </div>
-          </div>
-        ) : null}
       </div>
     </div>
   );
