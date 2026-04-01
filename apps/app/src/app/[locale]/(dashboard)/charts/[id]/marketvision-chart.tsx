@@ -17,6 +17,8 @@ interface MarketVisionChartProps {
   initialWindowDays?: number
 }
 
+type MarketVisionSeriesApi = ISeriesApi<'Line'> | ISeriesApi<'Histogram'> | ISeriesApi<'Baseline'>
+
 const SECONDS_PER_DAY = 24 * 60 * 60
 const DEFAULT_WINDOW_DAYS = 3
 const RIGHT_OFFSET_BARS = 12
@@ -79,7 +81,7 @@ export function MarketVisionChart({
 }: MarketVisionChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const seriesRefs = useRef<Map<string, ISeriesApi<any>>>(new Map())
+  const seriesRefs = useRef<Map<string, MarketVisionSeriesApi>>(new Map())
   const lightweightChartsRef = useRef<LightweightChartsModule | null>(null)
   const hasAppliedInitialRangeRef = useRef(false)
   const [chartReadyNonce, setChartReadyNonce] = useState(0)
@@ -255,8 +257,7 @@ export function MarketVisionChart({
           kdFillLayerRef.current.setAttribute('height', String(height))
           kdFillLayerRef.current.setAttribute('viewBox', `0 0 ${width} ${height}`)
 
-          const kSeries = seriesRefs.current.get('stochK') as ISeriesApi<any> | undefined
-          const anchorSeries = kSeries
+          const anchorSeries = seriesRefs.current.get('stochK')
           if (!chartRef.current || !anchorSeries) {
             kdFillPathsRef.current.up.setAttribute('d', '')
             kdFillPathsRef.current.down.setAttribute('d', '')
@@ -383,10 +384,7 @@ export function MarketVisionChart({
           const width = Math.max(1, chartContainerRef.current?.clientWidth ?? 1)
           const heightPx = Math.max(1, chartContainerRef.current?.clientHeight ?? 1)
 
-          const anchor =
-            (seriesRefs.current.get('zero') as ISeriesApi<any> | undefined) ??
-            (seriesRefs.current.get('wt2') as ISeriesApi<any> | undefined) ??
-            (seriesRefs.current.get('rsi') as ISeriesApi<any> | undefined)
+          const anchor = seriesRefs.current.get('zero') ?? seriesRefs.current.get('wt2') ?? seriesRefs.current.get('rsi')
 
           if (!anchor) return
 
@@ -599,7 +597,7 @@ export function MarketVisionChart({
         priceLineVisible: false,
       })
       wt1.setData(calculations.series.wt1.map((p) => ({ time: p.time as Time, value: p.value })))
-      seriesRefs.current.set('wt1', wt1 as unknown as ISeriesApi<any>)
+      seriesRefs.current.set('wt1', wt1)
     }
 
     if (calculations.series.wt2.length) {
@@ -618,7 +616,7 @@ export function MarketVisionChart({
         priceLineVisible: false,
       })
       wt2.setData(calculations.series.wt2.map((p) => ({ time: p.time as Time, value: p.value })))
-      seriesRefs.current.set('wt2', wt2 as unknown as ISeriesApi<any>)
+      seriesRefs.current.set('wt2', wt2)
     }
 
     // Fast WT (VWAP) - area approximation
@@ -637,7 +635,7 @@ export function MarketVisionChart({
         priceLineVisible: false,
       })
       vwap.setData(calculations.series.wtVwap.map((p) => ({ time: p.time as Time, value: p.value })))
-      seriesRefs.current.set('wtVwap', vwap as unknown as ISeriesApi<any>)
+      seriesRefs.current.set('wtVwap', vwap)
     }
 
     // RSI+MFI area and MFI bar (between -99 and -95)
@@ -663,7 +661,7 @@ export function MarketVisionChart({
           value: p.value * MFI_VISUAL_SCALE,
         })),
       )
-      seriesRefs.current.set('rsiMfi', rsiMfi as unknown as ISeriesApi<any>)
+      seriesRefs.current.set('rsiMfi', rsiMfi)
     }
 
     if (calculations.series.mfiBarTop.length) {

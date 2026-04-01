@@ -133,15 +133,15 @@ export function computeSommiDiamond(args: {
       wt2 >= args.soomiDiamondWTBearLevel &&
       Boolean(args.wtCross[i]) &&
       Boolean(args.wtCrossDown[i]) &&
-      !Boolean(args.candleBodyDirTf1[i]) &&
-      !Boolean(args.candleBodyDirTf2[i])
+      args.candleBodyDirTf1[i] !== true &&
+      args.candleBodyDirTf2[i] !== true
 
     bullish[i] =
       wt2 <= args.soomiDiamondWTBullLevel &&
       Boolean(args.wtCross[i]) &&
       Boolean(args.wtCrossUp[i]) &&
-      Boolean(args.candleBodyDirTf1[i]) &&
-      Boolean(args.candleBodyDirTf2[i])
+      args.candleBodyDirTf1[i] === true &&
+      args.candleBodyDirTf2[i] === true
   }
 
   return { bearish, bullish }
