@@ -302,7 +302,7 @@ export function InlinePriceChart({
             theme={livelineTheme}
             color="#ffffff30"
             showValue={false}
-            lineWidth={2}
+            lineWidth={1.5}
             window={windowSecs}
             grid={false}
             badge={false}
@@ -330,7 +330,7 @@ export function InlinePriceChart({
             theme={livelineTheme}
             color={isPositive ? "#10b981" : "#ef4444"}
             showValue={false}
-            lineWidth={2}
+            lineWidth={1.5}
             window={windowSecs}
             grid={false}
             badge={false}
