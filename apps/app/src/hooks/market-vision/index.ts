@@ -3,107 +3,183 @@
 import { useMemo } from 'react'
 import type { 
   OHLCVDataPoint, 
-  SeriesDataPoint, 
   MarketVisionBConfig,
-  MarketVisionBResult
+  MarketVisionBResult,
+  ColoredSeriesDataPoint,
+  MarketVisionSignalSeries,
+  MarketVisionSeriesLevels,
 } from './market-vision-config'
-import { calculateOscillators } from './oscillators'
-import { calculateWaveTrend } from './wave-trend'
-import { calculateMoneyFlow } from './money-flow'
-import { calculateStochastic } from './stochastic'
+import { DEFAULT_MARKET_VISION_CONFIG } from './market-vision-config'
+import { buildCandleSources, pickSourceSeries } from './pine-series'
+import { computeMacd, computeRsiMfi, computeSchaffTc, computeStochRsi, computeWaveTrend } from './vmc-core'
+import { findVmcDivs } from './vmc-divergences'
+import { parsePineTimeframeMinutes, canResampleToMinutes, resampleOHLCVToSeconds, buildBaseToResampledIndexMap, alignHtfValuesToBase, toHeikinAshiBars } from './timeframes'
+import { computeMacdWtColors, computeSommiDiamond, computeSommiFlag } from './vmc-patterns'
+import { pineEma, pineRsi } from './pine-math'
 
-// Default configuration matching Pine Script
-const DEFAULT_CONFIG: MarketVisionBConfig = {
-  // Oscillator 1 Settings (RSI, MFI, Ultimate, Williams %R, Double RSI)
-  oscillator1: {
-    show: true,
-    type: 'RSI',
-    length: 14,
-    source: 'close',
-    overbought: 70,
-    oversold: 30,
-    color: '#D4F321'
-  },
-  
-  // Oscillator 2 Settings
-  oscillator2: {
-    show: false,
-    type: 'MFI',
-    length: 14,
-    source: 'hlc3',
-    overbought: 80,
-    oversold: 20,
-    color: '#FF6B6B'
-  },
-  
-  // Wave Trend Settings
-  waveTrend: {
-    show: true,
-    source: 'hlc3',
-    channelLength: 9,
-    averageLength: 12,
-    overbought: 60,
-    oversold: -60,
-    veryOverbought: 53,
-    veryOversold: -53,
-    showZeroCrossing: true,
-    showOBOSDuplication: true,
-    showDelta: true,
-    deltaOutlineOnly: false,
-    color1: '#00FFEB',
-    color2: '#0041FF',
-    outlineColor: '#FFFFFF',
-    brightness: 100
-  },
-  
-  // Money Flow Settings
-  moneyFlow: {
-    show: true,
-    type: 'MFI',
-    multiplier: 150,
-    maLength: 14,
-    oscLength: 14,
-    fillArea: false,
-    brightness: 100,
-    yOffset: 2.5,
-    showFast: true,
-    showSlow: false,
-    fastColor: '#00FF08',
-    slowColor: '#FF0000'
-  },
-  
-  // Stochastic Settings
-  stochastic: {
-    show: true,
-    type: 'Stochastic - Standard',
-    source: 'Price',
-    showType: 'K and D',
-    kPeriod: 14,
-    dPeriod: 3,
-    smoothing: 3,
-    rsiLength: 13,
-    stochLength: 13,
-    kSmoothing: 3,
-    dSmoothing: 3,
-    doubleStochK: 21,
-    doubleStochD: 4,
-    doubleStochSmoothing: 10,
-    doubleRSIStochRSI: 14,
-    doubleRSIStochLength: 14,
-    doubleRSIStochKSmoothing: 3,
-    doubleRSIStochDSmoothing: 3,
-    brightness: 100,
-    kColor: '#F700FF',
-    dColor: '#2195F3'
-  },
-  
-  // Display Settings
-  display: {
-    showLevels: true,
-    showBackground: true,
-    showLabels: true,
-    transparency: 80
+function mergeMarketVisionConfig(
+  base: MarketVisionBConfig,
+  patch: Partial<MarketVisionBConfig> | undefined,
+): MarketVisionBConfig {
+  if (!patch) return base
+
+  return {
+    ...base,
+    waveTrend: { ...base.waveTrend, ...(patch.waveTrend ?? {}) },
+    mfi: { ...base.mfi, ...(patch.mfi ?? {}) },
+    rsi: { ...base.rsi, ...(patch.rsi ?? {}) },
+    stoch: { ...base.stoch, ...(patch.stoch ?? {}) },
+    schaff: { ...base.schaff, ...(patch.schaff ?? {}) },
+    sommi: {
+      flag: { ...base.sommi.flag, ...(patch.sommi?.flag ?? {}) },
+      diamond: { ...base.sommi.diamond, ...(patch.sommi?.diamond ?? {}) },
+    },
+    macdColors: { ...base.macdColors, ...(patch.macdColors ?? {}) },
+    mode: { ...base.mode, ...(patch.mode ?? {}) },
+    colors: { ...base.colors, ...(patch.colors ?? {}) },
   }
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function withAlpha(color: string, alpha: number): string {
+  const a = Math.max(0, Math.min(1, alpha))
+
+  if (color.startsWith('rgba(')) {
+    const m = color.match(/^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)$/i)
+    if (m) return `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${a})`
+    return color
+  }
+  if (color.startsWith('rgb(')) {
+    const m = color.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i)
+    if (m) return `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${a})`
+    return color
+  }
+  if (color.startsWith('#')) {
+    const hex = color.slice(1)
+    const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex
+    if (full.length === 6) {
+      const r = Number.parseInt(full.slice(0, 2), 16)
+      const g = Number.parseInt(full.slice(2, 4), 16)
+      const b = Number.parseInt(full.slice(4, 6), 16)
+      if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) return `rgba(${r}, ${g}, ${b}, ${a})`
+    }
+  }
+  return color
+}
+
+function emptySeries(): MarketVisionSignalSeries {
+  return {
+    wt1: [],
+    wt2: [],
+    wtVwap: [],
+    rsiMfi: [],
+    mfiBarTop: [],
+    mfiBarBottom: [],
+    rsi: [],
+    stochK: [],
+    stochD: [],
+    tc: [],
+    sommiHvwap: [],
+    wtBearDiv: [],
+    wtBullDiv: [],
+    wtBearDiv2: [],
+    wtBullDiv2: [],
+    rsiBearDiv: [],
+    rsiBullDiv: [],
+    stochBearDiv: [],
+    stochBullDiv: [],
+    wtCrossCircles: [],
+    buyCircle: [],
+    sellCircle: [],
+    divBuyCircle: [],
+    divSellCircle: [],
+    goldBuyCircle: [],
+    sommiBearFlag: [],
+    sommiBullFlag: [],
+    sommiBearDiamond: [],
+    sommiBullDiamond: [],
+  }
+}
+
+function emptyLevels(): MarketVisionSeriesLevels {
+  return { zero: [], obLevel2: [], obLevel3: [], osLevel2: [] }
+}
+
+function toColoredSeries(
+  times: number[],
+  values: number[],
+  colorForIndex?: (i: number, value: number) => string | null,
+): ColoredSeriesDataPoint[] {
+  const out: ColoredSeriesDataPoint[] = []
+  const n = Math.min(times.length, values.length)
+  for (let i = 0; i < n; i++) {
+    const t = times[i]
+    const v = values[i]
+    if (!isFiniteNumber(t) || !isFiniteNumber(v)) continue
+    const color = colorForIndex?.(i, v) ?? null
+    if (color) out.push({ time: t, value: v, color })
+    else out.push({ time: t, value: v })
+  }
+  return out
+}
+
+function constantColoredSeries(
+  times: number[],
+  value: number,
+  colorForIndex?: (i: number) => string | null,
+): ColoredSeriesDataPoint[] {
+  const out: ColoredSeriesDataPoint[] = []
+  for (let i = 0; i < times.length; i++) {
+    const t = times[i]
+    if (!isFiniteNumber(t)) continue
+    const color = colorForIndex?.(i) ?? null
+    if (color) out.push({ time: t, value, color })
+    else out.push({ time: t, value })
+  }
+  return out
+}
+
+function markerSeries(
+  times: number[],
+  signal: boolean[],
+  markerValue: number,
+  colorForIndex: (i: number) => string,
+  offsetBars: number,
+): ColoredSeriesDataPoint[] {
+  const out: ColoredSeriesDataPoint[] = []
+  for (let i = 0; i < Math.min(times.length, signal.length); i++) {
+    if (!signal[i]) continue
+    const j = i + offsetBars
+    if (j < 0 || j >= times.length) continue
+    const t = times[j]
+    if (!isFiniteNumber(t)) continue
+    out.push({ time: t, value: markerValue, color: colorForIndex(i) })
+  }
+  return out
+}
+
+function pivotValueSeries(
+  times: number[],
+  signalAtConfirm: boolean[],
+  pivotValues: number[],
+  colorForIndex: (confirmIndex: number) => string,
+  offsetBars: number,
+): ColoredSeriesDataPoint[] {
+  const out: ColoredSeriesDataPoint[] = []
+  const n = Math.min(times.length, signalAtConfirm.length, pivotValues.length)
+  for (let i = 0; i < n; i++) {
+    if (!signalAtConfirm[i]) continue
+    const j = i + offsetBars
+    if (j < 0 || j >= n) continue
+    const t = times[j]
+    const v = pivotValues[j]
+    if (!isFiniteNumber(t) || !isFiniteNumber(v)) continue
+    out.push({ time: t, value: v, color: colorForIndex(i) })
+  }
+  return out
 }
 
 export function useMarketVisionB(
@@ -111,126 +187,419 @@ export function useMarketVisionB(
   config?: Partial<MarketVisionBConfig>
 ): MarketVisionBResult {
   return useMemo(() => {
-    const finalConfig = { ...DEFAULT_CONFIG, ...config }
-    
-    if (!data || data.length === 0) {
-      return {
-        oscillator1: [],
-        oscillator2: [],
-        waveTrend: {
-          wt1: [],
-          wt2: [],
-          delta: [],
-          positiveCrosses: [],
-          negativeCrosses: [],
-          zeroCrosses: [],
-          obPositiveCrosses: [],
-          obNegativeCrosses: [],
-          osPositiveCrosses: [],
-          osNegativeCrosses: [],
-          trendFilter: { positive: [], negative: [] },
-          colors: {
-            wt1Outline: '',
-            wt1Area: '',
-            wt2Area: '',
-            deltaArea: '',
-            fillArea: ''
+    const finalConfig = mergeMarketVisionConfig(DEFAULT_MARKET_VISION_CONFIG, config)
+
+    if (!data.length) return { series: emptySeries(), levels: emptyLevels() }
+
+    const times = data.map((d) => d.time)
+    const sources = buildCandleSources(data)
+
+    const wave = computeWaveTrend(
+      sources,
+      finalConfig.waveTrend.wtMASource,
+      finalConfig.waveTrend.wtChannelLen,
+      finalConfig.waveTrend.wtAverageLen,
+      finalConfig.waveTrend.wtMALen,
+    )
+
+    const wt1 = wave.wt1
+    const wt2 = wave.wt2
+    const wtVwap = wave.wtVwap
+
+    const rsiSrc = pickSourceSeries(sources, finalConfig.rsi.rsiSRC)
+    const rsiValues = pineRsi(rsiSrc, finalConfig.rsi.rsiLen)
+
+    const rsimfiBase = computeRsiMfi(data, finalConfig.mfi.rsiMFIperiod, finalConfig.mfi.rsiMFIMultiplier, finalConfig.mfi.rsiMFIPosY)
+
+    const stochSrc = pickSourceSeries(sources, finalConfig.stoch.stochSRC)
+    const stoch = computeStochRsi(
+      stochSrc,
+      finalConfig.stoch.stochLen,
+      finalConfig.stoch.stochRsiLen,
+      finalConfig.stoch.stochKSmooth,
+      finalConfig.stoch.stochDSmooth,
+      finalConfig.stoch.stochUseLog,
+      finalConfig.stoch.stochAvg,
+    )
+
+    const tcValues = finalConfig.schaff.tcLine
+      ? computeSchaffTc(
+          pickSourceSeries(sources, finalConfig.schaff.tcSRC),
+          finalConfig.schaff.tclength,
+          finalConfig.schaff.tcfastLength,
+          finalConfig.schaff.tcslowLength,
+          finalConfig.schaff.tcfactor,
+        )
+      : new Array(times.length).fill(Number.NaN)
+
+    // Divergences (aligned to confirmation bar, i.e. pivotIndex + 2).
+    const wtDivs = findVmcDivs(wt2, sources.high, sources.low, finalConfig.waveTrend.wtDivOBLevel, finalConfig.waveTrend.wtDivOSLevel, true)
+    const wtDivs2 = findVmcDivs(
+      wt2,
+      sources.high,
+      sources.low,
+      finalConfig.waveTrend.wtDivOBLevel_add,
+      finalConfig.waveTrend.wtDivOSLevel_add,
+      true,
+    )
+    const wtDivsNl = findVmcDivs(wt2, sources.high, sources.low, 0, 0, false)
+
+    const useHiddenNl = finalConfig.waveTrend.showHiddenDiv_nl
+    const wtBearHiddenSelected = useHiddenNl ? wtDivsNl.bearHidden : wtDivs.bearHidden
+    const wtBullHiddenSelected = useHiddenNl ? wtDivsNl.bullHidden : wtDivs.bullHidden
+
+    const rsiDivs = findVmcDivs(rsiValues, sources.high, sources.low, finalConfig.rsi.rsiDivOBLevel, finalConfig.rsi.rsiDivOSLevel, true)
+    const rsiDivsNl = findVmcDivs(rsiValues, sources.high, sources.low, 0, 0, false)
+    const rsiBearHiddenSelected = useHiddenNl ? rsiDivsNl.bearHidden : rsiDivs.bearHidden
+    const rsiBullHiddenSelected = useHiddenNl ? rsiDivsNl.bullHidden : rsiDivs.bullHidden
+
+    const stochDivs = findVmcDivs(stoch.k, sources.high, sources.low, 0, 0, false)
+
+    // Signals
+    const wtOversold: boolean[] = wt2.map((v) => isFiniteNumber(v) && v <= finalConfig.waveTrend.osLevel)
+    const wtOverbought: boolean[] = wt2.map((v) => isFiniteNumber(v) && v >= finalConfig.waveTrend.obLevel)
+
+    const buySignal: boolean[] = new Array(times.length).fill(false)
+    const sellSignal: boolean[] = new Array(times.length).fill(false)
+
+    for (let i = 0; i < times.length; i++) {
+      buySignal[i] = Boolean(wave.wtCross[i]) && Boolean(wave.wtCrossUp[i]) && Boolean(wtOversold[i])
+      sellSignal[i] = Boolean(wave.wtCross[i]) && Boolean(wave.wtCrossDown[i]) && Boolean(wtOverbought[i])
+    }
+
+    const buySignalDiv: boolean[] = new Array(times.length).fill(false)
+    const sellSignalDiv: boolean[] = new Array(times.length).fill(false)
+    for (let i = 0; i < times.length; i++) {
+      buySignalDiv[i] =
+        (finalConfig.waveTrend.wtShowDiv && Boolean(wtDivs.bullDiv[i])) ||
+        (finalConfig.waveTrend.wtShowDiv && finalConfig.waveTrend.wtDivOBLevel_addshow && Boolean(wtDivs2.bullDiv[i])) ||
+        (finalConfig.stoch.stochShowDiv && Boolean(stochDivs.bullDiv[i])) ||
+        (finalConfig.rsi.rsiShowDiv && Boolean(rsiDivs.bullDiv[i]))
+
+      sellSignalDiv[i] =
+        (finalConfig.waveTrend.wtShowDiv && Boolean(wtDivs.bearDiv[i])) ||
+        (finalConfig.waveTrend.wtShowDiv && finalConfig.waveTrend.wtDivOBLevel_addshow && Boolean(wtDivs2.bearDiv[i])) ||
+        (finalConfig.stoch.stochShowDiv && Boolean(stochDivs.bearDiv[i])) ||
+        (finalConfig.rsi.rsiShowDiv && Boolean(rsiDivs.bearDiv[i]))
+    }
+
+    const divBuyColor = (i: number): string => {
+      if (wtDivs.bullDiv[i]) return finalConfig.colors.colorGreen
+      if (finalConfig.waveTrend.wtDivOBLevel_addshow && wtDivs2.bullDiv[i]) return withAlpha(finalConfig.colors.colorGreen, 0.4)
+      if (finalConfig.rsi.rsiShowDiv && rsiDivs.bullDiv[i]) return finalConfig.colors.colorGreen
+      return finalConfig.colors.colorGreen
+    }
+
+    const divSellColor = (i: number): string => {
+      if (wtDivs.bearDiv[i]) return finalConfig.colors.colorRed
+      if (finalConfig.waveTrend.wtDivOBLevel_addshow && wtDivs2.bearDiv[i]) return withAlpha(finalConfig.colors.colorRed, 0.4)
+      if (finalConfig.rsi.rsiShowDiv && rsiDivs.bearDiv[i]) return finalConfig.colors.colorRed
+      return finalConfig.colors.colorRed
+    }
+
+    // Gold buy (computed at confirmation bar, plotted at offset -2).
+    const wtGoldBuy: boolean[] = new Array(times.length).fill(false)
+    for (let i = 0; i < times.length; i++) {
+      const prevPivotIx = wtDivs.prevBotPivotIndex[i]
+      const lastRsi = prevPivotIx != null ? rsiValues[prevPivotIx] : Number.NaN
+      const wtLowPrev = wtDivs.prevBotSrc[i]
+      const wt2Now = wt2[i]
+
+      wtGoldBuy[i] =
+        ((finalConfig.waveTrend.wtShowDiv && Boolean(wtDivs.bullDiv[i])) || (finalConfig.rsi.rsiShowDiv && Boolean(rsiDivs.bullDiv[i]))) &&
+        isFiniteNumber(wtLowPrev) &&
+        isFiniteNumber(wt2Now) &&
+        wtLowPrev <= finalConfig.waveTrend.osLevel3 &&
+        wt2Now > finalConfig.waveTrend.osLevel3 &&
+        wtLowPrev - wt2Now <= -5 &&
+        isFiniteNumber(lastRsi) &&
+        lastRsi < 30
+    }
+
+    // Higher timeframe features (Sommi + MACD colors): disable if insufficient resolution.
+    const sommiHvwapAligned: number[] = new Array(times.length).fill(Number.NaN)
+    const sommiFlagBear: boolean[] = new Array(times.length).fill(false)
+    const sommiFlagBull: boolean[] = new Array(times.length).fill(false)
+
+    const sommiDiamondBear: boolean[] = new Array(times.length).fill(false)
+    const sommiDiamondBull: boolean[] = new Array(times.length).fill(false)
+
+    const macdWT1Color: Array<string | null> = new Array(times.length).fill(null)
+    const macdWT2Color: Array<string | null> = new Array(times.length).fill(null)
+
+    // Sommi flag HVWAP (WT vwap on HTF)
+    if ((finalConfig.sommi.flag.sommiFlagShow || finalConfig.sommi.flag.sommiShowVwap) && parsePineTimeframeMinutes(finalConfig.sommi.flag.sommiVwapTF) != null) {
+      const tfMinutes = parsePineTimeframeMinutes(finalConfig.sommi.flag.sommiVwapTF)!
+      if (canResampleToMinutes(data, tfMinutes)) {
+        const targetSeconds = tfMinutes * 60
+        const resampled = resampleOHLCVToSeconds(data, targetSeconds)
+        const baseToHtf = buildBaseToResampledIndexMap(data, resampled, targetSeconds)
+
+        const hSources = {
+          open: resampled.map((b) => b.open),
+          high: resampled.map((b) => b.high),
+          low: resampled.map((b) => b.low),
+          close: resampled.map((b) => b.close),
+          hlc3: resampled.map((b) => (b.high + b.low + b.close) / 3),
+        }
+
+        const hWave = computeWaveTrend(
+          hSources,
+          finalConfig.waveTrend.wtMASource,
+          finalConfig.waveTrend.wtChannelLen,
+          finalConfig.waveTrend.wtAverageLen,
+          finalConfig.waveTrend.wtMALen,
+        )
+        const hvwapHtf = hWave.wtVwap
+        const hvwapAligned = alignHtfValuesToBase(baseToHtf, hvwapHtf)
+        for (let i = 0; i < sommiHvwapAligned.length; i++) sommiHvwapAligned[i] = hvwapAligned[i] ?? Number.NaN
+
+        if (finalConfig.sommi.flag.sommiFlagShow) {
+          const sommi = computeSommiFlag({
+            rsimfi: rsimfiBase,
+            wt2,
+            wtCross: wave.wtCross,
+            wtCrossUp: wave.wtCrossUp,
+            wtCrossDown: wave.wtCrossDown,
+            hwtVwap: hvwapAligned,
+            soomiRSIMFIBearLevel: finalConfig.sommi.flag.soomiRSIMFIBearLevel,
+            soomiRSIMFIBullLevel: finalConfig.sommi.flag.soomiRSIMFIBullLevel,
+            soomiFlagWTBearLevel: finalConfig.sommi.flag.soomiFlagWTBearLevel,
+            soomiFlagWTBullLevel: finalConfig.sommi.flag.soomiFlagWTBullLevel,
+            sommiVwapBearLevel: finalConfig.sommi.flag.sommiVwapBearLevel,
+            sommiVwapBullLevel: finalConfig.sommi.flag.sommiVwapBullLevel,
+          })
+
+          for (let i = 0; i < times.length; i++) {
+            sommiFlagBear[i] = sommi.bearish[i] ?? false
+            sommiFlagBull[i] = sommi.bullish[i] ?? false
           }
-        },
-        moneyFlow: {
-          fast: [],
-          slow: [],
-          direction: [],
-          moneyFlowValue: []
-        },
-        levels: {
-          zero: [],
-          overbought1: [],
-          oversold1: [],
-          overbought2: [],
-          oversold2: []
         }
       }
     }
-    
-    // Calculate all components
-    const oscillators = calculateOscillators(data, {
-      oscillator1: finalConfig.oscillator1,
-      oscillator2: finalConfig.oscillator2
-    })
-    
-    const waveTrend = calculateWaveTrend(data, {
-      show: finalConfig.waveTrend.show,
-      source: 'hlc3',
-      channelLength: finalConfig.waveTrend.channelLength,
-      averageLength: finalConfig.waveTrend.averageLength,
-      overbought: finalConfig.waveTrend.overbought,
-      oversold: finalConfig.waveTrend.oversold,
-      veryOverbought: finalConfig.waveTrend.veryOverbought,
-      veryOversold: finalConfig.waveTrend.veryOversold,
-      showZeroCrossing: true,
-      showOBOSDuplication: true,
-      showDelta: true,
-      deltaOutlineOnly: false
-    })
-    
-    const moneyFlow = calculateMoneyFlow(data, finalConfig.moneyFlow)
-    
-    const stochastic = calculateStochastic(
-      data.map(d => d.close),
-      data.map(d => d.high), 
-      data.map(d => d.low),
-      finalConfig.stochastic.kPeriod,
-      finalConfig.stochastic.dSmoothing,
-      finalConfig.stochastic.kSmoothing
+
+    // Sommi diamond (heikin ashi candle direction on 2 HTFs)
+    if (finalConfig.sommi.diamond.sommiDiamondShow) {
+      const tf1Min = parsePineTimeframeMinutes(finalConfig.sommi.diamond.sommiHTCRes)
+      const tf2Min = parsePineTimeframeMinutes(finalConfig.sommi.diamond.sommiHTCRes2)
+
+      if (tf1Min != null && tf2Min != null && canResampleToMinutes(data, tf1Min) && canResampleToMinutes(data, tf2Min)) {
+        const tf1Seconds = tf1Min * 60
+        const tf2Seconds = tf2Min * 60
+
+        const rs1 = resampleOHLCVToSeconds(data, tf1Seconds)
+        const rs2 = resampleOHLCVToSeconds(data, tf2Seconds)
+
+        const ha1 = toHeikinAshiBars(rs1)
+        const ha2 = toHeikinAshiBars(rs2)
+
+        const baseTo1 = buildBaseToResampledIndexMap(data, ha1, tf1Seconds)
+        const baseTo2 = buildBaseToResampledIndexMap(data, ha2, tf2Seconds)
+
+        const dir1Htf = ha1.map((b) => b.close > b.open)
+        const dir2Htf = ha2.map((b) => b.close > b.open)
+
+        const dir1: boolean[] = baseTo1.map((ix) => (ix == null ? false : Boolean(dir1Htf[ix])))
+        const dir2: boolean[] = baseTo2.map((ix) => (ix == null ? false : Boolean(dir2Htf[ix])))
+
+        const diamond = computeSommiDiamond({
+          wt2,
+          wtCross: wave.wtCross,
+          wtCrossUp: wave.wtCrossUp,
+          wtCrossDown: wave.wtCrossDown,
+          candleBodyDirTf1: dir1,
+          candleBodyDirTf2: dir2,
+          soomiDiamondWTBearLevel: finalConfig.sommi.diamond.soomiDiamondWTBearLevel,
+          soomiDiamondWTBullLevel: finalConfig.sommi.diamond.soomiDiamondWTBullLevel,
+        })
+
+        for (let i = 0; i < times.length; i++) {
+          sommiDiamondBear[i] = diamond.bearish[i] ?? false
+          sommiDiamondBull[i] = diamond.bullish[i] ?? false
+        }
+      }
+    }
+
+    // MACD WT colors
+    if (finalConfig.macdColors.macdWTColorsShow) {
+      const tfMin = parsePineTimeframeMinutes(finalConfig.macdColors.macdWTColorsTF)
+      if (tfMin != null && canResampleToMinutes(data, tfMin)) {
+        const targetSeconds = tfMin * 60
+        const resampled = resampleOHLCVToSeconds(data, targetSeconds)
+        const baseToHtf = buildBaseToResampledIndexMap(data, resampled, targetSeconds)
+
+        const hrsimfiHtf = computeRsiMfi(resampled, finalConfig.mfi.rsiMFIperiod, finalConfig.mfi.rsiMFIMultiplier, finalConfig.mfi.rsiMFIPosY)
+        const hrsimfiAligned = alignHtfValuesToBase(baseToHtf, hrsimfiHtf)
+
+        const closeHtf = resampled.map((b) => b.close)
+        const macd = computeMacd(closeHtf, 28, 42, 9)
+        const macdAligned = alignHtfValuesToBase(baseToHtf, macd.macd)
+        const signalAligned = alignHtfValuesToBase(baseToHtf, macd.signal)
+
+        const colors = computeMacdWtColors({
+          hrsimfi: hrsimfiAligned,
+          macd: macdAligned,
+          signal: signalAligned,
+          colormacdWT1a: finalConfig.colors.colormacdWT1a,
+          colormacdWT1b: finalConfig.colors.colormacdWT1b,
+          colormacdWT1c: finalConfig.colors.colormacdWT1c,
+          colormacdWT1d: finalConfig.colors.colormacdWT1d,
+          colormacdWT2a: finalConfig.colors.colormacdWT2a,
+          colormacdWT2b: finalConfig.colors.colormacdWT2b,
+          colormacdWT2c: finalConfig.colors.colormacdWT2c,
+          colormacdWT2d: finalConfig.colors.colormacdWT2d,
+        })
+
+        for (let i = 0; i < times.length; i++) {
+          macdWT1Color[i] = colors.macdWT1Color[i] ?? null
+          macdWT2Color[i] = colors.macdWT2Color[i] ?? null
+        }
+      }
+    }
+
+    // Colors (Pine parity)
+    const rsiColorForIndex = (_i: number, value: number): string | null => {
+      if (value <= finalConfig.rsi.rsiOversold) return finalConfig.colors.rsiOversold
+      if (value >= finalConfig.rsi.rsiOverbought) return finalConfig.colors.rsiOverbought
+      return finalConfig.colors.rsiInBetween
+    }
+
+    const mfiColorForIndex = (_i: number, value: number): string | null =>
+      value > 0 ? finalConfig.colors.mfiAbove : finalConfig.colors.mfiBelow
+
+    const wtCrossColorForIndex = (i: number): string => {
+      const w1 = wt1[i]
+      const w2 = wt2[i]
+      if (!isFiniteNumber(w1) || !isFiniteNumber(w2)) return finalConfig.colors.colorWhite
+      // Pine: `plot(..., style=circles, transp=15)` → alpha=0.85.
+      return w2 - w1 > 0 ? 'rgba(255, 82, 82, 0.85)' : 'rgba(0, 230, 118, 0.85)'
+    }
+
+    const wt1Color = (i: number): string | null => macdWT1Color[i] ?? finalConfig.colors.colorWT1Fill
+    const wt2Color = (i: number): string | null => macdWT2Color[i] ?? finalConfig.colors.colorWT2Fill
+
+    const series: MarketVisionSignalSeries = emptySeries()
+
+    if (finalConfig.waveTrend.wtShow) {
+      series.wt1 = toColoredSeries(times, wt1, (i, v) => (isFiniteNumber(v) ? wt1Color(i) : null))
+      series.wt2 = toColoredSeries(times, wt2, (i, v) => (isFiniteNumber(v) ? wt2Color(i) : null))
+    }
+
+    if (finalConfig.waveTrend.vwapShow) {
+      series.wtVwap = toColoredSeries(times, wtVwap, () => finalConfig.colors.vwapColor)
+    }
+
+    if (finalConfig.mfi.rsiMFIShow) {
+      series.rsiMfi = toColoredSeries(times, rsimfiBase, mfiColorForIndex)
+      series.mfiBarTop = constantColoredSeries(times, -95, (i) => mfiColorForIndex(i, rsimfiBase[i] ?? 0))
+      series.mfiBarBottom = constantColoredSeries(times, -99, (i) => mfiColorForIndex(i, rsimfiBase[i] ?? 0))
+    }
+
+    if (finalConfig.rsi.rsiShow) {
+      series.rsi = toColoredSeries(times, rsiValues, rsiColorForIndex)
+    }
+
+    if (finalConfig.stoch.stochShow) {
+      series.stochK = toColoredSeries(times, stoch.k, () => finalConfig.colors.stochK)
+      series.stochD = toColoredSeries(times, stoch.d, () => finalConfig.colors.stochD)
+    }
+
+    if (finalConfig.schaff.tcLine) {
+      series.tc = toColoredSeries(times, tcValues, () => 'rgba(103, 58, 183, 0.25)')
+    }
+
+    // Divergence plots (pivot bar, offset -2).
+    if (finalConfig.waveTrend.wtShowDiv || finalConfig.waveTrend.wtShowHiddenDiv) {
+      const wtBearCombined: boolean[] = wtDivs.bearDiv.map(
+        (v, i) => (finalConfig.waveTrend.wtShowDiv && Boolean(v)) || (finalConfig.waveTrend.wtShowHiddenDiv && Boolean(wtBearHiddenSelected[i])),
+      )
+      const wtBullCombined: boolean[] = wtDivs.bullDiv.map(
+        (v, i) => (finalConfig.waveTrend.wtShowDiv && Boolean(v)) || (finalConfig.waveTrend.wtShowHiddenDiv && Boolean(wtBullHiddenSelected[i])),
+      )
+
+      series.wtBearDiv = pivotValueSeries(times, wtBearCombined, wt2, () => finalConfig.colors.wtBearDiv, -2)
+      series.wtBullDiv = pivotValueSeries(times, wtBullCombined, wt2, () => finalConfig.colors.wtBullDiv, -2)
+    }
+
+    if (finalConfig.waveTrend.wtShowDiv && finalConfig.waveTrend.wtDivOBLevel_addshow) {
+      series.wtBearDiv2 = pivotValueSeries(times, wtDivs2.bearDiv, wt2, () => finalConfig.colors.wtBearDiv, -2)
+      series.wtBullDiv2 = pivotValueSeries(times, wtDivs2.bullDiv, wt2, () => finalConfig.colors.wtBullDiv, -2)
+    }
+
+    if (finalConfig.rsi.rsiShowDiv || finalConfig.rsi.rsiShowHiddenDiv) {
+      const rBearCombined: boolean[] = rsiDivs.bearDiv.map(
+        (v, i) => (finalConfig.rsi.rsiShowDiv && Boolean(v)) || (finalConfig.rsi.rsiShowHiddenDiv && Boolean(rsiBearHiddenSelected[i])),
+      )
+      const rBullCombined: boolean[] = rsiDivs.bullDiv.map(
+        (v, i) => (finalConfig.rsi.rsiShowDiv && Boolean(v)) || (finalConfig.rsi.rsiShowHiddenDiv && Boolean(rsiBullHiddenSelected[i])),
+      )
+      series.rsiBearDiv = pivotValueSeries(times, rBearCombined, rsiValues, () => finalConfig.colors.wtBearDiv, -2)
+      series.rsiBullDiv = pivotValueSeries(times, rBullCombined, rsiValues, () => finalConfig.colors.wtBullDiv, -2)
+    }
+
+    if (finalConfig.stoch.stochShowDiv || finalConfig.stoch.stochShowHiddenDiv) {
+      const sBearCombined: boolean[] = stochDivs.bearDiv.map(
+        (v, i) => (finalConfig.stoch.stochShowDiv && Boolean(v)) || (finalConfig.stoch.stochShowHiddenDiv && Boolean(stochDivs.bearHidden[i])),
+      )
+      const sBullCombined: boolean[] = stochDivs.bullDiv.map(
+        (v, i) => (finalConfig.stoch.stochShowDiv && Boolean(v)) || (finalConfig.stoch.stochShowHiddenDiv && Boolean(stochDivs.bullHidden[i])),
+      )
+      series.stochBearDiv = pivotValueSeries(times, sBearCombined, stoch.k, () => finalConfig.colors.colorRed, -2)
+      series.stochBullDiv = pivotValueSeries(times, sBullCombined, stoch.k, () => finalConfig.colors.colorGreen, -2)
+    }
+
+    // WT cross circles (actual wt2 value)
+    series.wtCrossCircles = toColoredSeries(
+      times,
+      wt2.map((v, i) => (wave.wtCross[i] ? v : Number.NaN)),
+      (i) => wtCrossColorForIndex(i),
     )
-    
-    // Generate levels
-    const times = data.map(d => d.time)
-    const levels = {
-      overbought1: times.map(time => ({ time, value: finalConfig.waveTrend.overbought })),
-      overbought2: times.map(time => ({ time, value: finalConfig.waveTrend.veryOverbought })),
-      oversold1: times.map(time => ({ time, value: finalConfig.waveTrend.oversold })),
-      oversold2: times.map(time => ({ time, value: finalConfig.waveTrend.veryOversold })),
-      zero: times.map(time => ({ time, value: 0 }))
+
+    // Buy / sell circles
+    if (finalConfig.waveTrend.wtBuyShow) {
+      series.buyCircle = markerSeries(times, buySignal, -107, () => finalConfig.colors.colorGreen, 0)
     }
-    
-    return {
-      oscillator1: oscillators.oscillator1,
-      oscillator2: oscillators.oscillator2,
-      waveTrend: {
-        wt1: waveTrend.wt1,
-        wt2: waveTrend.wt2,
-        delta: waveTrend.delta,
-        positiveCrosses: waveTrend.positiveCrosses,
-        negativeCrosses: waveTrend.negativeCrosses,
-        zeroCrosses: waveTrend.zeroCrosses,
-        obPositiveCrosses: waveTrend.obPositiveCrosses,
-        obNegativeCrosses: waveTrend.obNegativeCrosses,
-        osPositiveCrosses: waveTrend.osPositiveCrosses,
-        osNegativeCrosses: waveTrend.osNegativeCrosses,
-        trendFilter: waveTrend.trendFilter,
-        colors: waveTrend.colors
-      },
-      moneyFlow: {
-        fast: moneyFlow.values,
-        slow: [],
-        direction: moneyFlow.direction,
-        moneyFlowValue: moneyFlow.moneyFlowValue
-      },
-      stochastic: {
-        k: stochastic.k.map((val, i) => ({ time: data[i]?.time, value: val })).filter((item): item is SeriesDataPoint => item.time != null),
-        d: stochastic.d.map((val, i) => ({ time: data[i]?.time, value: val })).filter((item): item is SeriesDataPoint => item.time != null),
-        obv: []
-      },
-      levels
+    if (finalConfig.waveTrend.wtSellShow) {
+      series.sellCircle = markerSeries(times, sellSignal, 105, () => finalConfig.colors.colorRed, 0)
     }
-    
+
+    if (finalConfig.waveTrend.wtDivShow) {
+      series.divBuyCircle = markerSeries(times, buySignalDiv, -106, divBuyColor, -2)
+      series.divSellCircle = markerSeries(times, sellSignalDiv, 106, divSellColor, -2)
+    }
+
+    if (finalConfig.waveTrend.wtGoldShow) {
+      series.goldBuyCircle = markerSeries(times, wtGoldBuy, -106, () => finalConfig.colors.colorOrange, -2)
+    }
+
+    // Sommi HVWAP plot
+    if (finalConfig.sommi.flag.sommiShowVwap) {
+      series.sommiHvwap = toColoredSeries(times, pineEma(sommiHvwapAligned, 3), () => finalConfig.colors.colorYellow)
+    }
+
+    if (finalConfig.sommi.flag.sommiFlagShow) {
+      series.sommiBearFlag = markerSeries(times, sommiFlagBear, 108, () => finalConfig.colors.sommiBear, 0)
+      series.sommiBullFlag = markerSeries(times, sommiFlagBull, -108, () => finalConfig.colors.sommiBull, 0)
+    }
+
+    if (finalConfig.sommi.diamond.sommiDiamondShow) {
+      series.sommiBearDiamond = markerSeries(times, sommiDiamondBear, 108, () => finalConfig.colors.sommiBear, 0)
+      series.sommiBullDiamond = markerSeries(times, sommiDiamondBull, -108, () => finalConfig.colors.sommiBull, 0)
+    }
+
+    const levels: MarketVisionSeriesLevels = {
+      zero: constantColoredSeries(times, 0),
+      obLevel2: constantColoredSeries(times, finalConfig.waveTrend.obLevel2),
+      obLevel3: constantColoredSeries(times, finalConfig.waveTrend.obLevel3),
+      osLevel2: constantColoredSeries(times, finalConfig.waveTrend.osLevel2),
+    }
+
+    return { series, levels }
   }, [data, config])
 }
 
 export type { MarketVisionBConfig, MarketVisionBResult } from './market-vision-config'
-export { DEFAULT_CONFIG as defaultMarketVisionBConfig }
+export { DEFAULT_MARKET_VISION_CONFIG as defaultMarketVisionBConfig }
 
 // Export RSI divergence detection functionality
 export { 

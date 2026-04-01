@@ -1,10 +1,5 @@
 'use client'
 
-import { generatePastelColors } from '../../lib/chart-colors'
-
-// Generate consistent pastel colors for MarketVision configuration
-const CONFIG_COLORS = generatePastelColors(9)
-
 export interface Time {
   time: number
 }
@@ -21,236 +16,386 @@ export interface SeriesDataPoint extends Time {
   value: number
 }
 
-// Individual component configs
-export interface OscillatorConfig {
-  show: boolean
-  type: 'RSI' | 'MFI' | 'Ultimate Oscillator' | 'Williams %R' | 'Double RSI'
-  length: number
-  source: 'close' | 'open' | 'high' | 'low' | 'hlc3'
-  overbought: number
-  oversold: number
-  color: string
+export interface ColoredSeriesDataPoint extends SeriesDataPoint {
+  color?: string
 }
 
-export interface StochasticConfig {
-  show: boolean
-  type: 'Stochastic - Standard' | 'RSI Stochastic'
-  source: 'Price' | 'Volume - On Balance Volume' | 'Volume - On Balance Volume - Locked to Standard Candles'
-  showType: 'K and D' | 'K Only' | 'D Only' | 'Double Stochastic - K and D + Long Term RSI Stochastic K - Set Value: 14, 14, 3, 3' | 'Double Stochastic - K and D + Long Term Stochastic D - Set Value: 21, 4, 10'
-  kPeriod: number
-  dPeriod: number
-  smoothing: number
-  kColor: string
-  dColor: string
-  rsiLength: number
-  stochLength: number
-  kSmoothing: number
-  dSmoothing: number
-  doubleStochK: number
-  doubleStochD: number
-  doubleStochSmoothing: number
-  doubleRSIStochRSI: number
-  doubleRSIStochLength: number
-  doubleRSIStochKSmoothing: number
-  doubleRSIStochDSmoothing: number
-  brightness: number
+export interface VmcSourceCandle {
+  open: number[]
+  high: number[]
+  low: number[]
+  close: number[]
+  hlc3: number[]
 }
 
-export interface WaveTrendConfig {
-  show: boolean
-  source: 'hlc3' | 'close' | 'open' | 'high' | 'low'
-  channelLength: number
-  averageLength: number
-  overbought: number
-  oversold: number
-  veryOverbought: number
-  veryOversold: number
-  showZeroCrossing: boolean
-  showOBOSDuplication: boolean
-  showDelta: boolean
-  deltaOutlineOnly: boolean
-  color1: string
-  color2: string
-  outlineColor: string
-  brightness: number
+export type VmcSource = keyof VmcSourceCandle
+
+export interface VmcWaveTrendSettings {
+  wtShow: boolean
+  wtBuyShow: boolean
+  wtGoldShow: boolean
+  wtSellShow: boolean
+  wtDivShow: boolean
+  vwapShow: boolean
+  wtChannelLen: number
+  wtAverageLen: number
+  wtMASource: VmcSource
+  wtMALen: number
+
+  // Overbought & oversold levels (match Pine script)
+  obLevel: number
+  obLevel2: number
+  obLevel3: number
+  osLevel: number
+  osLevel2: number
+  osLevel3: number
+
+  // Divergence WT
+  wtShowDiv: boolean
+  wtShowHiddenDiv: boolean
+  showHiddenDiv_nl: boolean
+  wtDivOBLevel: number
+  wtDivOSLevel: number
+  wtDivOBLevel_addshow: boolean
+  wtDivOBLevel_add: number
+  wtDivOSLevel_add: number
 }
 
-export interface MoneyFlowConfig {
-  show: boolean
-  showFast: boolean
-  showSlow: boolean
-  type: 'Pine Script RSI+MFI' | 'Chaikin Money Flow' | 'Dynamic Money Flow' | 'MFI' | 'VWMA' | 'RSI' | 'RSI.Signal Line - Set Value - RSI 13, Signal Line (Linear Regression) 21' | 'DEMA' | 'EMA' | 'HullMA' | 'SMA' | 'SMMA' | 'SSMA' | 'TEMA' | 'TMA' | 'WMA' | 'ZEMA'
-  multiplier: number
-  maLength: number
-  oscLength: number
-  fillArea: boolean
-  brightness: number
-  yOffset: number
-  fastColor: string
-  slowColor: string
+export interface VmcMfiSettings {
+  rsiMFIShow: boolean
+  rsiMFIperiod: number
+  rsiMFIMultiplier: number
+  rsiMFIPosY: number
 }
 
-// Main MarketVision B Configuration
+export interface VmcRsiSettings {
+  rsiShow: boolean
+  rsiSRC: VmcSource
+  rsiLen: number
+  rsiOversold: number
+  rsiOverbought: number
+
+  // Divergence RSI
+  rsiShowDiv: boolean
+  rsiShowHiddenDiv: boolean
+  rsiDivOBLevel: number
+  rsiDivOSLevel: number
+}
+
+export interface VmcStochSettings {
+  stochShow: boolean
+  stochUseLog: boolean
+  stochAvg: boolean
+  stochSRC: VmcSource
+  stochLen: number
+  stochRsiLen: number
+  stochKSmooth: number
+  stochDSmooth: number
+
+  // Divergence stoch
+  stochShowDiv: boolean
+  stochShowHiddenDiv: boolean
+}
+
+export interface VmcSchaffSettings {
+  tcLine: boolean
+  tcSRC: VmcSource
+  tclength: number
+  tcfastLength: number
+  tcslowLength: number
+  tcfactor: number
+}
+
+export interface VmcSommiFlagSettings {
+  sommiFlagShow: boolean
+  sommiShowVwap: boolean
+  sommiVwapTF: string
+  sommiVwapBearLevel: number
+  sommiVwapBullLevel: number
+  soomiFlagWTBearLevel: number
+  soomiFlagWTBullLevel: number
+  soomiRSIMFIBearLevel: number
+  soomiRSIMFIBullLevel: number
+}
+
+export interface VmcSommiDiamondSettings {
+  sommiDiamondShow: boolean
+  sommiHTCRes: string
+  sommiHTCRes2: string
+  soomiDiamondWTBearLevel: number
+  soomiDiamondWTBullLevel: number
+}
+
+export interface VmcSommiSettings {
+  flag: VmcSommiFlagSettings
+  diamond: VmcSommiDiamondSettings
+}
+
+export interface VmcMacdColorsSettings {
+  macdWTColorsShow: boolean
+  macdWTColorsTF: string
+}
+
+export interface VmcModeSettings {
+  darkMode: boolean
+}
+
+export interface VmcColorSettings {
+  // Core palette (defaults match Pine script constants)
+  colorRed: string
+  colorPurple: string
+  colorGreen: string
+  colorOrange: string
+  colorYellow: string
+  colorWhite: string
+  colorPink: string
+  colorBluelight: string
+
+  // WT areas
+  colorWT1Fill: string
+  colorWT2Fill: string
+  vwapColor: string
+
+  // RSI colors
+  rsiOverbought: string
+  rsiOversold: string
+  rsiInBetween: string
+
+  // MFI colors
+  mfiAbove: string
+  mfiBelow: string
+
+  // Divergence colors
+  wtBearDiv: string
+  wtBullDiv: string
+
+  // Stoch colors
+  stochK: string
+  stochD: string
+
+  // Sommi markers
+  sommiBear: string
+  sommiBull: string
+
+  // MACD WT colors (match Pine constants)
+  colormacdWT1a: string
+  colormacdWT1b: string
+  colormacdWT1c: string
+  colormacdWT1d: string
+  colormacdWT2a: string
+  colormacdWT2b: string
+  colormacdWT2c: string
+  colormacdWT2d: string
+}
+
+// Main MarketVision Configuration (Pine v4 parity: VuManChu B Divergences)
 export interface MarketVisionBConfig {
-  // Oscillator Settings
-  oscillator1: OscillatorConfig
-  oscillator2: OscillatorConfig
-  
-  // Wave Trend Settings
-  waveTrend: WaveTrendConfig
-  
-  // Money Flow Settings
-  moneyFlow: MoneyFlowConfig
-  
-  // Stochastic Settings
-  stochastic: StochasticConfig
-  
-  // Display Settings
-  display: {
-    showLevels: boolean
-    showBackground: boolean
-    showLabels: boolean
-    transparency: number
-  }
+  waveTrend: VmcWaveTrendSettings
+  mfi: VmcMfiSettings
+  rsi: VmcRsiSettings
+  stoch: VmcStochSettings
+  schaff: VmcSchaffSettings
+  sommi: VmcSommiSettings
+  macdColors: VmcMacdColorsSettings
+  mode: VmcModeSettings
+  colors: VmcColorSettings
 }
 
-// Results Interface
+export interface MarketVisionSeriesLevels {
+  zero: SeriesDataPoint[]
+  obLevel2: SeriesDataPoint[]
+  obLevel3: SeriesDataPoint[]
+  osLevel2: SeriesDataPoint[]
+}
+
+export interface MarketVisionSignalSeries {
+  // WT waves
+  wt1: ColoredSeriesDataPoint[]
+  wt2: ColoredSeriesDataPoint[]
+  wtVwap: ColoredSeriesDataPoint[]
+
+  // MFI area + bar
+  rsiMfi: ColoredSeriesDataPoint[]
+  mfiBarTop: ColoredSeriesDataPoint[]
+  mfiBarBottom: ColoredSeriesDataPoint[]
+
+  // RSI
+  rsi: ColoredSeriesDataPoint[]
+
+  // Stoch RSI
+  stochK: ColoredSeriesDataPoint[]
+  stochD: ColoredSeriesDataPoint[]
+
+  // Schaff
+  tc: ColoredSeriesDataPoint[]
+
+  // Sommi higher VWAP (ema(hvwap, 3))
+  sommiHvwap: ColoredSeriesDataPoint[]
+
+  // Divergence points (pivot bar, i.e. offset=-2 semantics already applied)
+  wtBearDiv: ColoredSeriesDataPoint[]
+  wtBullDiv: ColoredSeriesDataPoint[]
+  wtBearDiv2: ColoredSeriesDataPoint[]
+  wtBullDiv2: ColoredSeriesDataPoint[]
+  rsiBearDiv: ColoredSeriesDataPoint[]
+  rsiBullDiv: ColoredSeriesDataPoint[]
+  stochBearDiv: ColoredSeriesDataPoint[]
+  stochBullDiv: ColoredSeriesDataPoint[]
+
+  // Circles / dots / markers (absolute y-levels, Pine style)
+  wtCrossCircles: ColoredSeriesDataPoint[]
+  buyCircle: ColoredSeriesDataPoint[]
+  sellCircle: ColoredSeriesDataPoint[]
+  divBuyCircle: ColoredSeriesDataPoint[]
+  divSellCircle: ColoredSeriesDataPoint[]
+  goldBuyCircle: ColoredSeriesDataPoint[]
+  sommiBearFlag: ColoredSeriesDataPoint[]
+  sommiBullFlag: ColoredSeriesDataPoint[]
+  sommiBearDiamond: ColoredSeriesDataPoint[]
+  sommiBullDiamond: ColoredSeriesDataPoint[]
+}
+
+// Results Interface (Pine v4 series payload)
 export interface MarketVisionBResult {
-  oscillator1: SeriesDataPoint[]
-  oscillator2: SeriesDataPoint[]
-  waveTrend: {
-    wt1: SeriesDataPoint[]
-    wt2: SeriesDataPoint[]
-    delta: SeriesDataPoint[]
-    positiveCrosses: SeriesDataPoint[]
-    negativeCrosses: SeriesDataPoint[]
-    zeroCrosses: SeriesDataPoint[]
-    obPositiveCrosses: SeriesDataPoint[]
-    obNegativeCrosses: SeriesDataPoint[]
-    osPositiveCrosses: SeriesDataPoint[]
-    osNegativeCrosses: SeriesDataPoint[]
-    trendFilter: {
-      positive: boolean[]
-      negative: boolean[]
-    }
-    colors: {
-      wt1Outline: string
-      wt1Area: string
-      wt2Area: string
-      deltaArea: string
-      fillArea: string
-    }
-  }
-  moneyFlow: {
-    fast: SeriesDataPoint[]
-    slow: SeriesDataPoint[]
-    direction: SeriesDataPoint[]
-    moneyFlowValue: number[]
-  }
-  levels: {
-    zero: SeriesDataPoint[]
-    overbought1: SeriesDataPoint[]
-    oversold1: SeriesDataPoint[]
-    overbought2: SeriesDataPoint[]
-    oversold2: SeriesDataPoint[]
-  }
+  series: MarketVisionSignalSeries
+  levels: MarketVisionSeriesLevels
 }
 
 // Default Configuration
 export const DEFAULT_MARKET_VISION_CONFIG: MarketVisionBConfig = {
-  oscillator1: {
-    show: true,
-    type: 'RSI',
-    length: 14,
-    source: 'close',
-    overbought: 70,
-    oversold: 30,
-    color: CONFIG_COLORS[0] || 'hsl(210, 40%, 75%)'  // Soft blue
-  },
-  oscillator2: {
-    show: true,
-    type: 'MFI',
-    length: 14,
-    source: 'hlc3',
-    overbought: 80,
-    oversold: 20,
-    color: CONFIG_COLORS[1] || 'hsl(340, 45%, 78%)'  // Soft pink
-  },
   waveTrend: {
-    show: true,
-    source: 'hlc3',
-    channelLength: 6,
-    averageLength: 3,
-    overbought: 50,
-    oversold: -50,
-    veryOverbought: 70,
-    veryOversold: -70,
-    showZeroCrossing: false,
-    showOBOSDuplication: true,
-    showDelta: false,
-    deltaOutlineOnly: false,
-    color1: CONFIG_COLORS[2] || 'hsl(160, 42%, 72%)',  // Soft green
-    color2: CONFIG_COLORS[3] || 'hsl(45, 55%, 78%)',   // Soft yellow
-    outlineColor: '#FFFFFF',
-    brightness: 100
+    wtShow: true,
+    wtBuyShow: true,
+    wtGoldShow: true,
+    wtSellShow: true,
+    wtDivShow: true,
+    vwapShow: true,
+    wtChannelLen: 9,
+    wtAverageLen: 12,
+    wtMASource: 'hlc3',
+    wtMALen: 3,
+    obLevel: 53,
+    obLevel2: 60,
+    obLevel3: 100,
+    osLevel: -53,
+    osLevel2: -60,
+    osLevel3: -75,
+    wtShowDiv: true,
+    wtShowHiddenDiv: false,
+    showHiddenDiv_nl: true,
+    wtDivOBLevel: 45,
+    wtDivOSLevel: -65,
+    wtDivOBLevel_addshow: true,
+    wtDivOBLevel_add: 15,
+    wtDivOSLevel_add: -40,
   },
-  moneyFlow: {
-    show: true,
-    showFast: true,
-    showSlow: false,
-    type: 'Pine Script RSI+MFI',
-    multiplier: 150,
-    maLength: 60,
-    oscLength: 26,
-    fillArea: false,
-    brightness: 100,
-    yOffset: 2.5,
-    fastColor: CONFIG_COLORS[4] || 'hsl(280, 40%, 75%)',  // Soft purple
-    slowColor: CONFIG_COLORS[5] || 'hsl(15, 50%, 76%)'    // Soft coral
+  mfi: {
+    rsiMFIShow: true,
+    rsiMFIperiod: 60,
+    rsiMFIMultiplier: 150,
+    rsiMFIPosY: 2.5,
   },
-  stochastic: {
-    show: true,
-    type: 'Stochastic - Standard',
-    source: 'Price',
-    showType: 'K and D',
-    kPeriod: 6,
-    dPeriod: 3,
-    smoothing: 3,
-    kColor: CONFIG_COLORS[6] || 'hsl(190, 45%, 72%)',      // Soft cyan
-    dColor: CONFIG_COLORS[7] || 'hsl(120, 38%, 72%)',      // Soft sage
-    rsiLength: 13,
-    stochLength: 13,
-    kSmoothing: 3,
-    dSmoothing: 3,
-    doubleStochK: 21,
-    doubleStochD: 4,
-    doubleStochSmoothing: 10,
-    doubleRSIStochRSI: 14,
-    doubleRSIStochLength: 14,
-    doubleRSIStochKSmoothing: 3,
-    doubleRSIStochDSmoothing: 3,
-    brightness: 100
+  rsi: {
+    rsiShow: true,
+    rsiSRC: 'close',
+    rsiLen: 14,
+    rsiOversold: 30,
+    rsiOverbought: 60,
+    rsiShowDiv: false,
+    rsiShowHiddenDiv: false,
+    rsiDivOBLevel: 60,
+    rsiDivOSLevel: 30,
   },
-  display: {
-    showLevels: true,
-    showBackground: true,
-    showLabels: true,
-    transparency: 80
-  }
+  stoch: {
+    stochShow: true,
+    stochUseLog: true,
+    stochAvg: false,
+    stochSRC: 'close',
+    stochLen: 14,
+    stochRsiLen: 14,
+    stochKSmooth: 3,
+    stochDSmooth: 3,
+    stochShowDiv: false,
+    stochShowHiddenDiv: false,
+  },
+  schaff: {
+    tcLine: false,
+    tcSRC: 'close',
+    tclength: 10,
+    tcfastLength: 23,
+    tcslowLength: 50,
+    tcfactor: 0.5,
+  },
+  sommi: {
+    flag: {
+      sommiFlagShow: false,
+      sommiShowVwap: false,
+      sommiVwapTF: '720',
+      sommiVwapBearLevel: 0,
+      sommiVwapBullLevel: 0,
+      soomiFlagWTBearLevel: 0,
+      soomiFlagWTBullLevel: 0,
+      soomiRSIMFIBearLevel: 0,
+      soomiRSIMFIBullLevel: 0,
+    },
+    diamond: {
+      sommiDiamondShow: false,
+      sommiHTCRes: '60',
+      sommiHTCRes2: '240',
+      soomiDiamondWTBearLevel: 0,
+      soomiDiamondWTBullLevel: 0,
+    },
+  },
+  macdColors: {
+    macdWTColorsShow: false,
+    macdWTColorsTF: '240',
+  },
+  mode: {
+    darkMode: false,
+  },
+  colors: {
+    colorRed: '#ff0000',
+    colorPurple: '#e600e6',
+    colorGreen: '#3fff00',
+    colorOrange: '#e2a400',
+    colorYellow: '#ffe500',
+    colorWhite: '#ffffff',
+    colorPink: '#ff00f0',
+    colorBluelight: '#31c0ff',
+
+    // Pine defaults: #4994ec (WT1) / #1f1559 (WT2). Transparency is applied at render-time.
+    colorWT1Fill: '#4994ec',
+    colorWT2Fill: '#1f1559',
+    vwapColor: 'rgba(255, 255, 255, 0.50)',
+
+    rsiOverbought: '#e13e3e',
+    rsiOversold: '#3ee145',
+    rsiInBetween: '#c33ee1',
+
+    mfiAbove: '#3ee145',
+    mfiBelow: '#ff3d2e',
+
+    wtBearDiv: '#e60000',
+    wtBullDiv: '#00e676',
+
+    stochK: 'rgba(33, 186, 243, 0.30)',
+    stochD: 'rgba(103, 58, 183, 0.10)',
+
+    sommiBear: '#ff00f0',
+    sommiBull: '#31c0ff',
+
+    colormacdWT1a: '#4caf58',
+    colormacdWT1b: '#af4c4c',
+    colormacdWT1c: '#7ee57e',
+    colormacdWT1d: '#ff3535',
+    colormacdWT2a: '#305630',
+    colormacdWT2b: '#310101',
+    colormacdWT2c: '#132213',
+    colormacdWT2d: '#770000',
+  },
 }
 
 // Export as both the default and as marketVisionConfig for backward compatibility
 export const marketVisionConfig = DEFAULT_MARKET_VISION_CONFIG
 
-// Default colors
-export const DEFAULT_MARKET_VISION_COLORS = {
-  oscillator1: CONFIG_COLORS[0] || 'hsl(210, 40%, 75%)',    // Soft blue
-  oscillator2: CONFIG_COLORS[1] || 'hsl(340, 45%, 78%)',    // Soft pink
-  stochasticK: CONFIG_COLORS[6] || 'hsl(190, 45%, 72%)',    // Soft cyan
-  stochasticD: CONFIG_COLORS[7] || 'hsl(120, 38%, 72%)',    // Soft sage
-  waveTrend1: CONFIG_COLORS[2] || 'hsl(160, 42%, 72%)',     // Soft green
-  waveTrend2: CONFIG_COLORS[3] || 'hsl(45, 55%, 78%)',      // Soft yellow
-  waveTrendDelta: CONFIG_COLORS[8] || 'hsl(200, 40%, 75%)', // Soft sky blue
-  moneyFlowFast: CONFIG_COLORS[4] || 'hsl(280, 40%, 75%)',  // Soft purple
-  moneyFlowSlow: CONFIG_COLORS[5] || 'hsl(15, 50%, 76%)'    // Soft coral
-}
+export const DEFAULT_MARKET_VISION_COLORS = DEFAULT_MARKET_VISION_CONFIG.colors

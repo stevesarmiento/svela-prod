@@ -22,7 +22,7 @@ import { cleanTokenName } from "@/lib/logo-overrides"
 import { getUsdPriceFormatOptions } from "@/lib/format-usd"
 import type { Format } from "@/lib/number-flow/lite"
 
-export type IndicatorType = "marketVision" | "bollinger" | "bbwp"
+export type IndicatorType = "marketVision" | "bollinger" | "bbwp" | "rsiDivergences"
 
 interface MarketContext {
   priceUsd?: number | null
@@ -60,10 +60,42 @@ interface BBWPSnapshot {
   lookback: number
 }
 
+interface RsiDivergencesSnapshotSettings {
+  rsiLength: number
+  leftBars: number
+  rightBars: number
+  pairMode: "TV-like" | "Same Bar"
+  tolBars: number
+  priceMode: "High/Low" | "Close"
+  allowEqual: boolean
+  priceEps: number
+  rsiEps: number
+  showRegular: boolean
+  showHidden: boolean
+}
+
+interface RsiDivergencesSnapshotDivergence {
+  type: "bullish" | "bearish" | "h_bullish" | "h_bearish"
+  startTime: number
+  endTime: number
+  priceStart: number
+  priceEnd: number
+  rsiStart: number
+  rsiEnd: number
+}
+
+interface RsiDivergencesSnapshot {
+  rsiCurrent: number | null
+  rsiHistory: Array<number | null>
+  divergences: Array<RsiDivergencesSnapshotDivergence>
+  settings: RsiDivergencesSnapshotSettings
+}
+
 type IndicatorSnapshot =
   | { indicatorType: "marketVision"; snapshot: MarketVisionSnapshot }
   | { indicatorType: "bollinger"; snapshot: BollingerSnapshot }
   | { indicatorType: "bbwp"; snapshot: BBWPSnapshot }
+  | { indicatorType: "rsiDivergences"; snapshot: RsiDivergencesSnapshot }
 
 interface IndicatorExplainDialogBaseProps {
   coinId: string
@@ -94,6 +126,10 @@ export type IndicatorExplainDialogProps =
       snapshot: BollingerSnapshot
     })
   | (IndicatorExplainDialogBaseProps & { indicatorType: "bbwp"; snapshot: BBWPSnapshot })
+  | (IndicatorExplainDialogBaseProps & {
+      indicatorType: "rsiDivergences"
+      snapshot: RsiDivergencesSnapshot
+    })
 
 /** Avoid showing page placeholder copy ("Loading...") when quote metadata is not wired yet. */
 function resolveExplainDisplayName(args: {
@@ -321,7 +357,7 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
           variant="outline"
           size="sm"
           disabled={props.disabled}
-          className={cn("flex items-center gap-1.5 shrink-0 h-8 rounded-lg", props.triggerClassName)}
+          className={cn("flex items-center gap-1.5 shrink-0 h-7 p-2.5 rounded-lg", props.triggerClassName)}
         >
         <IconTextAppend
           className="size-3 fill-primary/60"

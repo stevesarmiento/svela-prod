@@ -1,7 +1,17 @@
 'use client'
 
-import type { OHLCVDataPoint, SeriesDataPoint, OscillatorConfig } from './market-vision-config'
+import type { OHLCVDataPoint, SeriesDataPoint } from './market-vision-config'
 import { rsi, mfi, ultimateOscillator, williamsR, sma, linearRegression, ema } from './technical-indicators'
+
+export interface OscillatorConfig {
+  show: boolean
+  type: 'RSI' | 'MFI' | 'Ultimate Oscillator' | 'Williams %R' | 'Double RSI'
+  length: number
+  source: 'close' | 'open' | 'high' | 'low' | 'hlc3'
+  overbought: number
+  oversold: number
+  color: string
+}
 
 // Local stochastic implementation for oscillators
 function stochastic(source: number[], highs: number[], lows: number[], period: number): number[] {

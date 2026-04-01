@@ -8,10 +8,12 @@ import { SectionHeader } from "../_components/section-header"
 import { MarketVisionChart } from './marketvision-chart'
 import { BollingerBandsChart } from './bollinger-bands-chart'
 import { BBWPChart } from './bbwp-chart'
+import { RsiDivergencesChart } from './rsi-divergences-chart'
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
 import { marketVisionConfig } from '@/hooks/market-vision/market-vision-config'
 import { useMarketVisionB, calculateBollingerBands, calculateBBWP } from '@/hooks/market-vision'
+import { calculateRsiDivergences, type RsiDivergenceType } from '@/hooks/market-vision/rsi-divergences'
 import { getAlignedPriceFromChartPoints } from '@/lib/aligned-price'
 import { getTokenLogoURL } from '@/lib/logo-overrides'
 import { Card, CardContent, CardHeader } from '@v1/ui/card'
@@ -67,6 +69,14 @@ function labelBbwp(value: number | null): { label: string; tone: IndicatorChipTo
   if (value <= 20) return { label: `BBWP ${value.toFixed(0)} Compression`, tone: 'neutral' }
   if (value >= 80) return { label: `BBWP ${value.toFixed(0)} Expansion`, tone: 'negative' }
   return { label: `BBWP ${value.toFixed(0)} Normal`, tone: 'neutral' }
+}
+
+function labelRsiDivergence(type: RsiDivergenceType | null): { label: string; tone: IndicatorChipTone } {
+  if (!type) return { label: 'Divergence —', tone: 'neutral' }
+  if (type === 'bullish') return { label: 'Divergence Bull', tone: 'positive' }
+  if (type === 'bearish') return { label: 'Divergence Bear', tone: 'negative' }
+  if (type === 'h_bullish') return { label: 'Divergence H_Bull', tone: 'positive' }
+  return { label: 'Divergence H_Bear', tone: 'negative' }
 }
 
 
@@ -167,10 +177,10 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
   }, [ohlcData, volumeData])
 
   const marketVisionCalculations = useMarketVisionB(indicatorData, marketVisionConfig)
-  const marketVisionRsiValue = lastFiniteValue(marketVisionCalculations.oscillator1)
-  const marketVisionMoneyFlowValue = lastFiniteValue(marketVisionCalculations.moneyFlow.fast)
-  const marketVisionWt1 = lastFiniteValue(marketVisionCalculations.waveTrend.wt1)
-  const marketVisionWt2 = lastFiniteValue(marketVisionCalculations.waveTrend.wt2)
+  const marketVisionRsiValue = lastFiniteValue(marketVisionCalculations.series.rsi)
+  const marketVisionMoneyFlowValue = lastFiniteValue(marketVisionCalculations.series.rsiMfi)
+  const marketVisionWt1 = lastFiniteValue(marketVisionCalculations.series.wt1)
+  const marketVisionWt2 = lastFiniteValue(marketVisionCalculations.series.wt2)
   const marketVisionBias: { label: string; tone: IndicatorChipTone } = React.useMemo(() => {
     if (marketVisionWt1 == null || marketVisionWt2 == null) return { label: 'WaveTrend —', tone: 'neutral' }
     if (marketVisionWt1 > marketVisionWt2) return { label: 'WaveTrend Bullish bias', tone: 'positive' }
@@ -218,6 +228,16 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
     return calculateBBWP(indicatorData, bbwpConfig)
   }, [indicatorData, bbwpConfig])
   const bbwpValue = lastFiniteValue(bbwpResult?.bbwp)
+
+  const rsiDivergencesResult = React.useMemo(() => {
+    if (indicatorData.length === 0) return null
+    return calculateRsiDivergences(indicatorData)
+  }, [indicatorData])
+  const rsiDivergencesRsiValue = lastFiniteValue(rsiDivergencesResult?.rsiSeries)
+  const rsiDivergencesLatestType: RsiDivergenceType | null =
+    rsiDivergencesResult?.divergences.length
+      ? (rsiDivergencesResult.divergences[rsiDivergencesResult.divergences.length - 1]?.type ?? null)
+      : null
 
   const INDICATOR_EXPLAIN_BARS = 60
   const indicatorExplainTail = React.useMemo(
@@ -274,6 +294,21 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
     )
   }, [bbwpValue])
 
+  const rsiDivergencesExplainBadges = React.useMemo(() => {
+    const rsiChip = labelRsi(rsiDivergencesRsiValue)
+    const divChip = labelRsiDivergence(rsiDivergencesLatestType)
+    return (
+      <>
+        <Badge variant="outline" className={cn("h-5 px-2 text-[10px] font-normal", getChipClasses(rsiChip.tone))}>
+          {rsiChip.label}
+        </Badge>
+        <Badge variant="outline" className={cn("h-5 px-2 text-[10px] font-normal", getChipClasses(divChip.tone))}>
+          {divChip.label}
+        </Badge>
+      </>
+    )
+  }, [rsiDivergencesRsiValue, rsiDivergencesLatestType])
+
   const EXPLAIN_DIALOG_CHART_HEIGHT = 220
   const marketVisionExplainChart = React.useMemo(
     () =>
@@ -325,6 +360,22 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
             />
           ),
     [indicatorData, bbwpConfig, indicatorWindowDays],
+  )
+
+  const rsiDivergencesExplainChart = React.useMemo(
+    () =>
+      indicatorData.length === 0
+        ? null
+        : (
+            <RsiDivergencesChart
+              data={indicatorData}
+              height={EXPLAIN_DIALOG_CHART_HEIGHT}
+              showTimeAxis={true}
+              initialWindowDays={indicatorWindowDays}
+              showLabels={true}
+            />
+          ),
+    [indicatorData, indicatorWindowDays],
   )
 
   const explainTokenLogoUrl = React.useMemo(
@@ -414,13 +465,13 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
                 }}
                 snapshot={{
                   rsiCurrent: marketVisionRsiValue,
-                  rsiHistory: marketVisionCalculations.oscillator1
+                  rsiHistory: marketVisionCalculations.series.rsi
                     .slice(-INDICATOR_EXPLAIN_BARS)
                     .map((p) => (typeof p.value === "number" && Number.isFinite(p.value) ? p.value : null)),
                   wt1Current: marketVisionWt1,
                   wt2Current: marketVisionWt2,
                   moneyFlowCurrent: marketVisionMoneyFlowValue,
-                  moneyFlowHistory: marketVisionCalculations.moneyFlow.fast
+                  moneyFlowHistory: marketVisionCalculations.series.rsiMfi
                     .slice(-INDICATOR_EXPLAIN_BARS)
                     .map((p) => (typeof p.value === "number" && Number.isFinite(p.value) ? p.value : null)),
                 }}

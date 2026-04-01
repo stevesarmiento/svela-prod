@@ -46,6 +46,39 @@ const BBWPSnapshotSchema = z.object({
   lookback: z.number(),
 })
 
+const RsiDivergenceTypeSchema = z.enum(["bullish", "bearish", "h_bullish", "h_bearish"])
+
+const RsiDivergencesSnapshotSettingsSchema = z.object({
+  rsiLength: z.number(),
+  leftBars: z.number(),
+  rightBars: z.number(),
+  pairMode: z.enum(["TV-like", "Same Bar"]),
+  tolBars: z.number(),
+  priceMode: z.enum(["High/Low", "Close"]),
+  allowEqual: z.boolean(),
+  priceEps: z.number(),
+  rsiEps: z.number(),
+  showRegular: z.boolean(),
+  showHidden: z.boolean(),
+})
+
+const RsiDivergencesSnapshotDivergenceSchema = z.object({
+  type: RsiDivergenceTypeSchema,
+  startTime: z.number(),
+  endTime: z.number(),
+  priceStart: z.number(),
+  priceEnd: z.number(),
+  rsiStart: z.number(),
+  rsiEnd: z.number(),
+})
+
+const RsiDivergencesSnapshotSchema = z.object({
+  rsiCurrent: z.number().nullable(),
+  rsiHistory: z.array(z.number().nullable()).max(180),
+  divergences: z.array(RsiDivergencesSnapshotDivergenceSchema).max(96),
+  settings: RsiDivergencesSnapshotSettingsSchema,
+})
+
 const RequestSchema = z.discriminatedUnion("indicatorType", [
   z.object({
     indicatorType: z.literal("marketVision"),
@@ -67,6 +100,13 @@ const RequestSchema = z.discriminatedUnion("indicatorType", [
     timeframe: z.string(),
     marketContext: MarketContextSchema.default({}),
     snapshot: BBWPSnapshotSchema,
+  }),
+  z.object({
+    indicatorType: z.literal("rsiDivergences"),
+    token: TokenSchema,
+    timeframe: z.string(),
+    marketContext: MarketContextSchema.default({}),
+    snapshot: RsiDivergencesSnapshotSchema,
   }),
 ])
 
@@ -119,6 +159,21 @@ function forPrompt(validated: IndicatorExplainRequest): IndicatorExplainRequest 
         indicatorHistory: trimSeries(validated.snapshot.indicatorHistory) ?? validated.snapshot.indicatorHistory,
         upperHistory: trimSeries(validated.snapshot.upperHistory) ?? validated.snapshot.upperHistory,
         lowerHistory: trimSeries(validated.snapshot.lowerHistory) ?? validated.snapshot.lowerHistory,
+      },
+    }
+  }
+
+  if (validated.indicatorType === "rsiDivergences") {
+    return {
+      ...validated,
+      marketContext: nextMc,
+      snapshot: {
+        ...validated.snapshot,
+        rsiHistory: trimSeries(validated.snapshot.rsiHistory) ?? validated.snapshot.rsiHistory,
+        divergences:
+          validated.snapshot.divergences.length > 24
+            ? [...validated.snapshot.divergences.slice(-24)]
+            : [...validated.snapshot.divergences],
       },
     }
   }
@@ -248,6 +303,33 @@ function buildLast7DaysFocus(validated: IndicatorExplainRequest): Record<string,
       upperCurrent: validated.snapshot.upperCurrent,
       lowerCurrent: validated.snapshot.lowerCurrent,
       basisCurrent: validated.snapshot.basisCurrent,
+    }
+  }
+
+  if (validated.indicatorType === "rsiDivergences") {
+    const ind = validated.snapshot.rsiHistory.slice(start)
+    const { first: i0, last: i1 } = lastFiniteInRange(ind)
+    const cutoffTime = wTimes?.length ? (wTimes[0] ?? null) : null
+    const divs = validated.snapshot.divergences
+    const divs7d =
+      cutoffTime != null ? divs.filter((d) => d.endTime >= cutoffTime) : divs
+    const counts = divs7d.reduce(
+      (acc, d) => {
+        acc[d.type] = (acc[d.type] ?? 0) + 1
+        return acc
+      },
+      {} as Record<string, number>,
+    )
+    const latest = divs7d.length ? divs7d[divs7d.length - 1] : divs.length ? divs[divs.length - 1] : null
+
+    return {
+      ...base,
+      rsiHistory7d: cap(ind),
+      rsiDeltaFirstToLastFinite7d: i0 != null && i1 != null ? Number((i1 - i0).toFixed(2)) : null,
+      rsiCurrent: validated.snapshot.rsiCurrent,
+      divergences7dCounts: counts,
+      latestDivergence7d: latest,
+      settings: validated.snapshot.settings,
     }
   }
 
@@ -391,9 +473,34 @@ ${buildSharedSections(p)}
 `.trim()
 }
 
+function buildRsiDivergencesPrompt(validated: IndicatorExplainRequest & { indicatorType: "rsiDivergences" }): string {
+  const p = buildBasePromptParts(validated)
+  return `
+You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **RSI divergences** indicator card.
+
+${buildSharedSections(p)}
+
+**Indicator mechanics (how it works)**
+- **RSI (0–100)**: momentum oscillator; rising RSI = strengthening momentum; falling RSI = weakening momentum.
+- This indicator finds **pivot highs/lows** on both **price** and **RSI**, pairs them (TV-like pairing with a ±bar tolerance), then flags divergence:
+  - **Bull (regular)**: price makes a **lower low** while RSI makes a **higher low**.
+  - **Bear (regular)**: price makes a **higher high** while RSI makes a **lower high**.
+  - **H_Bull (hidden)**: price makes a **higher low** while RSI makes a **lower low**.
+  - **H_Bear (hidden)**: price makes a **lower high** while RSI makes a **higher high**.
+
+**Instructions**
+- Output **Markdown** only. Be concise and trader-focused.
+- Anchor the analysis on the last ~${FOCUS_DAYS} days window. Mention the **latest divergence(s)** in that window (type + direction) and whether RSI is near **30/70**.
+- If there are no divergences in the 7d window, say so and describe the RSI trend vs price trend instead.
+- Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
+- Do not dump the JSON back; interpret it.
+`.trim()
+}
+
 function buildAnalysisPrompt(validated: IndicatorExplainRequest): string {
   if (validated.indicatorType === "marketVision") return buildMarketVisionPrompt(validated)
   if (validated.indicatorType === "bollinger") return buildBollingerPrompt(validated)
+  if (validated.indicatorType === "rsiDivergences") return buildRsiDivergencesPrompt(validated)
   return buildBBWPPrompt(validated)
 }
 

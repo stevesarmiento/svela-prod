@@ -25,6 +25,7 @@ import { formatUsdPrice } from "@/lib/format-usd"
 import { MiniPriceChart } from './mini-price-chart'
 import type { Time } from 'lightweight-charts'
 import { getAlignedPriceFromChartPoints } from '@/lib/aligned-price'
+import type { MarketVisionBResult } from '@/hooks/market-vision'
 
 interface MarketData {
   quote?: {
@@ -56,16 +57,6 @@ interface BBData {
   lower: IndicatorPoint[]
 }
 
-interface MarketVisionData {
-  moneyFlow: {
-    fast: IndicatorPoint[]
-  }
-  waveTrend: {
-    wt1: IndicatorPoint[]
-    wt2: IndicatorPoint[]
-  }
-}
-
 interface OpenInterestData {
   data?: Array<{
     close: number
@@ -95,7 +86,7 @@ interface MarketMetricsSidebarProps {
   chartData: ChartDataPoint[]
   volumeData: VolumeDataPoint[]
   bbData: BBData
-  marketVisionData: MarketVisionData
+  marketVisionData: MarketVisionBResult
   openInterestData: OpenInterestData
   liquidationData: LiquidationData
   takerBuySellData: TakerBuySellData
@@ -186,12 +177,12 @@ export function MarketMetricsSidebar({
     const latestBBLower = bbData.lower?.length > 0 ? bbData.lower[bbData.lower.length - 1] : null
     
     // Money flow and wave trend
-    const latestMoneyFlow = marketVisionData.moneyFlow.fast?.length > 0 ? 
-      marketVisionData.moneyFlow.fast[marketVisionData.moneyFlow.fast.length - 1] : null
-    const latestWT1 = marketVisionData.waveTrend.wt1?.length > 0 ? 
-      marketVisionData.waveTrend.wt1[marketVisionData.waveTrend.wt1.length - 1] : null
-    const latestWT2 = marketVisionData.waveTrend.wt2?.length > 0 ? 
-      marketVisionData.waveTrend.wt2[marketVisionData.waveTrend.wt2.length - 1] : null
+    const latestMoneyFlow = marketVisionData.series.rsiMfi?.length > 0 ? 
+      marketVisionData.series.rsiMfi[marketVisionData.series.rsiMfi.length - 1] : null
+    const latestWT1 = marketVisionData.series.wt1?.length > 0 ? 
+      marketVisionData.series.wt1[marketVisionData.series.wt1.length - 1] : null
+    const latestWT2 = marketVisionData.series.wt2?.length > 0 ? 
+      marketVisionData.series.wt2[marketVisionData.series.wt2.length - 1] : null
     
     // Open Interest trend
     const latestOI = openInterestData?.data && openInterestData.data.length > 0 ? 

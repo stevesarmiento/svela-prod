@@ -244,14 +244,13 @@ export function useAnalysisData({
       basis: analysisBBData.basis[analysisBBData.basis.length - 1],
     };
 
-    const latestWT = marketVisionData.waveTrend;
     const latestWTValues = {
-      wt1: latestWT.wt1[latestWT.wt1.length - 1]?.value || 0,
-      wt2: latestWT.wt2[latestWT.wt2.length - 1]?.value || 0,
+      wt1: marketVisionData.series.wt1[marketVisionData.series.wt1.length - 1]?.value || 0,
+      wt2: marketVisionData.series.wt2[marketVisionData.series.wt2.length - 1]?.value || 0,
     };
 
-    const latestMF = marketVisionData.moneyFlow;
-    const latestMFValue = latestMF.fast[latestMF.fast.length - 1]?.value || 0;
+    const latestMFValue =
+      marketVisionData.series.rsiMfi[marketVisionData.series.rsiMfi.length - 1]?.value || 0;
 
     // Calculate historical trends
     const bollingerHistory = analysisBBData.indicator
