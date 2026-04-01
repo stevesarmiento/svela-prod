@@ -69,7 +69,7 @@ export function WatchlistTableRow({
       {row.getVisibleCells().slice(2, -1).map(cell => ( // Exclude last cell (actions)
         <div
           key={cell.id}
-          className="flex min-w-0 items-center justify-start"
+          className="flex min-w-0 items-center justify-end"
         >
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
         </div>

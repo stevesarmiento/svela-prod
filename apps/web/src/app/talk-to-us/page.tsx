@@ -1,7 +1,13 @@
 import { CalEmbed } from "@/components/cal-embed";
+import type { Metadata } from "next";
+import { createWebPageMetadata } from "@/lib/metadata";
 
-export const metadata = {
-  title: "Talk to us",
+export const metadata: Metadata = {
+  ...createWebPageMetadata({
+    title: "Talk to us",
+    pathname: "/talk-to-us",
+    robots: { index: false, follow: false },
+  }),
 };
 
 export default function Page() {

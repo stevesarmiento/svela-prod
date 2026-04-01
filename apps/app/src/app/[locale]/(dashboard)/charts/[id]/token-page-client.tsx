@@ -35,6 +35,54 @@ function toEpochSeconds(time: unknown): number | null {
   return null
 }
 
+interface OhlcvBar {
+  time: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
+
+function bucketizeOhlcv(points: ReadonlyArray<OhlcvBar>, bucketSeconds: number): OhlcvBar[] {
+  if (!points.length) return []
+
+  const out: Array<OhlcvBar> = []
+  let currentBucketStart: number | null = null
+  let current: OhlcvBar | null = null
+
+  for (const p of points) {
+    if (!Number.isFinite(p.time)) continue
+    const bucketStart = Math.floor(p.time / bucketSeconds) * bucketSeconds
+
+    if (currentBucketStart === bucketStart && current) {
+      current.high = Math.max(current.high, p.high)
+      current.low = Math.min(current.low, p.low)
+      current.close = p.close
+      current.volume += p.volume
+      continue
+    }
+
+    if (current) out.push(current)
+    currentBucketStart = bucketStart
+    current = {
+      time: bucketStart,
+      open: p.open,
+      high: p.high,
+      low: p.low,
+      close: p.close,
+      volume: p.volume,
+    }
+  }
+
+  if (current) out.push(current)
+  return out
+}
+
+const SECONDS_PER_HOUR = 60 * 60
+const SECONDS_PER_DAY = 24 * 60 * 60
+const EXPLAIN_MAX_BARS = 180
+
 function getChipClasses(tone: IndicatorChipTone): string {
   if (tone === 'positive') return 'border-emerald-500/15 bg-emerald-500/10 text-emerald-200'
   if (tone === 'negative') return 'border-rose-500/15 bg-rose-500/10 text-rose-200'
@@ -239,19 +287,60 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
       ? (rsiDivergencesResult.divergences[rsiDivergencesResult.divergences.length - 1]?.type ?? null)
       : null
 
-  const INDICATOR_EXPLAIN_BARS = 60
-  const indicatorExplainTail = React.useMemo(
-    () => indicatorData.slice(-INDICATOR_EXPLAIN_BARS),
-    [indicatorData],
-  )
+  const explainSpec = React.useMemo(() => {
+    // TimeScaleSelector labels:
+    // - "30d" => "1Q"
+    // - "max" => "1Y"
+    // - "2y"  => "Max"
+    if (deferredTimeScale === "30d") return { bucketSeconds: SECONDS_PER_HOUR, targetBars: 7 * 24 }
+    if (deferredTimeScale === "max") return { bucketSeconds: SECONDS_PER_DAY, targetBars: 30 }
+    if (deferredTimeScale === "2y") return { bucketSeconds: SECONDS_PER_DAY, targetBars: 90 }
+    return { bucketSeconds: SECONDS_PER_DAY, targetBars: 30 }
+  }, [deferredTimeScale])
+
+  const explainOhlcv = React.useMemo(() => {
+    const bucketed = bucketizeOhlcv(indicatorData as ReadonlyArray<OhlcvBar>, explainSpec.bucketSeconds)
+    const bars = Math.min(EXPLAIN_MAX_BARS, explainSpec.targetBars)
+    return bucketed.slice(-bars)
+  }, [indicatorData, explainSpec.bucketSeconds, explainSpec.targetBars])
+
   const indicatorExplainCloseHistory = React.useMemo(
-    () => indicatorExplainTail.map((b) => b.close),
-    [indicatorExplainTail],
+    () => explainOhlcv.map((b) => b.close),
+    [explainOhlcv],
   )
   const indicatorExplainCloseTimesUtc = React.useMemo(
-    () => indicatorExplainTail.map((b) => b.time),
-    [indicatorExplainTail],
+    () => explainOhlcv.map((b) => b.time),
+    [explainOhlcv],
   )
+
+  // Explain-payload indicator computations — aligned to the candles we send to /api/analyze-indicator.
+  const marketVisionExplainCalculations = useMarketVisionB(explainOhlcv, marketVisionConfig)
+  const marketVisionExplainRsiValue = lastFiniteValue(marketVisionExplainCalculations.series.rsi)
+  const marketVisionExplainMoneyFlowValue = lastFiniteValue(marketVisionExplainCalculations.series.rsiMfi)
+  const marketVisionExplainWt1 = lastFiniteValue(marketVisionExplainCalculations.series.wt1)
+  const marketVisionExplainWt2 = lastFiniteValue(marketVisionExplainCalculations.series.wt2)
+
+  const bollingerExplainResult = React.useMemo(() => {
+    if (explainOhlcv.length === 0) return null
+    return calculateBollingerBands(explainOhlcv, bollingerConfig)
+  }, [explainOhlcv, bollingerConfig])
+
+  const bbExplainIndicator = lastFiniteValue(bollingerExplainResult?.indicator)
+  const bbExplainUpper = lastFiniteValue(bollingerExplainResult?.upper)
+  const bbExplainLower = lastFiniteValue(bollingerExplainResult?.lower)
+  const bbExplainBasis = lastFiniteValue(bollingerExplainResult?.basis)
+
+  const bbwpExplainResult = React.useMemo(() => {
+    if (explainOhlcv.length === 0) return null
+    return calculateBBWP(explainOhlcv, bbwpConfig)
+  }, [explainOhlcv, bbwpConfig])
+  const bbwpExplainValue = lastFiniteValue(bbwpExplainResult?.bbwp)
+
+  const rsiDivergencesExplainResult = React.useMemo(() => {
+    if (explainOhlcv.length === 0) return null
+    return calculateRsiDivergences(explainOhlcv)
+  }, [explainOhlcv])
+  const rsiDivergencesExplainRsiValue = lastFiniteValue(rsiDivergencesExplainResult?.rsiSeries)
 
   const marketVisionExplainBadges = React.useMemo(() => {
     const rsiChip = labelRsi(marketVisionRsiValue)
@@ -464,15 +553,13 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
                   closeTimesUtc: indicatorExplainCloseTimesUtc,
                 }}
                 snapshot={{
-                  rsiCurrent: marketVisionRsiValue,
-                  rsiHistory: marketVisionCalculations.series.rsi
-                    .slice(-INDICATOR_EXPLAIN_BARS)
+                  rsiCurrent: marketVisionExplainRsiValue,
+                  rsiHistory: marketVisionExplainCalculations.series.rsi
                     .map((p) => (typeof p.value === "number" && Number.isFinite(p.value) ? p.value : null)),
-                  wt1Current: marketVisionWt1,
-                  wt2Current: marketVisionWt2,
-                  moneyFlowCurrent: marketVisionMoneyFlowValue,
-                  moneyFlowHistory: marketVisionCalculations.series.rsiMfi
-                    .slice(-INDICATOR_EXPLAIN_BARS)
+                  wt1Current: marketVisionExplainWt1,
+                  wt2Current: marketVisionExplainWt2,
+                  moneyFlowCurrent: marketVisionExplainMoneyFlowValue,
+                  moneyFlowHistory: marketVisionExplainCalculations.series.rsiMfi
                     .map((p) => (typeof p.value === "number" && Number.isFinite(p.value) ? p.value : null)),
                 }}
                 disabled={showPending || isLoading}
@@ -531,18 +618,15 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
                   closeTimesUtc: indicatorExplainCloseTimesUtc,
                 }}
                 snapshot={{
-                  indicatorCurrent: bbIndicator,
-                  upperCurrent: bbUpper,
-                  lowerCurrent: bbLower,
-                  basisCurrent: lastFiniteValue(bollingerResult?.basis),
-                  indicatorHistory: (bollingerResult?.indicator ?? [])
-                    .slice(-INDICATOR_EXPLAIN_BARS)
+                  indicatorCurrent: bbExplainIndicator,
+                  upperCurrent: bbExplainUpper,
+                  lowerCurrent: bbExplainLower,
+                  basisCurrent: bbExplainBasis,
+                  indicatorHistory: (bollingerExplainResult?.indicator ?? [])
                     .map((p) => (typeof p.value === "number" && Number.isFinite(p.value) ? p.value : null)),
-                  upperHistory: (bollingerResult?.upper ?? [])
-                    .slice(-INDICATOR_EXPLAIN_BARS)
+                  upperHistory: (bollingerExplainResult?.upper ?? [])
                     .map((p) => (typeof p.value === "number" && Number.isFinite(p.value) ? p.value : null)),
-                  lowerHistory: (bollingerResult?.lower ?? [])
-                    .slice(-INDICATOR_EXPLAIN_BARS)
+                  lowerHistory: (bollingerExplainResult?.lower ?? [])
                     .map((p) => (typeof p.value === "number" && Number.isFinite(p.value) ? p.value : null)),
                 }}
                 disabled={showPending || isLoading}
@@ -601,9 +685,8 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
                   closeTimesUtc: indicatorExplainCloseTimesUtc,
                 }}
                 snapshot={{
-                  bbwpCurrent: bbwpValue,
-                  bbwpHistory: (bbwpResult?.bbwp ?? [])
-                    .slice(-INDICATOR_EXPLAIN_BARS)
+                  bbwpCurrent: bbwpExplainValue,
+                  bbwpHistory: (bbwpExplainResult?.bbwp ?? [])
                     .map((p) => (typeof p.value === "number" && Number.isFinite(p.value) ? p.value : null)),
                   lookback: bbwpConfig.lookback,
                 }}

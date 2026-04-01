@@ -4,6 +4,7 @@ import { preloadQuery } from "convex/nextjs"
 import { getAuthToken } from "@/lib/auth"
 import { api } from "../../../../convex/_generated/api"
 import { DashboardProviders } from "./dashboard-providers"
+import { Suspense } from "react"
 
 export default async function DashboardLayout({
   children,
@@ -19,7 +20,9 @@ export default async function DashboardLayout({
     <DashboardProviders preloadedWatchlist={preloadedWatchlist}>
       <div className="relative w-screen font-diatype">
         <div className="flex flex-grow flex-col max-w-7xl mx-auto">
-          <TopNav />
+          <Suspense fallback={null}>
+            <TopNav />
+          </Suspense>
           <main className="flex flex-grow w-full pb-20">{children}</main>
           <BottomNav />
         </div>

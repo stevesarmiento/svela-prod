@@ -9,9 +9,8 @@ export function TimeScaleSelector({ activeTimeScale, setActiveTimeScale }: TimeS
   const scales = [
     { value: "1d", label: "1D" }, // 24h (48 hours of hourly data)
     { value: "7d", label: "1W" }, // 7 days
-    { value: "30d", label: "1Q" }, // 30 days focus with 90 days context
+    { value: "30d", label: "1M" }, // 90 days
     { value: "max", label: "1Y" }, // 1 year of data
-    { value: "2y", label: "Max" }, // Maximum data possible
   ]
 
   return (

@@ -6,6 +6,7 @@ import type { SortingState } from "@tanstack/react-table"
 import { Spinner } from "@v1/ui/spinner"
 import { IconSafariFill } from "symbols-react"
 
+import { WatchlistAutoRefreshIndicator } from "../../watchlist/_components/watchlist-auto-refresh-indicator"
 import { WatchlistFilters } from "../../watchlist/_components/watchlist-filters"
 import { WatchlistEmptyState } from "../../watchlist/_components/watchlist-empty-states"
 import { WatchlistTableSection } from "../../watchlist/_components/watchlist-table-section"
@@ -85,11 +86,6 @@ export function ScreenerPageView() {
             watchlistGroupOptions={watchlistGroupOptions}
             selectedCoins={selectedCoins}
             totalCoins={filteredCoins.length}
-            autoRefreshStatus={{
-              lastUpdatedAtMs,
-              refreshIntervalMs: SCREENER_REFRESH_INTERVAL_MS,
-              isRefreshing: quotesQuery.isFetching,
-            }}
             onSearchTextChange={(value) => setFilters(prev => ({ ...prev, searchText: value }))}
             onPriceRangeChange={(range) => setFilters(prev => ({ ...prev, priceRange: range }))}
             onMarketCapRangeChange={(range) => setFilters(prev => ({ ...prev, marketCapRange: range }))}
@@ -105,6 +101,13 @@ export function ScreenerPageView() {
             align="left"
           />
         </div>
+        <WatchlistAutoRefreshIndicator
+          status={{
+            lastUpdatedAtMs,
+            refreshIntervalMs: SCREENER_REFRESH_INTERVAL_MS,
+            isRefreshing: quotesQuery.isFetching,
+          }}
+        />
       </div>
 
       <div className="space-y-4">

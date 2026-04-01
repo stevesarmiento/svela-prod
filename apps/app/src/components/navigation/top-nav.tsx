@@ -65,8 +65,6 @@ function getRouteGreeting(pathname: string): string {
   
   const routeGreetings: Record<string, string> = {
     '/screener': 'Market Screener',
-    // Back-compat: `/charts` now redirects to `/screener`.
-    '/charts': 'Market Screener',
   };
 
   // Check for exact matches first
@@ -106,8 +104,6 @@ function getStaticRouteGreeting(pathname: string): string | null {
 
   const routeGreetings: Record<string, string> = {
     '/screener': 'Market Screener',
-    // Back-compat: `/charts` now redirects to `/screener`.
-    '/charts': 'Market Screener',
   };
 
   if (routeGreetings[cleanPath]) {

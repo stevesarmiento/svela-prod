@@ -7,6 +7,22 @@ const nextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   transpilePackages: [],
+  async redirects() {
+    return [
+      // Back-compat: `/:locale/charts` used to be the screener entry point.
+      {
+        source: "/:locale/charts",
+        destination: "/:locale/screener",
+        permanent: true,
+      },
+      // Back-compat: non-locale charts entry.
+      {
+        source: "/charts",
+        destination: "/screener",
+        permanent: true,
+      },
+    ];
+  },
   experimental: {
     //optimizeCss: isProd,
     optimizePackageImports: isProd ? ["@v1/ui"] : [],

@@ -113,7 +113,7 @@ export function ComparisonCard({
   }
 
   return (
-    <Link href={buildWatchlistUrl(`/charts?compare=${coins.map(c => c.coingeckoId).join(',')}`, selectedGroupSlug)} className="block">
+    <Link href={buildWatchlistUrl("/watchlist?wt=chart", selectedGroupSlug)} className="block">
       <Card className="relative w-[400px] bg-gradient-to-b from-zinc-800/50 hover:from-zinc-800/80 to-zinc-800/20 hover:to-zinc-800/50 h-auto mx-auto hover:shadow-lg shadow-md transition-colors duration-200 ease-in-out cursor-pointer overflow-hidden rounded-[20px] border-zinc-800/50">
         <div
           className="absolute inset-0 z-0 size-full opacity-40 dark:opacity-30"
