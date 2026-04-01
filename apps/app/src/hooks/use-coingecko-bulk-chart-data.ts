@@ -12,7 +12,7 @@ import { runPromise } from "@/lib/effect/runtime-coingecko"
 const TIME_SCALE_DAYS = {
   '1d': '1',
   '7d': '7',
-  '30d': '30', 
+  '30d': '30',
   'max': '365',
   '2y': '730'
 }

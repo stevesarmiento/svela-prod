@@ -195,22 +195,34 @@ function pctChange(a: number, b: number): number | null {
 }
 
 const SECONDS_PER_DAY = 86400
-const FOCUS_DAYS = 7
-/** Max bars we attach in the 7d focus JSON (keeps prompt size sane for intraday series). */
-const MAX_BARS_IN_7D_FOCUS = 56
+const DEFAULT_FOCUS_DAYS = 7
+/** Max bars we attach in the focus JSON (keeps prompt size sane for intraday series). */
+const MAX_BARS_IN_FOCUS = 56
+
+function resolveFocusDays(timeframe: string): number {
+  // TimeScaleSelector values:
+  // - 1Q  => "30d"
+  // - 1Y  => "max"
+  // - Max => "2y"
+  if (timeframe === "30d") return 7
+  if (timeframe === "max") return 30
+  if (timeframe === "2y") return 90
+  return DEFAULT_FOCUS_DAYS
+}
 
 function startIndexLastCalendarDays(
   timesUtc: readonly number[] | undefined,
   closesLength: number,
+  focusDays: number,
 ): { start: number; mode: "calendar_utc" | "last_n_bars" } {
   if (!timesUtc || timesUtc.length !== closesLength || closesLength < 1) {
-    return { start: Math.max(0, closesLength - FOCUS_DAYS), mode: "last_n_bars" }
+    return { start: Math.max(0, closesLength - focusDays), mode: "last_n_bars" }
   }
   const latest = timesUtc[closesLength - 1]
   if (latest === undefined || !Number.isFinite(latest)) {
-    return { start: Math.max(0, closesLength - FOCUS_DAYS), mode: "last_n_bars" }
+    return { start: Math.max(0, closesLength - focusDays), mode: "last_n_bars" }
   }
-  const cutoff = latest - FOCUS_DAYS * SECONDS_PER_DAY
+  const cutoff = latest - focusDays * SECONDS_PER_DAY
   for (let i = 0; i < closesLength; i++) {
     const t = timesUtc[i]
     if (t !== undefined && t >= cutoff) return { start: i, mode: "calendar_utc" }
@@ -230,12 +242,16 @@ function lastFiniteInRange(values: ReadonlyArray<number | null>): { first: numbe
   return { first, last }
 }
 
-/** Compact 7-day slice for prompt: primary analysis window. */
-function buildLast7DaysFocus(validated: IndicatorExplainRequest): Record<string, unknown> | null {
+/** Compact focus slice for prompt: primary analysis window. */
+function buildFocus(validated: IndicatorExplainRequest, focusDays: number): Record<string, unknown> | null {
   const closes = validated.marketContext?.closeHistory
   if (!closes?.length) return null
 
-  const { start, mode } = startIndexLastCalendarDays(validated.marketContext?.closeTimesUtc, closes.length)
+  const { start, mode } = startIndexLastCalendarDays(
+    validated.marketContext?.closeTimesUtc,
+    closes.length,
+    focusDays,
+  )
   const wCloses = closes.slice(start)
   const wTimes =
     validated.marketContext?.closeTimesUtc &&
@@ -248,25 +264,41 @@ function buildLast7DaysFocus(validated: IndicatorExplainRequest): Record<string,
   const closePct =
     c0 !== undefined && c1 !== undefined ? pctChange(c0, c1) : null
 
-  const cap = <T,>(arr: readonly T[]): T[] => {
-    if (arr.length <= MAX_BARS_IN_7D_FOCUS) return [...arr]
-    return [...arr.slice(-MAX_BARS_IN_7D_FOCUS)]
+  function sampleEvenly<T>(arr: readonly T[], max: number): { sampled: T[]; sampling: null | { mode: "even"; originalBars: number; keptBars: number } } {
+    if (arr.length <= max) return { sampled: [...arr], sampling: null }
+    if (max <= 1) return { sampled: [arr[arr.length - 1]!], sampling: { mode: "even", originalBars: arr.length, keptBars: 1 } }
+
+    const out: T[] = []
+    const last = arr.length - 1
+    for (let i = 0; i < max; i++) {
+      const idx = Math.round((i * last) / (max - 1))
+      out.push(arr[idx]!)
+    }
+    return { sampled: out, sampling: { mode: "even", originalBars: arr.length, keptBars: max } }
   }
 
+  const { sampled: closesFocus, sampling } = sampleEvenly(wCloses, MAX_BARS_IN_FOCUS)
+  const times7d =
+    wTimes?.length && wTimes.length === wCloses.length
+      ? sampleEvenly(wTimes, MAX_BARS_IN_FOCUS).sampled
+      : undefined
+
   const base: Record<string, unknown> = {
-    interpretation: `Primary focus: last **${FOCUS_DAYS} calendar days** (approx).`,
+    interpretation: `Primary focus: last **${focusDays} calendar days** (approx).`,
     windowMode: mode,
     barsInWindow: wCloses.length,
+    sampling,
     closeChangePctInWindow: closePct,
     closeFirstInWindow: c0 ?? null,
     closeLastInWindow: c1 ?? null,
     windowTimeRangeUtc:
-      wTimes?.length && wTimes.length === wCloses.length
+      times7d?.length && times7d.length === closesFocus.length
         ? {
-            firstBar: wTimes[0] ?? null,
-            lastBar: wTimes[wTimes.length - 1] ?? null,
+            firstBar: times7d[0] ?? null,
+            lastBar: times7d[times7d.length - 1] ?? null,
           }
         : null,
+    closeHistoryFocus: closesFocus,
   }
 
   if (validated.indicatorType === "marketVision") {
@@ -274,13 +306,15 @@ function buildLast7DaysFocus(validated: IndicatorExplainRequest): Record<string,
     const mf = validated.snapshot.moneyFlowHistory.slice(start)
     const { first: rsi0, last: rsi1 } = lastFiniteInRange(rsi)
     const { first: mf0, last: mf1 } = lastFiniteInRange(mf)
+    const rsiFocus = sampleEvenly(rsi, MAX_BARS_IN_FOCUS).sampled
+    const mfFocus = sampleEvenly(mf, MAX_BARS_IN_FOCUS).sampled
     return {
       ...base,
-      rsiHistory7d: cap(rsi),
-      moneyFlowHistory7d: cap(mf),
-      rsiDeltaFirstToLastFinite7d:
+      rsiHistoryFocus: rsiFocus,
+      moneyFlowHistoryFocus: mfFocus,
+      rsiDeltaFirstToLastFiniteFocus:
         rsi0 != null && rsi1 != null ? Number((rsi1 - rsi0).toFixed(2)) : null,
-      moneyFlowDeltaFirstToLastFinite7d:
+      moneyFlowDeltaFirstToLastFiniteFocus:
         mf0 != null && mf1 != null ? Number((mf1 - mf0).toFixed(2)) : null,
       wt1Current: validated.snapshot.wt1Current,
       wt2Current: validated.snapshot.wt2Current,
@@ -292,12 +326,15 @@ function buildLast7DaysFocus(validated: IndicatorExplainRequest): Record<string,
   if (validated.indicatorType === "bollinger") {
     const ind = validated.snapshot.indicatorHistory.slice(start)
     const { first: i0, last: i1 } = lastFiniteInRange(ind)
+    const indFocus = sampleEvenly(ind, MAX_BARS_IN_FOCUS).sampled
+    const upperFocus = sampleEvenly(validated.snapshot.upperHistory.slice(start), MAX_BARS_IN_FOCUS).sampled
+    const lowerFocus = sampleEvenly(validated.snapshot.lowerHistory.slice(start), MAX_BARS_IN_FOCUS).sampled
     return {
       ...base,
-      indicatorHistory7d: cap(ind),
-      upperHistory7d: cap(validated.snapshot.upperHistory.slice(start)),
-      lowerHistory7d: cap(validated.snapshot.lowerHistory.slice(start)),
-      rsiDeltaFirstToLastFinite7d:
+      indicatorHistoryFocus: indFocus,
+      upperHistoryFocus: upperFocus,
+      lowerHistoryFocus: lowerFocus,
+      rsiDeltaFirstToLastFiniteFocus:
         i0 != null && i1 != null ? Number((i1 - i0).toFixed(2)) : null,
       indicatorCurrent: validated.snapshot.indicatorCurrent,
       upperCurrent: validated.snapshot.upperCurrent,
@@ -321,30 +358,32 @@ function buildLast7DaysFocus(validated: IndicatorExplainRequest): Record<string,
       {} as Record<string, number>,
     )
     const latest = divs7d.length ? divs7d[divs7d.length - 1] : divs.length ? divs[divs.length - 1] : null
+    const indFocus = sampleEvenly(ind, MAX_BARS_IN_FOCUS).sampled
 
     return {
       ...base,
-      rsiHistory7d: cap(ind),
-      rsiDeltaFirstToLastFinite7d: i0 != null && i1 != null ? Number((i1 - i0).toFixed(2)) : null,
+      rsiHistoryFocus: indFocus,
+      rsiDeltaFirstToLastFiniteFocus: i0 != null && i1 != null ? Number((i1 - i0).toFixed(2)) : null,
       rsiCurrent: validated.snapshot.rsiCurrent,
-      divergences7dCounts: counts,
-      latestDivergence7d: latest,
+      divergencesFocusCounts: counts,
+      latestDivergenceFocus: latest,
       settings: validated.snapshot.settings,
     }
   }
 
   const bb = validated.snapshot.bbwpHistory.slice(start)
   const { first: b0, last: b1 } = lastFiniteInRange(bb)
+  const bbFocus = sampleEvenly(bb, MAX_BARS_IN_FOCUS).sampled
   return {
     ...base,
-    bbwpHistory7d: cap(bb),
-    bbwpDeltaFirstToLastFinite7d: b0 != null && b1 != null ? Number((b1 - b0).toFixed(2)) : null,
+    bbwpHistoryFocus: bbFocus,
+    bbwpDeltaFirstToLastFiniteFocus: b0 != null && b1 != null ? Number((b1 - b0).toFixed(2)) : null,
     bbwpCurrent: validated.snapshot.bbwpCurrent,
     bbwpLookbackSetting: validated.snapshot.lookback,
   }
 }
 
-/** Short derived stats from full payload closes (context behind the 7d window). */
+/** Short derived stats from full payload closes (context behind the focus window). */
 function buildDerivedCloseHints(validated: IndicatorExplainRequest): string {
   const closes = validated.marketContext?.closeHistory
   if (!closes || closes.length < 2) return ""
@@ -375,15 +414,21 @@ interface BasePromptParts {
   tokenLabel: string
   derivedCloses: string
   focus7d: Record<string, unknown> | null
+  focusDays: number
 }
 
 function buildBasePromptParts(validated: IndicatorExplainRequest): BasePromptParts {
+  // Compute focus window from the full (untrimmed) payload so intraday series can still
+  // represent the full last-7-calendar-days window even if we later trim for token budget.
+  const focusDays = resolveFocusDays(validated.timeframe)
+  const focus7d = buildFocus(validated, focusDays)
   const payload = forPrompt(validated)
   return {
     payload,
     tokenLabel: formatTokenLabel(payload.token),
     derivedCloses: buildDerivedCloseHints(payload),
-    focus7d: buildLast7DaysFocus(payload),
+    focus7d,
+    focusDays,
   }
 }
 
@@ -393,11 +438,11 @@ function buildSharedSections(p: BasePromptParts): string {
 - Token: ${p.tokenLabel} (id: ${p.payload.token.coinId})
 - Chart timeframe label: ${p.payload.timeframe}
 
-**PRIMARY — last ${FOCUS_DAYS} days (calendar-aware when timestamps exist)**  
+**PRIMARY — last ${p.focusDays} days (calendar-aware when timestamps exist)**  
 Anchor most of your analysis here. Use the longer JSON below only for broader context if it helps.
-${p.focus7d ? JSON.stringify(p.focus7d, null, 2) : "(no closeHistory — cannot isolate 7d window)"}
+ ${p.focus7d ? JSON.stringify(p.focus7d, null, 2) : "(no closeHistory — cannot isolate focus window)"}
 
-- If \`windowMode\` is \`calendar_utc\`, bars are those with \`closeTimesUtc >= lastBar - ${FOCUS_DAYS} days\`.
+- If \`windowMode\` is \`calendar_utc\`, bars are those with \`closeTimesUtc >= lastBar - ${p.focusDays} days\`.
 - If \`last_n_bars\`, timestamps were missing/misaligned — treat the window as an **approximation** (often OK for ~daily candles).
 
 **GROUNDING JSON (full trailing payload)** — only numeric facts you may use. Do not invent values. Treat nulls as unknown.
@@ -422,7 +467,7 @@ ${buildSharedSections(p)}
 
 **Instructions**
 - Output **Markdown** only. Be concise and trader-focused.
-- Lead with the last ~${FOCUS_DAYS} days: price path in that window (\`closeChangePctInWindow\`) vs **RSI trend**, **WT1 vs WT2**, and **money flow trend** in the 7d slice.
+- Lead with the last ~${p.focusDays} days: price path in that window (\`closeChangePctInWindow\`) vs **RSI trend**, **WT1 vs WT2**, and **money flow trend** in the focus slice.
 - Call out **agreement vs disagreement** (e.g. price up but momentum/flow fading).
 - Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
 - Do not dump the JSON back; interpret it.
@@ -444,7 +489,7 @@ ${buildSharedSections(p)}
 
 **Instructions**
 - Output **Markdown** only. Be concise and trader-focused.
-- Lead with the last ~${FOCUS_DAYS} days: how the indicator behaved **relative to its bands** in the 7d slice (stretch vs mean reversion, compression vs expansion).
+- Lead with the last ~${p.focusDays} days: how the indicator behaved **relative to its bands** in the focus slice (stretch vs mean reversion, compression vs expansion).
 - Then relate that to the 7d price window (\`closeChangePctInWindow\`) and whether the indicator is confirming or warning.
 - If the underlying indicator is RSI-like and prints outside 0–100, do not label overbought/oversold on that number.
 - Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
@@ -466,7 +511,7 @@ ${buildSharedSections(p)}
 
 **Instructions**
 - Output **Markdown** only. Be concise and trader-focused.
-- Lead with the last ~${FOCUS_DAYS} days: identify whether BBWP implies **coiling (low percentile)**, **expanding (rising)**, or **elevated volatility (high)** in the 7d slice.
+- Lead with the last ~${p.focusDays} days: identify whether BBWP implies **coiling (low percentile)**, **expanding (rising)**, or **elevated volatility (high)** in the focus slice.
 - Translate that into a trader-useful read: “expect expansion risk” / “regime already active” and tie it to the 7d price move (\`closeChangePctInWindow\`).
 - Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
 - Do not dump the JSON back; interpret it.
@@ -490,8 +535,8 @@ ${buildSharedSections(p)}
 
 **Instructions**
 - Output **Markdown** only. Be concise and trader-focused.
-- Anchor the analysis on the last ~${FOCUS_DAYS} days window. Mention the **latest divergence(s)** in that window (type + direction) and whether RSI is near **30/70**.
-- If there are no divergences in the 7d window, say so and describe the RSI trend vs price trend instead.
+- Anchor the analysis on the last ~${p.focusDays} days window. Mention the **latest divergence(s)** in that window (type + direction) and whether RSI is near **30/70**.
+- If there are no divergences in the focus window, say so and describe the RSI trend vs price trend instead.
 - Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
 - Do not dump the JSON back; interpret it.
 `.trim()
