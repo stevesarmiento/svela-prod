@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Effect } from "effect"
 import { CoinGeckoApi } from "@/lib/effect/coingecko-api"
@@ -9,6 +9,7 @@ import type { CoinMarketData } from '@/types/coins'
 import { Liveline } from "liveline"
 import type { LivelinePoint } from "liveline"
 import { cn } from "@v1/ui/cn"
+import { Skeleton } from "@v1/ui/skeleton"
 
 interface InlinePriceChartProps {
   coingeckoId: string // CoinGecko ID to fetch real data
@@ -18,6 +19,7 @@ interface InlinePriceChartProps {
   initialData: CoinMarketData['quote']['USD'] // Required for useCoinGeckoChartData
   onError?: () => void
   className?: string
+  enabled?: boolean
 }
 
 type InlineChartTimeScale = "1d" | "7d" | "14d" | "30d" | "max" | "2y"
@@ -172,6 +174,7 @@ export function InlinePriceChart({
   initialData,
   onError: _onError,
   className,
+  enabled = true,
 }: InlinePriceChartProps) {
   const timeScale = "14d" as const
   const basePrice = initialData?.price && initialData.price > 0 ? initialData.price : 0
@@ -181,7 +184,7 @@ export function InlinePriceChart({
   const marketChartQuery = useInlineMarketChartSeries({
     coingeckoId,
     timeScale: toTimeScale(timeScale),
-    enabled: true,
+    enabled,
   })
 
   const rawChartData = marketChartQuery.data?.points ?? []
@@ -349,6 +352,48 @@ export function InlinePriceChart({
           />
         </div>
       </div>
+    </div>
+  )
+}
+
+export function LazyInlinePriceChart(props: InlinePriceChartProps & { rootMarginPx?: number }) {
+  const rootMarginPx = props.rootMarginPx ?? 400
+  const ref = useRef<HTMLDivElement | null>(null)
+  const [isInView, setIsInView] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    if (typeof IntersectionObserver !== "function") {
+      setIsInView(true)
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry) return
+        setIsInView(entry.isIntersecting)
+      },
+      {
+        root: null,
+        rootMargin: `${rootMarginPx}px`,
+        threshold: 0,
+      },
+    )
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [rootMarginPx])
+
+  return (
+    <div ref={ref} className={cn("w-full", props.className)}>
+      {isInView ? (
+        <InlinePriceChart {...props} enabled />
+      ) : (
+        <Skeleton className="h-8 w-full max-w-56 rounded-sm" />
+      )}
     </div>
   )
 }

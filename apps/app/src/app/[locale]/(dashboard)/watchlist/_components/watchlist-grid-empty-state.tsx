@@ -136,6 +136,10 @@ function IllustrationWatchlistCard({
     () => buildFakeSparkline(sparklineSeed, sparklinePointCount),
     [sparklineSeed, sparklinePointCount],
   )
+  const tokenKeys = useMemo(
+    () => Array.from({ length: tokenCount }, (_, i) => `token-${tokenCount}-${i}`),
+    [tokenCount],
+  )
   const sparklineWindowSecs = useMemo(() => {
     if (sparklineData.length < 2) return 30
     const first = sparklineData[0]?.time
@@ -207,9 +211,9 @@ function IllustrationWatchlistCard({
 
           <div className="flex items-center justify-between mt-auto">
             <div className="flex -space-x-1.5">
-              {[...Array(tokenCount)].map((_, i) => (
+              {tokenKeys.map((key) => (
                 <div
-                  key={i}
+                  key={key}
                   className={cn(
                     'size-4 rounded-full',
                     variant === 'primary'
@@ -230,6 +234,11 @@ export function WatchlistGridEmptyState() {
   const shouldReduceMotion: boolean = useReducedMotion() ?? false
   const [isShiftDown, setIsShiftDown] = useState(false)
   const [isNDown, setIsNDown] = useState(false)
+
+  const gridKeys = useMemo(
+    () => Array.from({ length: 9 }, (_, i) => `grid-${i}`),
+    [],
+  )
 
   useEffect(() => {
     function isTypingTarget(target: EventTarget | null) {
@@ -299,11 +308,11 @@ export function WatchlistGridEmptyState() {
     },
   }
 
-  const floatingAnimation = (delay: number = 0) => ({
+  const floatingAnimation = (delay = 0) => ({
     y: [0, -12, 0],
     transition: {
       duration: 1.5,
-      repeat: Infinity,
+      repeat: Number.POSITIVE_INFINITY,
       ease: 'easeInOut',
       delay,
     },
@@ -319,9 +328,9 @@ export function WatchlistGridEmptyState() {
       >
         {/* Background Grid Pattern - 3x3 */}
         <div className="absolute inset-0 grid grid-cols-3 gap-4 opacity-[0.02] scale-110 pointer-events-none">
-          {[...Array(9)].map((_, i) => (
+          {gridKeys.map((key) => (
             <div
-              key={i}
+              key={key}
               className="aspect-square bg-foreground rounded-3xl border border-foreground"
             />
           ))}

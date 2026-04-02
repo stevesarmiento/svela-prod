@@ -28,6 +28,7 @@ export interface WatchlistTableSectionProps {
   onCoinSelect: (coinId: string, selected: boolean) => void;
   onSelectAll: (checked: boolean, coinIds?: string[]) => void;
   onInlineChartError?: () => void;
+  mode?: "watchlist" | "screener";
 }
 
 export function WatchlistTableSection({
@@ -42,6 +43,7 @@ export function WatchlistTableSection({
   onCoinSelect,
   onSelectAll,
   onInlineChartError,
+  mode = "watchlist",
 }: WatchlistTableSectionProps) {
   const shouldReduceMotion = useReducedMotion()
   const selectedCoinsRef = useLatest(selectedCoins)
@@ -63,7 +65,8 @@ export function WatchlistTableSection({
     hasSelectedCoinsRef,
     shouldReduceMotion: shouldReduceMotion ?? false,
     onInlineChartError,
-  }), [onRemove, onCoinSelect, handleSelectAllWrapper, coins.length, shouldReduceMotion, onInlineChartError]);
+    mode,
+  }), [onRemove, onCoinSelect, handleSelectAllWrapper, coins.length, shouldReduceMotion, onInlineChartError, mode]);
 
   const table = useReactTable({
     data: coins,
@@ -82,6 +85,7 @@ export function WatchlistTableSection({
       selectedCoins={selectedCoins}
       watchlistGroup={watchlistGroup}
       onCoinSelect={onCoinSelect}
+      mode={mode}
     />
   )
 }
