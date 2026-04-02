@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { WatchlistCard } from './watchlist-card'
 import { WatchlistGroupEditorPanel } from './watchlist-group-editor-panel'
 import { Button } from '@v1/ui/button'
-import { Grid3X3, Plus } from 'lucide-react'
+import { Grid3X3 } from 'lucide-react'
 import { toast } from '@v1/ui/use-toast'
 import { env } from '@/env.mjs'
 import { 
@@ -18,7 +18,7 @@ import { Tabs, TabsContent } from '@v1/ui/tabs'
 import { WatchlistMultiLineChart } from './watchlist-multi-line-chart'
 import { useDeletePortfolioWallet } from "@/hooks/use-portfolio-wallets"
 import { useUpdateWatchlistGroup, useDeleteWatchlistGroup } from "@/lib/convex-hooks"
-import { Kbd } from '@v1/ui/kbd'
+import { WatchlistGridEmptyState } from './watchlist-grid-empty-state'
 
 const isDebug = env.NODE_ENV === "development"
 
@@ -237,15 +237,7 @@ export function WatchlistsGrid({
         <TabsContent value="grid" className="mt-0">
           {/* Empty State */}
           {!watchlistGroups || watchlistGroups.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-                <Plus className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <h3 className="font-medium mb-2">No watchlists yet</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Press <Kbd>Shift</Kbd> + <Kbd>N</Kbd> to create your first watchlist
-              </p>
-            </div>
+            <WatchlistGridEmptyState />
           ) : (
             <>
               {/* Watchlists Grid */}
