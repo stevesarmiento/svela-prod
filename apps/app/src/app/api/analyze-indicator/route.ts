@@ -195,9 +195,381 @@ function pctChange(a: number, b: number): number | null {
 }
 
 const SECONDS_PER_DAY = 86400
+const SECONDS_PER_HOUR = 3600
 const DEFAULT_FOCUS_DAYS = 7
 /** Max bars we attach in the focus JSON (keeps prompt size sane for intraday series). */
 const MAX_BARS_IN_FOCUS = 56
+
+type SliceMode = "calendar_utc" | "last_n_bars"
+type SetupCode =
+  | "continuation"
+  | "acceleration"
+  | "pullback"
+  | "reversal_attempt"
+  | "pause"
+  | "unknown"
+type SetupTone = "positive" | "negative" | "neutral"
+
+interface SliceStats {
+  bars: number
+  closeFirst: number | null
+  closeLast: number | null
+  closeChangePct: number | null
+  timeRangeUtc: { firstBar: number | null; lastBar: number | null } | null
+}
+
+interface ContextVsLastDaySummaryBase {
+  timeframe: string
+  focusDays: number
+  focusMode: SliceMode
+  lastDayMode: SliceMode
+  prior: SliceStats | null
+  lastDay: SliceStats | null
+  setup: {
+    code: SetupCode
+    label: string
+    tone: SetupTone
+  }
+}
+
+interface ContextVsLastDaySummaryMarketVision extends ContextVsLastDaySummaryBase {
+  indicatorType: "marketVision"
+  rsiDeltaPrior: number | null
+  rsiDeltaLastDay: number | null
+  moneyFlowDeltaPrior: number | null
+  moneyFlowDeltaLastDay: number | null
+  momentumAgreement: "confirming" | "diverging" | "unknown"
+}
+
+interface ContextVsLastDaySummaryBollinger extends ContextVsLastDaySummaryBase {
+  indicatorType: "bollinger"
+  indicatorDeltaPrior: number | null
+  indicatorDeltaLastDay: number | null
+  bandPositionNow: "above_upper" | "below_lower" | "inside" | "unknown"
+  momentumAgreement: "confirming" | "diverging" | "unknown"
+}
+
+interface ContextVsLastDaySummaryBBWP extends ContextVsLastDaySummaryBase {
+  indicatorType: "bbwp"
+  bbwpDeltaPrior: number | null
+  bbwpDeltaLastDay: number | null
+  volatilityRegime: "expanding" | "contracting" | "flat" | "unknown"
+}
+
+interface ContextVsLastDaySummaryRsiDivs extends ContextVsLastDaySummaryBase {
+  indicatorType: "rsiDivergences"
+  rsiDeltaPrior: number | null
+  rsiDeltaLastDay: number | null
+  divergencesPriorCounts: Record<string, number> | null
+  divergencesLastDayCounts: Record<string, number> | null
+  latestDivergenceLastDay: Record<string, unknown> | null
+  momentumAgreement: "confirming" | "diverging" | "unknown"
+}
+
+type ContextVsLastDaySummary =
+  | ContextVsLastDaySummaryMarketVision
+  | ContextVsLastDaySummaryBollinger
+  | ContextVsLastDaySummaryBBWP
+  | ContextVsLastDaySummaryRsiDivs
+
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v)
+}
+
+function startIndexLastSeconds(
+  timesUtc: readonly number[] | undefined,
+  length: number,
+  seconds: number,
+  fallbackBars: number,
+): { start: number; mode: SliceMode } {
+  if (!timesUtc || timesUtc.length !== length || length < 1) {
+    return { start: Math.max(0, length - fallbackBars), mode: "last_n_bars" }
+  }
+  const latest = timesUtc[length - 1]
+  if (!isFiniteNumber(latest)) {
+    return { start: Math.max(0, length - fallbackBars), mode: "last_n_bars" }
+  }
+  const cutoff = latest - seconds
+  for (let i = 0; i < length; i++) {
+    const t = timesUtc[i]
+    if (isFiniteNumber(t) && t >= cutoff) return { start: i, mode: "calendar_utc" }
+  }
+  return { start: Math.max(0, length - 1), mode: "calendar_utc" }
+}
+
+function sliceStats(args: {
+  closes: readonly number[]
+  timesUtc: readonly number[] | undefined
+  start: number
+  endExclusive: number
+}): SliceStats | null {
+  const start = Math.max(0, Math.min(args.start, args.closes.length))
+  const endExclusive = Math.max(start, Math.min(args.endExclusive, args.closes.length))
+  const bars = endExclusive - start
+  if (bars <= 0) return null
+
+  const closeFirst = args.closes[start] ?? null
+  const closeLast = args.closes[endExclusive - 1] ?? null
+  const closeChangePct =
+    bars >= 2 && closeFirst != null && closeLast != null ? pctChange(closeFirst, closeLast) : null
+
+  const timesOk =
+    args.timesUtc && args.timesUtc.length === args.closes.length
+      ? args.timesUtc
+      : undefined
+  const firstBar = timesOk?.[start]
+  const lastBar = timesOk?.[endExclusive - 1]
+  const timeRangeUtc =
+    isFiniteNumber(firstBar) && isFiniteNumber(lastBar)
+      ? { firstBar, lastBar }
+      : null
+
+  return {
+    bars,
+    closeFirst: isFiniteNumber(closeFirst) ? closeFirst : null,
+    closeLast: isFiniteNumber(closeLast) ? closeLast : null,
+    closeChangePct,
+    timeRangeUtc,
+  }
+}
+
+function deltaInSlice(
+  series: ReadonlyArray<number | null> | undefined,
+  expectedLength: number,
+  start: number,
+  endExclusive: number,
+): number | null {
+  if (!series || series.length !== expectedLength) return null
+  const seg = series.slice(start, endExclusive)
+  const { first, last } = lastFiniteInRange(seg)
+  if (first == null || last == null) return null
+  return Number((last - first).toFixed(2))
+}
+
+function classifySetup(args: {
+  priorPct: number | null
+  lastDayPct: number | null
+  focusDays: number
+}): { code: SetupCode; label: string; tone: SetupTone } {
+  const prior = args.priorPct
+  const day = args.lastDayPct
+  if (prior == null || day == null) {
+    return { code: "unknown", label: "Context unclear", tone: "neutral" }
+  }
+
+  const absDay = Math.abs(day)
+  if (absDay < 0.15) return { code: "pause", label: "Pause / consolidation", tone: "neutral" }
+
+  const sameSign = Math.sign(prior) === Math.sign(day) && Math.sign(prior) !== 0
+  const flipped = Math.sign(prior) !== Math.sign(day) && Math.sign(day) !== 0
+  const focusDenom = Math.max(1, Math.min(6, args.focusDays - 1))
+  const priorPerDay = prior / focusDenom
+  const accel = sameSign && absDay > Math.abs(priorPerDay) * 1.75
+
+  if (accel) {
+    const tone: SetupTone = prior > 0 ? "positive" : "negative"
+    return {
+      code: "acceleration",
+      label: prior > 0 ? "Uptrend acceleration" : "Downtrend acceleration",
+      tone,
+    }
+  }
+  if (sameSign) {
+    const tone: SetupTone = prior > 0 ? "positive" : "negative"
+    return {
+      code: "continuation",
+      label: prior > 0 ? "Uptrend continuation" : "Downtrend continuation",
+      tone,
+    }
+  }
+  if (flipped) return { code: "reversal_attempt", label: "Possible reversal attempt", tone: "neutral" }
+  return {
+    code: "pullback",
+    label:
+      prior > 0 && day < 0
+        ? "Bull trend pullback (24h down)"
+        : prior < 0 && day > 0
+          ? "Bear trend bounce (24h up)"
+          : "Pullback / mean-reversion",
+    tone: "neutral",
+  }
+}
+
+function computeContextVsLastDaySummary(validated: IndicatorExplainRequest): ContextVsLastDaySummary | null {
+  const closes = validated.marketContext?.closeHistory
+  if (!closes?.length) return null
+
+  const focusDays = resolveFocusDays(validated.timeframe)
+  const { start: focusStart, mode: focusMode } = startIndexLastCalendarDays(
+    validated.marketContext?.closeTimesUtc,
+    closes.length,
+    focusDays,
+  )
+
+  const fallbackBars = validated.timeframe === "30d" ? 24 : 2
+  const { start: dayStartRaw, mode: lastDayMode } = startIndexLastSeconds(
+    validated.marketContext?.closeTimesUtc,
+    closes.length,
+    SECONDS_PER_DAY,
+    fallbackBars,
+  )
+  const dayStart = Math.max(focusStart, dayStartRaw)
+
+  const prior = sliceStats({
+    closes,
+    timesUtc: validated.marketContext?.closeTimesUtc,
+    start: focusStart,
+    endExclusive: dayStart,
+  })
+  const lastDay = sliceStats({
+    closes,
+    timesUtc: validated.marketContext?.closeTimesUtc,
+    start: dayStart,
+    endExclusive: closes.length,
+  })
+
+  const setup = classifySetup({
+    priorPct: prior?.closeChangePct ?? null,
+    lastDayPct: lastDay?.closeChangePct ?? null,
+    focusDays,
+  })
+
+  const base: ContextVsLastDaySummaryBase = {
+    timeframe: validated.timeframe,
+    focusDays,
+    focusMode,
+    lastDayMode,
+    prior,
+    lastDay,
+    setup,
+  }
+
+  if (validated.indicatorType === "marketVision") {
+    const rsiDeltaPrior = deltaInSlice(validated.snapshot.rsiHistory, closes.length, focusStart, dayStart)
+    const rsiDeltaLastDay = deltaInSlice(validated.snapshot.rsiHistory, closes.length, dayStart, closes.length)
+    const mfDeltaPrior = deltaInSlice(validated.snapshot.moneyFlowHistory, closes.length, focusStart, dayStart)
+    const mfDeltaLastDay = deltaInSlice(validated.snapshot.moneyFlowHistory, closes.length, dayStart, closes.length)
+
+    const p = prior?.closeChangePct
+    const r = rsiDeltaPrior
+    const momentumAgreement =
+      p == null || r == null ? "unknown" : Math.sign(p) === Math.sign(r) ? "confirming" : "diverging"
+
+    return {
+      ...base,
+      indicatorType: "marketVision",
+      rsiDeltaPrior,
+      rsiDeltaLastDay,
+      moneyFlowDeltaPrior: mfDeltaPrior,
+      moneyFlowDeltaLastDay: mfDeltaLastDay,
+      momentumAgreement,
+    }
+  }
+
+  if (validated.indicatorType === "bollinger") {
+    const indDeltaPrior = deltaInSlice(validated.snapshot.indicatorHistory, closes.length, focusStart, dayStart)
+    const indDeltaLastDay = deltaInSlice(validated.snapshot.indicatorHistory, closes.length, dayStart, closes.length)
+
+    const bb = validated.snapshot
+    const bandPositionNow =
+      isFiniteNumber(bb.indicatorCurrent) && isFiniteNumber(bb.upperCurrent) && isFiniteNumber(bb.lowerCurrent)
+        ? bb.indicatorCurrent > bb.upperCurrent
+          ? "above_upper"
+          : bb.indicatorCurrent < bb.lowerCurrent
+            ? "below_lower"
+            : "inside"
+        : "unknown"
+
+    const p = prior?.closeChangePct
+    const r = indDeltaPrior
+    const momentumAgreement =
+      p == null || r == null ? "unknown" : Math.sign(p) === Math.sign(r) ? "confirming" : "diverging"
+
+    return {
+      ...base,
+      indicatorType: "bollinger",
+      indicatorDeltaPrior: indDeltaPrior,
+      indicatorDeltaLastDay: indDeltaLastDay,
+      bandPositionNow,
+      momentumAgreement,
+    }
+  }
+
+  if (validated.indicatorType === "bbwp") {
+    const bbDeltaPrior = deltaInSlice(validated.snapshot.bbwpHistory, closes.length, focusStart, dayStart)
+    const bbDeltaLastDay = deltaInSlice(validated.snapshot.bbwpHistory, closes.length, dayStart, closes.length)
+    const volatilityRegime =
+      bbDeltaLastDay == null
+        ? "unknown"
+        : Math.abs(bbDeltaLastDay) < 0.25
+          ? "flat"
+          : bbDeltaLastDay > 0
+            ? "expanding"
+            : "contracting"
+
+    return {
+      ...base,
+      indicatorType: "bbwp",
+      bbwpDeltaPrior: bbDeltaPrior,
+      bbwpDeltaLastDay: bbDeltaLastDay,
+      volatilityRegime,
+    }
+  }
+
+  // rsiDivergences
+  const rsiDeltaPrior = deltaInSlice(validated.snapshot.rsiHistory, closes.length, focusStart, dayStart)
+  const rsiDeltaLastDay = deltaInSlice(validated.snapshot.rsiHistory, closes.length, dayStart, closes.length)
+
+  const times =
+    validated.marketContext?.closeTimesUtc && validated.marketContext.closeTimesUtc.length === closes.length
+      ? validated.marketContext.closeTimesUtc
+      : null
+  const focusStartTime = times?.[focusStart] ?? null
+  const dayStartTime = times?.[dayStart] ?? null
+
+  function countsInRange(divs: ReadonlyArray<z.infer<typeof RsiDivergencesSnapshotDivergenceSchema>>, startTime: number, endTime: number | null): Record<string, number> {
+    return divs
+      .filter((d) => d.endTime >= startTime && (endTime == null || d.endTime < endTime))
+      .reduce(
+        (acc, d) => {
+          acc[d.type] = (acc[d.type] ?? 0) + 1
+          return acc
+        },
+        {} as Record<string, number>,
+      )
+  }
+
+  const divergencesPriorCounts =
+    isFiniteNumber(focusStartTime) && isFiniteNumber(dayStartTime)
+      ? countsInRange(validated.snapshot.divergences, focusStartTime, dayStartTime)
+      : null
+
+  const divergencesLastDayCounts =
+    isFiniteNumber(dayStartTime)
+      ? countsInRange(validated.snapshot.divergences, dayStartTime, null)
+      : null
+
+  const latestDivergenceLastDay =
+    isFiniteNumber(dayStartTime)
+      ? (validated.snapshot.divergences.filter((d) => d.endTime >= dayStartTime).slice(-1)[0] ?? null)
+      : null
+
+  const p = prior?.closeChangePct
+  const r = rsiDeltaPrior
+  const momentumAgreement =
+    p == null || r == null ? "unknown" : Math.sign(p) === Math.sign(r) ? "confirming" : "diverging"
+
+  return {
+    ...base,
+    indicatorType: "rsiDivergences",
+    rsiDeltaPrior,
+    rsiDeltaLastDay,
+    divergencesPriorCounts,
+    divergencesLastDayCounts,
+    latestDivergenceLastDay: latestDivergenceLastDay ? { ...latestDivergenceLastDay } : null,
+    momentumAgreement,
+  }
+}
 
 function resolveFocusDays(timeframe: string): number {
   // TimeScaleSelector values:
@@ -415,9 +787,10 @@ interface BasePromptParts {
   derivedCloses: string
   focus7d: Record<string, unknown> | null
   focusDays: number
+  compare: ContextVsLastDaySummary | null
 }
 
-function buildBasePromptParts(validated: IndicatorExplainRequest): BasePromptParts {
+function buildBasePromptParts(validated: IndicatorExplainRequest, compare: ContextVsLastDaySummary | null): BasePromptParts {
   // Compute focus window from the full (untrimmed) payload so intraday series can still
   // represent the full last-7-calendar-days window even if we later trim for token budget.
   const focusDays = resolveFocusDays(validated.timeframe)
@@ -429,6 +802,7 @@ function buildBasePromptParts(validated: IndicatorExplainRequest): BasePromptPar
     derivedCloses: buildDerivedCloseHints(payload),
     focus7d,
     focusDays,
+    compare,
   }
 }
 
@@ -445,6 +819,10 @@ Anchor most of your analysis here. Use the longer JSON below only for broader co
 - If \`windowMode\` is \`calendar_utc\`, bars are those with \`closeTimesUtc >= lastBar - ${p.focusDays} days\`.
 - If \`last_n_bars\`, timestamps were missing/misaligned — treat the window as an **approximation** (often OK for ~daily candles).
 
+**COMPARE — context vs last 24h (calendar-aware when timestamps exist)**  
+Use this section to explicitly compare the **prior part** of the focus window vs the **last 24h**. Do not invent missing values.
+${p.compare ? JSON.stringify(p.compare, null, 2) : "(not enough aligned closeHistory to compute prior-vs-last-24h comparison)"}
+
 **GROUNDING JSON (full trailing payload)** — only numeric facts you may use. Do not invent values. Treat nulls as unknown.
 ${JSON.stringify(p.payload, null, 2)}
 
@@ -454,7 +832,7 @@ ${p.derivedCloses || "(no usable closeHistory in payload)"}
 }
 
 function buildMarketVisionPrompt(validated: IndicatorExplainRequest & { indicatorType: "marketVision" }): string {
-  const p = buildBasePromptParts(validated)
+  const p = buildBasePromptParts(validated, computeContextVsLastDaySummary(validated))
   return `
 You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **Market Vision** indicator card.
 
@@ -467,7 +845,10 @@ ${buildSharedSections(p)}
 
 **Instructions**
 - Output **Markdown** only. Be concise and trader-focused.
+- Start with a single **TL;DR** line that uses the **COMPARE** section:\n  \`TL;DR: <setup.label> — prev <prior.closeChangePct>% vs 24h <lastDay.closeChangePct>%\` (if values are missing, say \`TL;DR: Context unclear\`).\n  Use the exact numbers from JSON; do not invent.
 - Lead with the last ~${p.focusDays} days: price path in that window (\`closeChangePctInWindow\`) vs **RSI trend**, **WT1 vs WT2**, and **money flow trend** in the focus slice.
+- Explicitly state what the **COMPARE** section implies: continuation / pullback / reversal attempt / acceleration / pause (use \`setup.code\` + \`setup.label\` when present).
+- Call out whether momentum is **confirming vs diverging** when the comparison provides \`momentumAgreement\`.
 - Call out **agreement vs disagreement** (e.g. price up but momentum/flow fading).
 - Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
 - Do not dump the JSON back; interpret it.
@@ -475,7 +856,7 @@ ${buildSharedSections(p)}
 }
 
 function buildBollingerPrompt(validated: IndicatorExplainRequest & { indicatorType: "bollinger" }): string {
-  const p = buildBasePromptParts(validated)
+  const p = buildBasePromptParts(validated, computeContextVsLastDaySummary(validated))
   return `
 You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **Bollinger-on-indicator** card.
 
@@ -489,8 +870,11 @@ ${buildSharedSections(p)}
 
 **Instructions**
 - Output **Markdown** only. Be concise and trader-focused.
+- Start with a single **TL;DR** line that uses the **COMPARE** section:\n  \`TL;DR: <setup.label> — prev <prior.closeChangePct>% vs 24h <lastDay.closeChangePct>%\` (if values are missing, say \`TL;DR: Context unclear\`).\n  Use the exact numbers from JSON; do not invent.
 - Lead with the last ~${p.focusDays} days: how the indicator behaved **relative to its bands** in the focus slice (stretch vs mean reversion, compression vs expansion).
 - Then relate that to the 7d price window (\`closeChangePctInWindow\`) and whether the indicator is confirming or warning.
+- Explicitly interpret the **COMPARE** section as one of: continuation / pullback / reversal attempt / acceleration / pause.
+- If \`bandPositionNow\` is available, mention it (above upper / below lower / inside) and what that suggests about extension risk.
 - If the underlying indicator is RSI-like and prints outside 0–100, do not label overbought/oversold on that number.
 - Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
 - Do not dump the JSON back; interpret it.
@@ -498,7 +882,7 @@ ${buildSharedSections(p)}
 }
 
 function buildBBWPPrompt(validated: IndicatorExplainRequest & { indicatorType: "bbwp" }): string {
-  const p = buildBasePromptParts(validated)
+  const p = buildBasePromptParts(validated, computeContextVsLastDaySummary(validated))
   return `
 You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **BBWP** (Bollinger BandWidth Percentile) card.
 
@@ -511,15 +895,17 @@ ${buildSharedSections(p)}
 
 **Instructions**
 - Output **Markdown** only. Be concise and trader-focused.
+- Start with a single **TL;DR** line that uses the **COMPARE** section:\n  \`TL;DR: <setup.label> — prev <prior.closeChangePct>% vs 24h <lastDay.closeChangePct>%\` (if values are missing, say \`TL;DR: Context unclear\`).\n  Use the exact numbers from JSON; do not invent.
 - Lead with the last ~${p.focusDays} days: identify whether BBWP implies **coiling (low percentile)**, **expanding (rising)**, or **elevated volatility (high)** in the focus slice.
 - Translate that into a trader-useful read: “expect expansion risk” / “regime already active” and tie it to the 7d price move (\`closeChangePctInWindow\`).
+- Use the **COMPARE** section to say whether the last 24h move looks like a continuation / pullback / reversal attempt / acceleration / pause, and whether volatility is contracting or expanding (if \`volatilityRegime\` is available).
 - Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
 - Do not dump the JSON back; interpret it.
 `.trim()
 }
 
 function buildRsiDivergencesPrompt(validated: IndicatorExplainRequest & { indicatorType: "rsiDivergences" }): string {
-  const p = buildBasePromptParts(validated)
+  const p = buildBasePromptParts(validated, computeContextVsLastDaySummary(validated))
   return `
 You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **RSI divergences** indicator card.
 
@@ -535,8 +921,10 @@ ${buildSharedSections(p)}
 
 **Instructions**
 - Output **Markdown** only. Be concise and trader-focused.
+- Start with a single **TL;DR** line that uses the **COMPARE** section:\n  \`TL;DR: <setup.label> — prev <prior.closeChangePct>% vs 24h <lastDay.closeChangePct>%\` (if values are missing, say \`TL;DR: Context unclear\`).\n  Use the exact numbers from JSON; do not invent.
 - Anchor the analysis on the last ~${p.focusDays} days window. Mention the **latest divergence(s)** in that window (type + direction) and whether RSI is near **30/70**.
 - If there are no divergences in the focus window, say so and describe the RSI trend vs price trend instead.
+- Use the **COMPARE** section to classify the last 24h action vs prior context (continuation / pullback / reversal attempt / acceleration / pause). If \`divergencesLastDayCounts\` is available, mention whether divergences support or contradict that.
 - Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
 - Do not dump the JSON back; interpret it.
 `.trim()
@@ -547,6 +935,17 @@ function buildAnalysisPrompt(validated: IndicatorExplainRequest): string {
   if (validated.indicatorType === "bollinger") return buildBollingerPrompt(validated)
   if (validated.indicatorType === "rsiDivergences") return buildRsiDivergencesPrompt(validated)
   return buildBBWPPrompt(validated)
+}
+
+function encodeBase64Json(value: unknown): string {
+  const json = JSON.stringify(value)
+  // Node.js runtime
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (typeof Buffer !== "undefined") return Buffer.from(json, "utf8").toString("base64")
+  // Edge/runtime fallback
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+  if (typeof btoa !== "undefined") return btoa(unescape(encodeURIComponent(json)))
+  return ""
 }
 
 export async function POST(request: Request) {
@@ -575,6 +974,7 @@ export async function POST(request: Request) {
       })
     }
 
+    const comparison = computeContextVsLastDaySummary(validated)
     const prompt = buildAnalysisPrompt(validated)
 
     const result = streamText({
@@ -590,6 +990,7 @@ export async function POST(request: Request) {
       headers: {
         "Cache-Control": "no-cache, no-transform",
         "X-Content-Type-Options": "nosniff",
+        ...(comparison ? { "X-Indicator-Comparison": encodeBase64Json(comparison) } : {}),
       },
     })
   } catch (error) {

@@ -494,6 +494,7 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
                 <div className="text-sm text-muted-foreground">No explanation yet.</div>
               ) : null}
             </div>
+            <div className="sticky bottom-[-2px] h-[100px] inset-0 z-[1002] pointer-events-none bg-gradient-to-t from-white via-white/50 dark:via-zinc-950/50 to-transparent dark:from-zinc-950" />
           </ScrollArea>
         </div>
       </DialogContent>

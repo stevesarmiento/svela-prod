@@ -211,6 +211,109 @@ async function patchDistFile(filePath) {
     ok = false
   }
 
+  // 5) Allow consumers to disable the live endpoint dot (sparkline mode).
+  // Liveline doesn't expose this in 0.0.7; we add `dot?: boolean` defaulting true.
+  // This keeps interactive charts (scrub) unchanged while letting tiny inline charts be line-only.
+  const dotPropOld = "  pulse = true,"
+  const dotPropNew = ["  pulse = true,", "  dot = true,"].join("\n")
+
+  if (next.includes(dotPropNew)) {
+    // already patched
+  } else if (next.includes(dotPropOld)) {
+    next = next.replace(dotPropOld, dotPropNew)
+    didChange = true
+  } else {
+    console.warn(`[patch-liveline] Dot-prop pattern not found: ${filePath}`)
+    ok = false
+  }
+
+  const engineDotOld = "    showPulse: pulse,"
+  const engineDotNew = ["    showPulse: pulse,", "    showDot: dot,"].join("\n")
+
+  if (next.includes(engineDotNew)) {
+    // already patched
+  } else if (next.includes(engineDotOld)) {
+    next = next.replace(engineDotOld, engineDotNew)
+    didChange = true
+  } else {
+    console.warn(`[patch-liveline] Engine dot config pattern not found: ${filePath}`)
+    ok = false
+  }
+
+  const cfgDotOld = "        showPulse: cfg.showPulse,"
+  const cfgDotNew = ["        showPulse: cfg.showPulse,", "        showDot: cfg.showDot,"].join("\n")
+
+  if (next.includes(cfgDotNew)) {
+    // already patched
+  } else if (next.includes(cfgDotOld)) {
+    // There are multiple frames (single + multi), patch all.
+    next = next.replaceAll(cfgDotOld, cfgDotNew)
+    didChange = true
+  } else {
+    console.warn(`[patch-liveline] Cfg dot pattern not found: ${filePath}`)
+    ok = false
+  }
+
+  const drawDotOld =
+    "      drawDot(ctx, lastPt[0], lastPt[1], palette, showPulse, dotScrub, opts.now_ms);"
+  const drawDotNew =
+    "      if (opts.showDot !== false) drawDot(ctx, lastPt[0], lastPt[1], palette, showPulse, dotScrub, opts.now_ms);"
+
+  if (next.includes(drawDotNew)) {
+    // already patched
+  } else if (next.includes(drawDotOld)) {
+    next = next.replaceAll(drawDotOld, drawDotNew)
+    didChange = true
+  } else {
+    console.warn(`[patch-liveline] Live-dot draw pattern not found: ${filePath}`)
+    ok = false
+  }
+
+  const drawCandleDotOld =
+    "      drawDot(ctx, lastPt[0], lastPt[1], palette, showPulse, opts.scrubAmount, opts.now_ms);"
+  const drawCandleDotNew =
+    "      if (opts.showDot !== false) drawDot(ctx, lastPt[0], lastPt[1], palette, showPulse, opts.scrubAmount, opts.now_ms);"
+
+  if (next.includes(drawCandleDotNew)) {
+    // already patched
+  } else if (next.includes(drawCandleDotOld)) {
+    next = next.replaceAll(drawCandleDotOld, drawCandleDotNew)
+    didChange = true
+  } else {
+    console.warn(`[patch-liveline] Candle live-dot draw pattern not found: ${filePath}`)
+    ok = false
+  }
+
+  const drawMultiDotOld =
+    "        drawMultiDot(ctx, lastPt[0], lastPt[1], entry.palette.line, true, opts.now_ms, 3);"
+  const drawMultiDotNew =
+    "        if (opts.showDot !== false) drawMultiDot(ctx, lastPt[0], lastPt[1], entry.palette.line, true, opts.now_ms, 3);"
+
+  if (next.includes(drawMultiDotNew)) {
+    // already patched
+  } else if (next.includes(drawMultiDotOld)) {
+    next = next.replaceAll(drawMultiDotOld, drawMultiDotNew)
+    didChange = true
+  } else {
+    console.warn(`[patch-liveline] Multi live-dot draw pattern not found: ${filePath}`)
+    ok = false
+  }
+
+  const drawSimpleDotOld =
+    "        drawSimpleDot(ctx, lastPt[0], lastPt[1], entry.palette.line, 3);"
+  const drawSimpleDotNew =
+    "        if (opts.showDot !== false) drawSimpleDot(ctx, lastPt[0], lastPt[1], entry.palette.line, 3);"
+
+  if (next.includes(drawSimpleDotNew)) {
+    // already patched
+  } else if (next.includes(drawSimpleDotOld)) {
+    next = next.replaceAll(drawSimpleDotOld, drawSimpleDotNew)
+    didChange = true
+  } else {
+    console.warn(`[patch-liveline] Simple live-dot draw pattern not found: ${filePath}`)
+    ok = false
+  }
+
   if (!didChange) return { ok, changed: false }
   await writeFile(filePath, next, "utf8")
   console.log(`[patch-liveline] Patched: ${filePath}`)

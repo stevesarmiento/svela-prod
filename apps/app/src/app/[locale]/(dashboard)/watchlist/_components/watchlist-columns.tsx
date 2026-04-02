@@ -88,7 +88,7 @@ function ColumnHeaderTooltip({
       </TooltipTrigger>
       <TooltipContent
         side="top"
-        className="p-2.5 rounded-md max-w-xs text-pretty text-xs font-normal normal-case tracking-normal"
+        className="p-2.5 rounded-md max-w-xs text-pretty text-[11px] font-normal normal-case tracking-normal"
       >
         {text}
       </TooltipContent>
@@ -202,7 +202,7 @@ export function createWatchlistColumns({
                 )}
               </div>
               <div className="flex flex-row items-center gap-2">
-                <div className="font-bold text-sm">
+                <div className="font-bold text-sm text-nowrap">
                   {row.original.quote.USD.price > 0 ? (
                     <span className={cn(
                       hasSelectedCoinsRef.current ? "text-primary" : "text-zinc-950 dark:text-white",
@@ -215,7 +215,7 @@ export function createWatchlistColumns({
                 </div>
                 <div className=" translate-y-[-1px]">
                   {row.original.quote.USD.price > 0 ? (
-                    <span className="text-muted-foreground font-diatype-medium text-xs">{tokenName}</span>
+                    <span className="text-nowrap text-muted-foreground font-diatype-medium text-[11px]">{tokenName}</span>
                   ) : (
                     <Skeleton className="h-3 w-16 rounded" />
                   )}
@@ -250,7 +250,7 @@ export function createWatchlistColumns({
         </div>
       ),
       cell: ({ row }) => (
-        <span className="block w-full text-right font-berkeley-mono text-xs tabular-nums">
+        <span className="block w-full text-right font-berkeley-mono text-[11px] tabular-nums">
           {row.original.quote.USD.price > 0 ? (
             formatUsdPrice(row.original.quote.USD.price)
           ) : (
@@ -271,7 +271,7 @@ export function createWatchlistColumns({
         </div>
       ),
       cell: ({ row }) => (
-        <span className="block w-full text-right font-berkeley-mono text-xs tabular-nums">
+        <span className="block w-full text-right font-berkeley-mono text-[11px] tabular-nums">
           {row.original.quote.USD.price > 0 ? (
             `$${formatLargeNumber(row.original.quote.USD.volume_24h || 0)}`
           ) : (
@@ -298,7 +298,6 @@ export function createWatchlistColumns({
             const isPositive = change24h > 0
             const isNegative = change24h < 0
             const isNeutral = !isPositive && !isNegative
-            const pctSign = isPositive ? "+" : isNegative ? "-" : ""
             const usdMove = deriveUsdMoveFromPercentChange({
               priceUsd: row.original.quote.USD.price,
               percentChange: change24h,
@@ -309,7 +308,7 @@ export function createWatchlistColumns({
               <div className="inline-flex items-center justify-end gap-2">
                 <span
                   className={cn(
-                    "font-berkeley-mono text-[10px] tabular-nums",
+                    "font-berkeley-mono text-[11px] tabular-nums",
                     isPositive && "text-emerald-400",
                     isNegative && "text-rose-400",
                     isNeutral && "text-muted-foreground",
@@ -320,18 +319,18 @@ export function createWatchlistColumns({
                 <Badge
                   variant={isPositive ? "success" : isNegative ? "destructive" : "outline"}
                   className={cn(
-                    "h-5 px-1 font-berkeley-mono text-[10px] tabular-nums gap-1",
+                    "h-5 px-1 font-berkeley-mono text-[11px] tabular-nums gap-1",
                     isNeutral && "border-zinc-200/60 text-muted-foreground dark:border-white/10",
                   )}
                 >
                   <IconTriangleFill
                     aria-hidden="true"
                     className={cn(
-                      "size-1.5 shrink-0 fill-current",
+                      "size-[4px] shrink-0 fill-current",
                       isNegative && "rotate-180",
                     )}
                   />
-                  {pctSign}{Math.abs(change24h).toFixed(2)}%
+                  {Math.abs(change24h).toFixed(2)}%
                 </Badge>
               </div>
             )
@@ -358,7 +357,7 @@ export function createWatchlistColumns({
           {row.original.quote.USD.price > 0 ? (
             <InlineSpotTakerBuySellVolumeChart
               baseSymbol={row.original.symbol}
-              className="w-full max-w-56"
+              className="max-w-56"
             />
           ) : (
             <Skeleton className="h-8 w-full max-w-56 rounded-sm" />
@@ -372,7 +371,7 @@ export function createWatchlistColumns({
       header: () => (
         <div className="flex w-full items-center justify-end gap-1 text-right">
           <ColumnHeaderTooltip text="14-day USD price trail. The first 7 days render neutral; the most recent 7 days render green/red based on performance over that window.">
-            2w price trail
+            2 week price trail
           </ColumnHeaderTooltip>
         </div>
       ),

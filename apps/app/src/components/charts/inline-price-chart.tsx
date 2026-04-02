@@ -302,7 +302,8 @@ export function InlinePriceChart({
             theme={livelineTheme}
             color="#ffffff30"
             showValue={false}
-            lineWidth={1.5}
+            dot={false}
+            lineWidth={1}
             window={windowSecs}
             grid={false}
             badge={false}
@@ -314,7 +315,7 @@ export function InlinePriceChart({
             exaggerate
             emptyText="No data"
             formatTime={() => ""}
-            padding={{ top: 8, right: 8, bottom: 8, left: 8 }}
+            padding={{ top: 8, right: 0, bottom: 8, left: 8 }}
             className="size-full"
           />
         </div>
@@ -328,9 +329,10 @@ export function InlinePriceChart({
             data={points}
             value={livelineValue}
             theme={livelineTheme}
-            color={isPositive ? "#10b981" : "#ef4444"}
+            color={isPositive ? "#00d492" : "#ff6467"}
             showValue={false}
-            lineWidth={1.5}
+            dot={false}
+            lineWidth={1}
             window={windowSecs}
             grid={false}
             badge={false}
@@ -342,7 +344,7 @@ export function InlinePriceChart({
             exaggerate
             emptyText="No data"
             formatTime={() => ""}
-            padding={{ top: 8, right: 8, bottom: 8, left: 8 }}
+            padding={{ top: 8, right: 0, bottom: 8, left: 8 }}
             className="size-full"
           />
         </div>
