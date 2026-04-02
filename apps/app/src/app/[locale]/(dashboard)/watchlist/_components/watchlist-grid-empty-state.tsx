@@ -1,6 +1,7 @@
 'use client'
 
 import { type ComponentType, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import { LayoutGrid, Plus, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@v1/ui/card'
@@ -227,6 +228,51 @@ function IllustrationWatchlistCard({
 
 export function WatchlistGridEmptyState() {
   const shouldReduceMotion: boolean = useReducedMotion() ?? false
+  const [isShiftDown, setIsShiftDown] = useState(false)
+  const [isNDown, setIsNDown] = useState(false)
+
+  useEffect(() => {
+    function isTypingTarget(target: EventTarget | null) {
+      if (!(target instanceof HTMLElement)) return false
+      if (target.isContentEditable) return true
+      const tag = target.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (isTypingTarget(event.target)) return
+      if (event.key === 'Shift') setIsShiftDown(true)
+      if (event.key.toLowerCase() === 'n') setIsNDown(true)
+      if (event.shiftKey) setIsShiftDown(true)
+    }
+
+    function handleKeyUp(event: KeyboardEvent) {
+      if (event.key === 'Shift') setIsShiftDown(false)
+      if (event.key.toLowerCase() === 'n') setIsNDown(false)
+      if (!event.shiftKey) setIsShiftDown(false)
+    }
+
+    function handleBlur() {
+      setIsShiftDown(false)
+      setIsNDown(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', handleBlur)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', handleBlur)
+    }
+  }, [])
+
+  function getKbdClassName(isActive: boolean) {
+    return cn(
+      'bg-white/10 text-white border-white/10 text-[10px] transition-colors',
+      isActive && 'bg-primary/30 border-primary/40 text-white',
+    )
+  }
 
   const containerVariants = {
     initial: { opacity: 0 },
@@ -352,9 +398,8 @@ export function WatchlistGridEmptyState() {
 
         <div className="inline-flex flex-col items-center gap-4 bg-zinc-900/50 px-6 py-4 rounded-xl border border-white/5 backdrop-blur-sm">
           <p className="text-sm font-medium flex items-center gap-3">
-            Press <Kbd className="bg-white/10 text-white border-white/10 text-[10px]">Shift</Kbd> +{' '}
-            <Kbd className="bg-white/10 text-white border-white/10 text-[10px]">N</Kbd> to create
-            your first watchlist
+            Press <Kbd className={getKbdClassName(isShiftDown)}>Shift</Kbd> +{' '}
+            <Kbd className={getKbdClassName(isNDown)}>N</Kbd> to create your first watchlist
           </p>
         </div>
       </motion.div>

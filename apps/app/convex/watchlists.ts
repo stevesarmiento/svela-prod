@@ -855,6 +855,12 @@ export const createMyWatchlistGroup = mutation({
     const user = await getCurrentUser(ctx);
     if (!user) throw new Error("Not authenticated");
 
+    const existingWatchlistItem = await ctx.db
+      .query("watchlists")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .first();
+    const shouldSeedDefaults = existingWatchlistItem === null;
+
     let baseSlug = generateSlug(args.name);
     if (!baseSlug) baseSlug = "watchlist";
 
@@ -871,7 +877,7 @@ export const createMyWatchlistGroup = mutation({
     }
 
     const now = Date.now();
-    return await ctx.db.insert("watchlistGroups", {
+    const groupId = await ctx.db.insert("watchlistGroups", {
       userId: user._id,
       name: args.name,
       slug,
@@ -882,6 +888,54 @@ export const createMyWatchlistGroup = mutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    if (shouldSeedDefaults) {
+      const seedCoinIds = ["bitcoin", "ethereum", "solana"] as const;
+
+      await Promise.all(
+        seedCoinIds.map(async (coinId) => {
+          const existing = await ctx.db
+            .query("watchlists")
+            .withIndex("by_group_coin", (q) => q.eq("watchlistGroupId", groupId).eq("coinId", coinId))
+            .first();
+          if (existing) return;
+          await ctx.db.insert("watchlists", {
+            userId: user._id,
+            watchlistGroupId: groupId,
+            coinId,
+          });
+        }),
+      );
+
+      await ctx.runMutation(internal.coingeckoState._touchTrackedCoinsBatch, {
+        coingeckoIds: [...seedCoinIds],
+        reason: "watchlist",
+        lastSeen: now,
+      });
+
+      await ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshMarketsByIds, {
+        coingeckoIds: [...seedCoinIds],
+      });
+
+      await Promise.all(
+        seedCoinIds.flatMap((coingeckoId) => [
+          ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshSingleMarketChart, {
+            coingeckoId,
+            days: "7",
+          }),
+          ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshSingleMarketChart, {
+            coingeckoId,
+            days: "1",
+          }),
+          ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshSingleOhlc, {
+            coingeckoId,
+            days: "1",
+          }),
+        ]),
+      );
+    }
+
+    return groupId;
   },
 });
 
