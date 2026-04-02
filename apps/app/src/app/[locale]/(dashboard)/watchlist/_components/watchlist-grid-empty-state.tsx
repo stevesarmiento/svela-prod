@@ -1,25 +1,56 @@
 'use client'
 
-import { type ComponentType } from 'react'
+import { type ComponentType, useMemo } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import { LayoutGrid, Plus, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@v1/ui/card'
 import { cn } from '@v1/ui/cn'
 import { Kbd } from '@v1/ui/kbd'
 import { IconRainbow, IconSparkles, IconTarget } from 'symbols-react'
+import { Liveline, type LivelinePoint } from 'liveline'
 
 type IllustrationVariant = 'orange' | 'blue' | 'primary'
-
-interface SparklineSpec {
-  viewBox: string
-  d: string
-  strokeWidth: number
-}
 
 const DOT_PATTERN_STYLE = {
   backgroundImage:
     "url(\"data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='5' cy='5' r='1' fill='rgba(255,255,255,0.12)'/%3E%3C/svg%3E\")",
   backgroundRepeat: 'repeat' as const,
+}
+
+function mulberry32(seed: number) {
+  let t = seed >>> 0
+  return function next() {
+    t += 0x6d2b79f5
+    let x = t
+    x = Math.imul(x ^ (x >>> 15), x | 1)
+    x ^= x + Math.imul(x ^ (x >>> 7), x | 61)
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+function buildFakeSparkline(seed: number, pointCount: number) {
+  const rand = mulberry32(seed)
+  const nowSecs = Math.floor(Date.now() / 1000)
+  const stepSecs = 60 * 30
+
+  const trend = (rand() - 0.5) * 0.12
+  const volatility = 0.35 + rand() * 0.25
+
+  let value = (rand() - 0.5) * 0.6
+  const result: Array<LivelinePoint> = []
+
+  for (let i = 0; i < pointCount; i++) {
+    const noise = (rand() - 0.5) * volatility
+    value += noise + trend
+    value = Math.max(-6, Math.min(6, value))
+
+    result.push({
+      time: nowSecs - (pointCount - 1 - i) * stepSecs,
+      value,
+    })
+  }
+
+  return result
 }
 
 const VARIANT_STYLES: Record<
@@ -74,9 +105,9 @@ interface IllustrationWatchlistCardProps {
   subtitleWidthClassName: string
   tokenCount: number
   footerPillWidthClassName: string
-  sparkline: SparklineSpec
+  sparklineSeed: number
+  sparklinePointCount?: number
   itemVariants: unknown
-  sparklineVariants: unknown
   shouldReduceMotion: boolean
   floatingAnimation: (delay: number) => unknown
   floatDelay: number
@@ -92,14 +123,26 @@ function IllustrationWatchlistCard({
   subtitleWidthClassName,
   tokenCount,
   footerPillWidthClassName,
-  sparkline,
+  sparklineSeed,
+  sparklinePointCount = 18,
   itemVariants,
-  sparklineVariants,
   shouldReduceMotion,
   floatingAnimation,
   floatDelay,
 }: IllustrationWatchlistCardProps) {
   const styles = VARIANT_STYLES[variant]
+  const sparklineData = useMemo(
+    () => buildFakeSparkline(sparklineSeed, sparklinePointCount),
+    [sparklineSeed, sparklinePointCount],
+  )
+  const sparklineWindowSecs = useMemo(() => {
+    if (sparklineData.length < 2) return 30
+    const first = sparklineData[0]?.time
+    const last = sparklineData[sparklineData.length - 1]?.time
+    if (typeof first !== 'number' || typeof last !== 'number') return 30
+    return Math.max(30, last - first)
+  }, [sparklineData])
+  const sparklineLatestValue = sparklineData[sparklineData.length - 1]?.value ?? 0
 
   return (
     <motion.div
@@ -129,22 +172,36 @@ function IllustrationWatchlistCard({
           </div>
 
           <div className="flex-1 flex items-center justify-center relative px-2">
-            <svg
-              className="w-full h-10 overflow-visible"
-              viewBox={sparkline.viewBox}
-              preserveAspectRatio="none"
-            >
-              <motion.path
-                d={sparkline.d}
-                fill="none"
-                stroke={styles.sparklineStroke}
-                strokeWidth={sparkline.strokeWidth}
-                strokeLinecap="round"
-                initial="initial"
-                animate="animate"
-                variants={sparklineVariants as never}
-              />
-            </svg>
+
+              <div
+                className="[mask-image:linear-gradient(to_right,transparent_0%,black_30%,black_100%)]"
+                style={{
+                  WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 30%, black 100%)',
+                  maskImage: 'linear-gradient(to right, transparent 0%, black 30%, black 100%)',
+                }}
+              >
+                <div className="h-10 w-[180px]">
+                  <Liveline
+                    data={sparklineData}
+                    value={sparklineLatestValue}
+                    color={"#ffffff50"}
+                    lineWidth={2}
+                    window={sparklineWindowSecs}
+                    showValue={false}
+                    dot={true}
+                    grid={false}
+                    badge={false}
+                    fill={false}
+                    pulse={false}
+                    scrub={false}
+                    momentum={false}
+                    exaggerate
+                    formatTime={() => ''}
+                    padding={{ top: 8, right: 5, bottom: 8, left: 2 }}
+                    className="size-full opacity-60"
+                  />
+                </div>
+              </div>
           </div>
 
           <div className="flex items-center justify-between mt-auto">
@@ -206,22 +263,8 @@ export function WatchlistGridEmptyState() {
     },
   })
 
-  // Draw once on mount (no looping).
-  const sparklineVariants = {
-    initial: { pathLength: 0, opacity: 0 },
-    animate: {
-      pathLength: 1,
-      opacity: 0.4,
-      transition: {
-        duration: 1.5,
-        ease: 'easeOut',
-        delay: 0.8,
-      },
-    },
-  }
-
   return (
-    <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+    <div className="group flex flex-col items-center justify-center py-20 px-4 text-center">
       <motion.div
         variants={containerVariants}
         initial="initial"
@@ -243,19 +286,14 @@ export function WatchlistGridEmptyState() {
             absoluteClassName="size-full"
             variant="primary"
             icon={IconTarget}
-            cardBgClassName="bg-zinc-800 shadow-2xl shadow-black"
+            cardBgClassName="bg-zinc-800 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-all duration-300"
             cardBorderClassName="border-primary/10"
             titleWidthClassName="w-16"
             subtitleWidthClassName="w-8"
             tokenCount={3}
             footerPillWidthClassName="w-10"
-            sparkline={{
-              viewBox: '0 0 120 30',
-              d: 'M 0 20 Q 15 5 30 15 T 60 10 T 90 25 T 120 15',
-              strokeWidth: 1.2,
-            }}
+            sparklineSeed={11}
             itemVariants={itemVariants}
-            sparklineVariants={sparklineVariants}
             shouldReduceMotion={shouldReduceMotion}
             floatingAnimation={floatingAnimation}
             floatDelay={0}
@@ -267,19 +305,14 @@ export function WatchlistGridEmptyState() {
             absoluteClassName="size-full"
             variant="primary"
             icon={IconSparkles}
-            cardBgClassName="bg-zinc-800 shadow-2xl shadow-black"
+            cardBgClassName="bg-zinc-800 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-2 transition-all duration-300"
             cardBorderClassName="border-primary/10 "
             titleWidthClassName="w-24"
             subtitleWidthClassName="w-12"
             tokenCount={5}
             footerPillWidthClassName="w-14"
-            sparkline={{
-              viewBox: '0 0 140 40',
-              d: 'M 0 30 Q 20 10 40 25 T 70 15 T 100 35 T 140 20',
-              strokeWidth: 1.2,
-            }}
+            sparklineSeed={37}
             itemVariants={itemVariants}
-            sparklineVariants={sparklineVariants}
             shouldReduceMotion={shouldReduceMotion}
             floatingAnimation={floatingAnimation}
             floatDelay={1.2}
@@ -291,19 +324,14 @@ export function WatchlistGridEmptyState() {
             absoluteClassName="size-full"
             variant="primary"
             icon={IconRainbow}
-            cardBgClassName="bg-zinc-800 shadow-2xl shadow-black"
+            cardBgClassName="bg-zinc-800 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-all duration-300"
             cardBorderClassName="border-primary/10"
             titleWidthClassName="w-20"
             subtitleWidthClassName="w-10"
             tokenCount={4}
             footerPillWidthClassName="w-12"
-            sparkline={{
-              viewBox: '0 0 140 30',
-              d: 'M 0 10 Q 20 25 40 10 T 80 20 T 120 5 T 140 15',
-              strokeWidth: 1.2,
-            }}
+            sparklineSeed={23}
             itemVariants={itemVariants}
-            sparklineVariants={sparklineVariants}
             shouldReduceMotion={shouldReduceMotion}
             floatingAnimation={floatingAnimation}
             floatDelay={0.6}
