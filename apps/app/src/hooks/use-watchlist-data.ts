@@ -30,8 +30,8 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     // Default max must be high enough to include majors (BTC/ETH often > $1B daily volume).
     volumeRange: [0, 1000000000000],
     changeFilter: "all",
-    // Default sort: highest volume first
-    sortBy: "volume",
+    // Default sort: highest market cap first
+    sortBy: "marketCap",
     sortOrder: "desc",
     watchlistGroupId: null,
   })
@@ -158,8 +158,8 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       marketCapRange: [0, 10000000000000],
       volumeRange: [0, 1000000000000],
       changeFilter: "all",
-      // Default sort: highest volume first
-      sortBy: "volume",
+      // Default sort: highest market cap first
+      sortBy: "marketCap",
       sortOrder: "desc",
       watchlistGroupId: null,
     });

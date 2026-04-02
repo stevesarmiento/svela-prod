@@ -10,13 +10,15 @@ interface WatchlistTableBodyProps {
   selectedCoins: Set<string>;
   watchlistGroup: string | null;
   onCoinSelect: (coinId: string, selected: boolean) => void;
+  mode?: "watchlist" | "screener";
 }
 
 export function WatchlistTableBody({ 
   table, 
   selectedCoins, 
   watchlistGroup, 
-  onCoinSelect
+  onCoinSelect,
+  mode = "watchlist",
 }: WatchlistTableBodyProps) {
   return (
     <div className="rounded-[10px] bg-primary/5 p-0.5">
@@ -35,6 +37,7 @@ export function WatchlistTableBody({
             selectedCoins={selectedCoins}
             watchlistGroup={watchlistGroup}
             onCoinSelect={onCoinSelect}
+            mode={mode}
           />
         ))}
       </div>

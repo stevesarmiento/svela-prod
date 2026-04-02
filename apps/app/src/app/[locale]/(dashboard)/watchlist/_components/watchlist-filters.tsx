@@ -10,6 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@v1/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { ListFilter, X } from "lucide-react";
 import { Kbd } from "@v1/ui/kbd";
+import { formatLargeNumber } from "@v1/ui/format-numbers";
 import { IconCommand, IconReturn } from "symbols-react";
 import { useBottomNav } from "@/components/navigation/bottom-nav-context"
 
@@ -20,6 +21,7 @@ interface FilterChip {
 }
 
 interface WatchlistFiltersProps {
+  mode?: "watchlist" | "screener";
   // Filter state
   searchText: string;
   priceRange: [number, number];
@@ -102,6 +104,96 @@ type NaturalLanguageAction =
   | { kind: "change"; value: "all" | "positive" | "negative" }
   | { kind: "sortBy"; value: "name" | "price" | "change" | "marketCap" | "volume" }
   | { kind: "sortOrder"; value: "asc" | "desc" }
+  | { kind: "priceRange"; value: [number, number] }
+  | { kind: "marketCapRange"; value: [number, number] }
+  | { kind: "volumeRange"; value: [number, number] }
+
+const RANGE_DEFAULTS = {
+  priceMax: 1_000_000,
+  marketCapMax: 10_000_000_000_000,
+  volumeMax: 1_000_000_000_000,
+} as const
+
+function parseCompactNumber(raw: string): number | null {
+  const cleaned = raw
+    .trim()
+    .toLowerCase()
+    .replaceAll("$", "")
+    .replaceAll(",", "")
+    .replaceAll("_", "")
+
+  if (!cleaned) return null
+
+  const match = cleaned.match(/^([0-9]*\.?[0-9]+)\s*(k|m|b|t|bn)?$/)
+  if (!match) return null
+
+  const n = Number(match[1])
+  if (!Number.isFinite(n)) return null
+
+  const suffix = match[2] ?? ""
+  const mult =
+    suffix === "k"
+      ? 1e3
+      : suffix === "m"
+        ? 1e6
+        : suffix === "b" || suffix === "bn"
+          ? 1e9
+          : suffix === "t"
+            ? 1e12
+            : 1
+
+  const value = n * mult
+  return Number.isFinite(value) ? value : null
+}
+
+type RangeField = "price" | "marketCap" | "volume"
+
+function parseRangeClause(args: {
+  clause: string
+  field: RangeField
+  max: number
+}): [number, number] | null {
+  const fieldRe =
+    args.field === "price"
+      ? /\bprice\b/
+      : args.field === "marketCap"
+        ? /\bmcap\b|\bmarket\s*cap\b|\bmarketcap\b/
+        : /\bvol\b|\bvolume\b/
+
+  if (!fieldRe.test(args.clause)) return null
+
+  const between = args.clause.match(
+    new RegExp(
+      `${fieldRe.source}\\s*(?:between|from)\\s*([^\\s]+)\\s*(?:and|to|-)\\s*([^\\s]+)`,
+    ),
+  )
+  if (between) {
+    const a = parseCompactNumber(between[1] ?? "")
+    const b = parseCompactNumber(between[2] ?? "")
+    if (a === null || b === null) return null
+    const lo = Math.min(a, b)
+    const hi = Math.max(a, b)
+    return [Math.max(0, lo), Math.min(args.max, hi)]
+  }
+
+  const cmp = args.clause.match(
+    new RegExp(`${fieldRe.source}\\s*(<=|>=|<|>|under|below|over|above)\\s*([^\\s]+)`),
+  )
+  if (!cmp) return null
+
+  const op = (cmp[1] ?? "").toLowerCase()
+  const v = parseCompactNumber(cmp[2] ?? "")
+  if (v === null) return null
+
+  if (op === "<" || op === "<=" || op === "under" || op === "below") {
+    return [0, Math.min(args.max, v)]
+  }
+  if (op === ">" || op === ">=" || op === "over" || op === "above") {
+    return [Math.max(0, v), args.max]
+  }
+
+  return null
+}
 
 function parseNaturalLanguageActions(args: {
   rawInput: string
@@ -219,6 +311,51 @@ function parseNaturalLanguageActions(args: {
     if (sortByValue || sortOrderValue) {
       if (sortByValue) actions.push({ kind: "sortBy", value: sortByValue })
       if (sortOrderValue) actions.push({ kind: "sortOrder", value: sortOrderValue })
+      continue
+    }
+
+    // 4) High-signal shortcuts
+    if (/\btop\s+gainers\b|\bgainers\b/.test(clause)) {
+      actions.push({ kind: "change", value: "positive" })
+      actions.push({ kind: "sortBy", value: "change" })
+      actions.push({ kind: "sortOrder", value: "desc" })
+      continue
+    }
+    if (/\btop\s+losers\b|\blosers\b/.test(clause)) {
+      actions.push({ kind: "change", value: "negative" })
+      actions.push({ kind: "sortBy", value: "change" })
+      actions.push({ kind: "sortOrder", value: "asc" })
+      continue
+    }
+
+    // 5) Numeric range clauses (USD)
+    const marketCapRange = parseRangeClause({
+      clause,
+      field: "marketCap",
+      max: RANGE_DEFAULTS.marketCapMax,
+    })
+    if (marketCapRange) {
+      actions.push({ kind: "marketCapRange", value: marketCapRange })
+      continue
+    }
+
+    const volumeRange = parseRangeClause({
+      clause,
+      field: "volume",
+      max: RANGE_DEFAULTS.volumeMax,
+    })
+    if (volumeRange) {
+      actions.push({ kind: "volumeRange", value: volumeRange })
+      continue
+    }
+
+    const priceRange = parseRangeClause({
+      clause,
+      field: "price",
+      max: RANGE_DEFAULTS.priceMax,
+    })
+    if (priceRange) {
+      actions.push({ kind: "priceRange", value: priceRange })
     }
   }
 
@@ -226,6 +363,7 @@ function parseNaturalLanguageActions(args: {
 }
 
 export function WatchlistFilters({
+  mode = "watchlist",
   searchText,
   priceRange,
   marketCapRange,
@@ -251,6 +389,7 @@ export function WatchlistFilters({
   isRemoving,
   align = "left",
 }: WatchlistFiltersProps) {
+  const isScreener = mode === "screener"
   const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
   const [inputValue, setInputValue] = useState(searchText);
   const [isInterpreting, setIsInterpreting] = useState(false)
@@ -261,18 +400,20 @@ export function WatchlistFilters({
   const intentConfidenceThreshold = 0.6
 
   const watchlistGroupIndex = useMemo(() => {
+    if (isScreener) return []
     return watchlistGroupOptions.map((g) => ({
       id: g.id,
       name: g.name,
       normalizedName: normalizeFilterQuery(g.name),
       normalizedNameNoThe: stripLeadingThe(normalizeFilterQuery(g.name)),
     }))
-  }, [watchlistGroupOptions])
+  }, [isScreener, watchlistGroupOptions])
 
   const selectedWatchlistGroupName = useMemo(() => {
+    if (isScreener) return null
     if (!watchlistGroupId) return null
     return watchlistGroupOptions.find((o) => o.id === watchlistGroupId)?.name ?? null
-  }, [watchlistGroupId, watchlistGroupOptions])
+  }, [isScreener, watchlistGroupId, watchlistGroupOptions])
 
   // Keyboard shortcut handler
   useEffect(() => {
@@ -287,13 +428,13 @@ export function WatchlistFilters({
       // Calculate hasActiveFilters inside the effect to avoid dependency issues
       const currentHasActiveFilters = !!(
         searchText ||
-        watchlistGroupId ||
+        (!isScreener && watchlistGroupId) ||
         priceRange[0] > 0 || priceRange[1] < 1000000 ||
         marketCapRange[0] > 0 || marketCapRange[1] < 10000000000000 ||
         volumeRange[0] > 0 || volumeRange[1] < 1000000000000 ||
         changeFilter !== "all" ||
-        // Default sort is volume desc (highest volume first)
-        sortBy !== "volume" || sortOrder !== "desc"
+        // Default sort is market cap desc (highest market cap first)
+        sortBy !== "marketCap" || sortOrder !== "desc"
       );
 
       // Check for Escape to clear filters (only if popover is not open and there are active filters)
@@ -308,6 +449,7 @@ export function WatchlistFilters({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [
     isFilterPopoverOpen,
+    isScreener,
     searchText,
     watchlistGroupId,
     priceRange,
@@ -352,7 +494,7 @@ export function WatchlistFilters({
       chips.push({ key: "searchText", label: "Search", value: searchText });
     }
 
-    if (watchlistGroupId) {
+    if (!isScreener && watchlistGroupId) {
       chips.push({
         key: "watchlistGroup",
         label: "Watchlist",
@@ -372,7 +514,7 @@ export function WatchlistFilters({
       chips.push({
         key: "marketCapRange",
         label: "Market Cap",
-        value: `$${marketCapRange[0]}B - $${marketCapRange[1]}B`,
+        value: `$${formatLargeNumber(marketCapRange[0])} - $${formatLargeNumber(marketCapRange[1])}`,
       });
     }
 
@@ -380,7 +522,7 @@ export function WatchlistFilters({
       chips.push({
         key: "volumeRange",
         label: "Volume",
-        value: `$${volumeRange[0]}M - $${volumeRange[1]}M`,
+        value: `$${formatLargeNumber(volumeRange[0])} - $${formatLargeNumber(volumeRange[1])}`,
       });
     }
 
@@ -392,7 +534,7 @@ export function WatchlistFilters({
       });
     }
 
-    if (sortBy !== "volume" || sortOrder !== "desc") {
+    if (sortBy !== "marketCap" || sortOrder !== "desc") {
       chips.push({
         key: "sort",
         label: "Sort",
@@ -410,7 +552,7 @@ export function WatchlistFilters({
         setInputValue("");
         break;
       case "watchlistGroup":
-        onWatchlistGroupIdChange(null)
+        if (!isScreener) onWatchlistGroupIdChange(null)
         break
       case "priceRange":
         onPriceRangeChange([0, 1000000]);
@@ -425,8 +567,8 @@ export function WatchlistFilters({
         onChangeFilterChange("all");
         break;
       case "sort":
-        // Reset to default sort (highest volume first)
-        onSortByChange("volume");
+        // Reset to default sort (highest market cap first)
+        onSortByChange("marketCap");
         onSortOrderChange("desc");
         break;
     }
@@ -468,6 +610,21 @@ export function WatchlistFilters({
         if (action.kind === "sortOrder") {
           onSortOrderChange(action.value)
           didApplyNonSearchAction = true
+          continue
+        }
+        if (action.kind === "priceRange") {
+          onPriceRangeChange(action.value)
+          didApplyNonSearchAction = true
+          continue
+        }
+        if (action.kind === "marketCapRange") {
+          onMarketCapRangeChange(action.value)
+          didApplyNonSearchAction = true
+          continue
+        }
+        if (action.kind === "volumeRange") {
+          onVolumeRangeChange(action.value)
+          didApplyNonSearchAction = true
         }
       }
 
@@ -486,9 +643,9 @@ export function WatchlistFilters({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               text: raw,
-              watchlistGroups: watchlistGroupOptions,
+              watchlistGroups: isScreener ? [] : watchlistGroupOptions,
               current: {
-                watchlistGroupId,
+                watchlistGroupId: isScreener ? null : watchlistGroupId,
                 changeFilter,
                 sortBy,
                 sortOrder,
@@ -522,6 +679,7 @@ export function WatchlistFilters({
             const value = (a as Record<string, unknown>).value
 
             if (kind === "watchlistGroupId") {
+              if (isScreener) continue
               if (value === null || typeof value === "string") {
                 onWatchlistGroupIdChange(value)
                 didApply = true
@@ -625,7 +783,11 @@ export function WatchlistFilters({
                 <div className="relative">
                   <Input
                     ref={inputRef}
-                    placeholder='Search coins, or type “majors”, “ownership”, “marketcap descending”…'
+                    placeholder={
+                      isScreener
+                        ? 'Search tokens, or type “marketcap descending”, “positive”, “volume asc”…'
+                        : 'Search coins, or type “majors”, “ownership”, “marketcap descending”…'
+                    }
                     value={inputValue}
                     disabled={isInterpreting}
                     onChange={(e) => setInputValue(e.target.value)}
@@ -651,36 +813,38 @@ export function WatchlistFilters({
                   <h4 className="font-medium text-xs text-primary/50 uppercase">Filters</h4>
                 </div>
 
-                {/* Watchlist Filter */}
-                <div className="space-y-2">
-                  <Label className="text-[11px] text-primary/80 uppercase flex items-center gap-1">
-                    Watchlist
-                  </Label>
-                  <Select
-                    value={watchlistGroupId ?? "__all__"}
-                    onValueChange={(value) =>
-                      onWatchlistGroupIdChange(value === "__all__" ? null : value)
-                    }
-                  >
-                    <SelectTrigger className="h-8 rounded-lg">
-                      <SelectValue placeholder="All watchlists" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover rounded-lg" side="right">
-                      <SelectItem value="__all__">All watchlists</SelectItem>
-                      {watchlistGroupOptions.length === 0 ? (
-                        <SelectItem value="__none__" disabled>
-                          No watchlists
-                        </SelectItem>
-                      ) : (
-                        watchlistGroupOptions.map((o) => (
-                          <SelectItem key={o.id} value={o.id}>
-                            {o.name}
+                {/* Watchlist Filter (watchlist-only) */}
+                {!isScreener && (
+                  <div className="space-y-2">
+                    <Label className="text-[11px] text-primary/80 uppercase flex items-center gap-1">
+                      Watchlist
+                    </Label>
+                    <Select
+                      value={watchlistGroupId ?? "__all__"}
+                      onValueChange={(value) =>
+                        onWatchlistGroupIdChange(value === "__all__" ? null : value)
+                      }
+                    >
+                      <SelectTrigger className="h-8 rounded-lg">
+                        <SelectValue placeholder="All watchlists" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover rounded-lg" side="right">
+                        <SelectItem value="__all__">All watchlists</SelectItem>
+                        {watchlistGroupOptions.length === 0 ? (
+                          <SelectItem value="__none__" disabled>
+                            No watchlists
                           </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
+                        ) : (
+                          watchlistGroupOptions.map((o) => (
+                            <SelectItem key={o.id} value={o.id}>
+                              {o.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {/* 24h Change Filter */}
                 <div className="space-y-2">

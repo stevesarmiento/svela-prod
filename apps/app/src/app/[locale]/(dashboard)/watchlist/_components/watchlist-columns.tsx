@@ -15,7 +15,7 @@ import { Spinner } from "@v1/ui/spinner"
 import dynamic from "next/dynamic"
 import type { CoinMarketData } from '@/types/coins'
 import { TokenLogo } from "@/components/token-logo"
-import { InlinePriceChart } from "@/components/charts/inline-price-chart"
+import { InlinePriceChart, LazyInlinePriceChart } from "@/components/charts/inline-price-chart"
 import { InlineSpotTakerBuySellVolumeChart } from "@/components/charts/inline-spot-taker-buy-sell-volume-chart"
 import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides"
@@ -50,6 +50,7 @@ interface WatchlistColumnsProps {
   hasSelectedCoinsRef: Ref<boolean>;
   shouldReduceMotion?: boolean;
   onInlineChartError?: () => void;
+  mode?: "watchlist" | "screener";
 }
 
 function deriveUsdMoveFromPercentChange(args: {
@@ -106,21 +107,27 @@ export function createWatchlistColumns({
   hasSelectedCoinsRef,
   shouldReduceMotion = false,
   onInlineChartError,
+  mode = "watchlist",
 }: WatchlistColumnsProps): ColumnDef<CoinMarketData>[] {
+  const enableSelection = mode === "watchlist"
   return [
     {
       id: 'select',
       header: () => (
-        <div className={cn(
-          "transition-opacity duration-200",
-          hasSelectedCoinsRef.current ? "opacity-100" : "opacity-0"
-        )}>
-          <Checkbox
-            checked={selectedCoinsRef.current.size === totalCoins && totalCoins > 0}
-            onCheckedChange={onSelectAll}
-            aria-label="Select all"
-          />
-        </div>
+        enableSelection ? (
+          <div
+            className={cn(
+              "transition-opacity duration-200",
+              hasSelectedCoinsRef.current ? "opacity-100" : "opacity-0",
+            )}
+          >
+            <Checkbox
+              checked={selectedCoinsRef.current.size === totalCoins && totalCoins > 0}
+              onCheckedChange={onSelectAll}
+              aria-label="Select all"
+            />
+          </div>
+        ) : null
       ),
       cell: ({ row }) => {
         const coinId = row.original.id.toString()
@@ -132,6 +139,48 @@ export function createWatchlistColumns({
           tokenLogoUrl && (tokenLogoUrl.startsWith("http") || tokenLogoUrl.startsWith("/"))
             ? tokenLogoUrl
             : undefined
+
+        if (!enableSelection) {
+          return (
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                {row.original.quote.USD.price > 0 ? (
+                  <TokenLogo
+                    src={safeTokenLogoUrl}
+                    alt={tokenName}
+                    sizePx={20}
+                    fallbackText={row.original.symbol}
+                    className="mr-1 ring-0 bg-primary/20 border-[1.5px] border-zinc-200 dark:border-black/60"
+                    quality={70}
+                  />
+                ) : (
+                  <Skeleton className="w-[20px] h-[20px] rounded-full" />
+                )}
+              </div>
+              <div className="flex flex-row items-center gap-2">
+                <div className="font-bold text-sm text-nowrap">
+                  {row.original.quote.USD.price > 0 ? (
+                    <span className="text-zinc-950 dark:text-white">
+                      {row.original.symbol.toUpperCase()}
+                    </span>
+                  ) : (
+                    <Skeleton className="h-4 w-8 rounded" />
+                  )}
+                </div>
+                <div className=" translate-y-[-1px]">
+                  {row.original.quote.USD.price > 0 ? (
+                    <span className="text-nowrap text-muted-foreground font-diatype-medium text-[11px]">
+                      {tokenName}
+                    </span>
+                  ) : (
+                    <Skeleton className="h-3 w-16 rounded" />
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        }
+
         // When any rows are selected, lock the reveal state for all rows (selection mode).
         // Otherwise, reveal on hover (handled by Motion `whileHover` below).
         const isSelectionMode = hasSelectedCoinsRef.current
@@ -261,6 +310,28 @@ export function createWatchlistColumns({
       enableSorting: true,
     },
     {
+      id: "marketCap",
+      accessorKey: "quote.USD.market_cap",
+      header: () => (
+        <div className="flex w-full items-center justify-end gap-1 text-right">
+          <ColumnHeaderTooltip text="Current USD market cap (price × circulating supply, when available). Useful for quickly spotting majors (BTC/ETH) vs smaller caps.">
+            Market cap
+          </ColumnHeaderTooltip>
+        </div>
+      ),
+      cell: ({ row }) => (
+        <span className="block w-full text-right font-berkeley-mono text-[11px] tabular-nums">
+          {row.original.quote.USD.price > 0 ? (
+            `$${formatLargeNumber(row.original.quote.USD.market_cap || 0)}`
+          ) : (
+            <Skeleton className="ms-auto inline-block h-4 w-16 rounded-full" />
+          )}
+        </span>
+      ),
+      enableSorting: true,
+      sortDescFirst: true,
+    },
+    {
       id: 'volume',
       accessorKey: 'quote.USD.volume_24h',
       header: () => (
@@ -280,6 +351,7 @@ export function createWatchlistColumns({
         </span>
       ),
       enableSorting: true,
+      sortDescFirst: true,
     },
     {
       id: "dailyPerformance",
@@ -385,15 +457,28 @@ export function createWatchlistColumns({
                 maskImage: "linear-gradient(to right, transparent 0%, black 12%, black 100%)",
               }}
             >
-              <InlinePriceChart 
-                className="w-full"
-                coingeckoId={row.original.id}
-                percentChange24h={row.original.quote.USD.percent_change_24h}
-                symbol={row.original.symbol}
-                sparkline7d={row.original.sparkline7d}
-                initialData={row.original.quote.USD}
-                onError={onInlineChartError}
-              />
+              {mode === "screener" ? (
+                <LazyInlinePriceChart
+                  className="w-full"
+                  coingeckoId={row.original.id}
+                  percentChange24h={row.original.quote.USD.percent_change_24h}
+                  symbol={row.original.symbol}
+                  sparkline7d={row.original.sparkline7d}
+                  initialData={row.original.quote.USD}
+                  onError={onInlineChartError}
+                  rootMarginPx={600}
+                />
+              ) : (
+                <InlinePriceChart
+                  className="w-full"
+                  coingeckoId={row.original.id}
+                  percentChange24h={row.original.quote.USD.percent_change_24h}
+                  symbol={row.original.symbol}
+                  sparkline7d={row.original.sparkline7d}
+                  initialData={row.original.quote.USD}
+                  onError={onInlineChartError}
+                />
+              )}
             </div>
           ) : (
             <Skeleton className="h-8 w-full max-w-56 rounded-sm" />

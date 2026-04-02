@@ -1,6 +1,7 @@
 'use client'
 
 import { type ComponentType, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import { LayoutGrid, Plus, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@v1/ui/card'
@@ -135,6 +136,10 @@ function IllustrationWatchlistCard({
     () => buildFakeSparkline(sparklineSeed, sparklinePointCount),
     [sparklineSeed, sparklinePointCount],
   )
+  const tokenKeys = useMemo(
+    () => Array.from({ length: tokenCount }, (_, i) => `token-${tokenCount}-${i}`),
+    [tokenCount],
+  )
   const sparklineWindowSecs = useMemo(() => {
     if (sparklineData.length < 2) return 30
     const first = sparklineData[0]?.time
@@ -206,9 +211,9 @@ function IllustrationWatchlistCard({
 
           <div className="flex items-center justify-between mt-auto">
             <div className="flex -space-x-1.5">
-              {[...Array(tokenCount)].map((_, i) => (
+              {tokenKeys.map((key) => (
                 <div
-                  key={i}
+                  key={key}
                   className={cn(
                     'size-4 rounded-full',
                     variant === 'primary'
@@ -227,6 +232,56 @@ function IllustrationWatchlistCard({
 
 export function WatchlistGridEmptyState() {
   const shouldReduceMotion: boolean = useReducedMotion() ?? false
+  const [isShiftDown, setIsShiftDown] = useState(false)
+  const [isNDown, setIsNDown] = useState(false)
+
+  const gridKeys = useMemo(
+    () => Array.from({ length: 9 }, (_, i) => `grid-${i}`),
+    [],
+  )
+
+  useEffect(() => {
+    function isTypingTarget(target: EventTarget | null) {
+      if (!(target instanceof HTMLElement)) return false
+      if (target.isContentEditable) return true
+      const tag = target.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (isTypingTarget(event.target)) return
+      if (event.key === 'Shift') setIsShiftDown(true)
+      if (event.key.toLowerCase() === 'n') setIsNDown(true)
+      if (event.shiftKey) setIsShiftDown(true)
+    }
+
+    function handleKeyUp(event: KeyboardEvent) {
+      if (event.key === 'Shift') setIsShiftDown(false)
+      if (event.key.toLowerCase() === 'n') setIsNDown(false)
+      if (!event.shiftKey) setIsShiftDown(false)
+    }
+
+    function handleBlur() {
+      setIsShiftDown(false)
+      setIsNDown(false)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+    window.addEventListener('blur', handleBlur)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      window.removeEventListener('blur', handleBlur)
+    }
+  }, [])
+
+  function getKbdClassName(isActive: boolean) {
+    return cn(
+      'bg-white/10 text-white border-white/10 text-[10px] transition-colors',
+      isActive && 'bg-primary/30 border-primary/40 text-white',
+    )
+  }
 
   const containerVariants = {
     initial: { opacity: 0 },
@@ -253,11 +308,11 @@ export function WatchlistGridEmptyState() {
     },
   }
 
-  const floatingAnimation = (delay: number = 0) => ({
+  const floatingAnimation = (delay = 0) => ({
     y: [0, -12, 0],
     transition: {
       duration: 1.5,
-      repeat: Infinity,
+      repeat: Number.POSITIVE_INFINITY,
       ease: 'easeInOut',
       delay,
     },
@@ -273,9 +328,9 @@ export function WatchlistGridEmptyState() {
       >
         {/* Background Grid Pattern - 3x3 */}
         <div className="absolute inset-0 grid grid-cols-3 gap-4 opacity-[0.02] scale-110 pointer-events-none">
-          {[...Array(9)].map((_, i) => (
+          {gridKeys.map((key) => (
             <div
-              key={i}
+              key={key}
               className="aspect-square bg-foreground rounded-3xl border border-foreground"
             />
           ))}
@@ -352,9 +407,8 @@ export function WatchlistGridEmptyState() {
 
         <div className="inline-flex flex-col items-center gap-4 bg-zinc-900/50 px-6 py-4 rounded-xl border border-white/5 backdrop-blur-sm">
           <p className="text-sm font-medium flex items-center gap-3">
-            Press <Kbd className="bg-white/10 text-white border-white/10 text-[10px]">Shift</Kbd> +{' '}
-            <Kbd className="bg-white/10 text-white border-white/10 text-[10px]">N</Kbd> to create
-            your first watchlist
+            Press <Kbd className={getKbdClassName(isShiftDown)}>Shift</Kbd> +{' '}
+            <Kbd className={getKbdClassName(isNDown)}>N</Kbd> to create your first watchlist
           </p>
         </div>
       </motion.div>

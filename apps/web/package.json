@@ -16,7 +16,7 @@
     "@v1/analytics": "workspace:*",
     "@v1/ui": "workspace:*",
     "geist": "^1.7.0",
-    "next": "^16.2.1",
+    "next": "^16.2.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "usehooks-ts": "^3.1.0"
@@ -27,7 +27,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "eslint": "^8",
-    "eslint-config-next": "^16.2.1",
+    "eslint-config-next": "^16.2.2",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3"

@@ -11,17 +11,20 @@ interface WatchlistTableRowProps {
   selectedCoins: Set<string>;
   watchlistGroup: string | null;
   onCoinSelect: (coinId: string, selected: boolean) => void;
+  mode?: "watchlist" | "screener";
 }
 
 export function WatchlistTableRow({ 
   row, 
   selectedCoins, 
   watchlistGroup, 
-  onCoinSelect
+  onCoinSelect,
+  mode = "watchlist",
 }: WatchlistTableRowProps) {
   const isLoadingRow = row.original.quote.USD.price <= 0
   const isSelected = selectedCoins.has(row.original.id.toString());
   const hasAnySelections = selectedCoins.size > 0;
+  const enableSelection = mode === "watchlist"
   
   const className = cn(
     "grid gap-4 px-4 py-2.5 border-b last:border-b-0 hover:ring-2 hover:ring-white/20 hover:rounded-[7px] transition-opacity duration-200",
@@ -34,30 +37,37 @@ export function WatchlistTableRow({
       {/* First cell - merged select + token with specific hover */}
       <div
         className="flex min-w-0 items-center"
-        role="button"
-        tabIndex={isLoadingRow ? -1 : 0}
-        onClick={(e) => {
-          if (isLoadingRow) return
-          e.preventDefault(); // Always prevent navigation for first cell
-          e.stopPropagation();
+        role={enableSelection ? "button" : undefined}
+        tabIndex={enableSelection ? (isLoadingRow ? -1 : 0) : undefined}
+        onClick={
+          enableSelection
+            ? (e) => {
+                if (isLoadingRow) return
+                e.preventDefault() // Always prevent navigation for first cell (selection mode)
+                e.stopPropagation()
 
-          // Let the checkbox handle its own toggling (avoid double-toggle).
-          const target = e.target as HTMLElement
-          if (target.closest('[data-watchlist-row-checkbox="true"]')) return
+                // Let the checkbox handle its own toggling (avoid double-toggle).
+                const target = e.target as HTMLElement
+                if (target.closest('[data-watchlist-row-checkbox="true"]')) return
 
-          // Toggle checkbox selection when clicking anywhere in first cell
-          const isCurrentlySelected = selectedCoins.has(row.original.id.toString());
-          onCoinSelect(row.original.id.toString(), !isCurrentlySelected);
-        }}
-        onKeyDown={(e) => {
-          if (isLoadingRow) return
-          if (e.key !== "Enter" && e.key !== " ") return
-          e.preventDefault()
-          e.stopPropagation()
+                const isCurrentlySelected = selectedCoins.has(row.original.id.toString())
+                onCoinSelect(row.original.id.toString(), !isCurrentlySelected)
+              }
+            : undefined
+        }
+        onKeyDown={
+          enableSelection
+            ? (e) => {
+                if (isLoadingRow) return
+                if (e.key !== "Enter" && e.key !== " ") return
+                e.preventDefault()
+                e.stopPropagation()
 
-          const isCurrentlySelected = selectedCoins.has(row.original.id.toString());
-          onCoinSelect(row.original.id.toString(), !isCurrentlySelected);
-        }}
+                const isCurrentlySelected = selectedCoins.has(row.original.id.toString())
+                onCoinSelect(row.original.id.toString(), !isCurrentlySelected)
+              }
+            : undefined
+        }
       >
         {(() => {
           const firstCell = row.getVisibleCells()[0];
