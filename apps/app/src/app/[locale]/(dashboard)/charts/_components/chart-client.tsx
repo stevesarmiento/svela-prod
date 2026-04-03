@@ -8,6 +8,7 @@ import { Spinner } from "@v1/ui/spinner"
 import type { CoinMarketData } from '@/types/coins'
 import { WatchlistsGrid } from "../../watchlist/_components/watchlists-grid"
 import { WatchlistTable } from "../../watchlist/_components/watchlist-table"
+import { WatchlistChartsEmptyState } from "./watchlist-charts-empty-state"
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -40,35 +41,8 @@ const ChartsContent = memo(function ChartsContent() {
 
   if (isInitialized && !hasWatchlistItems) {
     return (
-      <div className="space-y-6 w-full px-4">
-        {/* Selected Group Header */}
-        {selectedGroup && (
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-semibold">Charts: {selectedGroup.name}</h2>
-              {selectedGroup.description && (
-                <p className="text-sm text-muted-foreground">{selectedGroup.description}</p>
-              )}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              0 coins
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-col items-center justify-center py-12">
-          <div className="text-center">
-            <h3 className="text-lg font-medium mb-2">
-              {selectedGroup ? `No coins in ${selectedGroup.name}` : 'No coins in watchlist'}
-            </h3>
-            <p className="text-muted-foreground mb-4">
-              {selectedGroup
-                ? `Add some coins to ${selectedGroup.name} to see charts`
-                : 'Add some coins to your watchlist to see charts'
-              }
-            </p>
-          </div>
-        </div>
+      <div className="w-full">
+        <WatchlistChartsEmptyState groupName={selectedGroup?.name} groupColor={selectedGroup?.color} />
       </div>
     )
   }

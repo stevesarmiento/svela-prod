@@ -32,11 +32,38 @@ interface CoinGeckoNewsArticle {
   sentimentUpdatedAt: number | null;
 }
 
-function formatPostedShort(iso: string | undefined): string | null {
+/** Resolved ms from article fields; prefers numeric `postedAtMs`. */
+function getPostedAtMs(iso: string | null, postedAtMs: number): number | null {
+  if (Number.isFinite(postedAtMs) && postedAtMs > 0) return postedAtMs;
   if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  const t = new Date(iso).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+/** Human-relative time like "20 min ago" / "2 days ago"; falls back to short date when very old. */
+function formatPostedRelative(postedMs: number, nowMs: number): string | null {
+  if (!Number.isFinite(postedMs)) return null;
+  const diffMs = nowMs - postedMs;
+  if (diffMs < 0) return "just now";
+
+  const sec = Math.floor(diffMs / 1000);
+  if (sec < 10) return "just now";
+  if (sec < 60) return `${sec} sec ago`;
+
+  const min = Math.floor(sec / 60);
+  if (min < 60) return min === 1 ? "1 min ago" : `${min} min ago`;
+
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return hr === 1 ? "1 hr ago" : `${hr} hr ago`;
+
+  const day = Math.floor(hr / 24);
+  if (day < 30) return day === 1 ? "1 day ago" : `${day} days ago`;
+
+  return new Date(postedMs).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 /** Stable keys for static skeleton rows (not derived from map index). */
@@ -66,6 +93,13 @@ export function TokenCoingeckoNews({ coinId, className, isPending }: TokenCoinge
   const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
   const refreshNewsForCoinNow = useAction(api.coingeckoNews.refreshNewsForCoinNow);
   const requestSentimentForArticles = useMutation(api.coingeckoNews.requestSentimentForArticles);
+
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    setNowMs(Date.now());
+    const id = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const articles = useQuery(
     api.coingeckoNews.listNewsByCoinId,
@@ -206,7 +240,9 @@ export function TokenCoingeckoNews({ coinId, className, isPending }: TokenCoinge
           {!showSkeleton && !showError && (articles ?? []).length > 0 ? (
             <ul className="-mx-4 divide-y divide-white/10">
               {(articles ?? []).map((article) => {
-                const dateLabel = formatPostedShort(article.postedAtIso ?? undefined);
+                const postedMs = getPostedAtMs(article.postedAtIso, article.postedAtMs);
+                const dateLabel =
+                  postedMs !== null ? formatPostedRelative(postedMs, nowMs) : null;
                 const sentiment = article.sentiment ?? "neutral";
 
                 return (

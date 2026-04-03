@@ -2,6 +2,7 @@
 
 //import Link from "next/link";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useState, useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 // import { 
@@ -30,6 +31,19 @@ import { WatchlistButton } from "./watchlist-button";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
+function loadAnalysisDialog() {
+  return import("@/components/navigation/analysis-dialog");
+}
+
+const AnalysisDialog = dynamic(
+  () => loadAnalysisDialog().then((module) => module.AnalysisDialog),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-8 w-8 shrink-0 rounded-lg bg-zinc-950/10 dark:bg-white/10" />
+    ),
+  },
+);
 
 // const menuItems = [
 //   {
@@ -288,6 +302,14 @@ export function TopNav() {
           <div className="flex items-center gap-2">
             {isChartDetailPage && coinId && (
               <>
+                <AnalysisDialog
+                  coinId={tokenData?.id ?? coinId}
+                  tokenData={tokenData}
+                  triggerVariant="explain"
+                  triggerClassName="z-10"
+                  triggerTooltip="Deep Analysis"
+                  triggerAriaLabel="Deep Analysis"
+                />
                 <WatchlistButton 
                   coinId={coinId} 
                   coinName={tokenData?.name || tokenData?.symbol}

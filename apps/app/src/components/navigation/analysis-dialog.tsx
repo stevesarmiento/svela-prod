@@ -18,6 +18,7 @@ import { ScrollArea } from "@v1/ui/scroll-area";
 import Image from "next/image";
 import { IconBookPages, IconSparkles, IconTextAppend } from "symbols-react";
 import { MultiStepLoader } from "@v1/ui/mult-step-loader";
+import { cn } from "@v1/ui/cn";
 
 function loadMarketMetricsSidebar() {
   return import("./market-metrics-sidebar");
@@ -49,17 +50,24 @@ interface AnalysisDialogProps {
     id?: string;
     logoUrl?: string;
   } | null;
-  triggerVariant?: "default" | "icon";
+  /** Matches indicator card "Analyze" triggers. Only pass from chart detail header; other sites keep `icon` or `default`. */
+  triggerVariant?: "default" | "icon" | "explain";
+  /** Merged onto the trigger (e.g. chart header / nav-only polish). */
+  triggerClassName?: string;
   triggerTooltip?: string;
   triggerAriaLabel?: string;
+  /** Visible label when `triggerVariant` is `explain` (default: Analyze). */
+  triggerLabel?: string;
 }
 
 export function AnalysisDialog({
   coinId,
   tokenData,
   triggerVariant = "default",
+  triggerClassName,
   triggerTooltip,
   triggerAriaLabel,
+  triggerLabel = "Analyze",
 }: AnalysisDialogProps) {
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
 
@@ -69,43 +77,60 @@ export function AnalysisDialog({
     void loadAnalysisResult();
   }, []);
 
+  const isExplainTrigger = triggerVariant === "explain";
+
+  const triggerButton = (
+    <Button
+      type="button"
+      onPointerEnter={preloadDialogChunks}
+      onFocus={preloadDialogChunks}
+      onTouchStart={preloadDialogChunks}
+      onClick={() => setIsDialogOpen(true)}
+      aria-label={
+        triggerAriaLabel ??
+        (triggerVariant === "icon" || isExplainTrigger
+          ? "Deep analysis"
+          : undefined)
+      }
+      variant={isExplainTrigger ? "outline" : "ghost"}
+      size="sm"
+      className={cn(
+        isExplainTrigger
+          ? "flex items-center gap-1.5 shrink-0 h-7 p-2.5 rounded-lg"
+          : triggerVariant === "icon"
+            ? "h-6 w-6 p-1 rounded-lg bg-transparent hover:bg-primary/5 transition-colors group"
+            : "h-8 px-2 rounded-xl w-auto pr-3 bg-gray-100/80 hover:bg-gray-200/80 ring-1 ring-gray-300/60 dark:bg-zinc-800/40 dark:hover:bg-zinc-900/50 dark:ring-zinc-800/80",
+        triggerClassName,
+      )}
+    >
+      {triggerVariant === "icon" ? (
+        <IconTextAppend className="size-3.5 fill-zinc-400 dark:group-hover:fill-white transition-colors" />
+      ) : isExplainTrigger ? (
+        <>
+          <IconTextAppend className="size-3 fill-primary/60" />
+          <span>{triggerLabel}</span>
+        </>
+      ) : (
+        <>
+          <IconSparkles className="h-4 w-4 fill-gray-600 dark:fill-white/50" />
+          <span className="text-gray-900 dark:text-white">{triggerLabel}</span>
+        </>
+      )}
+    </Button>
+  );
+
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <Tooltip delayDuration={500}>
         <TooltipTrigger asChild>
-          <DialogTrigger asChild>
-            <Button
-              onPointerEnter={preloadDialogChunks}
-              onFocus={preloadDialogChunks}
-              onTouchStart={preloadDialogChunks}
-              onClick={() => setIsDialogOpen(true)}
-              aria-label={
-                triggerAriaLabel ??
-                (triggerVariant === "icon" ? "Deep analysis" : undefined)
-              }
-              variant="ghost"
-              size="sm"
-              className={
-                triggerVariant === "icon"
-                  ? "h-6 w-6 p-1 rounded-lg bg-transparent hover:bg-primary/5 transition-colors group"
-                  : "h-8 px-2 rounded-xl w-auto pr-3 bg-gray-100/80 hover:bg-gray-200/80 ring-1 ring-gray-300/60 dark:bg-zinc-800/40 dark:hover:bg-zinc-900/50 dark:ring-zinc-800/80"
-              }
-            >
-              {triggerVariant === "icon" ? (
-                <IconTextAppend className="size-3.5 fill-zinc-400 dark:group-hover:fill-white transition-colors" />
-              ) : (
-                <>
-                  <IconSparkles className="h-4 w-4 fill-gray-600 dark:fill-white/50" />
-                  <span className="text-gray-900 dark:text-white">Analyze</span>
-                </>
-              )}
-            </Button>
-          </DialogTrigger>
+          <DialogTrigger asChild>{triggerButton}</DialogTrigger>
         </TooltipTrigger>
-        <TooltipContent className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
+        <TooltipContent side="left" className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
           <span>
             {triggerTooltip ??
-              (triggerVariant === "icon" ? "Deep analysis" : "Analyze")}
+              (triggerVariant === "icon" || isExplainTrigger
+                ? "Deep analysis"
+                : "Analyze")}
           </span>
         </TooltipContent>
       </Tooltip>
