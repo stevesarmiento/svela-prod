@@ -76,6 +76,14 @@ interface CoinGeckoChartDataResult {
   }
 }
 
+interface UseCoinGeckoChartDataOptions {
+  /**
+   * Prefer `/market-chart` over `/ohlc` when both are available.
+   * Useful for tiny spark charts where maximum granularity matters.
+   */
+  preferMarketChart?: boolean
+}
+
 const LATEST_POINT_UPSERT_WINDOW_SECONDS = 5 * 60
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -373,19 +381,22 @@ function upsertLatestPricePoint(parsedData: ParsedChartData, latestPrice: number
 export function useCoinGeckoChartData(
   coinId: string,
   activeTimeScale: string,
-  initialData: CoinMarketData['quote']['USD']
+  initialData: CoinMarketData['quote']['USD'],
+  options?: UseCoinGeckoChartDataOptions
 ): CoinGeckoChartDataResult {
   const config = TIMEFRAME_CONFIG[activeTimeScale as keyof typeof TIMEFRAME_CONFIG] || TIMEFRAME_CONFIG['7d']
   const quoteQuery = useCoinGeckoQuote(coinId)
+  const preferMarketChart = options?.preferMarketChart ?? false
 
   // Fetch data from both routes with intelligent prioritization
   const { data: combinedData, isLoading } = useQuery({
-    queryKey: ['coingecko-combined-chart-data', coinId, activeTimeScale],
+    queryKey: ['coingecko-combined-chart-data', coinId, activeTimeScale, preferMarketChart],
     queryFn: async (): Promise<DataSourceResult> => {
       let primaryResult: DataSourceResult | null = null
 
       try {
-        const shouldPreferMarketChart = Number.parseInt(config.days) > 90 || activeTimeScale === '30d'
+        const shouldPreferMarketChart =
+          preferMarketChart || Number.parseInt(config.days) > 90 || activeTimeScale === '30d'
         const swallowToNull = (_: unknown) => Effect.succeed(null)
 
         const ohlcEffect = CoinGeckoApi.getOHLC({

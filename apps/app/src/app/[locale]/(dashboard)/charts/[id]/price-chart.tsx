@@ -24,6 +24,7 @@ import { cleanTokenName, getTokenLogoURL } from '@/lib/logo-overrides'
 import { TokenLogo } from "@/components/token-logo"
 import type { RealtimeQuoteStatus } from "@/hooks/use-realtime-quote"
 import { useLiveSpotPrice } from "@/lib/realtime-prices/live-spot-store"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 
 interface PriceChartProps {
   coinId: string;
@@ -36,31 +37,37 @@ interface PriceChartProps {
 
 function getSpotStatusLabel(
   status: RealtimeQuoteStatus | undefined,
-): { label: string; title: string; className: string } | null {
+): { label: string; title: string; className: string; href?: string; hrefLabel?: string } | null {
   if (!status) return null
   if (status.kind === "disabled") return null
 
   if (status.kind === "realtime") {
     return {
       label: "LIVE",
-      title: "Realtime spot via Pyth",
+      title: "Realtime price via",
       className:
-        "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/15",
+        "text-emerald-600 dark:text-emerald-400 bg-black border-zinc-800/80",
+      href: "https://docs.pyth.network/price-feeds/core/api-instances-and-providers/hermes",
+      hrefLabel: "Pyth Hermes",
     }
   }
 
   if (status.kind === "last-known") {
     return {
       label: "WARM",
-      title: "Warm-started from last-known spot snapshot",
+      title: "Warm-started from last-known spot snapshot (Pyth)",
       className: "text-zinc-700 dark:text-zinc-300 bg-zinc-500/10 border-zinc-500/15",
+      href: "https://docs.pyth.network/price-feeds/fetch-price-updates",
+      hrefLabel: "How Pyth price updates work",
     }
   }
 
   return {
     label: "CG",
-    title: "Fallback to CoinGecko quote",
+    title: "Fallback to",
     className: "text-zinc-600 dark:text-zinc-400 bg-zinc-500/10 border-zinc-500/15",
+    href: "https://docs.coingecko.com/reference/simple-price",
+    hrefLabel: "CoinGecko quotes",
   }
 }
 
@@ -455,27 +462,6 @@ export const PriceChart = memo(function PriceChart({
                     />
                     <span className="text-gray-900 dark:text-white font-bold text-sm">{coinName}</span>
                     <span className="text-primary/60 text-sm">is currently</span>
-                    {spotStatusLabel ? (
-                      <div
-                        className={cn(
-                          "ml-1 inline-flex gap-1.5 items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold font-berkeley-mono tabular-nums",
-                          spotStatusLabel.className,
-                        )}
-                        title={spotStatusLabel.title}
-                      >
-                        <div className="relative h-1.5 w-1.5">
-                          <span
-                            aria-hidden="true"
-                            className="absolute top-0 left-0 inline-block h-1.5 w-1.5 rounded-full bg-current"
-                          />
-                          <span
-                            aria-hidden="true"
-                            className="absolute top-0 left-0 inline-block h-1.5 w-1.5 rounded-full bg-current animate-ping"
-                          />
-                        </div>
-                        {spotStatusLabel.label}
-                      </div>
-                    ) : null}
                     </div>
                     <div className="flex items-center">
                       <span className={cn("text-4xl font-bold font-sans text-gray-900 dark:text-white", showPending && "animate-pulse motion-reduce:animate-none",)}>
@@ -511,11 +497,57 @@ export const PriceChart = memo(function PriceChart({
                   </div>
                 </div>
               </div>
-              <div className="absolute right-4 top-4 z-20 pointer-events-auto">
+               <div className="absolute right-4 top-4 z-20 pointer-events-auto flex flex-col items-end gap-2">
                   <TimeScaleSelector
                     activeTimeScale={deferredTimeScale}
                     setActiveTimeScale={handleTimeScaleChange}
                   />
+                </div>
+                <div className="absolute right-4 bottom-4 z-20 pointer-events-auto flex flex-col items-end gap-2">
+                  {spotStatusLabel ? (
+                    <Tooltip delayDuration={250}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label="Price feed source"
+                          className={cn(
+                            "inline-flex gap-1.5 items-center rounded-md border px-1.5 py-0.5 text-[9px] font-semibold font-berkeley-mono tracking-wider tabular-nums cursor-help focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-950",
+                            spotStatusLabel.className,
+                          )}
+                        >
+                          <div className="relative h-1.5 w-1.5">
+                            <span
+                              aria-hidden="true"
+                              className="absolute top-0 left-0 inline-block h-1.5 w-1.5 rounded-full bg-current"
+                            />
+                            <span
+                              aria-hidden="true"
+                              className="absolute top-0 left-0 inline-block h-1.5 w-1.5 rounded-full bg-current animate-ping"
+                            />
+                          </div>
+                          {spotStatusLabel.label}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="left"
+                        align="center"
+                        sideOffset={8}
+                        className="flex items-center gap-2 rounded-md border bg-white/95 p-2 py-1 text-xs text-zinc-900 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+                      >
+                        <span>{spotStatusLabel.title}</span>
+                        {spotStatusLabel.href ? (
+                          <a
+                            href={spotStatusLabel.href}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="ml-1 inline-flex items-center rounded-sm text-xs font-medium text-primary underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-950"
+                          >
+                            {spotStatusLabel.hrefLabel ?? "Learn more"}
+                          </a>
+                        ) : null}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
                 </div>
             </CardHeader>
             <CardContent className="pl-8 pr-6">

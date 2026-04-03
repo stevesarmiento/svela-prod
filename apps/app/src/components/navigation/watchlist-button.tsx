@@ -130,14 +130,15 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
     <Tooltip delayDuration={0}>
       <TooltipTrigger asChild>
         <Button
-          variant="ghost"
+          variant="outline"
+          size="icon"
           onClick={handleButtonClick}
           onMouseDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
           }}
           disabled={!isInitialized || isToggling}
-          className="z-10 rounded-xl w-8 h-8 bg-gray-100/80 hover:bg-gray-200/80 ring-1 ring-gray-300/60 dark:bg-zinc-800/40 dark:hover:bg-zinc-900/50 dark:ring-zinc-800/80"
+          className="z-10 rounded-lg p-1 size-7"
         >
           <AnimatePresence mode="wait">
             {!isInitialized ? (
@@ -201,14 +202,14 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
         {toggleShortcut && (
           <>
           <kbd
-            className="rounded-sm bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-gray-700 dark:text-zinc-300 uppercase"
+            className="flex items-center justify-center rounded-sm bg-gray-100 dark:bg-zinc-700 size-5 text-xs font-berkeley-mono text-gray-700 dark:text-zinc-300 uppercase"
             aria-label="Shift"
           >
             <IconShiftFill className="size-3 fill-current" aria-hidden="true" />
             <span className="sr-only">Shift</span>
           </kbd>
           <span className="text-gray-500 dark:text-zinc-400 text-xs">+</span>
-          <kbd className="rounded-sm bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-gray-700 dark:text-zinc-300 uppercase">
+          <kbd className="flex items-center justify-center rounded-sm bg-gray-100 dark:bg-zinc-700 size-5 text-xs font-berkeley-mono text-gray-700 dark:text-zinc-300 uppercase">
             W
           </kbd>
           </>

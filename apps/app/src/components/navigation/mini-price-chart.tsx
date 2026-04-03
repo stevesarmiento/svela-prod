@@ -1,15 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef } from "react"
-import { createRoot } from "react-dom/client"
-import { Liveline } from "liveline"
-import type { LivelinePoint } from "liveline"
+import { useEffect, useMemo, useRef } from "react"
 import { AlertTriangle } from "lucide-react"
 import { Spinner } from "@v1/ui/spinner"
 import { RateLimitErrorBoundary } from "@/components/error-boundary/rate-limit-error-boundary"
 import { useCoinGeckoChartData } from "@/hooks/use-coingecko-chart-data"
 import { useHullSuite } from "@/hooks/use-hull-suite"
 import { formatUsdPrice } from "@/lib/format-usd"
+import { loadLightweightCharts } from "@/lib/load-lightweight-charts"
+import type { IChartApi, LineData, MouseEventParams, Time } from "lightweight-charts"
 
 interface MiniPriceChartProps {
   coinId: string
@@ -17,122 +16,51 @@ interface MiniPriceChartProps {
   currentPrice?: number
 }
 
-const TooltipContent = ({
-  data,
-  tokenSymbol,
-}: {
-  data: { time: number; price: number; change: number; volume: number; hull?: number }
-  tokenSymbol?: string
-}) => {
-  function formatVolume(vol: number) {
-    if (vol >= 1e9) return `$${(vol / 1e9).toFixed(2)}B`
-    if (vol >= 1e6) return `$${(vol / 1e6).toFixed(2)}M`
-    if (vol >= 1e3) return `$${(vol / 1e3).toFixed(2)}K`
-    return `$${vol.toFixed(2)}`
+function normalizeNumericTimePriceSeries(
+  points: ReadonlyArray<{ time: Time; value: number }>,
+): Array<{ time: Time; value: number }> {
+  const byTimeSec = new Map<number, { time: Time; value: number }>()
+  for (const point of points) {
+    if (typeof point.time !== "number") continue
+    const timeSec = Math.floor(point.time)
+    if (!Number.isFinite(timeSec)) continue
+    if (!Number.isFinite(point.value) || point.value <= 0) continue
+    byTimeSec.set(timeSec, { time: timeSec as Time, value: point.value })
   }
-
-  function formatPrice(price: number) {
-    return formatUsdPrice(price)
-  }
-
-  return (
-    <div className="flex flex-col gap-1 overflow-hidden">
-      <div className="px-4 py-3">
-        <div className="mb-3 text-[11px] font-medium text-zinc-400">
-          {data.time
-            ? new Date(data.time * 1000).toLocaleDateString(undefined, {
-                month: "long",
-                day: "numeric",
-              })
-            : ""}
-        </div>
-        <div className="mb-3 h-[1px] w-full scale-125 bg-zinc-700/50" />
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-zinc-400">Price</span>
-            <div className="flex items-center gap-2">
-              <span
-                className={`h-4 rounded px-1.5 font-berkeley-mono text-[10px] ${
-                  data.change >= 0
-                    ? "bg-emerald-500/20 text-emerald-400"
-                    : "bg-rose-500/20 text-rose-400"
-                }`}
-              >
-                {data.change > 0 ? "+" : ""}
-                {data.change.toFixed(2)}%
-              </span>
-              <span className="font-berkeley-mono text-[11px] font-bold">
-                {formatPrice(data.price)}
-              </span>
-            </div>
-          </div>
-
-          {typeof data.hull === "number" && (
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-zinc-400">Hull MA</span>
-              <span className="font-berkeley-mono text-[11px] text-blue-300">
-                {formatPrice(data.hull)}
-              </span>
-            </div>
-          )}
-
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] text-zinc-400">Volume</span>
-            <span className="font-berkeley-mono text-[11px] text-zinc-300">
-              {formatVolume(data.volume)}
-            </span>
-          </div>
-
-          {tokenSymbol && (
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] text-zinc-400">Token</span>
-              <span className="font-berkeley-mono text-[11px] text-zinc-300">
-                {tokenSymbol.toUpperCase()}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
+  return Array.from(byTimeSec.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([, value]) => value)
 }
 
-function findClosestPoint(
-  data: Array<LivelinePoint>,
-  targetTimeSec: number,
-): LivelinePoint | null {
-  if (data.length === 0) return null
-
-  let low = 0
-  let high = data.length - 1
-
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2)
-    const midTime = data[mid]?.time
-    if (midTime === undefined) break
-    if (midTime === targetTimeSec) return data[mid] ?? null
-    if (midTime < targetTimeSec) low = mid + 1
-    else high = mid - 1
+function normalizeNumericTimeVolumeSeries(
+  points: ReadonlyArray<{ time: Time; value: number; color?: string }>,
+): Array<{ time: Time; value: number; color?: string }> {
+  const byTimeSec = new Map<number, { time: Time; value: number; color?: string }>()
+  for (const point of points) {
+    if (typeof point.time !== "number") continue
+    const timeSec = Math.floor(point.time)
+    if (!Number.isFinite(timeSec)) continue
+    if (!Number.isFinite(point.value) || point.value < 0) continue
+    byTimeSec.set(timeSec, { ...point, time: timeSec as Time })
   }
-
-  const right = data[low]
-  const left = data[low - 1]
-  if (!left) return right ?? null
-  if (!right) return left ?? null
-
-  const leftDiff = Math.abs(left.time - targetTimeSec)
-  const rightDiff = Math.abs(right.time - targetTimeSec)
-  return leftDiff <= rightDiff ? left : right
+  return Array.from(byTimeSec.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([, value]) => value)
 }
 
-export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceChartProps) {
-  const resolvedTheme = "dark"
+function timeToEpochSeconds(time: Time): number | null {
+  if (typeof time === "number") return time > 1e10 ? Math.floor(time / 1000) : Math.floor(time)
+  if (typeof time === "string") {
+    const parsed = Date.parse(time)
+    return Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null
+  }
+  // BusinessDay (midnight UTC)
+  return Math.floor(Date.UTC(time.year, time.month - 1, time.day) / 1000)
+}
 
+export function MiniPriceChart({ coinId, currentPrice }: MiniPriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
-  const tooltipElRef = useRef<HTMLDivElement | null>(null)
-  const tooltipRootRef = useRef<ReturnType<typeof createRoot> | null>(null)
-  const isTooltipVisibleRef = useRef(false)
-  const lastTooltipTimeRef = useRef<number | null>(null)
+  const chartRef = useRef<IChartApi | null>(null)
 
   const initialData = useMemo(
     () => ({
@@ -144,43 +72,35 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
     [currentPrice],
   )
 
-  const { chartData, volumeData, isLoading } = useCoinGeckoChartData(coinId, "7d", initialData)
+  const { chartData, volumeData, isLoading } = useCoinGeckoChartData(coinId, "7d", initialData, {
+    preferMarketChart: true,
+  })
+
+  const normalizedChartData = useMemo(
+    () => normalizeNumericTimePriceSeries(chartData),
+    [chartData],
+  )
+
+  const normalizedVolumeData = useMemo(
+    () => normalizeNumericTimeVolumeSeries(volumeData),
+    [volumeData],
+  )
 
   const priceChange = useMemo(() => {
-    if (chartData.length < 2) return 0
-    const firstPrice = chartData[0]?.value || 0
-    const lastPrice = chartData[chartData.length - 1]?.value || 0
+    if (normalizedChartData.length < 2) return 0
+    const firstPrice = normalizedChartData[0]?.value || 0
+    const lastPrice = normalizedChartData[normalizedChartData.length - 1]?.value || 0
     if (firstPrice === 0) return 0
     return ((lastPrice - firstPrice) / firstPrice) * 100
-  }, [chartData])
-
-  const pricePoints = useMemo((): LivelinePoint[] => {
-    const result: LivelinePoint[] = []
-    for (const point of chartData) {
-      if (typeof point.time !== "number") continue
-      if (!Number.isFinite(point.value) || point.value <= 0) continue
-      result.push({ time: Number(point.time), value: point.value })
-    }
-    return result
-  }, [chartData])
-
-  const volumePoints = useMemo((): LivelinePoint[] => {
-    const result: LivelinePoint[] = []
-    for (const point of volumeData) {
-      if (typeof point.time !== "number") continue
-      if (!Number.isFinite(point.value) || point.value < 0) continue
-      result.push({ time: Number(point.time), value: point.value })
-    }
-    return result
-  }, [volumeData])
+  }, [normalizedChartData])
 
   const ohlcvData = useMemo(() => {
-    if (chartData.length === 0) return []
+    if (normalizedChartData.length === 0) return []
 
-    return chartData.map((point, idx) => {
+    return normalizedChartData.map((point, idx) => {
       const price = point.value
-      const volume = volumeData[idx]?.value || 0
-      const prevPrice = idx > 0 ? chartData[idx - 1]?.value || price : price
+      const volume = normalizedVolumeData[idx]?.value || 0
+      const prevPrice = idx > 0 ? normalizedChartData[idx - 1]?.value || price : price
       const open = prevPrice
       const close = price
       const high = Math.max(open, close)
@@ -194,7 +114,7 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
         volume,
       }
     })
-  }, [chartData, volumeData])
+  }, [normalizedChartData, normalizedVolumeData])
 
   const hullSuite = useHullSuite(ohlcvData, {
     src: "close",
@@ -210,123 +130,243 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
     transpSwitch: 40,
   })
 
-  const hullPoints = useMemo((): LivelinePoint[] => {
-    const result: LivelinePoint[] = []
-    for (const point of hullSuite.MHULL) {
-      if (typeof point.time !== "number") continue
-      if (!Number.isFinite(point.value) || point.value <= 0) continue
-      result.push({ time: Number(point.time), value: point.value })
-    }
-    return result
-  }, [hullSuite.MHULL])
-
-  const latestValue = pricePoints[pricePoints.length - 1]?.value ?? 0
-
-  const windowSecs = useMemo(() => {
-    if (pricePoints.length < 2) return 30
-    const first = pricePoints[0]?.time
-    const last = pricePoints[pricePoints.length - 1]?.time
-    if (typeof first !== "number" || typeof last !== "number") return 30
-    return Math.max(30, last - first)
-  }, [pricePoints])
+  const normalizedHullData = useMemo(
+    () => normalizeNumericTimePriceSeries(hullSuite.MHULL),
+    [hullSuite.MHULL],
+  )
 
   useEffect(() => {
-    const tooltipEl = document.createElement("div")
-    const tooltipRoot = createRoot(tooltipEl)
-    tooltipElRef.current = tooltipEl
-    tooltipRootRef.current = tooltipRoot
+    if (!chartContainerRef.current) return
+    if (normalizedChartData.length === 0) return
 
-    tooltipEl.className =
-      "fixed z-[9999] overflow-hidden rounded-xl border border-zinc-700/50 bg-zinc-900/95 text-[11px] text-white shadow-2xl pointer-events-none backdrop-blur-xl transition-opacity duration-100 ease-out"
-    tooltipEl.style.left = "0px"
-    tooltipEl.style.top = "0px"
-    tooltipEl.style.opacity = "0"
-    tooltipEl.style.visibility = "hidden"
-    tooltipEl.style.transform = "translate3d(0px, 0px, 0)"
-    document.body.appendChild(tooltipEl)
+    let isCancelled = false
+    let chart: IChartApi | null = null
+    let resizeObserver: ResizeObserver | null = null
+    let resizeRafId: number | null = null
+    let windowResizeHandler: (() => void) | null = null
+    let crosshairMoveHandler: ((param: MouseEventParams<Time>) => void) | null = null
+    let scrubEl: HTMLDivElement | null = null
 
-    return () => {
-      isTooltipVisibleRef.current = false
-      lastTooltipTimeRef.current = null
-      tooltipElRef.current = null
-      tooltipRootRef.current = null
+    // Defensive: avoid leaving behind previous instances.
+    try {
+      chartRef.current?.remove()
+    } catch {
+      // noop
+    }
+    chartRef.current = null
 
-      requestAnimationFrame(() => {
+    void (async () => {
+      const lw = await loadLightweightCharts()
+      if (isCancelled || !chartContainerRef.current) return
+
+      const { createChart, ColorType, CrosshairMode, HistogramSeries, LineSeries, LineStyle } = lw
+
+      // Ensure we can attach an absolute-positioned scrub label.
+      chartContainerRef.current.style.position = chartContainerRef.current.style.position || "relative"
+
+      chart = createChart(chartContainerRef.current, {
+        layout: {
+          background: { type: ColorType.Solid, color: "transparent" },
+          textColor: "#9CA3AF",
+          fontSize: 10,
+          attributionLogo: false,
+        },
+        width: chartContainerRef.current.clientWidth,
+        height: 160,
+        rightPriceScale: { visible: false },
+        leftPriceScale: { visible: false },
+        timeScale: { visible: false, borderVisible: false },
+        grid: {
+          vertLines: { visible: false },
+          horzLines: { visible: false },
+        },
+        crosshair: {
+          mode: CrosshairMode.Magnet,
+          vertLine: {
+            width: 1,
+            color: "#374151",
+            style: LineStyle.Solid,
+            visible: true,
+          },
+          horzLine: {
+            visible: false,
+          },
+        },
+        handleScroll: true,
+        handleScale: true,
+      })
+
+      if (isCancelled) {
         try {
-          tooltipRoot.unmount()
+          chart.remove()
         } catch {
           // noop
-        }
-        if (document.body.contains(tooltipEl)) {
-          document.body.removeChild(tooltipEl)
-        }
-      })
-    }
-  }, [])
-
-  const handleHover = useCallback(
-    (hover: { time: number; value: number; x: number; y: number } | null) => {
-      const tooltipEl = tooltipElRef.current
-      const tooltipRoot = tooltipRootRef.current
-      const container = chartContainerRef.current
-      if (!tooltipEl || !tooltipRoot || !container) return
-
-      if (!hover) {
-        if (isTooltipVisibleRef.current) {
-          tooltipEl.style.opacity = "0"
-          tooltipEl.style.visibility = "hidden"
-          isTooltipVisibleRef.current = false
-          lastTooltipTimeRef.current = null
         }
         return
       }
 
-      const closest = findClosestPoint(pricePoints, Math.round(hover.time))
-      if (!closest) return
+      const createdChart = chart
+      chartRef.current = createdChart
 
-      const timeSec = closest.time
-      const firstPrice = pricePoints[0]?.value ?? closest.value
-      const percentChange = firstPrice ? ((closest.value - firstPrice) / firstPrice) * 100 : 0
-      const volume = findClosestPoint(volumePoints, timeSec)?.value ?? 0
-      const hull = findClosestPoint(hullPoints, timeSec)?.value
-
-      if (!isTooltipVisibleRef.current) {
-        tooltipEl.style.opacity = "1"
-        tooltipEl.style.visibility = "visible"
-        isTooltipVisibleRef.current = true
+      const handleResize = () => {
+        const containerEl = chartContainerRef.current
+        if (!containerEl) return
+        createdChart.applyOptions({
+          width: containerEl.clientWidth,
+          height: containerEl.clientHeight || 160,
+        })
       }
 
-      if (lastTooltipTimeRef.current !== timeSec) {
-        lastTooltipTimeRef.current = timeSec
-        tooltipRoot.render(
-          <TooltipContent
-            data={{ time: timeSec, price: closest.value, change: percentChange, volume, hull }}
-            tokenSymbol={tokenSymbol}
-          />,
-        )
+      if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
+        resizeObserver = new ResizeObserver(() => {
+          if (resizeRafId) cancelAnimationFrame(resizeRafId)
+          resizeRafId = requestAnimationFrame(() => handleResize())
+        })
+        resizeObserver.observe(chartContainerRef.current)
+      } else {
+        windowResizeHandler = handleResize
+        window.addEventListener("resize", handleResize)
       }
 
-      const chartRect = container.getBoundingClientRect()
-      const tooltipWidth = tooltipEl.offsetWidth || 200
-      const tooltipHeight = tooltipEl.offsetHeight || 120
+      handleResize()
 
-      let left = chartRect.left + hover.x + 15
-      let top = chartRect.top + hover.y - tooltipHeight / 2
+      // Scrub label (price + %) — no chrome; sits to the right of the vertical crosshair.
+      scrubEl = document.createElement("div")
+      scrubEl.className =
+        "pointer-events-none absolute top-2 left-0 z-10 hidden whitespace-nowrap text-[11px] leading-tight text-white drop-shadow-sm"
+      const scrubStack = document.createElement("div")
+      scrubStack.className = "flex flex-col gap-0.5"
+      const scrubPrice = document.createElement("span")
+      scrubPrice.className = "font-berkeley-mono font-semibold text-white"
+      const scrubPct = document.createElement("span")
+      scrubPct.className = "font-berkeley-mono text-white/90"
 
-      if (left + tooltipWidth > window.innerWidth - 10) {
-        left = chartRect.left + hover.x - tooltipWidth - 15
+      scrubStack.appendChild(scrubPrice)
+      scrubStack.appendChild(scrubPct)
+      scrubEl.appendChild(scrubStack)
+      chartContainerRef.current.appendChild(scrubEl)
+
+      const volumeSeries = createdChart.addSeries(HistogramSeries, {
+        priceFormat: { type: "volume" },
+        priceScaleId: "volume",
+        color: "#ffffff30",
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+
+      createdChart.priceScale("volume").applyOptions({
+        scaleMargins: {
+          top: 0.8,
+          bottom: 0,
+        },
+      })
+
+      const lineSeries = createdChart.addSeries(LineSeries, {
+        color: priceChange >= 0 ? "#10B981" : "#EF4444",
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+
+      lineSeries.setData(normalizedChartData)
+      if (normalizedVolumeData.length > 0) volumeSeries.setData(normalizedVolumeData)
+
+      if (normalizedHullData.length > 0) {
+        const hullSeries = createdChart.addSeries(LineSeries, {
+          color: "rgba(59,130,246,0.7)",
+          lineWidth: 1,
+          lineStyle: LineStyle.Dotted,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+        hullSeries.setData(normalizedHullData)
       }
 
-      if (top + tooltipHeight > window.innerHeight - 10) {
-        top = window.innerHeight - tooltipHeight - 10
+      createdChart.timeScale().fitContent()
+
+      const priceByTimeSec = new Map<number, number>()
+      for (const point of normalizedChartData) {
+        if (typeof point.time !== "number") continue
+        if (!Number.isFinite(point.value)) continue
+        priceByTimeSec.set(Math.floor(point.time), point.value)
       }
 
-      if (top < 10) top = 10
+      crosshairMoveHandler = (param: MouseEventParams<Time>) => {
+        if (
+          param.point === undefined ||
+          param.time === undefined ||
+          param.point.x < 0 ||
+          param.point.y < 0
+        ) {
+          scrubEl?.classList.add("hidden")
+          return
+        }
 
-      tooltipEl.style.transform = `translate3d(${left}px, ${top}px, 0)`
-    },
-    [hullPoints, pricePoints, tokenSymbol, volumePoints],
-  )
+        const timeSec = timeToEpochSeconds(param.time)
+        if (timeSec == null) return
+
+        const priceData = param.seriesData.get(lineSeries) as LineData<Time> | undefined
+        const priceValue =
+          typeof priceData?.value === "number" ? priceData.value : (priceByTimeSec.get(timeSec) ?? null)
+        if (priceValue == null) return
+
+        const firstPrice = normalizedChartData[0]?.value || priceValue
+        const percentChange = firstPrice ? ((priceValue - firstPrice) / firstPrice) * 100 : 0
+
+        scrubPrice.textContent = formatUsdPrice(priceValue)
+        scrubPct.textContent = `${percentChange > 0 ? "+" : ""}${percentChange.toFixed(2)}%`
+        scrubPct.className =
+          percentChange >= 0
+            ? "font-berkeley-mono text-emerald-400"
+            : "font-berkeley-mono text-rose-400"
+
+        const containerEl = chartContainerRef.current
+        if (!containerEl) return
+        const gapPx = 8
+        const minReservePx = 96
+        // Anchor left edge just past the crosshair line (not centered on it).
+        let left = param.point.x + gapPx
+        left = Math.max(0, Math.min(left, Math.max(0, containerEl.clientWidth - minReservePx)))
+        scrubEl?.style.setProperty("left", `${Math.round(left)}px`)
+        scrubEl?.classList.remove("hidden")
+      }
+
+      createdChart.subscribeCrosshairMove(crosshairMoveHandler)
+    })()
+
+    return () => {
+      isCancelled = true
+
+      const activeChart = chartRef.current ?? chart
+
+      try {
+        if (activeChart && crosshairMoveHandler) {
+          activeChart.unsubscribeCrosshairMove(crosshairMoveHandler)
+        }
+      } catch {
+        // noop
+      }
+
+      if (resizeRafId) cancelAnimationFrame(resizeRafId)
+      resizeObserver?.disconnect()
+      if (windowResizeHandler) window.removeEventListener("resize", windowResizeHandler)
+      if (scrubEl && chartContainerRef.current?.contains(scrubEl)) {
+        chartContainerRef.current.removeChild(scrubEl)
+      }
+
+      try {
+        activeChart?.remove()
+      } catch {
+        // noop
+      }
+      chartRef.current = null
+    }
+  }, [
+    normalizedChartData,
+    normalizedHullData,
+    normalizedVolumeData,
+    priceChange,
+  ])
 
   if (isLoading) {
     return (
@@ -336,7 +376,7 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
     )
   }
 
-  if (pricePoints.length === 0) {
+  if (normalizedChartData.length === 0) {
     return (
       <div className="flex h-[160px] w-full flex-col items-center justify-center space-y-2 text-xs text-gray-500">
         <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -355,28 +395,7 @@ export function MiniPriceChart({ coinId, tokenSymbol, currentPrice }: MiniPriceC
             backgroundRepeat: "repeat",
           }}
         />
-        <div ref={chartContainerRef} className="h-[160px] w-full">
-          <Liveline
-            data={pricePoints}
-            value={latestValue}
-            theme="dark"
-            color={priceChange >= 0 ? "#10B981" : "#EF4444"}
-            lineWidth={2}
-            window={windowSecs}
-            grid={false}
-            badge={false}
-            fill={false}
-            pulse={false}
-            momentum={false}
-            scrub
-            tooltipY={-9999}
-            tooltipOutline={false}
-            onHover={handleHover}
-            formatTime={() => ""}
-            padding={{ top: 12, right: 12, bottom: 12, left: 12 }}
-            className="size-full"
-          />
-        </div>
+        <div ref={chartContainerRef} className="h-[160px] w-full" />
       </div>
     </RateLimitErrorBoundary>
   )
