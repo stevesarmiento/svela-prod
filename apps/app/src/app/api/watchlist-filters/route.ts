@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { z } from "zod"
+import type { z } from "zod"
 import { auth } from "@clerk/nextjs/server"
 import { ratelimit } from "@v1/kv/ratelimit"
 import { generateText } from "ai"

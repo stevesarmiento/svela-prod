@@ -823,7 +823,6 @@ export function WatchlistFilters({
           minNetBuyUsd,
           requireBuyGreaterThanSell,
         })
-        continue
       }
     }
   }
