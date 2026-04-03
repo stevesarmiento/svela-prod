@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useTransition, useDeferredValue, useCallback, memo } from 'react'
+import React, { useMemo, useState, useTransition, useDeferredValue, useCallback, memo } from 'react'
 import { PriceChart } from "./price-chart"
 import { MarketMetrics } from "./market-metrics"
 import type { CoinMarketData } from '@/types/coins'
@@ -21,6 +21,7 @@ import { Badge } from '@v1/ui/badge'
 import { cn } from '@v1/ui/cn'
 import { IndicatorExplainDialog } from './indicator-explain-dialog'
 import { TokenCoingeckoNews } from './token-coingecko-news'
+import { useRealtimeQuote } from "@/hooks/use-realtime-quote"
 
 type IndicatorChipTone = 'neutral' | 'positive' | 'negative'
 
@@ -158,8 +159,20 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
     deferredTokenData.quote.USD
   )
 
+  // Don’t start realtime streaming until we have at least some historical series.
+  const canStartRealtimeStream = Boolean(deferredId) && !isLoading && chartData.length >= 2
+
   // Canonical quote source for headline + metrics (keeps price consistent everywhere).
   const quoteQuery = useCoinGeckoQuote(deferredId)
+  const realtimeSymbol = quoteQuery.data?.symbol ?? deferredTokenData.symbol
+
+  // Realtime warm start + streaming spot price (dynamic Hermes feed resolution).
+  const spotStatus = useRealtimeQuote({
+    coingeckoId: deferredId,
+    symbol: realtimeSymbol,
+    enabled: Boolean(deferredId),
+    streamEnabled: canStartRealtimeStream,
+  })
 
   const metricsData = React.useMemo(() => {
     const quote = quoteQuery.data
@@ -490,6 +503,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
               activeTimeScale={deferredTimeScale}
               setActiveTimeScale={handleTimeScaleChange}
               isPending={showPending}
+              spotStatus={spotStatus}
             />
           </div>
           <div className="lg:col-span-4 xl:col-span-4 min-w-0">

@@ -444,6 +444,33 @@ export default defineSchema({
     .index("by_rank", ["rank"])
     .index("by_last_updated", ["lastUpdated"]),
 
+  // Last-known spot price snapshots (Pyth/MagicBlock warm start + fallback).
+  // NOTE: Stored per (coingeckoId, source, sessionId) to avoid write conflicts
+  // when many clients are online at once. Readers take the most recently updated.
+  lastKnownPrices: defineTable({
+    coingeckoId: v.string(),
+    source: v.string(), // e.g. "pyth"
+    sessionId: v.string(),
+    writerClerkId: v.string(),
+    priceUsd: v.number(),
+    publishTime: v.optional(v.number()), // ms
+    confidence: v.optional(v.number()),
+    updatedAt: v.number(),
+  })
+    .index("by_coingecko_id", ["coingeckoId"])
+    .index("by_coingecko_id_and_source", ["coingeckoId", "source"])
+    .index("by_coingecko_id_and_source_and_session_id", [
+      "coingeckoId",
+      "source",
+      "sessionId",
+    ])
+    .index("by_coingecko_id_and_source_and_updated_at", [
+      "coingeckoId",
+      "source",
+      "updatedAt",
+    ])
+    .index("by_updated_at", ["updatedAt"]),
+
   // CoinGecko Markets Data - real-time market information
   coingeckoMarkets: defineTable({
     coingeckoId: v.string(), // CoinGecko ID (e.g., "bitcoin")

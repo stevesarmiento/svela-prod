@@ -17,11 +17,13 @@ import { useQuery as useTanStackQuery } from '@tanstack/react-query'
 import { CoinsInternalApi } from '@/lib/effect/coins-internal-api'
 import { runPromise } from '@/lib/effect/runtime-coins-internal'
 import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
-import { getUsdPriceFormatOptions } from '@/lib/format-usd'
+import { formatUsdPrice, getUsdPriceFormatOptions } from '@/lib/format-usd'
 import type { Format } from '@/lib/number-flow/lite'
 import type { Time } from 'lightweight-charts'
 import { cleanTokenName, getTokenLogoURL } from '@/lib/logo-overrides'
 import { TokenLogo } from "@/components/token-logo"
+import type { RealtimeQuoteStatus } from "@/hooks/use-realtime-quote"
+import { useLiveSpotPrice } from "@/lib/realtime-prices/live-spot-store"
 
 interface PriceChartProps {
   coinId: string;
@@ -29,6 +31,37 @@ interface PriceChartProps {
   activeTimeScale: string;
   setActiveTimeScale: (scale: string) => void;
   isPending?: boolean;
+  spotStatus?: RealtimeQuoteStatus;
+}
+
+function getSpotStatusLabel(
+  status: RealtimeQuoteStatus | undefined,
+): { label: string; title: string; className: string } | null {
+  if (!status) return null
+  if (status.kind === "disabled") return null
+
+  if (status.kind === "realtime") {
+    return {
+      label: "LIVE",
+      title: "Realtime spot via Pyth",
+      className:
+        "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/15",
+    }
+  }
+
+  if (status.kind === "last-known") {
+    return {
+      label: "WARM",
+      title: "Warm-started from last-known spot snapshot",
+      className: "text-zinc-700 dark:text-zinc-300 bg-zinc-500/10 border-zinc-500/15",
+    }
+  }
+
+  return {
+    label: "CG",
+    title: "Fallback to CoinGecko quote",
+    className: "text-zinc-600 dark:text-zinc-400 bg-zinc-500/10 border-zinc-500/15",
+  }
 }
 
 interface IndicatorSettings {
@@ -186,7 +219,14 @@ const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, set
   )
 })
 
-export const PriceChart = memo(function PriceChart({ coinId, initialData, activeTimeScale, setActiveTimeScale, isPending }: PriceChartProps) {
+export const PriceChart = memo(function PriceChart({
+  coinId,
+  initialData,
+  activeTimeScale,
+  setActiveTimeScale,
+  isPending,
+  spotStatus,
+}: PriceChartProps) {
   // React 19: Add concurrent features
   const [isDataPending, startDataTransition] = useTransition()
   const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null)
@@ -224,6 +264,8 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   // Canonical quote source (shared cache across token page + tables).
   const quoteQuery = useCoinGeckoQuote(deferredCoinId)
   const liveQuote = quoteQuery.data
+  const liveSpot = useLiveSpotPrice(coinId)
+  const liveSpotPriceUsd = liveSpot?.priceUsd ?? null
   
   // React 19: Get line chart data with OHLC data for tooltips using deferred values
   const { chartData, volumeData, ohlcData, isLoading, tokenData } = useCoinGeckoChartData(deferredCoinId, deferredTimeScale, deferredInitialData)
@@ -276,7 +318,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
     const averageIntervalSeconds = estimateAverageIntervalSeconds(ohlcEpochSeconds)
     const maxDiffSeconds = Math.max(2 * 60 * 60, Math.floor((averageIntervalSeconds ?? 0) / 2) || 12 * 60 * 60)
 
-    return ohlcData.map((point) => {
+    const base = ohlcData.map((point) => {
       const epochSeconds = timeToEpochSeconds(point.time)
       if (epochSeconds == null || volumePoints.length === 0) return { ...point }
 
@@ -286,7 +328,26 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
 
       return { ...point, volume }
     })
-  }, [ohlcData, volumeData])
+
+    // Patch the last point so the right edge reflects the realtime spot feed.
+    if (typeof liveSpotPriceUsd === "number" && Number.isFinite(liveSpotPriceUsd) && liveSpotPriceUsd > 0 && base.length > 0) {
+      const last = base[base.length - 1]
+      if (last) {
+        const prevClose = typeof last.close === "number" && Number.isFinite(last.close) ? last.close : liveSpotPriceUsd
+        const prevHigh = typeof last.high === "number" && Number.isFinite(last.high) ? last.high : prevClose
+        const prevLow = typeof last.low === "number" && Number.isFinite(last.low) ? last.low : prevClose
+
+        base[base.length - 1] = {
+          ...last,
+          close: liveSpotPriceUsd,
+          high: Math.max(prevHigh, liveSpotPriceUsd),
+          low: Math.min(prevLow, liveSpotPriceUsd),
+        }
+      }
+    }
+
+    return base
+  }, [ohlcData, volumeData, liveSpotPriceUsd])
 
   // Highlight the period under the crosshair and dim the rest:
   // - 1Q + 1Y: highlight month
@@ -340,7 +401,11 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   const liveChange24h = liveQuote?.price_change_percentage_24h ?? calculatePercentageChange ?? 0
   const chartLastPrice =
     chartData.length > 0 ? chartData[chartData.length - 1]?.value ?? null : null
+  const liveSpotPrice = liveSpotPriceUsd
   const livePrice =
+    (typeof liveSpotPrice === "number" && Number.isFinite(liveSpotPrice) && liveSpotPrice > 0
+      ? liveSpotPrice
+      : null) ??
     (typeof chartLastPrice === "number" && Number.isFinite(chartLastPrice) && chartLastPrice > 0
       ? chartLastPrice
       : null) ??
@@ -354,6 +419,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
   const isLoadingPrice = quoteQuery.isLoading || isLoading
   const showPending = isPending || isDataPending || isLoadingPrice
   const shouldReduceMotion = useReducedMotion()
+  const spotStatusLabel = useMemo(() => getSpotStatusLabel(spotStatus), [spotStatus])
 
   return (
     <div className={cn(
@@ -377,7 +443,7 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
             <CardHeader className="flex flex-row items-start justify-between p-6 pl-6">
               {/* Left side - Coin info */}
               <div className="relative flex gap-3 justify-between items-start w-full">
-                <div className="absolute left-0 flex flex-col">
+                <div className="absolute left-0 flex flex-col space-y-1">
                   <div className="flex items-center gap-2">
                     <TokenLogo
                       src={safeCoinLogoUrl}
@@ -389,17 +455,32 @@ export const PriceChart = memo(function PriceChart({ coinId, initialData, active
                     />
                     <span className="text-gray-900 dark:text-white font-bold text-sm">{coinName}</span>
                     <span className="text-primary/60 text-sm">is currently</span>
+                    {spotStatusLabel ? (
+                      <div
+                        className={cn(
+                          "ml-1 inline-flex gap-1.5 items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold font-berkeley-mono tabular-nums",
+                          spotStatusLabel.className,
+                        )}
+                        title={spotStatusLabel.title}
+                      >
+                        <div className="relative h-1.5 w-1.5">
+                          <span
+                            aria-hidden="true"
+                            className="absolute top-0 left-0 inline-block h-1.5 w-1.5 rounded-full bg-current"
+                          />
+                          <span
+                            aria-hidden="true"
+                            className="absolute top-0 left-0 inline-block h-1.5 w-1.5 rounded-full bg-current animate-ping"
+                          />
+                        </div>
+                        {spotStatusLabel.label}
+                      </div>
+                    ) : null}
                     </div>
                     <div className="flex items-center">
-                      <NumberFlow
-                        value={currentPrice}
-                        format={getUsdPriceFormatOptions(currentPrice) as Format}
-                        willChange
-                        className={cn(
-                          "text-4xl font-bold font-sans text-gray-900 dark:text-white",
-                          showPending && "animate-pulse motion-reduce:animate-none",
-                        )}
-                      />
+                      <span className={cn("text-4xl font-bold font-sans text-gray-900 dark:text-white", showPending && "animate-pulse motion-reduce:animate-none",)}>
+                        {formatUsdPrice(currentPrice)}
+                        </span>
                       {showPending && (
                         <div className="inline-flex items-center ml-2">
                           <div className="w-2 h-2 bg-gray-400 dark:bg-white/50 rounded-full animate-pulse motion-reduce:animate-none" />

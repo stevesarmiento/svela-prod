@@ -2,9 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { SortingState } from "@tanstack/react-table"
+import { useQueryClient } from "@tanstack/react-query"
 
 import { Spinner } from "@v1/ui/spinner"
+import { Button } from "@v1/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { toast } from "sonner"
+import { RefreshCw } from "lucide-react"
 
 import { WatchlistAutoRefreshIndicator } from "../../watchlist/_components/watchlist-auto-refresh-indicator"
 import { WatchlistFilters } from "../../watchlist/_components/watchlist-filters"
@@ -18,7 +22,7 @@ import type { SmartScreenerScreenResponse } from "@/lib/smart-screener/screen-ap
 import type { CoinMarketData } from "@/types/coins"
 
 const SCREENER_REFRESH_INTERVAL_MS = 60 * 60 * 1000
-const SCREENER_DEFAULT_LIMIT = 250
+const SCREENER_DEFAULT_LIMIT = 500
 /** Match initial / cleared `FilterState` slider maxima so we only treat ranges as “active” when narrowed. */
 const SCREENER_DEFAULT_PRICE_MAX = 1_000_000
 const SCREENER_DEFAULT_MC_MAX = 10_000_000_000_000
@@ -28,6 +32,8 @@ export function ScreenerPageView() {
   const [sorting, setSorting] = useState<SortingState>([])
   const [smartScreenerStatus, setSmartScreenerStatus] = useState<WatchlistTableStatus | null>(null)
   const [screenResult, setScreenResult] = useState<SmartScreenerScreenResponse | null>(null)
+  const [isRefreshingData, setIsRefreshingData] = useState(false)
+  const queryClient = useQueryClient()
 
   const topMarketsQuery = useScreenerTopMarkets(SCREENER_DEFAULT_LIMIT)
   const topCoins = topMarketsQuery.data
@@ -307,7 +313,7 @@ export function ScreenerPageView() {
   }
 
   return (
-    <div className="space-y-6 px-8 w-full">
+    <div className="space-y-2 px-8 w-full">
       <div className="flex items-center justify-between gap-4 py-1">
         <div className="flex-1 min-w-0">
           <WatchlistFilters
@@ -343,13 +349,54 @@ export function ScreenerPageView() {
             onSmartScreenerScreenResultChange={setScreenResult}
           />
         </div>
-        <WatchlistAutoRefreshIndicator
-          status={{
-            lastUpdatedAtMs: topMarketsQuery.lastUpdatedAtMs,
-            refreshIntervalMs: SCREENER_REFRESH_INTERVAL_MS,
-            isRefreshing: topMarketsQuery.isFetching,
-          }}
-        />
+        <div className="flex items-center gap-2">
+          <WatchlistAutoRefreshIndicator
+            status={{
+              lastUpdatedAtMs: topMarketsQuery.lastUpdatedAtMs,
+              refreshIntervalMs: SCREENER_REFRESH_INTERVAL_MS,
+              isRefreshing: topMarketsQuery.isFetching || isRefreshingData,
+            }}
+          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                aria-label="Refresh screener data"
+                variant="ghost"
+                size="sm"
+                disabled={isRefreshingData}
+                onClick={async () => {
+                  if (isRefreshingData) return
+                  setIsRefreshingData(true)
+                  try {
+                    await Promise.all([
+                      queryClient.invalidateQueries({ queryKey: ["screener"] }),
+                      queryClient.invalidateQueries({ queryKey: ["coingecko-quotes"] }),
+                      queryClient.invalidateQueries({ queryKey: ["coingecko-inline-market-chart"] }),
+                      queryClient.invalidateQueries({ queryKey: ["spotTakerBuySellVolumeHistory"] }),
+                    ])
+                  } catch (error) {
+                    toast.error("Refresh failed", {
+                      description: error instanceof Error ? error.message : "Failed to refresh screener data.",
+                    })
+                  } finally {
+                    setIsRefreshingData(false)
+                  }
+                }}
+                className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10 disabled:opacity-60"
+              >
+                {isRefreshingData ? (
+                  <Spinner size={14} />
+                ) : (
+                  <RefreshCw className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="left" align="center" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
+              <span>Refresh data</span>
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </div>
 
       <div className="space-y-4">

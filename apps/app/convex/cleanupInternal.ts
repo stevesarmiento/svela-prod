@@ -44,3 +44,34 @@ export const _cleanupOldData = internalMutation({
   },
 });
 
+export const _cleanupOldLastKnownPrices = internalMutation({
+  args: {
+    olderThanHours: v.number(),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    deletedLastKnown: v.number(),
+    hasMore: v.boolean(),
+    batchSize: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize ?? 500;
+    const cutoffTime = Date.now() - args.olderThanHours * 60 * 60 * 1000;
+
+    const oldLastKnown = await ctx.db
+      .query("lastKnownPrices")
+      .withIndex("by_updated_at", (q) => q.lt("updatedAt", cutoffTime))
+      .take(batchSize);
+
+    await Promise.all(oldLastKnown.map((row) => ctx.db.delete(row._id)));
+
+    return {
+      success: true,
+      deletedLastKnown: oldLastKnown.length,
+      hasMore: oldLastKnown.length === batchSize,
+      batchSize,
+    };
+  },
+});
+

@@ -4,6 +4,8 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import type { CoinMarketData } from "@/types/coins";
+import { useCoinGeckoQuotesBulk } from "@/hooks/use-coingecko-quotes";
+import type { CoinGeckoQuoteMarketData } from "@/lib/effect/coingecko-api";
 
 interface CoingeckoMarketRow {
   coingeckoId: string;
@@ -30,7 +32,13 @@ function isCoingeckoMarketRow(value: unknown): value is CoingeckoMarketRow {
   );
 }
 
-function toCoinMarketData(row: CoingeckoMarketRow): CoinMarketData {
+function toCoinMarketData(row: CoingeckoMarketRow, quote: CoinGeckoQuoteMarketData | undefined): CoinMarketData {
+  const price = quote?.current_price ?? row.currentPrice ?? 0;
+  const marketCap = quote?.market_cap ?? row.marketCap ?? 0;
+  const marketCapRank = quote?.market_cap_rank ?? row.marketCapRank ?? 0;
+  const totalVolume = quote?.total_volume ?? row.totalVolume ?? 0;
+  const change24h = quote?.price_change_percentage_24h ?? row.priceChangePercentage24h ?? 0;
+
   return {
     id: row.coingeckoId,
     name: row.name,
@@ -38,15 +46,15 @@ function toCoinMarketData(row: CoingeckoMarketRow): CoinMarketData {
     slug: row.coingeckoId,
     image: row.image,
     sparkline7d: undefined,
-    cmc_rank: row.marketCapRank ?? 0,
+    cmc_rank: marketCapRank,
     circulating_supply: 0,
     max_supply: null,
     quote: {
       USD: {
-        price: row.currentPrice ?? 0,
-        volume_24h: row.totalVolume ?? 0,
-        market_cap: row.marketCap ?? 0,
-        percent_change_24h: row.priceChangePercentage24h ?? 0,
+        price,
+        volume_24h: totalVolume,
+        market_cap: marketCap,
+        percent_change_24h: change24h,
         percent_change_1h: undefined,
         percent_change_7d: undefined,
         percent_change_30d: undefined,
@@ -58,7 +66,7 @@ function toCoinMarketData(row: CoingeckoMarketRow): CoinMarketData {
   };
 }
 
-export function useScreenerTopMarkets(limit = 250): {
+export function useScreenerTopMarkets(limit = 500): {
   data: CoinMarketData[];
   lastUpdatedAtMs: number | null;
   isLoading: boolean;
@@ -83,23 +91,39 @@ export function useScreenerTopMarkets(limit = 250): {
     retry: 1,
   });
 
-  const coins = useMemo(() => (query.data ?? []).map(toCoinMarketData), [query.data]);
+  const coingeckoIds = useMemo(
+    () => (query.data ?? []).map((row) => row.coingeckoId).filter(Boolean),
+    [query.data],
+  );
+  const quotesQuery = useCoinGeckoQuotesBulk(coingeckoIds, {
+    // Screener tolerates partial quote maps — don't fast-poll to backfill missing IDs.
+    mode: "bestEffort",
+    refetchOnWindowFocus: false,
+  });
+
+  const coins = useMemo(() => {
+    const quotesById = quotesQuery.data as Record<string, CoinGeckoQuoteMarketData> | undefined;
+    return (query.data ?? []).map((row) => toCoinMarketData(row, quotesById?.[row.coingeckoId]));
+  }, [query.data, quotesQuery.data]);
+
   const lastUpdatedAtMs = useMemo(() => {
-    const rows = query.data ?? [];
+    const quotesById = quotesQuery.data as Record<string, CoinGeckoQuoteMarketData> | undefined;
+    const ids = query.data ?? [];
     let max = 0;
-    for (const row of rows) {
-      const ts = row.updatedAt ?? 0;
+    for (const row of ids) {
+      const q = quotesById?.[row.coingeckoId];
+      const ts = q?.last_updated ? Date.parse(q.last_updated) : row.updatedAt ?? 0;
       if (Number.isFinite(ts) && ts > max) max = ts;
     }
     return max > 0 ? max : null;
-  }, [query.data]);
+  }, [query.data, quotesQuery.data]);
 
   return {
     data: coins,
     lastUpdatedAtMs,
-    isLoading: query.isLoading,
-    isFetching: query.isFetching,
-    error: (query.error as Error | null) ?? null,
+    isLoading: query.isLoading || quotesQuery.isLoading,
+    isFetching: query.isFetching || quotesQuery.isFetching,
+    error: (query.error as Error | null) ?? (quotesQuery.error as Error | null) ?? null,
   };
 }
 

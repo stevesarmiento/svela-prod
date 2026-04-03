@@ -141,8 +141,22 @@ export function useCoinGeckoQuote(coinId: string | null | undefined) {
   return query
 }
 
-export function useCoinGeckoQuotesBulk(coingeckoIds: ReadonlyArray<string>) {
+export interface CoinGeckoQuotesBulkOptions {
+  /**
+   * - "strict": temporarily poll faster when CoinGecko returns partial maps, to backfill missing IDs
+   * - "bestEffort": accept partial maps and stick to the normal hourly cadence
+   */
+  mode?: "strict" | "bestEffort"
+  /** Override global focus behavior (defaults to hook’s standard options). */
+  refetchOnWindowFocus?: boolean
+}
+
+export function useCoinGeckoQuotesBulk(
+  coingeckoIds: ReadonlyArray<string>,
+  options: CoinGeckoQuotesBulkOptions = {},
+) {
   const queryClient = useQueryClient()
+  const mode = options.mode ?? "strict"
 
   const stableIds = useMemo(() => {
     const unique = Array.from(new Set(coingeckoIds)).filter((id) => id.length > 0)
@@ -170,6 +184,7 @@ export function useCoinGeckoQuotesBulk(coingeckoIds: ReadonlyArray<string>) {
     enabled: stableIds.length > 0,
     retry: 1,
     ...COINGECKO_QUOTES_QUERY_OPTIONS,
+    refetchOnWindowFocus: options.refetchOnWindowFocus ?? COINGECKO_QUOTES_QUERY_OPTIONS.refetchOnWindowFocus,
     refetchInterval: (q) => {
       const data = q.state.data as Record<string, CoinGeckoQuoteMarketData> | undefined
       const error = q.state.error
@@ -181,10 +196,15 @@ export function useCoinGeckoQuotesBulk(coingeckoIds: ReadonlyArray<string>) {
       const failureCount = q.state.fetchFailureCount ?? 0
       const backoffMs = Math.min(60_000, 10_000 * Math.max(1, failureCount))
 
-      if (!data) return backoffMs
+      if (!data) {
+        // Avoid aggressive retry loops for large bulk maps (e.g. screener).
+        return mode === "bestEffort" ? Math.max(60_000, backoffMs) : backoffMs
+      }
 
-      for (const id of stableIds) {
-        if (!data[id]) return Math.max(20_000, backoffMs)
+      if (mode === "strict") {
+        for (const id of stableIds) {
+          if (!data[id]) return Math.max(20_000, backoffMs)
+        }
       }
 
       return COINGECKO_QUOTES_QUERY_OPTIONS.refetchInterval
