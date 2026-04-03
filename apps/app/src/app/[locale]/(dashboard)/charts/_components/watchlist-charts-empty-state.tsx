@@ -342,9 +342,7 @@ export function WatchlistChartsEmptyState({ groupName, groupColor }: WatchlistCh
   })
 
   const title = groupName ? `Add coins to ${groupName}` : 'Add coins to your watchlist'
-  const subtitle = groupName
-    ? `Once you add a few tokens, you can compare them here.`
-    : 'Once you add a few tokens, you can compare them here.'
+  const subtitle = 'Once you add a few tokens, you can compare them here.'
 
   const mainCardTokenLogos = useMemo(
     () => [
