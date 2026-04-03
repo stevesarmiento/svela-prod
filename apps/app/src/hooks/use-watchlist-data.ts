@@ -15,6 +15,25 @@ export interface FilterState {
   sortBy: "name" | "price" | "change" | "marketCap" | "volume";
   sortOrder: "asc" | "desc";
   watchlistGroupId: string | null;
+  takerFilter: TakerFilterState | null;
+}
+
+export interface TakerFilterState {
+  /** Snapshot range, currently backed by CoinGlass exchange-list snapshots (e.g. "24h"). */
+  range: "1h" | "4h" | "12h" | "24h" | "7d";
+  /**
+   * If set, use that exchange's taker stats when available; otherwise use the overall snapshot.
+   * Example: "Binance"
+   */
+  exchange: string | null;
+  /** \(0..1\) */
+  minBuyRatio: number | null;
+  minBuyVolumeUsd: number | null;
+  minTotalVolumeUsd: number | null;
+  /** Minimum net buy volume in USD (buy - sell). */
+  minNetBuyUsd: number | null;
+  /** Require buy volume > sell volume. */
+  requireBuyGreaterThanSell: boolean;
 }
 
 interface UseWatchlistDataProps {
@@ -34,6 +53,7 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
     sortBy: "marketCap",
     sortOrder: "desc",
     watchlistGroupId: null,
+    takerFilter: null,
   })
 
   const watchlistGroups = useWatchlistGroups()
@@ -162,6 +182,7 @@ export function useWatchlistData({ watchlist }: UseWatchlistDataProps) {
       sortBy: "marketCap",
       sortOrder: "desc",
       watchlistGroupId: null,
+      takerFilter: null,
     });
   }, []);
 

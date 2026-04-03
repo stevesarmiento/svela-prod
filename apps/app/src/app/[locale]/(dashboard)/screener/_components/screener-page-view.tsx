@@ -1,24 +1,33 @@
 'use client'
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { SortingState } from "@tanstack/react-table"
 
 import { Spinner } from "@v1/ui/spinner"
+import { toast } from "sonner"
 
 import { WatchlistAutoRefreshIndicator } from "../../watchlist/_components/watchlist-auto-refresh-indicator"
 import { WatchlistFilters } from "../../watchlist/_components/watchlist-filters"
 import { WatchlistEmptyState } from "../../watchlist/_components/watchlist-empty-states"
-import { WatchlistTableSection } from "../../watchlist/_components/watchlist-table-section"
+import { WatchlistTableSection, type WatchlistTableStatus } from "../../watchlist/_components/watchlist-table-section"
 import type { FilterState } from "@/hooks/use-watchlist-data"
 import { useHybridCoinSearch } from "@/hooks/use-hybrid-coin-search"
 import { useScreenerTopMarkets } from "@/hooks/use-screener-top-markets"
+import { useSmartScreenerTakerMetrics } from "@/hooks/use-smart-screener-taker-metrics"
+import type { SmartScreenerScreenResponse } from "@/lib/smart-screener/screen-api"
 import type { CoinMarketData } from "@/types/coins"
 
 const SCREENER_REFRESH_INTERVAL_MS = 60 * 60 * 1000
 const SCREENER_DEFAULT_LIMIT = 250
+/** Match initial / cleared `FilterState` slider maxima so we only treat ranges as “active” when narrowed. */
+const SCREENER_DEFAULT_PRICE_MAX = 1_000_000
+const SCREENER_DEFAULT_MC_MAX = 10_000_000_000_000
+const SCREENER_DEFAULT_VOL_MAX = 1_000_000_000_000
 
 export function ScreenerPageView() {
   const [sorting, setSorting] = useState<SortingState>([])
+  const [smartScreenerStatus, setSmartScreenerStatus] = useState<WatchlistTableStatus | null>(null)
+  const [screenResult, setScreenResult] = useState<SmartScreenerScreenResponse | null>(null)
 
   const topMarketsQuery = useScreenerTopMarkets(SCREENER_DEFAULT_LIMIT)
   const topCoins = topMarketsQuery.data
@@ -32,13 +41,15 @@ export function ScreenerPageView() {
     sortBy: "marketCap",
     sortOrder: "desc",
     watchlistGroupId: null,
+    takerFilter: null,
   })
 
   const appliedSearch = filters.searchText.trim()
-  const globalSearchQuery = useHybridCoinSearch(appliedSearch, { limit: 50 })
+  const globalSearchText = screenResult ? "" : appliedSearch
+  const globalSearchQuery = useHybridCoinSearch(globalSearchText, { limit: 50 })
 
   const searchCoins = useMemo((): CoinMarketData[] => {
-    if (!appliedSearch) return []
+    if (!globalSearchText) return []
     return (globalSearchQuery.data ?? []).map((coin) => ({
       id: coin.id,
       name: coin.name,
@@ -52,9 +63,58 @@ export function ScreenerPageView() {
       quote: coin.quote,
       fundingRate: null,
     }))
-  }, [appliedSearch, globalSearchQuery.data])
+  }, [globalSearchQuery.data, globalSearchText])
 
-  const coins = appliedSearch ? searchCoins : topCoins
+  const screenCoins = useMemo((): CoinMarketData[] => {
+    const rows = screenResult?.rows ?? []
+    return rows.map((row) => ({
+      id: row.coingeckoId,
+      name: row.name,
+      symbol: row.symbol,
+      slug: row.coingeckoId,
+      image: row.image,
+      sparkline7d: undefined,
+      cmc_rank: row.marketCapRank ?? 0,
+      circulating_supply: 0,
+      max_supply: null,
+      quote: {
+        USD: {
+          price: row.currentPrice ?? 0,
+          volume_24h: row.totalVolume ?? 0,
+          market_cap: row.marketCap ?? 0,
+          percent_change_24h: row.priceChangePercentage24h ?? 0,
+          percent_change_1h: undefined,
+          percent_change_7d: undefined,
+          percent_change_30d: undefined,
+          percent_change_60d: undefined,
+          percent_change_90d: undefined,
+        },
+      },
+      fundingRate: null,
+    }))
+  }, [screenResult])
+
+  const coins = screenResult ? screenCoins : globalSearchText ? searchCoins : topCoins
+
+  const takerSymbols = useMemo(() => {
+    if (!filters.takerFilter) return []
+    return coins.map((c) => c.symbol).filter(Boolean)
+  }, [coins, filters.takerFilter])
+
+  const takerMetricsQuery = useSmartScreenerTakerMetrics({
+    symbols: takerSymbols,
+    range: filters.takerFilter?.range ?? "24h",
+    exchange: filters.takerFilter?.exchange ?? null,
+    enabled: Boolean(filters.takerFilter),
+  })
+
+  const tableStatus = useMemo((): WatchlistTableStatus | null => {
+    if (smartScreenerStatus) return smartScreenerStatus
+    if (filters.takerFilter && takerMetricsQuery.isLoading) {
+      return { kind: "loadingDerivatives", text: "Loading taker data…" }
+    }
+    return null
+  }, [filters.takerFilter, smartScreenerStatus, takerMetricsQuery.isLoading])
 
   const filteredCoins = useMemo(() => {
     if (!coins.length) return []
@@ -83,6 +143,29 @@ export function ScreenerPageView() {
 
       if (filters.changeFilter === "positive" && change24h <= 0) return false
       if (filters.changeFilter === "negative" && change24h >= 0) return false
+
+      if (filters.takerFilter && !takerMetricsQuery.isLoading) {
+        const symbolKey = coin.symbol.toUpperCase()
+        const metrics = takerMetricsQuery.bySymbol[symbolKey] ?? null
+        if (!metrics) return false
+
+        if (filters.takerFilter.requireBuyGreaterThanSell) {
+          if (!(metrics.buyVolumeUsd > metrics.sellVolumeUsd)) return false
+        }
+        if (filters.takerFilter.minBuyRatio != null) {
+          if (!(metrics.buyRatio >= filters.takerFilter.minBuyRatio)) return false
+        }
+        if (filters.takerFilter.minBuyVolumeUsd != null) {
+          if (!(metrics.buyVolumeUsd >= filters.takerFilter.minBuyVolumeUsd)) return false
+        }
+        if (filters.takerFilter.minTotalVolumeUsd != null) {
+          if (!(metrics.totalVolumeUsd >= filters.takerFilter.minTotalVolumeUsd)) return false
+        }
+        if (filters.takerFilter.minNetBuyUsd != null) {
+          const netBuy = metrics.buyVolumeUsd - metrics.sellVolumeUsd
+          if (!(netBuy >= filters.takerFilter.minNetBuyUsd)) return false
+        }
+      }
 
       return true
     })
@@ -120,9 +203,76 @@ export function ScreenerPageView() {
     })
 
     return filtered
-  }, [coins, filters])
+  }, [coins, filters, takerMetricsQuery.bySymbol])
+
+  const hasActiveScreenerFilters = useMemo(() => {
+    if (screenResult != null) return true
+    if (globalSearchText.length > 0) return true
+    if (filters.searchText.trim().length > 0) return true
+    if (filters.changeFilter !== "all") return true
+    if (filters.takerFilter != null) return true
+    const [p0, p1] = filters.priceRange
+    if (p0 > 0 || p1 < SCREENER_DEFAULT_PRICE_MAX) return true
+    const [m0, m1] = filters.marketCapRange
+    if (m0 > 0 || m1 < SCREENER_DEFAULT_MC_MAX) return true
+    const [v0, v1] = filters.volumeRange
+    if (v0 > 0 || v1 < SCREENER_DEFAULT_VOL_MAX) return true
+    return false
+  }, [screenResult, globalSearchText, filters])
+
+  const tokenHeaderCountBadge = useMemo(() => {
+    if (!hasActiveScreenerFilters) return null
+    return { count: filteredCoins.length }
+  }, [hasActiveScreenerFilters, filteredCoins.length])
+
+  const emptyToastKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!filters.takerFilter) {
+      emptyToastKeyRef.current = null
+      return
+    }
+
+    if (takerMetricsQuery.isLoading) return
+    if (topMarketsQuery.isLoading) return
+    if (appliedSearch && globalSearchQuery.isLoading) return
+    if (coins.length === 0) return
+    if (filteredCoins.length > 0) return
+
+    const key = JSON.stringify({
+      taker: filters.takerFilter,
+      missing: takerMetricsQuery.counts.missing,
+      total: takerMetricsQuery.counts.total,
+    })
+    if (emptyToastKeyRef.current === key) return
+    emptyToastKeyRef.current = key
+
+    const total = takerMetricsQuery.counts.total
+    const missing = takerMetricsQuery.counts.missing
+
+    if (total > 0 && missing / total >= 0.5) {
+      toast.message("Taker data is warming up", {
+        description: "Some tokens don’t have taker data yet. Try again in a moment.",
+      })
+      return
+    }
+
+    toast.error("No matches", {
+      description: "Try lowering thresholds (e.g. net buy > $1m) or switching timeframe.",
+    })
+  }, [
+    appliedSearch,
+    coins.length,
+    filteredCoins.length,
+    filters.takerFilter,
+    globalSearchQuery.isLoading,
+    takerMetricsQuery.counts.missing,
+    takerMetricsQuery.counts.total,
+    takerMetricsQuery.isLoading,
+    topMarketsQuery.isLoading,
+  ])
 
   const handleClearAllFilters = useCallback(() => {
+    setScreenResult(null)
     setFilters({
       searchText: "",
       priceRange: [0, 1000000],
@@ -132,6 +282,7 @@ export function ScreenerPageView() {
       sortBy: "marketCap",
       sortOrder: "desc",
       watchlistGroupId: null,
+      takerFilter: null,
     })
   }, [])
 
@@ -151,6 +302,9 @@ export function ScreenerPageView() {
   if (globalSearchQuery.error) {
     console.error("Screener global search error:", globalSearchQuery.error)
   }
+  if (takerMetricsQuery.error) {
+    console.error("Screener taker metrics error:", takerMetricsQuery.error)
+  }
 
   return (
     <div className="space-y-6 px-8 w-full">
@@ -167,6 +321,7 @@ export function ScreenerPageView() {
             sortOrder={filters.sortOrder}
             watchlistGroupId={filters.watchlistGroupId}
             watchlistGroupOptions={[]}
+            takerFilter={filters.takerFilter}
             selectedCoins={selectedCoins}
             totalCoins={filteredCoins.length}
             onSearchTextChange={(value) => setFilters((prev) => ({ ...prev, searchText: value }))}
@@ -177,11 +332,15 @@ export function ScreenerPageView() {
             onSortByChange={(value) => setFilters((prev) => ({ ...prev, sortBy: value }))}
             onSortOrderChange={(value) => setFilters((prev) => ({ ...prev, sortOrder: value }))}
             onWatchlistGroupIdChange={() => setFilters((prev) => ({ ...prev, watchlistGroupId: null }))}
+            onTakerFilterChange={(value) => setFilters((prev) => ({ ...prev, takerFilter: value }))}
             onClearAllFilters={handleClearAllFilters}
             onSelectAll={noopFiltersSelectAll}
             onRemoveSelected={noopRemoveSelected}
             isRemoving={false}
             align="left"
+            onSmartScreenerStatusChange={setSmartScreenerStatus}
+            smartScreenerSummary={screenResult?.summary ?? null}
+            onSmartScreenerScreenResultChange={setScreenResult}
           />
         </div>
         <WatchlistAutoRefreshIndicator
@@ -194,7 +353,9 @@ export function ScreenerPageView() {
       </div>
 
       <div className="space-y-4">
-        {topMarketsQuery.isLoading || (appliedSearch ? globalSearchQuery.isLoading : false) ? (
+        {!screenResult &&
+        (topMarketsQuery.isLoading ||
+          (globalSearchText ? globalSearchQuery.isLoading : false)) ? (
           <div className="flex items-center justify-center py-8">
             <Spinner size={24} />
           </div>
@@ -215,6 +376,8 @@ export function ScreenerPageView() {
             onCoinSelect={noopCoinSelect}
             onSelectAll={noopTableSelectAll}
             mode="screener"
+            status={tableStatus}
+            tokenHeaderCountBadge={tokenHeaderCountBadge}
           />
         )}
       </div>

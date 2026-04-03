@@ -492,4 +492,25 @@ export default defineSchema({
     .index("by_key", ["cacheKey"])
     .index("by_expiry", ["expiresAt"])
     .index("by_source", ["dataSource"]),
+
+  smartScreenerPromptFailures: defineTable({
+    createdAtMs: v.number(),
+    surface: v.union(v.literal("watchlist"), v.literal("screener")),
+    prompt: v.string(),
+    confidence: v.number(),
+    confidenceBucket: v.union(
+      v.literal("low"),
+      v.literal("medium"),
+      v.literal("high"),
+    ),
+    actionKinds: v.array(v.string()),
+    fallbackSearchText: v.optional(v.string()),
+    // Optional feedback from the user (future UX).
+    whatIMeant: v.optional(v.string()),
+    // Non-sensitive error hint (e.g. "invalid_output", "rate_limited", "exception").
+    errorType: v.optional(v.string()),
+  })
+    .index("by_surface", ["surface"])
+    .index("by_surface_and_created_at_ms", ["surface", "createdAtMs"])
+    .index("by_created_at_ms", ["createdAtMs"]),
 });

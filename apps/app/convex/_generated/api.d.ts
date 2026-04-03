@@ -32,6 +32,7 @@ import type * as historicalData from "../historicalData.js";
 import type * as portfolio from "../portfolio.js";
 import type * as portfolioJobs from "../portfolioJobs.js";
 import type * as refresh from "../refresh.js";
+import type * as smartScreenerTelemetry from "../smartScreenerTelemetry.js";
 import type * as userSettings from "../userSettings.js";
 import type * as users from "../users.js";
 import type * as watchlists from "../watchlists.js";
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   portfolio: typeof portfolio;
   portfolioJobs: typeof portfolioJobs;
   refresh: typeof refresh;
+  smartScreenerTelemetry: typeof smartScreenerTelemetry;
   userSettings: typeof userSettings;
   users: typeof users;
   watchlists: typeof watchlists;

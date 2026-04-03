@@ -1,6 +1,7 @@
 'use client'
 
 import { flexRender, type Table } from '@tanstack/react-table'
+import { Badge } from "@v1/ui/badge"
 import { cn } from "@v1/ui/cn"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import type { CoinMarketData } from '@/types/coins'
@@ -8,9 +9,13 @@ import { WATCHLIST_TABLE_GRID_TEMPLATE_COLUMNS } from "./watchlist-table-layout"
 
 interface WatchlistTableHeaderProps {
   table: Table<CoinMarketData>;
+  tokenHeaderCountBadge?: { count: number } | null;
 }
 
-export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
+export function WatchlistTableHeader({
+  table,
+  tokenHeaderCountBadge = null,
+}: WatchlistTableHeaderProps) {
   return (
     <div className="px-4 py-1">
       <div className="text-[10px] font-semibold text-muted-foreground tracking-wide">
@@ -28,7 +33,17 @@ export function WatchlistTableHeader({ table }: WatchlistTableHeaderProps) {
                     className="flex w-full min-w-0 items-center justify-start gap-2 cursor-pointer select-none hover:text-foreground"
                     onClick={() => table.getColumn('token-sort')?.toggleSorting()} // Sort by token
                   >
-                    <span>Token</span>
+                    <span className="inline-flex items-center gap-1.5 min-w-0">
+                      <span>Token</span>
+                      {tokenHeaderCountBadge ? (
+                        <Badge
+                          variant="secondary"
+                          className="h-4 shrink-0 rounded-md px-1.5 py-0 text-[10px] font-medium tabular-nums leading-none bg-primary/10 text-primary/80 border-0"
+                        >
+                          {tokenHeaderCountBadge.count}
+                        </Badge>
+                      ) : null}
+                    </span>
                     {{
                       asc: ' ↑',
                       desc: ' ↓',

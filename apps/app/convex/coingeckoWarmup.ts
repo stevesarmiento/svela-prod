@@ -120,3 +120,44 @@ export const requestMarketsRefresh = mutation({
   },
 });
 
+export const requestTopMarketsRefresh = mutation({
+  args: {
+    serverToken: v.string(),
+    topN: v.number(),
+  },
+  returns: v.object({
+    scheduled: v.boolean(),
+    reason: v.string(),
+    topN: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const now = Date.now();
+    const topN = Math.min(10000, Math.max(250, Math.floor(args.topN)));
+    const jobKey = `warmup:top-markets:${topN}`;
+
+    const existing = await ctx.db
+      .query("jobState")
+      .withIndex("by_job_key", (q) => q.eq("jobKey", jobKey))
+      .first();
+
+    if (existing && now - existing.updatedAt < WARMUP_DEDUP_MS) {
+      return { scheduled: false, reason: "cooldown", topN };
+    }
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { updatedAt: now });
+    } else {
+      await ctx.db.insert("jobState", {
+        jobKey,
+        cursor: undefined,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshTopMarkets, { topN });
+    return { scheduled: true, reason: "scheduled", topN };
+  },
+});
+

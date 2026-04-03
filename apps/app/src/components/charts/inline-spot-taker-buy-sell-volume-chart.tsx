@@ -189,7 +189,7 @@ export function InlineSpotTakerBuySellVolumeChart({
   if (series.maxVolume <= 0) return <DataUnavailable />
   if (series.count <= 0) return <DataUnavailable />
 
-  const width = 150
+  const width = 120
   const height = 32
   const baselineY = 16
   const barMax = 14
