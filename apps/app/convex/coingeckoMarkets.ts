@@ -179,4 +179,54 @@ export const getTopMarketDataByRank = query({
       .order("asc")
       .take(limit)
   },
-}) 
+})
+
+export const getMarketDataPageByRank = query({
+  args: {
+    serverToken: v.string(),
+    minRank: v.number(),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(coingeckoMarketValidator),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken)
+    const limit = Math.min(1000, Math.max(1, args.limit ?? 500))
+    const minRank = Math.max(1, Math.floor(args.minRank))
+    return await ctx.db
+      .query("coingeckoMarkets")
+      .withIndex("by_market_cap_rank", (q) => q.gte("marketCapRank", minRank))
+      .order("asc")
+      .take(limit)
+  },
+})
+
+export const getMarketDataByCoingeckoIds = query({
+  args: {
+    serverToken: v.string(),
+    coingeckoIds: v.array(v.string()),
+  },
+  returns: v.array(coingeckoMarketValidator),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken)
+    const ids = Array.from(
+      new Set(
+        args.coingeckoIds
+          .map((id) => id.trim())
+          .filter((id) => id.length > 0),
+      ),
+    ).slice(0, 500)
+
+    if (ids.length === 0) return []
+
+    const rows = await Promise.all(
+      ids.map(async (coingeckoId) => {
+        return await ctx.db
+          .query("coingeckoMarkets")
+          .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", coingeckoId))
+          .first()
+      }),
+    )
+
+    return rows.filter((r) => r !== null)
+  },
+})

@@ -280,6 +280,8 @@ export function createWatchlistColumns({
     {
       id: 'token-sort',
       accessorKey: 'name',
+      // Visible "Token" header (and optional count badge) is rendered in `watchlist-table-header.tsx`
+      // via the first grid cell; this column only participates in sorting.
       header: () => (
         <div className="text-left flex items-center gap-1">
           Token

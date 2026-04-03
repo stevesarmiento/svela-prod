@@ -16,6 +16,11 @@ import { useLatest } from "@/hooks/use-latest"
 import { WatchlistTableBody } from "./watchlist-table-body"
 import { createWatchlistColumns } from "./watchlist-columns"
 
+export interface WatchlistTableStatus {
+  kind: "interpreting" | "loadingDerivatives"
+  text: string
+}
+
 export interface WatchlistTableSectionProps {
   coins: Array<CoinMarketData>;
   sorting: SortingState;
@@ -29,6 +34,9 @@ export interface WatchlistTableSectionProps {
   onSelectAll: (checked: boolean, coinIds?: string[]) => void;
   onInlineChartError?: () => void;
   mode?: "watchlist" | "screener";
+  status?: WatchlistTableStatus | null;
+  /** Shown next to the Token column header when filters narrow the list (e.g. screener). */
+  tokenHeaderCountBadge?: { count: number } | null;
 }
 
 export function WatchlistTableSection({
@@ -44,6 +52,8 @@ export function WatchlistTableSection({
   onSelectAll,
   onInlineChartError,
   mode = "watchlist",
+  status = null,
+  tokenHeaderCountBadge = null,
 }: WatchlistTableSectionProps) {
   const shouldReduceMotion = useReducedMotion()
   const selectedCoinsRef = useLatest(selectedCoins)
@@ -86,6 +96,8 @@ export function WatchlistTableSection({
       watchlistGroup={watchlistGroup}
       onCoinSelect={onCoinSelect}
       mode={mode}
+      status={status}
+      tokenHeaderCountBadge={tokenHeaderCountBadge}
     />
   )
 }

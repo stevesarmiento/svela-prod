@@ -23,19 +23,19 @@
       "name": "@v1/app",
       "version": "0.1.0",
       "dependencies": {
-        "@ai-sdk/google": "^3.0.53",
-        "@ai-sdk/openai": "^3.0.48",
-        "@ai-sdk/react": "^3.0.143",
+        "@ai-sdk/google": "^3.0.55",
+        "@ai-sdk/openai": "^3.0.49",
+        "@ai-sdk/react": "^3.0.144",
         "@clerk/nextjs": "^6.39.1",
         "@convex-dev/auth": "^0.0.87",
         "@effect/platform": "^0.92.1",
         "@effect/schema": "^0.75.5",
         "@number-flow/react": "^0.3.5",
-        "@tanstack/query-async-storage-persister": "^5.95.2",
+        "@tanstack/query-async-storage-persister": "^5.96.1",
         "@tanstack/react-pacer": "^0.19.4",
-        "@tanstack/react-query": "^5.95.2",
-        "@tanstack/react-query-devtools": "^5.95.2",
-        "@tanstack/react-query-persist-client": "^5.95.2",
+        "@tanstack/react-query": "^5.96.1",
+        "@tanstack/react-query-devtools": "^5.96.1",
+        "@tanstack/react-query-persist-client": "^5.96.1",
         "@tanstack/react-table": "^8.21.3",
         "@trigger.dev/sdk": "3.0.0-beta.56",
         "@v1/analytics": "workspace:*",
@@ -44,7 +44,7 @@
         "@v1/kv": "workspace:*",
         "@v1/logger": "workspace:*",
         "@v1/ui": "workspace:*",
-        "ai": "^6.0.141",
+        "ai": "^6.0.142",
         "apexcharts": "^4.7.0",
         "convex": "^1.34.1",
         "dub": "^0.36.6",
@@ -55,9 +55,9 @@
         "lodash.debounce": "^4.0.8",
         "lucide-react": "^0.563.0",
         "motion": "^11.18.2",
-        "next": "^16.2.1",
+        "next": "^16.2.2",
         "next-international": "^1.3.1",
-        "next-safe-action": "^8.1.10",
+        "next-safe-action": "^8.3.0",
         "nuqs": "^2.8.9",
         "openai": "^4.104.0",
         "react": "^19.2.4",
@@ -70,13 +70,14 @@
         "zustand": "^5.0.12",
       },
       "devDependencies": {
-        "@sentry/nextjs": "^10.46.0",
+        "@sentry/nextjs": "^10.47.0",
         "@tailwindcss/postcss": "^4.2.2",
         "@types/js-cookie": "^3.0.6",
         "@types/lodash.debounce": "^4.0.9",
         "@types/node": "^24.12.0",
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
+        "bun-types": "^1.3.11",
         "dotenv": "^16.6.1",
         "postcss": "^8.5.8",
         "tailwindcss": "^4.2.2",
@@ -93,7 +94,7 @@
         "@v1/analytics": "workspace:*",
         "@v1/ui": "workspace:*",
         "geist": "^1.7.0",
-        "next": "^16.2.1",
+        "next": "^16.2.2",
         "react": "^19.2.4",
         "react-dom": "^19.2.4",
         "usehooks-ts": "^3.1.0",
@@ -104,7 +105,7 @@
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
         "eslint": "^8",
-        "eslint-config-next": "^16.2.1",
+        "eslint-config-next": "^16.2.2",
         "postcss": "^8.5.8",
         "tailwindcss": "^4.2.2",
         "typescript": "^5.9.3",
@@ -138,7 +139,7 @@
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
         "convex": "^1.34.1",
-        "next": "^16.2.1",
+        "next": "^16.2.2",
         "react": "^19.2.4",
         "react-dom": "^19.2.4",
         "typescript": "^5.9.3",
@@ -262,7 +263,7 @@
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.3",
         "autoprefixer": "^10.4.23",
-        "next": "^16.2.1",
+        "next": "^16.2.2",
         "react": "^19.2.4",
         "react-dom": "^19.2.4",
         "typescript": "^5.9.3",
@@ -588,7 +589,7 @@
 
     "@next/env": ["@next/env@16.2.2", "", {}, "sha512-LqSGz5+xGk9EL/iBDr2yo/CgNQV6cFsNhRR2xhSXYh7B/hb4nePCxlmDvGEKG30NMHDFf0raqSyOZiQrO7BkHQ=="],
 
-    "@next/eslint-plugin-next": ["@next/eslint-plugin-next@16.2.1", "", { "dependencies": { "fast-glob": "3.3.1" } }, "sha512-r0epZGo24eT4g08jJlg2OEryBphXqO8aL18oajoTKLzHJ6jVr6P6FI58DLMug04MwD3j8Fj0YK0slyzneKVyzA=="],
+    "@next/eslint-plugin-next": ["@next/eslint-plugin-next@16.2.2", "", { "dependencies": { "fast-glob": "3.3.1" } }, "sha512-IOPbWzDQ+76AtjZioaCjpIY72xNSDMnarZ2GMQ4wjNLvnJEJHqxQwGFhgnIWLV9klb4g/+amg88Tk5OXVpyLTw=="],
 
     "@next/swc-darwin-arm64": ["@next/swc-darwin-arm64@16.2.2", "", { "os": "darwin", "cpu": "arm64" }, "sha512-B92G3ulrwmkDSEJEp9+XzGLex5wC1knrmCSIylyVeiAtCIfvEJYiN3v5kXPlYt5R4RFlsfO/v++aKV63Acrugg=="],
 
@@ -1550,6 +1551,8 @@
 
     "buffer-from": ["buffer-from@1.1.2", "", {}, "sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ=="],
 
+    "bun-types": ["bun-types@1.3.11", "", { "dependencies": { "@types/node": "*" } }, "sha512-1KGPpoxQWl9f6wcZh57LvrPIInQMn2TQ7jsgxqpRzg+l0QPOFvJVH7HmvHo/AiPgwXy+/Thf6Ov3EdVn1vOabg=="],
+
     "busboy": ["busboy@1.6.0", "", { "dependencies": { "streamsearch": "^1.1.0" } }, "sha512-8SFQbg/0hQ9xy3UNTB0YEnsNBbWfhf7RtnzpL7TkBiTBRfrQ9Fxcnz7VJsleJpyp6rVLvXiuORqjlHi5q+PYuA=="],
 
     "call-bind": ["call-bind@1.0.8", "", { "dependencies": { "call-bind-apply-helpers": "^1.0.0", "es-define-property": "^1.0.0", "get-intrinsic": "^1.2.4", "set-function-length": "^1.2.2" } }, "sha512-oKlSFMcMwpUg2ednkhQ454wfWiU/ul3CkJe/PEHcTKuiX6RpbehUiFMXu13HalGZxfUwCQzZG747YXBn1im9ww=="],
@@ -1774,7 +1777,7 @@
 
     "eslint": ["eslint@8.57.1", "", { "dependencies": { "@eslint-community/eslint-utils": "^4.2.0", "@eslint-community/regexpp": "^4.6.1", "@eslint/eslintrc": "^2.1.4", "@eslint/js": "8.57.1", "@humanwhocodes/config-array": "^0.13.0", "@humanwhocodes/module-importer": "^1.0.1", "@nodelib/fs.walk": "^1.2.8", "@ungap/structured-clone": "^1.2.0", "ajv": "^6.12.4", "chalk": "^4.0.0", "cross-spawn": "^7.0.2", "debug": "^4.3.2", "doctrine": "^3.0.0", "escape-string-regexp": "^4.0.0", "eslint-scope": "^7.2.2", "eslint-visitor-keys": "^3.4.3", "espree": "^9.6.1", "esquery": "^1.4.2", "esutils": "^2.0.2", "fast-deep-equal": "^3.1.3", "file-entry-cache": "^6.0.1", "find-up": "^5.0.0", "glob-parent": "^6.0.2", "globals": "^13.19.0", "graphemer": "^1.4.0", "ignore": "^5.2.0", "imurmurhash": "^0.1.4", "is-glob": "^4.0.0", "is-path-inside": "^3.0.3", "js-yaml": "^4.1.0", "json-stable-stringify-without-jsonify": "^1.0.1", "levn": "^0.4.1", "lodash.merge": "^4.6.2", "minimatch": "^3.1.2", "natural-compare": "^1.4.0", "optionator": "^0.9.3", "strip-ansi": "^6.0.1", "text-table": "^0.2.0" }, "bin": { "eslint": "bin/eslint.js" } }, "sha512-ypowyDxpVSYpkXr9WPv2PAZCtNip1Mv5KTW0SCurXv/9iOpcrH9PaqUElksqEB6pChqHGDRCFTyrZlGhnLNGiA=="],
 
-    "eslint-config-next": ["eslint-config-next@16.2.1", "", { "dependencies": { "@next/eslint-plugin-next": "16.2.1", "eslint-import-resolver-node": "^0.3.6", "eslint-import-resolver-typescript": "^3.5.2", "eslint-plugin-import": "^2.32.0", "eslint-plugin-jsx-a11y": "^6.10.0", "eslint-plugin-react": "^7.37.0", "eslint-plugin-react-hooks": "^7.0.0", "globals": "16.4.0", "typescript-eslint": "^8.46.0" }, "peerDependencies": { "eslint": ">=9.0.0", "typescript": ">=3.3.1" }, "optionalPeers": ["typescript"] }, "sha512-qhabwjQZ1Mk53XzXvmogf8KQ0tG0CQXF0CZ56+2/lVhmObgmaqj7x5A1DSrWdZd3kwI7GTPGUjFne+krRxYmFg=="],
+    "eslint-config-next": ["eslint-config-next@16.2.2", "", { "dependencies": { "@next/eslint-plugin-next": "16.2.2", "eslint-import-resolver-node": "^0.3.6", "eslint-import-resolver-typescript": "^3.5.2", "eslint-plugin-import": "^2.32.0", "eslint-plugin-jsx-a11y": "^6.10.0", "eslint-plugin-react": "^7.37.0", "eslint-plugin-react-hooks": "^7.0.0", "globals": "16.4.0", "typescript-eslint": "^8.46.0" }, "peerDependencies": { "eslint": ">=9.0.0", "typescript": ">=3.3.1" }, "optionalPeers": ["typescript"] }, "sha512-6VlvEhwoug2JpVgjZDhyXrJXUEuPY++TddzIpTaIRvlvlXXFgvQUtm3+Zr84IjFm0lXtJt73w19JA08tOaZVwg=="],
 
     "eslint-import-resolver-node": ["eslint-import-resolver-node@0.3.9", "", { "dependencies": { "debug": "^3.2.7", "is-core-module": "^2.13.0", "resolve": "^1.22.4" } }, "sha512-WFj2isz22JahUv+B788TlO3N6zL3nNJGU8CcZbPZvVEkBPaJdCV4vy5wyghty5ROFbCRnm132v8BScu5/1BQ8g=="],
 

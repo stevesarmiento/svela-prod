@@ -32,5 +32,5 @@
     ".next/types/**/*.ts",
     ".cursorrules"
   ],
-  "exclude": ["node_modules", ".turbo", ".next"]
+  "exclude": ["node_modules", ".turbo", ".next", "**/*.test.ts", "**/*.test.tsx"]
 }

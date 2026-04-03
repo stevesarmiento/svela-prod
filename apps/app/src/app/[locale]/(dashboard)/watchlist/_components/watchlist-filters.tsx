@@ -1,62 +1,78 @@
-"use client";
+"use client"
 
-import { useMemo, useState, useEffect, useRef } from "react";
-import { Input } from "@v1/ui/input";
-import { Button } from "@v1/ui/button";
-import { Badge } from "@v1/ui/badge";
-import { Label } from "@v1/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@v1/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@v1/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
-import { ListFilter, X } from "lucide-react";
-import { Kbd } from "@v1/ui/kbd";
-import { formatLargeNumber } from "@v1/ui/format-numbers";
-import { IconCommand, IconReturn } from "symbols-react";
+import * as React from "react"
+import { ArrowUp, X } from "lucide-react"
+import { IconArrowTurnDownRight, IconArrowTurnUpRight, IconCommand, IconSparkleMagnifyingglass, IconSparkles, IconTelegramLogo } from "symbols-react"
+
+import { Badge } from "@v1/ui/badge"
+import { Button } from "@v1/ui/button"
+import { cn } from "@v1/ui/cn"
+import { Kbd } from "@v1/ui/kbd"
+import { formatLargeNumber } from "@v1/ui/format-numbers"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
+import { toast } from "sonner"
+
 import { useBottomNav } from "@/components/navigation/bottom-nav-context"
+import type { TakerFilterState } from "@/hooks/use-watchlist-data"
+import { shouldApplySmartScreenerResult } from "@/lib/smart-screener/client-result"
+import {
+  SmartScreenerScreenResponseSchema,
+  type SmartScreenerScreenResponse,
+} from "@/lib/smart-screener/screen-api"
+import { formatDslSummary } from "@/lib/smart-screener/screening-dsl"
+import { promptLooksLikeConstraints } from "@/lib/smart-screener/prompt-gating"
+import type { WatchlistTableStatus } from "./watchlist-table-section"
 
 interface FilterChip {
-  key: string;
-  label: string;
-  value: string;
+  key: string
+  label: string
+  value: string
 }
 
-interface WatchlistFiltersProps {
-  mode?: "watchlist" | "screener";
+export interface WatchlistFiltersProps {
+  mode?: "watchlist" | "screener"
   // Filter state
-  searchText: string;
-  priceRange: [number, number];
-  marketCapRange: [number, number];
-  volumeRange: [number, number];
-  changeFilter: "all" | "positive" | "negative";
-  sortBy: "name" | "price" | "change" | "marketCap" | "volume";
-  sortOrder: "asc" | "desc";
-  watchlistGroupId: string | null;
-  watchlistGroupOptions: Array<{ id: string; name: string }>;
-  
+  searchText: string
+  priceRange: [number, number]
+  marketCapRange: [number, number]
+  volumeRange: [number, number]
+  changeFilter: "all" | "positive" | "negative"
+  sortBy: "name" | "price" | "change" | "marketCap" | "volume"
+  sortOrder: "asc" | "desc"
+  watchlistGroupId: string | null
+  watchlistGroupOptions: Array<{ id: string; name: string }>
+  takerFilter: TakerFilterState | null
+
   // Selection state
-  selectedCoins: Set<string>;
-  totalCoins: number;
-  
+  selectedCoins: Set<string>
+  totalCoins: number
+
   // Filter handlers
-  onSearchTextChange: (value: string) => void;
-  onPriceRangeChange: (range: [number, number]) => void;
-  onMarketCapRangeChange: (range: [number, number]) => void;
-  onVolumeRangeChange: (range: [number, number]) => void;
-  onChangeFilterChange: (value: "all" | "positive" | "negative") => void;
-  onSortByChange: (value: "name" | "price" | "change" | "marketCap" | "volume") => void;
-  onSortOrderChange: (value: "asc" | "desc") => void;
-  onWatchlistGroupIdChange: (value: string | null) => void;
-  onClearAllFilters: () => void;
-  
+  onSearchTextChange: (value: string) => void
+  onPriceRangeChange: (range: [number, number]) => void
+  onMarketCapRangeChange: (range: [number, number]) => void
+  onVolumeRangeChange: (range: [number, number]) => void
+  onChangeFilterChange: (value: "all" | "positive" | "negative") => void
+  onSortByChange: (value: "name" | "price" | "change" | "marketCap" | "volume") => void
+  onSortOrderChange: (value: "asc" | "desc") => void
+  onWatchlistGroupIdChange: (value: string | null) => void
+  onTakerFilterChange: (value: TakerFilterState | null) => void
+  onClearAllFilters: () => void
+
   // Selection handlers
-  onSelectAll: (checked: boolean) => void;
-  onRemoveSelected: () => void;
-  
+  onSelectAll: (checked: boolean) => void
+  onRemoveSelected: () => void
+
   // Loading states
-  isRemoving?: boolean;
+  isRemoving?: boolean
 
   // Layout
-  align?: "left" | "right";
+  align?: "left" | "right"
+
+  // Smart screener UX
+  onSmartScreenerStatusChange?: (status: WatchlistTableStatus | null) => void
+  smartScreenerSummary?: string | null
+  onSmartScreenerScreenResultChange?: (result: SmartScreenerScreenResponse | null) => void
 }
 
 function normalizeFilterQuery(input: string): string {
@@ -230,7 +246,6 @@ function parseNaturalLanguageActions(args: {
         continue
       }
 
-      // Example: watchlist name "the majors" should match query "majors"
       if (clauseNoThe.length >= 3) {
         const contains = args.watchlistGroupIndex.filter(
           (g) => g.normalizedName.includes(clause) || g.normalizedNameNoThe.includes(clauseNoThe),
@@ -241,7 +256,6 @@ function parseNaturalLanguageActions(args: {
         }
       }
 
-      // Helpful for small typos (e.g. "ownerhip" -> "ownership")
       if (clause.length >= 6) {
         let best: { id: string; dist: number } | null = null
         let bestIsTied = false
@@ -281,10 +295,7 @@ function parseNaturalLanguageActions(args: {
       continue
     }
 
-    // 3) Sort phrases. Support:
-    // - "sort marketcap desc"
-    // - "marketcap descending"
-    // - "market cap decending" (common misspelling)
+    // 3) Sort phrases
     const clauseForSort = clause.replace(/^sort(\s+by)?\s+/, "")
 
     const sortOrderValue =
@@ -314,7 +325,7 @@ function parseNaturalLanguageActions(args: {
       continue
     }
 
-    // 4) High-signal shortcuts
+    // 4) Shortcuts
     if (/\btop\s+gainers\b|\bgainers\b/.test(clause)) {
       actions.push({ kind: "change", value: "positive" })
       actions.push({ kind: "sortBy", value: "change" })
@@ -354,12 +365,176 @@ function parseNaturalLanguageActions(args: {
       field: "price",
       max: RANGE_DEFAULTS.priceMax,
     })
-    if (priceRange) {
-      actions.push({ kind: "priceRange", value: priceRange })
-    }
+    if (priceRange) actions.push({ kind: "priceRange", value: priceRange })
   }
 
   return actions
+}
+
+function doesQueryLookLikeFilterIntent(raw: string): boolean {
+  const s = normalizeFilterQuery(raw)
+  if (!s) return false
+  if (s.length < 6) return false
+  if (
+    /\b(sort|top|gainers|losers|market|mcap|volume|price|change|between|under|over|above|below|taker|buy|sell|ratio|net)\b/.test(
+      s,
+    )
+  ) {
+    return true
+  }
+  if (/[<>]=?/.test(s)) return true
+  return s.split(" ").length >= 3
+}
+
+type PreviewAction =
+  | { kind: "searchText"; value: string }
+  | NaturalLanguageAction
+  | { kind: "takerFilter"; value: TakerFilterState }
+
+function previewActionToChip(action: PreviewAction): FilterChip {
+  if (action.kind === "searchText") {
+    return { key: "preview:searchText", label: "Search", value: action.value }
+  }
+  if (action.kind === "watchlist") {
+    return { key: "preview:watchlist", label: "Watchlist", value: action.watchlistGroupId }
+  }
+  if (action.kind === "change") {
+    return { key: "preview:change", label: "24h Change", value: action.value }
+  }
+  if (action.kind === "sortBy") {
+    return { key: "preview:sortBy", label: "Sort", value: action.value }
+  }
+  if (action.kind === "sortOrder") {
+    return { key: "preview:sortOrder", label: "Order", value: action.value }
+  }
+  if (action.kind === "takerFilter") {
+    const parts: Array<string> = []
+    if (action.value.exchange) parts.push(action.value.exchange)
+    if (action.value.minBuyRatio != null) parts.push(`buyRatio ≥ ${(action.value.minBuyRatio * 100).toFixed(0)}%`)
+    if (action.value.minBuyVolumeUsd != null) parts.push(`buy ≥ $${formatLargeNumber(action.value.minBuyVolumeUsd)}`)
+    if (action.value.minTotalVolumeUsd != null) parts.push(`total ≥ $${formatLargeNumber(action.value.minTotalVolumeUsd)}`)
+    if (action.value.requireBuyGreaterThanSell) parts.push("buy > sell")
+    if (action.value.minNetBuyUsd != null) parts.push(`netBuy ≥ $${formatLargeNumber(action.value.minNetBuyUsd)}`)
+    return {
+      key: "preview:takerFilter",
+      label: "Taker",
+      value: parts.length > 0 ? parts.join(" • ") : action.value.range,
+    }
+  }
+  if (action.kind === "priceRange") {
+    return { key: "preview:priceRange", label: "Price", value: `$${action.value[0]} - $${action.value[1]}` }
+  }
+  if (action.kind === "marketCapRange") {
+    return {
+      key: "preview:marketCapRange",
+      label: "Market Cap",
+      value: `$${formatLargeNumber(action.value[0])} - $${formatLargeNumber(action.value[1])}`,
+    }
+  }
+  return {
+    key: "preview:volumeRange",
+    label: "Volume",
+    value: `$${formatLargeNumber(action.value[0])} - $${formatLargeNumber(action.value[1])}`,
+  }
+}
+
+function getActiveFilters(args: {
+  isScreener: boolean
+  searchText: string
+  watchlistGroupId: string | null
+  watchlistGroupOptions: Array<{ id: string; name: string }>
+  takerFilter: TakerFilterState | null
+  smartScreenerSummary: string | null
+  priceRange: [number, number]
+  marketCapRange: [number, number]
+  volumeRange: [number, number]
+  changeFilter: "all" | "positive" | "negative"
+  sortBy: "name" | "price" | "change" | "marketCap" | "volume"
+  sortOrder: "asc" | "desc"
+}): FilterChip[] {
+  const chips: FilterChip[] = []
+
+  if (args.smartScreenerSummary) {
+    chips.push({
+      key: "smartScreener",
+      label: "Screener",
+      value: args.smartScreenerSummary,
+    })
+  }
+
+  if (args.searchText) chips.push({ key: "searchText", label: "Search", value: args.searchText })
+
+  if (!args.isScreener && args.watchlistGroupId) {
+    const name =
+      args.watchlistGroupOptions.find((o) => o.id === args.watchlistGroupId)?.name ?? "Selected"
+    chips.push({ key: "watchlistGroup", label: "Watchlist", value: name })
+  }
+
+  if (args.takerFilter) {
+    const parts: Array<string> = []
+    if (args.takerFilter.exchange) parts.push(args.takerFilter.exchange)
+    if (args.takerFilter.minBuyRatio != null) {
+      parts.push(`buyRatio ≥ ${(args.takerFilter.minBuyRatio * 100).toFixed(0)}%`)
+    }
+    if (args.takerFilter.minBuyVolumeUsd != null) {
+      parts.push(`buy ≥ $${formatLargeNumber(args.takerFilter.minBuyVolumeUsd)}`)
+    }
+    if (args.takerFilter.minTotalVolumeUsd != null) {
+      parts.push(`total ≥ $${formatLargeNumber(args.takerFilter.minTotalVolumeUsd)}`)
+    }
+    if (args.takerFilter.requireBuyGreaterThanSell) parts.push("buy > sell")
+    if (args.takerFilter.minNetBuyUsd != null) {
+      parts.push(`netBuy ≥ $${formatLargeNumber(args.takerFilter.minNetBuyUsd)}`)
+    }
+
+    chips.push({
+      key: "takerFilter",
+      label: "Taker",
+      value: parts.length > 0 ? parts.join(" • ") : args.takerFilter.range,
+    })
+  }
+
+  if (args.priceRange[0] > 0 || args.priceRange[1] < RANGE_DEFAULTS.priceMax) {
+    chips.push({
+      key: "priceRange",
+      label: "Price",
+      value: `$${args.priceRange[0]} - $${args.priceRange[1]}`,
+    })
+  }
+
+  if (args.marketCapRange[0] > 0 || args.marketCapRange[1] < RANGE_DEFAULTS.marketCapMax) {
+    chips.push({
+      key: "marketCapRange",
+      label: "Market Cap",
+      value: `$${formatLargeNumber(args.marketCapRange[0])} - $${formatLargeNumber(args.marketCapRange[1])}`,
+    })
+  }
+
+  if (args.volumeRange[0] > 0 || args.volumeRange[1] < RANGE_DEFAULTS.volumeMax) {
+    chips.push({
+      key: "volumeRange",
+      label: "Volume",
+      value: `$${formatLargeNumber(args.volumeRange[0])} - $${formatLargeNumber(args.volumeRange[1])}`,
+    })
+  }
+
+  if (args.changeFilter !== "all") {
+    chips.push({
+      key: "changeFilter",
+      label: "24h Change",
+      value: args.changeFilter === "positive" ? "Positive" : "Negative",
+    })
+  }
+
+  if (args.sortBy !== "marketCap" || args.sortOrder !== "desc") {
+    chips.push({
+      key: "sort",
+      label: "Sort",
+      value: `${args.sortBy} ${args.sortOrder}`,
+    })
+  }
+
+  return chips
 }
 
 export function WatchlistFilters({
@@ -373,6 +548,7 @@ export function WatchlistFilters({
   sortOrder,
   watchlistGroupId,
   watchlistGroupOptions,
+  takerFilter,
   selectedCoins,
   totalCoins,
   onSearchTextChange,
@@ -383,23 +559,27 @@ export function WatchlistFilters({
   onSortByChange,
   onSortOrderChange,
   onWatchlistGroupIdChange,
+  onTakerFilterChange,
   onClearAllFilters,
   onSelectAll,
   onRemoveSelected,
   isRemoving,
   align = "left",
+  onSmartScreenerStatusChange,
+  smartScreenerSummary = null,
+  onSmartScreenerScreenResultChange,
 }: WatchlistFiltersProps) {
   const isScreener = mode === "screener"
-  const [isFilterPopoverOpen, setIsFilterPopoverOpen] = useState(false);
-  const [inputValue, setInputValue] = useState(searchText);
-  const [isInterpreting, setIsInterpreting] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null);
-  const filterButtonRef = useRef<HTMLButtonElement>(null);
-  const { setNavigationMode, setSelectionMode } = useBottomNav()
+  const [open, setOpen] = React.useState(false)
+  const [draft, setDraft] = React.useState("")
+  const [isInterpreting, setIsInterpreting] = React.useState(false)
 
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const interpretAbortRef = React.useRef<AbortController | null>(null)
+  const { setNavigationMode, setSelectionMode } = useBottomNav()
   const intentConfidenceThreshold = 0.6
 
-  const watchlistGroupIndex = useMemo(() => {
+  const watchlistGroupIndex = React.useMemo(() => {
     if (isScreener) return []
     return watchlistGroupOptions.map((g) => ({
       id: g.id,
@@ -409,71 +589,72 @@ export function WatchlistFilters({
     }))
   }, [isScreener, watchlistGroupOptions])
 
-  const selectedWatchlistGroupName = useMemo(() => {
-    if (isScreener) return null
-    if (!watchlistGroupId) return null
-    return watchlistGroupOptions.find((o) => o.id === watchlistGroupId)?.name ?? null
-  }, [isScreener, watchlistGroupId, watchlistGroupOptions])
+  const activeFilters = React.useMemo(
+    () =>
+      getActiveFilters({
+        isScreener,
+        smartScreenerSummary,
+        searchText,
+        watchlistGroupId,
+        watchlistGroupOptions,
+        takerFilter,
+        priceRange,
+        marketCapRange,
+        volumeRange,
+        changeFilter,
+        sortBy,
+        sortOrder,
+      }),
+    [
+      isScreener,
+      smartScreenerSummary,
+      searchText,
+      watchlistGroupId,
+      watchlistGroupOptions,
+      takerFilter,
+      priceRange,
+      marketCapRange,
+      volumeRange,
+      changeFilter,
+      sortBy,
+      sortOrder,
+    ],
+  )
 
-  // Keyboard shortcut handler
-  useEffect(() => {
+  const hasActiveFilters = activeFilters.length > 0
+  const hasSelectedCoins = selectedCoins.size > 0
+
+  React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Check for Cmd+F (Mac) or Ctrl+F (Windows/Linux)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
-        e.preventDefault();
-        setIsFilterPopoverOpen(true);
-        return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault()
+        setOpen(true)
+        return
       }
 
-      // Calculate hasActiveFilters inside the effect to avoid dependency issues
-      const currentHasActiveFilters = !!(
-        searchText ||
-        (!isScreener && watchlistGroupId) ||
-        priceRange[0] > 0 || priceRange[1] < 1000000 ||
-        marketCapRange[0] > 0 || marketCapRange[1] < 10000000000000 ||
-        volumeRange[0] > 0 || volumeRange[1] < 1000000000000 ||
-        changeFilter !== "all" ||
-        // Default sort is market cap desc (highest market cap first)
-        sortBy !== "marketCap" || sortOrder !== "desc"
-      );
-
-      // Check for Escape to clear filters (only if popover is not open and there are active filters)
-      if (e.key === 'Escape' && !isFilterPopoverOpen && currentHasActiveFilters) {
-        e.preventDefault();
-        onClearAllFilters();
-        setInputValue("");
+      if (e.key === "Escape" && !open && hasActiveFilters) {
+        e.preventDefault()
+        onClearAllFilters()
       }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [
-    isFilterPopoverOpen,
-    isScreener,
-    searchText,
-    watchlistGroupId,
-    priceRange,
-    marketCapRange,
-    volumeRange,
-    changeFilter,
-    sortBy,
-    sortOrder,
-    onClearAllFilters,
-  ]);
-
-  // Focus input when popover opens
-  useEffect(() => {
-    if (isFilterPopoverOpen && inputRef.current) {
-      // Small delay to ensure the popover is fully rendered
-      setTimeout(() => {
-        inputRef.current?.focus();
-      }, 100);
     }
-  }, [isFilterPopoverOpen]);
 
-  // ✅ LEGITIMATE: Synchronize with external system (bottom navigation context)
-  // This useEffect is correct because it syncs React state with external navigation system
-  useEffect(() => {
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [hasActiveFilters, onClearAllFilters, open])
+
+  React.useEffect(() => {
+    if (!open) return
+    setDraft("")
+    setIsInterpreting(false)
+    interpretAbortRef.current?.abort()
+    interpretAbortRef.current = null
+
+    const t = window.setTimeout(() => inputRef.current?.focus(), 60)
+    return () => window.clearTimeout(t)
+  }, [open])
+
+  // Sync selection state to bottom navigation context (external system).
+  React.useEffect(() => {
     if (selectedCoins.size > 0) {
       setSelectionMode({
         selectedCoins,
@@ -485,431 +666,459 @@ export function WatchlistFilters({
     } else {
       setNavigationMode()
     }
-  }, [selectedCoins, totalCoins, onSelectAll, onRemoveSelected, isRemoving, setSelectionMode, setNavigationMode])
+  }, [
+    selectedCoins,
+    totalCoins,
+    onSelectAll,
+    onRemoveSelected,
+    isRemoving,
+    setSelectionMode,
+    setNavigationMode,
+  ])
 
-  const getActiveFilters = (): FilterChip[] => {
-    const chips: FilterChip[] = [];
-
-    if (searchText) {
-      chips.push({ key: "searchText", label: "Search", value: searchText });
-    }
-
-    if (!isScreener && watchlistGroupId) {
-      chips.push({
-        key: "watchlistGroup",
-        label: "Watchlist",
-        value: selectedWatchlistGroupName ?? "Selected",
-      })
-    }
-
-    if (priceRange[0] > 0 || priceRange[1] < 1000000) {
-      chips.push({
-        key: "priceRange",
-        label: "Price",
-        value: `$${priceRange[0]} - $${priceRange[1]}`,
-      });
-    }
-
-    if (marketCapRange[0] > 0 || marketCapRange[1] < 10000000000000) {
-      chips.push({
-        key: "marketCapRange",
-        label: "Market Cap",
-        value: `$${formatLargeNumber(marketCapRange[0])} - $${formatLargeNumber(marketCapRange[1])}`,
-      });
-    }
-
-    if (volumeRange[0] > 0 || volumeRange[1] < 1000000000000) {
-      chips.push({
-        key: "volumeRange",
-        label: "Volume",
-        value: `$${formatLargeNumber(volumeRange[0])} - $${formatLargeNumber(volumeRange[1])}`,
-      });
-    }
-
-    if (changeFilter !== "all") {
-      chips.push({
-        key: "changeFilter",
-        label: "24h Change",
-        value: changeFilter === "positive" ? "Positive" : "Negative",
-      });
-    }
-
-    if (sortBy !== "marketCap" || sortOrder !== "desc") {
-      chips.push({
-        key: "sort",
-        label: "Sort",
-        value: `${sortBy} ${sortOrder}`,
-      });
-    }
-
-    return chips;
-  };
-
-  const removeFilter = (key: string) => {
+  function removeFilter(key: string) {
     switch (key) {
+      case "smartScreener":
+        onSmartScreenerScreenResultChange?.(null)
+        return
       case "searchText":
-        onSearchTextChange("");
-        setInputValue("");
-        break;
+        onSearchTextChange("")
+        return
       case "watchlistGroup":
         if (!isScreener) onWatchlistGroupIdChange(null)
-        break
-      case "priceRange":
-        onPriceRangeChange([0, 1000000]);
-        break;
-      case "marketCapRange":
-        onMarketCapRangeChange([0, 10000000000000]);
-        break;
-      case "volumeRange":
-        onVolumeRangeChange([0, 1000000000000]);
-        break;
-      case "changeFilter":
-        onChangeFilterChange("all");
-        break;
-      case "sort":
-        // Reset to default sort (highest market cap first)
-        onSortByChange("marketCap");
-        onSortOrderChange("desc");
-        break;
-    }
-  };
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      const raw = inputValue.trim()
-      if (!raw) {
-        setIsFilterPopoverOpen(false)
         return
+      case "takerFilter":
+        onTakerFilterChange(null)
+        return
+      case "priceRange":
+        onPriceRangeChange([0, RANGE_DEFAULTS.priceMax])
+        return
+      case "marketCapRange":
+        onMarketCapRangeChange([0, RANGE_DEFAULTS.marketCapMax])
+        return
+      case "volumeRange":
+        onVolumeRangeChange([0, RANGE_DEFAULTS.volumeMax])
+        return
+      case "changeFilter":
+        onChangeFilterChange("all")
+        return
+      case "sort":
+        onSortByChange("marketCap")
+        onSortOrderChange("desc")
+        return
+    }
+  }
+
+  function applyNaturalLanguageActions(actions: Array<NaturalLanguageAction>) {
+    for (const action of actions) {
+      if (action.kind === "watchlist") {
+        if (!isScreener) onWatchlistGroupIdChange(action.watchlistGroupId)
+        continue
+      }
+      if (action.kind === "change") {
+        onChangeFilterChange(action.value)
+        continue
+      }
+      if (action.kind === "sortBy") {
+        onSortByChange(action.value)
+        continue
+      }
+      if (action.kind === "sortOrder") {
+        onSortOrderChange(action.value)
+        continue
+      }
+      if (action.kind === "priceRange") {
+        onPriceRangeChange(action.value)
+        continue
+      }
+      if (action.kind === "marketCapRange") {
+        onMarketCapRangeChange(action.value)
+        continue
+      }
+      if (action.kind === "volumeRange") onVolumeRangeChange(action.value)
+    }
+  }
+
+  function applyServerActions(serverActions: Array<unknown>) {
+    for (const a of serverActions) {
+      if (typeof a !== "object" || a === null) continue
+      const kind = (a as Record<string, unknown>).kind
+      const value = (a as Record<string, unknown>).value
+
+      if (kind === "watchlistGroupId") {
+        if (isScreener) continue
+        if (typeof value === "string" || value === null) onWatchlistGroupIdChange(value)
+        continue
+      }
+      if (kind === "changeFilter") {
+        if (value === "all" || value === "positive" || value === "negative") {
+          onChangeFilterChange(value)
+        }
+        continue
+      }
+      if (kind === "sortBy") {
+        if (
+          value === "name" ||
+          value === "price" ||
+          value === "change" ||
+          value === "marketCap" ||
+          value === "volume"
+        ) {
+          onSortByChange(value)
+        }
+        continue
+      }
+      if (kind === "sortOrder") {
+        if (value === "asc" || value === "desc") onSortOrderChange(value)
+        continue
       }
 
-      if (isInterpreting) return
+      if (kind === "takerFilter") {
+        if (typeof value !== "object" || value === null) continue
+        const record = value as Record<string, unknown>
 
-      const actions = parseNaturalLanguageActions({
-        rawInput: raw,
-        watchlistGroupIndex,
+        const range =
+          record.range === "1h" ||
+          record.range === "4h" ||
+          record.range === "12h" ||
+          record.range === "24h" ||
+          record.range === "7d"
+            ? (record.range as TakerFilterState["range"])
+            : ("24h" as const)
+        const exchange = record.exchange === null || typeof record.exchange === "string" ? record.exchange : null
+        const minBuyRatioRaw =
+          record.minBuyRatio === null || typeof record.minBuyRatio === "number" ? record.minBuyRatio : null
+        const minBuyVolumeUsdRaw =
+          record.minBuyVolumeUsd === null || typeof record.minBuyVolumeUsd === "number" ? record.minBuyVolumeUsd : null
+        const minTotalVolumeUsdRaw =
+          record.minTotalVolumeUsd === null || typeof record.minTotalVolumeUsd === "number" ? record.minTotalVolumeUsd : null
+        const minNetBuyUsdRaw =
+          record.minNetBuyUsd === null || typeof record.minNetBuyUsd === "number" ? record.minNetBuyUsd : null
+        const requireBuyGreaterThanSell =
+          typeof record.requireBuyGreaterThanSell === "boolean" ? record.requireBuyGreaterThanSell : false
+
+        const minBuyRatio =
+          minBuyRatioRaw == null
+            ? null
+            : Math.max(0, Math.min(1, Number.isFinite(minBuyRatioRaw) ? minBuyRatioRaw : 0))
+        const minNetBuyUsd =
+          minNetBuyUsdRaw == null
+            ? null
+            : Math.max(0, Number.isFinite(minNetBuyUsdRaw) ? minNetBuyUsdRaw : 0)
+        const minBuyVolumeUsd =
+          minBuyVolumeUsdRaw == null
+            ? null
+            : Math.max(0, Number.isFinite(minBuyVolumeUsdRaw) ? minBuyVolumeUsdRaw : 0)
+        const minTotalVolumeUsd =
+          minTotalVolumeUsdRaw == null
+            ? null
+            : Math.max(0, Number.isFinite(minTotalVolumeUsdRaw) ? minTotalVolumeUsdRaw : 0)
+
+        onTakerFilterChange({
+          range,
+          exchange,
+          minBuyRatio,
+          minBuyVolumeUsd,
+          minTotalVolumeUsd,
+          minNetBuyUsd,
+          requireBuyGreaterThanSell,
+        })
+      }
+    }
+  }
+
+  async function interpretAndApply(raw: string): Promise<void> {
+    const trimmed = raw.trim()
+    if (!trimmed) return
+
+    // Keep derivatives/taker prompts on the existing intent endpoint for now.
+    const looksLikeDerivatives =
+      /\b(taker|net\s*buy|open\s*interest|oi\b|liquidat|funding)\b/i.test(trimmed)
+
+    const isAdvancedScreenerQuery =
+      /\b(fdv|ath|atl|drawdown|return|volatility|trend|momentum)\b/i.test(trimmed) ||
+      /\b(7d|30d|24h)\b/i.test(trimmed) ||
+      /\b(range)\b/i.test(trimmed)
+
+    const shouldUseServerScreener =
+      isScreener &&
+      !looksLikeDerivatives &&
+      (isAdvancedScreenerQuery || promptLooksLikeConstraints(trimmed))
+
+    // In screener mode, prefer the server screener for metric/constraint prompts even if the
+    // local parser can partially interpret them (to avoid "sort-only" / partial applies).
+    if (shouldUseServerScreener) {
+      interpretAbortRef.current?.abort()
+      const abortController = new AbortController()
+      interpretAbortRef.current = abortController
+
+      setIsInterpreting(true)
+      onSmartScreenerStatusChange?.({ kind: "interpreting", text: "Interpreting…" })
+      try {
+        const res = await fetch("/api/smart-screener/screen", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: abortController.signal,
+          body: JSON.stringify({
+            text: trimmed,
+            surface: "screener",
+          }),
+        })
+
+        const json: unknown = await res.json().catch(() => null)
+        const parsed = SmartScreenerScreenResponseSchema.safeParse(json)
+        if (!parsed.success) {
+          toast.error("Try again", {
+            description: "Couldn’t interpret that. Try rephrasing with concrete constraints.",
+          })
+          return
+        }
+
+        const data = parsed.data
+        if (data.userMessage) {
+          if (data.ok) toast.message("Smart screener", { description: data.userMessage })
+          else toast.error("Try again", { description: data.userMessage })
+        }
+
+        if (!data.ok) return
+
+        // Clear potentially-conflicting local filters so server result sets render as expected.
+        onSearchTextChange("")
+        onPriceRangeChange([0, RANGE_DEFAULTS.priceMax])
+        onMarketCapRangeChange([0, RANGE_DEFAULTS.marketCapMax])
+        onVolumeRangeChange([0, RANGE_DEFAULTS.volumeMax])
+        onChangeFilterChange("all")
+        onSortByChange("marketCap")
+        onSortOrderChange("desc")
+        onTakerFilterChange(null)
+
+        onSmartScreenerScreenResultChange?.({
+          ...data,
+          summary: formatDslSummary(data.dsl),
+        })
+        return
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return
+        toast.error("Smart screener unavailable", {
+          description: "Couldn’t interpret that right now. Try again in a moment.",
+        })
+        return
+      } finally {
+        setIsInterpreting(false)
+        onSmartScreenerStatusChange?.(null)
+      }
+    }
+
+    const actions = parseNaturalLanguageActions({ rawInput: trimmed, watchlistGroupIndex })
+
+    // Fast path: if it looks like a simple token search, apply immediately.
+    if (actions.length === 0 && trimmed.split(/\s+/g).length === 1 && trimmed.length <= 18) {
+      onSearchTextChange(trimmed)
+      return
+    }
+
+    // Local parse success: apply immediately.
+    if (actions.length > 0) return applyNaturalLanguageActions(actions)
+
+    const looksLikeIntent = doesQueryLookLikeFilterIntent(trimmed)
+    if (!looksLikeIntent) {
+      onSearchTextChange(trimmed)
+      return
+    }
+
+    // For screener mode, use the server-side screen endpoint for broader market/metric queries.
+    if (isScreener && !looksLikeDerivatives) {
+      interpretAbortRef.current?.abort()
+      const abortController = new AbortController()
+      interpretAbortRef.current = abortController
+
+      setIsInterpreting(true)
+      onSmartScreenerStatusChange?.({ kind: "interpreting", text: "Interpreting…" })
+      try {
+        const res = await fetch("/api/smart-screener/screen", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: abortController.signal,
+          body: JSON.stringify({
+            text: trimmed,
+            surface: "screener",
+          }),
+        })
+
+        const json: unknown = await res.json().catch(() => null)
+        const parsed = SmartScreenerScreenResponseSchema.safeParse(json)
+        if (!parsed.success) {
+          toast.error("Try again", {
+            description: "Couldn’t interpret that. Try rephrasing with concrete constraints.",
+          })
+          return
+        }
+
+        const data = parsed.data
+        if (data.userMessage) {
+          if (data.ok) {
+            toast.message("Smart screener", { description: data.userMessage })
+          } else {
+            toast.error("Try again", { description: data.userMessage })
+          }
+        }
+
+        if (!data.ok) return
+
+        // Clear potentially-conflicting local filters so server result sets render as expected.
+        onSearchTextChange("")
+        onPriceRangeChange([0, RANGE_DEFAULTS.priceMax])
+        onMarketCapRangeChange([0, RANGE_DEFAULTS.marketCapMax])
+        onVolumeRangeChange([0, RANGE_DEFAULTS.volumeMax])
+        onChangeFilterChange("all")
+        onSortByChange("marketCap")
+        onSortOrderChange("desc")
+        onTakerFilterChange(null)
+
+        onSmartScreenerScreenResultChange?.({
+          ...data,
+          summary: formatDslSummary(data.dsl),
+        })
+        return
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return
+        toast.error("Smart screener unavailable", {
+          description: "Couldn’t interpret that right now. Try again in a moment.",
+        })
+        return
+      } finally {
+        setIsInterpreting(false)
+        onSmartScreenerStatusChange?.(null)
+      }
+    }
+
+    interpretAbortRef.current?.abort()
+    const abortController = new AbortController()
+    interpretAbortRef.current = abortController
+
+    setIsInterpreting(true)
+    onSmartScreenerStatusChange?.({ kind: "interpreting", text: "Interpreting…" })
+    try {
+      const res = await fetch("/api/watchlist-filters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: abortController.signal,
+        body: JSON.stringify({
+          text: trimmed,
+          surface: isScreener ? "screener" : "watchlist",
+          watchlistGroups: isScreener ? [] : watchlistGroupOptions,
+          current: {
+            watchlistGroupId: isScreener ? null : watchlistGroupId,
+            changeFilter,
+            sortBy,
+            sortOrder,
+            takerFilter,
+          },
+        }),
       })
 
-      let didApplyNonSearchAction = false
-      for (const action of actions) {
-        if (action.kind === "watchlist") {
-          onWatchlistGroupIdChange(action.watchlistGroupId)
-          didApplyNonSearchAction = true
-          continue
-        }
-        if (action.kind === "change") {
-          onChangeFilterChange(action.value)
-          didApplyNonSearchAction = true
-          continue
-        }
-        if (action.kind === "sortBy") {
-          onSortByChange(action.value)
-          didApplyNonSearchAction = true
-          continue
-        }
-        if (action.kind === "sortOrder") {
-          onSortOrderChange(action.value)
-          didApplyNonSearchAction = true
-          continue
-        }
-        if (action.kind === "priceRange") {
-          onPriceRangeChange(action.value)
-          didApplyNonSearchAction = true
-          continue
-        }
-        if (action.kind === "marketCapRange") {
-          onMarketCapRangeChange(action.value)
-          didApplyNonSearchAction = true
-          continue
-        }
-        if (action.kind === "volumeRange") {
-          onVolumeRangeChange(action.value)
-          didApplyNonSearchAction = true
-        }
-      }
+      const data = (await res.json().catch(() => null)) as unknown
+      const obj = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null
+      const confidence = typeof obj?.confidence === "number" ? obj.confidence : 0
+      const serverActions = Array.isArray(obj?.actions) ? (obj.actions as Array<unknown>) : []
 
-      if (didApplyNonSearchAction) {
-        setInputValue("")
-        setIsFilterPopoverOpen(false)
+      const shouldApplyActions = shouldApplySmartScreenerResult({
+        ok: res.ok,
+        confidence,
+        actionsCount: serverActions.length,
+        threshold: intentConfidenceThreshold,
+      })
+      if (!shouldApplyActions) {
+        toast.error("Try again", {
+          description:
+            "Couldn’t confidently interpret that. Try rephrasing (e.g. “taker buy > sell, net buy > $10m”).",
+        })
         return
       }
 
-      // If the local fast-path can’t map intent, ask the server interpreter.
-      setIsInterpreting(true)
-      void (async () => {
-        try {
-          const res = await fetch("/api/watchlist-filters", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              text: raw,
-              watchlistGroups: isScreener ? [] : watchlistGroupOptions,
-              current: {
-                watchlistGroupId: isScreener ? null : watchlistGroupId,
-                changeFilter,
-                sortBy,
-                sortOrder,
-              },
-            }),
-          })
-
-          if (!res.ok) {
-            onSearchTextChange(raw)
-            setIsFilterPopoverOpen(false)
-            return
-          }
-
-          const data = (await res.json()) as unknown
-          const obj = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null
-          const confidence = typeof obj?.confidence === "number" ? obj.confidence : 0
-          const serverActions = Array.isArray(obj?.actions) ? (obj?.actions as Array<unknown>) : []
-          const fallbackSearchText =
-            typeof obj?.fallbackSearchText === "string" ? obj.fallbackSearchText : null
-
-          if (serverActions.length === 0 || confidence < intentConfidenceThreshold) {
-            onSearchTextChange(fallbackSearchText ?? raw)
-            setIsFilterPopoverOpen(false)
-            return
-          }
-
-          let didApply = false
-          for (const a of serverActions) {
-            if (typeof a !== "object" || a === null) continue
-            const kind = (a as Record<string, unknown>).kind
-            const value = (a as Record<string, unknown>).value
-
-            if (kind === "watchlistGroupId") {
-              if (isScreener) continue
-              if (value === null || typeof value === "string") {
-                onWatchlistGroupIdChange(value)
-                didApply = true
-              }
-              continue
-            }
-            if (kind === "changeFilter") {
-              if (value === "all" || value === "positive" || value === "negative") {
-                onChangeFilterChange(value)
-                didApply = true
-              }
-              continue
-            }
-            if (kind === "sortBy") {
-              if (
-                value === "name" ||
-                value === "price" ||
-                value === "change" ||
-                value === "marketCap" ||
-                value === "volume"
-              ) {
-                onSortByChange(value)
-                didApply = true
-              }
-              continue
-            }
-            if (kind === "sortOrder") {
-              if (value === "asc" || value === "desc") {
-                onSortOrderChange(value)
-                didApply = true
-              }
-            }
-          }
-
-          if (didApply) setInputValue("")
-          else onSearchTextChange(raw)
-          setIsFilterPopoverOpen(false)
-        } catch {
-          onSearchTextChange(raw)
-          setIsFilterPopoverOpen(false)
-        } finally {
-          setIsInterpreting(false)
-        }
-      })()
-    } else if (e.key === 'Escape') {
-      setIsFilterPopoverOpen(false);
+      applyServerActions(serverActions)
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return
+      toast.error("Smart screener unavailable", {
+        description: "Couldn’t interpret that right now. Try again in a moment.",
+      })
+    } finally {
+      setIsInterpreting(false)
+      onSmartScreenerStatusChange?.(null)
     }
-  };
+  }
 
-  const activeFilters = getActiveFilters();
-  const hasActiveFilters = activeFilters.length > 0;
-  const hasSelectedCoins = selectedCoins.size > 0;
+  const examples = React.useMemo(
+    () => [
+      "taker buy > sell, net buy > $10m",
+      "market cap over 500m, price under 0.10",
+      "top gainers with > 100m volume",
+    ],
+    [],
+  )
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* Regular Filter UI */}
       <div className="flex items-center w-full">
-        {/* Filter Button and Active Filters Row */}
         <div
-          className={`flex items-center gap-2 flex-1 min-w-0 ${align === "right" ? "flex-row-reverse justify-start" : ""}`}
+          className={cn(
+            "flex items-center gap-2 flex-1 min-w-0",
+            align === "right" && "flex-row-reverse justify-start",
+          )}
         >
-          <Popover open={isFilterPopoverOpen} onOpenChange={setIsFilterPopoverOpen}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <PopoverTrigger asChild>
-                    <Button
-                      ref={filterButtonRef}
-                      variant="ghost"
-                      size="icon"
-                      className={`group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10 ${
-                        hasActiveFilters ? "text-blue-600 dark:text-blue-400" : ""
-                      } ${hasSelectedCoins ? "ring-2 ring-red-500/50" : ""}`}
-                    >
-                      <ListFilter className="h-4 w-4" />
-                      {hasActiveFilters && (
-                        <div className="absolute -top-1 -right-1 h-2 w-2 bg-blue-500 rounded-full" />
-                      )}
-                      {hasSelectedCoins && (
-                        <div className="absolute -top-1 -left-1 h-2 w-2 bg-red-500 rounded-full" />
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent
-                  side={align === "right" ? "left" : "right"}
-                  className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs"
-                >
-                  <span>Filters</span>
-                  <Kbd><IconCommand className="h-2.5 w-2.5 fill-primary/70" /></Kbd>
-                  <span>+</span>
-                  <Kbd>F</Kbd>
-                </TooltipContent>
-              </Tooltip>
-            <PopoverContent
-              className="rounded-xl bg-white dark:bg-zinc-900 p-2 ml-2"
-              align={align === "right" ? "end" : "start"}
-              side={align === "right" ? "left" : "right"}
-            >
-              {/* Search Input - Top Level */}
-              <div className="">
-                <div className="relative">
-                  <Input
-                    ref={inputRef}
-                    placeholder={
-                      isScreener
-                        ? 'Search tokens, or type “marketcap descending”, “positive”, “volume asc”…'
-                        : 'Search coins, or type “majors”, “ownership”, “marketcap descending”…'
-                    }
-                    value={inputValue}
-                    disabled={isInterpreting}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={handleSearchKeyDown}
-                    className="h-8"
-                  />
-                  <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
-                    {isInterpreting ? (
-                      <span className="text-[10px] text-muted-foreground">Interpreting…</span>
-                    ) : (
-                      <Kbd className="text-xs">
-                        <IconReturn className="h-2.5 w-2.5 fill-zinc-900 dark:fill-white/50" />
-                      </Kbd>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Filter Options */}
-              <div className="p-2.5 space-y-3">
-                <div className="flex items-center gap-1">
-                  <ListFilter className="h-2.5 w-2.5 text-primary/30" />
-                  <h4 className="font-medium text-xs text-primary/50 uppercase">Filters</h4>
-                </div>
-
-                {/* Watchlist Filter (watchlist-only) */}
-                {!isScreener && (
-                  <div className="space-y-2">
-                    <Label className="text-[11px] text-primary/80 uppercase flex items-center gap-1">
-                      Watchlist
-                    </Label>
-                    <Select
-                      value={watchlistGroupId ?? "__all__"}
-                      onValueChange={(value) =>
-                        onWatchlistGroupIdChange(value === "__all__" ? null : value)
-                      }
-                    >
-                      <SelectTrigger className="h-8 rounded-lg">
-                        <SelectValue placeholder="All watchlists" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-popover rounded-lg" side="right">
-                        <SelectItem value="__all__">All watchlists</SelectItem>
-                        {watchlistGroupOptions.length === 0 ? (
-                          <SelectItem value="__none__" disabled>
-                            No watchlists
-                          </SelectItem>
-                        ) : (
-                          watchlistGroupOptions.map((o) => (
-                            <SelectItem key={o.id} value={o.id}>
-                              {o.name}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                aria-label="Open Smart Screener"
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "group h-6.5 px-2 gap-1.5 rounded-lg bg-accent hover:bg-accent/90 border border-border hover:ring-1 ring-primary/30 relative",
+                  hasActiveFilters && "ring-1 ring-blue-500/50 dark:ring-blue-400",
+                  hasSelectedCoins && "ring-1 ring-red-500/50",
                 )}
+                onClick={() => setOpen(true)}
+              >
+                <IconSparkles className="size-3 fill-primary/70" />
+                <span>Smart Screener</span>
+                {hasActiveFilters ? (
+                  <span className="absolute -top-1 -right-1 size-2 bg-blue-500 rounded-full" />
+                ) : null}
+                {hasSelectedCoins ? (
+                  <span className="absolute -top-1 -left-1 size-2 bg-red-500 rounded-full" />
+                ) : null}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent
+              side={align === "right" ? "left" : "right"}
+              className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs"
+            >
+              <span>Open by pressing</span>
+              <Kbd>
+                <IconCommand className="h-2.5 w-2.5 fill-primary/70" />
+              </Kbd>
+              <span>+</span>
+              <Kbd>F</Kbd>
+            </TooltipContent>
+          </Tooltip>
 
-                {/* 24h Change Filter */}
-                <div className="space-y-2">
-                  <Label className="text-[11px] text-primary/80 uppercase flex items-center gap-1">
-                    24h Change
-                  </Label>
-                  <Select value={changeFilter} onValueChange={onChangeFilterChange}>
-                    <SelectTrigger className="h-8 rounded-lg">
-                      <SelectValue placeholder="All changes" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover rounded-lg" side="right">
-                      <SelectItem value="all">All changes</SelectItem>
-                      <SelectItem value="positive">Positive only</SelectItem>
-                      <SelectItem value="negative">Negative only</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Sort Options */}
-                <div className="space-y-2">
-                  <Label className="text-[11px] text-primary/80 uppercase">Sort By</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Select value={sortBy} onValueChange={onSortByChange}>
-                      <SelectTrigger className="h-8 rounded-lg">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-popover rounded-lg" side="right">
-                        <SelectItem value="name">Name</SelectItem>
-                        <SelectItem value="price">Price</SelectItem>
-                        <SelectItem value="change">24h Change</SelectItem>
-                        <SelectItem value="marketCap">Market Cap</SelectItem>
-                        <SelectItem value="volume">Volume</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Select value={sortOrder} onValueChange={onSortOrderChange}>
-                      <SelectTrigger className="h-8 rounded-lg">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-popover rounded-lg" side="right">
-                        <SelectItem value="asc">Ascending</SelectItem>
-                        <SelectItem value="desc">Descending</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          {/* Active Filters - Inline */}
-          {hasActiveFilters && (
+          {hasActiveFilters ? (
             <div className="flex flex-wrap gap-2 min-w-0 items-center">
               {activeFilters.map((filter) => (
                 <Badge
                   key={filter.key}
                   variant="secondary"
-                  className="h-6 gap-1 pr-1 py-0 bg-primary/5 text-primary/50 hover:text-primary cursor-crosshair border-border border-dashed flex-shrink-0"
+                  className="group h-6 gap-1 pr-1 py-0 bg-primary/5 text-primary/50 hover:text-primary cursor-crosshair border-border border-dashed flex-shrink-0"
                 >
                   <span className="text-xs font-medium opacity-50">{filter.label}</span>
                   <div className="h-[24px] w-[1px] bg-border mx-1" />
-                  <span className="text-xs">{filter.value}</span>
+                  <span className="text-xs tabular-nums">{filter.value}</span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-4 w-4 p-0 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    className="ml-1 h-4 w-4 p-0 rounded-md group-hover:bg-blue-500"
+                    aria-label={`Remove ${filter.label} filter`}
                     onClick={() => removeFilter(filter.key)}
                   >
                     <X className="h-3 w-3" />
@@ -920,9 +1129,106 @@ export function WatchlistFilters({
                 press <Kbd className="font-bold w-8">esc</Kbd> to clear
               </span>
             </div>
-          )}
+          ) : null}
+
+          {open ? (
+            <div
+              className={cn(
+                "fixed inset-0 z-[10000] flex items-start justify-center px-4 pt-40",
+              )}
+            >
+              <button
+                type="button"
+                aria-label="Close smart screener"
+                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                onClick={() => setOpen(false)}
+              />
+
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Smart screener"
+                className={cn(
+                  "relative w-full max-w-3xl overflow-hidden rounded-[28px] border border-gray-200/50 bg-white/95 shadow-[0_3px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)] backdrop-blur-md dark:border-transparent dark:bg-zinc-900/80 dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.4)]",
+                  // tailwindcss-animate: compositor-friendly enter (skipped when prefers-reduced-motion)
+                  "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-200 motion-safe:ease-out",
+                )}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <form
+                  id="smart-screener-prompt-form"
+                  className="pb-16"
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    const prompt = draft
+                    setOpen(false)
+                    setDraft("")
+                    void interpretAndApply(prompt)
+                  }}
+                >
+                  <div className="flex min-h-12 items-center gap-3 border-b border-black/60 pb-6 p-6">
+                    <input
+                      ref={inputRef}
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      placeholder="Describe what you're looking for..."
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") setOpen(false)
+                      }}
+                      className="min-w-0 flex-1 border-0 bg-transparent text-base text-foreground shadow-none outline-none placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+                    />
+                    <button
+                      type="button"
+                      aria-label="Close smart screener"
+                      className="shrink-0 rounded-md"
+                      onClick={() => setOpen(false)}
+                    >
+                      <Kbd className="bg-primary/10 font-mono px-2 w-8 uppercase text-xs">esc</Kbd>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 p-5 border-t border-white/5 pt-3">
+                    {examples.map((example) => (
+                      <button
+                        key={example}
+                        type="button"
+                        className={cn(
+                          "inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-dashed border-border bg-primary/5 py-0 pl-1.5 pr-1 text-primary/80",
+                          "cursor-pointer transition-colors hover:text-primary",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                        )}
+                        onClick={() => {
+                          setOpen(false)
+                          setDraft("")
+                          void interpretAndApply(example)
+                        }}
+                      >
+                        <span className="max-w-[min(100%,20rem)] text-left text-xs text-pretty">
+                          {example}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </form>
+
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="default"
+                  form="smart-screener-prompt-form"
+                  aria-label="Run smart screener"
+                  className="absolute h-7 bottom-4 right-4 !rounded-lg gap-2 inline-flex"
+                  disabled={draft.trim().length === 0 || isInterpreting}
+                >
+                  <IconArrowTurnDownRight className="size-2.5 fill-primary/70" />
+                  <span className="text-xs">Enter</span>
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
-  );
+  )
 }
+

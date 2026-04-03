@@ -373,3 +373,57 @@ export const getTakerBuySellExchangeListSnapshot = query({
     };
   },
 });
+
+export const getTakerBuySellExchangeListSnapshotsBatch = query({
+  args: {
+    serverToken: v.string(),
+    symbols: v.array(v.string()),
+    range: v.string(),
+  },
+  returns: v.array(
+    v.object({
+      symbol: v.string(),
+      data: v.union(takerBuySellSnapshotValidator, v.null()),
+      lastUpdated: v.number(),
+      stale: v.boolean(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const now = Date.now();
+    const staleWindowMs = 2 * 60 * 1000;
+
+    const symbols = Array.from(
+      new Set(
+        args.symbols
+          .map((s) => s.trim().toUpperCase())
+          .filter((s) => s.length > 0),
+      ),
+    ).slice(0, 300);
+
+    const results = await Promise.all(
+      symbols.map(async (symbol) => {
+        const latest = await ctx.db
+          .query("coinglassTakerBuySellExchangeListSnapshots")
+          .withIndex("by_symbol_and_range_and_last_updated", (q) =>
+            q.eq("symbol", symbol).eq("range", args.range),
+          )
+          .order("desc")
+          .first();
+
+        if (!latest) {
+          return { symbol, data: null, lastUpdated: 0, stale: true };
+        }
+
+        return {
+          symbol,
+          data: latest,
+          lastUpdated: latest.lastUpdated,
+          stale: latest.lastUpdated <= now - staleWindowMs,
+        };
+      }),
+    );
+
+    return results;
+  },
+});
