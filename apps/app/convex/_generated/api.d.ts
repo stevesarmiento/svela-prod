@@ -29,6 +29,7 @@ import type * as coinglassWriters from "../coinglassWriters.js";
 import type * as coins from "../coins.js";
 import type * as crons from "../crons.js";
 import type * as historicalData from "../historicalData.js";
+import type * as lastKnownPrices from "../lastKnownPrices.js";
 import type * as portfolio from "../portfolio.js";
 import type * as portfolioJobs from "../portfolioJobs.js";
 import type * as refresh from "../refresh.js";
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   coins: typeof coins;
   crons: typeof crons;
   historicalData: typeof historicalData;
+  lastKnownPrices: typeof lastKnownPrices;
   portfolio: typeof portfolio;
   portfolioJobs: typeof portfolioJobs;
   refresh: typeof refresh;

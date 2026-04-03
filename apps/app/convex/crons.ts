@@ -169,6 +169,14 @@ crons.interval(
   { olderThanDays: 30, batchSize: 250 },
 );
 
+// Cleanup ephemeral last-known spot snapshots (per-session writers).
+crons.interval(
+  "cleanup_old_last_known_prices",
+  { hours: 6 },
+  internal.cleanupInternal._cleanupOldLastKnownPrices,
+  { olderThanHours: 48, batchSize: 1000 },
+);
+
 // One-time-ish cleanup: remove legacy tracked coin membership.
 // After `refreshTopMarkets` stopped writing `reason: "top"`, this will converge to 0 deletions.
 crons.interval(

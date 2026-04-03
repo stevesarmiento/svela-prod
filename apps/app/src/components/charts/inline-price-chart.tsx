@@ -9,7 +9,6 @@ import type { CoinMarketData } from '@/types/coins'
 import { Liveline } from "liveline"
 import type { LivelinePoint } from "liveline"
 import { cn } from "@v1/ui/cn"
-import { Skeleton } from "@v1/ui/skeleton"
 
 interface InlinePriceChartProps {
   coingeckoId: string // CoinGecko ID to fetch real data
@@ -155,15 +154,12 @@ function useInlineMarketChartSeries(args: {
 
       return { points, cached: result?.status?.cached ?? false }
     },
-    staleTime: 30 * 1000, // keep inline charts feeling fresh without spamming
-    refetchInterval: (q) => {
-      const points = (q.state.data as { points: Array<{ time: number; value: number }> } | undefined)?.points?.length ?? 0
-      if (points < 2) return 5_000
-      return 2 * 60 * 1000
-    },
+    // Inline trails should be "mostly stable" and follow the app-wide hourly cadence.
+    staleTime: 60 * 60 * 1000,
+    refetchInterval: 60 * 60 * 1000,
     enabled: (args.enabled ?? true) && args.coingeckoId.length > 0,
     retry: 1,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   })
 }
 
@@ -196,7 +192,8 @@ export function InlinePriceChart({
     rawChartDataWithLatest.length >= 2
       ? rawChartDataWithLatest
       : buildFallbackSeries({ timeScale: toTimeScale(timeScale), basePrice })
-  const isLoading = marketChartQuery.isLoading
+  // Treat "disabled" (offscreen) as loading so Liveline can show its built-in state.
+  const isLoading = enabled ? marketChartQuery.isLoading : true
 
   const chartData14dWindow = useMemo(() => {
     if (!chartData || chartData.length < 2) return []
@@ -359,22 +356,25 @@ export function InlinePriceChart({
 export function LazyInlinePriceChart(props: InlinePriceChartProps & { rootMarginPx?: number }) {
   const rootMarginPx = props.rootMarginPx ?? 400
   const ref = useRef<HTMLDivElement | null>(null)
-  const [isInView, setIsInView] = useState(false)
+  const [hasActivated, setHasActivated] = useState(false)
 
   useEffect(() => {
     const el = ref.current
     if (!el) return
 
     if (typeof IntersectionObserver !== "function") {
-      setIsInView(true)
+      setHasActivated(true)
       return
     }
 
     const observer = new IntersectionObserver(
       (entries) => {
-        const entry = entries[0]
-        if (!entry) return
-        setIsInView(entry.isIntersecting)
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue
+          setHasActivated(true)
+          observer.disconnect()
+          return
+        }
       },
       {
         root: null,
@@ -389,11 +389,10 @@ export function LazyInlinePriceChart(props: InlinePriceChartProps & { rootMargin
 
   return (
     <div ref={ref} className={cn("w-full", props.className)}>
-      {isInView ? (
-        <InlinePriceChart {...props} enabled />
-      ) : (
-        <Skeleton className="h-8 w-full max-w-56 rounded-sm" />
-      )}
+      <InlinePriceChart
+        {...props}
+        enabled={(props.enabled ?? true) && hasActivated}
+      />
     </div>
   )
 }

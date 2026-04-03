@@ -27,7 +27,7 @@ export function WatchlistTableRow({
   const enableSelection = mode === "watchlist"
   
   const className = cn(
-    "grid gap-4 px-4 py-2.5 border-b last:border-b-0 hover:ring-2 hover:ring-white/20 hover:rounded-[7px] transition-opacity duration-200",
+    "grid gap-4 px-4 py-2.5 border-b last:border-b-0 hover:ring-2 hover:ring-inset hover:ring-white/20 hover:rounded-[7px] transition-opacity duration-200",
     isLoadingRow ? "cursor-default" : "hover:bg-primary/[0.02] cursor-pointer",
     hasAnySelections ? (isSelected ? "opacity-100" : "opacity-40") : "opacity-100",
   )
@@ -124,10 +124,13 @@ export function WatchlistTableRow({
     <Link
       key={row.id}
       href={watchlistGroup ? `/charts/${row.original.id}?wg=${watchlistGroup}` : `/charts/${row.original.id}`}
-      className={className}
-      style={{ gridTemplateColumns: WATCHLIST_TABLE_GRID_TEMPLATE_COLUMNS }}
     >
-      {content}
+      <div
+        className={className}
+        style={{ gridTemplateColumns: WATCHLIST_TABLE_GRID_TEMPLATE_COLUMNS }}
+      >
+        {content}
+      </div>
     </Link>
   );
 }

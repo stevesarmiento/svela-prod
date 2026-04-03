@@ -21,10 +21,11 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
+            // Polling must be opt-in per query; otherwise tables thrash.
             staleTime: 30 * 1000, // 30 seconds
-            refetchInterval: 60 * 1000, // 1 minute
-            refetchOnWindowFocus: true,
-            retry: 3,
+            refetchInterval: false,
+            refetchOnWindowFocus: false,
+            retry: 1,
           },
         },
       })

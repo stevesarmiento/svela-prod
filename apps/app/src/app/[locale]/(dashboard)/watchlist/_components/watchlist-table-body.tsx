@@ -1,6 +1,8 @@
 'use client'
 
 import type { Table } from '@tanstack/react-table'
+import { useEffect, useMemo, useRef, useState } from "react"
+import { cn } from "@v1/ui/cn"
 import { Spinner } from "@v1/ui/spinner"
 import { WatchlistTableHeader } from './watchlist-table-header'
 import { WatchlistTableRow } from './watchlist-table-row'
@@ -26,6 +28,52 @@ export function WatchlistTableBody({
   status = null,
   tokenHeaderCountBadge = null,
 }: WatchlistTableBodyProps) {
+  const SCREENER_PAGE_SIZE = 50
+  const enablePagination = mode === "screener"
+  const scrollRootRef = useRef<HTMLDivElement | null>(null)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+
+  const rows = table.getRowModel().rows
+  const rowCount = rows.length
+
+  const [visibleCount, setVisibleCount] = useState(() =>
+    enablePagination ? Math.min(SCREENER_PAGE_SIZE, rowCount) : rowCount,
+  )
+
+  useEffect(() => {
+    setVisibleCount(enablePagination ? Math.min(SCREENER_PAGE_SIZE, rowCount) : rowCount)
+  }, [enablePagination, rowCount])
+
+  const visibleRows = useMemo(() => {
+    if (!enablePagination) return rows
+    return rows.slice(0, visibleCount)
+  }, [enablePagination, rows, visibleCount])
+
+  const hasMore = enablePagination && visibleCount < rowCount
+  const bodyClassName = cn(
+    "relative bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm",
+    enablePagination && "max-h-[62dvh] overflow-y-auto",
+  )
+
+  useEffect(() => {
+    if (!hasMore) return
+    const root = scrollRootRef.current
+    const target = sentinelRef.current
+    if (!root || !target) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry?.isIntersecting) return
+        setVisibleCount((prev) => Math.min(rowCount, prev + SCREENER_PAGE_SIZE))
+      },
+      { root, rootMargin: "240px", threshold: 0.01 },
+    )
+
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [hasMore, rowCount])
+
   return (
     <div className="rounded-[10px] bg-primary/5 p-0.5">
       {/* Header: keep the original "on tinted background" styling,
@@ -38,8 +86,11 @@ export function WatchlistTableBody({
       </div>
 
       {/* Table Body */}
-      <div className="relative bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm">
-        {table.getRowModel().rows.map(row => (
+      <div
+        ref={scrollRootRef}
+        className={bodyClassName}
+      >
+        {visibleRows.map(row => (
           <WatchlistTableRow
             key={row.id}
             row={row}
@@ -49,6 +100,12 @@ export function WatchlistTableBody({
             mode={mode}
           />
         ))}
+
+        {hasMore ? (
+          <div ref={sentinelRef} className="flex items-center justify-center py-3">
+            <div className="text-xs text-muted-foreground">Loading more…</div>
+          </div>
+        ) : null}
 
         {status ? (
           <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-white/75 dark:bg-black/35 backdrop-blur-sm">
