@@ -559,16 +559,7 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
   }
 
   if (!typedWatchlistGroupsData?.length) {
-    return (
-      <div className="py-6 border border-dashed border-border rounded-lg">
-        <div className="flex flex-col items-center justify-center gap-3">
-          <div className="text-center">
-            <h3 className="font-medium">No watchlists found</h3>
-            <p className="text-sm text-muted-foreground">Create a watchlist to get started</p>
-          </div>
-        </div>
-      </div>
-    )
+    return null
   }
 
   return (

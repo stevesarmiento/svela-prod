@@ -19,6 +19,7 @@ import { WatchlistMultiLineChart } from './watchlist-multi-line-chart'
 import { useDeletePortfolioWallet } from "@/hooks/use-portfolio-wallets"
 import { useUpdateWatchlistGroup, useDeleteWatchlistGroup } from "@/lib/convex-hooks"
 import { WatchlistGridEmptyState } from './watchlist-grid-empty-state'
+import { WatchlistComparisonEmptyState } from './watchlist-comparison-empty-state'
 
 const isDebug = env.NODE_ENV === "development"
 
@@ -311,21 +312,7 @@ export function WatchlistsGrid({
                 }}
               />
             ) : (
-              <div className="flex items-center justify-center h-[500px] border border-dashed border-border rounded-lg">
-                <div className="text-center">
-                  <Grid3X3 className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="font-medium mb-2">No Watchlists</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Create watchlists in the Grid tab to see them compared here
-                  </p>
-                  <Button 
-                    onClick={() => onViewModeChange?.('grid')} 
-                    variant="outline"
-                  >
-                    Go to Grid
-                  </Button>
-                </div>
-              </div>
+              <WatchlistComparisonEmptyState />
             )}
           </div>
         </TabsContent>
