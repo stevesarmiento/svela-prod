@@ -4,6 +4,14 @@ import { api } from "../../../../../convex/_generated/api";
 import { convex, getServerToken } from "@/lib/convex-server";
 
 export const dynamic = "force-dynamic";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function expectsWindowCoverage(timeframe: string): number | null {
+  if (timeframe === "max") return 1825;
+  const n = Number(timeframe);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
 
 interface MarketChartParams {
   id?: string;
@@ -49,7 +57,15 @@ export async function GET(request: NextRequest) {
     timeframe,
   });
 
-  if (series.data.length < 2 || series.stale) {
+  const expectedDays = expectsWindowCoverage(timeframe);
+  const earliest = series.data[0]?.timestamp ?? null;
+  const hasCoverage =
+    expectedDays == null || earliest == null
+      ? true
+      : earliest <= Date.now() - expectedDays * DAY_MS * 0.85;
+
+  const warmupRequested = series.data.length < 2 || series.stale || !hasCoverage;
+  if (warmupRequested) {
     void convex
       .mutation(api.coingeckoWarmup.requestMarketChartRefresh, {
         serverToken: getServerToken(),
@@ -77,6 +93,10 @@ export async function GET(request: NextRequest) {
       },
       status: {
         cached: true,
+        stale: series.stale,
+        warmupRequested,
+        points: series.data.length,
+        lastUpdated: series.lastUpdated,
       },
     },
     {

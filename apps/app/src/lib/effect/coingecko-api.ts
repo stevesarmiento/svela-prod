@@ -137,6 +137,10 @@ export interface MarketChartApiResponse {
   }
   status?: {
     cached?: boolean
+    stale?: boolean
+    warmupRequested?: boolean
+    points?: number
+    lastUpdated?: number
   }
 }
 
@@ -154,6 +158,10 @@ const MarketChartApiResponseSchema = Schema.Struct({
   status: Schema.optional(
     Schema.Struct({
       cached: Schema.optional(Schema.Boolean),
+      stale: Schema.optional(Schema.Boolean),
+      warmupRequested: Schema.optional(Schema.Boolean),
+      points: Schema.optional(Schema.Number),
+      lastUpdated: Schema.optional(Schema.Number),
     }),
   ),
 })
@@ -169,6 +177,13 @@ export interface OHLCDataPoint {
 export interface OHLCApiResponse {
   data: OHLCDataPoint[]
   cached?: boolean
+  status?: {
+    cached?: boolean
+    stale?: boolean
+    warmupRequested?: boolean
+    points?: number
+    lastUpdated?: number
+  }
 }
 
 const OHLCDataPointSchema = Schema.Struct({
@@ -182,6 +197,15 @@ const OHLCDataPointSchema = Schema.Struct({
 const OHLCApiResponseSchema = Schema.Struct({
   data: Schema.Array(OHLCDataPointSchema),
   cached: Schema.optional(Schema.Boolean),
+  status: Schema.optional(
+    Schema.Struct({
+      cached: Schema.optional(Schema.Boolean),
+      stale: Schema.optional(Schema.Boolean),
+      warmupRequested: Schema.optional(Schema.Boolean),
+      points: Schema.optional(Schema.Number),
+      lastUpdated: Schema.optional(Schema.Number),
+    }),
+  ),
 })
 
 export interface CoinGeckoQuotesStatus {

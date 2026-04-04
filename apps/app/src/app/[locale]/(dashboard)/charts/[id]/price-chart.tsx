@@ -25,6 +25,7 @@ import { TokenLogo } from "@/components/token-logo"
 import type { RealtimeQuoteStatus } from "@/hooks/use-realtime-quote"
 import { useLiveSpotPrice } from "@/lib/realtime-prices/live-spot-store"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
+import { ChartLoadingSkeleton } from "@/components/charts/chart-loading-skeleton"
 
 interface PriceChartProps {
   coinId: string;
@@ -63,7 +64,7 @@ function getSpotStatusLabel(
   }
 
   return {
-    label: "CG",
+    label: "CACHED",
     title: "Fallback to",
     className: "text-zinc-600 dark:text-zinc-400 bg-zinc-500/10 border-zinc-500/15",
     href: "https://docs.coingecko.com/reference/simple-price",
@@ -275,7 +276,11 @@ export const PriceChart = memo(function PriceChart({
   const liveSpotPriceUsd = liveSpot?.priceUsd ?? null
   
   // React 19: Get line chart data with OHLC data for tooltips using deferred values
-  const { chartData, volumeData, ohlcData, isLoading, tokenData } = useCoinGeckoChartData(deferredCoinId, deferredTimeScale, deferredInitialData)
+  const { chartData, volumeData, ohlcData, isLoading, isWarmingUp, tokenData } = useCoinGeckoChartData(
+    deferredCoinId,
+    deferredTimeScale,
+    deferredInitialData,
+  )
   const { displayPrice, calculatePercentageChange } = usePriceCalculations(chartData, tokenData, deferredInitialData, deferredTimeScale)
   
   // Use isomorphic theme hook - eliminates hydration mismatch
@@ -356,6 +361,8 @@ export const PriceChart = memo(function PriceChart({
     return base
   }, [ohlcData, volumeData, liveSpotPriceUsd])
 
+  const isSeriesReady = ohlcvDataForChart.length >= 2
+
   // Highlight the period under the crosshair and dim the rest:
   // - 1Q + 1Y: highlight month
   // - Max: highlight quarter
@@ -365,7 +372,7 @@ export const PriceChart = memo(function PriceChart({
     const crosshairEpochSeconds = timeToEpochSeconds(crosshairTime)
     if (crosshairEpochSeconds == null) return null
 
-    const isQuarterly = deferredTimeScale === '2y'
+    const isQuarterly = deferredTimeScale === '2y' || deferredTimeScale === 'max'
     const range = isQuarterly
       ? getUtcQuarterRange(crosshairEpochSeconds)
       : getUtcMonthRange(crosshairEpochSeconds)
@@ -380,7 +387,7 @@ export const PriceChart = memo(function PriceChart({
     }
   }, [crosshairTime, deferredTimeScale, isDarkMode])
 
-  const chartContainerRef = useChartInstance(ohlcvDataForChart, {
+  const chartContainerRef = useChartInstance(isSeriesReady ? ohlcvDataForChart : [], {
     chartType: 'line',
     showVolume: true,
     isDarkMode,
@@ -408,10 +415,32 @@ export const PriceChart = memo(function PriceChart({
   const liveChange24h = liveQuote?.price_change_percentage_24h ?? calculatePercentageChange ?? 0
   const chartLastPrice =
     chartData.length > 0 ? chartData[chartData.length - 1]?.value ?? null : null
-  const liveSpotPrice = liveSpotPriceUsd
+
+  const referencePrice =
+    (typeof liveQuote?.current_price === "number" && Number.isFinite(liveQuote.current_price) && liveQuote.current_price > 0
+      ? liveQuote.current_price
+      : null) ??
+    (typeof chartLastPrice === "number" && Number.isFinite(chartLastPrice) && chartLastPrice > 0
+      ? chartLastPrice
+      : null) ??
+    (typeof deferredInitialData?.price === "number" && Number.isFinite(deferredInitialData.price) && deferredInitialData.price > 0
+      ? deferredInitialData.price
+      : null)
+
+  const isLiveSpotTrusted = (() => {
+    const spot = liveSpotPriceUsd
+    if (typeof spot !== "number" || !Number.isFinite(spot) || spot <= 0) return false
+    if (referencePrice == null) return true
+    const ratio = spot / referencePrice
+    // Guard against wrong Pyth feed selection (e.g. META equity feed, KPEPE 1000x unit feed).
+    if (!Number.isFinite(ratio) || ratio <= 0) return false
+    return ratio < 20 && ratio > 0.05
+  })()
+
+  const trustedSpotPriceUsd = isLiveSpotTrusted ? liveSpotPriceUsd : null
   const livePrice =
-    (typeof liveSpotPrice === "number" && Number.isFinite(liveSpotPrice) && liveSpotPrice > 0
-      ? liveSpotPrice
+    (typeof trustedSpotPriceUsd === "number" && Number.isFinite(trustedSpotPriceUsd) && trustedSpotPriceUsd > 0
+      ? trustedSpotPriceUsd
       : null) ??
     (typeof chartLastPrice === "number" && Number.isFinite(chartLastPrice) && chartLastPrice > 0
       ? chartLastPrice
@@ -423,10 +452,19 @@ export const PriceChart = memo(function PriceChart({
   const currentPrice = crosshairPrice ?? livePrice
   const priceChange24h = scrubPriceChange ?? liveChange24h
 
-  const isLoadingPrice = quoteQuery.isLoading || isLoading
-  const showPending = isPending || isDataPending || isLoadingPrice
+  // Only treat loading as "blocking" when we can’t render a proper series yet.
+  // Warmup (stale DB refresh) can run in the background without pulsing the whole chart.
+  const isBlockingLoading = quoteQuery.isLoading || (isLoading && !isSeriesReady) || !isSeriesReady
+  const showPending = isPending || isDataPending || isBlockingLoading
   const shouldReduceMotion = useReducedMotion()
-  const spotStatusLabel = useMemo(() => getSpotStatusLabel(spotStatus), [spotStatus])
+  const effectiveSpotStatus = useMemo(() => {
+    if (!spotStatus) return spotStatus
+    if (spotStatus.kind !== "realtime") return spotStatus
+    return isLiveSpotTrusted
+      ? spotStatus
+      : { kind: "fallback" as const, updatedAtMs: spotStatus.updatedAtMs, source: "coingecko" as const }
+  }, [spotStatus, isLiveSpotTrusted])
+  const spotStatusLabel = useMemo(() => getSpotStatusLabel(effectiveSpotStatus), [effectiveSpotStatus])
 
   return (
     <div className={cn(
@@ -503,7 +541,7 @@ export const PriceChart = memo(function PriceChart({
                     setActiveTimeScale={handleTimeScaleChange}
                   />
                 </div>
-                <div className="absolute right-4 bottom-4 z-20 pointer-events-auto flex flex-col items-end gap-2">
+                <div className="absolute right-4 top-[57px] z-20 pointer-events-auto flex flex-col items-end gap-2">
                   {spotStatusLabel ? (
                     <Tooltip delayDuration={250}>
                       <TooltipTrigger asChild>
@@ -555,14 +593,17 @@ export const PriceChart = memo(function PriceChart({
                 "p-0 relative will-change-auto",
                 showPending && "opacity-80 transition-opacity duration-300"
               )}>
-                <div 
-                  ref={chartContainerRef} 
-                  className="min-h-[400px] w-full will-change-auto transform-gpu"
-                  style={{ 
-                    minHeight: '400px',
-                    contain: 'layout style paint'
-                  }}
-                />
+                <div className="relative h-[400px] w-full">
+                  {!isSeriesReady ? (
+                    <ChartLoadingSkeleton height={400} lines={1} className="opacity-80" />
+                  ) : (
+                    <div
+                      ref={chartContainerRef}
+                      className="h-[400px] w-full will-change-auto transform-gpu"
+                      style={{ contain: 'layout style paint' }}
+                    />
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

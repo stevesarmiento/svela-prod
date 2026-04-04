@@ -76,7 +76,7 @@ export function MarketVisionChart({
   data, 
   config,
   height = 200,
-  showTimeAxis = false,
+  showTimeAxis = true,
   initialWindowDays,
 }: MarketVisionChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)

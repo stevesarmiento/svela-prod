@@ -254,7 +254,7 @@ function buildColorMap(preset: SpectrumPreset, colors: Required<BBWPSpectrumColo
   return map
 }
 
-export function BBWPChart({ data, config, height = 200, showTimeAxis = false, initialWindowDays }: BBWPChartProps) {
+export function BBWPChart({ data, config, height = 200, showTimeAxis = true, initialWindowDays }: BBWPChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
@@ -318,8 +318,8 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = false, in
       if (isCancelled || !chartContainerRef.current) return
 
       const chart = createChart(chartContainerRef.current, {
-        handleScale: false,
-        handleScroll: false,
+        handleScale: true,
+        handleScroll: true,
         layout: {
           background: { type: LwcColorType.Solid, color: 'transparent' },
           textColor: '#ffffff50',

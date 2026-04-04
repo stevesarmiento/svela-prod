@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
+import type { Doc } from "./_generated/dataModel";
 
 const priceHistoryPointValidator = v.object({
   _id: v.id("priceHistory"),
@@ -21,6 +22,8 @@ const priceHistoryPointValidator = v.object({
 
 const MAX_RETURN_POINTS = 8192;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const CHUNK_SIZE = 4096;
+const MAX_CHUNKS = 6;
 
 function getStaleWindowMs(timeframe: string): number {
   const base = timeframe.replace(/_ohlc$/, "");
@@ -94,27 +97,49 @@ export const getPriceHistorySeries = query({
 
     const startMs = getWindowStartMs(args.timeframe, now);
 
-    // NOTE: Convex arrays have a hard max length (8192). Never collect unbounded series.
-    // We keep the most recent points and return them in ascending order.
-    const latestPoints = await ctx.db
-      .query("priceHistory")
-      .withIndex("by_coingecko_timeframe_timestamp", (q) => {
-        if (startMs !== null) {
+    // NOTE: Convex arrays have a hard max length (8192). Never return unbounded series.
+    // Dedupe by `timestamp` to tolerate accidental duplicate writes (keeps newest per timestamp).
+    const byTimestamp = new Map<number, Doc<"priceHistory">>();
+    let beforeTimestamp = endMs;
+
+    for (let i = 0; i < MAX_CHUNKS; i++) {
+      const chunk = await ctx.db
+        .query("priceHistory")
+        .withIndex("by_coingecko_timeframe_timestamp", (q) => {
+          if (startMs !== null) {
+            return q
+              .eq("coingeckoId", args.coingeckoId)
+              .eq("timeframe", args.timeframe)
+              .gte("timestamp", startMs)
+              .lte("timestamp", beforeTimestamp);
+          }
           return q
             .eq("coingeckoId", args.coingeckoId)
             .eq("timeframe", args.timeframe)
-            .gte("timestamp", startMs)
-            .lte("timestamp", endMs);
-        }
-        return q
-          .eq("coingeckoId", args.coingeckoId)
-          .eq("timeframe", args.timeframe)
-          .lte("timestamp", endMs);
-      })
-      .order("desc")
-      .take(MAX_RETURN_POINTS);
+            .lte("timestamp", beforeTimestamp);
+        })
+        .order("desc")
+        .take(CHUNK_SIZE);
 
-    const data = latestPoints.slice().reverse();
+      if (chunk.length === 0) break;
+
+      let minTimestampInChunk = Number.POSITIVE_INFINITY;
+      for (const row of chunk) {
+        if (!byTimestamp.has(row.timestamp)) byTimestamp.set(row.timestamp, row);
+        if (row.timestamp < minTimestampInChunk) minTimestampInChunk = row.timestamp;
+        if (byTimestamp.size >= MAX_RETURN_POINTS) break;
+      }
+
+      if (byTimestamp.size >= MAX_RETURN_POINTS) break;
+      if (!Number.isFinite(minTimestampInChunk)) break;
+      if (startMs !== null && minTimestampInChunk <= startMs) break;
+
+      const nextBefore = minTimestampInChunk - 1;
+      if (nextBefore >= beforeTimestamp) break;
+      beforeTimestamp = nextBefore;
+    }
+
+    const data = Array.from(byTimestamp.values()).sort((a, b) => a.timestamp - b.timestamp);
 
     const staleWindowMs = getStaleWindowMs(args.timeframe);
     return {

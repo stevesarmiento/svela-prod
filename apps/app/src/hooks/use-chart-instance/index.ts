@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChartHighlightRange, OHLCVDataPoint, UseChartInstanceOptions } from './types';
 import { createChartController, type ChartController } from './controller/create-chart-controller';
 import { timeToEpochSeconds } from './utils';
@@ -18,7 +18,10 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
         highlightRange = null,
     } = options;
 
-    const chartContainerRef = useRef<HTMLDivElement>(null);
+    const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null)
+    const chartContainerRef = useCallback((node: HTMLDivElement | null) => {
+        setContainerEl(node)
+    }, [])
     const controllerRef = useRef<ChartController | null>(null);
 
     const callbacksRef = useRef<Pick<UseChartInstanceOptions, 'onCrosshairMove' | 'onCrosshairTimeMove'>>({
@@ -35,7 +38,6 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
 
     // (Re)create the chart only when the structure changes.
     useEffect(() => {
-        const containerEl = chartContainerRef.current;
         if (!containerEl) return;
 
         const controller = createChartController({
@@ -52,7 +54,7 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
             controller.destroy();
             if (controllerRef.current === controller) controllerRef.current = null;
         };
-    }, [chartType, showVolume, isDarkMode]);
+    }, [containerEl, chartType, showVolume, isDarkMode]);
 
     // Data updates should not recreate the chart.
     useEffect(() => {
