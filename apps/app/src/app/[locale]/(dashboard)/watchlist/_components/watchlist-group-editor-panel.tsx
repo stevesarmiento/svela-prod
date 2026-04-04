@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useId, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { ChevronLeft } from 'lucide-react'
 import { Button } from '@v1/ui/button'
@@ -44,6 +44,10 @@ export function WatchlistGroupEditorPanel({
 }: WatchlistGroupEditorPanelProps) {
   const shouldReduceMotion = useReducedMotion()
   const [view, setView] = useState<PickerView>('details')
+  const [nameError, setNameError] = useState<string | null>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const nameFieldId = useId()
+  const nameErrorId = `${nameFieldId}-error`
 
   const durationUi = motionDuration(shouldReduceMotion, DURATION_UI_S)
   const durationUiExit = motionDuration(shouldReduceMotion, DURATION_UI_S * 0.8)
@@ -57,14 +61,26 @@ export function WatchlistGroupEditorPanel({
   )
 
   const handleCancel = useCallback(() => {
+    setNameError(null)
     setView('details')
     onCancel()
   }, [onCancel])
 
+  const handleSubmitClick = useCallback(() => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setNameError('Enter a watchlist name')
+      nameInputRef.current?.focus()
+      return
+    }
+    setNameError(null)
+    void onSubmit()
+  }, [name, onSubmit])
+
   return (
     <div
       className={cn(
-        "ml-[-2px] w-auto overflow-hidden",
+        "ml-[-2px] w-auto pt-4",
         className,
       )}
     >
@@ -86,7 +102,7 @@ export function WatchlistGroupEditorPanel({
             transition={{ duration: durationUi, ease: EASE_OUT_CUBIC }}
             className="space-y-6 px-1"
           >
-            <div className="flex gap-2 items-start">
+            <div className="flex gap-2 items-start mt-1">
               <Button
                 type="button"
                 variant="outline"
@@ -97,14 +113,30 @@ export function WatchlistGroupEditorPanel({
                 <WatchlistGroupIcon icon={icon} size={20} />
               </Button>
 
-              <div className="flex-1">
+              <div className="flex-1 space-y-1">
                 <Input
+                  ref={nameInputRef}
+                  id={nameFieldId}
                   value={name}
-                  onChange={(e) => onNameChange(e.target.value)}
+                  onChange={(e) => {
+                    onNameChange(e.target.value)
+                    if (e.target.value.trim()) setNameError(null)
+                  }}
                   placeholder="Watchlist name"
-                  className="rounded-xl h-12"
+                  aria-invalid={nameError != null}
+                  aria-describedby={nameError != null ? nameErrorId : undefined}
+                  className={cn(
+                    'rounded-xl h-12',
+                    nameError != null &&
+                      'border-destructive ring-destructive/25 focus-visible:ring-destructive/30',
+                  )}
                   autoFocus={autoFocusName}
                 />
+                {nameError != null ? (
+                  <p id={nameErrorId} className="px-0.5 text-xs text-destructive" role="alert">
+                    {nameError}
+                  </p>
+                ) : null}
               </div>
             </div>
 
@@ -127,7 +159,7 @@ export function WatchlistGroupEditorPanel({
             </div>
 
             <div className="space-y-2">
-              <Button onClick={() => void onSubmit()} size="sm" className="w-full h-10  rounded-full">
+              <Button type="button" onClick={handleSubmitClick} size="sm" className="w-full h-10  rounded-full">
                 {submitLabel}
               </Button>
               <Button

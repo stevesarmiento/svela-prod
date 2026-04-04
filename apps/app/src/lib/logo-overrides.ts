@@ -196,6 +196,8 @@ const POPULAR_SYMBOL_TO_FILENAME: Record<string, string> = {
     okxbtc: "okxbtc",
     "2z": "doublezero",
     doublezero: "doublezero",
+    uni: "uniswap",
+    uniswap: "uniswap",
 };
 
 /**

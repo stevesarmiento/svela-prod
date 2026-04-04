@@ -340,10 +340,14 @@ export function WatchlistCard({
                 </div>
               </div>
             ) : coins.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <p className="text-md text-white/60 max-w-[180px] mx-auto">
-                  To add tokens, press <Kbd className=" bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md text-white/80">Shift</Kbd> + <Kbd className=" bg-white/5 border border-white/10 px-1.5 py-0.5 rounded-md text-white/80">A</Kbd>
-                </p>
+              <div className="flex flex-col items-center justify-center py-8 text-center text-sm text-white/60 mx-auto">
+                  <span>To add tokens to this watchlist </span>
+                  <div className="flex items-center gap-1">
+                    <span>press </span>
+                    <Kbd className=" bg-white/10 rounded-md text-white/80">Shift</Kbd>
+                    <span>+</span>
+                    <Kbd className=" bg-white/10 rounded-md text-white/80">A</Kbd>
+                  </div>
               </div>
             ) : (
               <div

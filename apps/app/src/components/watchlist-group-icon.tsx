@@ -1,27 +1,49 @@
 'use client'
 
-import { 
-  IconCircleDottedAndCircle,
-  IconSparkles,
-  IconBookmarkFill,
-  IconChartLineUptrendXyaxis,
-  IconGraduationcapFill,
-  IconStarFill,
-  IconFlameFill,
-  IconBoltFill,
-  IconSketchLogo,
-  IconCrownFill,
-  IconTarget,
-  IconMoonStars,
+import {
   IconAmericanFootballFill,
-  IconVolleyballFill,
-  IconEyeFill,
-  IconTimelapse,
+  IconBalloonFill,
+  IconBanknoteFill,
   IconBellFill,
-  IconHeartFill,
-  IconDiamondFill,
+  IconBitcoinsignCircleFill,
+  IconBoltFill,
+  IconBookmarkFill,
+  IconCameraFill,
+  IconCatFill,
   IconChartBar,
-  IconSealFill
+  IconChartLineDowntrendXyaxis,
+  IconChartLineUptrendXyaxis,
+  IconCircleDottedAndCircle,
+  IconCrownFill,
+  IconDiamondFill,
+  IconDogFill,
+  IconEyeFill,
+  IconFishFill,
+  IconFlagFill,
+  IconFlameFill,
+  IconGamecontrollerFill,
+  IconGiftFill,
+  IconGlobeAmericasFill,
+  IconGraduationcapFill,
+  IconHeartFill,
+  IconHouseFill,
+  IconInfinityCircleFill,
+  IconLeafFill,
+  IconMoonStars,
+  IconPartyPopperFill,
+  IconPawprintFill,
+  IconRainbow,
+  IconSealFill,
+  IconShieldFill,
+  IconSketchLogo,
+  IconSparkles,
+  IconStarFill,
+  IconTarget,
+  IconTimelapse,
+  IconTreeFill,
+  IconTrophyFill,
+  IconVolleyballFill,
+  IconWalletBifoldFill,
 } from 'symbols-react'
 import { cn } from '@v1/ui/cn'
 
@@ -31,11 +53,10 @@ interface WatchlistGroupIconProps {
   size?: number
 }
 
-// Map of available icons - you can add more here
 const ICON_MAP = {
   // Emojis
   '💩': '💩',
-  '🚀': '🚀', 
+  '🚀': '🚀',
   '💎': '💎',
   '🔥': '🔥',
   '⭐': '⭐',
@@ -54,68 +75,105 @@ const ICON_MAP = {
   '🎭': '🎭',
   '🎲': '🎲',
   '🎨': '🎨',
-  
+  '📈': '📈',
+  '📉': '📉',
+  '💹': '💹',
+  '📊': '📊',
+  '🏦': '🏦',
+  '🧠': '🧠',
+  '🏆': '🏆',
+  '🎁': '🎁',
+  '🐋': '🐋',
+  '🦅': '🦅',
+  '🌊': '🌊',
+  '☀️': '☀️',
+  '🍀': '🍀',
+  '✨': '✨',
+  '🤖': '🤖',
+  '🪙': '🪙',
+  '⚙️': '⚙️',
+  '🛡️': '🛡️',
+  '🌍': '🌍',
+  '👀': '👀',
+  '🧪': '🧪',
+  '🏠': '🏠',
+  '🎵': '🎵',
+  '🍕': '🍕',
+  '⚽': '⚽',
+  '🎮': '🎮',
+  '💼': '💼',
+  '🧊': '🧊',
+
   // Symbols React icons
-  'sparkles': IconSparkles,
+  sparkles: IconSparkles,
   'graduation-cap': IconGraduationcapFill,
-  'star': IconStarFill,
-  'fire': IconFlameFill,
-  'lightning': IconBoltFill,
-  'diamond': IconDiamondFill,
-  'crown': IconCrownFill,
-  'target': IconTarget,
-  'moon': IconMoonStars,
+  star: IconStarFill,
+  fire: IconFlameFill,
+  lightning: IconBoltFill,
+  diamond: IconDiamondFill,
+  crown: IconCrownFill,
+  target: IconTarget,
+  moon: IconMoonStars,
   'american-football': IconAmericanFootballFill,
-  'volleyball': IconVolleyballFill,
-  'chart': IconChartLineUptrendXyaxis,
-  'bars': IconChartBar,
-  'eye': IconEyeFill,
-  'time': IconTimelapse,
-  'bell': IconBellFill,
-  'heart': IconHeartFill,
-  'bookmark': IconBookmarkFill,
-  'sketch': IconSketchLogo,
-  'seal': IconSealFill,
-  'dots': IconCircleDottedAndCircle,
-}
+  volleyball: IconVolleyballFill,
+  chart: IconChartLineUptrendXyaxis,
+  'chart-down': IconChartLineDowntrendXyaxis,
+  bars: IconChartBar,
+  eye: IconEyeFill,
+  time: IconTimelapse,
+  bell: IconBellFill,
+  heart: IconHeartFill,
+  bookmark: IconBookmarkFill,
+  sketch: IconSketchLogo,
+  seal: IconSealFill,
+  dots: IconCircleDottedAndCircle,
+
+  banknote: IconBanknoteFill,
+  bitcoin: IconBitcoinsignCircleFill,
+  wallet: IconWalletBifoldFill,
+  globe: IconGlobeAmericasFill,
+  shield: IconShieldFill,
+  trophy: IconTrophyFill,
+  gift: IconGiftFill,
+  leaf: IconLeafFill,
+  tree: IconTreeFill,
+  pawprint: IconPawprintFill,
+  fish: IconFishFill,
+  cat: IconCatFill,
+  dog: IconDogFill,
+  party: IconPartyPopperFill,
+  balloon: IconBalloonFill,
+  rainbow: IconRainbow,
+  infinity: IconInfinityCircleFill,
+  house: IconHouseFill,
+  flag: IconFlagFill,
+  camera: IconCameraFill,
+  game: IconGamecontrollerFill,
+} as const
 
 export function WatchlistGroupIcon({ icon, className, size = 20 }: WatchlistGroupIconProps) {
-  // Default to sparkles icon if no icon specified
   const iconKey = icon || 'sparkles'
   const IconComponent = ICON_MAP[iconKey as keyof typeof ICON_MAP]
-  
-  // If it's an emoji (string that's not in our icon map but exists in the emoji section)
+
   if (typeof IconComponent === 'string') {
     return (
-      <span 
-        className={cn("flex items-center justify-center", className)}
-        style={{ fontSize: size }}
-      >
+      <span className={cn('flex items-center justify-center', className)} style={{ fontSize: size }}>
         {IconComponent}
       </span>
     )
   }
-  
-  // If it's a React component (icon)
+
   if (IconComponent) {
     return (
-      <IconComponent 
-        className={cn("flex-shrink-0 fill-current", className)} 
-        style={{ width: size, height: size }}
-      />
+      <IconComponent className={cn('flex-shrink-0 fill-current', className)} style={{ width: size, height: size }} />
     )
   }
-  
-  // Fallback to sparkles icon
+
   return (
-    <IconSparkles 
-      className={cn("flex-shrink-0 fill-current", className)} 
-      style={{ width: size, height: size }}
-    />
+    <IconSparkles className={cn('flex-shrink-0 fill-current', className)} style={{ width: size, height: size }} />
   )
 }
 
-// Export the available icons for use in UI selection
 export const AVAILABLE_ICONS = {
   emojis: [
     { key: '💩', label: 'Poop', emoji: '💩' },
@@ -125,7 +183,7 @@ export const AVAILABLE_ICONS = {
     { key: '⭐', label: 'Star', emoji: '⭐' },
     { key: '👑', label: 'Crown', emoji: '👑' },
     { key: '🎯', label: 'Target', emoji: '🎯' },
-    { key: '💰', label: 'Money', emoji: '💰' },
+    { key: '💰', label: 'Money bag', emoji: '💰' },
     { key: '🌙', label: 'Moon', emoji: '🌙' },
     { key: '⚡', label: 'Lightning', emoji: '⚡' },
     { key: '🦄', label: 'Unicorn', emoji: '🦄' },
@@ -134,21 +192,51 @@ export const AVAILABLE_ICONS = {
     { key: '💀', label: 'Skull', emoji: '💀' },
     { key: '🎪', label: 'Circus', emoji: '🎪' },
     { key: '🌈', label: 'Rainbow', emoji: '🌈' },
-    { key: '🔮', label: 'Crystal Ball', emoji: '🔮' },
+    { key: '🔮', label: 'Crystal ball', emoji: '🔮' },
     { key: '🎭', label: 'Theater', emoji: '🎭' },
     { key: '🎲', label: 'Dice', emoji: '🎲' },
     { key: '🎨', label: 'Art', emoji: '🎨' },
+    { key: '📈', label: 'Chart up', emoji: '📈' },
+    { key: '📉', label: 'Chart down', emoji: '📉' },
+    { key: '💹', label: 'Markets', emoji: '💹' },
+    { key: '📊', label: 'Bar chart', emoji: '📊' },
+    { key: '🏦', label: 'Bank', emoji: '🏦' },
+    { key: '🧠', label: 'Brain', emoji: '🧠' },
+    { key: '🏆', label: 'Trophy', emoji: '🏆' },
+    { key: '🎁', label: 'Gift', emoji: '🎁' },
+    { key: '🐋', label: 'Whale', emoji: '🐋' },
+    { key: '🦅', label: 'Eagle', emoji: '🦅' },
+    { key: '🌊', label: 'Wave', emoji: '🌊' },
+    { key: '☀️', label: 'Sun', emoji: '☀️' },
+    { key: '🍀', label: 'Clover', emoji: '🍀' },
+    { key: '✨', label: 'Sparkles', emoji: '✨' },
+    { key: '🤖', label: 'Robot', emoji: '🤖' },
+    { key: '🪙', label: 'Coin', emoji: '🪙' },
+    { key: '⚙️', label: 'Gear', emoji: '⚙️' },
+    { key: '🛡️', label: 'Shield', emoji: '🛡️' },
+    { key: '🌍', label: 'Globe', emoji: '🌍' },
+    { key: '👀', label: 'Eyes', emoji: '👀' },
+    { key: '🧪', label: 'Science', emoji: '🧪' },
+    { key: '🏠', label: 'Home', emoji: '🏠' },
+    { key: '🎵', label: 'Music', emoji: '🎵' },
+    { key: '🍕', label: 'Pizza', emoji: '🍕' },
+    { key: '⚽', label: 'Soccer', emoji: '⚽' },
+    { key: '🎮', label: 'Video game', emoji: '🎮' },
+    { key: '💼', label: 'Briefcase', emoji: '💼' },
+    { key: '🧊', label: 'Ice', emoji: '🧊' },
   ],
   icons: [
     { key: 'sparkles', label: 'Sparkles' },
-    { key: 'graduation-cap', label: 'Graduation Cap' },
+    { key: 'graduation-cap', label: 'Graduation cap' },
     { key: 'star', label: 'Star' },
     { key: 'fire', label: 'Flame' },
     { key: 'lightning', label: 'Lightning' },
+    { key: 'diamond', label: 'Diamond' },
     { key: 'crown', label: 'Crown' },
     { key: 'target', label: 'Target' },
     { key: 'moon', label: 'Moon' },
-    { key: 'chart', label: 'Chart' },
+    { key: 'chart', label: 'Chart up' },
+    { key: 'chart-down', label: 'Chart down' },
     { key: 'bars', label: 'Bars' },
     { key: 'eye', label: 'Eye' },
     { key: 'time', label: 'Time' },
@@ -157,8 +245,29 @@ export const AVAILABLE_ICONS = {
     { key: 'bookmark', label: 'Bookmark' },
     { key: 'seal', label: 'Seal' },
     { key: 'dots', label: 'Dots' },
-    { key: 'american-football', label: 'American Football' },
+    { key: 'banknote', label: 'Banknote' },
+    { key: 'bitcoin', label: 'Bitcoin' },
+    { key: 'wallet', label: 'Wallet' },
+    { key: 'globe', label: 'Globe' },
+    { key: 'shield', label: 'Shield' },
+    { key: 'trophy', label: 'Trophy' },
+    { key: 'gift', label: 'Gift' },
+    { key: 'infinity', label: 'Infinity' },
+    { key: 'rainbow', label: 'Rainbow' },
+    { key: 'house', label: 'House' },
+    { key: 'flag', label: 'Flag' },
+    { key: 'party', label: 'Party' },
+    { key: 'balloon', label: 'Balloon' },
+    { key: 'leaf', label: 'Leaf' },
+    { key: 'tree', label: 'Tree' },
+    { key: 'pawprint', label: 'Paw' },
+    { key: 'fish', label: 'Fish' },
+    { key: 'cat', label: 'Cat' },
+    { key: 'dog', label: 'Dog' },
+    { key: 'camera', label: 'Camera' },
+    { key: 'game', label: 'Game' },
+    { key: 'american-football', label: 'Football' },
     { key: 'volleyball', label: 'Volleyball' },
     { key: 'sketch', label: 'Sketch' },
-  ]
-} 
+  ],
+}

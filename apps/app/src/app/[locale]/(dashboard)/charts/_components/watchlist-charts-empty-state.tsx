@@ -331,18 +331,18 @@ function CoinSearchIllustration({ coinLogos }: { coinLogos: Array<{ src: string;
                 changeWidthClassName="w-10"
               />
               <CoinSearchIllustrationRow
-                src={coinLogos[1]?.src ?? '/logos/popular/ethereum.svg'}
-                name={coinLogos[1]?.name ?? 'Ethereum'}
-                symbol={coinLogos[1]?.symbol ?? 'ETH'}
-                priceWidthClassName="w-10"
-                changeWidthClassName="w-12"
-              />
-              <CoinSearchIllustrationRow
                 src={coinLogos[2]?.src ?? '/logos/popular/solana.svg'}
                 name={coinLogos[2]?.name ?? 'Solana'}
                 symbol={coinLogos[2]?.symbol ?? 'SOL'}
                 priceWidthClassName="w-14"
                 changeWidthClassName="w-9"
+              />
+              <CoinSearchIllustrationRow
+                src={coinLogos[1]?.src ?? '/logos/popular/ethereum.svg'}
+                name={coinLogos[1]?.name ?? 'Ethereum'}
+                symbol={coinLogos[1]?.symbol ?? 'ETH'}
+                priceWidthClassName="w-10"
+                changeWidthClassName="w-12"
               />
               <CoinSearchIllustrationRow
                 src={coinLogos[3]?.src ?? '/logos/popular/tether.svg'}
