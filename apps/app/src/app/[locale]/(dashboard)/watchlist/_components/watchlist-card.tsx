@@ -344,9 +344,9 @@ export function WatchlistCard({
                   <span>To add tokens to this watchlist </span>
                   <div className="flex items-center gap-1">
                     <span>press </span>
-                    <Kbd className=" bg-white/10 rounded-md text-white/80">Shift</Kbd>
+                    <Kbd className=" bg-white/10 border !border-white/20 rounded-md text-white/80">Shift</Kbd>
                     <span>+</span>
-                    <Kbd className=" bg-white/10 rounded-md text-white/80">A</Kbd>
+                    <Kbd className=" bg-white/10 border !border-white/20 rounded-md text-white/80">A</Kbd>
                   </div>
               </div>
             ) : (
