@@ -192,48 +192,49 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
             <Kbd>A</Kbd>
           </TooltipContent>
         </Tooltip>
-      <SheetContent className="p-0 !z-50 overflow-auto no-scrollbar rounded-[20px] bg-zinc-950 border-zinc-800
+      {/** Keep sheet inner default !bg-zinc-900/90; only add layout + chrome so body scroll matches panel styling. */}
+      <SheetContent className="flex h-full min-h-0 flex-col overflow-hidden p-0 !z-50 rounded-[20px] border-zinc-800
                                shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
                                dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
-
-          <SheetHeader className="p-2 sticky top-0 border-b border-zinc-800/50">
-            <div className="flex-1 flex items-center w-full">
-              <div className="relative min-w-full">
-                <div className="relative rounded-[14px] bg-zinc-950/50 focus-within:bg-zinc-950 border border-zinc-800/80 overflow-hidden p-1 transition-colors duration-200">
-                  <div className="relative z-10 flex items-center p-0 px-2">
-                    <IconMagnifyingglass className="h-4 w-4 fill-white/50 ml-1" />
+          {/** Header stays fixed; only the body below scrolls (coins never scroll over the search bar). */}
+          <SheetHeader className="shrink-0 space-y-0 bg-zinc-900/90 p-2 text-left border-b border-black">
+            <div className="flex w-full min-w-0 items-center">
+              <div className="relative min-w-0 flex-1">
+                <div className="relative overflow-hidden">
+                  <div className="relative z-10 flex items-center px-2 py-0">
+                    <IconMagnifyingglass className="ml-1 h-4 w-4 shrink-0 fill-white/50" />
                     <Input
                       ref={inputRef}
                       type="text"
                       placeholder="Search by symbol (BTC) or name (Bitcoin)..."
-                      className="flex-1 border-0 bg-transparent text-white placeholder:text-white/50 focus-visible:ring-0 focus-visible:ring-offset-0"
+                      className="flex-1 min-w-0 border-0 bg-transparent text-white placeholder:text-white/50 focus-visible:ring-0 focus-visible:ring-offset-0 focus-within:bg-transparent focus-visible:bg-transparent"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
-                    {searchQuery && (
+                    {searchQuery ? (
                       <button
                         onClick={() => setSearchQuery('')}
-                        className="p-1 rounded-full hover:bg-white/10 transition-colors"
+                        className="shrink-0 rounded-full p-1 transition-colors hover:bg-white/10"
                         type="button"
                       >
                         <IconXmarkCircleFill className="h-4 w-4 fill-white/50 hover:fill-white/70" />
                         <span className="sr-only">Clear search</span>
                       </button>
-                    )}
-                    <Kbd>ESC</Kbd>
+                    ) : null}
+                    <Kbd className="w-8 shrink-0">ESC</Kbd>
                   </div>
                 </div>
               </div>
             </div>
           </SheetHeader>
-          
-          <div className="space-y-2 p-3 px-2">
+
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-zinc-900/90  border-t border-zinc-800 p-3 px-2 no-scrollbar">
             <div className="text-xs text-white/50 ml-3">
               {getSearchInfo()}
             </div>
             {isLoading ? (
               <div className="">
-                <CoinSearchSkeleton rowCount={5} />
+                <CoinSearchSkeleton rowCount={20} />
               </div>
             ) : (
               <div className="overflow-hidden">
@@ -273,14 +274,12 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell className="font-berkeley-mono text-xs text-white/90">
+                          <TableCell className="flex flex-col items-end gap-2 font-berkeley-mono rounded-r-xl text-[11px]">
                             {coin.quote.USD.price > 0 ? (
                               formatUsdPrice(coin.quote.USD.price)
                             ) : (
                               <Skeleton className="h-4 w-16 bg-zinc-700/50" />
                             )}
-                          </TableCell>
-                          <TableCell className="font-berkeley-mono rounded-r-xl text-[11px]">
                             {coin.quote.USD.price > 0 && coin.quote.USD.percent_change_24h !== null ? (
                               <span className={`${coin.quote.USD.percent_change_24h > 0 ? 'text-green-400' : 'text-red-400'}`}>
                                 {coin.quote.USD.percent_change_24h.toFixed(2)}%
