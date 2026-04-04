@@ -14,9 +14,9 @@ import { useCoinGeckoQuote } from './use-coingecko-quotes'
 const TIMEFRAME_CONFIG = {
   '1d': { days: '1' },     // Short: use OHLC + market-chart
   '7d': { days: '7' },     // Short: use OHLC + market-chart  
-  '30d': { days: '90' },   // 30-day focus with 90 days context: use OHLC + market-chart
+  '30d': { days: '90' },   // 1M view: show 1Q (90d)
   'max': { days: '365' },  // Long: prefer market-chart (daily vs OHLC's ~weekly)
-  '2y': { days: '1825' }   // Long: prefer market-chart (daily vs OHLC's sparse data)
+  '2y': { days: 'max' }    // 2Y: max available (server caps to ~5y)
 } as const
 
 // API Response Interfaces
@@ -31,6 +31,13 @@ interface OHLCDataPoint {
 interface OHLCAPIResponse {
   readonly data: ReadonlyArray<OHLCDataPoint>
   readonly cached?: boolean
+  readonly status?: {
+    readonly cached?: boolean
+    readonly stale?: boolean
+    readonly warmupRequested?: boolean
+    readonly points?: number
+    readonly lastUpdated?: number
+  }
 }
 
 interface MarketChartPoint {
@@ -46,6 +53,10 @@ interface MarketChartAPIResponse {
   }
   readonly status?: {
     readonly cached?: boolean
+    readonly stale?: boolean
+    readonly warmupRequested?: boolean
+    readonly points?: number
+    readonly lastUpdated?: number
   }
 }
 
@@ -59,6 +70,10 @@ interface DataSourceResult {
   data: ParsedChartData | null
   source: 'ohlc' | 'market-chart' | 'fallback'
   cached: boolean
+  stale?: boolean
+  warmupRequested?: boolean
+  points?: number
+  lastUpdated?: number
   error?: string
 }
 
@@ -67,6 +82,12 @@ interface CoinGeckoChartDataResult {
   volumeData: Array<{ time: Time; value: number; color: string }>
   ohlcData: Array<{ time: Time; open: number; high: number; low: number; close: number }> // For tooltip
   isLoading: boolean
+  /**
+   * When true, the server told us it’s returning cached/stale data and has scheduled a warmup.
+   * This should NOT necessarily block rendering if we already have a usable series.
+   */
+  isWarmingUp: boolean
+  isStale: boolean
   tokenData: null
   performance: {
     dataSource: 'ohlc' | 'market-chart' | 'fallback'
@@ -86,6 +107,12 @@ interface UseCoinGeckoChartDataOptions {
 
 const LATEST_POINT_UPSERT_WINDOW_SECONDS = 5 * 60
 
+const OHLC_SUPPORTED_DAYS = new Set(['1', '7', '14', '30', '90', '180', '365', 'max'])
+
+function isOhlcSupportedDays(days: string): boolean {
+  return OHLC_SUPPORTED_DAYS.has(days)
+}
+
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
@@ -98,6 +125,113 @@ function estimateAverageIntervalSeconds(epochSeconds: number[]): number | null {
   const span = last - first
   if (span <= 0) return null
   return span / (sorted.length - 1)
+}
+
+function pickMarketChartBucketSeconds(args: {
+  activeTimeScale: string
+  prices: ReadonlyArray<MarketChartPoint>
+}): number {
+  if (args.activeTimeScale === '30d') return 4 * 60 * 60 // 4h bars for 1M (=90d window)
+  if (args.activeTimeScale === 'max') return 24 * 60 * 60 // daily bars for 1Y
+
+  if (args.activeTimeScale === '2y') {
+    let min = Number.POSITIVE_INFINITY
+    let max = Number.NEGATIVE_INFINITY
+    let count = 0
+    for (const p of args.prices) {
+      const t = Number(p.time)
+      if (!Number.isFinite(t)) continue
+      count++
+      if (t < min) min = t
+      if (t > max) max = t
+    }
+    if (count < 2 || !Number.isFinite(min) || !Number.isFinite(max)) return 24 * 60 * 60
+    const spanDays = (max - min) / (24 * 60 * 60)
+    return spanDays > 900 ? 30 * 24 * 60 * 60 : 24 * 60 * 60 // monthly for long history
+  }
+
+  // Default: keep it fairly granular.
+  return 60 * 60
+}
+
+function bucketizeMarketChart(args: {
+  prices: ReadonlyArray<MarketChartPoint>
+  volumes: ReadonlyArray<MarketChartPoint>
+  bucketSeconds: number
+}): ParsedChartData | null {
+  const pricePoints = args.prices
+    .map((point) => {
+      const time = Math.floor(Number(point.time))
+      const value = Number(point.value ?? 0)
+      if (!Number.isFinite(time)) return null
+      if (!Number.isFinite(value) || value <= 0) return null
+      return { time, value }
+    })
+    .filter((p): p is { time: number; value: number } => p !== null)
+    .sort((a, b) => a.time - b.time)
+
+  if (pricePoints.length < 2) return null
+
+  const bucketSeconds = Math.max(60, Math.floor(args.bucketSeconds))
+  const priceBuckets = new Map<
+    number,
+    {
+      time: Time
+      open: number
+      high: number
+      low: number
+      close: number
+    }
+  >()
+
+  for (const p of pricePoints) {
+    const bucketStart = Math.floor(p.time / bucketSeconds) * bucketSeconds
+    const existing = priceBuckets.get(bucketStart)
+    if (!existing) {
+      priceBuckets.set(bucketStart, {
+        time: bucketStart as Time,
+        open: p.value,
+        high: p.value,
+        low: p.value,
+        close: p.value,
+      })
+      continue
+    }
+
+    existing.high = Math.max(existing.high, p.value)
+    existing.low = Math.min(existing.low, p.value)
+    existing.close = p.value
+  }
+
+  const volumeBuckets = new Map<number, number>()
+  for (const point of args.volumes) {
+    const time = Math.floor(Number(point.time))
+    const value = Number(point.value ?? 0)
+    if (!Number.isFinite(time)) continue
+    if (!Number.isFinite(value) || value < 0) continue
+    const bucketStart = Math.floor(time / bucketSeconds) * bucketSeconds
+    volumeBuckets.set(bucketStart, (volumeBuckets.get(bucketStart) ?? 0) + value)
+  }
+
+  const ohlcBars = Array.from(priceBuckets.entries())
+    .map(([bucketStart, bar]) => ({
+      ...bar,
+      volume: volumeBuckets.get(bucketStart) ?? 0,
+    }))
+    .sort((a, b) => Number(a.time) - Number(b.time))
+  const ohlcData = ohlcBars.map((bar) => ({
+    time: bar.time,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+  }))
+
+  return {
+    lineChart: ohlcData.map((bar) => ({ time: bar.time, value: bar.close })),
+    volumeChart: ohlcBars.map((bar) => ({ time: bar.time, value: bar.volume, color: '#ffffff40' })),
+    ohlcData,
+  }
 }
 
 /**
@@ -145,83 +279,15 @@ function parseOHLCData(data: OHLCAPIResponse): ParsedChartData | null {
 /**
  * Parse market chart data from /api/coingecko/market-chart route
  */
-function parseMarketChartData(data: MarketChartAPIResponse): ParsedChartData | null {
+function parseMarketChartData(data: MarketChartAPIResponse, activeTimeScale: string): ParsedChartData | null {
   if (!data?.data || !data.data.prices || !Array.isArray(data.data.prices)) {
     return null
   }
 
   try {
     const { prices, volumes = [] } = data.data
-
-    const lineChart = prices
-      .map((point: MarketChartPoint) => ({
-        time: Math.floor(point.time) as Time,
-        value: point.value ?? 0,
-      }))
-      .filter((point) => Number.isFinite(Number(point.time)) && Number.isFinite(point.value) && point.value > 0)
-      .sort((a, b) => Number(a.time) - Number(b.time))
-
-    // Parse volume data
-    const volumeByEpoch = new Map<number, number>()
-    for (const point of volumes) {
-      const time = Math.floor(point.time) as Time
-      const value = point.value ?? 0
-      if (!Number.isFinite(Number(time))) continue
-      if (!Number.isFinite(value) || value < 0) continue
-      volumeByEpoch.set(Number(time), value)
-    }
-
-    const volumeChart = lineChart.map((point) => ({
-      time: point.time,
-      value: volumeByEpoch.get(Number(point.time)) ?? 0,
-      color: '#ffffff40',
-    }))
-
-    // Build rolling-window OHLC from the price series so tooltips show real ranges.
-    // (Market-chart is a single price series; this approximates OHLC over a recent window.)
-    const epochSeconds = lineChart.map((p) => Number(p.time))
-    const avgIntervalSeconds = estimateAverageIntervalSeconds(epochSeconds) ?? 0
-    const spanSeconds = epochSeconds.length ? epochSeconds[epochSeconds.length - 1]! - epochSeconds[0]! : 0
-    const spanDays = spanSeconds > 0 ? spanSeconds / (24 * 60 * 60) : 0
-
-    const targetWindowSeconds =
-      spanDays <= 14 ? 6 * 60 * 60 : spanDays <= 120 ? 24 * 60 * 60 : 7 * 24 * 60 * 60
-
-    const rawWindowSize =
-      avgIntervalSeconds > 0 ? Math.round(targetWindowSeconds / avgIntervalSeconds) : 0
-    const windowSize = clampNumber(rawWindowSize || 2, 2, 96)
-
-    const ohlcData = lineChart.map((point, idx) => {
-      const start = Math.max(0, idx - windowSize + 1)
-      const open = lineChart[start]!.value
-      const close = point.value
-
-      let high = Number.NEGATIVE_INFINITY
-      let low = Number.POSITIVE_INFINITY
-      for (let i = start; i <= idx; i++) {
-        const v = lineChart[i]!.value
-        if (v > high) high = v
-        if (v < low) low = v
-      }
-
-      // Fallback safety for unexpected empty ranges
-      if (!Number.isFinite(high)) high = close
-      if (!Number.isFinite(low)) low = close
-
-      return {
-        time: point.time,
-        open,
-        high,
-        low,
-        close,
-      }
-    })
-
-    return {
-      lineChart,
-      volumeChart,
-      ohlcData,
-    }
+    const bucketSeconds = pickMarketChartBucketSeconds({ activeTimeScale, prices })
+    return bucketizeMarketChart({ prices, volumes, bucketSeconds })
   } catch (error) {
     console.error('Failed to parse market chart data:', error)
     return null
@@ -237,9 +303,10 @@ function generateFallbackData(
   initialData: CoinMarketData['quote']['USD']
 ): ParsedChartData {
   const config = TIMEFRAME_CONFIG[timeframe as keyof typeof TIMEFRAME_CONFIG] || TIMEFRAME_CONFIG['7d']
-  const days = Number.parseInt(config.days)
+  const days = Number.parseInt(config.days, 10)
+  const safeDays = Number.isFinite(days) && days > 0 ? days : 365
   // Ensure at least 2 points so tiny charts don't render "No data".
-  const dataPoints = Math.max(2, Math.min(days, 90)) // Limit fallback data points
+  const dataPoints = Math.max(2, Math.min(safeDays, 90)) // Limit fallback data points
   const basePrice = initialData?.price
 
   // If we don't have a real price to anchor on, return empty data (no fake charting).
@@ -395,24 +462,14 @@ export function useCoinGeckoChartData(
       let primaryResult: DataSourceResult | null = null
 
       try {
+        const numericDays = Number.parseInt(config.days, 10)
         const shouldPreferMarketChart =
-          preferMarketChart || Number.parseInt(config.days) > 90 || activeTimeScale === '30d'
+          preferMarketChart ||
+          activeTimeScale === '30d' ||
+          activeTimeScale === '2y' ||
+          !Number.isFinite(numericDays) ||
+          numericDays > 90
         const swallowToNull = (_: unknown) => Effect.succeed(null)
-
-        const ohlcEffect = CoinGeckoApi.getOHLC({
-          coinId,
-          days: config.days,
-          vsCurrency: "usd",
-        }).pipe(
-          Effect.catchTags({
-            CoinGeckoInvalidParamsError: swallowToNull,
-            CoinGeckoUnauthorizedError: swallowToNull,
-            CoinGeckoNotFoundError: swallowToNull,
-            CoinGeckoRateLimitedError: swallowToNull,
-            CoinGeckoApiError: swallowToNull,
-            CoinGeckoDecodeError: swallowToNull,
-          }),
-        )
 
         const marketEffect = CoinGeckoApi.getMarketChart({
           coinId,
@@ -429,46 +486,131 @@ export function useCoinGeckoChartData(
           }),
         )
 
-        const [ohlcResult, marketResult] = await runPromise(
-          Effect.all([ohlcEffect, marketEffect], { concurrency: "unbounded" }),
-        )
-
-        if (ohlcResult && marketResult) {
-          if (shouldPreferMarketChart) {
-            const parsedMarket = parseMarketChartData(marketResult)
+        if (shouldPreferMarketChart) {
+          const marketResult = await runPromise(marketEffect)
+          if (marketResult) {
+            const parsedMarket = parseMarketChartData(marketResult, activeTimeScale)
             if (parsedMarket) {
               primaryResult = {
                 data: parsedMarket,
                 source: 'market-chart',
                 cached: marketResult.status?.cached || false,
+                stale: marketResult.status?.stale,
+                warmupRequested: marketResult.status?.warmupRequested,
+                points: marketResult.status?.points,
+                lastUpdated: marketResult.status?.lastUpdated,
               }
             }
-          } else {
+          }
+
+          const allowOhlcFallback =
+            activeTimeScale !== '30d' &&
+            activeTimeScale !== 'max' &&
+            activeTimeScale !== '2y' &&
+            isOhlcSupportedDays(config.days)
+
+          if (!primaryResult && allowOhlcFallback) {
+            const ohlcEffect = CoinGeckoApi.getOHLC({
+              coinId,
+              days: config.days,
+              vsCurrency: "usd",
+            }).pipe(
+              Effect.catchTags({
+                CoinGeckoInvalidParamsError: swallowToNull,
+                CoinGeckoUnauthorizedError: swallowToNull,
+                CoinGeckoNotFoundError: swallowToNull,
+                CoinGeckoRateLimitedError: swallowToNull,
+                CoinGeckoApiError: swallowToNull,
+                CoinGeckoDecodeError: swallowToNull,
+              }),
+            )
+
+            const ohlcResult = await runPromise(ohlcEffect)
+            if (ohlcResult) {
+              const parsedOHLC = parseOHLCData(ohlcResult)
+              if (parsedOHLC) {
+                primaryResult = {
+                  data: parsedOHLC,
+                  source: 'ohlc',
+                  cached: ohlcResult.cached || ohlcResult.status?.cached || false,
+                  stale: ohlcResult.status?.stale,
+                  warmupRequested: ohlcResult.status?.warmupRequested,
+                  points: ohlcResult.status?.points,
+                  lastUpdated: ohlcResult.status?.lastUpdated,
+                }
+              }
+            }
+          }
+        } else {
+          const ohlcEffect = CoinGeckoApi.getOHLC({
+            coinId,
+            days: config.days,
+            vsCurrency: "usd",
+          }).pipe(
+            Effect.catchTags({
+              CoinGeckoInvalidParamsError: swallowToNull,
+              CoinGeckoUnauthorizedError: swallowToNull,
+              CoinGeckoNotFoundError: swallowToNull,
+              CoinGeckoRateLimitedError: swallowToNull,
+              CoinGeckoApiError: swallowToNull,
+              CoinGeckoDecodeError: swallowToNull,
+            }),
+          )
+
+          const [ohlcResult, marketResult] = await runPromise(
+            Effect.all([ohlcEffect, marketEffect], { concurrency: "unbounded" }),
+          )
+
+          if (ohlcResult && marketResult) {
             const combined = combineOHLCWithVolume(ohlcResult, marketResult)
             if (combined) {
               primaryResult = {
                 data: combined,
                 source: 'ohlc',
-                cached: ohlcResult.cached || false,
+                cached: ohlcResult.cached || ohlcResult.status?.cached || marketResult.status?.cached || false,
+                stale: Boolean(ohlcResult.status?.stale || marketResult.status?.stale),
+                warmupRequested: Boolean(
+                  ohlcResult.status?.warmupRequested || marketResult.status?.warmupRequested,
+                ),
+                points:
+                  typeof marketResult.status?.points === "number"
+                    ? marketResult.status.points
+                    : typeof ohlcResult.status?.points === "number"
+                      ? ohlcResult.status.points
+                      : undefined,
+                lastUpdated:
+                  typeof marketResult.status?.lastUpdated === "number"
+                    ? marketResult.status.lastUpdated
+                    : typeof ohlcResult.status?.lastUpdated === "number"
+                      ? ohlcResult.status.lastUpdated
+                      : undefined,
               }
             }
-          }
-        } else if (marketResult) {
-          const parsedMarket = parseMarketChartData(marketResult)
-          if (parsedMarket) {
-            primaryResult = {
-              data: parsedMarket,
-              source: 'market-chart',
-              cached: marketResult.status?.cached || false,
+          } else if (marketResult) {
+            const parsedMarket = parseMarketChartData(marketResult, activeTimeScale)
+            if (parsedMarket) {
+              primaryResult = {
+                data: parsedMarket,
+                source: 'market-chart',
+                cached: marketResult.status?.cached || false,
+                stale: marketResult.status?.stale,
+                warmupRequested: marketResult.status?.warmupRequested,
+                points: marketResult.status?.points,
+                lastUpdated: marketResult.status?.lastUpdated,
+              }
             }
-          }
-        } else if (ohlcResult) {
-          const parsedOHLC = parseOHLCData(ohlcResult)
-          if (parsedOHLC) {
-            primaryResult = {
-              data: parsedOHLC,
-              source: 'ohlc',
-              cached: ohlcResult.cached || false,
+          } else if (ohlcResult) {
+            const parsedOHLC = parseOHLCData(ohlcResult)
+            if (parsedOHLC) {
+              primaryResult = {
+                data: parsedOHLC,
+                source: 'ohlc',
+                cached: ohlcResult.cached || ohlcResult.status?.cached || false,
+                stale: ohlcResult.status?.stale,
+                warmupRequested: ohlcResult.status?.warmupRequested,
+                points: ohlcResult.status?.points,
+                lastUpdated: ohlcResult.status?.lastUpdated,
+              }
             }
           }
         }
@@ -492,8 +634,9 @@ export function useCoinGeckoChartData(
     staleTime: 2 * 60 * 1000, // 2 minutes
     refetchInterval: (query) => {
       const points = query.state.data?.data?.lineChart?.length ?? 0
+      const warmupRequested = Boolean(query.state.data?.warmupRequested)
       // When warmup is in-flight, poll quickly so token pages don't stay empty.
-      if (points < 2) return 5_000
+      if (points < 2 || warmupRequested) return 5_000
       return 5 * 60 * 1000
     },
     enabled: !!coinId,
@@ -554,11 +697,17 @@ export function useCoinGeckoChartData(
     return upsertLatestPricePoint(parsedData, latestPrice, latestTimestampSeconds)
   }, [parsedData, quoteQuery.data?.current_price, quoteQuery.data?.last_updated])
 
+  const serverPoints = combinedData?.points ?? combinedData?.data?.lineChart?.length ?? null
+  const isStale = Boolean(combinedData?.stale)
+  const isWarmingUp = Boolean(combinedData?.warmupRequested)
+
   return {
     chartData: dataWithLatestQuote.lineChart,
     volumeData: dataWithLatestQuote.volumeChart,
     ohlcData: dataWithLatestQuote.ohlcData, // OHLC data for tooltip
     isLoading,
+    isWarmingUp: isWarmingUp || (typeof serverPoints === "number" ? serverPoints < 2 : false),
+    isStale,
     tokenData: null,
     performance: {
       dataSource,

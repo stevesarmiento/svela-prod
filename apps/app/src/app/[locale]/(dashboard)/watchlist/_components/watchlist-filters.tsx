@@ -1193,7 +1193,7 @@ export function WatchlistFilters({
                         key={example}
                         type="button"
                         className={cn(
-                          "inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-dashed border-border bg-primary/5 py-0 pl-1.5 pr-1 text-primary/80",
+                          "inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-dashed border-primary/20 bg-zinc-600/30 py-0 pl-1.5 pr-2 text-primary/80",
                           "cursor-pointer transition-colors hover:text-primary",
                           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                         )}
@@ -1221,7 +1221,7 @@ export function WatchlistFilters({
                   disabled={draft.trim().length === 0 || isInterpreting}
                 >
                   <IconArrowTurnDownRight className="size-2.5 fill-primary/70" />
-                  <span className="text-xs">Enter</span>
+                  <span className="text-xs uppercase">Enter</span>
                 </Button>
               </div>
             </div>

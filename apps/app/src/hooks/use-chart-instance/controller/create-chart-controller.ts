@@ -128,7 +128,24 @@ export function createChartController({
     const CANDLE_DOWN_COLOR = '#EF4444';
     const VOLUME_BAR_COLOR = resolvedIsDarkMode ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)';
 
+    function computePriceFormat(value: number | null | undefined): { precision: number; minMove: number } {
+        if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+            return { precision: 2, minMove: 0.01 };
+        }
+
+        const abs = Math.abs(value);
+        if (abs >= 1) return { precision: 2, minMove: 0.01 };
+
+        // For micro-priced tokens (e.g. PEPE), the default 2dp scale collapses everything to ~0.
+        // Pick enough decimals to show movement while staying bounded.
+        const rawPrecision = Math.ceil(-Math.log10(abs)) + 2;
+        const precision = Math.min(12, Math.max(2, rawPrecision));
+        const minMove = 10 ** -precision;
+        return { precision, minMove };
+    }
+
     let lineData: PriceDataPoint[] | null = null;
+    let lastAppliedPriceFormatKey: string | null = null;
 
     if (chartType === 'candlestick') {
         priceSeries = chart.addSeries(CandlestickSeries, {
@@ -478,6 +495,18 @@ export function createChartController({
 
         const dataLastPrice =
             safeOhlcvData.length > 0 ? (safeOhlcvData[safeOhlcvData.length - 1]?.close ?? null) : null;
+
+        const nextFormat = computePriceFormat(dataLastPrice);
+        const nextFormatKey = `${nextFormat.precision}:${nextFormat.minMove}`;
+        if (nextFormatKey !== lastAppliedPriceFormatKey) {
+            lastAppliedPriceFormatKey = nextFormatKey;
+            priceSeries.applyOptions({
+                priceFormat: { type: 'price', precision: nextFormat.precision, minMove: nextFormat.minMove },
+            });
+            highlightPriceSeries.applyOptions({
+                priceFormat: { type: 'price', precision: nextFormat.precision, minMove: nextFormat.minMove },
+            });
+        }
 
         if (chartType === 'candlestick') {
             (priceSeries as ISeriesApi<'Candlestick'>).setData(safeOhlcvData);

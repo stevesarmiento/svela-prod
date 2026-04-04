@@ -57,6 +57,13 @@ crons.interval(
 );
 
 crons.interval(
+  "coingecko_refresh_market_chart_90d",
+  { hours: 4 },
+  internal.coingeckoJobs.refreshTrackedMarketChartBatch,
+  { days: "90", batchSize: 10 },
+);
+
+crons.interval(
   "coingecko_refresh_market_chart_365d",
   { hours: 24 },
   internal.coingeckoJobs.refreshTrackedMarketChartBatch,
@@ -75,6 +82,13 @@ crons.interval(
   { hours: 24 },
   internal.coingeckoJobs.refreshTrackedMarketChartBatch,
   { days: "1825", batchSize: 2 },
+);
+
+crons.interval(
+  "coingecko_refresh_market_chart_max",
+  { hours: 24 },
+  internal.coingeckoJobs.refreshTrackedMarketChartBatch,
+  { days: "max", batchSize: 2 },
 );
 
 // OHLC refresh (used by technical analysis & tooltips).

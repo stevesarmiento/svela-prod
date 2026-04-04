@@ -114,6 +114,15 @@ export const _upsertCoinGeckoHistoricalData = internalMutation({
       };
     }
 
+    const minIncomingTimestamp = args.dataPoints.reduce(
+      (min, p) => (p.timestamp < min ? p.timestamp : min),
+      args.dataPoints[0]?.timestamp ?? Number.POSITIVE_INFINITY,
+    );
+    const maxIncomingTimestamp = args.dataPoints.reduce(
+      (max, p) => (p.timestamp > max ? p.timestamp : max),
+      args.dataPoints[0]?.timestamp ?? 0,
+    );
+
     const latestExisting = await ctx.db
       .query("priceHistory")
       .withIndex("by_coingecko_timeframe_timestamp", (q) =>
@@ -122,8 +131,24 @@ export const _upsertCoinGeckoHistoricalData = internalMutation({
       .order("desc")
       .first();
 
+    const earliestExisting = latestExisting
+      ? await ctx.db
+          .query("priceHistory")
+          .withIndex("by_coingecko_timeframe_timestamp", (q) =>
+            q.eq("coingeckoId", args.coingeckoId).eq("timeframe", args.timeframe),
+          )
+          .order("asc")
+          .first()
+      : null;
+
     const overlapMs = pickOverlapMs(args.timeframe);
-    const cutoff = latestExisting ? latestExisting.timestamp - overlapMs : Number.NEGATIVE_INFINITY;
+    const defaultCutoff = latestExisting ? latestExisting.timestamp - overlapMs : Number.NEGATIVE_INFINITY;
+    const shouldBackfill =
+      earliestExisting != null &&
+      Number.isFinite(minIncomingTimestamp) &&
+      earliestExisting.timestamp > minIncomingTimestamp + overlapMs;
+    const cutoff = shouldBackfill ? minIncomingTimestamp - overlapMs : defaultCutoff;
+    const upperBound = Number.isFinite(maxIncomingTimestamp) ? maxIncomingTimestamp + overlapMs : Number.POSITIVE_INFINITY;
 
     const existingWindow = latestExisting
       ? await ctx.db
@@ -132,7 +157,8 @@ export const _upsertCoinGeckoHistoricalData = internalMutation({
             q
               .eq("coingeckoId", args.coingeckoId)
               .eq("timeframe", args.timeframe)
-              .gte("timestamp", cutoff),
+              .gte("timestamp", cutoff)
+              .lte("timestamp", upperBound),
           )
           .collect()
       : [];
@@ -145,6 +171,13 @@ export const _upsertCoinGeckoHistoricalData = internalMutation({
     let skippedCount = 0;
 
     for (const point of args.dataPoints) {
+      // Avoid inserting duplicates for older timestamps on refreshes.
+      // We only upsert the overlap window unless we detected missing historical coverage.
+      if (point.timestamp < cutoff) {
+        skippedCount++;
+        continue;
+      }
+
       const existing = byTimestamp.get(point.timestamp);
       if (!existing) {
         await ctx.db.insert("priceHistory", {

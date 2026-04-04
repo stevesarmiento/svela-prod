@@ -149,7 +149,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
   const indicatorWindowDays = React.useMemo(() => {
     if (deferredTimeScale === '2y') return 60
     if (deferredTimeScale === 'max') return 30
-    return 3
+    return 14
   }, [deferredTimeScale])
 
   // React 19: Use deferred values for data fetching
@@ -236,6 +236,18 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
       .sort((a, b) => a[0] - b[0])
       .map(([, value]) => value)
   }, [ohlcData, volumeData])
+
+  const dailyOhlcv = React.useMemo(() => {
+    if (indicatorData.length === 0) return []
+    const daily = bucketizeOhlcv(indicatorData as ReadonlyArray<OhlcvBar>, SECONDS_PER_DAY)
+    return daily.map((bar) => ({
+      time: bar.time,
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+    }))
+  }, [indicatorData])
 
   const marketVisionCalculations = useMarketVisionB(indicatorData, marketVisionConfig)
   const marketVisionRsiValue = lastFiniteValue(marketVisionCalculations.series.rsi)
@@ -494,7 +506,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
 
   return (
     <main className={cn("mx-auto py-6 relative z-10", showPending && "opacity-90 transition-opacity duration-200")}>
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-12">
         <div className="col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-8 xl:col-span-8 min-w-0 sm:space-y-0">
             <PriceChart
@@ -510,9 +522,9 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
             <TokenCoingeckoNews coinId={deferredId} isPending={showPending} />
           </div>
         </div>
-        <div className="col-span-12">
+        <div className="col-span-12 my-12 mt-8">
           {metricsData ? (
-            <MarketMetrics data={metricsData} isPending={showPending} />
+            <MarketMetrics data={metricsData} isPending={showPending} dailyOhlcv={dailyOhlcv} />
           ) : quoteQuery.error ? (
             <div className={`h-[120px] bg-zinc-950/50 border border-zinc-800/30 rounded-[20px] flex items-center justify-center ${showPending ? 'opacity-60' : ''}`}>
               <div className="text-center">
@@ -531,10 +543,11 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
             </div>
           )}
         </div>
-
-        <SectionHeader title="Technical Indicators" className="col-span-12 mt-16" />
+        <div className="col-span-12 mt-16 mb-4">
+          <span className="text-2xl font-semibold text-white">Technical Indicators</span>  
+        </div>  
         
-          
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 col-span-12">
         <div className="col-span-12 md:col-span-6">
           <Card className={cn("border-zinc-800/70 bg-black rounded-2xl overflow-hidden", showPending && "opacity-90")}>
             <CardHeader className="flex flex-row items-start justify-between gap-4 p-4 pb-2">
@@ -592,7 +605,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
                   data={indicatorData}
                   config={marketVisionConfig}
                   height={250}
-                  showTimeAxis={false}
+                  showTimeAxis={true}
                   initialWindowDays={indicatorWindowDays}
                 />
               )}
@@ -659,7 +672,7 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
                   data={indicatorData}
                   config={bollingerConfig}
                   height={250}
-                  showTimeAxis={false}
+                  showTimeAxis={true}
                   initialWindowDays={indicatorWindowDays}
                 />
               )}
@@ -726,12 +739,13 @@ export const TokenPageClient = memo(function TokenPageClient({ id, tokenData, is
                     maWidth: 2,
                   }}
                   height={250}
-                  showTimeAxis={false}
+                  showTimeAxis={true}
                   initialWindowDays={indicatorWindowDays}
                 />
               )}
             </CardContent>
           </Card>
+        </div>
         </div>
       </div>
     </main>

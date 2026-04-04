@@ -15,31 +15,72 @@ export const _cleanupOldData = internalMutation({
   }),
   handler: async (ctx, args) => {
     const batchSize = args.batchSize ?? 100;
-    const cutoffTime = Date.now() - args.olderThanDays * 24 * 60 * 60 * 1000;
+    // `priceHistory` is our source of truth for charting and indicators.
+    // Do not delete historical rows based on `lastUpdated`, since older candles
+    // are naturally immutable and can appear "stale" even when still needed.
+    const oldCacheData = await ctx.db
+      .query("apiCache")
+      .withIndex("by_expiry", (q) => q.lt("expiresAt", Date.now()))
+      .take(batchSize);
 
-    const [oldHistoricalData, oldCacheData] = await Promise.all([
-      ctx.db
-        .query("priceHistory")
-        .withIndex("by_last_updated", (q) => q.lt("lastUpdated", cutoffTime))
-        .take(batchSize),
-      ctx.db
-        .query("apiCache")
-        .withIndex("by_expiry", (q) => q.lt("expiresAt", Date.now()))
-        .take(batchSize),
-    ]);
-
-    await Promise.all([
-      ...oldHistoricalData.map((item) => ctx.db.delete(item._id)),
-      ...oldCacheData.map((item) => ctx.db.delete(item._id)),
-    ]);
+    await Promise.all(oldCacheData.map((item) => ctx.db.delete(item._id)));
 
     return {
       success: true,
-      deletedHistorical: oldHistoricalData.length,
+      deletedHistorical: 0,
       deletedCache: oldCacheData.length,
-      hasMore:
-        oldHistoricalData.length === batchSize || oldCacheData.length === batchSize,
+      hasMore: oldCacheData.length === batchSize,
       batchSize,
+    };
+  },
+});
+
+export const _compactPriceHistoryDuplicatesBatch = internalMutation({
+  args: {
+    coingeckoId: v.string(),
+    timeframe: v.string(),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    scanned: v.number(),
+    deleted: v.number(),
+    kept: v.number(),
+    hasMore: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = Math.min(5000, Math.max(100, args.batchSize ?? 2000));
+
+    const rows = await ctx.db
+      .query("priceHistory")
+      .withIndex("by_coingecko_timeframe_timestamp", (q) =>
+        q.eq("coingeckoId", args.coingeckoId).eq("timeframe", args.timeframe),
+      )
+      .order("desc")
+      .take(batchSize);
+
+    if (rows.length === 0) {
+      return { scanned: 0, deleted: 0, kept: 0, hasMore: false };
+    }
+
+    const seen = new Set<number>();
+    const toDelete: Array<(typeof rows)[number]["_id"]> = [];
+    for (const row of rows) {
+      if (seen.has(row.timestamp)) {
+        toDelete.push(row._id);
+        continue;
+      }
+      seen.add(row.timestamp);
+    }
+
+    if (toDelete.length > 0) {
+      await Promise.all(toDelete.map((id) => ctx.db.delete(id)));
+    }
+
+    return {
+      scanned: rows.length,
+      deleted: toDelete.length,
+      kept: rows.length - toDelete.length,
+      hasMore: toDelete.length > 0 || rows.length === batchSize,
     };
   },
 });

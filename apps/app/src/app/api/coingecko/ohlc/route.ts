@@ -4,11 +4,13 @@ import { auth } from "@clerk/nextjs/server";
 import { api } from "../../../../../convex/_generated/api";
 import { convex, getServerToken } from "@/lib/convex-server";
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const OHLCParamsSchema = z.object({
   id: z.string(),
   vs_currency: z.string().optional().default("usd"),
   days: z
-    .enum(["1", "7", "14", "30", "90", "180", "365", "1825", "max"])
+    .enum(["1", "7", "14", "30", "90", "180", "365", "max"])
     .optional()
     .default("7"),
   precision: z.string().optional().nullable(),
@@ -61,6 +63,21 @@ export async function GET(request: NextRequest) {
     timeframe: `${days}_ohlc`,
   });
 
+  const earliest = series.data[0]?.timestamp ?? null;
+  const hasCoverage =
+    earliest == null ? true : earliest <= Date.now() - Number(days === "max" ? 365 : days) * DAY_MS * 0.85;
+
+  const warmupRequested = series.data.length < 2 || series.stale || !hasCoverage;
+  if (warmupRequested) {
+    void convex
+      .mutation(api.coingeckoWarmup.requestOhlcRefresh, {
+        serverToken: getServerToken(),
+        coingeckoId: coinId,
+        days,
+      })
+      .catch(() => null);
+  }
+
   const transformedData: Array<OHLCDataPoint> = series.data.map((point) => {
     const close = point.close ?? point.price;
     return {
@@ -76,6 +93,13 @@ export async function GET(request: NextRequest) {
     {
       data: transformedData,
       cached: true,
+      status: {
+        cached: true,
+        stale: series.stale,
+        warmupRequested,
+        points: series.data.length,
+        lastUpdated: series.lastUpdated,
+      },
     },
     {
       status: 200,

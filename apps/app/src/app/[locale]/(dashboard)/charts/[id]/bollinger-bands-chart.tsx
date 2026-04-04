@@ -136,7 +136,7 @@ export function BollingerBandsChart({
   data, 
   config,
   height = 250,
-  showTimeAxis = false,
+  showTimeAxis = true,
   initialWindowDays,
 }: BollingerBandsChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
