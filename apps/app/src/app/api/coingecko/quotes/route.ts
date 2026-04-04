@@ -14,6 +14,33 @@ function parseCsv(value: string | null): string[] {
     .filter((v) => v.length > 0);
 }
 
+function parseSparkline(args: { raw: string | null; defaultValue: boolean }): boolean {
+  if (!args.raw) return args.defaultValue;
+  const v = args.raw.trim().toLowerCase();
+  if (v === "0" || v === "false" || v === "no") return false;
+  if (v === "1" || v === "true" || v === "yes") return true;
+  return args.defaultValue;
+}
+
+function parseLimit(args: {
+  raw: string | null;
+  requestedIdsCount: number;
+}): number {
+  // For explicit ID lookups, default to "all requested" (up to 500) so bulk quote
+  // callers don't accidentally trigger partial maps + expensive fallbacks.
+  if (!args.raw) {
+    if (args.requestedIdsCount > 0) return Math.min(500, Math.max(1, args.requestedIdsCount));
+    return 100;
+  }
+
+  const parsed = Number(args.raw);
+  if (!Number.isFinite(parsed)) return args.requestedIdsCount > 0 ? Math.min(500, Math.max(1, args.requestedIdsCount)) : 100;
+
+  // Top-coins mode uses a single `coins/markets` page (max 250). ID mode supports chunking (max 500).
+  const max = args.requestedIdsCount > 0 ? 500 : 250;
+  return Math.min(max, Math.max(1, Math.floor(parsed)));
+}
+
 interface CoinGeckoMarketsRow {
   id: string;
   symbol: string;
@@ -63,14 +90,15 @@ async function fetchCoinGeckoMarkets(args: {
   apiKey: string;
   ids?: ReadonlyArray<string>;
   perPage: number;
+  sparkline: boolean;
 }): Promise<CoinGeckoMarketsRow[]> {
   const url = new URL("https://pro-api.coingecko.com/api/v3/coins/markets");
   url.searchParams.set("vs_currency", "usd");
   url.searchParams.set("order", "market_cap_desc");
   url.searchParams.set("per_page", String(Math.min(250, Math.max(1, args.perPage))));
   url.searchParams.set("page", "1");
-  // Needed to render Watchlist inline charts without per-coin market-chart fan-out.
-  url.searchParams.set("sparkline", "true");
+  // Sparkline is expensive for large batches; allow callers to disable.
+  url.searchParams.set("sparkline", args.sparkline ? "true" : "false");
   url.searchParams.set("price_change_percentage", "1h,24h,7d,30d");
 
   if (args.ids && args.ids.length > 0) {
@@ -159,7 +187,7 @@ export async function GET(request: NextRequest) {
     const symbols = parseCsv(searchParams.get("symbols"));
     const names = parseCsv(searchParams.get("names"));
     const category = searchParams.get("category");
-    const limit = Math.min(250, Math.max(1, Number(searchParams.get("limit") ?? "100")));
+    const limit = parseLimit({ raw: searchParams.get("limit"), requestedIdsCount: ids.length });
 
     const serverToken = getServerToken();
 
@@ -196,17 +224,33 @@ export async function GET(request: NextRequest) {
 
     resolvedIds = Array.from(new Set(resolvedIds)).slice(0, limit);
 
+    const sparkline = parseSparkline({
+      raw: searchParams.get("sparkline"),
+      // Default: keep sparkline for small sets, disable for large bulk requests to avoid timeouts.
+      defaultValue: resolvedIds.length <= 150,
+    });
+
     const data: Record<string, unknown> = {};
 
     const apiKeyResult = await getUserApiKey(userId, "coingecko", "X_CG_PRO_API_KEY");
     const apiKey = apiKeyResult.key;
 
     if (apiKey) {
-      const rows = await fetchCoinGeckoMarkets({
-        apiKey,
-        ids: resolvedIds.length > 0 ? resolvedIds : undefined,
-        perPage: resolvedIds.length > 0 ? resolvedIds.length : limit,
-      });
+      const rows =
+        resolvedIds.length > 0
+          ? (
+              await Promise.all(
+                chunk(resolvedIds, 250).map(async (idChunk) => {
+                  return await fetchCoinGeckoMarkets({
+                    apiKey,
+                    ids: idChunk,
+                    perPage: idChunk.length,
+                    sparkline,
+                  });
+                }),
+              )
+            ).flat()
+          : await fetchCoinGeckoMarkets({ apiKey, perPage: limit, sparkline });
 
       for (const row of rows) {
         const sparkline7d =
@@ -239,8 +283,14 @@ export async function GET(request: NextRequest) {
         if (missingIds.length > 0) {
           // Fallback: some valid CoinGecko ids occasionally don't show up in `coins/markets`.
           // Try the per-coin endpoint to avoid blank watchlist rows.
-          const fallbackCoins = await Promise.all(
-            missingIds.map(async (id) => {
+          const MAX_FALLBACK_COINS = 25;
+          if (missingIds.length > MAX_FALLBACK_COINS) {
+            warning = warning
+              ? `${warning} ${missingIds.length} coins missing from markets; skipping per-coin fallback.`
+              : `${missingIds.length} coins missing from markets; skipping per-coin fallback.`;
+          } else {
+            const fallbackCoins = await Promise.all(
+              missingIds.map(async (id) => {
               const coin = await fetchCoinGeckoCoin({ apiKey, id });
               if (!coin) return null;
               const md = coin.market_data;
@@ -268,8 +318,12 @@ export async function GET(request: NextRequest) {
               };
 
               return id;
-            }),
-          );
+              }),
+            );
+
+            // If we successfully filled some via fallback, keep the warmup set minimal.
+            void fallbackCoins;
+          }
 
           const stillMissing = missingIds.filter((id) => data[id] === undefined);
 
@@ -278,8 +332,6 @@ export async function GET(request: NextRequest) {
             coingeckoIds: stillMissing,
           });
 
-          // If we successfully filled some via fallback, keep the warmup set minimal.
-          void fallbackCoins;
         }
 
         // Persist what we *did* fetch into Convex so portfolio/watchlist rendering works even

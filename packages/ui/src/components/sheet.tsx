@@ -38,7 +38,7 @@ const sheetVariants = cva(
           "inset-x-0 bottom-0 data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
         left: "inset-y-0 left-0 h-full w-[420px] min-w-[400px] data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
         right:
-          "inset-y-0 right-0 h-full w-[420px] min-w-[400px] data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-[520px]",
+          "inset-y-0 right-0 h-full w-[520px] min-w-[400px] data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-[520px]",
       },
     },
     defaultVariants: {
@@ -72,7 +72,7 @@ const SheetContent = React.forwardRef<
       >
         <div
           className={cn(
-            "border w-full h-full bg-[#FAFAF9] dark:bg-[#121212] p-6 relative overflow-hidden",
+            "border w-full h-full p-6 !bg-zinc-900/90 relative overflow-hidden",
             className,
           )}
         >

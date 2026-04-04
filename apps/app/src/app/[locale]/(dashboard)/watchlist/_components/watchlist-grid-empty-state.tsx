@@ -1,7 +1,6 @@
 'use client'
 
-import { type ComponentType, useMemo } from 'react'
-import { useEffect, useState } from 'react'
+import { type ComponentType, useEffect, useMemo, useState } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import { LayoutGrid, Plus, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@v1/ui/card'
@@ -230,15 +229,126 @@ function IllustrationWatchlistCard({
   )
 }
 
-export function WatchlistGridEmptyState() {
+export function WatchlistEmptyIllustration() {
   const shouldReduceMotion: boolean = useReducedMotion() ?? false
-  const [isShiftDown, setIsShiftDown] = useState(false)
-  const [isNDown, setIsNDown] = useState(false)
 
   const gridKeys = useMemo(
     () => Array.from({ length: 9 }, (_, i) => `grid-${i}`),
     [],
   )
+
+  const containerVariants = {
+    initial: { opacity: 0 },
+    animate: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+        delayChildren: 0.2,
+      },
+    },
+  }
+
+  const itemVariants = {
+    initial: { scale: 0.8, opacity: 0, y: 10 },
+    animate: {
+      scale: 1,
+      opacity: 1,
+      y: 0,
+      transition: {
+        type: 'spring',
+        stiffness: 100,
+        damping: 15,
+      },
+    },
+  }
+
+  const floatingAnimation = (delay = 0) => ({
+    y: [0, -12, 0],
+    transition: {
+      duration: 1.5,
+      repeat: Number.POSITIVE_INFINITY,
+      ease: 'easeInOut',
+      delay,
+    },
+  })
+
+  return (
+    <motion.div
+      variants={containerVariants}
+      initial="initial"
+      animate="animate"
+      className="relative w-80 h-80 mb-10 flex items-center justify-center"
+    >
+      {/* Background Grid Pattern - 3x3 */}
+      <div className="absolute inset-0 grid grid-cols-3 gap-4 opacity-[0.02] scale-110 pointer-events-none">
+        {gridKeys.map((key) => (
+          <div key={key} className="aspect-square bg-foreground rounded-3xl border border-foreground" />
+        ))}
+      </div>
+
+      <div className="absolute top-[70px] left-6 w-[200px] h-32 -rotate-6 z-10">
+        <IllustrationWatchlistCard
+          absoluteClassName="size-full"
+          variant="primary"
+          icon={IconTarget}
+          cardBgClassName="bg-zinc-800 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-all duration-300"
+          cardBorderClassName="border-primary/10"
+          titleWidthClassName="w-16"
+          subtitleWidthClassName="w-8"
+          tokenCount={3}
+          footerPillWidthClassName="w-10"
+          sparklineSeed={11}
+          itemVariants={itemVariants}
+          shouldReduceMotion={shouldReduceMotion}
+          floatingAnimation={floatingAnimation}
+          floatDelay={0}
+        />
+      </div>
+
+      <div className="absolute z-20 w-[200px] h-32">
+        <IllustrationWatchlistCard
+          absoluteClassName="size-full"
+          variant="primary"
+          icon={IconSparkles}
+          cardBgClassName="bg-zinc-800 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-2 transition-all duration-300"
+          cardBorderClassName="border-primary/10 "
+          titleWidthClassName="w-24"
+          subtitleWidthClassName="w-12"
+          tokenCount={5}
+          footerPillWidthClassName="w-14"
+          sparklineSeed={37}
+          itemVariants={itemVariants}
+          shouldReduceMotion={shouldReduceMotion}
+          floatingAnimation={floatingAnimation}
+          floatDelay={1.2}
+        />
+      </div>
+
+      <div className="absolute bottom-[70px] right-6 w-[200px] h-32 rotate-3 z-10">
+        <IllustrationWatchlistCard
+          absoluteClassName="size-full"
+          variant="primary"
+          icon={IconRainbow}
+          cardBgClassName="bg-zinc-800 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-all duration-300"
+          cardBorderClassName="border-primary/10"
+          titleWidthClassName="w-20"
+          subtitleWidthClassName="w-10"
+          tokenCount={4}
+          footerPillWidthClassName="w-12"
+          sparklineSeed={23}
+          itemVariants={itemVariants}
+          shouldReduceMotion={shouldReduceMotion}
+          floatingAnimation={floatingAnimation}
+          floatDelay={0.6}
+        />
+      </div>
+    </motion.div>
+  )
+}
+
+export function WatchlistGridEmptyState() {
+  const [isShiftDown, setIsShiftDown] = useState(false)
+  const [isNDown, setIsNDown] = useState(false)
 
   useEffect(() => {
     function isTypingTarget(target: EventTarget | null) {
@@ -283,116 +393,9 @@ export function WatchlistGridEmptyState() {
     )
   }
 
-  const containerVariants = {
-    initial: { opacity: 0 },
-    animate: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-        delayChildren: 0.2,
-      },
-    },
-  }
-
-  const itemVariants = {
-    initial: { scale: 0.8, opacity: 0, y: 10 },
-    animate: {
-      scale: 1,
-      opacity: 1,
-      y: 0,
-      transition: {
-        type: 'spring',
-        stiffness: 100,
-        damping: 15,
-      },
-    },
-  }
-
-  const floatingAnimation = (delay = 0) => ({
-    y: [0, -12, 0],
-    transition: {
-      duration: 1.5,
-      repeat: Number.POSITIVE_INFINITY,
-      ease: 'easeInOut',
-      delay,
-    },
-  })
-
   return (
     <div className="group flex flex-col items-center justify-center py-20 px-4 text-center">
-      <motion.div
-        variants={containerVariants}
-        initial="initial"
-        animate="animate"
-        className="relative w-80 h-80 mb-10 flex items-center justify-center"
-      >
-        {/* Background Grid Pattern - 3x3 */}
-        <div className="absolute inset-0 grid grid-cols-3 gap-4 opacity-[0.02] scale-110 pointer-events-none">
-          {gridKeys.map((key) => (
-            <div
-              key={key}
-              className="aspect-square bg-foreground rounded-3xl border border-foreground"
-            />
-          ))}
-        </div>
-
-        <div className="absolute top-[70px] left-6 w-[200px] h-32 -rotate-6 z-10">
-          <IllustrationWatchlistCard
-            absoluteClassName="size-full"
-            variant="primary"
-            icon={IconTarget}
-            cardBgClassName="bg-zinc-800 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-all duration-300"
-            cardBorderClassName="border-primary/10"
-            titleWidthClassName="w-16"
-            subtitleWidthClassName="w-8"
-            tokenCount={3}
-            footerPillWidthClassName="w-10"
-            sparklineSeed={11}
-            itemVariants={itemVariants}
-            shouldReduceMotion={shouldReduceMotion}
-            floatingAnimation={floatingAnimation}
-            floatDelay={0}
-          />
-        </div>
-
-        <div className="absolute z-20 w-[200px] h-32">
-          <IllustrationWatchlistCard
-            absoluteClassName="size-full"
-            variant="primary"
-            icon={IconSparkles}
-            cardBgClassName="bg-zinc-800 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-2 transition-all duration-300"
-            cardBorderClassName="border-primary/10 "
-            titleWidthClassName="w-24"
-            subtitleWidthClassName="w-12"
-            tokenCount={5}
-            footerPillWidthClassName="w-14"
-            sparklineSeed={37}
-            itemVariants={itemVariants}
-            shouldReduceMotion={shouldReduceMotion}
-            floatingAnimation={floatingAnimation}
-            floatDelay={1.2}
-          />
-        </div>
-
-        <div className="absolute bottom-[70px] right-6 w-[200px] h-32 rotate-3 z-10">
-          <IllustrationWatchlistCard
-            absoluteClassName="size-full"
-            variant="primary"
-            icon={IconRainbow}
-            cardBgClassName="bg-zinc-800 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-all duration-300"
-            cardBorderClassName="border-primary/10"
-            titleWidthClassName="w-20"
-            subtitleWidthClassName="w-10"
-            tokenCount={4}
-            footerPillWidthClassName="w-12"
-            sparklineSeed={23}
-            itemVariants={itemVariants}
-            shouldReduceMotion={shouldReduceMotion}
-            floatingAnimation={floatingAnimation}
-            floatDelay={0.6}
-          />
-        </div>
-      </motion.div>
+      <WatchlistEmptyIllustration />
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}

@@ -1,19 +1,9 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useDebouncedValue } from "@tanstack/react-pacer";
 
+/** Debounces a value after `delay` ms of stability via TanStack Pacer (same API as before). */
 export function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
+  const [debouncedValue] = useDebouncedValue(value, { wait: delay });
   return debouncedValue;
 }

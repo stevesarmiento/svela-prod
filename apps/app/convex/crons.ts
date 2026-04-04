@@ -3,12 +3,12 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-// CoinGecko markets (top 500) for discovery/search.
+// CoinGecko markets (top 2500) for discovery/search.
 crons.interval(
   "coingecko_refresh_top_markets",
   { hours: 4 },
   internal.coingeckoJobs.refreshTopMarkets,
-  { topN: 500 },
+  { topN: 2500 },
 );
 
 // Refresh market quotes for tracked coins (watchlists + portfolios).

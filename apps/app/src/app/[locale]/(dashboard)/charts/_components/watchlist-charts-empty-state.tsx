@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from 'motion/react'
 import { Card, CardContent } from '@v1/ui/card'
 import { cn } from '@v1/ui/cn'
 import { Kbd } from '@v1/ui/kbd'
-import { IconRainbow, IconSparkles, IconTarget } from 'symbols-react'
+import { IconMagnifyingglass } from 'symbols-react'
 import { Liveline, type LivelinePoint } from 'liveline'
 import { TokenLogo } from '@/components/token-logo'
 import { COLOR_THEMES } from '@/components/color-picker'
@@ -250,6 +250,115 @@ function IllustrationWatchlistCard({
   )
 }
 
+function CoinSearchIllustrationRow({
+  src,
+  name,
+  symbol,
+  priceWidthClassName,
+  changeWidthClassName,
+}: {
+  src: string
+  name: string
+  symbol: string
+  priceWidthClassName: string
+  changeWidthClassName: string
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl px-3 py-2 transition-colors">
+      <TokenLogo
+        src={src}
+        alt={name}
+        sizePx={24}
+        fallbackText={symbol.slice(0, 1)}
+        className="ring-0 bg-transparent"
+        quality={80}
+      />
+      <div className="min-w-0 flex-1 text-left">
+        <div className="truncate text-sm font-semibold text-white/90">{name}</div>
+        <div className="-mt-0.5 text-[11px] text-white/50">{symbol}</div>
+      </div>
+      <div className="flex items-center gap-3">
+        <div className={cn('h-3 rounded-full bg-white/10', priceWidthClassName)} />
+        <div className={cn('h-3 rounded-full bg-white/10', changeWidthClassName)} />
+      </div>
+    </div>
+  )
+}
+
+/** Fades the whole illustration (card edge + shadow) to transparent so no hard bottom is visible. */
+// const COIN_SEARCH_ILLUSTRATION_MASK_STYLE = {
+//   WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 52%, rgba(0,0,0,0.45) 72%, transparent 100%)',
+//   maskImage: 'linear-gradient(to bottom, black 0%, black 52%, rgba(0,0,0,0.45) 72%, transparent 100%)',
+//   WebkitMaskRepeat: 'no-repeat' as const,
+//   maskRepeat: 'no-repeat' as const,
+//   WebkitMaskSize: '100% 100%',
+//   maskSize: '100% 100%',
+// }
+
+const COIN_SEARCH_ILLUSTRATION_MASK_STYLE = {
+  WebkitMaskImage:
+    'radial-gradient(ellipse 125% 100% at 50% 12%, black 28%, rgba(0,0,0,0.55) 52%, transparent 78%)',
+  maskImage:
+    'radial-gradient(ellipse 125% 100% at 50% 12%, black 28%, rgba(0,0,0,0.55) 52%, transparent 78%)',
+  WebkitMaskRepeat: 'no-repeat' as const,
+  maskRepeat: 'no-repeat' as const,
+  WebkitMaskSize: '100% 100%',
+  maskSize: '100% 100%',
+}
+
+function CoinSearchIllustration({ coinLogos }: { coinLogos: Array<{ src: string; name: string; symbol: string }> }) {
+  return (
+    <div aria-hidden className="relative w-[360px]" style={COIN_SEARCH_ILLUSTRATION_MASK_STYLE}>
+      <Card className="rounded-[29px] overflow-hidden dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+        <CardContent className="p-0">
+          <div className="p-2 sticky top-0 border-b border-zinc-800/50">
+            <div className="relative overflow-hidden p-1">
+              <div className="flex items-center gap-2 px-2 py-1.5">
+                <IconMagnifyingglass className="h-4 w-4 fill-white/50" />
+                <div className="h-4 w-[210px] rounded-full bg-white/5" />
+                <Kbd className="ml-auto bg-white/10 text-white border-white/10 text-[10px] w-8">ESC</Kbd>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2 p-3 px-2">
+            <div className="space-y-1">
+              <CoinSearchIllustrationRow
+                src={coinLogos[0]?.src ?? '/logos/popular/bitcoin.svg'}
+                name={coinLogos[0]?.name ?? 'Bitcoin'}
+                symbol={coinLogos[0]?.symbol ?? 'BTC'}
+                priceWidthClassName="w-12"
+                changeWidthClassName="w-10"
+              />
+              <CoinSearchIllustrationRow
+                src={coinLogos[1]?.src ?? '/logos/popular/ethereum.svg'}
+                name={coinLogos[1]?.name ?? 'Ethereum'}
+                symbol={coinLogos[1]?.symbol ?? 'ETH'}
+                priceWidthClassName="w-10"
+                changeWidthClassName="w-12"
+              />
+              <CoinSearchIllustrationRow
+                src={coinLogos[2]?.src ?? '/logos/popular/solana.svg'}
+                name={coinLogos[2]?.name ?? 'Solana'}
+                symbol={coinLogos[2]?.symbol ?? 'SOL'}
+                priceWidthClassName="w-14"
+                changeWidthClassName="w-9"
+              />
+              <CoinSearchIllustrationRow
+                src={coinLogos[3]?.src ?? '/logos/popular/tether.svg'}
+                name={coinLogos[3]?.name ?? 'Tether'}
+                symbol={coinLogos[3]?.symbol ?? 'USDT'}
+                priceWidthClassName="w-11"
+                changeWidthClassName="w-8"
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
 interface WatchlistChartsEmptyStateProps {
   groupName?: string | null
   /** Convex watchlist group `color` key (e.g. `blue`, `orange`) — same as ColorPicker / watchlist cards. */
@@ -260,8 +369,6 @@ export function WatchlistChartsEmptyState({ groupName, groupColor }: WatchlistCh
   const shouldReduceMotion: boolean = useReducedMotion() ?? false
   const [isShiftDown, setIsShiftDown] = useState(false)
   const [isADown, setIsADown] = useState(false)
-
-  const gridKeys = useMemo(() => Array.from({ length: 9 }, (_, i) => `grid-${i}`), [])
 
   useEffect(() => {
     function isTypingTarget(target: EventTarget | null) {
@@ -306,122 +413,23 @@ export function WatchlistChartsEmptyState({ groupName, groupColor }: WatchlistCh
     )
   }
 
-  const containerVariants = {
-    initial: { opacity: 0 },
-    animate: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-        delayChildren: 0.2,
-      },
-    },
-  }
+  const title = 'Add some tokens to watch'
+  const subtitle = 'Once you add a few, you can compare them here.'
 
-  const itemVariants = {
-    initial: { scale: 0.8, opacity: 0, y: 10 },
-    animate: {
-      scale: 1,
-      opacity: 1,
-      y: 0,
-      transition: {
-        type: 'spring',
-        stiffness: 100,
-        damping: 15,
-      },
-    },
-  }
-
-  const floatingAnimation = (delay = 0) => ({
-    y: [0, -12, 0],
-    transition: {
-      duration: 1.5,
-      repeat: Number.POSITIVE_INFINITY,
-      ease: 'easeInOut',
-      delay,
-    },
-  })
-
-  const title = groupName ? `Add coins to ${groupName}` : 'Add coins to your watchlist'
-  const subtitle = 'Once you add a few tokens, you can compare them here.'
-
-  const mainCardTokenLogos = useMemo(
+  const coinLogos = useMemo(
     () => [
-      { src: '/logos/popular/bitcoin.svg', alt: 'Bitcoin', fallbackText: 'B' },
-      { src: '/logos/popular/ethereum.svg', alt: 'Ethereum', fallbackText: 'E' },
-      { src: '/logos/popular/solana.svg', alt: 'Solana', fallbackText: 'S' },
-      { src: '/logos/popular/tether.svg', alt: 'Tether', fallbackText: 'T' },
-      { src: '/logos/popular/bnb.svg', alt: 'BNB', fallbackText: 'B' },
+      { src: '/logos/popular/bitcoin.svg', name: 'Bitcoin', symbol: 'BTC' },
+      { src: '/logos/popular/ethereum.svg', name: 'Ethereum', symbol: 'ETH' },
+      { src: '/logos/popular/solana.svg', name: 'Solana', symbol: 'SOL' },
+      { src: '/logos/popular/tether.svg', name: 'Tether', symbol: 'USDT' },
     ],
     [],
   )
 
-  const middleCardTitle = groupName?.trim() ? groupName.trim() : 'Your watchlist'
-
-  const middleCardSurfaceClassName = useMemo(
-    () => getWatchlistGroupCardSurfaceClassName(groupColor),
-    [groupColor],
-  )
-
   return (
     <div className="group flex flex-col items-center justify-center py-20 px-4 text-center">
-      <motion.div
-        variants={containerVariants}
-        initial="initial"
-        animate="animate"
-        className="relative w-80 h-80 mb-10 flex items-center justify-center"
-      >
-        <div className="absolute inset-0 grid grid-cols-3 gap-4 opacity-[0.02] scale-110 pointer-events-none">
-          {gridKeys.map((key) => (
-            <div key={key} className="aspect-square bg-foreground rounded-3xl border border-foreground" />
-          ))}
-        </div>
-
-        <div className="absolute top-[70px] left-6 w-[200px] h-32 -rotate-6 z-10">
-          <IllustrationWatchlistCard
-            absoluteClassName="size-full"
-            icon={IconTarget}
-            cardTitle="Momentum"
-            cardSubtitle="3 tokens"
-            tokenCount={3}
-            sparklineSeed={11}
-            itemVariants={itemVariants}
-            shouldReduceMotion={shouldReduceMotion}
-            floatingAnimation={floatingAnimation}
-            floatDelay={0}
-          />
-        </div>
-
-        <div className="absolute z-20 w-[200px] h-32">
-          <IllustrationWatchlistCard
-            absoluteClassName="size-full"
-            iconEmoji="🚀"
-            icon={IconSparkles}
-            cardSurfaceClassName={middleCardSurfaceClassName}
-            cardTitle={middleCardTitle}
-            tokenCount={5}
-            tokenLogos={mainCardTokenLogos}
-            sparklineSeed={37}
-            itemVariants={itemVariants}
-            shouldReduceMotion={shouldReduceMotion}
-            floatingAnimation={floatingAnimation}
-            floatDelay={1.2}
-          />
-        </div>
-
-        <div className="absolute bottom-[70px] right-6 w-[200px] h-32 rotate-3 z-10">
-          <IllustrationWatchlistCard
-            absoluteClassName="size-full"
-            icon={IconRainbow}
-            cardTitle="Blue chips"
-            cardSubtitle="4 tokens"
-            tokenCount={4}
-            sparklineSeed={23}
-            itemVariants={itemVariants}
-            shouldReduceMotion={shouldReduceMotion}
-            floatingAnimation={floatingAnimation}
-            floatDelay={0.6}
-          />
-        </div>
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="mb-10">
+        <CoinSearchIllustration coinLogos={coinLogos} />
       </motion.div>
 
       <motion.div
