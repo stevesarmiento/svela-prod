@@ -210,14 +210,16 @@ export function TopNav() {
           {isChartDetailPage ? (
             // Token Header with cached data
             <div className="flex items-center gap-4">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={handleBack}
-                className="flex text-gray-600 hover:text-gray-900 dark:text-white/70 dark:hover:text-white hover:bg-primary/5 rounded-xl w-8 h-8 items-center justify-center transition-all duration-150"
+                className="cursor-pointer rounded-xl size-8"
                 aria-label="Go back"
               >
                 <IconChevronBackward className="h-3 w-3 fill-current" />
-              </button>
+              </Button>
               <div className="flex items-center gap-2">
                 {tokenData && !isLoading && (
                   <Image

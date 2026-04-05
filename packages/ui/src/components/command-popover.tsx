@@ -57,6 +57,8 @@ const CommandPopover = ({
                      text-popover-foreground shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.4)]"
           side="bottom"
           sideOffset={12}
+          // Keep focus on the cmdk input (trigger) so typing + arrow selection work; don't jump into the list.
+          onOpenAutoFocus={(event) => event.preventDefault()}
         >
           {/* Background Pattern - FIRST (behind everything) */}
           <div

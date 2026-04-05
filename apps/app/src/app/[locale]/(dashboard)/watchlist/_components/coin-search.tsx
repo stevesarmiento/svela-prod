@@ -238,11 +238,15 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
               </div>
             ) : (
               <div className="overflow-hidden">
-                <Table>
+                {/* border-separate + spacing so <td> rounded-xl paints correctly (<tr> ignores border-radius) */}
+                <Table className="w-full border-separate border-spacing-x-0 border-spacing-y-1.5">
                   <TableBody>
                     {coinsToDisplay.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-center text-white/50 py-8">
+                      <TableRow className="border-0 hover:bg-transparent">
+                        <TableCell
+                          colSpan={1}
+                          className="rounded-xl py-8 text-center text-white/50"
+                        >
                           {debouncedSearchQuery.trim() ? 'No coins found' : 'Loading coins...'}
                         </TableCell>
                       </TableRow>
@@ -250,13 +254,13 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                       coinsToDisplay.map((coin) => (
                         // Use curated logos + cleaned names for specific token types.
                         // (e.g. xStocks / wrapped tokens / LST naming conventions)
-                        <TableRow 
+                        <TableRow
                           key={coin.id}
-                          className="cursor-pointer border-none hover:bg-zinc-800/50 border-zinc-700/30 font-berkeley-mono transition-colors group"
+                          className="cursor-pointer border-0 font-berkeley-mono transition-colors group hover:bg-transparent active:scale-[0.98] transition-all duration-200"
                           onClick={() => handleAddCoin(coin)}
                         >
-                          <TableCell className="text-white rounded-l-xl">
-                            <div className="flex items-center gap-3">
+                          <TableCell className="flex flex-row items-center justify-between overflow-hidden rounded-xl px-3 py-2.5 text-white transition-colors group-hover:bg-zinc-800/50">
+                            <div className="flex flex-row items-center gap-3">
                               <TokenLogo
                                 src={(() => {
                                   const logoUrl = getTokenLogoURL(coin.symbol, coin.image)
@@ -268,13 +272,12 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                                 className="ring-0 bg-transparent"
                                 quality={70}
                               />
-                              <div>
+                              <div className="flex flex-col items-start gap-0">
                                 <div className="font-semibold font-sans text-sm text-white group-hover:text-white/90 mt-1">{cleanTokenName(coin.name)}</div>
                                 <div className="text-[11px] text-white/50 -mt-1">{coin.symbol.toUpperCase()}</div>
                               </div>
                             </div>
-                          </TableCell>
-                          <TableCell className="flex flex-col items-end gap-2 font-berkeley-mono rounded-r-xl text-[11px]">
+                            <div className="flex flex-col items-end gap-0 font-berkeley-mono text-[11px]">
                             {coin.quote.USD.price > 0 ? (
                               formatUsdPrice(coin.quote.USD.price)
                             ) : (
@@ -287,6 +290,7 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                             ) : (
                               <Skeleton className="h-4 w-12 bg-zinc-700/50" />
                             )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))

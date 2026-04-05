@@ -165,24 +165,27 @@ export function useKeyboardShortcuts(
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignore if typing in an input or textarea
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-
       const modifiers: string[] = [];
       if (event.metaKey) modifiers.push('meta');
       if (event.ctrlKey) modifiers.push('ctrl');
       if (event.altKey) modifiers.push('alt');
 
-      // Only handle specific shortcuts to avoid unnecessary processing
       const key = event.key.toLowerCase();
       const currentMode = modeRef.current;
-      const isRelevantShortcut = 
-        ((modifiers.includes('meta') || modifiers.includes('ctrl')) && key === 'k') ||
-        (key === 'escape' && currentMode === 'selection');
+      const isPaletteShortcut =
+        (modifiers.includes('meta') || modifiers.includes('ctrl')) && key === 'k';
+      const isSelectionEscape =
+        key === 'escape' && currentMode === 'selection';
 
-      if (isRelevantShortcut) {
+      // Palette should work even when focus is in a text field; ignore other keys there.
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement
+      ) {
+        if (!isPaletteShortcut && !isSelectionEscape) return;
+      }
+
+      if (isPaletteShortcut || isSelectionEscape) {
         event.preventDefault();
         handleShortcutRef.current(event.key, modifiers, currentMode);
       }

@@ -434,7 +434,11 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
         </DialogHeader>
 
         <div className="relative">
+          {showStreamLoader ? (
+            <div className="absolute top-[-2px] h-[100px] inset-0 z-[1002] pointer-events-none bg-gradient-to-t from-white via-white/50 dark:via-zinc-950/50 to-transparent dark:from-zinc-950 rotate-180" />
+          ) : null}
           <ScrollArea className="h-[min(42vh,20rem)] pr-4 mt-8">
+
             <div className="prose prose-invert max-w-none text-pretty min-h-[min(42vh,20rem)]">
               {showError ? (
                 <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
@@ -443,11 +447,11 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
               ) : null}
 
               {showStreamLoader ? (
-                <div className="not-prose flex min-h-[min(42vh,20rem)] w-full items-start justify-center py-6">
+                <div className="not-prose flex min-h-[min(42vh,20rem)] w-full items-start justify-center py-0">
                   <MultiStepLoader
                     loadingStates={explainLoadingSteps}
                     loading
-                    duration={2000}
+                    duration={1500}
                     loop
                     variant="inline"
                   />

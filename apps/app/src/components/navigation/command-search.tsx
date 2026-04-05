@@ -176,12 +176,13 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
     onCommandSelect(value, setIsOpen);
   }, [onCommandSelect, setIsOpen, handleTokenNavigation, handleContextualAction, coinsToDisplay, clearSearch, handleAddCoin]);
 
-  // Reset search when closing
+  // Reset search when closing; blur so global shortcuts are not stuck on a hidden input
   useEffect(() => {
     if (!isOpen) {
       clearSearch();
+      inputRef.current?.blur();
     }
-  }, [isOpen, clearSearch]);
+  }, [isOpen, clearSearch, inputRef]);
 
   // Get page-specific placeholder text
   const getPlaceholder = () => {

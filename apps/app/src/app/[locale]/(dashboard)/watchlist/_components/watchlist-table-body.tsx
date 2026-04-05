@@ -3,7 +3,7 @@
 import type { Table } from '@tanstack/react-table'
 import { useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@v1/ui/cn"
-import { Spinner } from "@v1/ui/spinner"
+import { TextShimmerWave } from "@v1/ui/text-shimmer"
 import { WatchlistTableHeader } from './watchlist-table-header'
 import { WatchlistTableRow } from './watchlist-table-row'
 import type { CoinMarketData } from '@/types/coins'
@@ -108,11 +108,14 @@ export function WatchlistTableBody({
         ) : null}
 
         {status ? (
-          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-white/75 dark:bg-black/35 backdrop-blur-sm">
-            <div className="flex items-center gap-3 rounded-xl border border-border bg-background/90 px-4 py-2 text-sm text-muted-foreground shadow-sm">
-              <Spinner size={16} />
-              <span className="text-pretty">{status.text}</span>
-            </div>
+          <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-white/75 dark:bg-black/50 border-transparent border backdrop-blur-sm">
+            <TextShimmerWave
+              as="span"
+              className="max-w-md px-4 text-center text-sm text-pretty"
+              duration={1.2}
+            >
+              {status.text}
+            </TextShimmerWave>
           </div>
         ) : null}
       </div>

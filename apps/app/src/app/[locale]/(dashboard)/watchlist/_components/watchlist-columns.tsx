@@ -393,7 +393,7 @@ export function createWatchlistColumns({
                 <Badge
                   variant={isPositive ? "success" : isNegative ? "destructive" : "outline"}
                   className={cn(
-                    "h-5 px-1 font-berkeley-mono text-[11px] tabular-nums gap-1",
+                    "h-5 px-1.5 font-berkeley-mono text-[11px] tabular-nums gap-1",
                     isNeutral && "border-zinc-200/60 text-muted-foreground dark:border-white/10",
                   )}
                 >
