@@ -1,9 +1,11 @@
-import { 
-  // IconCompassDrawing, 
-  IconBookmarkFill, 
-  IconWalletBifoldFill, 
-  IconSafariFill, 
-  IconCaptionsBubbleFill } from "symbols-react";
+import type { ComponentType } from "react";
+import {
+  // IconCompassDrawing,
+  IconBookmarkFill,
+  IconWalletBifoldFill,
+  IconSafariFill,
+  IconCaptionsBubbleFill,
+} from "symbols-react";
 import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
 import { getShortcutForRoute } from "@/lib/keyboard-shortcuts";
 
@@ -14,103 +16,79 @@ export const BASE_ROUTES = {
   screener: "/screener",
 } as const;
   
-export const MENU_ITEMS = isAlphaFeaturesEnabled()
-  ? ([
-      {
-        title: "Watchlist",
-        href: "/watchlist",
-        icon: IconBookmarkFill,
-      },
-      {
-        title: "Screener",
-        href: "/screener",
-        icon: IconSafariFill,
-      },
-    ] as const)
-  : ([
-      {
-        title: "Watchlist",
-        href: "/watchlist",
-        icon: IconBookmarkFill,
-      },
-      {
-        title: "Screener",
-        href: "/screener",
-        icon: IconSafariFill,
-      },
-    ] as const);
+export const MENU_ITEMS = [
+  {
+    title: "Watchlist",
+    href: "/watchlist",
+    icon: IconBookmarkFill,
+  },
+  {
+    title: "Screener",
+    href: "/screener",
+    icon: IconSafariFill,
+  },
+] as const;
   
+const watchlistCommandItem = {
+  title: "Watchlist",
+  subtitle: "Your cryptocurrency watchlist",
+  href: "/watchlist",
+  icon: IconBookmarkFill,
+  shortcut: getShortcutForRoute("/watchlist"),
+} as const;
+
+const screenerCommandItem = {
+  title: "Screener",
+  subtitle: "Filter and browse all watchlist coins",
+  href: "/screener",
+  icon: IconSafariFill,
+  shortcut: getShortcutForRoute("/screener"),
+} as const;
+
+const overviewCommandItem = {
+  title: "Overview",
+  subtitle: "View dashboard and watchlist",
+  href: "/watchlist",
+  icon: IconCaptionsBubbleFill,
+  shortcut: getShortcutForRoute("/watchlist"),
+} as const;
+
+const quickActionItems = [
+  {
+    title: "Bitcoin Price",
+    subtitle: "Get current BTC price",
+    action: "bitcoin-price",
+    icon: IconSafariFill,
+  },
+  {
+    title: "Ethereum Price",
+    subtitle: "Get current ETH price",
+    action: "ethereum-price",
+    icon: IconSafariFill,
+  },
+  {
+    title: "Market Overview",
+    subtitle: "Top 10 cryptocurrencies",
+    action: "market-overview",
+    icon: IconWalletBifoldFill,
+  },
+] as const;
+
 export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
   ? ([
       {
         group: "Navigation",
-        items: [
-          {
-            title: "Watchlist",
-            subtitle: "Your cryptocurrency watchlist",
-            href: "/watchlist",
-            icon: IconBookmarkFill,
-            shortcut: getShortcutForRoute("/watchlist"),
-          },
-          {
-            title: "Screener",
-            subtitle: "Filter and browse all watchlist coins",
-            href: "/screener",
-            icon: IconSafariFill,
-            shortcut: getShortcutForRoute("/screener"),
-          },
-        ],
+        items: [watchlistCommandItem, screenerCommandItem],
       },
     ] as const)
   : ([
       {
         group: "Navigation",
-        items: [
-          {
-            title: "Overview",
-            subtitle: "View dashboard and watchlist",
-            href: "/watchlist",
-            icon: IconCaptionsBubbleFill,
-            shortcut: getShortcutForRoute("/watchlist"),
-          },
-          {
-            title: "Watchlist",
-            subtitle: "Your cryptocurrency watchlist",
-            href: "/watchlist",
-            icon: IconBookmarkFill,
-            shortcut: getShortcutForRoute("/watchlist"),
-          },
-          {
-            title: "Screener",
-            subtitle: "Filter and browse all watchlist coins",
-            href: "/screener",
-            icon: IconSafariFill,
-            shortcut: getShortcutForRoute("/screener"),
-          },
-        ],
+        items: [overviewCommandItem, watchlistCommandItem, screenerCommandItem],
       },
       {
         group: "Quick Actions",
-        items: [
-          {
-            title: "Bitcoin Price",
-            subtitle: "Get current BTC price",
-            action: "bitcoin-price",
-            icon: IconSafariFill,
-          },
-          {
-            title: "Ethereum Price",
-            subtitle: "Get current ETH price",
-            action: "ethereum-price",
-            icon: IconSafariFill,
-          },
-          {
-            title: "Market Overview",
-            subtitle: "Top 10 cryptocurrencies",
-            action: "market-overview",
-            icon: IconWalletBifoldFill,
-          },
-        ],
+        items: quickActionItems,
       },
     ] as const);
   
@@ -118,7 +96,7 @@ export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
     title: string;
     subtitle: string;
     href: string;
-    icon: React.ComponentType<{ className?: string }>;
+    icon: ComponentType<{ className?: string }>;
     shortcut?: string;
   };
   
@@ -126,7 +104,7 @@ export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
     title: string;
     subtitle: string;
     action: string;
-    icon: React.ComponentType<{ className?: string }>;
+    icon: ComponentType<{ className?: string }>;
   };
   
   export type CommandItem = NavigationItem | ActionItem;

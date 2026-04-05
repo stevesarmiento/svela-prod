@@ -6,7 +6,7 @@ import { usePathHelper } from './bottom-nav-hooks';
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
 import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
 
-type CommandContext = 'overview' | 'watchlist' | 'charts';
+import type { CommandContext } from './bottom-nav-context';
 
 interface MenuItem {
   href: string

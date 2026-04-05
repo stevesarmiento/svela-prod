@@ -2,16 +2,14 @@ import React from 'react';
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { NavigationItems } from './navigation-items';
 import { SelectionContent } from './selection-content';
-import type { SelectionState } from './bottom-nav-context';
-import { BackgroundPattern } from './background-pattern';
-
-type CommandContext = 'overview' | 'watchlist' | 'charts' | null;
+import type { CommandContext, SelectionState } from './bottom-nav-context';
+import { uiEnterExitTransition, uiLayoutTransition } from '@/lib/motion-tokens';
 
 interface NavigationDockProps {
   mode: 'navigation' | 'selection';
   selectionState: SelectionState | null;
   isCommandOpen: boolean;
-  onOpenCommandSearch?: (context: CommandContext) => void;
+  onOpenCommandSearch?: (context: CommandContext | null) => void;
 }
 
 const NavigationDockComponent = ({ 
@@ -22,6 +20,7 @@ const NavigationDockComponent = ({
 }: NavigationDockProps) => {
   const shouldReduceMotion = useReducedMotion()
 
+  // Visibility when the command palette is open is handled by the BottomNav wrapper (opacity + pointer-events).
   const dockClassName = React.useMemo(() => {
     return `relative rounded-[20px] overflow-hidden p-1 h-[56px] w-auto flex items-center justify-center
            shadow-[0_3px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
@@ -29,20 +28,15 @@ const NavigationDockComponent = ({
            ${mode === 'selection' 
              ? 'bg-rose-950 border border-red-200 dark:border-red-800/50' 
              : 'bg-white/95 border border-gray-200/50 dark:bg-zinc-800/80 backdrop-blur-md dark:border-transparent'
-           } ${isCommandOpen && mode === 'navigation' ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'}`;
-  }, [mode, isCommandOpen]);
+           }`;
+  }, [mode]);
 
   return (
     <AnimatePresence mode="popLayout">
       <motion.div 
         className={dockClassName}
         layout={!shouldReduceMotion}
-        transition={shouldReduceMotion ? { duration: 0 } : {
-          type: "spring",
-          stiffness: 280,
-          damping: 18,
-          mass: 0.3,
-        }}
+        transition={uiLayoutTransition(shouldReduceMotion)}
       >
         <div className="relative z-10 flex items-center gap-1 p-1 w-auto">
           {mode === 'navigation' && (
@@ -53,12 +47,7 @@ const NavigationDockComponent = ({
               animate={{ opacity: 1, scale: 1 }}
               exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
               className="w-auto"
-              transition={shouldReduceMotion ? { duration: 0 } : {
-                type: "spring",
-                stiffness: 280,
-                damping: 18,
-                mass: 0.3,
-              }}
+              transition={uiEnterExitTransition(shouldReduceMotion)}
             >
               <NavigationItems onOpenCommandSearch={onOpenCommandSearch || (() => {})} />
             </motion.div>
@@ -71,12 +60,7 @@ const NavigationDockComponent = ({
               initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
-              transition={shouldReduceMotion ? { duration: 0 } : {
-                type: "spring",
-                stiffness: 280,
-                damping: 18,
-                mass: 0.3,
-              }}
+              transition={uiEnterExitTransition(shouldReduceMotion)}
               className="w-[320px] flex items-center justify-center"
             >
               <SelectionContent selectionState={selectionState} />

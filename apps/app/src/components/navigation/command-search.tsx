@@ -231,7 +231,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                 </Tooltip>
               </Button>
               <div 
-                className={`overflow-hidden ${isOpen ? 'w-[420px] opacity-100' : 'w-0 opacity-0'}`}
+                className={`overflow-hidden ${isOpen ? 'w-[445px] opacity-100' : 'w-0 opacity-0'}`}
                 onMouseDown={(e) => e.stopPropagation()}
               >
                 <CommandInput 
