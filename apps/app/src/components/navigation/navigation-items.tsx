@@ -29,9 +29,10 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
     switch (item.href) {
       case "/screener":
         return navigation.screener;
-      case "/watchlist":
       case "/overview":
         return navigation.overview;
+      case "/watchlists":
+        return navigation.watchlist;
       default:
         return item.href;
     }
@@ -42,7 +43,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
       if (isActive) {
         // Re-clicking the Overview (watchlist) tab should open the same
         // "Add to comparison" flow used in charts.
-        if (item.href === "/watchlist" || item.title.toLowerCase() === "overview") {
+        if (item.href === "/watchlists" || item.title.toLowerCase() === "overview") {
           onOpenCommandSearch("charts");
           return;
         }
@@ -69,7 +70,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
           item.href === "/screener"
             ? "Screener"
             : isActive
-              ? item.href === "/watchlist"
+              ? item.href === "/watchlists"
                 ? "Watchlists"
                 : `Search ${item.title}`
               : item.title;

@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { createMetadata } from "@/lib/metadata"
-import { redirect } from "next/navigation"
+import { WatchlistClient } from "../watchlist/_components/watchlist-client"
 
 export async function generateMetadata({
   params,
@@ -9,12 +9,12 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale } = await params
   return createMetadata({
-    title: "Watchlist",
-    pathname: "/watchlist",
+    title: "Watchlists",
+    pathname: "/watchlists",
     locale,
   })
 }
 
-export default function WatchlistPage() {
-  redirect("/watchlists")
+export default function WatchlistsPage() {
+  return <WatchlistClient />
 }

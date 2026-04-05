@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 
 const watchlistGroupValidator = v.object({
   _id: v.id("watchlistGroups"),
@@ -1453,5 +1454,126 @@ export const getMyWatchlistBootstrap = query({
       defaultItems,
       allCoinIds,
     };
+  },
+});
+
+export const getMyHoldingsAcrossWatchlists = query({
+  args: {},
+  returns: v.object({
+    positions: v.array(
+      v.object({
+        coinId: v.string(),
+        holdings: v.number(),
+      }),
+    ),
+    totalHoldings: v.number(),
+    coinsWithHoldings: v.number(),
+  }),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) {
+      return { positions: [], totalHoldings: 0, coinsWithHoldings: 0 };
+    }
+
+    const rows = await ctx.db
+      .query("watchlists")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    const holdingsByCoinId = new Map<string, number>();
+    for (const row of rows) {
+      const holdings = row.holdings;
+      if (typeof holdings !== "number") continue;
+      if (!Number.isFinite(holdings) || holdings <= 0) continue;
+
+      holdingsByCoinId.set(row.coinId, (holdingsByCoinId.get(row.coinId) ?? 0) + holdings);
+    }
+
+    const positions = Array.from(holdingsByCoinId.entries())
+      .map(([coinId, holdings]) => ({ coinId, holdings }))
+      .sort((a, b) => a.coinId.localeCompare(b.coinId));
+
+    const totalHoldings = positions.reduce((sum, row) => sum + row.holdings, 0);
+
+    return {
+      positions,
+      totalHoldings,
+      coinsWithHoldings: positions.length,
+    };
+  },
+});
+
+export const getMyHoldingsBreakdownByWatchlistGroup = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      group: watchlistGroupValidator,
+      positions: v.array(
+        v.object({
+          coinId: v.string(),
+          holdings: v.number(),
+        }),
+      ),
+      totalHoldings: v.number(),
+      coinsWithHoldings: v.number(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return [];
+
+    const [groups, rows] = await Promise.all([
+      ctx.db
+        .query("watchlistGroups")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect(),
+      ctx.db
+        .query("watchlists")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect(),
+    ]);
+
+    const groupsById = new Map(groups.map((group) => [group._id, group] as const));
+
+    const holdingsByGroupId = new Map<Id<"watchlistGroups">, Map<string, number>>();
+    for (const row of rows) {
+      const holdings = row.holdings;
+      if (typeof holdings !== "number") continue;
+      if (!Number.isFinite(holdings) || holdings <= 0) continue;
+
+      const groupId = row.watchlistGroupId;
+      if (!groupsById.has(groupId)) continue;
+
+      const byCoin = holdingsByGroupId.get(groupId) ?? new Map<string, number>();
+      byCoin.set(row.coinId, (byCoin.get(row.coinId) ?? 0) + holdings);
+      holdingsByGroupId.set(groupId, byCoin);
+    }
+
+    const result = Array.from(holdingsByGroupId.entries())
+      .map(([groupId, byCoin]) => {
+        const group = groupsById.get(groupId);
+        if (!group) return null;
+
+        const positions = Array.from(byCoin.entries())
+          .map(([coinId, coinHoldings]) => ({ coinId, holdings: coinHoldings }))
+          .sort((a, b) => a.coinId.localeCompare(b.coinId));
+
+        const totalHoldings = positions.reduce((sum, row) => sum + row.holdings, 0);
+
+        return {
+          group,
+          positions,
+          totalHoldings,
+          coinsWithHoldings: positions.length,
+        };
+      })
+      .filter(
+        (row): row is NonNullable<typeof row> =>
+          row !== null && row.positions.length > 0,
+      );
+
+    // Stable ordering for UI; we’ll sort by USD client-side once quotes arrive.
+    result.sort((a, b) => a.group.name.localeCompare(b.group.name));
+    return result;
   },
 });

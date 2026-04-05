@@ -314,6 +314,151 @@ async function patchDistFile(filePath) {
     ok = false
   }
 
+  // 6) Line-mode-style full crosshair for single-series charts (horizontal + vertical).
+  const crosshairHorizontalOld = [
+    "  ctx.lineTo(hoverX, h - pad.bottom);",
+    "  ctx.stroke();",
+    "  ctx.restore();",
+    "  const dotRadius = 4 * Math.min(scrubOpacity * 3, 1);",
+    "  if (dotRadius > 0.5) {",
+    "    ctx.globalAlpha = 1;",
+    "    ctx.beginPath();",
+    "    ctx.arc(hoverX, y, dotRadius, 0, Math.PI * 2);",
+  ].join("\n")
+
+  const crosshairHorizontalNew = [
+    "  ctx.lineTo(hoverX, h - pad.bottom);",
+    "  ctx.stroke();",
+    "  ctx.globalAlpha = scrubOpacity * 0.3;",
+    "  ctx.beginPath();",
+    "  ctx.moveTo(pad.left, y);",
+    "  ctx.lineTo(layout.w - pad.right, y);",
+    "  ctx.stroke();",
+    "  ctx.restore();",
+    "  const dotRadius = 4 * Math.min(scrubOpacity * 3, 1);",
+    "  if (dotRadius > 0.5) {",
+    "    ctx.globalAlpha = 1;",
+    "    ctx.beginPath();",
+    "    ctx.arc(hoverX, y, dotRadius, 0, Math.PI * 2);",
+  ].join("\n")
+
+  if (next.includes(crosshairHorizontalNew)) {
+    // already patched
+  } else if (next.includes(crosshairHorizontalOld)) {
+    next = next.replace(crosshairHorizontalOld, crosshairHorizontalNew)
+    didChange = true
+  } else {
+    console.warn(`[patch-liveline] Crosshair horizontal pattern not found: ${filePath}`)
+    ok = false
+  }
+
+  // 7) Crosshair was fully hidden within CROSSHAIR_FADE_MIN_PX of the live point; keep it visible while scrubbing.
+  const scrubOpacityNearLiveOld = "const scrubOpacity = distToLive < CROSSHAIR_FADE_MIN_PX ? 0 :"
+  const scrubOpacityNearLiveNew =
+    "const scrubOpacity = distToLive < CROSSHAIR_FADE_MIN_PX ? opts.scrubAmount :"
+
+  if (next.includes(scrubOpacityNearLiveNew)) {
+    // already patched
+  } else if (next.includes(scrubOpacityNearLiveOld)) {
+    next = next.replaceAll(scrubOpacityNearLiveOld, scrubOpacityNearLiveNew)
+    didChange = true
+  } else {
+    console.warn(`[patch-liveline] Scrub-opacity-near-live pattern not found: ${filePath}`)
+    ok = false
+  }
+
+  // 8) Crosshair: dashed strokes + higher contrast (vertical + horizontal in drawCrosshair).
+  const crosshairStrokesSolidOld = [
+    "  ctx.save();",
+    "  ctx.globalAlpha = scrubOpacity * 0.5;",
+    "  ctx.strokeStyle = palette.crosshairLine;",
+    "  ctx.lineWidth = 1;",
+    "  ctx.beginPath();",
+    "  ctx.moveTo(hoverX, pad.top);",
+    "  ctx.lineTo(hoverX, h - pad.bottom);",
+    "  ctx.stroke();",
+    "  ctx.globalAlpha = scrubOpacity * 0.3;",
+    "  ctx.beginPath();",
+    "  ctx.moveTo(pad.left, y);",
+    "  ctx.lineTo(layout.w - pad.right, y);",
+    "  ctx.stroke();",
+    "  ctx.restore();",
+  ].join("\n")
+
+  const crosshairStrokesDashedNew = [
+    "  ctx.save();",
+    "  ctx.globalAlpha = scrubOpacity * 0.82;",
+    "  ctx.strokeStyle = palette.crosshairLine;",
+    "  ctx.lineWidth = 1.5;",
+    "  ctx.setLineDash([5, 5]);",
+    "  ctx.beginPath();",
+    "  ctx.moveTo(hoverX, pad.top);",
+    "  ctx.lineTo(hoverX, h - pad.bottom);",
+    "  ctx.stroke();",
+    "  ctx.globalAlpha = scrubOpacity * 0.68;",
+    "  ctx.beginPath();",
+    "  ctx.moveTo(pad.left, y);",
+    "  ctx.lineTo(layout.w - pad.right, y);",
+    "  ctx.stroke();",
+    "  ctx.setLineDash([]);",
+    "  ctx.restore();",
+  ].join("\n")
+
+  if (next.includes(crosshairStrokesDashedNew)) {
+    // already patched
+  } else if (next.includes(crosshairStrokesSolidOld)) {
+    next = next.replace(crosshairStrokesSolidOld, crosshairStrokesDashedNew)
+    didChange = true
+  } else {
+    console.warn(`[patch-liveline] Crosshair stroke restyle pattern not found: ${filePath}`)
+    ok = false
+  }
+
+  // 8b) Multi-series crosshair vertical line: match dashed style.
+  const multiCrosshairVerticalSolidOld = [
+    "  ctx.save();",
+    "  ctx.globalAlpha = scrubOpacity * 0.5;",
+    "  ctx.strokeStyle = palette.crosshairLine;",
+    "  ctx.lineWidth = 1;",
+    "  ctx.beginPath();",
+    "  ctx.moveTo(hoverX, pad.top);",
+    "  ctx.lineTo(hoverX, h - pad.bottom);",
+    "  ctx.stroke();",
+    "  ctx.restore();",
+    "  const dotRadius = 4 * Math.min(scrubOpacity * 3, 1);",
+    "  if (dotRadius > 0.5) {",
+    "    ctx.globalAlpha = 1;",
+    "    for (const entry of entries) {",
+  ].join("\n")
+
+  const multiCrosshairVerticalDashedNew = [
+    "  ctx.save();",
+    "  ctx.globalAlpha = scrubOpacity * 0.82;",
+    "  ctx.strokeStyle = palette.crosshairLine;",
+    "  ctx.lineWidth = 1.5;",
+    "  ctx.setLineDash([5, 5]);",
+    "  ctx.beginPath();",
+    "  ctx.moveTo(hoverX, pad.top);",
+    "  ctx.lineTo(hoverX, h - pad.bottom);",
+    "  ctx.stroke();",
+    "  ctx.setLineDash([]);",
+    "  ctx.restore();",
+    "  const dotRadius = 4 * Math.min(scrubOpacity * 3, 1);",
+    "  if (dotRadius > 0.5) {",
+    "    ctx.globalAlpha = 1;",
+    "    for (const entry of entries) {",
+  ].join("\n")
+
+  if (next.includes(multiCrosshairVerticalDashedNew)) {
+    // already patched
+  } else if (next.includes(multiCrosshairVerticalSolidOld)) {
+    next = next.replace(multiCrosshairVerticalSolidOld, multiCrosshairVerticalDashedNew)
+    didChange = true
+  } else {
+    console.warn(`[patch-liveline] Multi crosshair stroke pattern not found: ${filePath}`)
+    ok = false
+  }
+
   if (!didChange) return { ok, changed: false }
   await writeFile(filePath, next, "utf8")
   console.log(`[patch-liveline] Patched: ${filePath}`)

@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { createMetadata } from "@/lib/metadata"
-import { redirect } from "next/navigation"
+import { OverviewHoldingsSection } from "./overview-holdings-section"
 
 export async function generateMetadata({
   params,
@@ -9,12 +9,12 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale } = await params
   return createMetadata({
-    title: "Watchlist",
-    pathname: "/watchlist",
+    title: "Overview",
+    pathname: "/overview",
     locale,
   })
 }
 
-export default function WatchlistPage() {
-  redirect("/watchlists")
+export default function OverviewPage() {
+  return <OverviewHoldingsSection />
 }

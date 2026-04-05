@@ -68,7 +68,15 @@ function getRouteGreeting(pathname: string): string {
   const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
   
   // Special case: Use time-based greeting for watchlist (now the default overview)
-  if (cleanPath === '/watchlist' || cleanPath.startsWith('/watchlist/') || cleanPath === '/' || cleanPath === '/overview' || cleanPath.startsWith('/overview/')) {
+  if (
+    cleanPath === '/watchlists' ||
+    cleanPath.startsWith('/watchlists/') ||
+    cleanPath === '/watchlist' ||
+    cleanPath.startsWith('/watchlist/') ||
+    cleanPath === '/' ||
+    cleanPath === '/overview' ||
+    cleanPath.startsWith('/overview/')
+  ) {
     const hour = new Date().getHours();
     
     if (hour < 12) return "Good morning";
@@ -107,6 +115,8 @@ function getStaticRouteGreeting(pathname: string): string | null {
 
   // Overview/watchlist uses time-based greeting (handled client-side to avoid hydration mismatch)
   if (
+    cleanPath === '/watchlists' ||
+    cleanPath.startsWith('/watchlists/') ||
     cleanPath === '/watchlist' ||
     cleanPath.startsWith('/watchlist/') ||
     cleanPath === '/' ||
@@ -149,8 +159,8 @@ export function TopNav() {
   // Get current watchlist group parameter to preserve it in back navigation
   const watchlistGroup = searchParams.get('wg');
   const backToWatchlistComparisonUrl = watchlistGroup
-    ? `/watchlist?wt=chart&wg=${watchlistGroup}`
-    : "/watchlist?wt=chart";
+    ? `/watchlists?wt=chart&wg=${watchlistGroup}`
+    : "/watchlists?wt=chart";
 
   const handleBack = () => {
     // Prefer history navigation so we restore scroll + prior view state.
@@ -173,7 +183,14 @@ export function TopNav() {
 
   // Check if current route is overview (now watchlist is the default overview)
   const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
-  const isOverviewRoute = cleanPath === '/watchlist' || cleanPath.startsWith('/watchlist/') || cleanPath === '/' || cleanPath === '/overview' || cleanPath.startsWith('/overview/');
+  const isOverviewRoute =
+    cleanPath === '/watchlists' ||
+    cleanPath.startsWith('/watchlists/') ||
+    cleanPath === '/watchlist' ||
+    cleanPath.startsWith('/watchlist/') ||
+    cleanPath === '/' ||
+    cleanPath === '/overview' ||
+    cleanPath.startsWith('/overview/');
 
   // Static route greeting (safe to render during SSR without time-based mismatch)
   const staticGreeting = getStaticRouteGreeting(pathname);
@@ -260,7 +277,7 @@ export function TopNav() {
           ) : (
             // Default Logo and Greeting
             <>
-              <Link href="/watchlist" className="opacity-50 hover:opacity-100 transition-opacity duration-150">
+              <Link href="/overview" className="opacity-50 hover:opacity-100 transition-opacity duration-150">
                 <SvelaLogo 
                   width={25} 
                   height={25}

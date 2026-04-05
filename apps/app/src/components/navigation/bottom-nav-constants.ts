@@ -4,22 +4,27 @@ import {
   IconBookmarkFill,
   IconWalletBifoldFill,
   IconSafariFill,
-  IconCaptionsBubbleFill,
+  IconHouseFill,
 } from "symbols-react";
 import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
 import { getShortcutForRoute } from "@/lib/keyboard-shortcuts";
 
 // Base routes (will be enhanced with watchlist params by components)
 export const BASE_ROUTES = {
-  overview: "/watchlist",
-  watchlist: "/watchlist", 
+  overview: "/overview",
+  watchlist: "/watchlists",
   screener: "/screener",
 } as const;
   
 export const MENU_ITEMS = [
   {
-    title: "Watchlist",
-    href: "/watchlist",
+    title: "Overview",
+    href: "/overview",
+    icon: IconHouseFill,
+  },
+  {
+    title: "Watchlists",
+    href: "/watchlists",
     icon: IconBookmarkFill,
   },
   {
@@ -30,11 +35,11 @@ export const MENU_ITEMS = [
 ] as const;
   
 const watchlistCommandItem = {
-  title: "Watchlist",
+  title: "Watchlists",
   subtitle: "Your cryptocurrency watchlist",
-  href: "/watchlist",
+  href: "/watchlists",
   icon: IconBookmarkFill,
-  shortcut: getShortcutForRoute("/watchlist"),
+  shortcut: getShortcutForRoute("/watchlists"),
 } as const;
 
 const screenerCommandItem = {
@@ -48,9 +53,9 @@ const screenerCommandItem = {
 const overviewCommandItem = {
   title: "Overview",
   subtitle: "View dashboard and watchlist",
-  href: "/watchlist",
-  icon: IconCaptionsBubbleFill,
-  shortcut: getShortcutForRoute("/watchlist"),
+  href: "/overview",
+  icon: IconHouseFill,
+  shortcut: getShortcutForRoute("/overview"),
 } as const;
 
 const quickActionItems = [
