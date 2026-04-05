@@ -24,6 +24,7 @@ import { BackgroundPattern } from './background-pattern';
 import { formatUsdPrice } from "@/lib/format-usd";
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides";
 import { TokenLogo } from "@/components/token-logo";
+import { cn } from "@v1/ui/cn";
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | null;
 
@@ -230,8 +231,11 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
                     </TooltipContent>
                 </Tooltip>
               </Button>
-              <div 
-                className={`overflow-hidden ${isOpen ? 'w-[445px] opacity-100' : 'w-0 opacity-0'}`}
+              <div
+                className={cn(
+                  "overflow-hidden transition-[width,opacity] duration-[var(--motion-nav-duration)] ease-[var(--motion-nav-ease-out)] motion-reduce:transition-none",
+                  isOpen ? "w-[445px] opacity-100" : "w-0 opacity-0",
+                )}
                 onMouseDown={(e) => e.stopPropagation()}
               >
                 <CommandInput 

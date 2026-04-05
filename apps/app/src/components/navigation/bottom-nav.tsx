@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useCallback } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import {
   useNavigationMode,
   useSelectionMode,
@@ -12,9 +11,13 @@ import { useKeyboardShortcuts, useCommandHandler, useSequentialShortcuts } from 
 import { NavigationDock } from "./navigation-dock";
 import { BackButton } from "./back-button";
 import { CommandSearch } from "./command-search";
-import { uiEnterExitTransition } from "@/lib/motion-tokens";
+import { bottomNavChromeMotionStyle } from "@/lib/motion-tokens";
+import { cn } from "@v1/ui/cn";
 
 import type { CommandContext } from "./bottom-nav-context";
+
+const actionEntranceClassName =
+  "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-[var(--motion-nav-duration)] motion-safe:ease-[var(--motion-nav-ease-out)] motion-reduce:animate-none";
 
 export function BottomNav() {
   // React 19: Use selective context hooks for better performance
@@ -22,9 +25,6 @@ export function BottomNav() {
   const { selectionState } = useSelectionMode();
   const { isCommandOpen, setIsCommandOpen } = useOverlayState();
   const { commandContext, setCommandContext } = useCommandContext();
-  const shouldReduceMotion = useReducedMotion();
-
-  const navTransition = uiEnterExitTransition(shouldReduceMotion);
   
   // Initialize sequential shortcuts (still needed for functionality)
   useSequentialShortcuts();
@@ -52,66 +52,48 @@ export function BottomNav() {
       className="dark pointer-events-none fixed bottom-8 left-0 right-0 z-[9999] flex justify-center px-4"
       data-bottom-nav="true"
     >
-      <div className="pointer-events-auto relative flex max-w-full shrink-0 flex-nowrap items-center gap-2">
-        {/* Navigation Dock */}
-        <motion.div
-          animate={{
-            // Opacity only: scale shrinks the painted dock inside a full-width flex cell and reads as off-center.
-            opacity: isCommandOpen && mode === "navigation" ? 0 : 1,
-            pointerEvents: isCommandOpen && mode === "navigation" ? "none" : "auto",
-          }}
-          transition={navTransition}
-          className={`${isCommandOpen ? "sr-only" : "shrink-0"}`}
+      <div
+        className="pointer-events-auto relative flex max-w-full shrink-0 flex-nowrap items-center gap-2"
+        style={bottomNavChromeMotionStyle()}
+      >
+        {/* Navigation Dock — duration/ease from motion-tokens (injected CSS vars on this row) */}
+        <div
+          className={cn(
+            "shrink-0 transition-opacity duration-[var(--motion-nav-duration)] ease-[var(--motion-nav-ease-out)] motion-reduce:transition-none",
+            isCommandOpen && mode === "navigation"
+              ? "pointer-events-none opacity-0 hidden"
+              : "opacity-100",
+          )}
+          aria-hidden={isCommandOpen && mode === "navigation"}
         >
           <NavigationDock
             mode={mode}
             selectionState={selectionState}
-            isCommandOpen={isCommandOpen}
             onOpenCommandSearch={handleOpenCommandSearch}
           />
-        </motion.div>
+        </div>
 
-        {/* Action Slot */}
-        {/* sync: avoid popLayout reflow on sibling dock when the action slot updates */}
-        <AnimatePresence mode="sync">
-          {mode === "selection" && selectionState ? (
-            <motion.div
-              className="shrink-0"
-              key="back-button"
-              layoutId={shouldReduceMotion ? undefined : "action-button"}
-              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.95 }}
-              transition={navTransition}
-            >
-              <BackButton 
-                onExitSelection={setNavigationMode} 
-                selectionState={selectionState}
-              />
-            </motion.div>
-          ) : mode === "navigation" ? (
-            <motion.div
-              className="shrink-0"
-              key="command-search"
-              layoutId={shouldReduceMotion ? undefined : "action-button"}
-              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.95 }}
-              animate={{
-                opacity: 1,
-                scale: 1,
-                pointerEvents: isCommandOpen ? "auto" : "none",
-              }}
-              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.95 }}
-              transition={navTransition}
-            >
-              <CommandSearch
-                isOpen={isCommandOpen}
-                setIsOpen={handleCloseCommand}
-                onCommandSelect={handleCommandSelect}
-                context={commandContext}
-              />
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
+        {/* Action Slot — entrance via tailwindcss-animate; no exit tween without keeping both mounted */}
+        {mode === "selection" && selectionState ? (
+          <div className={cn("shrink-0", actionEntranceClassName)} key="back-button">
+            <BackButton
+              onExitSelection={setNavigationMode}
+              selectionState={selectionState}
+            />
+          </div>
+        ) : mode === "navigation" ? (
+          <div
+            className={cn("shrink-0", actionEntranceClassName)}
+            key="command-search"
+          >
+            <CommandSearch
+              isOpen={isCommandOpen}
+              setIsOpen={handleCloseCommand}
+              onCommandSelect={handleCommandSelect}
+              context={commandContext}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

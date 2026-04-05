@@ -1,90 +1,77 @@
 import React from 'react';
-import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { NavigationItems } from './navigation-items';
 import { SelectionContent } from './selection-content';
 import type { CommandContext, SelectionState } from './bottom-nav-context';
-import { uiEnterExitTransition, uiLayoutTransition } from '@/lib/motion-tokens';
+import { cn } from '@v1/ui/cn';
 
 interface NavigationDockProps {
   mode: 'navigation' | 'selection';
   selectionState: SelectionState | null;
-  isCommandOpen: boolean;
   onOpenCommandSearch?: (context: CommandContext | null) => void;
 }
 
-const NavigationDockComponent = ({ 
-  mode, 
-  selectionState, 
-  isCommandOpen,
-  onOpenCommandSearch
-}: NavigationDockProps) => {
-  const shouldReduceMotion = useReducedMotion()
+const layerTransitionClass =
+  'transition-opacity duration-[var(--motion-nav-duration)] ease-[var(--motion-nav-ease-out)] motion-reduce:transition-none';
 
-  // Visibility when the command palette is open is handled by the BottomNav wrapper (opacity + pointer-events).
+const NavigationDockComponent = ({
+  mode,
+  selectionState,
+  onOpenCommandSearch,
+}: NavigationDockProps) => {
   const dockClassName = React.useMemo(() => {
-    return `relative rounded-[20px] overflow-hidden p-1 h-[56px] w-auto flex items-center justify-center
+    return `relative rounded-[20px] overflow-hidden p-1 h-[56px] w-auto
            shadow-[0_3px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
            dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.4)]
-           ${mode === 'selection' 
-             ? 'bg-rose-950 border border-red-200 dark:border-red-800/50' 
+           grid grid-cols-1 grid-rows-1 place-items-center
+           ${mode === 'selection'
+             ? 'bg-rose-950 border border-red-200 dark:border-red-800/50'
              : 'bg-white/95 border border-gray-200/50 dark:bg-zinc-800/80 backdrop-blur-md dark:border-transparent'
            }`;
   }, [mode]);
 
   return (
-    <AnimatePresence mode="popLayout">
-      <motion.div 
-        className={dockClassName}
-        layout={!shouldReduceMotion}
-        transition={uiLayoutTransition(shouldReduceMotion)}
+    <div className={dockClassName}>
+      <div
+        className={cn(
+          'col-start-1 row-start-1 w-auto',
+          layerTransitionClass,
+          mode === 'navigation'
+            ? 'relative z-10 opacity-100'
+            : 'pointer-events-none relative z-0 opacity-0',
+        )}
       >
-        <div className="relative z-10 flex items-center gap-1 p-1 w-auto">
-          {mode === 'navigation' && (
-            <motion.div
-              key="navigation"
-              layoutId={shouldReduceMotion ? undefined : "navigation"}
-              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
-              className="w-auto"
-              transition={uiEnterExitTransition(shouldReduceMotion)}
-            >
-              <NavigationItems onOpenCommandSearch={onOpenCommandSearch || (() => {})} />
-            </motion.div>
-          )}
-          
-          {mode === 'selection' && selectionState && (
-            <motion.div
-              key="selection"
-              layoutId={shouldReduceMotion ? undefined : "navigation"}
-              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
-              transition={uiEnterExitTransition(shouldReduceMotion)}
-              className="w-[320px] flex items-center justify-center"
-            >
-              <SelectionContent selectionState={selectionState} />
-            </motion.div>
-          )}
+        <div className="flex w-auto items-center gap-1 p-1">
+          <NavigationItems onOpenCommandSearch={onOpenCommandSearch || (() => {})} />
         </div>
-      </motion.div>
-    </AnimatePresence>
+      </div>
+
+      {selectionState ? (
+        <div
+          className={cn(
+            'col-start-1 row-start-1 flex w-[320px] items-center justify-center',
+            layerTransitionClass,
+            mode === 'selection'
+              ? 'relative z-10 opacity-100'
+              : 'pointer-events-none relative z-0 opacity-0',
+          )}
+        >
+          <SelectionContent selectionState={selectionState} />
+        </div>
+      ) : null}
+    </div>
   );
 };
 
-// React 19: Enhanced memo with custom comparison function
 export const NavigationDock = React.memo(NavigationDockComponent, areNavigationDockPropsEqual);
 
 NavigationDock.displayName = 'NavigationDock';
 
-// React 19: Enhanced memo comparison for better performance
 function areNavigationDockPropsEqual(
-  prevProps: NavigationDockProps, 
-  nextProps: NavigationDockProps
+  prevProps: NavigationDockProps,
+  nextProps: NavigationDockProps,
 ): boolean {
   return (
     prevProps.mode === nextProps.mode &&
-    prevProps.isCommandOpen === nextProps.isCommandOpen &&
     prevProps.selectionState?.selectedCoins === nextProps.selectionState?.selectedCoins &&
     prevProps.selectionState?.totalCoins === nextProps.selectionState?.totalCoins &&
     prevProps.selectionState?.isRemoving === nextProps.selectionState?.isRemoving
