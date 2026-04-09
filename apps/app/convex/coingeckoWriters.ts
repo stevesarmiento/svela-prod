@@ -45,7 +45,9 @@ export const _upsertMarketDataBatch = internalMutation({
     for (const item of args.items) {
       const existing = await ctx.db
         .query("coingeckoMarkets")
-        .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", item.coingeckoId))
+        .withIndex("by_coingecko_id", (q) =>
+          q.eq("coingeckoId", item.coingeckoId),
+        )
         .first();
 
       if (existing) {
@@ -86,6 +88,11 @@ function pickOverlapMs(timeframe: string): number {
   if (timeframe === "1") return 6 * 60 * 60 * 1000;
   if (timeframe === "7") return 12 * 60 * 60 * 1000;
   if (timeframe === "14") return 24 * 60 * 60 * 1000;
+  return 48 * 60 * 60 * 1000;
+}
+
+function pickGlobalMarketOverlapMs(timeframe: string): number {
+  if (timeframe === "1") return 6 * 60 * 60 * 1000;
   return 48 * 60 * 60 * 1000;
 }
 
@@ -135,20 +142,28 @@ export const _upsertCoinGeckoHistoricalData = internalMutation({
       ? await ctx.db
           .query("priceHistory")
           .withIndex("by_coingecko_timeframe_timestamp", (q) =>
-            q.eq("coingeckoId", args.coingeckoId).eq("timeframe", args.timeframe),
+            q
+              .eq("coingeckoId", args.coingeckoId)
+              .eq("timeframe", args.timeframe),
           )
           .order("asc")
           .first()
       : null;
 
     const overlapMs = pickOverlapMs(args.timeframe);
-    const defaultCutoff = latestExisting ? latestExisting.timestamp - overlapMs : Number.NEGATIVE_INFINITY;
+    const defaultCutoff = latestExisting
+      ? latestExisting.timestamp - overlapMs
+      : Number.NEGATIVE_INFINITY;
     const shouldBackfill =
       earliestExisting != null &&
       Number.isFinite(minIncomingTimestamp) &&
       earliestExisting.timestamp > minIncomingTimestamp + overlapMs;
-    const cutoff = shouldBackfill ? minIncomingTimestamp - overlapMs : defaultCutoff;
-    const upperBound = Number.isFinite(maxIncomingTimestamp) ? maxIncomingTimestamp + overlapMs : Number.POSITIVE_INFINITY;
+    const cutoff = shouldBackfill
+      ? minIncomingTimestamp - overlapMs
+      : defaultCutoff;
+    const upperBound = Number.isFinite(maxIncomingTimestamp)
+      ? maxIncomingTimestamp + overlapMs
+      : Number.POSITIVE_INFINITY;
 
     const existingWindow = latestExisting
       ? await ctx.db
@@ -235,6 +250,120 @@ export const _upsertCoinGeckoHistoricalData = internalMutation({
   },
 });
 
+const globalMarketHistoryPointValidator = v.object({
+  timestamp: v.number(),
+  marketCapUsd: v.number(),
+  volumeUsd: v.number(),
+});
+
+export const _upsertGlobalMarketHistory = internalMutation({
+  args: {
+    timeframe: v.union(
+      v.literal("1"),
+      v.literal("7"),
+      v.literal("30"),
+      v.literal("365"),
+    ),
+    dataPoints: v.array(globalMarketHistoryPointValidator),
+    dataSource: v.string(),
+    asOfMs: v.optional(v.number()),
+  },
+  returns: v.object({
+    insertedCount: v.number(),
+    updatedCount: v.number(),
+    skippedCount: v.number(),
+    latestTimestamp: v.optional(v.number()),
+  }),
+  handler: async (ctx, args) => {
+    const now = args.asOfMs ?? Date.now();
+    if (args.dataPoints.length === 0) {
+      return {
+        insertedCount: 0,
+        updatedCount: 0,
+        skippedCount: 0,
+        latestTimestamp: undefined,
+      };
+    }
+
+    const uniqueByTimestamp = new Map<
+      number,
+      (typeof args.dataPoints)[number]
+    >();
+    for (const point of args.dataPoints)
+      uniqueByTimestamp.set(point.timestamp, point);
+    const dedupedPoints = Array.from(uniqueByTimestamp.values()).sort(
+      (a, b) => a.timestamp - b.timestamp,
+    );
+
+    const minIncomingTimestamp =
+      dedupedPoints[0]?.timestamp ?? Number.POSITIVE_INFINITY;
+    const maxIncomingTimestamp =
+      dedupedPoints[dedupedPoints.length - 1]?.timestamp ?? 0;
+    const overlapMs = pickGlobalMarketOverlapMs(args.timeframe);
+    const cutoff = minIncomingTimestamp - overlapMs;
+    const upperBound = maxIncomingTimestamp + overlapMs;
+
+    const existingWindow = await ctx.db
+      .query("globalMarketHistory")
+      .withIndex("by_timeframe_timestamp", (q) =>
+        q
+          .eq("timeframe", args.timeframe)
+          .gte("timestamp", cutoff)
+          .lte("timestamp", upperBound),
+      )
+      .collect();
+
+    const byTimestamp = new Map<number, (typeof existingWindow)[number]>();
+    for (const row of existingWindow) {
+      if (!byTimestamp.has(row.timestamp)) byTimestamp.set(row.timestamp, row);
+    }
+
+    let insertedCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
+
+    for (const point of dedupedPoints) {
+      const existing = byTimestamp.get(point.timestamp);
+      if (!existing) {
+        await ctx.db.insert("globalMarketHistory", {
+          timeframe: args.timeframe,
+          timestamp: point.timestamp,
+          marketCapUsd: point.marketCapUsd,
+          volumeUsd: point.volumeUsd,
+          dataSource: args.dataSource,
+          lastUpdated: now,
+        });
+        insertedCount++;
+        continue;
+      }
+
+      const hasDiff =
+        existing.marketCapUsd !== point.marketCapUsd ||
+        existing.volumeUsd !== point.volumeUsd;
+
+      if (!hasDiff) {
+        skippedCount++;
+        continue;
+      }
+
+      await ctx.db.patch(existing._id, {
+        marketCapUsd: point.marketCapUsd,
+        volumeUsd: point.volumeUsd,
+        dataSource: args.dataSource,
+        lastUpdated: now,
+      });
+      updatedCount++;
+    }
+
+    return {
+      insertedCount,
+      updatedCount,
+      skippedCount,
+      latestTimestamp: maxIncomingTimestamp || undefined,
+    };
+  },
+});
+
 const coinGeckoCoinWriteValidator = v.object({
   coingeckoId: v.string(),
   name: v.string(),
@@ -267,7 +396,9 @@ export const _bulkUpsertCoinGeckoCoins = internalMutation({
     for (const coin of uniqueById.values()) {
       const existing = await ctx.db
         .query("coingeckoCoins")
-        .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", coin.coingeckoId))
+        .withIndex("by_coingecko_id", (q) =>
+          q.eq("coingeckoId", coin.coingeckoId),
+        )
         .first();
 
       if (existing) {
@@ -336,7 +467,9 @@ export const _syncCoinGeckoCoinsListBatch = internalMutation({
     for (const coin of uniqueById.values()) {
       const existing = await ctx.db
         .query("coingeckoCoins")
-        .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", coin.coingeckoId))
+        .withIndex("by_coingecko_id", (q) =>
+          q.eq("coingeckoId", coin.coingeckoId),
+        )
         .first();
 
       const nextSymbol = coin.symbol.toUpperCase();
@@ -383,4 +516,3 @@ export const _syncCoinGeckoCoinsListBatch = internalMutation({
     return { inserted, updated, normalized };
   },
 });
-

@@ -4,7 +4,16 @@ import { requireServerToken } from "./_lib/server_token";
 import { internal } from "./_generated/api";
 
 const WARMUP_DEDUP_MS = 5 * 60 * 1000;
-const OHLC_SUPPORTED_DAYS = new Set(["1", "7", "14", "30", "90", "180", "365", "max"]);
+const OHLC_SUPPORTED_DAYS = new Set([
+  "1",
+  "7",
+  "14",
+  "30",
+  "90",
+  "180",
+  "365",
+  "max",
+]);
 
 export const requestMarketChartRefresh = mutation({
   args: {
@@ -43,18 +52,26 @@ export const requestMarketChartRefresh = mutation({
       });
     }
 
-    await ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshSingleMarketChart, {
-      coingeckoId: args.coingeckoId,
-      days: args.days,
-    });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.coingeckoJobs.refreshSingleMarketChart,
+      {
+        coingeckoId: args.coingeckoId,
+        days: args.days,
+      },
+    );
 
     // Opportunistically compact historical duplicates (from prior writer behavior).
     for (const delaySeconds of [1, 3, 6]) {
-      await ctx.scheduler.runAfter(delaySeconds, internal.cleanupInternal._compactPriceHistoryDuplicatesBatch, {
-        coingeckoId: args.coingeckoId,
-        timeframe: args.days,
-        batchSize: 2000,
-      });
+      await ctx.scheduler.runAfter(
+        delaySeconds,
+        internal.cleanupInternal._compactPriceHistoryDuplicatesBatch,
+        {
+          coingeckoId: args.coingeckoId,
+          timeframe: args.days,
+          batchSize: 2000,
+        },
+      );
     }
 
     return { scheduled: true, reason: "scheduled" };
@@ -105,11 +122,15 @@ export const requestOhlcRefresh = mutation({
     });
 
     for (const delaySeconds of [1, 3, 6]) {
-      await ctx.scheduler.runAfter(delaySeconds, internal.cleanupInternal._compactPriceHistoryDuplicatesBatch, {
-        coingeckoId: args.coingeckoId,
-        timeframe: `${args.days}_ohlc`,
-        batchSize: 2000,
-      });
+      await ctx.scheduler.runAfter(
+        delaySeconds,
+        internal.cleanupInternal._compactPriceHistoryDuplicatesBatch,
+        {
+          coingeckoId: args.coingeckoId,
+          timeframe: `${args.days}_ohlc`,
+          batchSize: 2000,
+        },
+      );
     }
 
     return { scheduled: true, reason: "scheduled" };
@@ -177,11 +198,70 @@ export const requestMarketsRefresh = mutation({
       ),
     );
 
-    await ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshMarketsByIds, {
-      coingeckoIds: runnable,
-    });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.coingeckoJobs.refreshMarketsByIds,
+      {
+        coingeckoIds: runnable,
+      },
+    );
 
-    return { scheduled: true, scheduledCount: runnable.length, reason: "scheduled" };
+    return {
+      scheduled: true,
+      scheduledCount: runnable.length,
+      reason: "scheduled",
+    };
+  },
+});
+
+export const requestGlobalMarketCapRefresh = mutation({
+  args: {
+    serverToken: v.string(),
+    days: v.union(
+      v.literal("1"),
+      v.literal("7"),
+      v.literal("30"),
+      v.literal("365"),
+    ),
+  },
+  returns: v.object({
+    scheduled: v.boolean(),
+    reason: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const now = Date.now();
+    const jobKey = `warmup:global-market-cap:${args.days}`;
+
+    const existing = await ctx.db
+      .query("jobState")
+      .withIndex("by_job_key", (q) => q.eq("jobKey", jobKey))
+      .first();
+
+    if (existing && now - existing.updatedAt < WARMUP_DEDUP_MS) {
+      return { scheduled: false, reason: "cooldown" };
+    }
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { updatedAt: now });
+    } else {
+      await ctx.db.insert("jobState", {
+        jobKey,
+        cursor: undefined,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.coingeckoJobs.refreshGlobalMarketCapHistory,
+      {
+        days: args.days,
+      },
+    );
+
+    return { scheduled: true, reason: "scheduled" };
   },
 });
 
@@ -221,8 +301,9 @@ export const requestTopMarketsRefresh = mutation({
       });
     }
 
-    await ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshTopMarkets, { topN });
+    await ctx.scheduler.runAfter(0, internal.coingeckoJobs.refreshTopMarkets, {
+      topN,
+    });
     return { scheduled: true, reason: "scheduled", topN };
   },
 });
-

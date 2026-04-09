@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as _lib_overview_signals from "../_lib/overview_signals.js";
 import type * as _lib_server_token from "../_lib/server_token.js";
 import type * as apiKeys from "../apiKeys.js";
 import type * as apiKeysActions from "../apiKeysActions.js";
@@ -30,6 +31,7 @@ import type * as coins from "../coins.js";
 import type * as crons from "../crons.js";
 import type * as historicalData from "../historicalData.js";
 import type * as lastKnownPrices from "../lastKnownPrices.js";
+import type * as overview from "../overview.js";
 import type * as portfolio from "../portfolio.js";
 import type * as portfolioJobs from "../portfolioJobs.js";
 import type * as refresh from "../refresh.js";
@@ -45,6 +47,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "_lib/overview_signals": typeof _lib_overview_signals;
   "_lib/server_token": typeof _lib_server_token;
   apiKeys: typeof apiKeys;
   apiKeysActions: typeof apiKeysActions;
@@ -67,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   historicalData: typeof historicalData;
   lastKnownPrices: typeof lastKnownPrices;
+  overview: typeof overview;
   portfolio: typeof portfolio;
   portfolioJobs: typeof portfolioJobs;
   refresh: typeof refresh;

@@ -1,4 +1,4 @@
-import { Effect, Schema, Schedule } from "effect"
+import { Effect, Schema, Schedule } from "effect";
 
 export class CoinGeckoInvalidParamsError extends Schema.TaggedError<CoinGeckoInvalidParamsError>()(
   "CoinGeckoInvalidParamsError",
@@ -36,54 +36,70 @@ export type CoinGeckoApiErrors =
   | CoinGeckoNotFoundError
   | CoinGeckoRateLimitedError
   | CoinGeckoApiError
-  | CoinGeckoDecodeError
+  | CoinGeckoDecodeError;
 
 function getErrorMessage(body: unknown): string | null {
-  if (!body) return null
-  if (typeof body === "string") return body
-  if (typeof body !== "object") return null
+  if (!body) return null;
+  if (typeof body === "string") return body;
+  if (typeof body !== "object") return null;
 
-  const record = body as Record<string, unknown>
-  if (typeof record.error === "string") return record.error
-  if (typeof record.message === "string") return record.message
-  if (typeof record.details === "string") return record.details
-  return null
+  const record = body as Record<string, unknown>;
+  if (typeof record.error === "string") return record.error;
+  if (typeof record.message === "string") return record.message;
+  if (typeof record.details === "string") return record.details;
+  return null;
 }
 
 async function parseJsonOrText(response: Response): Promise<unknown> {
-  const text = await response.text().catch(() => "")
-  if (!text) return null
+  const text = await response.text().catch(() => "");
+  if (!text) return null;
   try {
-    return JSON.parse(text) as unknown
+    return JSON.parse(text) as unknown;
   } catch {
-    return text
+    return text;
   }
 }
 
-function makeHttpError(args: { endpoint: string; status: number; message: string }): CoinGeckoApiErrors {
+function makeHttpError(args: {
+  endpoint: string;
+  status: number;
+  message: string;
+}): CoinGeckoApiErrors {
   if (args.status === 400) {
-    return new CoinGeckoInvalidParamsError({ endpoint: args.endpoint, message: args.message })
+    return new CoinGeckoInvalidParamsError({
+      endpoint: args.endpoint,
+      message: args.message,
+    });
   }
   if (args.status === 401) {
-    return new CoinGeckoUnauthorizedError({ endpoint: args.endpoint, message: args.message })
+    return new CoinGeckoUnauthorizedError({
+      endpoint: args.endpoint,
+      message: args.message,
+    });
   }
   if (args.status === 404) {
-    return new CoinGeckoNotFoundError({ endpoint: args.endpoint, message: args.message })
+    return new CoinGeckoNotFoundError({
+      endpoint: args.endpoint,
+      message: args.message,
+    });
   }
   if (args.status === 429) {
-    return new CoinGeckoRateLimitedError({ endpoint: args.endpoint, message: args.message })
+    return new CoinGeckoRateLimitedError({
+      endpoint: args.endpoint,
+      message: args.message,
+    });
   }
   return new CoinGeckoApiError({
     endpoint: args.endpoint,
     status: args.status,
     message: args.message,
-  })
+  });
 }
 
 function requestJson<A>(args: {
-  endpoint: string
-  decode: (data: unknown) => A
-  init?: RequestInit
+  endpoint: string;
+  decode: (data: unknown) => A;
+  init?: RequestInit;
 }): Effect.Effect<A, CoinGeckoApiErrors> {
   return Effect.tryPromise({
     try: () => fetch(args.endpoint, args.init),
@@ -107,47 +123,78 @@ function requestJson<A>(args: {
     ),
     Effect.flatMap(({ response, body }) => {
       if (!response.ok) {
-        const message = getErrorMessage(body) ?? `Request failed: ${response.status}`
-        return Effect.fail(makeHttpError({ endpoint: args.endpoint, status: response.status, message }))
+        const message =
+          getErrorMessage(body) ?? `Request failed: ${response.status}`;
+        return Effect.fail(
+          makeHttpError({
+            endpoint: args.endpoint,
+            status: response.status,
+            message,
+          }),
+        );
       }
 
       return Effect.try({
         try: () => args.decode(body),
-        catch: (error) => new CoinGeckoDecodeError({ endpoint: args.endpoint, message: String(error) }),
-      })
+        catch: (error) =>
+          new CoinGeckoDecodeError({
+            endpoint: args.endpoint,
+            message: String(error),
+          }),
+      });
     }),
     Effect.retry(Schedule.exponential("500 millis", 2)),
     Effect.timeout("8 seconds"),
     Effect.catchTag("TimeoutException", () =>
-      Effect.fail(new CoinGeckoApiError({ endpoint: args.endpoint, status: 408, message: "Request timed out" })),
+      Effect.fail(
+        new CoinGeckoApiError({
+          endpoint: args.endpoint,
+          status: 408,
+          message: "Request timed out",
+        }),
+      ),
     ),
-  )
+  );
 }
 
 export interface MarketChartPoint {
-  time: number
-  value: number
+  time: number;
+  value: number;
 }
 
 export interface MarketChartApiResponse {
   data: {
-    prices: MarketChartPoint[]
-    volumes: MarketChartPoint[]
-    market_caps: MarketChartPoint[]
-  }
+    prices: MarketChartPoint[];
+    volumes: MarketChartPoint[];
+    market_caps: MarketChartPoint[];
+  };
   status?: {
-    cached?: boolean
-    stale?: boolean
-    warmupRequested?: boolean
-    points?: number
-    lastUpdated?: number
-  }
+    cached?: boolean;
+    stale?: boolean;
+    warmupRequested?: boolean;
+    points?: number;
+    lastUpdated?: number;
+  };
+}
+
+export interface GlobalMarketCapChartApiResponse {
+  data: {
+    market_cap: MarketChartPoint[];
+    volume: MarketChartPoint[];
+  };
+  status?: {
+    cached?: boolean;
+    stale?: boolean;
+    warmupRequested?: boolean;
+    points?: number;
+    lastUpdated?: number;
+  };
 }
 
 const MarketChartPointSchema = Schema.Struct({
   time: Schema.Number,
   value: Schema.Number,
-})
+});
 
 const MarketChartApiResponseSchema = Schema.Struct({
   data: Schema.Struct({
@@ -164,26 +211,42 @@ const MarketChartApiResponseSchema = Schema.Struct({
       lastUpdated: Schema.optional(Schema.Number),
     }),
   ),
-})
+});
+
+const GlobalMarketCapChartApiResponseSchema = Schema.Struct({
+  data: Schema.Struct({
+    market_cap: Schema.Array(MarketChartPointSchema),
+    volume: Schema.Array(MarketChartPointSchema),
+  }),
+  status: Schema.optional(
+    Schema.Struct({
+      cached: Schema.optional(Schema.Boolean),
+      stale: Schema.optional(Schema.Boolean),
+      warmupRequested: Schema.optional(Schema.Boolean),
+      points: Schema.optional(Schema.Number),
+      lastUpdated: Schema.optional(Schema.Number),
+    }),
+  ),
+});
 
 export interface OHLCDataPoint {
-  timestamp: number
-  open: number
-  high: number
-  low: number
-  close: number
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
 }
 
 export interface OHLCApiResponse {
-  data: OHLCDataPoint[]
-  cached?: boolean
+  data: OHLCDataPoint[];
+  cached?: boolean;
   status?: {
-    cached?: boolean
-    stale?: boolean
-    warmupRequested?: boolean
-    points?: number
-    lastUpdated?: number
-  }
+    cached?: boolean;
+    stale?: boolean;
+    warmupRequested?: boolean;
+    points?: number;
+    lastUpdated?: number;
+  };
 }
 
 const OHLCDataPointSchema = Schema.Struct({
@@ -192,7 +255,7 @@ const OHLCDataPointSchema = Schema.Struct({
   high: Schema.Number,
   low: Schema.Number,
   close: Schema.Number,
-})
+});
 
 const OHLCApiResponseSchema = Schema.Struct({
   data: Schema.Array(OHLCDataPointSchema),
@@ -206,36 +269,36 @@ const OHLCApiResponseSchema = Schema.Struct({
       lastUpdated: Schema.optional(Schema.Number),
     }),
   ),
-})
+});
 
 export interface CoinGeckoQuotesStatus {
-  timestamp?: string
-  error_code?: number
-  error_message?: string
+  timestamp?: string;
+  error_code?: number;
+  error_message?: string;
 }
 
 export interface CoinGeckoQuoteMarketData {
-  id: string
-  name: string
-  symbol: string
-  market_cap_rank: number | null
-  image: string
-  sparkline7d?: ReadonlyArray<number>
-  current_price: number | null
-  market_cap: number | null
-  total_volume: number | null
-  price_change_percentage_24h: number | null
-  price_change_percentage_1h_in_currency?: number | null
-  price_change_percentage_7d_in_currency?: number | null
-  price_change_percentage_30d_in_currency?: number | null
-  circulating_supply?: number | null
-  max_supply?: number | null
-  last_updated?: string
+  id: string;
+  name: string;
+  symbol: string;
+  market_cap_rank: number | null;
+  image: string;
+  sparkline7d?: ReadonlyArray<number>;
+  current_price: number | null;
+  market_cap: number | null;
+  total_volume: number | null;
+  price_change_percentage_24h: number | null;
+  price_change_percentage_1h_in_currency?: number | null;
+  price_change_percentage_7d_in_currency?: number | null;
+  price_change_percentage_30d_in_currency?: number | null;
+  circulating_supply?: number | null;
+  max_supply?: number | null;
+  last_updated?: string;
 }
 
 export interface CoinGeckoQuotesApiResponse {
-  data: Record<string, CoinGeckoQuoteMarketData>
-  status?: CoinGeckoQuotesStatus
+  data: Record<string, CoinGeckoQuoteMarketData>;
+  status?: CoinGeckoQuotesStatus;
 }
 
 const CoinGeckoQuoteMarketDataSchema = Schema.Struct({
@@ -249,101 +312,153 @@ const CoinGeckoQuoteMarketDataSchema = Schema.Struct({
   market_cap: Schema.NullOr(Schema.Number),
   total_volume: Schema.NullOr(Schema.Number),
   price_change_percentage_24h: Schema.NullOr(Schema.Number),
-  price_change_percentage_1h_in_currency: Schema.optional(Schema.NullOr(Schema.Number)),
-  price_change_percentage_7d_in_currency: Schema.optional(Schema.NullOr(Schema.Number)),
-  price_change_percentage_30d_in_currency: Schema.optional(Schema.NullOr(Schema.Number)),
+  price_change_percentage_1h_in_currency: Schema.optional(
+    Schema.NullOr(Schema.Number),
+  ),
+  price_change_percentage_7d_in_currency: Schema.optional(
+    Schema.NullOr(Schema.Number),
+  ),
+  price_change_percentage_30d_in_currency: Schema.optional(
+    Schema.NullOr(Schema.Number),
+  ),
   circulating_supply: Schema.optional(Schema.NullOr(Schema.Number)),
   max_supply: Schema.optional(Schema.NullOr(Schema.Number)),
   last_updated: Schema.optional(Schema.String),
-})
+});
 
 const CoinGeckoQuotesStatusSchema = Schema.Struct({
   timestamp: Schema.optional(Schema.String),
   error_code: Schema.optional(Schema.Number),
   error_message: Schema.optional(Schema.String),
-})
+});
 
 const CoinGeckoQuotesApiResponseSchema = Schema.Struct({
   data: Schema.Unknown,
   status: Schema.optional(CoinGeckoQuotesStatusSchema),
-})
+});
 
-export class CoinGeckoApi extends Effect.Service<CoinGeckoApi>()("CoinGeckoApi", {
-  accessors: true,
-  effect: Effect.gen(function* () {
-    const getMarketChart = Effect.fn("CoinGeckoApi.getMarketChart")(function* (args: {
-      coinId: string
-      days?: string
-      vsCurrency?: string
-      interval?: string
-    }) {
-      const searchParams = new URLSearchParams()
-      searchParams.set("id", args.coinId)
-      if (args.days) searchParams.set("days", args.days)
-      if (args.vsCurrency) searchParams.set("vs_currency", args.vsCurrency)
-      if (args.interval) searchParams.set("interval", args.interval)
+export class CoinGeckoApi extends Effect.Service<CoinGeckoApi>()(
+  "CoinGeckoApi",
+  {
+    accessors: true,
+    effect: Effect.gen(function* () {
+      const getMarketChart = Effect.fn("CoinGeckoApi.getMarketChart")(
+        function* (args: {
+          coinId: string;
+          days?: string;
+          vsCurrency?: string;
+          interval?: string;
+        }) {
+          const searchParams = new URLSearchParams();
+          searchParams.set("id", args.coinId);
+          if (args.days) searchParams.set("days", args.days);
+          if (args.vsCurrency) searchParams.set("vs_currency", args.vsCurrency);
+          if (args.interval) searchParams.set("interval", args.interval);
 
-      return yield* requestJson({
-        endpoint: `/api/coingecko/market-chart?${searchParams.toString()}`,
-        decode: (data) => Schema.decodeUnknownSync(MarketChartApiResponseSchema)(data),
-      })
-    })
-
-    const getOHLC = Effect.fn("CoinGeckoApi.getOHLC")(function* (args: {
-      coinId: string
-      days?: string
-      vsCurrency?: string
-      precision?: string | null
-    }) {
-      const searchParams = new URLSearchParams()
-      searchParams.set("id", args.coinId)
-      if (args.days) searchParams.set("days", args.days)
-      if (args.vsCurrency) searchParams.set("vs_currency", args.vsCurrency)
-      if (args.precision) searchParams.set("precision", args.precision)
-
-      return yield* requestJson({
-        endpoint: `/api/coingecko/ohlc?${searchParams.toString()}`,
-        decode: (data) => Schema.decodeUnknownSync(OHLCApiResponseSchema)(data),
-      })
-    })
-
-    const getQuotes = Effect.fn("CoinGeckoApi.getQuotes")(function* (args: {
-      ids?: ReadonlyArray<string>
-      symbols?: ReadonlyArray<string>
-      names?: ReadonlyArray<string>
-      category?: string
-      limit?: number
-    }) {
-      const searchParams = new URLSearchParams()
-      if (args.ids && args.ids.length > 0) searchParams.set("ids", args.ids.join(","))
-      if (args.symbols && args.symbols.length > 0) searchParams.set("symbols", args.symbols.join(","))
-      if (args.names && args.names.length > 0) searchParams.set("names", args.names.join(","))
-      if (args.category) searchParams.set("category", args.category)
-      if (args.limit !== undefined) searchParams.set("limit", String(args.limit))
-
-      const endpoint = searchParams.size ? `/api/coingecko/quotes?${searchParams.toString()}` : "/api/coingecko/quotes"
-
-      return yield* requestJson({
-        endpoint,
-        decode: (data): CoinGeckoQuotesApiResponse => {
-          const decoded = Schema.decodeUnknownSync(CoinGeckoQuotesApiResponseSchema)(data)
-          const raw = decoded.data
-          if (typeof raw !== "object" || raw === null) {
-            throw new Error("Expected quotes response data to be an object")
-          }
-
-          const decodeCoin = Schema.decodeUnknownSync(CoinGeckoQuoteMarketDataSchema)
-          const result: Record<string, CoinGeckoQuoteMarketData> = {}
-          for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-            result[key] = decodeCoin(value)
-          }
-
-          return { data: result, status: decoded.status }
+          return yield* requestJson({
+            endpoint: `/api/coingecko/market-chart?${searchParams.toString()}`,
+            decode: (data) =>
+              Schema.decodeUnknownSync(MarketChartApiResponseSchema)(data),
+          });
         },
-      })
-    })
+      );
 
-    return { getMarketChart, getOHLC, getQuotes } as const
-  }),
-}) {}
+      const getGlobalMarketCapChart = Effect.fn(
+        "CoinGeckoApi.getGlobalMarketCapChart",
+      )(function* (args: {
+        days?: string;
+        vsCurrency?: string;
+      }) {
+        const searchParams = new URLSearchParams();
+        if (args.days) searchParams.set("days", args.days);
+        if (args.vsCurrency) searchParams.set("vs_currency", args.vsCurrency);
 
+        const endpoint = searchParams.size
+          ? `/api/coingecko/global-market-cap?${searchParams.toString()}`
+          : "/api/coingecko/global-market-cap";
+
+        return yield* requestJson({
+          endpoint,
+          decode: (data) =>
+            Schema.decodeUnknownSync(GlobalMarketCapChartApiResponseSchema)(
+              data,
+            ),
+        });
+      });
+
+      const getOHLC = Effect.fn("CoinGeckoApi.getOHLC")(function* (args: {
+        coinId: string;
+        days?: string;
+        vsCurrency?: string;
+        precision?: string | null;
+      }) {
+        const searchParams = new URLSearchParams();
+        searchParams.set("id", args.coinId);
+        if (args.days) searchParams.set("days", args.days);
+        if (args.vsCurrency) searchParams.set("vs_currency", args.vsCurrency);
+        if (args.precision) searchParams.set("precision", args.precision);
+
+        return yield* requestJson({
+          endpoint: `/api/coingecko/ohlc?${searchParams.toString()}`,
+          decode: (data) =>
+            Schema.decodeUnknownSync(OHLCApiResponseSchema)(data),
+        });
+      });
+
+      const getQuotes = Effect.fn("CoinGeckoApi.getQuotes")(function* (args: {
+        ids?: ReadonlyArray<string>;
+        symbols?: ReadonlyArray<string>;
+        names?: ReadonlyArray<string>;
+        category?: string;
+        limit?: number;
+      }) {
+        const searchParams = new URLSearchParams();
+        if (args.ids && args.ids.length > 0)
+          searchParams.set("ids", args.ids.join(","));
+        if (args.symbols && args.symbols.length > 0)
+          searchParams.set("symbols", args.symbols.join(","));
+        if (args.names && args.names.length > 0)
+          searchParams.set("names", args.names.join(","));
+        if (args.category) searchParams.set("category", args.category);
+        if (args.limit !== undefined)
+          searchParams.set("limit", String(args.limit));
+
+        const endpoint = searchParams.size
+          ? `/api/coingecko/quotes?${searchParams.toString()}`
+          : "/api/coingecko/quotes";
+
+        return yield* requestJson({
+          endpoint,
+          decode: (data): CoinGeckoQuotesApiResponse => {
+            const decoded = Schema.decodeUnknownSync(
+              CoinGeckoQuotesApiResponseSchema,
+            )(data);
+            const raw = decoded.data;
+            if (typeof raw !== "object" || raw === null) {
+              throw new Error("Expected quotes response data to be an object");
+            }
+
+            const decodeCoin = Schema.decodeUnknownSync(
+              CoinGeckoQuoteMarketDataSchema,
+            );
+            const result: Record<string, CoinGeckoQuoteMarketData> = {};
+            for (const [key, value] of Object.entries(
+              raw as Record<string, unknown>,
+            )) {
+              result[key] = decodeCoin(value);
+            }
+
+            return { data: result, status: decoded.status };
+          },
+        });
+      });
+
+      return {
+        getMarketChart,
+        getGlobalMarketCapChart,
+        getOHLC,
+        getQuotes,
+      } as const;
+    }),
+  },
+) {}

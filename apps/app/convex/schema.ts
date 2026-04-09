@@ -423,6 +423,19 @@ export default defineSchema({
     .index("by_timeframe_timestamp", ["timeframe", "timestamp"])
     .index("by_last_updated", ["lastUpdated"]),
 
+  // Historical global crypto market benchmark data (CoinGecko `/global/market_cap_chart`).
+  globalMarketHistory: defineTable({
+    timeframe: v.string(), // "1" | "7" | "30" | "365"
+    timestamp: v.number(), // Unix timestamp in ms
+    marketCapUsd: v.number(),
+    volumeUsd: v.number(),
+    dataSource: v.string(),
+    lastUpdated: v.number(),
+  })
+    .index("by_timeframe_timestamp", ["timeframe", "timestamp"])
+    .index("by_timeframe_last_updated", ["timeframe", "lastUpdated"])
+    .index("by_timestamp", ["timestamp"]),
+
   // Current market data - frequently updated (CoinGecko only)
   currentMarketData: defineTable({
     coingeckoId: v.string(), // CoinGecko ID

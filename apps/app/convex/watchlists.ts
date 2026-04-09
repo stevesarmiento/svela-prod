@@ -38,6 +38,27 @@ async function getCurrentUser(ctx: QueryCtx | MutationCtx) {
   return user ?? null;
 }
 
+function buildOverviewSnapshotCacheKey(clerkId: string): string {
+  return `overview:watchlist:snapshot:v2:${clerkId}`;
+}
+
+async function markOverviewSnapshotStale(ctx: MutationCtx, clerkId: string) {
+  const keys = [
+    buildOverviewSnapshotCacheKey(clerkId),
+    `overview:dailyBrief:${clerkId}:watchlist:24h`,
+    `overview:dailyBrief:${clerkId}:watchlist:7d`,
+  ];
+
+  for (const cacheKey of keys) {
+    const existing = await ctx.db
+      .query("apiCache")
+      .withIndex("by_key", (q) => q.eq("cacheKey", cacheKey))
+      .first();
+    if (!existing) continue;
+    await ctx.db.patch(existing._id, { expiresAt: 0 });
+  }
+}
+
 // Watchlist Group functions
 export const getWatchlistGroups = query({
   args: { serverToken: v.string(), clerkId: v.string() },
@@ -265,6 +286,7 @@ export const deleteWatchlistGroup = mutation({
 
     // Delete the group
     await ctx.db.delete(args.groupId);
+    await markOverviewSnapshotStale(ctx, args.clerkId);
     return null;
   },
 });
@@ -491,6 +513,8 @@ export const addToWatchlist = mutation({
       days: "1",
     });
 
+    await markOverviewSnapshotStale(ctx, args.clerkId);
+
     return id;
   },
 });
@@ -549,6 +573,8 @@ export const removeFromWatchlist = mutation({
         reason: "watchlist",
       });
     }
+
+    await markOverviewSnapshotStale(ctx, args.clerkId);
     return null;
   },
 });
@@ -1012,6 +1038,8 @@ export const deleteMyWatchlistGroup = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     const group = await ctx.db.get(args.groupId);
     if (!group || group.userId !== user._id) throw new Error("Watchlist group not found");
@@ -1040,6 +1068,7 @@ export const deleteMyWatchlistGroup = mutation({
     );
 
     await ctx.db.delete(args.groupId);
+    await markOverviewSnapshotStale(ctx, identity.subject);
     return null;
   },
 });
@@ -1133,6 +1162,8 @@ export const addToMyWatchlist = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     let targetGroupId = args.groupId;
     if (!targetGroupId) {
@@ -1194,6 +1225,8 @@ export const addToMyWatchlist = mutation({
       days: "1",
     });
 
+    await markOverviewSnapshotStale(ctx, identity.subject);
+
     return id;
   },
 });
@@ -1204,6 +1237,8 @@ export const removeFromMyWatchlist = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
     let targetGroupId = args.groupId;
     if (!targetGroupId) {
@@ -1234,6 +1269,7 @@ export const removeFromMyWatchlist = mutation({
       });
     }
 
+    await markOverviewSnapshotStale(ctx, identity.subject);
     return null;
   },
 });
@@ -1249,6 +1285,8 @@ export const setMyWatchlistItemHoldings = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     const group = await ctx.db.get(args.groupId);
     if (!group || group.userId !== user._id) throw new Error("Watchlist group not found");
@@ -1267,6 +1305,7 @@ export const setMyWatchlistItemHoldings = mutation({
         watchlistGroupId: row.watchlistGroupId,
         coinId: row.coinId,
       });
+      await markOverviewSnapshotStale(ctx, identity.subject);
       return null;
     }
 
@@ -1275,6 +1314,7 @@ export const setMyWatchlistItemHoldings = mutation({
     }
 
     await ctx.db.patch(row._id, { holdings: args.holdings });
+    await markOverviewSnapshotStale(ctx, identity.subject);
     return null;
   },
 });
@@ -1285,6 +1325,8 @@ export const removeBulkFromMyWatchlist = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return { removedCount: 0 };
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { removedCount: 0 };
 
     let targetGroupId = args.groupId;
     if (!targetGroupId) {
@@ -1325,6 +1367,7 @@ export const removeBulkFromMyWatchlist = mutation({
       }),
     );
 
+    await markOverviewSnapshotStale(ctx, identity.subject);
     return { removedCount: toDelete.length };
   },
 });
@@ -1335,6 +1378,8 @@ export const removeFromAllMyWatchlists = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
     const rows = await ctx.db
       .query("watchlists")
@@ -1355,6 +1400,7 @@ export const removeFromAllMyWatchlists = mutation({
       });
     }
 
+    await markOverviewSnapshotStale(ctx, identity.subject);
     return null;
   },
 });
@@ -1365,6 +1411,8 @@ export const removeBulkFromAllMyWatchlists = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return { removedCount: 0 };
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { removedCount: 0 };
 
     const uniqueCoinIds = Array.from(new Set(args.coinIds)).filter((id) => id.length > 0);
     if (uniqueCoinIds.length === 0) return { removedCount: 0 };
@@ -1399,6 +1447,7 @@ export const removeBulkFromAllMyWatchlists = mutation({
         }),
     );
 
+    await markOverviewSnapshotStale(ctx, identity.subject);
     return { removedCount };
   },
 });

@@ -1,6 +1,9 @@
 import type { Metadata } from "next"
 import { createMetadata } from "@/lib/metadata"
 import { OverviewHoldingsSection } from "./overview-holdings-section"
+import { preloadQuery } from "convex/nextjs"
+import { getAuthToken } from "@/lib/auth"
+import { api } from "../../../../../convex/_generated/api"
 
 export async function generateMetadata({
   params,
@@ -15,6 +18,11 @@ export async function generateMetadata({
   })
 }
 
-export default function OverviewPage() {
-  return <OverviewHoldingsSection />
+export default async function OverviewPage() {
+  const token = await getAuthToken()
+  const preloadedOverview = token
+    ? await preloadQuery(api.overview.getMyOverviewBootstrap, {}, { token })
+    : null
+
+  return <OverviewHoldingsSection preloadedOverview={preloadedOverview} />
 }

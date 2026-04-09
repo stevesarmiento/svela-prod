@@ -1,8 +1,7 @@
 import { v } from "convex/values";
-import { action, mutation, query } from "./_generated/server";
+import { action, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
 import { internal } from "./_generated/api";
-import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
 const walletValidator = v.object({
@@ -40,6 +39,33 @@ function formatAddress(address: string): string {
   const trimmed = address.trim();
   if (trimmed.length <= 12) return trimmed;
   return `${trimmed.slice(0, 6)}…${trimmed.slice(-6)}`;
+}
+
+function buildOverviewSnapshotCacheKey(clerkId: string): string {
+  return `overview:watchlist:snapshot:v2:${clerkId}`;
+}
+
+async function markOverviewSnapshotStale(ctx: MutationCtx, clerkId: string) {
+  const keys = [
+    buildOverviewSnapshotCacheKey(clerkId),
+    `overview:dailyBrief:${clerkId}:watchlist:24h`,
+    `overview:dailyBrief:${clerkId}:watchlist:7d`,
+  ];
+
+  for (const cacheKey of keys) {
+    const existing = await ctx.db
+      .query("apiCache")
+      .withIndex("by_key", (q) => q.eq("cacheKey", cacheKey))
+      .first();
+    if (!existing) continue;
+    await ctx.db.patch(existing._id, { expiresAt: 0 });
+  }
+}
+
+async function markMyOverviewSnapshotStale(ctx: MutationCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) return;
+  await markOverviewSnapshotStale(ctx, identity.subject);
 }
 
 function generateSlug(name: string): string {
@@ -348,6 +374,7 @@ export const upsertPortfolioWalletSelection = mutation({
       await ctx.db.delete(item._id);
     }
 
+    await markOverviewSnapshotStale(ctx, args.clerkId);
     return walletId;
   },
 });
@@ -421,6 +448,7 @@ export const deletePortfolioWallet = mutation({
       removedCoingeckoIds,
     });
 
+    await markOverviewSnapshotStale(ctx, args.clerkId);
     return null;
   },
 });
@@ -641,6 +669,7 @@ export const upsertMyPortfolioWalletSelection = mutation({
       await ctx.db.delete(item._id);
     }
 
+    await markMyOverviewSnapshotStale(ctx);
     return walletId;
   },
 });
@@ -704,7 +733,7 @@ export const deleteMyPortfolioWallet = mutation({
       removedCoingeckoIds,
     });
 
+    await markMyOverviewSnapshotStale(ctx);
     return null;
   },
 });
-

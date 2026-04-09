@@ -20,6 +20,17 @@ const priceHistoryPointValidator = v.object({
   lastUpdated: v.number(),
 });
 
+const globalMarketHistoryPointValidator = v.object({
+  _id: v.id("globalMarketHistory"),
+  _creationTime: v.number(),
+  timeframe: v.string(),
+  timestamp: v.number(),
+  marketCapUsd: v.number(),
+  volumeUsd: v.number(),
+  dataSource: v.string(),
+  lastUpdated: v.number(),
+});
+
 const MAX_RETURN_POINTS = 8192;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CHUNK_SIZE = 4096;
@@ -41,6 +52,11 @@ function getStaleWindowMs(timeframe: string): number {
   if (base === "1825") return 24 * 60 * 60 * 1000;
   if (base === "max") return 24 * 60 * 60 * 1000;
   return 10 * 60 * 1000;
+}
+
+function getGlobalMarketStaleWindowMs(timeframe: string): number {
+  if (timeframe === "1") return 90 * 60 * 1000;
+  return 36 * 60 * 60 * 1000;
 }
 
 function getWindowStartMs(timeframe: string, now: number): number | null {
@@ -125,8 +141,10 @@ export const getPriceHistorySeries = query({
 
       let minTimestampInChunk = Number.POSITIVE_INFINITY;
       for (const row of chunk) {
-        if (!byTimestamp.has(row.timestamp)) byTimestamp.set(row.timestamp, row);
-        if (row.timestamp < minTimestampInChunk) minTimestampInChunk = row.timestamp;
+        if (!byTimestamp.has(row.timestamp))
+          byTimestamp.set(row.timestamp, row);
+        if (row.timestamp < minTimestampInChunk)
+          minTimestampInChunk = row.timestamp;
         if (byTimestamp.size >= MAX_RETURN_POINTS) break;
       }
 
@@ -139,7 +157,9 @@ export const getPriceHistorySeries = query({
       beforeTimestamp = nextBefore;
     }
 
-    const data = Array.from(byTimestamp.values()).sort((a, b) => a.timestamp - b.timestamp);
+    const data = Array.from(byTimestamp.values()).sort(
+      (a, b) => a.timestamp - b.timestamp,
+    );
 
     const staleWindowMs = getStaleWindowMs(args.timeframe);
     return {
@@ -150,3 +170,51 @@ export const getPriceHistorySeries = query({
   },
 });
 
+export const getGlobalMarketHistorySeries = query({
+  args: {
+    serverToken: v.string(),
+    timeframe: v.union(
+      v.literal("1"),
+      v.literal("7"),
+      v.literal("30"),
+      v.literal("365"),
+    ),
+  },
+  returns: v.object({
+    data: v.array(globalMarketHistoryPointValidator),
+    lastUpdated: v.number(),
+    stale: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const now = Date.now();
+
+    const latest = await ctx.db
+      .query("globalMarketHistory")
+      .withIndex("by_timeframe_last_updated", (q) =>
+        q.eq("timeframe", args.timeframe),
+      )
+      .order("desc")
+      .first();
+
+    if (!latest) {
+      return { data: [], lastUpdated: 0, stale: false };
+    }
+
+    const data = await ctx.db
+      .query("globalMarketHistory")
+      .withIndex("by_timeframe_timestamp", (q) =>
+        q.eq("timeframe", args.timeframe),
+      )
+      .order("asc")
+      .collect();
+
+    return {
+      data,
+      lastUpdated: latest.lastUpdated,
+      stale:
+        latest.lastUpdated <=
+        now - getGlobalMarketStaleWindowMs(args.timeframe),
+    };
+  },
+});
