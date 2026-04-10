@@ -508,6 +508,9 @@ function OverviewHoldingsSectionInner(props: {
           <OverviewDailyBriefCard
             status={overviewBootstrap?.status ?? "missing"}
             window={commandWindow}
+            movers24h={overviewBootstrap?.movers24h ?? null}
+            movers7d={overviewBootstrap?.movers7d ?? null}
+            events={overviewBootstrap?.events ?? null}
             brief24h={
               overviewBootstrap?.brief24h ?? {
                 status: "missing",

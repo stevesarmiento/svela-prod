@@ -279,9 +279,22 @@ const DailyBriefSchema = z.object({
   bullets: z.array(z.string().min(1).max(220)).min(0).max(8).default([]),
   risks: z.array(z.string().min(1).max(220)).max(6).default([]),
   opportunities: z.array(z.string().min(1).max(220)).max(6).default([]),
+  cards: z
+    .array(
+      z.object({
+        kind: z.enum(["top_gainer", "top_loser", "events", "regime", "technicals", "theme"]),
+        title: z.string().min(1).max(48),
+        primary: z.string().min(1).max(120),
+        secondary: z.string().min(1).max(160).nullable().default(null),
+        body: z.string().min(1).max(240),
+        tone: z.enum(["positive", "negative", "neutral"]),
+      }),
+    )
+    .max(6)
+    .default([]),
 });
 
-const DailyBriefSchemaV1 = DailyBriefSchema.omit({ summary: true });
+const DailyBriefSchemaV1 = DailyBriefSchema.omit({ summary: true, cards: true });
 
 // Cache rows include extra metadata fields; accept them but validate the core brief shape.
 // Also accept older cache entries (without `summary`) and map them forward.
@@ -298,10 +311,10 @@ const DailyBriefCacheDataSchemaV1 = DailyBriefSchemaV1.extend({
 const DailyBriefCacheDataSchema = z
   .union([DailyBriefCacheDataSchemaV2, DailyBriefCacheDataSchemaV1])
   .transform((data) => {
-    if ("summary" in data) return data;
-    const bullets = Array.isArray(data.bullets) ? data.bullets : [];
-    const summaryFromBullets = bullets.length > 0 ? bullets.slice(0, 3).join(" ") : data.headline;
-    return { ...data, summary: summaryFromBullets };
+    if ("summary" in data && "cards" in data) return data;
+    // Older cache entries lacked `summary` and `cards`. Avoid reconstructing from bullets here
+    // because older bullets often repeat mover facts the UI already shows elsewhere.
+    return { ...data, summary: data.headline, cards: [] };
   })
   .pipe(DailyBriefCacheDataSchemaV2);
 
@@ -331,6 +344,28 @@ function sanitizeDailyBrief(brief: z.infer<typeof DailyBriefSchema>): z.infer<ty
   const bullets = normalizeBriefList(brief.bullets, 6);
   const risks = normalizeBriefList(brief.risks ?? [], 4);
   const opportunities = normalizeBriefList(brief.opportunities ?? [], 4);
+  const cards = (() => {
+    const out: z.infer<typeof DailyBriefSchema>["cards"] = [];
+    const seen = new Set<string>();
+    for (const card of brief.cards ?? []) {
+      if (!card) continue;
+      if (seen.has(card.kind)) continue;
+      seen.add(card.kind);
+      out.push({
+        kind: card.kind,
+        title: normalizeBriefText(card.title).slice(0, 48) || card.kind,
+        primary: normalizeBriefText(card.primary).slice(0, 120) || "—",
+        secondary: (() => {
+          const v = card.secondary == null ? null : normalizeBriefText(card.secondary).slice(0, 160);
+          return v && v.length > 0 ? v : null;
+        })(),
+        body: normalizeBriefText(card.body).slice(0, 240) || "—",
+        tone: card.tone,
+      });
+      if (out.length >= 6) break;
+    }
+    return out;
+  })();
 
   return {
     summary,
@@ -338,6 +373,7 @@ function sanitizeDailyBrief(brief: z.infer<typeof DailyBriefSchema>): z.infer<ty
     bullets,
     risks,
     opportunities,
+    cards,
   };
 }
 
@@ -347,6 +383,23 @@ const dailyBriefValidator = v.object({
   bullets: v.array(v.string()),
   risks: v.array(v.string()),
   opportunities: v.array(v.string()),
+  cards: v.array(
+    v.object({
+      kind: v.union(
+        v.literal("top_gainer"),
+        v.literal("top_loser"),
+        v.literal("events"),
+        v.literal("regime"),
+        v.literal("technicals"),
+        v.literal("theme"),
+      ),
+      title: v.string(),
+      primary: v.string(),
+      secondary: v.union(v.string(), v.null()),
+      body: v.string(),
+      tone: v.union(v.literal("positive"), v.literal("negative"), v.literal("neutral")),
+    }),
+  ),
   generatedAt: v.number(),
   model: v.union(v.string(), v.null()),
 });
@@ -384,6 +437,14 @@ type DailyBriefCache = {
     bullets: string[];
     risks: string[];
     opportunities: string[];
+    cards: Array<{
+      kind: "top_gainer" | "top_loser" | "events" | "regime" | "technicals" | "theme";
+      title: string;
+      primary: string;
+      secondary: string | null;
+      body: string;
+      tone: "positive" | "negative" | "neutral";
+    }>;
     generatedAt: number;
     model: string | null;
   } | null;
@@ -415,6 +476,14 @@ type DailyBrief = {
   bullets: string[];
   risks: string[];
   opportunities: string[];
+  cards: Array<{
+    kind: "top_gainer" | "top_loser" | "events" | "regime" | "technicals" | "theme";
+    title: string;
+    primary: string;
+    secondary: string | null;
+    body: string;
+    tone: "positive" | "negative" | "neutral";
+  }>;
   generatedAt: number;
   model: string | null;
 };
@@ -477,6 +546,7 @@ function parseBriefCacheRow(row: {
       bullets: parsed.data.bullets,
       risks: parsed.data.risks ?? [],
       opportunities: parsed.data.opportunities ?? [],
+      cards: parsed.data.cards ?? [],
       generatedAt,
       model,
     },
@@ -575,6 +645,7 @@ function buildFallbackBrief(args: {
     bullets: bullets.length > 0 ? bullets.slice(0, 6) : [],
     risks: [],
     opportunities: [],
+    cards: [],
   };
 }
 
@@ -1251,6 +1322,23 @@ export const upsertMyOverviewBriefForServer = mutation({
       bullets: v.array(v.string()),
       risks: v.array(v.string()),
       opportunities: v.array(v.string()),
+      cards: v.array(
+        v.object({
+          kind: v.union(
+            v.literal("top_gainer"),
+            v.literal("top_loser"),
+            v.literal("events"),
+            v.literal("regime"),
+            v.literal("technicals"),
+            v.literal("theme"),
+          ),
+          title: v.string(),
+          primary: v.string(),
+          secondary: v.union(v.string(), v.null()),
+          body: v.string(),
+          tone: v.union(v.literal("positive"), v.literal("negative"), v.literal("neutral")),
+        }),
+      ),
       model: v.union(v.string(), v.null()),
     }),
   },
@@ -1269,6 +1357,7 @@ export const upsertMyOverviewBriefForServer = mutation({
       bullets: args.brief.bullets,
       risks: args.brief.risks,
       opportunities: args.brief.opportunities,
+      cards: args.brief.cards,
       generatedAt: now,
       model: args.brief.model ?? null,
     };
@@ -1304,6 +1393,7 @@ export const upsertMyOverviewBriefForServer = mutation({
       bullets: data.bullets,
       risks: data.risks,
       opportunities: data.opportunities,
+      cards: data.cards,
       generatedAt: now,
       model: data.model,
     };
@@ -1377,6 +1467,7 @@ export const generateMyOverviewBrief = action({
         bullets: [],
         risks: [],
         opportunities: [],
+        cards: [],
         generatedAt: Date.now(),
         model: null,
       };
@@ -1400,6 +1491,7 @@ export const generateMyOverviewBrief = action({
           bullets: parsed.data.bullets,
           risks: parsed.data.risks ?? [],
           opportunities: parsed.data.opportunities ?? [],
+          cards: parsed.data.cards ?? [],
           generatedAt,
           model: modelName,
         };
@@ -1526,6 +1618,7 @@ Formatting:
       bullets: brief.bullets,
       risks: brief.risks ?? [],
       opportunities: brief.opportunities ?? [],
+      cards: brief.cards ?? [],
       generatedAt: now,
       model: modelName,
     };

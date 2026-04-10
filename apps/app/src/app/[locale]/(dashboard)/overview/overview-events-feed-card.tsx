@@ -1,5 +1,6 @@
 "use client";
 
+import { AnalysisDialog } from "@/components/navigation/analysis-dialog";
 import { TokenLogo } from "@/components/token-logo";
 import { formatUsdPrice } from "@/lib/format-usd";
 import { getTokenLogoURL } from "@/lib/logo-overrides";
@@ -8,7 +9,6 @@ import {
   EASE_OUT_CUBIC,
   motionDuration,
 } from "@/lib/motion-tokens";
-import { AnimatedSizeContainer } from "@v1/ui/animated-size-container";
 import { Badge } from "@v1/ui/badge";
 import { Button } from "@v1/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@v1/ui/card";
@@ -16,23 +16,8 @@ import { cn } from "@v1/ui/cn";
 import { Skeleton } from "@v1/ui/skeleton";
 import { Spinner } from "@v1/ui/spinner";
 import { Tabs, TabsList, TabsTrigger } from "@v1/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@v1/ui/tooltip";
-import {
-  BarChart3,
-  Bookmark,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
-  Flame,
-  Link2,
-} from "lucide-react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { BarChart3, ExternalLink } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -43,8 +28,6 @@ import type { MoversSnapshot } from "./overview-movers-card";
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-type OverviewStatus = "missing" | "fresh" | "stale";
 
 type EventKind =
   | "news"
@@ -144,48 +127,52 @@ function MoversList(props: {
           {props.rows.map((row) => {
             const logo = getTokenLogoURL(row.symbol, row.logoUrl ?? undefined);
             return (
-              <li
-                key={row.coingeckoId}
-                className="flex items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <TokenLogo
-                    src={logo}
-                    alt={row.name}
-                    sizePx={28}
-                    fallbackText={row.symbol}
-                    unoptimizedRemote
-                  />
-                  <div className="min-w-0">
-                    <div className="text-xs font-medium text-zinc-950 dark:text-white truncate">
-                      {row.symbol.toUpperCase()}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground truncate">
-                      {row.name}
+              <li key={row.coingeckoId} className="min-w-0">
+                <Link
+                  href={`/charts/${row.coingeckoId}`}
+                  className={cn(
+                    "flex items-center justify-between gap-3 min-w-0 active:scale-[0.98]",
+                    "-mx-2 rounded-xl p-2",
+                    "transition-colors duration-150",
+                    "hover:bg-zinc-950/5 dark:hover:bg-white/5",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  )}
+                >
+                  <div className="flex items-start gap-2 min-w-0">
+                    <TokenLogo
+                      src={logo}
+                      alt={row.name}
+                      sizePx={22}
+                      fallbackText={row.symbol}
+                      unoptimizedRemote
+                    />
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium text-zinc-950 dark:text-white truncate">
+                        {row.symbol.toUpperCase()}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground truncate">
+                        {row.name}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <ChangeBadge pct={row.changePct} />
-                  {row.impactUsd !== null ? (
-                    <div
-                      className={cn(
-                        "text-[11px] font-berkeley-mono tabular-nums",
-                        row.impactUsd > 0 && "text-emerald-400",
-                        row.impactUsd < 0 && "text-rose-400",
-                        row.impactUsd === 0 && "text-muted-foreground",
-                      )}
-                    >
-                      {row.impactUsd > 0 ? "+" : row.impactUsd < 0 ? "-" : ""}
-                      {formatUsdPrice(Math.abs(row.impactUsd))}
-                    </div>
-                  ) : (
-                    <div className="text-[11px] font-berkeley-mono tabular-nums text-muted-foreground">
-                      —
-                    </div>
-                  )}
-                </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <ChangeBadge pct={row.changePct} />
+                    {row.impactUsd !== null ? (
+                      <div
+                        className={cn(
+                          "text-[11px] font-berkeley-mono tabular-nums",
+                          row.impactUsd > 0 && "text-emerald-400",
+                          row.impactUsd < 0 && "text-rose-400",
+                          row.impactUsd === 0 && "text-muted-foreground",
+                        )}
+                      >
+                        {row.impactUsd > 0 ? "+" : row.impactUsd < 0 ? "-" : ""}
+                        {formatUsdPrice(Math.abs(row.impactUsd))}
+                      </div>
+                    ) : null}
+                  </div>
+                </Link>
               </li>
             );
           })}
@@ -220,17 +207,7 @@ function MoversFeedPost(props: {
 
   return (
     <div className="group/post rounded-2xl bg-zinc-100/80 dark:bg-white/[0.04] transition-colors duration-150 hover:bg-zinc-200/70 dark:hover:bg-white/[0.07]">
-      <div className="px-4 py-3.5">
-        <div className="text-[11px] text-muted-foreground text-pretty">
-          {data.coinCount > 0
-            ? `${data.coinCount} tokens${movers.limited ? " • limited" : ""}${
-                data.missingMarketDataCount > 0
-                  ? ` • ${data.missingMarketDataCount} missing quotes`
-                  : ""
-              }`
-            : "Add coins to a watchlist to track movers."}
-        </div>
-
+      <div className="px-4 py-2">
         {!hasAny ? (
           <div className="text-xs text-muted-foreground text-pretty">
             {data.coinCount > 0
@@ -238,7 +215,7 @@ function MoversFeedPost(props: {
               : "No movers available yet."}
           </div>
         ) : (
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <MoversList title="Top gainers" rows={gainers} />
             <MoversList title="Top losers" rows={losers} />
           </div>
@@ -249,7 +226,6 @@ function MoversFeedPost(props: {
 }
 
 function MoversFeedHeader(props: {
-  status: OverviewStatus;
   movers: {
     window: "24h" | "7d";
     onWindowChange: (window: "24h" | "7d") => void;
@@ -269,21 +245,14 @@ function MoversFeedHeader(props: {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   return (
-    <div className="sticky top-0 z-30 py-2">
+    <div className="sticky top-4 z-30 py-2 ">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-xl font-bold text-zinc-950 dark:text-white text-balance">
           <span className="z-[1] font-bold">Top movers</span>
-          <div className="z-[-1] absolute top-[-2px] h-[70px] inset-0 pointer-events-none bg-gradient-to-b from-white via-white/50 dark:via-background/90 to-transparent dark:from-background" />
+          <div className="z-[-1] absolute top-[-20px] h-[100px] inset-0 pointer-events-none bg-gradient-to-b from-white via-white/50 dark:via-background/90 to-transparent dark:from-background" />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Badge
-            variant={props.status === "fresh" ? "success" : "warning"}
-            className="font-berkeley-mono text-[11px]"
-          >
-            {props.status === "fresh" ? "Fresh" : "Stale"}
-          </Badge>
-
           <Tabs
             value={movers.window}
             onValueChange={(value) =>
@@ -299,51 +268,6 @@ function MoversFeedHeader(props: {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={isRefreshing}
-            onClick={async () => {
-              if (isRefreshing) return;
-              setIsRefreshing(true);
-              try {
-                const result = await movers.onRefreshNow();
-                if (!result.scheduled) {
-                  toast("Refresh skipped", {
-                    description:
-                      result.reason === "cooldown"
-                        ? "You refreshed recently. Try again in a moment."
-                        : "Refresh could not be scheduled.",
-                  });
-                  return;
-                }
-                toast.success("Refresh scheduled", {
-                  description: `Refreshing ${result.coinsCount} tokens and ${result.walletsCount} wallets.`,
-                });
-              } catch (error) {
-                toast.error("Refresh failed", {
-                  description:
-                    error instanceof Error
-                      ? error.message
-                      : "Failed to refresh data.",
-                });
-              } finally {
-                setIsRefreshing(false);
-              }
-            }}
-            className="h-8 rounded-[10px]"
-          >
-            {isRefreshing ? (
-              <span className="inline-flex items-center gap-2">
-                <Spinner size={14} />
-                Refreshing…
-              </span>
-            ) : (
-              "Refresh"
-            )}
-          </Button>
         </div>
       </div>
     </div>
@@ -411,53 +335,6 @@ function formatRelativeTime(ms: number, nowMs: number): string {
   });
 }
 
-function kindMeta(kind: EventKind): {
-  emoji: string;
-  label: string;
-  colorClass: string;
-} {
-  switch (kind) {
-    case "news":
-      return {
-        emoji: "\uD83D\uDCF0",
-        label: "News",
-        colorClass: "text-blue-500 dark:text-blue-400",
-      };
-    case "price_spike":
-      return {
-        emoji: "\u26A1",
-        label: "Price spike",
-        colorClass: "text-amber-500 dark:text-amber-400",
-      };
-    case "volume_anomaly":
-      return {
-        emoji: "\uD83D\uDCC8",
-        label: "Volume anomaly",
-        colorClass: "text-purple-500 dark:text-purple-400",
-      };
-    case "breakout_high":
-      return {
-        emoji: "\uD83D\uDE80",
-        label: "Breakout",
-        colorClass: "text-emerald-500 dark:text-emerald-400",
-      };
-    case "breakout_low":
-      return {
-        emoji: "\uD83D\uDCC9",
-        label: "Breakdown",
-        colorClass: "text-rose-500 dark:text-rose-400",
-      };
-  }
-}
-
-function toneBadgeVariant(
-  tone: EventTone,
-): "success" | "destructive" | "outline" {
-  if (tone === "positive") return "success";
-  if (tone === "negative") return "destructive";
-  return "outline";
-}
-
 function sentimentLabel(sentiment: Exclude<NewsSentiment, null>): string {
   if (sentiment === "bullish") return "Bullish";
   if (sentiment === "bearish") return "Bearish";
@@ -472,135 +349,51 @@ function sentimentVariant(
   return "warning";
 }
 
-/** Deterministic seed from event id for fake community count. */
-function seedCount(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) {
-    h = (h * 31 + id.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h % 42) + 1;
+function parseBreakoutTimeframeDays(title: string): string | null {
+  const match = title.match(/\b(\d+)d\b/i);
+  if (!match) return null;
+  return match[1] ?? null;
 }
 
-// ---------------------------------------------------------------------------
-// Local interaction state (no persistence — fun engagement layer only)
-// ---------------------------------------------------------------------------
-
-function useFeedInteractions() {
-  const [fireSet, setFireSet] = useState<Set<string>>(() => new Set());
-  const [bookmarkSet, setBookmarkSet] = useState<Set<string>>(() => new Set());
-  const [expandedSet, setExpandedSet] = useState<Set<string>>(() => new Set());
-
-  const toggleFire = useCallback((id: string) => {
-    setFireSet((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const toggleBookmark = useCallback((id: string) => {
-    setBookmarkSet((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  const toggleExpanded = useCallback((id: string) => {
-    setExpandedSet((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  return {
-    fireSet,
-    bookmarkSet,
-    expandedSet,
-    toggleFire,
-    toggleBookmark,
-    toggleExpanded,
-  };
+function ensureSentence(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
-// ---------------------------------------------------------------------------
-// Copy-link button (follows copy-button.tsx pattern)
-// ---------------------------------------------------------------------------
-
-function CopyLinkAction(props: { href: string }) {
-  const [copied, setCopied] = useState(false);
-  const shouldReduceMotion = useReducedMotion();
-  const iconTransition = {
-    duration: motionDuration(shouldReduceMotion, DURATION_UI_S),
-    ease: EASE_OUT_CUBIC,
-  } as const;
-
-  const handleCopy = async () => {
-    try {
-      const url = `${window.location.origin}${props.href}`;
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      toast.success("Link copied");
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      toast.error("Failed to copy");
+function buildFeedSentence(event: OverviewEvent): string {
+  switch (event.kind) {
+    case "price_spike": {
+      const pct = typeof event.percent === "number" ? event.percent : 0;
+      return `${event.name} moved ${pct > 0 ? "+" : ""}${pct.toFixed(2)}% in the last 24h.`;
     }
-  };
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors active:scale-[0.95]"
-        >
-          <span className="relative size-3.5 flex items-center justify-center">
-            <AnimatePresence mode="wait">
-              {copied ? (
-                <motion.span
-                  key="check"
-                  className="absolute inset-0 flex items-center justify-center"
-                  initial={
-                    shouldReduceMotion ? false : { opacity: 0, scale: 0.8 }
-                  }
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={
-                    shouldReduceMotion ? undefined : { opacity: 0, scale: 0.8 }
-                  }
-                  transition={iconTransition}
-                >
-                  <Check size={13} className="text-green-500" />
-                </motion.span>
-              ) : (
-                <motion.span
-                  key="link"
-                  className="absolute inset-0 flex items-center justify-center"
-                  initial={
-                    shouldReduceMotion ? false : { opacity: 0, scale: 0.8 }
-                  }
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={
-                    shouldReduceMotion ? undefined : { opacity: 0, scale: 0.8 }
-                  }
-                  transition={iconTransition}
-                >
-                  <Link2 size={13} />
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </span>
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" className="text-xs">
-        Copy link
-      </TooltipContent>
-    </Tooltip>
-  );
+    case "volume_anomaly": {
+      const summary = event.summary?.trim().toLowerCase();
+      if (!summary) {
+        return `${event.name} is showing an unusual volume shift.`;
+      }
+      if (event.tone === "negative") {
+        return ensureSentence(
+          `${event.name} volume has cooled off to ${summary}`,
+        );
+      }
+      return ensureSentence(`${event.name} volume is running hot at ${summary}`);
+    }
+    case "breakout_high": {
+      const timeframe = parseBreakoutTimeframeDays(event.title);
+      return timeframe
+        ? `${event.name} pushed to a new ${timeframe}d high.`
+        : `${event.name} pushed to a new local high.`;
+    }
+    case "breakout_low": {
+      const timeframe = parseBreakoutTimeframeDays(event.title);
+      return timeframe
+        ? `${event.name} slipped to a new ${timeframe}d low.`
+        : `${event.name} slipped to a new local low.`;
+    }
+    case "news":
+      return ensureSentence(`${event.name} is in the news: ${event.title}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -662,103 +455,81 @@ function EventsFeedSkeleton() {
 // ---------------------------------------------------------------------------
 
 function OverviewEventsFeedCardBase(props: {
-  status: OverviewStatus;
   events: EventsFeedData;
   intro?: ReactNode;
 }) {
   const data = props.events;
-  const isLoading = props.status === "missing";
   const nowMs = Date.now();
 
   const events = useMemo(() => data?.events ?? [], [data?.events]);
   const groups = useMemo(() => groupByDate(events), [events]);
   const shouldReduceMotion = useReducedMotion();
 
-  const {
-    fireSet,
-    bookmarkSet,
-    expandedSet,
-    toggleFire,
-    toggleBookmark,
-    toggleExpanded,
-  } = useFeedInteractions();
-
-  if (isLoading) return <EventsFeedSkeleton />;
-
   return (
-    <TooltipProvider delayDuration={300}>
-      <Card className="border-transparent shadow-none bg-transparent">
-        <CardHeader className="p-0 space-y-0">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle className="text-2xl font-bold text-zinc-950 dark:text-white text-balance px-5">
-                Activity
-              </CardTitle>
-          </div>
-        </CardHeader>
+    <Card className="border-transparent shadow-none bg-transparent">
+      <CardHeader className="p-0 space-y-0 sr-only">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-2xl font-bold text-zinc-950 dark:text-white text-balance px-5">
+              Activity
+            </CardTitle>
+        </div>
+      </CardHeader>
 
-        <CardContent className="px-5 pb-5 pt-0">
-          <div role="region" aria-label="Activity feed">
-            {props.intro ? <div className="pt-3">{props.intro}</div> : null}
+      <CardContent className="px-5 pb-5 pt-0">
+        <div role="region" aria-label="Activity feed">
+          {props.intro ? <div className="pt-3">{props.intro}</div> : null}
 
-            {events.length === 0 ? (
-              <div
-                className={cn(
-                  "text-xs text-muted-foreground text-pretty",
-                  props.intro ? "pt-6" : "py-8",
-                )}
-              >
-                No recent events yet.
-              </div>
-            ) : (
-              <div className={cn(props.intro ? "pt-4" : "")}>
-                {groups.map((group) => {
-                  // running index across all groups for stagger
-                  let runIdx = 0;
-                  for (const g of groups) {
-                    if (g === group) break;
-                    runIdx += g.events.length;
-                  }
+          {events.length === 0 ? (
+            <div
+              className={cn(
+                "text-xs text-muted-foreground text-pretty",
+                props.intro ? "pt-6" : "py-8",
+              )}
+            >
+              No recent events yet.
+            </div>
+          ) : (
+            <div className={cn(props.intro ? "pt-4" : "")}>
+              {groups.map((group) => {
+                // running index across all groups for stagger
+                let runIdx = 0;
+                for (const g of groups) {
+                  if (g === group) break;
+                  runIdx += g.events.length;
+                }
 
-                  return (
-                    <div key={group.label} className="pt-4">
-                      {/* ── Date header ── */}
-                      <div className="sticky relative top-0 z-30 py-2 text-xl font-medium text-white">
-                        <span className="text-white z-[1] font-bold">{group.label}</span>
-                        <div className="z-[-1] absolute top-[-2px] h-[70px] inset-0 pointer-events-none bg-gradient-to-b from-white via-white/50 dark:via-background/90 to-transparent dark:from-background" />
-                      </div>
-
-                      {/* ── Event cards ── */}
-                      <div className="space-y-2 pt-2">
-                        {group.events.map((event, i) => (
-                          <EventCard
-                            key={event.id}
-                            event={event}
-                            index={runIdx + i}
-                            nowMs={nowMs}
-                            isFired={fireSet.has(event.id)}
-                            isBookmarked={bookmarkSet.has(event.id)}
-                            isExpanded={expandedSet.has(event.id)}
-                            onToggleFire={toggleFire}
-                            onToggleBookmark={toggleBookmark}
-                            onToggleExpanded={toggleExpanded}
-                            shouldReduceMotion={shouldReduceMotion}
-                          />
-                        ))}
-                      </div>
+                return (
+                  <div key={group.label} className="pt-4">
+                    {/* ── Date header ── */}
+                    <div className="sticky relative top-4 z-30 py-2 text-xl font-medium text-white">
+                      <span className="text-white z-[1] font-bold">{group.label}</span>
+                      <div className="z-[-1] absolute top-[-20px] h-[100px] inset-0 pointer-events-none bg-gradient-to-b from-white via-white/50 dark:via-background/90 to-transparent dark:from-background" />
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </TooltipProvider>
+
+                    {/* ── Event cards ── */}
+                    <div className="space-y-2 pt-2">
+                      {group.events.map((event, i) => (
+                        <EventCard
+                          key={event.id}
+                          event={event}
+                          index={runIdx + i}
+                          nowMs={nowMs}
+                          shouldReduceMotion={shouldReduceMotion}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
 export function OverviewActivityFeedCard(props: {
-  status: OverviewStatus;
   events: EventsFeedData;
   movers: {
     window: "24h" | "7d";
@@ -777,11 +548,10 @@ export function OverviewActivityFeedCard(props: {
 }) {
   return (
     <OverviewEventsFeedCardBase
-      status={props.status}
       events={props.events}
       intro={
         <>
-          <MoversFeedHeader status={props.status} movers={props.movers} />
+          <MoversFeedHeader movers={props.movers} />
           <div className="pt-3">
             <MoversFeedPost movers={props.movers} />
           </div>
@@ -792,11 +562,10 @@ export function OverviewActivityFeedCard(props: {
 }
 
 export function OverviewEventsFeedCard(props: {
-  status: OverviewStatus;
   events: EventsFeedData;
 }) {
   return (
-    <OverviewEventsFeedCardBase status={props.status} events={props.events} />
+    <OverviewEventsFeedCardBase events={props.events} />
   );
 }
 
@@ -810,33 +579,13 @@ function EventCard(props: {
   event: OverviewEvent;
   index: number;
   nowMs: number;
-  isFired: boolean;
-  isBookmarked: boolean;
-  isExpanded: boolean;
-  onToggleFire: (id: string) => void;
-  onToggleBookmark: (id: string) => void;
-  onToggleExpanded: (id: string) => void;
   shouldReduceMotion: boolean | null;
 }) {
-  const {
-    event,
-    index,
-    nowMs,
-    isFired,
-    isBookmarked,
-    isExpanded,
-    onToggleFire,
-    onToggleBookmark,
-    onToggleExpanded,
-    shouldReduceMotion,
-  } = props;
+  const { event, index, nowMs, shouldReduceMotion } = props;
 
   const logo = getTokenLogoURL(event.symbol, event.logoUrl ?? undefined);
   const timeLabel = formatRelativeTime(event.occurredAtMs, nowMs);
-  const meta = kindMeta(event.kind);
-  const baseCount = useMemo(() => seedCount(event.id), [event.id]);
-  const fireCount = baseCount + (isFired ? 1 : 0);
-  const needsTruncation = (event.summary?.length ?? 0) > 80;
+  const feedSentence = buildFeedSentence(event);
 
   const entryTransition = {
     duration: motionDuration(shouldReduceMotion, DURATION_UI_S),
@@ -852,8 +601,7 @@ function EventCard(props: {
       transition={entryTransition}
     >
       <div className="px-4 py-3.5">
-        {/* ── Primary row: logo + name + subtitle ── */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           <TokenLogo
             src={logo}
             alt={event.name}
@@ -863,256 +611,68 @@ function EventCard(props: {
           />
 
           <div className="min-w-0 flex-1">
-            {/* Name */}
-            <Link
-              href={event.tokenHref}
-              className="block text-[13px] font-semibold text-zinc-950 dark:text-white truncate hover:underline underline-offset-2"
-            >
-              {event.name}
-            </Link>
-
-            {/* Kind label (colored) · metadata */}
-            <div className="flex flex-wrap items-center gap-x-1 text-[12px] leading-snug">
-              <span className={cn("font-medium", meta.colorClass)}>
-                {meta.label}
-              </span>
-              <span className="text-muted-foreground">\u00B7</span>
-              <span className="font-berkeley-mono tabular-nums text-muted-foreground">
-                {event.symbol.toUpperCase()}
-              </span>
-              {typeof event.percent === "number" ? (
-                <>
-                  <span className="text-muted-foreground">\u00B7</span>
-                  <span
-                    className={cn(
-                      "font-berkeley-mono tabular-nums font-medium",
-                      event.tone === "positive"
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : event.tone === "negative"
-                          ? "text-rose-600 dark:text-rose-400"
-                          : "text-muted-foreground",
-                    )}
-                  >
-                    {event.percent > 0 ? "+" : ""}
-                    {event.percent.toFixed(2)}%
-                  </span>
-                </>
+            <div className="flex items-center gap-2 min-w-0">
+              <Link
+                href={event.tokenHref}
+                className="text-[13px] font-semibold text-zinc-950 dark:text-white truncate hover:underline underline-offset-2"
+              >
+                {event.name}
+              </Link>
+              {event.kind === "news" && event.sentiment ? (
+                <Badge
+                  variant={sentimentVariant(event.sentiment)}
+                  className="h-5 px-1.5 font-berkeley-mono text-[10px] tabular-nums shrink-0"
+                >
+                  {sentimentLabel(event.sentiment)}
+                </Badge>
               ) : null}
-              {typeof event.valueUsd === "number" ? (
-                <>
-                  <span className="text-muted-foreground">\u00B7</span>
-                  <span className="font-berkeley-mono tabular-nums text-muted-foreground">
-                    {formatUsdPrice(Math.abs(event.valueUsd))}
-                  </span>
-                </>
+            </div>
+            <p className="mt-0.5 text-[13px] leading-relaxed text-zinc-700 dark:text-zinc-300 text-pretty">
+              {feedSentence}
+            </p>
+
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 opacity-0 group-hover/post:opacity-100 max-sm:opacity-100 transition-opacity duration-150">
+              <Link
+                href={event.tokenHref}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-background hover:text-foreground transition-colors active:scale-[0.98]"
+              >
+                <BarChart3 className="size-3" />
+                View chart
+              </Link>
+              <AnalysisDialog
+                coinId={event.coingeckoId}
+                tokenData={{
+                  id: event.coingeckoId,
+                  name: event.name,
+                  symbol: event.symbol,
+                  logoUrl: logo,
+                }}
+                triggerVariant="explain"
+                triggerLabel="Analyze"
+                showTriggerTooltip={false}
+                triggerAriaLabel="Analyze"
+                triggerClassName="h-7 rounded-md border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground shadow-none hover:bg-background hover:text-foreground focus-visible:ring-0"
+              />
+              {event.kind === "news" && event.externalHref ? (
+                <a
+                  href={event.externalHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/60 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-background hover:text-foreground transition-colors active:scale-[0.98]"
+                >
+                  <ExternalLink className="size-3" />
+                  Read article
+                </a>
               ) : null}
             </div>
           </div>
 
-          {/* Right side: time + emoji */}
           <div className="shrink-0 flex items-center gap-2">
             <span className="text-[11px] font-berkeley-mono tabular-nums text-muted-foreground">
               {timeLabel}
             </span>
-            <span className="text-sm" aria-hidden>
-              {meta.emoji}
-            </span>
           </div>
         </div>
-
-        {/* ── Expandable detail section ── */}
-        <AnimatedSizeContainer height>
-          <div>
-            {/* Title (always visible if different from name) */}
-            {event.title !== event.name ? (
-              <p className="mt-2 ml-12 text-[12px] text-zinc-700 dark:text-zinc-300 leading-snug text-pretty">
-                {event.title}
-              </p>
-            ) : null}
-
-            {/* Badges: sentiment for news */}
-            {event.kind === "news" ? (
-              <div className="mt-1.5 ml-12 flex flex-wrap items-center gap-1.5">
-                {event.sentiment ? (
-                  <Badge
-                    variant={sentimentVariant(event.sentiment)}
-                    className="h-5 px-1.5 font-berkeley-mono text-[10px] tabular-nums"
-                  >
-                    {sentimentLabel(event.sentiment)}
-                  </Badge>
-                ) : (
-                  <Badge
-                    variant="outline"
-                    className="h-5 px-1.5 font-berkeley-mono text-[10px] tabular-nums text-muted-foreground"
-                  >
-                    Sentiment pending
-                  </Badge>
-                )}
-              </div>
-            ) : null}
-
-            {/* Expandable summary */}
-            {event.summary ? (
-              <div className="mt-1.5 ml-12">
-                <p className="text-[12px] text-muted-foreground leading-relaxed text-pretty">
-                  {isExpanded || !needsTruncation
-                    ? event.summary
-                    : `${event.summary.slice(0, 80)}\u2026`}
-                </p>
-                {needsTruncation ? (
-                  <button
-                    type="button"
-                    onClick={() => onToggleExpanded(event.id)}
-                    className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {isExpanded ? "Less" : "More"}
-                    {isExpanded ? (
-                      <ChevronUp size={11} />
-                    ) : (
-                      <ChevronDown size={11} />
-                    )}
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-
-            {/* ── Action bar (hover-reveal) ── */}
-            <div className="mt-2 ml-[44px] flex items-center gap-0.5 opacity-0 group-hover/post:opacity-100 max-sm:opacity-100 transition-opacity duration-150">
-              {/* Fire */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isFired) toast.success("Fired up!");
-                  onToggleFire(event.id);
-                }}
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] transition-colors active:scale-[0.95]",
-                  isFired
-                    ? "text-orange-500"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <AnimatePresence mode="wait">
-                  <motion.span
-                    key={isFired ? "fired" : "idle"}
-                    initial={
-                      shouldReduceMotion ? false : { scale: 0.6, opacity: 0 }
-                    }
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={
-                      shouldReduceMotion
-                        ? undefined
-                        : { scale: 0.6, opacity: 0 }
-                    }
-                    transition={{
-                      type: "spring",
-                      stiffness: 280,
-                      damping: 18,
-                      mass: 0.3,
-                    }}
-                  >
-                    <Flame
-                      size={13}
-                      className={cn(isFired && "fill-orange-500")}
-                    />
-                  </motion.span>
-                </AnimatePresence>
-                <span className="font-berkeley-mono tabular-nums text-[10px]">
-                  {fireCount}
-                </span>
-              </button>
-
-              {/* Copy */}
-              <CopyLinkAction href={event.tokenHref} />
-
-              {/* Bookmark */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onToggleBookmark(event.id);
-                      toast.success(
-                        isBookmarked ? "Removed bookmark" : "Bookmarked",
-                      );
-                    }}
-                    className={cn(
-                      "inline-flex items-center rounded-md px-1.5 py-1 transition-colors active:scale-[0.95]",
-                      isBookmarked
-                        ? "text-amber-500"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    <AnimatePresence mode="wait">
-                      <motion.span
-                        key={isBookmarked ? "saved" : "unsaved"}
-                        initial={
-                          shouldReduceMotion
-                            ? false
-                            : { scale: 0.6, opacity: 0 }
-                        }
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={
-                          shouldReduceMotion
-                            ? undefined
-                            : { scale: 0.6, opacity: 0 }
-                        }
-                        transition={{
-                          type: "spring",
-                          stiffness: 280,
-                          damping: 18,
-                          mass: 0.3,
-                        }}
-                      >
-                        <Bookmark
-                          size={13}
-                          className={cn(isBookmarked && "fill-amber-500")}
-                        />
-                      </motion.span>
-                    </AnimatePresence>
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">
-                  {isBookmarked ? "Remove bookmark" : "Bookmark"}
-                </TooltipContent>
-              </Tooltip>
-
-              {/* Chart */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link
-                    href={event.tokenHref}
-                    className="inline-flex items-center rounded-md px-1.5 py-1 text-muted-foreground hover:text-foreground transition-colors active:scale-[0.95]"
-                  >
-                    <BarChart3 size={13} />
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">
-                  View chart
-                </TooltipContent>
-              </Tooltip>
-
-              {/* External source */}
-              {event.kind === "news" && event.externalHref ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <a
-                      href={event.externalHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center rounded-md px-1.5 py-1 text-muted-foreground hover:text-foreground transition-colors active:scale-[0.95]"
-                    >
-                      <ExternalLink size={13} />
-                    </a>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs">
-                    Open source
-                  </TooltipContent>
-                </Tooltip>
-              ) : null}
-            </div>
-          </div>
-        </AnimatedSizeContainer>
       </div>
     </MotionDiv>
   );
