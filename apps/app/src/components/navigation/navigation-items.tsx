@@ -41,9 +41,13 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
   const handleItemClick = useCallback((item: MenuItem, isActive: boolean) => {
     return () => {
       if (isActive) {
-        // Re-clicking the Overview (watchlist) tab should open the same
+        if (item.href === "/overview") {
+          return;
+        }
+
+        // Re-clicking the Watchlists tab should open the same
         // "Add to comparison" flow used in charts.
-        if (item.href === "/watchlists" || item.title.toLowerCase() === "overview") {
+        if (item.href === "/watchlists") {
           onOpenCommandSearch("charts");
           return;
         }
@@ -70,7 +74,9 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
           item.href === "/screener"
             ? "Screener"
             : isActive
-              ? item.href === "/watchlists"
+              ? item.href === "/overview"
+                ? "Overview"
+                : item.href === "/watchlists"
                 ? "Watchlists"
                 : `Search ${item.title}`
               : item.title;
