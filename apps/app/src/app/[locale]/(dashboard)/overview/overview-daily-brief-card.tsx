@@ -376,7 +376,8 @@ export function OverviewDailyBriefCard(props: {
   // Autoplay timer -- the active indicator fills up, then advances to the next slide
   const [isPaused, setIsPaused] = useState(false)
   const [progress, setProgress] = useState(0)
-  const slideCount = 1 + orderedCards.length
+  const slideKeys = useMemo<Array<string>>(() => ["summary", ...orderedCards.map((c) => c.kind)], [orderedCards])
+  const slideCount = slideKeys.length
   const progressRef = useRef(0)
   const lastTickRef = useRef(Date.now())
 
@@ -492,7 +493,7 @@ export function OverviewDailyBriefCard(props: {
           </Carousel>
 
           <div className="flex items-center justify-start gap-1.5 px-2">
-            {Array.from({ length: slideCount }).map((_, idx) => {
+            {slideKeys.map((slideKey, idx) => {
               const isActive = idx === selectedSlide
               const fillPct = isActive
                 ? Math.min((progress / SLIDE_INTERVAL_MS) * 100, 100)
@@ -500,7 +501,7 @@ export function OverviewDailyBriefCard(props: {
 
               return (
                 <button
-                  key={idx}
+                  key={slideKey}
                   type="button"
                   aria-label={`Go to slide ${idx + 1}`}
                   className={cn(

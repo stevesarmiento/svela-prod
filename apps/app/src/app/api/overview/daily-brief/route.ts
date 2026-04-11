@@ -221,7 +221,7 @@ export async function POST(req: NextRequest) {
           timeframe,
         })
         const closes = (series.data ?? [])
-          .map((p) => (Number.isFinite(p.close ?? NaN) ? (p.close as number) : p.price))
+          .map((p) => (Number.isFinite(p.close ?? Number.NaN) ? (p.close as number) : p.price))
           .filter((n) => typeof n === "number" && Number.isFinite(n))
         if (closes.length < 20) return null
         const rsi = computeRsiLast(closes, 14)
@@ -258,7 +258,9 @@ export async function POST(req: NextRequest) {
           : "neutral"
 
     const covered =
-      moversBlock && Number.isFinite(moversBlock.coinCount ?? NaN) && Number.isFinite(moversBlock.missingMarketDataCount ?? NaN)
+      moversBlock &&
+      Number.isFinite(moversBlock.coinCount ?? Number.NaN) &&
+      Number.isFinite(moversBlock.missingMarketDataCount ?? Number.NaN)
         ? Math.max(0, (moversBlock.coinCount ?? 0) - (moversBlock.missingMarketDataCount ?? 0))
         : null
 
@@ -353,7 +355,7 @@ export async function POST(req: NextRequest) {
     })()
 
     let summary = normalizeText(fallbackSummary)
-    let bodies: Record<CardKind, string> = { ...defaultBodies }
+    const bodies: Record<CardKind, string> = { ...defaultBodies }
     let modelName: string | null = null
 
     if (isGeminiAvailable && gemini) {
