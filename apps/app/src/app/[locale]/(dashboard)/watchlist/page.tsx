@@ -1,6 +1,6 @@
-import { WatchlistClient } from "./_components/watchlist-client"
 import type { Metadata } from "next"
 import { createMetadata } from "@/lib/metadata"
+import { redirect } from "next/navigation"
 
 export async function generateMetadata({
   params,
@@ -16,5 +16,5 @@ export async function generateMetadata({
 }
 
 export default function WatchlistPage() {
-  return <WatchlistClient />
+  redirect("/watchlists")
 }

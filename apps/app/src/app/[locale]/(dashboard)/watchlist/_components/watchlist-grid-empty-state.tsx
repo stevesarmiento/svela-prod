@@ -8,6 +8,31 @@ import { cn } from '@v1/ui/cn'
 import { Kbd } from '@v1/ui/kbd'
 import { IconRainbow, IconSparkles, IconTarget } from 'symbols-react'
 import { Liveline, type LivelinePoint } from 'liveline'
+import { TokenLogo } from '@/components/token-logo'
+
+const CARD_TOKEN_LOGOS = [
+  // Card 1 (yellow — 3 tokens)
+  [
+    { src: '/logos/popular/bitcoin.svg', alt: 'Bitcoin', fallback: 'B' },
+    { src: '/logos/popular/ethereum.svg', alt: 'Ethereum', fallback: 'E' },
+    { src: '/logos/popular/solana.svg', alt: 'Solana', fallback: 'S' },
+  ],
+  // Card 2 (blue — 5 tokens)
+  [
+    { src: '/logos/popular/uniswap.svg', alt: 'Uniswap', fallback: 'U' },
+    { src: '/logos/popular/sui.svg', alt: 'Sui', fallback: 'S' },
+    { src: '/logos/popular/jito.svg', alt: 'Jito', fallback: 'J' },
+    { src: '/logos/popular/hyperliquid.svg', alt: 'Hyperliquid', fallback: 'H' },
+    { src: '/logos/popular/aptos.svg', alt: 'Aptos', fallback: 'A' },
+  ],
+  // Card 3 (rose — 4 tokens)
+  [
+    { src: '/logos/popular/bnb.svg', alt: 'BNB', fallback: 'B' },
+    { src: '/logos/popular/cardano.svg', alt: 'Cardano', fallback: 'C' },
+    { src: '/logos/popular/tron.svg', alt: 'Tron', fallback: 'T' },
+    { src: '/logos/popular/tether.svg', alt: 'Tether', fallback: 'U' },
+  ],
+] as const
 
 type IllustrationVariant = 'orange' | 'blue' | 'primary'
 
@@ -104,6 +129,7 @@ interface IllustrationWatchlistCardProps {
   titleWidthClassName: string
   subtitleWidthClassName: string
   tokenCount: number
+  tokenLogos?: ReadonlyArray<{ src: string; alt: string; fallback: string }>
   footerPillWidthClassName: string
   sparklineSeed: number
   sparklinePointCount?: number
@@ -122,6 +148,7 @@ function IllustrationWatchlistCard({
   titleWidthClassName,
   subtitleWidthClassName,
   tokenCount,
+  tokenLogos,
   footerPillWidthClassName,
   sparklineSeed,
   sparklinePointCount = 18,
@@ -166,7 +193,7 @@ function IllustrationWatchlistCard({
         <div className="absolute inset-0 opacity-40" style={DOT_PATTERN_STYLE} />
         <CardContent className="relative p-4 h-full flex flex-col gap-2.5">
           <div className="flex items-center gap-2">
-            <div className={cn('size-7 bg-zinc-700 rounded-full flex items-center justify-center border border-primary/10')}>
+            <div className={cn('size-7 bg-white/10 rounded-full flex items-center justify-center border border-primary/10')}>
               <Icon className={cn('size-3.5 fill-primary/50', styles.iconClassName)} />
             </div>
             <div className="flex flex-col gap-1.5 opacity-50">
@@ -188,7 +215,7 @@ function IllustrationWatchlistCard({
                   <Liveline
                     data={sparklineData}
                     value={sparklineLatestValue}
-                    color={"#ffffff50"}
+                    color={"#ffffff80"}
                     lineWidth={2}
                     window={sparklineWindowSecs}
                     showValue={false}
@@ -210,17 +237,29 @@ function IllustrationWatchlistCard({
 
           <div className="flex items-center justify-between mt-auto">
             <div className="flex -space-x-1.5">
-              {tokenKeys.map((key) => (
-                <div
-                  key={key}
-                  className={cn(
-                    'size-4 rounded-full',
-                    variant === 'primary'
-                      ? 'bg-zinc-700/30 backdrop-blur-sm border border-primary/5'
-                      : '',
-                  )}
-                />
-              ))}
+              {tokenLogos
+                ? tokenLogos.map((token) => (
+                    <TokenLogo
+                      key={token.src}
+                      src={token.src}
+                      alt={token.alt}
+                      fallbackText={token.fallback}
+                      sizePx={18}
+                      className="ring-0 border border-white/10 bg-zinc-700/30"
+                      quality={85}
+                    />
+                  ))
+                : tokenKeys.map((key) => (
+                    <div
+                      key={key}
+                      className={cn(
+                        'size-4 rounded-full',
+                        variant === 'primary'
+                          ? 'bg-white/5 backdrop-blur-sm border border-primary/5'
+                          : '',
+                      )}
+                    />
+                  ))}
             </div>
           </div>
         </CardContent>
@@ -291,11 +330,12 @@ export function WatchlistEmptyIllustration() {
           absoluteClassName="size-full"
           variant="primary"
           icon={IconTarget}
-          cardBgClassName="bg-zinc-800 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-all duration-300"
-          cardBorderClassName="border-primary/10"
+          cardBgClassName="bg-yellow-700 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-2 transition-all duration-300"
+          cardBorderClassName="border-yellow-600"
           titleWidthClassName="w-16"
           subtitleWidthClassName="w-8"
           tokenCount={3}
+          tokenLogos={CARD_TOKEN_LOGOS[0]}
           footerPillWidthClassName="w-10"
           sparklineSeed={11}
           itemVariants={itemVariants}
@@ -310,11 +350,12 @@ export function WatchlistEmptyIllustration() {
           absoluteClassName="size-full"
           variant="primary"
           icon={IconSparkles}
-          cardBgClassName="bg-zinc-800 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-2 transition-all duration-300"
-          cardBorderClassName="border-primary/10 "
+          cardBgClassName="bg-blue-700 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-all duration-300"
+          cardBorderClassName="border-blue-600"
           titleWidthClassName="w-24"
           subtitleWidthClassName="w-12"
           tokenCount={5}
+          tokenLogos={CARD_TOKEN_LOGOS[1]}
           footerPillWidthClassName="w-14"
           sparklineSeed={37}
           itemVariants={itemVariants}
@@ -329,11 +370,12 @@ export function WatchlistEmptyIllustration() {
           absoluteClassName="size-full"
           variant="primary"
           icon={IconRainbow}
-          cardBgClassName="bg-zinc-800 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-all duration-300"
-          cardBorderClassName="border-primary/10"
+          cardBgClassName="bg-rose-600/80 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-all duration-300"
+          cardBorderClassName="border-rose-500"
           titleWidthClassName="w-20"
           subtitleWidthClassName="w-10"
           tokenCount={4}
+          tokenLogos={CARD_TOKEN_LOGOS[2]}
           footerPillWidthClassName="w-12"
           sparklineSeed={23}
           itemVariants={itemVariants}

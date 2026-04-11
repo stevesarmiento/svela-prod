@@ -10,7 +10,8 @@ function getCoinGeckoApiKey(): string {
 
 function chunk<T>(items: ReadonlyArray<T>, size: number): Array<Array<T>> {
   const out: Array<Array<T>> = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  for (let i = 0; i < items.length; i += size)
+    out.push(items.slice(i, i + size));
   return out;
 }
 
@@ -52,7 +53,9 @@ async function fetchJson(endpoint: string, apiKey: string): Promise<unknown> {
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`CoinGecko request failed (${response.status}): ${body.slice(0, 200)}`);
+    throw new Error(
+      `CoinGecko request failed (${response.status}): ${body.slice(0, 200)}`,
+    );
   }
 
   return await response.json();
@@ -95,7 +98,9 @@ function mapMarketRows(rows: ReadonlyArray<CoinGeckoMarketRow>): Array<{
     marketCap: coin.market_cap ?? undefined,
     // CoinGecko sometimes returns 0/null for unranked assets; never store those as a "top rank".
     marketCapRank:
-      coin.market_cap_rank !== null && coin.market_cap_rank > 0 ? coin.market_cap_rank : undefined,
+      coin.market_cap_rank !== null && coin.market_cap_rank > 0
+        ? coin.market_cap_rank
+        : undefined,
     fullyDilutedValuation: coin.fully_diluted_valuation ?? undefined,
     totalVolume: coin.total_volume ?? undefined,
     high24h: coin.high_24h ?? undefined,
@@ -103,7 +108,8 @@ function mapMarketRows(rows: ReadonlyArray<CoinGeckoMarketRow>): Array<{
     priceChange24h: coin.price_change_24h ?? undefined,
     priceChangePercentage24h: coin.price_change_percentage_24h ?? undefined,
     marketCapChange24h: coin.market_cap_change_24h ?? undefined,
-    marketCapChangePercentage24h: coin.market_cap_change_percentage_24h ?? undefined,
+    marketCapChangePercentage24h:
+      coin.market_cap_change_percentage_24h ?? undefined,
     circulatingSupply: coin.circulating_supply ?? undefined,
     totalSupply: coin.total_supply ?? undefined,
     maxSupply: coin.max_supply ?? undefined,
@@ -154,11 +160,16 @@ async function upsertMarketsByIds(
     url.searchParams.set("sparkline", "false");
     url.searchParams.set("price_change_percentage", "24h");
 
-    const data = (await fetchJson(url.toString(), args.apiKey)) as Array<CoinGeckoMarketRow>;
+    const data = (await fetchJson(
+      url.toString(),
+      args.apiKey,
+    )) as Array<CoinGeckoMarketRow>;
     if (data.length === 0) continue;
 
     const items = mapMarketRows(data);
-    await ctx.runMutation(internal.coingeckoWriters._upsertMarketDataBatch, { items });
+    await ctx.runMutation(internal.coingeckoWriters._upsertMarketDataBatch, {
+      items,
+    });
     refreshed += items.length;
   }
 
@@ -190,9 +201,12 @@ export const syncCoinGeckoCoinsListBatch = internalAction({
     const batchSize = Math.min(2000, Math.max(50, args.batchSize ?? 500));
     const jobKey = "coingecko:coins:list";
 
-    const state: { cursor?: string } | null = await ctx.runQuery(internal.coingeckoState._getJobState, {
-      jobKey,
-    });
+    const state: { cursor?: string } | null = await ctx.runQuery(
+      internal.coingeckoState._getJobState,
+      {
+        jobKey,
+      },
+    );
     const rawCursor = state?.cursor ?? null;
 
     let offset = Number.parseInt(rawCursor ?? "0", 10);
@@ -201,7 +215,10 @@ export const syncCoinGeckoCoinsListBatch = internalAction({
     const list = await fetchCoinList(apiKey);
     const total = list.length;
     if (total === 0) {
-      await ctx.runMutation(internal.coingeckoState._setJobCursor, { jobKey, cursor: null });
+      await ctx.runMutation(internal.coingeckoState._setJobCursor, {
+        jobKey,
+        cursor: null,
+      });
       return {
         processed: 0,
         total: 0,
@@ -216,7 +233,10 @@ export const syncCoinGeckoCoinsListBatch = internalAction({
 
     const slice = list.slice(offset, offset + batchSize);
     if (slice.length === 0) {
-      await ctx.runMutation(internal.coingeckoState._setJobCursor, { jobKey, cursor: null });
+      await ctx.runMutation(internal.coingeckoState._setJobCursor, {
+        jobKey,
+        cursor: null,
+      });
       return {
         processed: 0,
         total,
@@ -234,17 +254,21 @@ export const syncCoinGeckoCoinsListBatch = internalAction({
       platforms: coin.platforms ?? {},
     }));
 
-    const result: { inserted: number; updated: number; normalized: number } = await ctx.runMutation(
-      internal.coingeckoWriters._syncCoinGeckoCoinsListBatch,
-      {
-        coins: mapped,
-        asOfMs: Date.now(),
-      },
-    );
+    const result: { inserted: number; updated: number; normalized: number } =
+      await ctx.runMutation(
+        internal.coingeckoWriters._syncCoinGeckoCoinsListBatch,
+        {
+          coins: mapped,
+          asOfMs: Date.now(),
+        },
+      );
 
     const nextOffset = offset + slice.length;
     const nextCursor = nextOffset >= total ? null : String(nextOffset);
-    await ctx.runMutation(internal.coingeckoState._setJobCursor, { jobKey, cursor: nextCursor });
+    await ctx.runMutation(internal.coingeckoState._setJobCursor, {
+      jobKey,
+      cursor: nextCursor,
+    });
 
     return {
       processed: slice.length,
@@ -277,12 +301,17 @@ export const refreshTopMarkets = internalAction({
       url.searchParams.set("sparkline", "false");
       url.searchParams.set("price_change_percentage", "24h");
 
-      const data = (await fetchJson(url.toString(), apiKey)) as Array<CoinGeckoMarketRow>;
+      const data = (await fetchJson(
+        url.toString(),
+        apiKey,
+      )) as Array<CoinGeckoMarketRow>;
       all.push(...data);
     }
 
     const items = mapMarketRows(all).slice(0, topN);
-    await ctx.runMutation(internal.coingeckoWriters._upsertMarketDataBatch, { items });
+    await ctx.runMutation(internal.coingeckoWriters._upsertMarketDataBatch, {
+      items,
+    });
 
     return { count: items.length };
   },
@@ -293,7 +322,10 @@ export const refreshMarketsByIds = internalAction({
   returns: v.object({ requested: v.number(), refreshed: v.number() }),
   handler: async (ctx, args) => {
     const apiKey = getCoinGeckoApiKey();
-    return await upsertMarketsByIds(ctx, { apiKey, coingeckoIds: args.coingeckoIds });
+    return await upsertMarketsByIds(ctx, {
+      apiKey,
+      coingeckoIds: args.coingeckoIds,
+    });
   },
 });
 
@@ -304,12 +336,17 @@ export const refreshTrackedMarketsBatch = internalAction({
     const batchSize = args.batchSize ?? 250;
     const jobKey = "coingecko:markets";
 
-    const state = await ctx.runQuery(internal.coingeckoState._getJobState, { jobKey });
+    const state = await ctx.runQuery(internal.coingeckoState._getJobState, {
+      jobKey,
+    });
     const cursor = state?.cursor ?? null;
 
-    const page = await ctx.runQuery(internal.coingeckoState._getTrackedCoinsPage, {
-      paginationOpts: { numItems: batchSize, cursor },
-    });
+    const page = await ctx.runQuery(
+      internal.coingeckoState._getTrackedCoinsPage,
+      {
+        paginationOpts: { numItems: batchSize, cursor },
+      },
+    );
 
     const uniqueIds: Array<string> = [];
     const seen = new Set<string>();
@@ -320,7 +357,10 @@ export const refreshTrackedMarketsBatch = internalAction({
     }
 
     if (uniqueIds.length === 0) {
-      await ctx.runMutation(internal.coingeckoState._setJobCursor, { jobKey, cursor: null });
+      await ctx.runMutation(internal.coingeckoState._setJobCursor, {
+        jobKey,
+        cursor: null,
+      });
       return { processed: 0 };
     }
 
@@ -342,9 +382,21 @@ type MarketChartApiResponse = {
   total_volumes: Array<[number, number]>;
 };
 
+type GlobalMarketCapChartApiResponse = {
+  market_cap_chart: {
+    market_cap: Array<[number, number]>;
+    volume: Array<[number, number]>;
+  };
+};
+
 async function upsertMarketChart(
   ctx: ActionCtx,
-  args: { coingeckoId: string; days: string; apiKey: string; dataSource: string },
+  args: {
+    coingeckoId: string;
+    days: string;
+    apiKey: string;
+    dataSource: string;
+  },
 ): Promise<void> {
   const url = new URL(
     `https://pro-api.coingecko.com/api/v3/coins/${encodeURIComponent(args.coingeckoId)}/market_chart`,
@@ -352,7 +404,10 @@ async function upsertMarketChart(
   url.searchParams.set("vs_currency", "usd");
   url.searchParams.set("days", args.days);
 
-  const data = (await fetchJson(url.toString(), args.apiKey)) as MarketChartApiResponse;
+  const data = (await fetchJson(
+    url.toString(),
+    args.apiKey,
+  )) as MarketChartApiResponse;
   const points = data.prices.map((p, idx) => {
     const tsMs = p[0];
     const price = p[1];
@@ -366,13 +421,56 @@ async function upsertMarketChart(
     };
   });
 
-  await ctx.runMutation(internal.coingeckoWriters._upsertCoinGeckoHistoricalData, {
-    coingeckoId: args.coingeckoId,
-    timeframe: args.days,
-    dataPoints: points,
-    dataSource: args.dataSource,
-    asOfMs: Date.now(),
-  });
+  await ctx.runMutation(
+    internal.coingeckoWriters._upsertCoinGeckoHistoricalData,
+    {
+      coingeckoId: args.coingeckoId,
+      timeframe: args.days,
+      dataPoints: points,
+      dataSource: args.dataSource,
+      asOfMs: Date.now(),
+    },
+  );
+}
+
+async function upsertGlobalMarketHistory(
+  ctx: ActionCtx,
+  args: { days: "1" | "7" | "30" | "365"; apiKey: string; dataSource: string },
+): Promise<{
+  insertedCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  latestTimestamp?: number;
+}> {
+  const url = new URL(
+    "https://pro-api.coingecko.com/api/v3/global/market_cap_chart",
+  );
+  url.searchParams.set("vs_currency", "usd");
+  url.searchParams.set("days", args.days);
+
+  const data = (await fetchJson(
+    url.toString(),
+    args.apiKey,
+  )) as GlobalMarketCapChartApiResponse;
+  const marketCap = data.market_cap_chart?.market_cap ?? [];
+  const volume = data.market_cap_chart?.volume ?? [];
+  const volumeByTimestamp = new Map(
+    volume.map(([timestamp, value]) => [timestamp, value] as const),
+  );
+
+  return await ctx.runMutation(
+    internal.coingeckoWriters._upsertGlobalMarketHistory,
+    {
+      timeframe: args.days,
+      dataPoints: marketCap.map(([timestamp, marketCapUsd]) => ({
+        timestamp,
+        marketCapUsd,
+        volumeUsd: volumeByTimestamp.get(timestamp) ?? 0,
+      })),
+      dataSource: args.dataSource,
+      asOfMs: Date.now(),
+    },
+  );
 }
 
 export const refreshTrackedMarketChartBatch = internalAction({
@@ -386,12 +484,17 @@ export const refreshTrackedMarketChartBatch = internalAction({
     const batchSize = args.batchSize ?? 6;
     const jobKey = `coingecko:market-chart:${args.days}`;
 
-    const state = await ctx.runQuery(internal.coingeckoState._getJobState, { jobKey });
+    const state = await ctx.runQuery(internal.coingeckoState._getJobState, {
+      jobKey,
+    });
     const cursor = state?.cursor ?? null;
 
-    const page = await ctx.runQuery(internal.coingeckoState._getTrackedCoinsPage, {
-      paginationOpts: { numItems: batchSize, cursor },
-    });
+    const page = await ctx.runQuery(
+      internal.coingeckoState._getTrackedCoinsPage,
+      {
+        paginationOpts: { numItems: batchSize, cursor },
+      },
+    );
 
     const uniqueIds: Array<string> = [];
     const seen = new Set<string>();
@@ -402,7 +505,10 @@ export const refreshTrackedMarketChartBatch = internalAction({
     }
 
     if (uniqueIds.length === 0) {
-      await ctx.runMutation(internal.coingeckoState._setJobCursor, { jobKey, cursor: null });
+      await ctx.runMutation(internal.coingeckoState._setJobCursor, {
+        jobKey,
+        cursor: null,
+      });
       return { processed: 0, days: args.days };
     }
 
@@ -421,6 +527,97 @@ export const refreshTrackedMarketChartBatch = internalAction({
     });
 
     return { processed: uniqueIds.length, days: args.days };
+  },
+});
+
+export const refreshGlobalMarketCapHistory = internalAction({
+  args: {
+    days: v.union(
+      v.literal("1"),
+      v.literal("7"),
+      v.literal("30"),
+      v.literal("365"),
+    ),
+  },
+  returns: v.object({
+    days: v.union(
+      v.literal("1"),
+      v.literal("7"),
+      v.literal("30"),
+      v.literal("365"),
+    ),
+    insertedCount: v.number(),
+    updatedCount: v.number(),
+    skippedCount: v.number(),
+    latestTimestamp: v.optional(v.number()),
+  }),
+  handler: async (ctx, args) => {
+    const apiKey = getCoinGeckoApiKey();
+    const result = await upsertGlobalMarketHistory(ctx, {
+      days: args.days,
+      apiKey,
+      dataSource: "coingecko-cron-global-market-cap",
+    });
+
+    return {
+      days: args.days,
+      insertedCount: result.insertedCount,
+      updatedCount: result.updatedCount,
+      skippedCount: result.skippedCount,
+      latestTimestamp: result.latestTimestamp,
+    };
+  },
+});
+
+export const refreshAllGlobalMarketCapHistoryWindows = internalAction({
+  args: {},
+  returns: v.object({
+    processed: v.number(),
+    results: v.array(
+      v.object({
+        days: v.union(
+          v.literal("1"),
+          v.literal("7"),
+          v.literal("30"),
+          v.literal("365"),
+        ),
+        insertedCount: v.number(),
+        updatedCount: v.number(),
+        skippedCount: v.number(),
+        latestTimestamp: v.optional(v.number()),
+      }),
+    ),
+  }),
+  handler: async (ctx) => {
+    const apiKey = getCoinGeckoApiKey();
+    const windows: Array<"1" | "7" | "30" | "365"> = ["1", "7", "30", "365"];
+    const results: Array<{
+      days: "1" | "7" | "30" | "365";
+      insertedCount: number;
+      updatedCount: number;
+      skippedCount: number;
+      latestTimestamp?: number;
+    }> = [];
+
+    for (const days of windows) {
+      const result = await upsertGlobalMarketHistory(ctx, {
+        days,
+        apiKey,
+        dataSource: "coingecko-backfill-global-market-cap",
+      });
+      results.push({
+        days,
+        insertedCount: result.insertedCount,
+        updatedCount: result.updatedCount,
+        skippedCount: result.skippedCount,
+        latestTimestamp: result.latestTimestamp,
+      });
+    }
+
+    return {
+      processed: results.length,
+      results,
+    };
   },
 });
 
@@ -446,13 +643,23 @@ type OhlcApiRow = [number, number, number, number, number];
 
 async function upsertOhlc(
   ctx: ActionCtx,
-  args: { coingeckoId: string; days: string; apiKey: string; dataSource: string },
+  args: {
+    coingeckoId: string;
+    days: string;
+    apiKey: string;
+    dataSource: string;
+  },
 ): Promise<void> {
-  const url = new URL(`https://pro-api.coingecko.com/api/v3/coins/${encodeURIComponent(args.coingeckoId)}/ohlc`);
+  const url = new URL(
+    `https://pro-api.coingecko.com/api/v3/coins/${encodeURIComponent(args.coingeckoId)}/ohlc`,
+  );
   url.searchParams.set("vs_currency", "usd");
   url.searchParams.set("days", args.days);
 
-  const data = (await fetchJson(url.toString(), args.apiKey)) as Array<OhlcApiRow>;
+  const data = (await fetchJson(
+    url.toString(),
+    args.apiKey,
+  )) as Array<OhlcApiRow>;
   const points = data.map((row) => ({
     timestamp: row[0],
     price: row[4],
@@ -463,13 +670,16 @@ async function upsertOhlc(
     close: row[4],
   }));
 
-  await ctx.runMutation(internal.coingeckoWriters._upsertCoinGeckoHistoricalData, {
-    coingeckoId: args.coingeckoId,
-    timeframe: `${args.days}_ohlc`,
-    dataPoints: points,
-    dataSource: args.dataSource,
-    asOfMs: Date.now(),
-  });
+  await ctx.runMutation(
+    internal.coingeckoWriters._upsertCoinGeckoHistoricalData,
+    {
+      coingeckoId: args.coingeckoId,
+      timeframe: `${args.days}_ohlc`,
+      dataPoints: points,
+      dataSource: args.dataSource,
+      asOfMs: Date.now(),
+    },
+  );
 }
 
 export const refreshSingleOhlc = internalAction({
@@ -501,12 +711,17 @@ export const refreshTrackedOhlcBatch = internalAction({
     const batchSize = args.batchSize ?? 4;
     const jobKey = `coingecko:ohlc:${args.days}`;
 
-    const state = await ctx.runQuery(internal.coingeckoState._getJobState, { jobKey });
+    const state = await ctx.runQuery(internal.coingeckoState._getJobState, {
+      jobKey,
+    });
     const cursor = state?.cursor ?? null;
 
-    const page = await ctx.runQuery(internal.coingeckoState._getTrackedCoinsPage, {
-      paginationOpts: { numItems: batchSize, cursor },
-    });
+    const page = await ctx.runQuery(
+      internal.coingeckoState._getTrackedCoinsPage,
+      {
+        paginationOpts: { numItems: batchSize, cursor },
+      },
+    );
 
     const uniqueIds: Array<string> = [];
     const seen = new Set<string>();
@@ -517,7 +732,10 @@ export const refreshTrackedOhlcBatch = internalAction({
     }
 
     if (uniqueIds.length === 0) {
-      await ctx.runMutation(internal.coingeckoState._setJobCursor, { jobKey, cursor: null });
+      await ctx.runMutation(internal.coingeckoState._setJobCursor, {
+        jobKey,
+        cursor: null,
+      });
       return { processed: 0, days: args.days };
     }
 
@@ -546,13 +764,19 @@ export const refreshCoinImagesBatch = internalAction({
     const apiKey = getCoinGeckoApiKey();
     const batchSize = args.batchSize ?? 200;
 
-    const needing = await ctx.runQuery(internal.coingeckoCoinsInternal._getCoinsNeedingImageUpdates, {
-      limit: batchSize,
-    });
+    const needing = await ctx.runQuery(
+      internal.coingeckoCoinsInternal._getCoinsNeedingImageUpdates,
+      {
+        limit: batchSize,
+      },
+    );
     if (needing.length === 0) return { processed: 0 };
 
     const ids = needing.map((c) => c.coingeckoId);
-    const existing = await ctx.runQuery(internal.coingeckoCoinsInternal._getCoinGeckoCoinsByIds, { ids });
+    const existing = await ctx.runQuery(
+      internal.coingeckoCoinsInternal._getCoinGeckoCoinsByIds,
+      { ids },
+    );
     const existingById = new Map(existing.map((c) => [c.coingeckoId, c]));
 
     const chunks = chunk(ids, 250);
@@ -567,7 +791,10 @@ export const refreshCoinImagesBatch = internalAction({
       url.searchParams.set("page", "1");
       url.searchParams.set("sparkline", "false");
 
-      const data = (await fetchJson(url.toString(), apiKey)) as Array<CoinGeckoMarketRow>;
+      const data = (await fetchJson(
+        url.toString(),
+        apiKey,
+      )) as Array<CoinGeckoMarketRow>;
       if (data.length === 0) continue;
 
       const coins = data
@@ -586,10 +813,13 @@ export const refreshCoinImagesBatch = internalAction({
         })
         .filter((c) => c !== null);
 
-      await ctx.runMutation(internal.coingeckoWriters._bulkUpsertCoinGeckoCoins, {
-        coins,
-        asOfMs: Date.now(),
-      });
+      await ctx.runMutation(
+        internal.coingeckoWriters._bulkUpsertCoinGeckoCoins,
+        {
+          coins,
+          asOfMs: Date.now(),
+        },
+      );
 
       processed += coins.length;
     }
@@ -597,4 +827,3 @@ export const refreshCoinImagesBatch = internalAction({
     return { processed };
   },
 });
-

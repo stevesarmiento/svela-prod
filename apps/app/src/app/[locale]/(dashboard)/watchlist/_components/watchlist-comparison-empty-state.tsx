@@ -123,15 +123,6 @@ function ComparisonTinyChartIllustration() {
       <div className="grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/50 border-zinc-800/10 overflow-hidden p-1">
         {/* Legend */}
         <div className="flex flex-col col-span-4 sm:col-span-3 p-3 pt-2 space-y-2">
-          <div className="flex flex-row items-center justify-between gap-2 mb-2">
-            <div className="w-full rounded-lg border border-zinc-800/20 dark:border-zinc-800/50 bg-transparent px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="h-2 w-28 rounded-full bg-zinc-500/15" />
-                <span className="size-3 rounded-sm border border-zinc-500/20 bg-zinc-500/10" />
-              </div>
-            </div>
-          </div>
-
           <div className="flex flex-col gap-2 p-0 pt-2">
             {/* Row 1 */}
             <div
@@ -181,9 +172,9 @@ function ComparisonTinyChartIllustration() {
 
             <div className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-1">
-                <span className="size-6 rounded-full border border-zinc-200/70 dark:border-zinc-800/60 bg-zinc-500/10" />
-                <span className="-ml-2 size-6 rounded-full border border-zinc-200/70 dark:border-zinc-800/60 bg-zinc-500/10" />
-                <span className="-ml-2 size-6 rounded-full border border-zinc-200/70 dark:border-zinc-800/60 bg-zinc-500/10" />
+                <span className="size-6 rounded-full border border-zinc-200/70 dark:border-zinc-800/60 bg-zinc-900" />
+                <span className="-ml-2 size-6 rounded-full border border-zinc-200/70 dark:border-zinc-800/60 bg-zinc-900" />
+                <span className="-ml-2 size-6 rounded-full border border-zinc-200/70 dark:border-zinc-800/60 bg-zinc-900" />
               </div>
               <div className="flex items-center gap-1 rounded-full border border-zinc-200/60 dark:border-zinc-800/50 bg-zinc-500/5 px-2 py-1">
                 <span className="h-2 w-6 rounded-full bg-zinc-500/12" />

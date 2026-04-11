@@ -29,9 +29,10 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
     switch (item.href) {
       case "/screener":
         return navigation.screener;
-      case "/watchlist":
       case "/overview":
         return navigation.overview;
+      case "/watchlists":
+        return navigation.watchlist;
       default:
         return item.href;
     }
@@ -40,9 +41,13 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
   const handleItemClick = useCallback((item: MenuItem, isActive: boolean) => {
     return () => {
       if (isActive) {
-        // Re-clicking the Overview (watchlist) tab should open the same
+        if (item.href === "/overview") {
+          return;
+        }
+
+        // Re-clicking the Watchlists tab should open the same
         // "Add to comparison" flow used in charts.
-        if (item.href === "/watchlist" || item.title.toLowerCase() === "overview") {
+        if (item.href === "/watchlists") {
           onOpenCommandSearch("charts");
           return;
         }
@@ -69,28 +74,32 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
           item.href === "/screener"
             ? "Screener"
             : isActive
-              ? item.href === "/watchlist"
+              ? item.href === "/overview"
+                ? "Overview"
+                : item.href === "/watchlists"
                 ? "Watchlists"
                 : `Search ${item.title}`
               : item.title;
-        
+
         return (
           <Tooltip delayDuration={500} key={item.title}>
             <TooltipTrigger asChild>
               <button
                 type="button"
                 onClick={handleItemClick(item, isActive)}
-                className={`group p-3 rounded-[13px] transition-colors duration-100 cursor-pointer active:scale-[0.98] hover:bg-transparent ${
+                className={`group p-2 rounded-[13px] transition-colors duration-100 cursor-pointer active:scale-[0.98] hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus:[&_svg]:!fill-white focus-visible:[&_svg]:!fill-white dark:focus-visible:ring-zinc-500 dark:focus-visible:ring-offset-zinc-800 ${
                   isActive 
                     ? "bg-black/10 hover:bg-black/15 dark:bg-white/10 dark:hover:bg-white/15" 
                     : ""
                 }`}
               >
-                <item.icon className={`size-4 ${
-                  isActive 
-                    ? 'fill-gray-900 dark:fill-white' 
-                    : 'fill-gray-500 group-hover:fill-gray-900 dark:fill-white/40 dark:group-hover:fill-white'
-                }`} />
+                <item.icon
+                  className={`size-4.5 ${
+                    isActive
+                      ? "fill-white"
+                      : "fill-gray-500 group-hover:fill-gray-900 dark:fill-white/40 dark:group-hover:fill-white"
+                  }`}
+                />
               </button>
             </TooltipTrigger>
             <TooltipContent

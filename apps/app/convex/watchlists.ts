@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 
 const watchlistGroupValidator = v.object({
   _id: v.id("watchlistGroups"),
@@ -35,6 +36,27 @@ async function getCurrentUser(ctx: QueryCtx | MutationCtx) {
     .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
     .first();
   return user ?? null;
+}
+
+function buildOverviewSnapshotCacheKey(clerkId: string): string {
+  return `overview:watchlist:snapshot:v4:${clerkId}`;
+}
+
+async function markOverviewSnapshotStale(ctx: MutationCtx, clerkId: string) {
+  const keys = [
+    buildOverviewSnapshotCacheKey(clerkId),
+    `overview:dailyBrief:${clerkId}:watchlist:24h`,
+    `overview:dailyBrief:${clerkId}:watchlist:7d`,
+  ];
+
+  for (const cacheKey of keys) {
+    const existing = await ctx.db
+      .query("apiCache")
+      .withIndex("by_key", (q) => q.eq("cacheKey", cacheKey))
+      .first();
+    if (!existing) continue;
+    await ctx.db.patch(existing._id, { expiresAt: 0 });
+  }
 }
 
 // Watchlist Group functions
@@ -264,6 +286,7 @@ export const deleteWatchlistGroup = mutation({
 
     // Delete the group
     await ctx.db.delete(args.groupId);
+    await markOverviewSnapshotStale(ctx, args.clerkId);
     return null;
   },
 });
@@ -490,6 +513,8 @@ export const addToWatchlist = mutation({
       days: "1",
     });
 
+    await markOverviewSnapshotStale(ctx, args.clerkId);
+
     return id;
   },
 });
@@ -548,6 +573,8 @@ export const removeFromWatchlist = mutation({
         reason: "watchlist",
       });
     }
+
+    await markOverviewSnapshotStale(ctx, args.clerkId);
     return null;
   },
 });
@@ -1011,6 +1038,8 @@ export const deleteMyWatchlistGroup = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     const group = await ctx.db.get(args.groupId);
     if (!group || group.userId !== user._id) throw new Error("Watchlist group not found");
@@ -1039,6 +1068,7 @@ export const deleteMyWatchlistGroup = mutation({
     );
 
     await ctx.db.delete(args.groupId);
+    await markOverviewSnapshotStale(ctx, identity.subject);
     return null;
   },
 });
@@ -1132,6 +1162,8 @@ export const addToMyWatchlist = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     let targetGroupId = args.groupId;
     if (!targetGroupId) {
@@ -1193,6 +1225,8 @@ export const addToMyWatchlist = mutation({
       days: "1",
     });
 
+    await markOverviewSnapshotStale(ctx, identity.subject);
+
     return id;
   },
 });
@@ -1203,6 +1237,8 @@ export const removeFromMyWatchlist = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
     let targetGroupId = args.groupId;
     if (!targetGroupId) {
@@ -1233,6 +1269,7 @@ export const removeFromMyWatchlist = mutation({
       });
     }
 
+    await markOverviewSnapshotStale(ctx, identity.subject);
     return null;
   },
 });
@@ -1248,6 +1285,8 @@ export const setMyWatchlistItemHoldings = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) throw new Error("Not authenticated");
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
 
     const group = await ctx.db.get(args.groupId);
     if (!group || group.userId !== user._id) throw new Error("Watchlist group not found");
@@ -1266,6 +1305,7 @@ export const setMyWatchlistItemHoldings = mutation({
         watchlistGroupId: row.watchlistGroupId,
         coinId: row.coinId,
       });
+      await markOverviewSnapshotStale(ctx, identity.subject);
       return null;
     }
 
@@ -1274,6 +1314,7 @@ export const setMyWatchlistItemHoldings = mutation({
     }
 
     await ctx.db.patch(row._id, { holdings: args.holdings });
+    await markOverviewSnapshotStale(ctx, identity.subject);
     return null;
   },
 });
@@ -1284,6 +1325,8 @@ export const removeBulkFromMyWatchlist = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return { removedCount: 0 };
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { removedCount: 0 };
 
     let targetGroupId = args.groupId;
     if (!targetGroupId) {
@@ -1324,6 +1367,7 @@ export const removeBulkFromMyWatchlist = mutation({
       }),
     );
 
+    await markOverviewSnapshotStale(ctx, identity.subject);
     return { removedCount: toDelete.length };
   },
 });
@@ -1334,6 +1378,8 @@ export const removeFromAllMyWatchlists = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return null;
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
 
     const rows = await ctx.db
       .query("watchlists")
@@ -1354,6 +1400,7 @@ export const removeFromAllMyWatchlists = mutation({
       });
     }
 
+    await markOverviewSnapshotStale(ctx, identity.subject);
     return null;
   },
 });
@@ -1364,6 +1411,8 @@ export const removeBulkFromAllMyWatchlists = mutation({
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
     if (!user) return { removedCount: 0 };
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { removedCount: 0 };
 
     const uniqueCoinIds = Array.from(new Set(args.coinIds)).filter((id) => id.length > 0);
     if (uniqueCoinIds.length === 0) return { removedCount: 0 };
@@ -1398,6 +1447,7 @@ export const removeBulkFromAllMyWatchlists = mutation({
         }),
     );
 
+    await markOverviewSnapshotStale(ctx, identity.subject);
     return { removedCount };
   },
 });
@@ -1453,5 +1503,126 @@ export const getMyWatchlistBootstrap = query({
       defaultItems,
       allCoinIds,
     };
+  },
+});
+
+export const getMyHoldingsAcrossWatchlists = query({
+  args: {},
+  returns: v.object({
+    positions: v.array(
+      v.object({
+        coinId: v.string(),
+        holdings: v.number(),
+      }),
+    ),
+    totalHoldings: v.number(),
+    coinsWithHoldings: v.number(),
+  }),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) {
+      return { positions: [], totalHoldings: 0, coinsWithHoldings: 0 };
+    }
+
+    const rows = await ctx.db
+      .query("watchlists")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    const holdingsByCoinId = new Map<string, number>();
+    for (const row of rows) {
+      const holdings = row.holdings;
+      if (typeof holdings !== "number") continue;
+      if (!Number.isFinite(holdings) || holdings <= 0) continue;
+
+      holdingsByCoinId.set(row.coinId, (holdingsByCoinId.get(row.coinId) ?? 0) + holdings);
+    }
+
+    const positions = Array.from(holdingsByCoinId.entries())
+      .map(([coinId, holdings]) => ({ coinId, holdings }))
+      .sort((a, b) => a.coinId.localeCompare(b.coinId));
+
+    const totalHoldings = positions.reduce((sum, row) => sum + row.holdings, 0);
+
+    return {
+      positions,
+      totalHoldings,
+      coinsWithHoldings: positions.length,
+    };
+  },
+});
+
+export const getMyHoldingsBreakdownByWatchlistGroup = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      group: watchlistGroupValidator,
+      positions: v.array(
+        v.object({
+          coinId: v.string(),
+          holdings: v.number(),
+        }),
+      ),
+      totalHoldings: v.number(),
+      coinsWithHoldings: v.number(),
+    }),
+  ),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) return [];
+
+    const [groups, rows] = await Promise.all([
+      ctx.db
+        .query("watchlistGroups")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect(),
+      ctx.db
+        .query("watchlists")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect(),
+    ]);
+
+    const groupsById = new Map(groups.map((group) => [group._id, group] as const));
+
+    const holdingsByGroupId = new Map<Id<"watchlistGroups">, Map<string, number>>();
+    for (const row of rows) {
+      const holdings = row.holdings;
+      if (typeof holdings !== "number") continue;
+      if (!Number.isFinite(holdings) || holdings <= 0) continue;
+
+      const groupId = row.watchlistGroupId;
+      if (!groupsById.has(groupId)) continue;
+
+      const byCoin = holdingsByGroupId.get(groupId) ?? new Map<string, number>();
+      byCoin.set(row.coinId, (byCoin.get(row.coinId) ?? 0) + holdings);
+      holdingsByGroupId.set(groupId, byCoin);
+    }
+
+    const result = Array.from(holdingsByGroupId.entries())
+      .map(([groupId, byCoin]) => {
+        const group = groupsById.get(groupId);
+        if (!group) return null;
+
+        const positions = Array.from(byCoin.entries())
+          .map(([coinId, coinHoldings]) => ({ coinId, holdings: coinHoldings }))
+          .sort((a, b) => a.coinId.localeCompare(b.coinId));
+
+        const totalHoldings = positions.reduce((sum, row) => sum + row.holdings, 0);
+
+        return {
+          group,
+          positions,
+          totalHoldings,
+          coinsWithHoldings: positions.length,
+        };
+      })
+      .filter(
+        (row): row is NonNullable<typeof row> =>
+          row !== null && row.positions.length > 0,
+      );
+
+    // Stable ordering for UI; we’ll sort by USD client-side once quotes arrive.
+    result.sort((a, b) => a.group.name.localeCompare(b.group.name));
+    return result;
   },
 });

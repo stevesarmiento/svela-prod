@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { cn } from "../utils";
 import { Spinner } from "./spinner";
-import { TextShimmerWave } from "./text-shimmer";
 
 const CheckIcon = ({ className }: { className?: string }) => {
   return (
@@ -96,16 +95,14 @@ const LoaderCore = ({
               {isFutureStep && <div className="w-6 h-6" />}
             </div>
             {isCurrentStep ? (
-              <TextShimmerWave
-                as="span"
+              <span
                 className={cn(
                   onDarkPanel &&
                     "[--base-color:rgba(255,255,255,0.55)] [--base-gradient-color:#ffffff]",
                 )}
-                duration={1.2}
               >
                 {loadingState.text}
-              </TextShimmerWave>
+              </span>
             ) : (
               <span
                 className={cn(

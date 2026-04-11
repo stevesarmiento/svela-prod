@@ -29,6 +29,34 @@ crons.interval(
 
 // Market chart refresh (DB is source of truth; keep series warm).
 crons.interval(
+  "coingecko_refresh_global_market_cap_1d",
+  { minutes: 30 },
+  internal.coingeckoJobs.refreshGlobalMarketCapHistory,
+  { days: "1" },
+);
+
+crons.interval(
+  "coingecko_refresh_global_market_cap_7d",
+  { hours: 6 },
+  internal.coingeckoJobs.refreshGlobalMarketCapHistory,
+  { days: "7" },
+);
+
+crons.interval(
+  "coingecko_refresh_global_market_cap_30d",
+  { hours: 6 },
+  internal.coingeckoJobs.refreshGlobalMarketCapHistory,
+  { days: "30" },
+);
+
+crons.interval(
+  "coingecko_refresh_global_market_cap_365d",
+  { hours: 6 },
+  internal.coingeckoJobs.refreshGlobalMarketCapHistory,
+  { days: "365" },
+);
+
+crons.interval(
   "coingecko_refresh_market_chart_1d",
   { hours: 1 },
   internal.coingeckoJobs.refreshTrackedMarketChartBatch,

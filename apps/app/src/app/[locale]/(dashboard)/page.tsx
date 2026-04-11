@@ -6,5 +6,5 @@ export const metadata = {
 
 export default async function Page() {
   // Immediate redirect to watchlist to prevent flash
-  redirect("/watchlist");
+  redirect("/overview");
 }

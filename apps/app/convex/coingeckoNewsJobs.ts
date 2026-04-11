@@ -87,6 +87,16 @@ function mapNewsRows(rows: ReadonlyArray<CoinGeckoNewsRow>): Array<NewsItem> {
   return mapped as Array<NewsItem>;
 }
 
+const SENTIMENT_BATCH_LIMIT = 20;
+
+function chunkArticleIds<T>(values: ReadonlyArray<T>, size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < values.length; i += size) {
+    out.push(values.slice(i, i + size));
+  }
+  return out;
+}
+
 async function refreshNewsForCoin(args: {
   coingeckoId: string;
   perPage: number;
@@ -143,11 +153,27 @@ export const refreshTrackedCoinNewsBatch = internalAction({
     );
 
     let refreshedCoins = 0;
+    const articleIdsNeedingSentiment: Id<"coingeckoNewsArticles">[] = [];
     for (const coingeckoId of coinIds) {
       const items = await refreshNewsForCoin({ coingeckoId, perPage });
-      await ctx.runMutation(internal.coingeckoNewsWriters._upsertNewsForCoin, { coingeckoId, items });
+      const upserted = await ctx.runMutation(internal.coingeckoNewsWriters._upsertNewsForCoin, {
+        coingeckoId,
+        items,
+      });
       await ctx.runMutation(internal.coingeckoNewsWriters._pruneNewsLinksForCoin, { coingeckoId, keep: 20 });
+      articleIdsNeedingSentiment.push(...upserted.articleIdsNeedingSentiment);
       refreshedCoins++;
+    }
+
+    const batches = chunkArticleIds(
+      Array.from(new Set(articleIdsNeedingSentiment)),
+      SENTIMENT_BATCH_LIMIT,
+    );
+    for (const articleIds of batches) {
+      if (articleIds.length === 0) continue;
+      await ctx.scheduler.runAfter(0, internal.coingeckoNewsJobs.analyzeSentimentBatch, {
+        articleIds,
+      });
     }
 
     await ctx.runMutation(internal.coingeckoState._setJobCursor, {
@@ -168,8 +194,21 @@ export const refreshCoinNews = internalAction({
   handler: async (ctx, args) => {
     const perPage = Math.min(20, Math.max(1, args.perPage ?? 5));
     const items = await refreshNewsForCoin({ coingeckoId: args.coingeckoId, perPage });
-    await ctx.runMutation(internal.coingeckoNewsWriters._upsertNewsForCoin, { coingeckoId: args.coingeckoId, items });
+    const upserted = await ctx.runMutation(internal.coingeckoNewsWriters._upsertNewsForCoin, {
+      coingeckoId: args.coingeckoId,
+      items,
+    });
     await ctx.runMutation(internal.coingeckoNewsWriters._pruneNewsLinksForCoin, { coingeckoId: args.coingeckoId, keep: 20 });
+    const batches = chunkArticleIds(
+      Array.from(new Set(upserted.articleIdsNeedingSentiment)),
+      SENTIMENT_BATCH_LIMIT,
+    );
+    for (const articleIds of batches) {
+      if (articleIds.length === 0) continue;
+      await ctx.scheduler.runAfter(0, internal.coingeckoNewsJobs.analyzeSentimentBatch, {
+        articleIds,
+      });
+    }
     return null;
   },
 });
@@ -210,7 +249,10 @@ function extractJsonObject(text: string): unknown {
   return safeJsonParse(unfenced.slice(first, last + 1));
 }
 
-function heuristicSentiment(title: string): { sentiment: "bullish" | "bearish" | "neutral"; confidence: number } {
+function heuristicSentiment(title: string): {
+  sentiment: "bullish" | "bearish" | "neutral";
+  confidence: number;
+} {
   const t = title.toLowerCase();
 
   const bearish = [
@@ -224,14 +266,24 @@ function heuristicSentiment(title: string): { sentiment: "bullish" | "bearish" |
     "slump",
     "falls",
     "plunge",
+    "crash",
+    "tank",
+    "tumble",
+    "sink",
+    "slide",
+    "selloff",
+    "sell-off",
     "bear",
     "liquidation",
+    "down ",
+    " -",
   ];
   const bullish = [
     "rally",
     "surge",
     "rise",
     "up ",
+    "+",
     "breakout",
     "approval",
     "buy",
@@ -242,8 +294,17 @@ function heuristicSentiment(title: string): { sentiment: "bullish" | "bearish" |
     "launch",
   ];
 
-  if (bearish.some((k) => t.includes(k))) return { sentiment: "bearish", confidence: 0.55 };
-  if (bullish.some((k) => t.includes(k))) return { sentiment: "bullish", confidence: 0.55 };
+  const hasNegativePct =
+    /\bdown\s+\d{1,3}(?:\.\d+)?%/.test(t) || /-\s*\d{1,3}(?:\.\d+)?%/.test(t);
+  const hasPositivePct =
+    /\bup\s+\d{1,3}(?:\.\d+)?%/.test(t) || /\+\s*\d{1,3}(?:\.\d+)?%/.test(t);
+
+  const hasBearish = hasNegativePct || bearish.some((k) => t.includes(k));
+  const hasBullish = hasPositivePct || bullish.some((k) => t.includes(k));
+
+  if (hasBearish && hasBullish) return { sentiment: "neutral", confidence: 0.4 };
+  if (hasBearish) return { sentiment: "bearish", confidence: hasNegativePct ? 0.65 : 0.6 };
+  if (hasBullish) return { sentiment: "bullish", confidence: hasPositivePct ? 0.65 : 0.6 };
   return { sentiment: "neutral", confidence: 0.35 };
 }
 
@@ -335,3 +396,84 @@ Rules:
   },
 });
 
+export const backfillRecentMissingSentiment = internalAction({
+  args: {
+    scanLimit: v.optional(v.number()),
+    analyzeLimit: v.optional(v.number()),
+  },
+  returns: v.object({ queued: v.number() }),
+  handler: async (ctx, args): Promise<{ queued: number }> => {
+    const scanLimit = Math.min(500, Math.max(1, args.scanLimit ?? 200));
+    const analyzeLimit = Math.min(100, Math.max(1, args.analyzeLimit ?? 50));
+    const articleIds: Id<"coingeckoNewsArticles">[] = await ctx.runQuery(
+      internal.coingeckoNewsWriters._listRecentArticlesMissingSentiment,
+      {
+        scanLimit,
+        analyzeLimit,
+      },
+    );
+
+    const batches = chunkArticleIds(
+      Array.from(new Set(articleIds)),
+      SENTIMENT_BATCH_LIMIT,
+    );
+    for (const batchArticleIds of batches) {
+      if (batchArticleIds.length === 0) continue;
+      await ctx.scheduler.runAfter(0, internal.coingeckoNewsJobs.analyzeSentimentBatch, {
+        articleIds: batchArticleIds,
+      });
+    }
+    return { queued: articleIds.length };
+  },
+});
+
+export const relabelRecentLowConfidenceNeutralSentiment: ReturnType<typeof internalAction> =
+  internalAction({
+  args: {
+    scanLimit: v.optional(v.number()),
+    analyzeLimit: v.optional(v.number()),
+    maxExistingConfidence: v.optional(v.number()),
+  },
+  returns: v.object({ relabeled: v.number(), candidates: v.number() }),
+  handler: async (ctx, args): Promise<{ relabeled: number; candidates: number }> => {
+    const scanLimit = Math.min(500, Math.max(1, args.scanLimit ?? 200));
+    const analyzeLimit = Math.min(200, Math.max(1, args.analyzeLimit ?? 80));
+    const maxExistingConfidence = Math.min(1, Math.max(0, args.maxExistingConfidence ?? 0.4));
+
+    const articleIds: Id<"coingeckoNewsArticles">[] = await ctx.runQuery(
+      internal.coingeckoNewsWriters._listRecentLowConfidenceNeutralArticles,
+      {
+        scanLimit,
+        analyzeLimit,
+        maxConfidence: maxExistingConfidence,
+      },
+    );
+
+    if (articleIds.length === 0) return { relabeled: 0, candidates: 0 };
+
+    type ArticleDoc = {
+      _id: Id<"coingeckoNewsArticles">;
+      title: string;
+      sentiment?: "bullish" | "bearish" | "neutral";
+      sentimentConfidence?: number;
+    };
+    const docs = (await ctx.runQuery(internal.coingeckoNewsWriters._getNewsArticlesByIds, {
+      articleIds,
+    })) as Array<ArticleDoc | null>;
+
+    const items = docs
+      .filter((doc): doc is ArticleDoc => Boolean(doc) && typeof doc!.title === "string")
+      .map((doc) => ({ id: doc._id, h: heuristicSentiment(doc.title) }))
+      .filter((x) => x.h.sentiment !== "neutral")
+      .map((x) => ({ articleId: x.id, sentiment: x.h.sentiment, confidence: x.h.confidence }));
+
+    if (items.length === 0) return { relabeled: 0, candidates: articleIds.length };
+
+    const res: { updated: number } = await ctx.runMutation(
+      internal.coingeckoNewsWriters._overwriteLowConfidenceNeutralSentimentBatch,
+      { items, maxExistingConfidence },
+    );
+
+    return { relabeled: res.updated, candidates: articleIds.length };
+  },
+  });

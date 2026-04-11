@@ -1,26 +1,27 @@
 import type { ComponentType } from "react";
-import {
-  // IconCompassDrawing,
-  IconBookmarkFill,
-  IconWalletBifoldFill,
-  IconSafariFill,
-  IconCaptionsBubbleFill,
-} from "symbols-react";
+import { IconWalletBifoldFill, IconSafariFill } from "symbols-react";
+import { BookmarkIcon } from "./bookmark-icon";
+import { HomeIcon } from "./home-icon";
 import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
 import { getShortcutForRoute } from "@/lib/keyboard-shortcuts";
 
 // Base routes (will be enhanced with watchlist params by components)
 export const BASE_ROUTES = {
-  overview: "/watchlist",
-  watchlist: "/watchlist", 
+  overview: "/overview",
+  watchlist: "/watchlists",
   screener: "/screener",
 } as const;
   
 export const MENU_ITEMS = [
   {
-    title: "Watchlist",
-    href: "/watchlist",
-    icon: IconBookmarkFill,
+    title: "Overview",
+    href: "/overview",
+    icon: HomeIcon,
+  },
+  {
+    title: "Watchlists",
+    href: "/watchlists",
+    icon: BookmarkIcon,
   },
   {
     title: "Screener",
@@ -30,11 +31,11 @@ export const MENU_ITEMS = [
 ] as const;
   
 const watchlistCommandItem = {
-  title: "Watchlist",
+  title: "Watchlists",
   subtitle: "Your cryptocurrency watchlist",
-  href: "/watchlist",
-  icon: IconBookmarkFill,
-  shortcut: getShortcutForRoute("/watchlist"),
+  href: "/watchlists",
+  icon: BookmarkIcon,
+  shortcut: getShortcutForRoute("/watchlists"),
 } as const;
 
 const screenerCommandItem = {
@@ -48,9 +49,9 @@ const screenerCommandItem = {
 const overviewCommandItem = {
   title: "Overview",
   subtitle: "View dashboard and watchlist",
-  href: "/watchlist",
-  icon: IconCaptionsBubbleFill,
-  shortcut: getShortcutForRoute("/watchlist"),
+  href: "/overview",
+  icon: HomeIcon,
+  shortcut: getShortcutForRoute("/overview"),
 } as const;
 
 const quickActionItems = [

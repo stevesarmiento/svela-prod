@@ -55,6 +55,7 @@ interface AnalysisDialogProps {
   /** Merged onto the trigger (e.g. chart header / nav-only polish). */
   triggerClassName?: string;
   triggerTooltip?: string;
+  showTriggerTooltip?: boolean;
   triggerAriaLabel?: string;
   /** Visible label when `triggerVariant` is `explain` (default: Analyze). */
   triggerLabel?: string;
@@ -66,6 +67,7 @@ export function AnalysisDialog({
   triggerVariant = "default",
   triggerClassName,
   triggerTooltip,
+  showTriggerTooltip = true,
   triggerAriaLabel,
   triggerLabel = "Analyze",
 }: AnalysisDialogProps) {
@@ -121,19 +123,23 @@ export function AnalysisDialog({
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-      <Tooltip delayDuration={500}>
-        <TooltipTrigger asChild>
-          <DialogTrigger asChild>{triggerButton}</DialogTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="left" className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
-          <span>
-            {triggerTooltip ??
-              (triggerVariant === "icon" || isExplainTrigger
-                ? "Deep analysis"
-                : "Analyze")}
-          </span>
-        </TooltipContent>
-      </Tooltip>
+      {showTriggerTooltip ? (
+        <Tooltip delayDuration={500}>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>{triggerButton}</DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
+            <span>
+              {triggerTooltip ??
+                (triggerVariant === "icon" || isExplainTrigger
+                  ? "Deep analysis"
+                  : "Analyze")}
+            </span>
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <DialogTrigger asChild>{triggerButton}</DialogTrigger>
+      )}
       <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
         {isDialogOpen ? (
           <AnalysisDialogBody coinId={coinId} tokenData={tokenData} />

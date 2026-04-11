@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
 const sentimentValidator = v.union(v.literal("bullish"), v.literal("bearish"), v.literal("neutral"));
 
@@ -23,6 +24,7 @@ export const _upsertNewsForCoin = internalMutation({
     updatedArticles: v.number(),
     insertedLinks: v.number(),
     updatedLinks: v.number(),
+    articleIdsNeedingSentiment: v.array(v.id("coingeckoNewsArticles")),
   }),
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -30,6 +32,7 @@ export const _upsertNewsForCoin = internalMutation({
     let updatedArticles = 0;
     let insertedLinks = 0;
     let updatedLinks = 0;
+    const articleIdsNeedingSentiment = new Set<Id<"coingeckoNewsArticles">>();
 
     for (const item of args.items) {
       const existingArticle = await ctx.db
@@ -69,6 +72,11 @@ export const _upsertNewsForCoin = internalMutation({
         insertedArticles++;
       }
 
+      const articleAfterUpsert = existingArticle ?? (await ctx.db.get(articleId));
+      if (articleAfterUpsert?.sentiment === undefined) {
+        articleIdsNeedingSentiment.add(articleId);
+      }
+
       const existingLink = await ctx.db
         .query("coingeckoNewsCoinLinks")
         .withIndex("by_coingecko_id_and_article_id", (q) =>
@@ -94,7 +102,13 @@ export const _upsertNewsForCoin = internalMutation({
       insertedLinks++;
     }
 
-    return { insertedArticles, updatedArticles, insertedLinks, updatedLinks };
+    return {
+      insertedArticles,
+      updatedArticles,
+      insertedLinks,
+      updatedLinks,
+      articleIdsNeedingSentiment: Array.from(articleIdsNeedingSentiment),
+    };
   },
 });
 
@@ -164,6 +178,47 @@ export const _getNewsArticlesByIds = internalQuery({
   },
 });
 
+export const _listRecentArticlesMissingSentiment = internalQuery({
+  args: {
+    scanLimit: v.number(),
+    analyzeLimit: v.number(),
+  },
+  returns: v.array(v.id("coingeckoNewsArticles")),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("coingeckoNewsArticles")
+      .withIndex("by_posted_at_ms")
+      .order("desc")
+      .take(args.scanLimit);
+
+    return rows
+      .filter((row) => row.sentiment === undefined)
+      .slice(0, args.analyzeLimit)
+      .map((row) => row._id);
+  },
+});
+
+export const _listRecentLowConfidenceNeutralArticles = internalQuery({
+  args: {
+    scanLimit: v.number(),
+    analyzeLimit: v.number(),
+    maxConfidence: v.number(),
+  },
+  returns: v.array(v.id("coingeckoNewsArticles")),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("coingeckoNewsArticles")
+      .withIndex("by_posted_at_ms")
+      .order("desc")
+      .take(args.scanLimit);
+
+    return rows
+      .filter((row) => row.sentiment === "neutral" && (row.sentimentConfidence ?? 0) <= args.maxConfidence)
+      .slice(0, args.analyzeLimit)
+      .map((row) => row._id);
+  },
+});
+
 const sentimentWriteItemValidator = v.object({
   articleId: v.id("coingeckoNewsArticles"),
   sentiment: sentimentValidator,
@@ -197,3 +252,33 @@ export const _setArticleSentimentBatch = internalMutation({
   },
 });
 
+export const _overwriteLowConfidenceNeutralSentimentBatch = internalMutation({
+  args: {
+    items: v.array(sentimentWriteItemValidator),
+    maxExistingConfidence: v.number(),
+  },
+  returns: v.object({ updated: v.number() }),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    let updated = 0;
+
+    for (const item of args.items) {
+      const existing = await ctx.db.get(item.articleId);
+      if (!existing) continue;
+      if (existing.sentiment !== "neutral") continue;
+      const existingConf = existing.sentimentConfidence ?? 0;
+      if (existingConf > args.maxExistingConfidence) continue;
+      if (existingConf > item.confidence) continue;
+
+      await ctx.db.patch(item.articleId, {
+        sentiment: item.sentiment,
+        sentimentConfidence: item.confidence,
+        sentimentUpdatedAt: now,
+        updatedAt: now,
+      });
+      updated++;
+    }
+
+    return { updated };
+  },
+});

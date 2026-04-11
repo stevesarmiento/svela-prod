@@ -1,7 +1,8 @@
-import "@v1/ui/globals.css";
+import "../globals.css";
 import { cn } from "@v1/ui/cn";
 import { Providers } from "@/components/providers/providers";
 import { ReactScan } from "@/components/dev/react-scan";
+import { RuntimeErrorBoundary, RuntimeErrorCapture } from "@/components/dev/runtime-error-capture";
 import type { Metadata } from "next";
 import { APP_DESCRIPTION, APP_NAME, getAppBaseUrl } from "@/lib/metadata";
 import { getStaticParams } from "@/locales/server";
@@ -109,7 +110,8 @@ export default async function RootLayout({
         <Suspense fallback={null}>
           <Providers>
             <ReactScan />
-            {children}
+            <RuntimeErrorCapture />
+            <RuntimeErrorBoundary>{children}</RuntimeErrorBoundary>
           </Providers>
         </Suspense>
       </body>
