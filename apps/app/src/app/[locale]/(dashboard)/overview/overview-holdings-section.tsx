@@ -29,8 +29,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconTriangleFill } from "symbols-react";
 import { api } from "../../../../../convex/_generated/api";
 import { TimeScaleSelector } from "../charts/_components/multi-line-lightweight-time-scale-selector";
-import { OverviewDailyBriefCard } from "./overview-daily-brief-card";
-import { OverviewActivityFeedCard } from "./overview-events-feed-card";
+import { OverviewActivityFeedCard } from "./overview-events-feed-card/activity-feed-card";
+import { OverviewEmptyState } from "./overview-empty-state";
 
 interface HoldingsGroupRow {
   group: {
@@ -339,40 +339,6 @@ function OverviewHoldingsSectionInner(props: {
     rebasedComparison.marketPoints.length,
   ]);
 
-  const exBtcRebased = useMemo(() => {
-    if (!rebasedComparison.baselineTime) return [];
-    if (marketSeries.exBtcPoints.length === 0) return [];
-
-    const baselineValue = getPointValueAtTime(
-      marketSeries.exBtcPoints,
-      rebasedComparison.baselineTime,
-    );
-    if (!baselineValue || !Number.isFinite(baselineValue) || baselineValue <= 0)
-      return [];
-
-    return rebasedComparison.portfolioPoints
-      .map((point) => {
-        const value = getPointValueAtTime(marketSeries.exBtcPoints, point.time);
-        if (!value || !Number.isFinite(value) || value <= 0) return null;
-        return { time: point.time, value: (value / baselineValue) * 100 };
-      })
-      .filter(
-        (point): point is { time: number; value: number } => point !== null,
-      );
-  }, [
-    marketSeries.exBtcPoints,
-    rebasedComparison.baselineTime,
-    rebasedComparison.portfolioPoints,
-  ]);
-
-  const exBtcReturnPct = useMemo(() => {
-    if (exBtcRebased.length < 2) return null;
-    const lastValue = exBtcRebased[exBtcRebased.length - 1]?.value;
-    if (typeof lastValue !== "number" || !Number.isFinite(lastValue))
-      return null;
-    return lastValue - 100;
-  }, [exBtcRebased]);
-
   const rangeChange = useMemo(() => {
     const points = valueSeries.points;
     if (points.length < 2)
@@ -396,23 +362,31 @@ function OverviewHoldingsSectionInner(props: {
     };
   }, [scrubbedPortfolioValueUsd, valueSeries.points]);
 
+  const isEmptyDashboard =
+    overviewBootstrap !== undefined &&
+    (overviewBootstrap.watchlistCoinCount ?? 0) === 0;
+
+  if (isEmptyDashboard) {
+    return <OverviewEmptyState />;
+  }
+
   return (
     <div className="w-full px-4 sm:px-6 py-6">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
-        <div className="space-y-4 lg:col-span-4 lg:sticky lg:top-6 lg:self-start">
+        <div className="space-y-4 lg:col-span-5 lg:sticky lg:top-6 lg:self-start">
           <Card
             className={cn(
               "bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)] will-change-auto",
             )}
           >
-            <CardHeader className="p-5 pt-0">
+            <CardHeader className="p-0">
               <CardTitle className="sr-only mb-0 text-pretty text-balance text-sm font-medium text-zinc-600 dark:text-white/60">
                 Portfolio value
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-5 pt-0">
-              <div className="flex flex-col items-start text-left">
-                <div className="text-pretty text-balance text-3xl font-semibold tabular-nums text-zinc-950 dark:text-white">
+            <CardContent className="p-4 pt-0 relative">
+              <div className="absolute top-0 left-6 flex flex-col items-start text-left">
+                <div className="text-pretty text-balance text-3xl tabular-nums text-zinc-950 dark:text-white">
                   {formatUsdPrice(displayValueUsd)}
                 </div>
                 {hasHoldings && rangeChange.isAvailable ? (
@@ -428,19 +402,58 @@ function OverviewHoldingsSectionInner(props: {
                 ) : null}
               </div>
 
+              {/* Performance chart */}
+              <div className="relative mt-4 -mx-5">
+                <div
+                  className="pointer-events-none absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
+                    backgroundRepeat: "repeat",
+                    maskImage:
+                      "radial-gradient(ellipse 62% 48% at 50% 48%, #000 28%, #000 42%, transparent 78%)",
+                    WebkitMaskImage:
+                      "radial-gradient(ellipse 62% 48% at 50% 48%, #000 28%, #000 42%, transparent 78%)",
+                  }}
+                />
+                <div className="flex items-center justify-end px-5 pb-2">
+                  <TimeScaleSelector
+                    activeTimeScale={activeTimeScale}
+                    setActiveTimeScale={setActiveTimeScale}
+                  />
+                </div>
+                <div className="">
+                  {!hasHoldings ? (
+                    <div className="flex h-[240px] items-center justify-center text-sm text-zinc-600 dark:text-white/60">
+                      No holdings to chart yet.
+                    </div>
+                  ) : (
+                    <OverviewPerformanceChart
+                      portfolioPoints={portfolioChartPoints}
+                      marketPoints={rebasedComparison.marketPoints}
+                      height={240}
+                      onHover={setScrubTime}
+                      note={chartNote}
+                    />
+                  )}
+                </div>
+              </div>
+              <div className="w-full scale-x-110 h-[2px] bg-black border-b border-white/15 mt-4" />
               {hasHoldings && groupRows.length > 0 ? (
                 <div className="mt-4">
-                  <div className="h-2 w-full overflow-hidden rounded-[2px]">
+                  <div className="text-xs font-medium text-zinc-600 dark:text-white/60 mb-2">
+                    Holdings Breakdown
+                  </div>
+                  <div className="h-3 w-full overflow-hidden rounded-[4px]">
                     <div className="flex h-full w-full gap-0.5">
                       {groupRows.map((row) => (
                         <div
                           key={row.id}
                           className={cn(
-                            "h-full rounded-[2px] opacity-90",
+                            "h-full rounded-[4px] opacity-90",
                             row.barClassName,
                           )}
                           style={{
-                            width: `${Math.max(1, row.percent * 100)}%`,
+                            width: `${Math.max(10, row.percent * 100)}%`,
                           }}
                           aria-hidden
                         />
@@ -449,6 +462,7 @@ function OverviewHoldingsSectionInner(props: {
                   </div>
                 </div>
               ) : null}
+              <div className="w-full scale-x-110 h-[2px] bg-black border-b border-white/15 mt-4" />
 
               {!hasHoldings ? (
                 <p className="mt-4 text-pretty text-xs text-zinc-600 dark:text-white/60">
@@ -458,11 +472,8 @@ function OverviewHoldingsSectionInner(props: {
               ) : null}
 
               {hasHoldings && groupRows.length > 0 ? (
-                <div className="mt-5">
-                  <div className="mb-2 text-xs font-medium text-zinc-600 dark:text-white/60">
-                    Holdings
-                  </div>
-                  <div className="space-y-2 divide-y divide-zinc-200/60 dark:divide-white/10">
+                <div className="mt-2">
+                  <div className="space-y-2">
                     {groupRows.map((row) => (
                       <div key={row.id} className="py-2">
                         {/* Single row: stacks | name | token bar | % */}
@@ -479,7 +490,7 @@ function OverviewHoldingsSectionInner(props: {
                                       key={segment.coinId}
                                       className="h-full rounded-[2px]"
                                       style={{
-                                        width: `${Math.max(1, segment.percent * 100)}%`,
+                                        width: `${Math.max(10, segment.percent * 100)}%`,
                                         backgroundColor: segment.color,
                                       }}
                                     />
@@ -505,88 +516,10 @@ function OverviewHoldingsSectionInner(props: {
             </CardContent>
           </Card>
 
-          <OverviewDailyBriefCard
-            status={overviewBootstrap?.status ?? "missing"}
-            window={commandWindow}
-            movers24h={overviewBootstrap?.movers24h ?? null}
-            movers7d={overviewBootstrap?.movers7d ?? null}
-            events={overviewBootstrap?.events ?? null}
-            brief24h={
-              overviewBootstrap?.brief24h ?? {
-                status: "missing",
-                stale: true,
-                expiresAt: null,
-                generatedAt: null,
-                brief: null,
-              }
-            }
-            brief7d={
-              overviewBootstrap?.brief7d ?? {
-                status: "missing",
-                stale: true,
-                expiresAt: null,
-                generatedAt: null,
-                brief: null,
-              }
-            }
-            onGenerate={generateOverviewBrief}
-          />
         </div>
 
-        <div className="space-y-4 lg:col-span-8">
-          <Card className="relative border-none bg-transparent">
-            {/* Dot texture: visible in center, faded via elliptical radial mask at edges */}
-            <div
-              className="pointer-events-none absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
-                backgroundRepeat: "repeat",
-                maskImage:
-                  "radial-gradient(ellipse 62% 48% at 50% 48%, #000 28%, #000 42%, transparent 78%)",
-                WebkitMaskImage:
-                  "radial-gradient(ellipse 62% 48% at 50% 48%, #000 28%, #000 42%, transparent 78%)",
-              }}
-            />
-            <CardHeader className="p-5 pb-2 flex flex-row items-center justify-end">
-              <CardTitle className="sr-only mb-0 text-pretty text-balance text-sm font-medium text-zinc-600 dark:text-white/60">
-                Value over time
-              </CardTitle>
-              <TimeScaleSelector
-                activeTimeScale={activeTimeScale}
-                setActiveTimeScale={setActiveTimeScale}
-              />
-            </CardHeader>
-            <CardContent className="p-5 pt-0">
-              {!hasHoldings ? (
-                <div className="flex h-[320px] items-center justify-center text-sm text-zinc-600 dark:text-white/60">
-                  No holdings to chart yet.
-                </div>
-              ) : (
-                <OverviewPerformanceChart
-                  portfolioPoints={portfolioChartPoints}
-                  marketPoints={rebasedComparison.marketPoints}
-                  extraSeries={
-                    exBtcRebased.length > 0
-                      ? [
-                          {
-                            id: "ex-btc",
-                            label: "Ex-BTC",
-                            points: exBtcRebased,
-                            color: "rgba(245, 158, 11, 0.25)",
-                          },
-                        ]
-                      : []
-                  }
-                  height={320}
-                  onHover={setScrubTime}
-                  note={chartNote}
-                />
-              )}
-            </CardContent>
-          </Card>
-
+        <div className="space-y-4 lg:col-span-7">
           <OverviewActivityFeedCard
-            status={overviewBootstrap?.status ?? "missing"}
             events={
               overviewBootstrap?.events ?? {
                 generatedAt: 0,
@@ -616,10 +549,33 @@ function OverviewHoldingsSectionInner(props: {
               },
               onRefreshNow: async () => {
                 const result = await refreshMyDataNow({ force: false });
-                // Recompute overview snapshot (watchlist-only) so cards update promptly.
                 await refreshOverviewSnapshot({ force: true });
                 return result;
               },
+            }}
+            dailyBrief={{
+              status: overviewBootstrap?.status ?? "missing",
+              window: commandWindow,
+              movers24h: overviewBootstrap?.movers24h ?? null,
+              movers7d: overviewBootstrap?.movers7d ?? null,
+              events: overviewBootstrap?.events ?? null,
+              brief24h:
+                overviewBootstrap?.brief24h ?? {
+                  status: "missing",
+                  stale: true,
+                  expiresAt: null,
+                  generatedAt: null,
+                  brief: null,
+                },
+              brief7d:
+                overviewBootstrap?.brief7d ?? {
+                  status: "missing",
+                  stale: true,
+                  expiresAt: null,
+                  generatedAt: null,
+                  brief: null,
+                },
+              onGenerate: generateOverviewBrief,
             }}
           />
         </div>

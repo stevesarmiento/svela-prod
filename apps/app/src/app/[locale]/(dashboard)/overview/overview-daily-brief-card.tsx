@@ -19,14 +19,9 @@ import {
 
 const MotionDiv = motion.div
 
-const SLIDE_MIN_H = "min-h-[148px]"
+const SLIDE_MIN_H = "min-h-[120px]"
 const SLIDE_INTERVAL_MS = 8000
 
-function toneBackground(tone: "positive" | "negative" | "neutral"): string {
-  if (tone === "positive") return "bg-emerald-50/40 dark:bg-emerald-950/10"
-  if (tone === "negative") return "bg-rose-50/40 dark:bg-rose-950/10"
-  return "bg-zinc-50/40 dark:bg-white/[0.02]"
-}
 
 type BriefWindow = "24h" | "7d"
 type OverviewStatus = "missing" | "fresh" | "stale"
@@ -78,6 +73,14 @@ interface DailyBriefCache {
   brief: DailyBrief | null
 }
 
+const MISSING_BRIEF_CACHE: DailyBriefCache = {
+  status: "missing",
+  stale: true,
+  expiresAt: null,
+  generatedAt: null,
+  brief: null,
+}
+
 function formatBriefTime(ms: number): string {
   const d = new Date(ms)
   return d.toLocaleString(undefined, {
@@ -103,12 +106,10 @@ function windowLabel(window: BriefWindow): string {
 
 function BriefSkeleton() {
   return (
-    <div className="space-y-3">
-      <div className="rounded-2xl bg-zinc-50/40 dark:bg-white/[0.02] px-4 py-5 space-y-3">
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-3 w-11/12" />
-        <Skeleton className="h-3 w-10/12" />
-      </div>
+    <div className="space-y-3 px-2">
+      <Skeleton className="h-5 w-full" />
+      <Skeleton className="h-5 w-11/12" />
+      <Skeleton className="h-5 w-9/12" />
     </div>
   )
 }
@@ -123,7 +124,9 @@ export function OverviewDailyBriefCard(props: {
   events?: SnapshotEvents | null
   onGenerate: (args: { window: BriefWindow; force?: boolean }) => Promise<DailyBrief>
 }) {
-  const cache = props.window === "7d" ? props.brief7d : props.brief24h
+  const cache =
+    (props.window === "7d" ? props.brief7d : props.brief24h) ??
+    MISSING_BRIEF_CACHE
   const generateBrief = props.onGenerate
 
   const [isGenerating, setIsGenerating] = useState(false)
@@ -416,32 +419,13 @@ export function OverviewDailyBriefCard(props: {
   )
 
   const shouldReduceMotion = useReducedMotion()
-
   const showSkeleton = props.status === "missing"
-
   if (showSkeleton) return <BriefSkeleton />
 
   const dur = motionDuration(shouldReduceMotion, DURATION_UI_S)
 
   return (
     <div className="space-y-3">
-      {/* Title row */}
-      <div className="flex items-center justify-between gap-2 px-2">
-        <span className="text-lg font-medium text-zinc-950 dark:text-white text-balance">
-          Daily brief
-        </span>
-        {isGenerating ? (
-          <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <Spinner className="h-3 w-3" />
-            Updating
-          </span>
-        ) : brief?.generatedAt ? (
-          <span className="text-[11px] text-muted-foreground">
-            {formatBriefTime(brief.generatedAt)}
-          </span>
-        ) : null}
-      </div>
-
       {brief ? (
         <div
           className="space-y-3"
@@ -456,7 +440,7 @@ export function OverviewDailyBriefCard(props: {
           >
             <CarouselContent>
               <CarouselItem>
-                <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center rounded-2xl bg-zinc-50/40 dark:bg-white/[0.02] px-4 py-5 border border-white/5")}>
+                <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4")}>
                   <AnimatePresence mode="wait">
                     <MotionDiv
                       key={`summary-${selectedSlide}`}
@@ -465,7 +449,7 @@ export function OverviewDailyBriefCard(props: {
                       exit={shouldReduceMotion ? undefined : { opacity: 0, y: 0 }}
                       transition={{ duration: dur, ease: EASE_OUT_CUBIC }}
                     >
-                      <p className="text-[15px] leading-relaxed text-zinc-700 dark:text-zinc-200 text-pretty">
+                      <p className="text-xl leading-relaxed font-medium text-zinc-900 dark:text-zinc-100 text-pretty">
                         {summary}
                       </p>
                     </MotionDiv>
@@ -475,13 +459,7 @@ export function OverviewDailyBriefCard(props: {
 
               {orderedCards.map((card) => (
                 <CarouselItem key={card.kind}>
-                  <div
-                    className={cn(
-                      SLIDE_MIN_H,
-                      "flex flex-col justify-center rounded-2xl px-4 py-5 border border-white/5",
-                      toneBackground(card.tone),
-                    )}
-                  >
+                  <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4")}>
                     <AnimatePresence mode="wait">
                       <MotionDiv
                         key={`card-${card.kind}-${selectedSlide}`}
@@ -491,17 +469,17 @@ export function OverviewDailyBriefCard(props: {
                         transition={{ duration: dur, ease: EASE_OUT_CUBIC }}
                         className="space-y-2"
                       >
-                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                        <span className="text-xs uppercase tracking-wide text-muted-foreground">
                           {card.title}
                         </span>
-                        <p className="text-[15px] font-medium text-zinc-950 dark:text-white">
+                        <p className="text-lg font-medium text-zinc-900 dark:text-white">
                           {card.primary}
                         </p>
-                        <p className="text-[14px] leading-relaxed text-zinc-700 dark:text-zinc-200 text-pretty">
+                        <p className="text-base leading-relaxed text-zinc-700 dark:text-zinc-200 text-pretty">
                           {card.body}
                         </p>
                         {card.secondary ? (
-                          <p className="text-[11px] text-muted-foreground/70">
+                          <p className="text-xs text-muted-foreground/70">
                             {card.secondary}
                           </p>
                         ) : null}

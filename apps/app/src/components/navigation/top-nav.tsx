@@ -150,7 +150,9 @@ export function TopNav() {
   const { openUserProfile } = useClerk();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [hasHydrated, setHasHydrated] = useState(false);
   const [overviewGreeting, setOverviewGreeting] = useState<string | null>(null);
+  const [todayLabel, setTodayLabel] = useState<string | null>(null);
   const { isChartDetailPage, tokenData, isLoading } = useTokenHeader();
 
   // Extract coin ID from pathname for watchlist button
@@ -197,12 +199,21 @@ export function TopNav() {
 
   // Update time-based greeting client-side for overview routes (avoids hydration mismatch).
   useEffect(() => {
+    setHasHydrated(true);
+
     if (!isOverviewRoute) {
       setOverviewGreeting(null);
-      return;
+    } else {
+      setOverviewGreeting(getRouteGreeting(pathname));
     }
 
-    setOverviewGreeting(getRouteGreeting(pathname));
+    setTodayLabel(
+      new Date().toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
+    );
   }, [isOverviewRoute, pathname]);
 
   const handleProfileClick = () => {
@@ -216,8 +227,8 @@ export function TopNav() {
   const email = clerkUser?.primaryEmailAddress?.emailAddress || user?.email;
   const avatarUrl = clerkUser?.imageUrl || user?.avatarUrl;
 
-  // Don't show greeting with name until user data is loaded
-  const showPersonalizedGreeting = isLoaded && firstName;
+  // Keep the first client render identical to SSR.
+  const showPersonalizedGreeting = hasHydrated && isLoaded && firstName;
 
   return (
     <div className="py-12 px-4">
@@ -265,11 +276,7 @@ export function TopNav() {
                   </h1>
                   <p className="text-xs text-gray-900 dark:text-white">
                     <span className="text-xs text-gray-500 dark:text-white/60">Today is </span> 
-                    {new Date().toLocaleDateString('en-US', { 
-                      weekday: 'long', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })}
+                    {todayLabel ?? "Today"}
                   </p>
                 </div>
               </div>
@@ -277,14 +284,14 @@ export function TopNav() {
           ) : (
             // Default Logo and Greeting
             <>
-              <Link href="/overview" className="opacity-50 hover:opacity-100 transition-opacity duration-150">
+              <Link href="/overview" className="opacity-50 hover:opacity-100 transition-opacity duration-150 hover:scale-105">
                 <SvelaLogo 
                   width={25} 
                   height={25}
                   adaptive={true}
                 />
               </Link>
-              <span className="text-xl font-bold text-zinc-950 dark:text-white">
+              <span className="text-xl font-diatype-bold text-zinc-950 dark:text-white">
                 {isOverviewRoute
                   ? showPersonalizedGreeting
                     ? `${overviewGreeting ?? "Good morning"}, ${firstName}`

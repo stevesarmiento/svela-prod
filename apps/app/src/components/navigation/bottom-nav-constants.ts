@@ -1,11 +1,7 @@
 import type { ComponentType } from "react";
-import {
-  // IconCompassDrawing,
-  IconBookmarkFill,
-  IconWalletBifoldFill,
-  IconSafariFill,
-  IconHouseFill,
-} from "symbols-react";
+import { IconWalletBifoldFill, IconSafariFill } from "symbols-react";
+import { BookmarkIcon } from "./bookmark-icon";
+import { HomeIcon } from "./home-icon";
 import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
 import { getShortcutForRoute } from "@/lib/keyboard-shortcuts";
 
@@ -20,12 +16,12 @@ export const MENU_ITEMS = [
   {
     title: "Overview",
     href: "/overview",
-    icon: IconHouseFill,
+    icon: HomeIcon,
   },
   {
     title: "Watchlists",
     href: "/watchlists",
-    icon: IconBookmarkFill,
+    icon: BookmarkIcon,
   },
   {
     title: "Screener",
@@ -38,7 +34,7 @@ const watchlistCommandItem = {
   title: "Watchlists",
   subtitle: "Your cryptocurrency watchlist",
   href: "/watchlists",
-  icon: IconBookmarkFill,
+  icon: BookmarkIcon,
   shortcut: getShortcutForRoute("/watchlists"),
 } as const;
 
@@ -54,7 +50,7 @@ const overviewCommandItem = {
   title: "Overview",
   subtitle: "View dashboard and watchlist",
   href: "/overview",
-  icon: IconHouseFill,
+  icon: HomeIcon,
   shortcut: getShortcutForRoute("/overview"),
 } as const;
 

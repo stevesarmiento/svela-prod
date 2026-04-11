@@ -3,15 +3,15 @@
 import React, { useTransition, useDeferredValue, useCallback, useMemo, memo, useState } from 'react'
 import { useIsomorphicTheme } from '@/hooks/use-isomorphic-theme'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
-import { motion, useReducedMotion } from 'motion/react'
 import { cn } from "@v1/ui/cn"
+import { Badge } from "@v1/ui/badge"
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
 import { useChartInstance, type HullSuiteOverlay } from '@/hooks/use-chart-instance'
 import { usePriceCalculations } from '@/hooks/use-price-calculations'
 import type { CoinMarketData } from '@/types/coins'
 import { useHullSuite } from '@/hooks/use-hull-suite'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
-import { IconArrowUpRight } from 'symbols-react'
+import { IconTriangleFill } from 'symbols-react'
 import NumberFlow from '@/components/number-flow'
 import { useQuery as useTanStackQuery } from '@tanstack/react-query'
 import { CoinsInternalApi } from '@/lib/effect/coins-internal-api'
@@ -34,6 +34,39 @@ interface PriceChartProps {
   setActiveTimeScale: (scale: string) => void;
   isPending?: boolean;
   spotStatus?: RealtimeQuoteStatus;
+}
+
+function clampPercentChange(value: number): number {
+  if (!Number.isFinite(value)) return 0
+  if (value > 9999) return 9999
+  if (value < -9999) return -9999
+  return value
+}
+
+function PriceChangeBadge(props: { pct: number }) {
+  const clamped = clampPercentChange(props.pct)
+  const isPositive = clamped > 0
+  const isNegative = clamped < 0
+  const isNeutral = !isPositive && !isNegative
+  return (
+    <Badge
+      variant={isPositive ? "success" : isNegative ? "destructive" : "outline"}
+      className={cn(
+        "inline-flex align-middle h-6 px-2 font-berkeley-mono text-[12px] tabular-nums gap-1",
+        isNeutral &&
+          "border-zinc-200/60 text-muted-foreground dark:border-white/10",
+      )}
+    >
+      <IconTriangleFill
+        aria-hidden="true"
+        className={cn(
+          "size-[6px] shrink-0 fill-current",
+          isNegative && "rotate-180",
+        )}
+      />
+      {Math.abs(clamped).toFixed(2)}%
+    </Badge>
+  )
 }
 
 function getSpotStatusLabel(
@@ -456,7 +489,6 @@ export const PriceChart = memo(function PriceChart({
   // Warmup (stale DB refresh) can run in the background without pulsing the whole chart.
   const isBlockingLoading = quoteQuery.isLoading || (isLoading && !isSeriesReady) || !isSeriesReady
   const showPending = isPending || isDataPending || isBlockingLoading
-  const shouldReduceMotion = useReducedMotion()
   const effectiveSpotStatus = useMemo(() => {
     if (!spotStatus) return spotStatus
     if (spotStatus.kind !== "realtime") return spotStatus
@@ -512,25 +544,16 @@ export const PriceChart = memo(function PriceChart({
                       )}
                     </div>
 
-                  <div className={`text-xs font-bold font-berkeley-mono ${Number.isNaN(priceChange24h) ? 'text-muted-foreground' : priceChange24h >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  <div className="mt-1">
                     {Number.isNaN(priceChange24h) ? (
-                      <span>N/A</span>
+                      <Badge
+                        variant="outline"
+                        className="inline-flex align-middle h-6 px-2 font-berkeley-mono text-[12px] tabular-nums border-zinc-200/60 text-muted-foreground dark:border-white/10"
+                      >
+                        N/A
+                      </Badge>
                     ) : (
-                      <>
-                        <motion.span
-                          key={priceChange24h >= 0 ? 'up' : 'down'}
-                          initial={{ rotate: priceChange24h >= 0 ? 0 : 90 }}
-                          animate={{ rotate: priceChange24h >= 0 ? 0 : 90 }}
-                          transition={shouldReduceMotion ? { duration: 0 } : { type: "spring", bounce: 0.3, duration: 0.3 }}
-                          className="inline-block mr-2"
-                          style={{ transformOrigin: 'center' }}
-                        >
-                          <IconArrowUpRight className={`w-2 h-2 ${priceChange24h >= 0 ? 'fill-emerald-500' : 'fill-rose-500'}`} />
-                        </motion.span>
-                        <span>
-                          {Math.abs(priceChange24h).toFixed(2)}%
-                        </span>
-                      </>
+                      <PriceChangeBadge pct={priceChange24h} />
                     )}
                   </div>
                 </div>

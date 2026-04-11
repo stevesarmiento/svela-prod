@@ -221,14 +221,12 @@ function OverviewMoversCardInner(props: {
   setWindow: (window: MoversWindow) => void
 } & Omit<OverviewMoversCardProps, "window" | "onWindowChange">) {
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const data = props.window === "7d" ? props.movers7d : props.movers24h
+  const gainers = useMemo(() => data?.gainers ?? [], [data?.gainers])
+  const losers = useMemo(() => data?.losers ?? [], [data?.losers])
 
   const isLoading = props.status === "missing"
   if (isLoading) return <MoversSkeleton />
-
-  const data = props.window === "7d" ? props.movers7d : props.movers24h
-
-  const gainers = useMemo(() => data?.gainers ?? [], [data?.gainers])
-  const losers = useMemo(() => data?.losers ?? [], [data?.losers])
 
   const hasAny = gainers.length > 0 || losers.length > 0
 

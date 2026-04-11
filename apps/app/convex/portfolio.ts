@@ -42,7 +42,7 @@ function formatAddress(address: string): string {
 }
 
 function buildOverviewSnapshotCacheKey(clerkId: string): string {
-  return `overview:watchlist:snapshot:v2:${clerkId}`;
+  return `overview:watchlist:snapshot:v4:${clerkId}`;
 }
 
 async function markOverviewSnapshotStale(ctx: MutationCtx, clerkId: string) {

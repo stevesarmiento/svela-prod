@@ -35,7 +35,7 @@ export function useAuth() {
         clerkSignIn.authenticateWithRedirect({
           strategy: "oauth_google",
           redirectUrl: "/sso-callback",
-          redirectUrlComplete: "/watchlist",
+          redirectUrlComplete: "/overview",
         });
       } else {
         clerk.openSignIn({
@@ -181,4 +181,3 @@ export function useRemoveBulkFromAllWatchlists() {
   const bulk = useMutation(api.watchlists.removeBulkFromAllMyWatchlists);
   return useCallback((coinIds: string[]) => bulk({ coinIds }), [bulk]);
 }
-

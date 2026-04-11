@@ -6,7 +6,7 @@ const isProd = process.env.NODE_ENV === "production";
 const nextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
-  transpilePackages: [],
+  transpilePackages: ["@solana/design-system"],
   async redirects() {
     return [
       // Back-compat: `/:locale/charts` used to be the screener entry point.

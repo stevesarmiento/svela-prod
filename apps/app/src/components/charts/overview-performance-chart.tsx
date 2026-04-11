@@ -8,12 +8,6 @@ import { useIsomorphicTheme } from "@/hooks/use-isomorphic-theme";
 interface OverviewPerformanceChartProps {
   portfolioPoints: LivelinePoint[];
   marketPoints?: LivelinePoint[];
-  extraSeries?: Array<{
-    id: string;
-    label: string;
-    points: LivelinePoint[];
-    color: string;
-  }>;
   height?: number;
   onHover?: (time: number | null) => void;
   note?: string | null;
@@ -55,7 +49,6 @@ function formatIndexValue(value: number): string {
 export function OverviewPerformanceChart({
   portfolioPoints,
   marketPoints = [],
-  extraSeries = [],
   height = 320,
   onHover,
   note,
@@ -90,30 +83,12 @@ export function OverviewPerformanceChart({
       });
     }
 
-    for (const extra of extraSeries) {
-      if (extra.points.length === 0) continue;
-      const latestValue = extra.points[extra.points.length - 1]?.value;
-      if (typeof latestValue !== "number") continue;
-      nextSeries.push({
-        id: extra.id,
-        data: extra.points,
-        value: latestValue,
-        color: extra.color,
-        label: `${extra.label} ${latestValue - 100 >= 0 ? "+" : ""}${(latestValue - 100).toFixed(2)}%`,
-      });
-    }
-
     return nextSeries;
-  }, [extraSeries, isDarkMode, marketPoints, portfolioPoints]);
+  }, [isDarkMode, marketPoints, portfolioPoints]);
 
   const allPoints = useMemo(
-    () =>
-      [
-        ...portfolioPoints,
-        ...marketPoints,
-        ...extraSeries.flatMap((series) => series.points),
-      ].sort((a, b) => a.time - b.time),
-    [extraSeries, marketPoints, portfolioPoints],
+    () => [...portfolioPoints, ...marketPoints].sort((a, b) => a.time - b.time),
+    [marketPoints, portfolioPoints],
   );
 
   const windowSecs = useMemo(() => {
@@ -173,11 +148,11 @@ export function OverviewPerformanceChart({
         series={series}
         theme={isDarkMode ? "dark" : "light"}
         color={isDarkMode ? "#e5e7eb" : "#111827"}
-        lineWidth={2}
+        lineWidth={1}
         window={windowSecs}
         formatTime={formatTime}
         formatValue={formatIndexValue}
-        grid
+        grid={false}
         badge={false}
         fill={false}
         pulse={false}
@@ -185,7 +160,7 @@ export function OverviewPerformanceChart({
         momentum={false}
         tooltipY={-9999}
         tooltipOutline={false}
-        padding={{ top: 12, right: 60, bottom: 20, left: 12 }}
+        padding={{ top: 12, right: 20, bottom: 20, left: 12 }}
         onHover={handleHover}
         className="size-full"
       />

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState, useMemo, useDeferredValue } fr
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { Button } from "@v1/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
-import { IconMagnifyingglass, IconCircleSlash, IconCommand } from "symbols-react";
+import { IconCircleSlash, IconCommand } from "symbols-react";
 import {
   CommandPopover,
   CommandEmpty,
@@ -25,6 +25,7 @@ import { formatUsdPrice } from "@/lib/format-usd";
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides";
 import { TokenLogo } from "@/components/token-logo";
 import { cn } from "@v1/ui/cn";
+import { SearchIcon } from "./search-icon";
 
 type CommandContext = 'overview' | 'watchlist' | 'charts' | null;
 
@@ -194,7 +195,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
   };
 
   return (
-    <div className="group relative rounded-[20px] bg-zinc-800/80 backdrop-blur-md border border-transparent overflow-hidden px-2 py-0 hover:bg-zinc-800/90 transition-colors duration-150 cursor-pointer
+    <div className="group relative rounded-[20px] bg-zinc-800 backdrop-blur-md border border-transparent overflow-hidden px-2 py-0 hover:bg-zinc-800 transition-colors duration-150 cursor-pointer
                    shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
       
       {/* React 19: Optimized shared background pattern */}
@@ -216,7 +217,7 @@ export const CommandSearch = React.memo(({ isOpen, setIsOpen, onCommandSelect, c
               >
                 <Tooltip delayDuration={500}>
                   <TooltipTrigger asChild>
-                    <IconMagnifyingglass className="h-4 w-4 fill-white/70 group-hover:fill-white" />
+                    <SearchIcon className="h-4 w-4 fill-white/40 group-hover:fill-white" />
                   </TooltipTrigger>
                   <TooltipContent
                     side="top"

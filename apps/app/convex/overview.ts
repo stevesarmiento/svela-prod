@@ -8,18 +8,12 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { requireServerToken } from "./_lib/server_token";
-import {
-  dedupeAndSortByOccurredAt,
-  detectBreakout,
-  detectVolumeAnomaly,
-  isCacheFresh,
-  isPriceSpike,
-  rankMovers,
-} from "./_lib/overview_signals";
+import { dedupeAndSortByOccurredAt, isCacheFresh, rankMovers } from "./_lib/overview_signals";
 
 type Window = "24h" | "7d";
 
@@ -195,6 +189,7 @@ const eventToneValidator = v.union(
 
 const overviewEventValidator = v.object({
   id: v.string(),
+  articleId: v.union(v.string(), v.null()),
   kind: eventKindValidator,
   tone: eventToneValidator,
   sentiment: v.union(
@@ -214,13 +209,6 @@ const overviewEventValidator = v.object({
   percent: v.union(v.number(), v.null()),
 });
 
-function toneFromSigned(value: number): "positive" | "negative" | "neutral" {
-  if (!Number.isFinite(value)) return "neutral";
-  if (value > 0) return "positive";
-  if (value < 0) return "negative";
-  return "neutral";
-}
-
 function newsToneFromSentiment(
   sentiment: "bullish" | "bearish" | "neutral" | null,
 ): "positive" | "negative" | "neutral" {
@@ -238,6 +226,7 @@ const eventsSnapshotValidator = v.object({
 
 const OverviewEventSchema = z.object({
   id: z.string(),
+  articleId: z.string().nullable(),
   kind: z.enum([
     "news",
     "price_spike",
@@ -265,6 +254,16 @@ const EventsSnapshotSchema = z.object({
   coinCount: z.number(),
   limited: z.boolean(),
   events: z.array(OverviewEventSchema),
+});
+
+const newsSentimentOverlayRowValidator = v.object({
+  articleId: v.string(),
+  sentiment: v.union(
+    v.union(v.literal("bullish"), v.literal("bearish"), v.literal("neutral")),
+    v.null(),
+  ),
+  sentimentConfidence: v.union(v.number(), v.null()),
+  sentimentUpdatedAt: v.union(v.number(), v.null()),
 });
 
 function getGemini() {
@@ -420,7 +419,8 @@ function buildDailyBriefCacheKey(args: {
 }
 
 function buildSnapshotCacheKey(args: { clerkId: string }): string {
-  return `overview:watchlist:snapshot:v2:${args.clerkId}`;
+  // Bump when snapshot shape/semantics change (e.g. news-only feed) so stale apiCache rows are not reused.
+  return `overview:watchlist:snapshot:v4:${args.clerkId}`;
 }
 
 type MoversSnapshot = z.infer<typeof MoversSnapshotSchema>;
@@ -805,6 +805,104 @@ async function buildRankedCoinUniverse(ctx: QueryCtx, watchlistIds: ReadonlyArra
   return { watchlistCoinCount, limited, coinIds: sorted.slice(0, MAX_COINS).map((c) => c.coingeckoId) };
 }
 
+/** Ranked overview coin universe for a user (same ordering as snapshot movers/events). */
+export const _getMyRankedOverviewCoinIds = internalQuery({
+  args: { clerkId: v.string() },
+  returns: v.object({
+    coinIds: v.array(v.string()),
+    watchlistCoinCount: v.number(),
+    limited: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .first();
+    if (!user) {
+      return { coinIds: [], watchlistCoinCount: 0, limited: false };
+    }
+
+    const rows = await ctx.db
+      .query("watchlists")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    const watchlistIds = rows.map((row) => row.coinId);
+    const universe = await buildRankedCoinUniverse(ctx, watchlistIds);
+    return {
+      coinIds: universe.coinIds,
+      watchlistCoinCount: universe.watchlistCoinCount,
+      limited: universe.limited,
+    };
+  },
+});
+
+const OVERVIEW_NEWS_WARMUP_DEDUP_MS = 5 * 60 * 1000;
+const OVERVIEW_NEWS_WARMUP_MAX_COINS = 20;
+const OVERVIEW_NEWS_WARMUP_STAGGER_MS = 250;
+
+/** Touch watchlist tracking and schedule CoinGecko news fetches (deduped, staggered). */
+export const _scheduleWatchlistNewsWarmup = internalMutation({
+  args: { coinIds: v.array(v.string()) },
+  returns: v.object({
+    scheduled: v.number(),
+    skippedCooldown: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const unique = Array.from(
+      new Set(args.coinIds.map((id) => id.trim()).filter((id) => id.length > 0)),
+    );
+    if (unique.length === 0) {
+      return { scheduled: 0, skippedCooldown: 0 };
+    }
+
+    await ctx.runMutation(internal.coingeckoState._touchTrackedCoinsBatch, {
+      coingeckoIds: unique,
+      reason: "watchlist",
+      lastSeen: now,
+    });
+
+    const target = unique.slice(0, OVERVIEW_NEWS_WARMUP_MAX_COINS);
+    let scheduled = 0;
+    let skippedCooldown = 0;
+
+    for (let i = 0; i < target.length; i++) {
+      const coingeckoId = target[i]!;
+      const jobKey = `warmup:overview-news:${coingeckoId}`;
+      const existing = await ctx.db
+        .query("jobState")
+        .withIndex("by_job_key", (q) => q.eq("jobKey", jobKey))
+        .first();
+
+      if (existing && now - existing.updatedAt < OVERVIEW_NEWS_WARMUP_DEDUP_MS) {
+        skippedCooldown += 1;
+        continue;
+      }
+
+      if (existing) {
+        await ctx.db.patch(existing._id, { updatedAt: now });
+      } else {
+        await ctx.db.insert("jobState", {
+          jobKey,
+          cursor: undefined,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      await ctx.scheduler.runAfter(
+        i * OVERVIEW_NEWS_WARMUP_STAGGER_MS,
+        internal.coingeckoNewsJobs.refreshCoinNews,
+        { coingeckoId, perPage: 5 },
+      );
+      scheduled += 1;
+    }
+
+    return { scheduled, skippedCooldown };
+  },
+});
+
 export const _computeMyOverviewSnapshotPayload = internalQuery({
   args: { clerkId: v.string() },
   returns: overviewSnapshotValidator,
@@ -964,9 +1062,10 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
     const movers24h = buildMovers("24h");
     const movers7d = buildMovers("7d");
 
-    // Events -----------------------------------------------------------------
+    // Events (news only; latest one article per watchlist coin in ranked universe)
     const events: Array<{
       id: string;
+      articleId: string | null;
       kind: "news" | "price_spike" | "volume_anomaly" | "breakout_high" | "breakout_low";
       tone: "positive" | "negative" | "neutral";
       sentiment: "bullish" | "bearish" | "neutral" | null;
@@ -983,46 +1082,8 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
       percent: number | null;
     }> = [];
 
-    const HOUR_MS = 60 * 60 * 1000;
-    const BUCKET_HOUR_MS = 60 * 60 * 1000;
-    const FRESH_MS = 2 * HOUR_MS;
-
-    for (const [coingeckoId, snapshot] of snapshotById.entries()) {
-      if (!snapshot) continue;
-      const pct = snapshot.change24hPct;
-      if (pct === null) continue;
-      if (!isPriceSpike({ changePct: pct, thresholdPct: 5 })) continue;
-      const meta = getMeta(coingeckoId);
-      const bucket = Math.floor(snapshot.lastUpdatedMs / BUCKET_HOUR_MS);
-      events.push({
-        id: `price_spike:${coingeckoId}:${bucket}`,
-        kind: "price_spike",
-        tone: toneFromSigned(pct),
-        sentiment: null,
-        occurredAtMs: snapshot.lastUpdatedMs,
-        coingeckoId,
-        name: meta.name,
-        symbol: meta.symbol,
-        logoUrl: meta.logoUrl,
-        title: `${meta.symbol.toUpperCase()} moved ${pct > 0 ? "+" : ""}${pct.toFixed(2)}% (24h)`,
-        summary: "Large 24h move",
-        tokenHref: `/charts/${coingeckoId}`,
-        externalHref: null,
-        valueUsd: null,
-        percent: pct,
-      });
-    }
-
-    const coinsByVolume = [...coinIds].sort((a, b) => {
-      const av = snapshotById.get(a)?.volume24hUsd ?? 0;
-      const bv = snapshotById.get(b)?.volume24hUsd ?? 0;
-      return bv - av;
-    });
-    const NEWS_COINS = 30;
-    const newsCoins = coinsByVolume.slice(0, NEWS_COINS);
-
     const newsLinks = await Promise.all(
-      newsCoins.map(async (coingeckoId) => {
+      coinIds.map(async (coingeckoId) => {
         const link = await ctx.db
           .query("coingeckoNewsCoinLinks")
           .withIndex("by_coingecko_id_and_posted_at_ms", (q) => q.eq("coingeckoId", coingeckoId))
@@ -1046,8 +1107,20 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
       const sentiment = article.sentiment ?? null;
       const postedAtMs =
         typeof article.postedAtMs === "number" ? article.postedAtMs : row.link.postedAtMs;
+      const marketSnap = snapshotById.get(row.coingeckoId);
+      const pct24h =
+        marketSnap && typeof marketSnap.change24hPct === "number" && Number.isFinite(marketSnap.change24hPct)
+          ? marketSnap.change24hPct
+          : null;
+      const pct7dRaw =
+        marketSnap?.change7dPct ?? computed7dById.get(row.coingeckoId) ?? null;
+      const pct7d =
+        typeof pct7dRaw === "number" && Number.isFinite(pct7dRaw) ? pct7dRaw : null;
+      // Prefer 24h for feed badge; fall back to 7d when 24h missing (common on coingeckoMarkets rows).
+      const percentForBadge = pct24h ?? pct7d;
       events.push({
         id: `news:${String(article._id)}`,
+        articleId: String(article._id),
         kind: "news",
         tone: newsToneFromSentiment(sentiment),
         sentiment,
@@ -1061,127 +1134,8 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
         tokenHref: `/charts/${row.coingeckoId}`,
         externalHref: article.url,
         valueUsd: null,
-        percent: null,
+        percent: percentForBadge,
       });
-    }
-
-    // Keep this comfortably under Convex's per-function doc read limit (32k).
-    // Each signal coin loads two `priceHistory` windows; keep the product of
-    // (coins * per-coin history rows) low enough to leave budget for other reads.
-    //
-    // Note: Convex counts *documents read*, not just documents returned to the client.
-    // These bounds are intentionally conservative because this snapshot also does
-    // other per-coin reads (market/meta/news).
-    const SIGNAL_COINS = 25;
-    const signalCoins = coinsByVolume.slice(0, SIGNAL_COINS);
-
-    async function getHistoryPoints(coingeckoId: string, timeframe: "7" | "30") {
-      // Previously this was 400/900 which can exceed 32k reads when multiplied by ~25 coins.
-      // We only need enough points for breakout + basic volume anomaly baselining.
-      const takeN = timeframe === "7" ? 130 : 200;
-      const rows = await ctx.db
-        .query("priceHistory")
-        .withIndex("by_coingecko_timeframe_timestamp", (q) =>
-          q.eq("coingeckoId", coingeckoId).eq("timeframe", timeframe),
-        )
-        .order("desc")
-        .take(takeN);
-      return [...rows].sort((a, b) => a.timestamp - b.timestamp);
-    }
-
-    for (const coingeckoId of signalCoins) {
-      const market = snapshotById.get(coingeckoId);
-      if (!market) continue;
-      const meta = getMeta(coingeckoId);
-      const [h7, h30] = await Promise.all([
-        getHistoryPoints(coingeckoId, "7"),
-        getHistoryPoints(coingeckoId, "30"),
-      ]);
-
-      for (const [timeframe, points] of [
-        ["7", h7],
-        ["30", h30],
-      ] as const) {
-        const breakout = detectBreakout({ points, nowMs: now, freshnessMs: FRESH_MS });
-        if (!breakout || !breakout.isFresh) continue;
-
-        if (breakout.isNewHigh) {
-          events.push({
-            id: `breakout_high:${coingeckoId}:${timeframe}:${breakout.latestTimestamp}`,
-            kind: "breakout_high",
-            tone: "positive",
-            sentiment: null,
-            occurredAtMs: breakout.latestTimestamp,
-            coingeckoId,
-            name: meta.name,
-            symbol: meta.symbol,
-            logoUrl: meta.logoUrl,
-            title: `${meta.symbol.toUpperCase()} made a new ${timeframe}d high`,
-            summary: "Breakout",
-            tokenHref: `/charts/${coingeckoId}`,
-            externalHref: null,
-            valueUsd: null,
-            percent: null,
-          });
-        }
-
-        if (breakout.isNewLow) {
-          events.push({
-            id: `breakout_low:${coingeckoId}:${timeframe}:${breakout.latestTimestamp}`,
-            kind: "breakout_low",
-            tone: "negative",
-            sentiment: null,
-            occurredAtMs: breakout.latestTimestamp,
-            coingeckoId,
-            name: meta.name,
-            symbol: meta.symbol,
-            logoUrl: meta.logoUrl,
-            title: `${meta.symbol.toUpperCase()} made a new ${timeframe}d low`,
-            summary: "Breakdown",
-            tokenHref: `/charts/${coingeckoId}`,
-            externalHref: null,
-            valueUsd: null,
-            percent: null,
-          });
-        }
-      }
-
-      if (h7.length >= 10) {
-        const latest = h7[h7.length - 1]!;
-        if (Number.isFinite(latest.timestamp) && now - latest.timestamp <= FRESH_MS) {
-          const volumes = h7
-            .slice(0, -1)
-            .map((p) => p.volume)
-            .filter((v) => Number.isFinite(v) && v > 0);
-          const current = market.volume24hUsd;
-          const anomaly = detectVolumeAnomaly({
-            historyVolumes: volumes,
-            currentVolume: current,
-            highRatio: 2,
-            lowRatio: 0.5,
-          });
-
-          if (anomaly) {
-            events.push({
-              id: `volume_anomaly:${coingeckoId}:${latest.timestamp}`,
-              kind: "volume_anomaly",
-              tone: anomaly.isHigh ? "positive" : "negative",
-              sentiment: null,
-              occurredAtMs: latest.timestamp,
-              coingeckoId,
-              name: meta.name,
-              symbol: meta.symbol,
-              logoUrl: meta.logoUrl,
-              title: `${meta.symbol.toUpperCase()} volume ${anomaly.isHigh ? "spike" : "drop"} vs 7d avg`,
-              summary: `${anomaly.ratio.toFixed(2)}× vs baseline`,
-              tokenHref: `/charts/${coingeckoId}`,
-              externalHref: null,
-              valueUsd: current,
-              percent: null,
-            });
-          }
-        }
-      }
     }
 
     const EVENT_LIMIT = 30;
@@ -1288,6 +1242,35 @@ export const getMyOverviewBootstrap = query({
       brief24h,
       brief7d,
     };
+  },
+});
+
+export const getNewsSentimentOverlay = query({
+  args: { articleIds: v.array(v.string()) },
+  returns: v.array(newsSentimentOverlayRowValidator),
+  handler: async (ctx, args) => {
+    const uniqueArticleIds = Array.from(
+      new Set(
+        args.articleIds
+          .map((articleId) => articleId.trim())
+          .filter((articleId) => articleId.length > 0),
+      ),
+    ).slice(0, 100);
+
+    const rows = await Promise.all(
+      uniqueArticleIds.map(async (articleId) => {
+        const doc = await ctx.db.get(articleId as Id<"coingeckoNewsArticles">);
+        if (!doc) return null;
+        return {
+          articleId,
+          sentiment: doc.sentiment ?? null,
+          sentimentConfidence: doc.sentimentConfidence ?? null,
+          sentimentUpdatedAt: doc.sentimentUpdatedAt ?? null,
+        };
+      }),
+    );
+
+    return rows.filter((row): row is NonNullable<typeof row> => row !== null);
   },
 });
 
@@ -1430,6 +1413,15 @@ export const refreshMyOverviewSnapshot = action({
       };
     }
 
+    const ranked = await ctx.runQuery(internal.overview._getMyRankedOverviewCoinIds, {
+      clerkId: identity.subject,
+    });
+    if (ranked.coinIds.length > 0) {
+      await ctx.runMutation(internal.overview._scheduleWatchlistNewsWarmup, {
+        coinIds: ranked.coinIds,
+      });
+    }
+
     const snapshot = await ctx.runQuery(internal.overview._computeMyOverviewSnapshotPayload, {
       clerkId: identity.subject,
     });
@@ -1439,7 +1431,7 @@ export const refreshMyOverviewSnapshot = action({
       cacheKey,
       data: snapshot,
       expiresAt: now + TTL_MS,
-      dataSource: "overview_snapshot_v2",
+      dataSource: "overview_snapshot_v4",
     });
 
     return {
