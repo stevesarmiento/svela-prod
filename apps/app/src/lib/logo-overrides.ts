@@ -32,7 +32,9 @@ function getXstockLogoFilename(symbol: string): string | null {
 }
 
 function normalizeSymbol(symbol: string): string {
-    return symbol.trim().toLowerCase();
+    // Some upstream sources include suffixes/annotations like "XAUT (Wormhole)".
+    // For overrides we only want the core ticker token.
+    return symbol.trim().toLowerCase().split(/\s+/)[0] ?? "";
 }
 
 function getPopularLogoFilename(symbol: string): string | null {
@@ -184,6 +186,9 @@ const POPULAR_SYMBOL_TO_FILENAME: Record<string, string> = {
     bnb: "bnb",
     usdt: "tether",
     tether: "tether",
+    xaut: "xaut",
+    "tether-gold": "xaut",
+    "tether gold": "xaut",
     apt: "aptos",
     aptos: "aptos",
     sui: "sui",

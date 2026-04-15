@@ -46,6 +46,8 @@ export function TokenLogo({
   const devUnoptimized = process.env.NODE_ENV !== "production" && sizePx <= 32
   const preferUnoptimized = unoptimizedRemote ?? (envUnoptimized || devUnoptimized)
   const shouldUnoptimize = Boolean(preferUnoptimized && safeSrc && isRemoteSrc(safeSrc))
+  const shouldUnoptimizeSvg = Boolean(safeSrc && safeSrc.toLowerCase().endsWith(".svg"))
+  const isUnoptimized = shouldUnoptimize || shouldUnoptimizeSvg
 
   return (
     <div
@@ -67,7 +69,7 @@ export function TokenLogo({
           fill
           sizes={`${sizePx}px`}
           quality={quality}
-          unoptimized={shouldUnoptimize}
+          unoptimized={isUnoptimized}
           className="object-cover"
           onError={(e) => {
             const target = e.target as HTMLImageElement
