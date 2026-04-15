@@ -38,7 +38,7 @@ export default clerkMiddleware(async (auth, req) => {
 
   // Redirect authenticated users away from auth pages
   if (isPublic && isAuthenticated) {
-    return NextResponse.redirect(new URL("/overview", req.url));
+    return NextResponse.redirect(new URL("/watchlists", req.url));
   }
 
   // Redirect unauthenticated users from protected routes to login
@@ -53,9 +53,9 @@ export default clerkMiddleware(async (auth, req) => {
     const pathname = req.nextUrl.pathname;
     const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, "") || "/";
 
-    // Redirect dashboard routes to watchlist
+    // Redirect dashboard routes to watchlists
     if (cleanPath === "/" || cleanPath === "/dashboard") {
-      return NextResponse.redirect(new URL("/overview", req.url));
+      return NextResponse.redirect(new URL("/watchlists", req.url));
     }
   }
 
