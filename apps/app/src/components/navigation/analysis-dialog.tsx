@@ -183,17 +183,20 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
     [],
   );
 
+  // Must match the effect below: analysis only starts once we have enough OHLCV history.
+  const hasEnoughChartHistory =
+    chartData.length >= 30 && volumeData.length >= 30;
+
   // Kick off analysis once we have market data (required for prepareAnalysisData()).
   const hasStartedAnalysisRef = React.useRef(false);
   React.useEffect(() => {
     // Avoid firing analysis before we have enough history to produce meaningful indicators.
     // CoinGecko chart + volume data often arrive after marketData, and early runs can produce 0/1-period artifacts.
-    const hasEnoughHistory = chartData.length >= 30 && volumeData.length >= 30;
-    if (!marketData || !hasEnoughHistory || hasStartedAnalysisRef.current)
+    if (!marketData || !hasEnoughChartHistory || hasStartedAnalysisRef.current)
       return;
     hasStartedAnalysisRef.current = true;
     void handleAnalyze();
-  }, [marketData, chartData.length, volumeData.length, handleAnalyze]);
+  }, [marketData, hasEnoughChartHistory, handleAnalyze]);
 
   // Transform CoinGecko marketData to expected format for MarketMetricsSidebar
   const transformedMarketData = React.useMemo(() => {
@@ -306,7 +309,11 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
               <div className="relative lg:col-span-3 space-y-6 p-12 h-full">
                 <div className="relative h-full">
                   <AnalysisResult
-                    isLoading={isAnalysisLoading || !marketData}
+                    isLoading={
+                      isAnalysisLoading ||
+                      !marketData ||
+                      (Boolean(marketData) && !hasEnoughChartHistory)
+                    }
                     result={analysisResult}
                     marketData={marketData}
                     tokenData={tokenData}
