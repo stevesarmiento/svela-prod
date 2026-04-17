@@ -146,11 +146,11 @@ export function WatchlistGroupEditorPanel({
                   key={colorItem.value}
                   type="button"
                   className={cn(
-                    "h-8 w-8 rounded-full cursor-pointer active:scale-[0.98] transition-transform duration-[var(--duration-micro)] ease-[var(--ease-out-cubic)] motion-reduce:transition-none border border-white/20",
+                    "h-8 w-8 rounded-lg cursor-pointer transition-transform duration-[var(--duration-micro)] ease-[var(--ease-out-cubic)] motion-reduce:transition-none border border-white/20 active:scale-[0.95] hover:scale-[1.10]",
                     colorItem.bg,
                     colorItem.border,
                     color === colorItem.value &&
-                      "ring-2 ring-white/50 ring-offset-4 ring-offset-zinc-900",
+                      "ring-2 ring-white/20 ring-offset-4 ring-offset-zinc-900",
                   )}
                   onClick={() => onColorChange(colorItem.value)}
                   aria-label={colorItem.name}
