@@ -47,7 +47,7 @@ function UserBootstrap({ children }: ConvexProviderProps) {
 
   const bootstrapPayload = useMemo(() => {
     if (!user) return null;
-    const email = user.emailAddresses[0]?.emailAddress ?? "";
+    const email = user.emailAddresses[0]?.emailAddress?.trim() || undefined;
     return {
       userId: user.id,
       email,
@@ -87,4 +87,3 @@ export function ConvexProvider({ children }: ConvexProviderProps) {
     </ConvexProviderWithClerk>
   );
 }
-

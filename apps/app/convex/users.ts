@@ -8,7 +8,7 @@ const userValidator = v.object({
   _id: v.id("users"),
   _creationTime: v.number(),
   clerkId: v.string(),
-  email: v.string(),
+  email: v.optional(v.string()),
   fullName: v.optional(v.string()),
   avatarUrl: v.optional(v.string()),
 });
@@ -29,7 +29,7 @@ export const createUser = mutation({
   args: {
     serverToken: v.string(),
     clerkId: v.string(),
-    email: v.string(),
+    email: v.optional(v.string()),
     fullName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
   },
@@ -37,6 +37,7 @@ export const createUser = mutation({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     if (isDebug) console.log("[users.createUser] called", { clerkId: args.clerkId });
+    const email = args.email?.trim() || undefined;
 
     // Check if user already exists
     const existingUser = await ctx.db
@@ -47,7 +48,7 @@ export const createUser = mutation({
     if (existingUser) {
       // Update existing user
       await ctx.db.patch(existingUser._id, {
-        email: args.email,
+        email,
         fullName: args.fullName,
         avatarUrl: args.avatarUrl,
       });
@@ -57,7 +58,7 @@ export const createUser = mutation({
     // Create new user
     const newUserId = await ctx.db.insert("users", {
       clerkId: args.clerkId,
-      email: args.email,
+      email,
       fullName: args.fullName,
       avatarUrl: args.avatarUrl,
     });
@@ -94,7 +95,7 @@ export const updateUser = mutation({
 
 export const upsertCurrentUser = mutation({
   args: {
-    email: v.string(),
+    email: v.optional(v.string()),
     fullName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
   },
@@ -104,8 +105,7 @@ export const upsertCurrentUser = mutation({
     if (!identity) throw new Error("Not authenticated");
 
     const clerkId = identity.subject;
-    const email = args.email.trim();
-    if (!email) throw new Error("Email is required");
+    const email = args.email?.trim() || undefined;
 
     const existing = await ctx.db
       .query("users")

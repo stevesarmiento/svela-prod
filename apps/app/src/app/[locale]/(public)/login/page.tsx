@@ -1,4 +1,4 @@
-import { GoogleSignin } from "@/components/google-signin";
+import { LoginMethods } from "@/components/login-methods";
 import { SvelaLogo } from "@v1/ui/svela-logo";
 import {
   Card,
@@ -84,7 +84,7 @@ export default function Page() {
 
               <div className="pt-1">
                 <div className="mt-3 w-full ">
-                  <GoogleSignin />
+                  <LoginMethods />
                 </div>
                 <p className="text-xs text-muted-foreground mt-2 text-center">
                   connect an account and keep your watchlists, <br /> charts, and insights synced.

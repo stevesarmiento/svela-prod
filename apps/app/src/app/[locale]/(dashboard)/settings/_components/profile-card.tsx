@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/convex-hooks';
 import { cn } from '@v1/ui/cn';
 import { SvelaLogo } from '@v1/ui/svela-logo';
 import { IconBinoculars, IconDistributeHorizontalCenter, IconSparkleMagnifyingglass } from 'symbols-react';
+import { formatWalletAddress, getUserDisplayName } from '@/lib/user-display';
 
 type PatternId = 'grid' | 'waves' | 'hatch' | 'topo';
 
@@ -57,7 +58,9 @@ function formatIssuedDate(value: Date | null): string | null {
 function getInitials(fullName?: string, email?: string): string {
   const seed = (fullName?.trim() || email?.split('@')[0] || '').trim();
   const parts = seed.split(/[\s._-]+/).filter(Boolean);
-  const letters = parts.slice(0, 2).map((p) => p[0]?.toUpperCase()).join('');
+  const letters = parts.length > 1
+    ? parts.slice(0, 2).map((p) => p[0]?.toUpperCase()).join('')
+    : seed.slice(0, 2).toUpperCase();
   return letters || 'SV';
 }
 
@@ -320,8 +323,14 @@ export function ProfileCard() {
     );
   }
 
-  const displayName = user.fullName || user.email?.split('@')[0] || 'Svela Member';
-  const initials = getInitials(user.fullName ?? undefined, user.email ?? undefined);
+  const displayName = getUserDisplayName({
+    fullName: user.fullName,
+    email: user.email,
+    walletAddress: user.walletAddress,
+    fallback: 'Svela Member',
+  });
+  const initials = getInitials(user.fullName ?? undefined, user.email ?? user.walletAddress ?? undefined);
+  const walletLabel = formatWalletAddress(user.walletAddress);
   const memberId = getMemberId(user.id);
   const issuedAt = toSafeDate(user.createdAt ?? null);
   const issuedLabel = formatIssuedDate(issuedAt);
@@ -451,12 +460,24 @@ export function ProfileCard() {
                   {memberId}
                 </div>
               </div>
-              <div className="space-y-1 text-right">
-                <div className="text-[8px] font-bold text-white/40 uppercase tracking-[0.2em]">
-                  Issued
-                </div>
-                <div className="text-xs font-berkeley-mono text-white/80 tabular-nums">
-                  {issuedLabel ?? '—'}
+              <div className="flex items-end gap-8">
+                {walletLabel ? (
+                  <div className="space-y-1 text-right">
+                    <div className="text-[8px] font-bold text-white/40 uppercase tracking-[0.2em]">
+                      Wallet
+                    </div>
+                    <div className="text-xs font-berkeley-mono text-white/80 tabular-nums">
+                      {walletLabel}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="space-y-1 text-right">
+                  <div className="text-[8px] font-bold text-white/40 uppercase tracking-[0.2em]">
+                    Issued
+                  </div>
+                  <div className="text-xs font-berkeley-mono text-white/80 tabular-nums">
+                    {issuedLabel ?? '—'}
+                  </div>
                 </div>
               </div>
             </div>
@@ -475,4 +496,3 @@ export function ProfileCard() {
     </div>
   );
 }
-

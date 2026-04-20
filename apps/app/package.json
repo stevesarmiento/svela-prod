@@ -35,6 +35,7 @@
     "@tanstack/react-query-persist-client": "^5.97.0",
     "@tanstack/react-table": "^8.21.3",
     "@trigger.dev/sdk": "3.0.0-beta.56",
+    "@wallet-standard/app": "^1.1.0",
     "@v1/analytics": "workspace:*",
     "@v1/convex": "workspace:*",
     "@v1/jobs": "workspace:*",
