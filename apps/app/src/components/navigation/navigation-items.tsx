@@ -5,6 +5,7 @@ import { MENU_ITEMS } from './bottom-nav-constants';
 import { usePathHelper } from './bottom-nav-hooks';
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
 import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
+import { prefetchDashboardRoute } from '@/lib/prefetch-routes';
 
 import type { CommandContext } from './bottom-nav-context';
 
@@ -65,6 +66,10 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
     };
   }, [router, onOpenCommandSearch, getItemUrl]);
 
+  const handleItemPrefetch = useCallback((item: MenuItem) => {
+    prefetchDashboardRoute(router, getItemUrl(item))
+  }, [getItemUrl, router])
+
   return (
     <div className="flex items-center gap-2">
       {(MENU_ITEMS as readonly MenuItem[]).map((item) => {
@@ -87,6 +92,8 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
               <button
                 type="button"
                 onClick={handleItemClick(item, isActive)}
+                onMouseEnter={() => handleItemPrefetch(item)}
+                onFocus={() => handleItemPrefetch(item)}
                 className={`group p-2 rounded-[13px] transition-colors duration-100 cursor-pointer active:scale-[0.98] hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus:[&_svg]:!fill-white focus-visible:[&_svg]:!fill-white dark:focus-visible:ring-zinc-500 dark:focus-visible:ring-offset-zinc-800 ${
                   isActive 
                     ? "bg-black/10 hover:bg-black/15 dark:bg-white/10 dark:hover:bg-white/15" 

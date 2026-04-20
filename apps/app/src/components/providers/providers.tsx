@@ -13,7 +13,8 @@ import type React from "react";
 import { useMemo } from "react";
 import { ConvexProvider } from "./convex-provider";
 import { NotifToaster } from "@v1/ui/sonner-notif";
-import { WatchlistProvider } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context";
+import { LinkIntentPrefetch } from "@/components/navigation/link-intent-prefetch";
+import { ServiceWorkerRegistrar } from "@/components/service-worker/service-worker-registrar";
 
 const ReactQueryDevtools =
   process.env.NODE_ENV === "development"
@@ -107,11 +108,11 @@ export function Providers({ children }: ProvidersProps) {
       <PersistedQueryProvider>
         <NuqsAdapter>
           <ConvexProvider>
-            <WatchlistProvider>
-              {children}
-              <NotifToaster position="top-center" offset={-10} />
-              {ReactQueryDevtools ? <ReactQueryDevtools initialIsOpen={false} /> : null}
-            </WatchlistProvider>
+            <LinkIntentPrefetch />
+            <ServiceWorkerRegistrar />
+            {children}
+            <NotifToaster position="top-center" offset={-10} />
+            {ReactQueryDevtools ? <ReactQueryDevtools initialIsOpen={false} /> : null}
           </ConvexProvider>
         </NuqsAdapter>
       </PersistedQueryProvider>

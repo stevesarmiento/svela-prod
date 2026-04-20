@@ -11,7 +11,7 @@ import type { api } from "../../../../convex/_generated/api"
 
 interface DashboardProvidersProps {
   children: React.ReactNode
-  preloadedWatchlist: Preloaded<typeof api.watchlists.getMyWatchlistBootstrap> | null
+  preloadedWatchlist: Preloaded<typeof api.watchlists.getMyWatchlistNavBootstrap> | null
 }
 
 /** Dashboard-only context stack (nav, sidebar, watchlist bootstrap, loading, errors). */

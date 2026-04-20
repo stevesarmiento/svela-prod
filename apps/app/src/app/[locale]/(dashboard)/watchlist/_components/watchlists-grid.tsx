@@ -7,10 +7,6 @@ import { Button } from '@v1/ui/button'
 import { Grid3X3 } from 'lucide-react'
 import { toast } from '@v1/ui/use-toast'
 import { env } from '@/env.mjs'
-import { 
-  useWatchlistGroups,
-  useWatchlistByGroup
-} from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useWatchlist, type WatchlistGroup } from './watchlist-context'
 import { Dialog, DialogContent } from '@v1/ui/dialog'
@@ -20,30 +16,12 @@ import { useDeletePortfolioWallet } from "@/hooks/use-portfolio-wallets"
 import { useUpdateWatchlistGroup, useDeleteWatchlistGroup } from "@/lib/convex-hooks"
 import { WatchlistGridEmptyState } from './watchlist-grid-empty-state'
 import { WatchlistComparisonEmptyState } from './watchlist-comparison-empty-state'
+import {
+  useWatchlistsOverviewData,
+  useWatchlistsPageBootstrap,
+} from './watchlists-page-bootstrap-context'
 
 const isDebug = env.NODE_ENV === "development"
-
-interface CoinGeckoWatchlistCoin {
-  id: string; // CoinGecko string ID
-  name: string;
-  symbol: string;
-  slug: string;
-  image: string; // CoinGecko image URL
-  cmc_rank: number;
-  circulating_supply: number;
-  max_supply: number | null;
-  quote: {
-    USD: {
-      price: number;
-      volume_24h: number;
-      market_cap: number;
-      percent_change_24h: number;
-      percent_change_1h?: number;
-      percent_change_7d?: number;
-      percent_change_30d?: number;
-    };
-  };
-}
 
 interface WatchlistsGridProps {
   onSelectWatchlist?: (group: WatchlistGroup) => void
@@ -51,47 +29,6 @@ interface WatchlistsGridProps {
   activeTimeScale?: string
   onTimeScaleChange?: (scale: string) => void
   onViewModeChange?: (mode: 'grid' | 'chart') => void
-}
-
-// Component to fetch coins for a specific group
-function WatchlistGroupWithCoins({ 
-  group, 
-  onEdit, 
-  onDelete, 
-  onSelect,
-  selected
-}: {
-  group: WatchlistGroup
-  onEdit?: (group: WatchlistGroup) => void
-  onDelete?: (group: WatchlistGroup) => void
-  onSelect?: (group: WatchlistGroup) => void
-  selected?: boolean
-}) {
-  const groupWatchlist = useWatchlistByGroup(group._id) as Array<{ coinId: string }> | undefined
-  const isGroupWatchlistLoading = groupWatchlist === undefined
-  
-  // For watchlist cards only: Convert to CoinGecko IDs for display
-  const coingeckoIds = useMemo(() => {
-    // Watchlist stores CoinGecko string IDs, use them directly for card display
-    const ids = groupWatchlist?.map(item => item.coinId) || []
-    return ids
-  }, [groupWatchlist])
-  
-  // Use CoinGecko data only for watchlist card display
-  const { data: coins = [], isLoading: isCoinsLoading } = useCoinGeckoWatchlistCoins(coingeckoIds)
-  const isCardLoading = isGroupWatchlistLoading || (coingeckoIds.length > 0 && isCoinsLoading && coins.length === 0)
-
-  return (
-    <WatchlistCard
-      group={group}
-      coins={coins}
-      isLoading={isCardLoading}
-      onEdit={onEdit}
-      onDelete={onDelete}
-      onSelect={onSelect}
-      selected={selected}
-    />
-  )
 }
 
 export function WatchlistsGrid({ 
@@ -107,23 +44,24 @@ export function WatchlistsGrid({
   const [editingName, setEditingName] = useState('')
   const [editingIcon, setEditingIcon] = useState('')
   const [editingColor, setEditingColor] = useState('')
+  const pageBootstrap = useWatchlistsPageBootstrap()
+  const { overviewByGroupId, isLoading: isOverviewLoading } = useWatchlistsOverviewData()
 
   // Hooks
-  const watchlistGroups = useWatchlistGroups() as WatchlistGroup[] | undefined
   const updateGroup = useUpdateWatchlistGroup()
   const deleteGroup = useDeleteWatchlistGroup()
   const deleteWallet = useDeletePortfolioWallet()
-  const { selectedGroup } = useWatchlist()
+  const { selectedGroup, watchlistGroups } = useWatchlist()
 
   const gridGroups = useMemo(() => {
     // Keep the existing "newest first" behavior, but render all groups in one grid.
-    return (watchlistGroups ?? []).slice().reverse()
+    return watchlistGroups.slice().reverse()
   }, [watchlistGroups])
 
-  const editingGroupWatchlist = useWatchlistByGroup(editingGroup?._id) as Array<{ coinId: string }> | undefined
   const editingCoinIds = useMemo(() => {
-    return editingGroupWatchlist?.map((item) => item.coinId) || []
-  }, [editingGroupWatchlist])
+    if (!editingGroup) return []
+    return (pageBootstrap.itemsByGroupId[editingGroup._id] ?? []).map((item) => item.coinId)
+  }, [pageBootstrap.itemsByGroupId, editingGroup])
   const { data: editingCoins = [] } = useCoinGeckoWatchlistCoins(editingCoinIds)
 
   const handleEditSave = useCallback(async (name: string, icon: string, color: string) => {
@@ -219,12 +157,13 @@ export function WatchlistsGrid({
   }, [])
 
   // Convert all watchlist groups to Set for chart component
-  const allWatchlistIds = useMemo(() => {
-    return new Set(watchlistGroups?.map(group => group._id) || [])
-  }, [watchlistGroups])
+  const allWatchlistIds = useMemo(
+    () => new Set(watchlistGroups.map((group) => group._id)),
+    [watchlistGroups],
+  )
 
 
-  if (!watchlistGroups) {
+  if (!watchlistGroups.length && isOverviewLoading) {
     return (
       <div className="flex items-center justify-center py-8">
         <div className="text-muted-foreground">Loading watchlists...</div>
@@ -237,23 +176,30 @@ export function WatchlistsGrid({
       <Tabs value={viewMode}>
         <TabsContent value="grid" className="mt-0">
           {/* Empty State */}
-          {!watchlistGroups || watchlistGroups.length === 0 ? (
+          {watchlistGroups.length === 0 ? (
             <WatchlistGridEmptyState />
           ) : (
             <>
               {/* Watchlists Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 relative">
-                {gridGroups.map((group) => (
-                  <div key={group._id}>
-                    <WatchlistGroupWithCoins
-                      group={group}
-                      onEdit={openEditDialog}
-                      onDelete={handleDeleteWatchlist}
-                      onSelect={onSelectWatchlist}
-                      selected={selectedGroup?._id === group._id}
-                    />
-                  </div>
-                ))}
+                {gridGroups.map((group) => {
+                  const overviewEntry = overviewByGroupId.get(group._id)
+
+                  return (
+                    <div key={group._id}>
+                      <WatchlistCard
+                        group={group}
+                        coins={overviewEntry?.coins ?? []}
+                        itemCount={overviewEntry?.items.length ?? 0}
+                        isLoading={isOverviewLoading}
+                        onEdit={openEditDialog}
+                        onDelete={handleDeleteWatchlist}
+                        onSelect={onSelectWatchlist}
+                        selected={selectedGroup?._id === group._id}
+                      />
+                    </div>
+                  )
+                })}
               </div>
 
               {/* Edit Watchlist Modal (centered) */}
@@ -307,7 +253,7 @@ export function WatchlistsGrid({
                 setActiveTimeScale={onTimeScaleChange || (() => {})}
                 selectedWatchlists={allWatchlistIds}
                 onSelectWatchlist={(watchlistId) => {
-                  const group = watchlistGroups?.find(g => g._id === watchlistId)
+                  const group = watchlistGroups.find(g => g._id === watchlistId)
                   if (group) onSelectWatchlist?.(group)
                 }}
               />

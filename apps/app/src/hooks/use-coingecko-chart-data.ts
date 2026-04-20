@@ -445,34 +445,69 @@ function upsertLatestPricePoint(parsedData: ParsedChartData, latestPrice: number
   }
 }
 
-export function useCoinGeckoChartData(
-  coinId: string,
-  activeTimeScale: string,
-  initialData: CoinMarketData['quote']['USD'],
-  options?: UseCoinGeckoChartDataOptions
-): CoinGeckoChartDataResult {
-  const config = TIMEFRAME_CONFIG[activeTimeScale as keyof typeof TIMEFRAME_CONFIG] || TIMEFRAME_CONFIG['7d']
-  const quoteQuery = useCoinGeckoQuote(coinId)
-  const preferMarketChart = options?.preferMarketChart ?? false
+export async function fetchCoinGeckoCombinedChartData(args: {
+  coinId: string
+  activeTimeScale: string
+  initialData: CoinMarketData['quote']['USD']
+  preferMarketChart?: boolean
+}): Promise<DataSourceResult> {
+  const config =
+    TIMEFRAME_CONFIG[args.activeTimeScale as keyof typeof TIMEFRAME_CONFIG] ||
+    TIMEFRAME_CONFIG['7d']
+  const preferMarketChart = args.preferMarketChart ?? false
+  let primaryResult: DataSourceResult | null = null
 
-  // Fetch data from both routes with intelligent prioritization
-  const { data: combinedData, isLoading } = useQuery({
-    queryKey: ['coingecko-combined-chart-data', coinId, activeTimeScale, preferMarketChart],
-    queryFn: async (): Promise<DataSourceResult> => {
-      let primaryResult: DataSourceResult | null = null
+  try {
+    const numericDays = Number.parseInt(config.days, 10)
+    const shouldPreferMarketChart =
+      preferMarketChart ||
+      args.activeTimeScale === '30d' ||
+      args.activeTimeScale === '2y' ||
+      !Number.isFinite(numericDays) ||
+      numericDays > 90
+    const swallowToNull = (_: unknown) => Effect.succeed(null)
 
-      try {
-        const numericDays = Number.parseInt(config.days, 10)
-        const shouldPreferMarketChart =
-          preferMarketChart ||
-          activeTimeScale === '30d' ||
-          activeTimeScale === '2y' ||
-          !Number.isFinite(numericDays) ||
-          numericDays > 90
-        const swallowToNull = (_: unknown) => Effect.succeed(null)
+    const marketEffect = CoinGeckoApi.getMarketChart({
+      coinId: args.coinId,
+      days: config.days,
+      vsCurrency: "usd",
+    }).pipe(
+      Effect.catchTags({
+        CoinGeckoInvalidParamsError: swallowToNull,
+        CoinGeckoUnauthorizedError: swallowToNull,
+        CoinGeckoNotFoundError: swallowToNull,
+        CoinGeckoRateLimitedError: swallowToNull,
+        CoinGeckoApiError: swallowToNull,
+        CoinGeckoDecodeError: swallowToNull,
+      }),
+    )
 
-        const marketEffect = CoinGeckoApi.getMarketChart({
-          coinId,
+    if (shouldPreferMarketChart) {
+      const marketResult = await runPromise(marketEffect)
+      if (marketResult) {
+        const parsedMarket = parseMarketChartData(marketResult, args.activeTimeScale)
+        if (parsedMarket) {
+          primaryResult = {
+            data: parsedMarket,
+            source: 'market-chart',
+            cached: marketResult.status?.cached || false,
+            stale: marketResult.status?.stale,
+            warmupRequested: marketResult.status?.warmupRequested,
+            points: marketResult.status?.points,
+            lastUpdated: marketResult.status?.lastUpdated,
+          }
+        }
+      }
+
+      const allowOhlcFallback =
+        args.activeTimeScale !== '30d' &&
+        args.activeTimeScale !== 'max' &&
+        args.activeTimeScale !== '2y' &&
+        isOhlcSupportedDays(config.days)
+
+      if (!primaryResult && allowOhlcFallback) {
+        const ohlcEffect = CoinGeckoApi.getOHLC({
+          coinId: args.coinId,
           days: config.days,
           vsCurrency: "usd",
         }).pipe(
@@ -486,151 +521,136 @@ export function useCoinGeckoChartData(
           }),
         )
 
-        if (shouldPreferMarketChart) {
-          const marketResult = await runPromise(marketEffect)
-          if (marketResult) {
-            const parsedMarket = parseMarketChartData(marketResult, activeTimeScale)
-            if (parsedMarket) {
-              primaryResult = {
-                data: parsedMarket,
-                source: 'market-chart',
-                cached: marketResult.status?.cached || false,
-                stale: marketResult.status?.stale,
-                warmupRequested: marketResult.status?.warmupRequested,
-                points: marketResult.status?.points,
-                lastUpdated: marketResult.status?.lastUpdated,
-              }
+        const ohlcResult = await runPromise(ohlcEffect)
+        if (ohlcResult) {
+          const parsedOHLC = parseOHLCData(ohlcResult)
+          if (parsedOHLC) {
+            primaryResult = {
+              data: parsedOHLC,
+              source: 'ohlc',
+              cached: ohlcResult.cached || ohlcResult.status?.cached || false,
+              stale: ohlcResult.status?.stale,
+              warmupRequested: ohlcResult.status?.warmupRequested,
+              points: ohlcResult.status?.points,
+              lastUpdated: ohlcResult.status?.lastUpdated,
             }
           }
-
-          const allowOhlcFallback =
-            activeTimeScale !== '30d' &&
-            activeTimeScale !== 'max' &&
-            activeTimeScale !== '2y' &&
-            isOhlcSupportedDays(config.days)
-
-          if (!primaryResult && allowOhlcFallback) {
-            const ohlcEffect = CoinGeckoApi.getOHLC({
-              coinId,
-              days: config.days,
-              vsCurrency: "usd",
-            }).pipe(
-              Effect.catchTags({
-                CoinGeckoInvalidParamsError: swallowToNull,
-                CoinGeckoUnauthorizedError: swallowToNull,
-                CoinGeckoNotFoundError: swallowToNull,
-                CoinGeckoRateLimitedError: swallowToNull,
-                CoinGeckoApiError: swallowToNull,
-                CoinGeckoDecodeError: swallowToNull,
-              }),
-            )
-
-            const ohlcResult = await runPromise(ohlcEffect)
-            if (ohlcResult) {
-              const parsedOHLC = parseOHLCData(ohlcResult)
-              if (parsedOHLC) {
-                primaryResult = {
-                  data: parsedOHLC,
-                  source: 'ohlc',
-                  cached: ohlcResult.cached || ohlcResult.status?.cached || false,
-                  stale: ohlcResult.status?.stale,
-                  warmupRequested: ohlcResult.status?.warmupRequested,
-                  points: ohlcResult.status?.points,
-                  lastUpdated: ohlcResult.status?.lastUpdated,
-                }
-              }
-            }
-          }
-        } else {
-          const ohlcEffect = CoinGeckoApi.getOHLC({
-            coinId,
-            days: config.days,
-            vsCurrency: "usd",
-          }).pipe(
-            Effect.catchTags({
-              CoinGeckoInvalidParamsError: swallowToNull,
-              CoinGeckoUnauthorizedError: swallowToNull,
-              CoinGeckoNotFoundError: swallowToNull,
-              CoinGeckoRateLimitedError: swallowToNull,
-              CoinGeckoApiError: swallowToNull,
-              CoinGeckoDecodeError: swallowToNull,
-            }),
-          )
-
-          const [ohlcResult, marketResult] = await runPromise(
-            Effect.all([ohlcEffect, marketEffect], { concurrency: "unbounded" }),
-          )
-
-          if (ohlcResult && marketResult) {
-            const combined = combineOHLCWithVolume(ohlcResult, marketResult)
-            if (combined) {
-              primaryResult = {
-                data: combined,
-                source: 'ohlc',
-                cached: ohlcResult.cached || ohlcResult.status?.cached || marketResult.status?.cached || false,
-                stale: Boolean(ohlcResult.status?.stale || marketResult.status?.stale),
-                warmupRequested: Boolean(
-                  ohlcResult.status?.warmupRequested || marketResult.status?.warmupRequested,
-                ),
-                points:
-                  typeof marketResult.status?.points === "number"
-                    ? marketResult.status.points
-                    : typeof ohlcResult.status?.points === "number"
-                      ? ohlcResult.status.points
-                      : undefined,
-                lastUpdated:
-                  typeof marketResult.status?.lastUpdated === "number"
-                    ? marketResult.status.lastUpdated
-                    : typeof ohlcResult.status?.lastUpdated === "number"
-                      ? ohlcResult.status.lastUpdated
-                      : undefined,
-              }
-            }
-          } else if (marketResult) {
-            const parsedMarket = parseMarketChartData(marketResult, activeTimeScale)
-            if (parsedMarket) {
-              primaryResult = {
-                data: parsedMarket,
-                source: 'market-chart',
-                cached: marketResult.status?.cached || false,
-                stale: marketResult.status?.stale,
-                warmupRequested: marketResult.status?.warmupRequested,
-                points: marketResult.status?.points,
-                lastUpdated: marketResult.status?.lastUpdated,
-              }
-            }
-          } else if (ohlcResult) {
-            const parsedOHLC = parseOHLCData(ohlcResult)
-            if (parsedOHLC) {
-              primaryResult = {
-                data: parsedOHLC,
-                source: 'ohlc',
-                cached: ohlcResult.cached || ohlcResult.status?.cached || false,
-                stale: ohlcResult.status?.stale,
-                warmupRequested: ohlcResult.status?.warmupRequested,
-                points: ohlcResult.status?.points,
-                lastUpdated: ohlcResult.status?.lastUpdated,
-              }
-            }
-          }
-        }
-
-        if (primaryResult) return primaryResult
-
-        return {
-          data: generateFallbackData(coinId, activeTimeScale, initialData),
-          source: 'fallback',
-          cached: false,
-        }
-      } catch (error) {
-        return {
-          data: generateFallbackData(coinId, activeTimeScale, initialData),
-          source: 'fallback',
-          cached: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
         }
       }
-    },
+    } else {
+      const ohlcEffect = CoinGeckoApi.getOHLC({
+        coinId: args.coinId,
+        days: config.days,
+        vsCurrency: "usd",
+      }).pipe(
+        Effect.catchTags({
+          CoinGeckoInvalidParamsError: swallowToNull,
+          CoinGeckoUnauthorizedError: swallowToNull,
+          CoinGeckoNotFoundError: swallowToNull,
+          CoinGeckoRateLimitedError: swallowToNull,
+          CoinGeckoApiError: swallowToNull,
+          CoinGeckoDecodeError: swallowToNull,
+        }),
+      )
+
+      const [ohlcResult, marketResult] = await runPromise(
+        Effect.all([ohlcEffect, marketEffect], { concurrency: "unbounded" }),
+      )
+
+      if (ohlcResult && marketResult) {
+        const combined = combineOHLCWithVolume(ohlcResult, marketResult)
+        if (combined) {
+          primaryResult = {
+            data: combined,
+            source: 'ohlc',
+            cached:
+              ohlcResult.cached ||
+              ohlcResult.status?.cached ||
+              marketResult.status?.cached ||
+              false,
+            stale: Boolean(ohlcResult.status?.stale || marketResult.status?.stale),
+            warmupRequested: Boolean(
+              ohlcResult.status?.warmupRequested || marketResult.status?.warmupRequested,
+            ),
+            points:
+              typeof marketResult.status?.points === "number"
+                ? marketResult.status.points
+                : typeof ohlcResult.status?.points === "number"
+                  ? ohlcResult.status.points
+                  : undefined,
+            lastUpdated:
+              typeof marketResult.status?.lastUpdated === "number"
+                ? marketResult.status.lastUpdated
+                : typeof ohlcResult.status?.lastUpdated === "number"
+                  ? ohlcResult.status.lastUpdated
+                  : undefined,
+          }
+        }
+      } else if (marketResult) {
+        const parsedMarket = parseMarketChartData(marketResult, args.activeTimeScale)
+        if (parsedMarket) {
+          primaryResult = {
+            data: parsedMarket,
+            source: 'market-chart',
+            cached: marketResult.status?.cached || false,
+            stale: marketResult.status?.stale,
+            warmupRequested: marketResult.status?.warmupRequested,
+            points: marketResult.status?.points,
+            lastUpdated: marketResult.status?.lastUpdated,
+          }
+        }
+      } else if (ohlcResult) {
+        const parsedOHLC = parseOHLCData(ohlcResult)
+        if (parsedOHLC) {
+          primaryResult = {
+            data: parsedOHLC,
+            source: 'ohlc',
+            cached: ohlcResult.cached || ohlcResult.status?.cached || false,
+            stale: ohlcResult.status?.stale,
+            warmupRequested: ohlcResult.status?.warmupRequested,
+            points: ohlcResult.status?.points,
+            lastUpdated: ohlcResult.status?.lastUpdated,
+          }
+        }
+      }
+    }
+
+    if (primaryResult) return primaryResult
+
+    return {
+      data: generateFallbackData(args.coinId, args.activeTimeScale, args.initialData),
+      source: 'fallback',
+      cached: false,
+    }
+  } catch (error) {
+    return {
+      data: generateFallbackData(args.coinId, args.activeTimeScale, args.initialData),
+      source: 'fallback',
+      cached: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
+
+export function useCoinGeckoChartData(
+  coinId: string,
+  activeTimeScale: string,
+  initialData: CoinMarketData['quote']['USD'],
+  options?: UseCoinGeckoChartDataOptions
+): CoinGeckoChartDataResult {
+  const quoteQuery = useCoinGeckoQuote(coinId)
+  const preferMarketChart = options?.preferMarketChart ?? false
+
+  // Fetch data from both routes with intelligent prioritization
+  const { data: combinedData, isLoading } = useQuery({
+    queryKey: ['coingecko-combined-chart-data', coinId, activeTimeScale, preferMarketChart],
+    queryFn: async (): Promise<DataSourceResult> =>
+      await fetchCoinGeckoCombinedChartData({
+        coinId,
+        activeTimeScale,
+        initialData,
+        preferMarketChart,
+      }),
     staleTime: 2 * 60 * 1000, // 2 minutes
     refetchInterval: (query) => {
       const points = query.state.data?.data?.lineChart?.length ?? 0

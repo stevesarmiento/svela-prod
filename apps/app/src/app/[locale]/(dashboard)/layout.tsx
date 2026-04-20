@@ -13,8 +13,8 @@ export default async function DashboardLayout({
 }) {
   const token = await getAuthToken()
   const preloadedWatchlist = token
-    ? await preloadQuery(api.watchlists.getMyWatchlistBootstrap, {}, { token })
-    : null
+    ? await preloadQuery(api.watchlists.getMyWatchlistNavBootstrap, {}, { token })
+    : await preloadQuery(api.watchlists.getMyWatchlistNavBootstrap, {})
 
   return (
     <DashboardProviders preloadedWatchlist={preloadedWatchlist}>

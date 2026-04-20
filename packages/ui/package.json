@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "sideEffects": false,
-  "files": ["postcss.config.js", "src/globals.css"],
+  "files": ["postcss.config.js", "src/globals.css", "src/globals.app.css", "src/globals.shared.css"],
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "lint": "biome check .",
@@ -52,7 +52,9 @@
     "./form": "./src/components/form.tsx",
     "./editor": "./src/components/editor/index.tsx",
     "./mult-step-loader": "./src/components/mult-step-loader.tsx",
+    "./globals.app.css": "./src/globals.app.css",
     "./globals.css": "./src/globals.css",
+    "./globals.shared.css": "./src/globals.shared.css",
     "./hover-card": "./src/components/hover-card.tsx",
     "./icons": "./src/components/icons.tsx",
     "./input": "./src/components/input.tsx",

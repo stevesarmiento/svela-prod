@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from "react"
+import type { ForwardRefExoticComponent, RefAttributes } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { Spinner } from "@v1/ui/spinner"
 import { Button } from "@v1/ui/button"
 import { Tabs, TabsContent } from "@v1/ui/tabs"
@@ -37,15 +39,65 @@ import { useQueryClient } from "@tanstack/react-query"
 
 import { useWatchlist } from "./watchlist-context"
 import { WatchlistsGrid } from "./watchlists-grid"
-import { ChartsClient } from "../../charts/_components/chart-client"
-import { ComparisonChartsClient } from "../../charts/_components/chart-client"
-import { CreateWatchlist } from "./create-watchlist"
-import { CoinSearch, type CoinSearchRef } from "./coin-search"
-import { AddWalletDialog } from "@/app/[locale]/(dashboard)/portfolio/_components/add-wallet-dialog"
+import type { CoinSearchRef } from "./coin-search"
 import { WatchlistGroupIcon } from "@/components/watchlist-group-icon"
 import { matchesShortcut, GLOBAL_SHORTCUTS } from "@/lib/keyboard-shortcuts"
 import { useLatest } from "@/hooks/use-latest"
 import { api } from "../../../../../../convex/_generated/api"
+
+function loadChartsModule() {
+  return import("../../charts/_components/chart-client")
+}
+
+function loadCreateWatchlist() {
+  return import("./create-watchlist")
+}
+
+function loadCoinSearch() {
+  return import("./coin-search")
+}
+
+function loadAddWalletDialog() {
+  return import("@/app/[locale]/(dashboard)/portfolio/_components/add-wallet-dialog")
+}
+
+const LazyChartsClient = dynamic(
+  () => loadChartsModule().then((module) => module.ChartsClient),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-12">
+        <Spinner size={24} />
+      </div>
+    ),
+  },
+)
+
+const LazyComparisonChartsClient = dynamic(
+  () => loadChartsModule().then((module) => module.ComparisonChartsClient),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-12">
+        <Spinner size={24} />
+      </div>
+    ),
+  },
+)
+
+const LazyCreateWatchlist = dynamic(
+  () => loadCreateWatchlist().then((module) => module.CreateWatchlist),
+  { ssr: false },
+)
+
+const LazyAddWalletDialog = dynamic(
+  () => loadAddWalletDialog().then((module) => module.AddWalletDialog),
+  { ssr: false },
+)
+
+type LazyCoinSearchComponent = ForwardRefExoticComponent<
+  RefAttributes<CoinSearchRef>
+>
 
 export interface WatchlistPageViewProps {
   activeTimeScale: string
@@ -73,6 +125,8 @@ export function WatchlistPageView({
   const [isCreatingWatchlist, setIsCreatingWatchlist] = useState(false)
   const [isAddWalletOpen, setIsAddWalletOpen] = useState(false)
   const [isRefreshingData, setIsRefreshingData] = useState(false)
+  const [CoinSearchComponent, setCoinSearchComponent] = useState<LazyCoinSearchComponent | null>(null)
+  const [shouldOpenCoinSearch, setShouldOpenCoinSearch] = useState(false)
   const coinSearchRef = useRef<CoinSearchRef>(null)
   const queryClient = useQueryClient()
   const refreshMyDataNow = useMutation(api.refresh.refreshMyDataNow)
@@ -81,6 +135,40 @@ export function WatchlistPageView({
   const isCreatingWatchlistRef = useLatest(isCreatingWatchlist)
   const onGridViewModeChangeRef = useLatest(onGridViewModeChange)
   const onContentModeChangeRef = useLatest(onContentModeChange)
+
+  const preloadChartsClient = useCallback(() => {
+    void loadChartsModule()
+  }, [])
+
+  const preloadComparisonChartsClient = useCallback(() => {
+    void loadChartsModule()
+  }, [])
+
+  const preloadCreateWatchlist = useCallback(() => {
+    void loadCreateWatchlist()
+  }, [])
+
+  const preloadAddWalletDialog = useCallback(() => {
+    void loadAddWalletDialog()
+  }, [])
+
+  const preloadCoinSearch = useCallback(async () => {
+    if (CoinSearchComponent) return
+    const module = await loadCoinSearch()
+    setCoinSearchComponent(() => module.CoinSearch as LazyCoinSearchComponent)
+  }, [CoinSearchComponent])
+
+  const openCoinSearch = useCallback(async () => {
+    await preloadCoinSearch()
+    setShouldOpenCoinSearch(true)
+  }, [preloadCoinSearch])
+
+  useEffect(() => {
+    if (!shouldOpenCoinSearch) return
+    if (!CoinSearchComponent) return
+    coinSearchRef.current?.open()
+    setShouldOpenCoinSearch(false)
+  }, [CoinSearchComponent, shouldOpenCoinSearch])
 
   useEffect(() => {
     const addTokenShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'focusAddToken')
@@ -93,18 +181,20 @@ export function WatchlistPageView({
       if (createWatchlistShortcut && matchesShortcut(event, createWatchlistShortcut)) {
         if (isCreatingWatchlistRef.current) return
         event.preventDefault()
+        preloadCreateWatchlist()
         setIsCreatingWatchlist(true)
         return
       }
 
       if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
         event.preventDefault()
-        coinSearchRef.current?.open()
+        void openCoinSearch()
         return
       }
 
       if (addWalletShortcut && matchesShortcut(event, addWalletShortcut)) {
         event.preventDefault()
+        preloadAddWalletDialog()
         setIsAddWalletOpen(true)
         return
       }
@@ -138,7 +228,15 @@ export function WatchlistPageView({
 
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
-  }, [contentModeRef, isCreatingWatchlistRef, onContentModeChangeRef, onGridViewModeChangeRef])
+  }, [
+    contentModeRef,
+    isCreatingWatchlistRef,
+    onContentModeChangeRef,
+    onGridViewModeChangeRef,
+    openCoinSearch,
+    preloadAddWalletDialog,
+    preloadCreateWatchlist,
+  ])
 
   // If watchlist context isn’t ready yet, keep the existing spinner behavior.
   if (!isInitialized) {
@@ -242,6 +340,8 @@ export function WatchlistPageView({
                 variant="ghost"
                 size="sm"
                 onClick={() => onContentModeChange(contentMode === "cards" ? "aggregate" : "cards")}
+                onMouseEnter={preloadComparisonChartsClient}
+                onFocus={preloadComparisonChartsClient}
                 className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
               >
                 {contentMode === "cards" ? (
@@ -274,7 +374,12 @@ export function WatchlistPageView({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setIsCreatingWatchlist(true)}
+                  onClick={() => {
+                    preloadCreateWatchlist()
+                    setIsCreatingWatchlist(true)
+                  }}
+                  onMouseEnter={preloadCreateWatchlist}
+                  onFocus={preloadCreateWatchlist}
                   className="w-full justify-start gap-2 rounded-md"
                 >
                   <IconWidgetSmallBadgePlus className="h-3.5 w-3.5 fill-muted-foreground" />
@@ -288,7 +393,15 @@ export function WatchlistPageView({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => coinSearchRef.current?.open()}
+                  onClick={() => {
+                    void openCoinSearch()
+                  }}
+                  onMouseEnter={() => {
+                    void preloadCoinSearch()
+                  }}
+                  onFocus={() => {
+                    void preloadCoinSearch()
+                  }}
                   className="w-full justify-start gap-2 rounded-md"
                 >
                   <IconBookmark className="h-3.5 w-3.5 fill-muted-foreground" />
@@ -304,7 +417,12 @@ export function WatchlistPageView({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setIsAddWalletOpen(true)}
+                  onClick={() => {
+                    preloadAddWalletDialog()
+                    setIsAddWalletOpen(true)
+                  }}
+                  onMouseEnter={preloadAddWalletDialog}
+                  onFocus={preloadAddWalletDialog}
                   className="w-full justify-start gap-2 rounded-md"
                 >
                   <IconWalletBifold className="h-3.5 w-3.5 fill-muted-foreground" />
@@ -386,6 +504,7 @@ export function WatchlistPageView({
             <WatchlistsGrid
               onSelectWatchlist={(group) => {
                 selectWatchlistGroup(group)
+                preloadChartsClient()
                 onGridViewModeChange("chart")
               }}
               viewMode="grid"
@@ -396,24 +515,25 @@ export function WatchlistPageView({
           </TabsContent>
 
           <TabsContent value="chart" className="mt-0">
-            <ChartsClient />
+            <LazyChartsClient />
           </TabsContent>
         </Tabs>
       ) : (
-        <ComparisonChartsClient inset={false} />
+        <LazyComparisonChartsClient inset={false} />
       )}
 
-      <CreateWatchlist
+      <LazyCreateWatchlist
         isOpen={isCreatingWatchlist}
         onClose={() => setIsCreatingWatchlist(false)}
       />
 
-      <AddWalletDialog open={isAddWalletOpen} onOpenChange={setIsAddWalletOpen} />
+      <LazyAddWalletDialog open={isAddWalletOpen} onOpenChange={setIsAddWalletOpen} />
 
-      <div className="sr-only">
-        <CoinSearch ref={coinSearchRef} />
-      </div>
+      {CoinSearchComponent ? (
+        <div className="sr-only">
+          <CoinSearchComponent ref={coinSearchRef} />
+        </div>
+      ) : null}
     </div>
   )
 }
-

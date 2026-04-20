@@ -1,3 +1,4 @@
+import "@solana/design-system/styles"
 import type { Metadata } from "next"
 import { createMetadata } from "@/lib/metadata"
 import { OverviewHoldingsSection } from "./overview-holdings-section"

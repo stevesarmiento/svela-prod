@@ -1,63 +1,160 @@
 'use client'
 
 import type React from 'react'
-import { createContext, useContext, useEffect, useCallback, useMemo, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  type ReactNode,
+} from 'react'
 import { useUser } from '@clerk/nextjs'
+import type { Preloaded } from 'convex/react'
+import { usePreloadedQuery } from 'convex/react'
 import { useQueryState } from 'nuqs'
+import { env } from '@/env.mjs'
 import type {
   WatchlistGroup as WatchlistGroupModel,
   WatchlistItem as WatchlistItemModel,
 } from '@/lib/effect/watchlist-models'
-import { env } from '@/env.mjs'
-import type { Preloaded } from "convex/react"
-import { usePreloadedQuery, useQuery } from "convex/react"
-import { api } from "../../../../../../convex/_generated/api"
+import { api } from '../../../../../../convex/_generated/api'
 import {
-  useWatchlist as useConvexWatchlist, 
-  useWatchlistGroups,
-  useWatchlistByGroup,
+  useAddToWatchlistGroup,
+  useRemoveBulkFromWatchlist,
+  useRemoveFromWatchlistGroup,
+  useWatchlist as useConvexWatchlist,
   useWatchlistBySlug,
-  useAddToWatchlistGroup, 
-  useRemoveFromWatchlistGroup, 
-  useRemoveBulkFromWatchlist 
+  useWatchlistGroups,
 } from '@/lib/convex-hooks'
 
 export type WatchlistGroup = WatchlistGroupModel
 
-/** Coin rows for the selected group (includes optional token quantity for charts). */
 export interface SelectedWatchlistItemRow {
   coinId: string
   holdings?: number
 }
 
 interface WatchlistContextType {
-  // MIGRATED TO COINGECKO: Now uses string IDs instead of numeric IDs
-  watchlist: string[] // CoinGecko string IDs (e.g., ["bitcoin", "ethereum"])
+  watchlist: string[]
   isLoading: boolean
   isInitialized: boolean
-  addToWatchlist: (coinId: string) => Promise<void> // CoinGecko string ID
-  removeFromWatchlist: (coinId: string) => Promise<void> // CoinGecko string ID
-  removeBulkFromWatchlist: (coinIds: string[]) => Promise<void> // CoinGecko string IDs
-  
-  // Multiple watchlist groups
+  addToWatchlist: (coinId: string) => Promise<void>
+  removeFromWatchlist: (coinId: string) => Promise<void>
+  removeBulkFromWatchlist: (coinIds: string[]) => Promise<void>
   watchlistGroups: WatchlistGroup[]
   selectedGroup: WatchlistGroup | null
-  selectedGroupCoins: string[] // CoinGecko string IDs
+  selectedGroupCoins: string[]
   selectedGroupItems: SelectedWatchlistItemRow[]
   isGroupsLoading: boolean
   selectWatchlistGroup: (group: WatchlistGroup | null) => void
-  addToSelectedGroup: (coinId: string) => Promise<void> // CoinGecko string ID
-  removeFromSelectedGroup: (coinId: string) => Promise<void> // CoinGecko string ID
-  removeBulkFromSelectedGroup: (coinIds: string[]) => Promise<void> // CoinGecko string IDs
+  addToSelectedGroup: (coinId: string) => Promise<void>
+  removeFromSelectedGroup: (coinId: string) => Promise<void>
+  removeBulkFromSelectedGroup: (coinIds: string[]) => Promise<void>
 }
 
 const WatchlistContext = createContext<WatchlistContextType | undefined>(undefined)
+const isDebug = env.NODE_ENV === 'development'
 
-const isDebug = env.NODE_ENV === "development"
+type SelectedGroupData =
+  | { group: WatchlistGroup; items: WatchlistItemModel[] }
+  | null
+  | undefined
+
+function toSelectedWatchlistItems(
+  items: ReadonlyArray<{ coinId: string; holdings?: number }> | undefined,
+): SelectedWatchlistItemRow[] {
+  if (!items?.length) return []
+  return items.map((item) => ({
+    coinId: item.coinId,
+    ...(item.holdings !== undefined ? { holdings: item.holdings } : {}),
+  }))
+}
+
+function useSelectedGroupState(args: {
+  watchlistGroups: WatchlistGroup[]
+  defaultGroupSlug: string
+}) {
+  const [selectedGroupSlug, setSelectedGroupSlug] = useQueryState('wg', {
+    defaultValue: args.defaultGroupSlug,
+    shallow: false,
+  })
+
+  const selectedGroup = useMemo(() => {
+    if (!selectedGroupSlug) return null
+    return args.watchlistGroups.find((group) => group.slug === selectedGroupSlug) ?? null
+  }, [args.watchlistGroups, selectedGroupSlug])
+
+  useEffect(() => {
+    if (args.watchlistGroups.length === 0) return
+
+    if (!selectedGroupSlug) {
+      const fallbackGroup =
+        args.watchlistGroups.find((group) => group.isDefault) ?? args.watchlistGroups[0]
+      if (fallbackGroup) {
+        if (isDebug) console.log('Auto-selecting default/first group:', fallbackGroup.name)
+        void setSelectedGroupSlug(fallbackGroup.slug)
+      }
+      return
+    }
+
+    const groupExists = args.watchlistGroups.some((group) => group.slug === selectedGroupSlug)
+    if (!groupExists) {
+      const fallbackGroup =
+        args.watchlistGroups.find((group) => group.isDefault) ?? args.watchlistGroups[0]
+      if (fallbackGroup) {
+        if (isDebug) console.log('Selected group no longer exists, falling back to default')
+        void setSelectedGroupSlug(fallbackGroup.slug)
+      }
+    }
+  }, [args.watchlistGroups, selectedGroupSlug, setSelectedGroupSlug])
+
+  return {
+    selectedGroupSlug,
+    setSelectedGroupSlug,
+    selectedGroup,
+  }
+}
+
+function buildContextValue(args: {
+  watchlist: string[]
+  isLoading: boolean
+  isInitialized: boolean
+  watchlistGroups: WatchlistGroup[]
+  selectedGroup: WatchlistGroup | null
+  selectedGroupCoins: string[]
+  selectedGroupItems: SelectedWatchlistItemRow[]
+  isGroupsLoading: boolean
+  addToWatchlist: (coinId: string) => Promise<void>
+  removeFromWatchlist: (coinId: string) => Promise<void>
+  removeBulkFromWatchlist: (coinIds: string[]) => Promise<void>
+  selectWatchlistGroup: (group: WatchlistGroup | null) => void
+  addToSelectedGroup: (coinId: string) => Promise<void>
+  removeFromSelectedGroup: (coinId: string) => Promise<void>
+  removeBulkFromSelectedGroup: (coinIds: string[]) => Promise<void>
+}): WatchlistContextType {
+  return {
+    watchlist: args.watchlist,
+    isLoading: args.isLoading,
+    isInitialized: args.isInitialized,
+    addToWatchlist: args.addToWatchlist,
+    removeFromWatchlist: args.removeFromWatchlist,
+    removeBulkFromWatchlist: args.removeBulkFromWatchlist,
+    watchlistGroups: args.watchlistGroups,
+    selectedGroup: args.selectedGroup,
+    selectedGroupCoins: args.selectedGroupCoins,
+    selectedGroupItems: args.selectedGroupItems,
+    isGroupsLoading: args.isGroupsLoading,
+    selectWatchlistGroup: args.selectWatchlistGroup,
+    addToSelectedGroup: args.addToSelectedGroup,
+    removeFromSelectedGroup: args.removeFromSelectedGroup,
+    removeBulkFromSelectedGroup: args.removeBulkFromSelectedGroup,
+  }
+}
 
 export function WatchlistProvider(props: {
   children: React.ReactNode
-  preloadedBootstrap?: Preloaded<typeof api.watchlists.getMyWatchlistBootstrap>
+  preloadedBootstrap?: Preloaded<typeof api.watchlists.getMyWatchlistNavBootstrap>
 }) {
   if (props.preloadedBootstrap) {
     return (
@@ -66,350 +163,276 @@ export function WatchlistProvider(props: {
       </WatchlistProviderPreloaded>
     )
   }
+
   return <WatchlistProviderLive>{props.children}</WatchlistProviderLive>
 }
 
 function WatchlistProviderPreloaded(props: {
   children: React.ReactNode
-  preloadedBootstrap: Preloaded<typeof api.watchlists.getMyWatchlistBootstrap>
+  preloadedBootstrap: Preloaded<typeof api.watchlists.getMyWatchlistNavBootstrap>
 }) {
   const { user, isLoaded } = useUser()
   const bootstrap = usePreloadedQuery(props.preloadedBootstrap)
-
   const addToConvexWatchlistGroup = useAddToWatchlistGroup()
   const removeFromConvexWatchlistGroup = useRemoveFromWatchlistGroup()
   const removeBulkFromConvexWatchlist = useRemoveBulkFromWatchlist()
 
   const watchlistGroups = bootstrap.groups
-  const defaultGroupSlug = bootstrap.defaultGroup?.slug ?? ""
-  const defaultWatchlistItems = bootstrap.defaultItems
-
-  const watchlist = useMemo(() => {
-    if (Array.isArray(defaultWatchlistItems) && isLoaded) return defaultWatchlistItems.map((item) => item.coinId)
-    if (isLoaded && !user) return []
-    return []
-  }, [defaultWatchlistItems, isLoaded, user])
-
-  const isInitialized = useMemo(() => isLoaded, [isLoaded])
-
-  const [selectedGroupSlug, setSelectedGroupSlug] = useQueryState('wg', {
-    defaultValue: defaultGroupSlug,
-    shallow: false,
+  const defaultGroupSlug = bootstrap.defaultGroup?.slug ?? ''
+  const { selectedGroupSlug, setSelectedGroupSlug, selectedGroup } = useSelectedGroupState({
+    watchlistGroups,
+    defaultGroupSlug,
   })
 
-  const selectedGroup = useMemo(() => {
-    if (!selectedGroupSlug || !watchlistGroups) return null
-    return watchlistGroups.find(g => g.slug === selectedGroupSlug) || null
-  }, [selectedGroupSlug, watchlistGroups])
-
-  const shouldUseBootstrapItems = Boolean(
-    selectedGroupSlug &&
-      bootstrap.defaultGroup?.slug &&
-      selectedGroupSlug === bootstrap.defaultGroup.slug
+  const selectedGroupData = useWatchlistBySlug(selectedGroupSlug) as SelectedGroupData
+  const selectedGroupItems = useMemo(
+    () => toSelectedWatchlistItems(selectedGroupData?.items),
+    [selectedGroupData?.items],
+  )
+  const selectedGroupCoins = useMemo(
+    () => selectedGroupItems.map((item) => item.coinId),
+    [selectedGroupItems],
   )
 
-  const selectedGroupData = useQuery(
-    api.watchlists.getMyWatchlistBySlug,
-    !shouldUseBootstrapItems && selectedGroupSlug ? { slug: selectedGroupSlug } : "skip",
-  ) as { group: WatchlistGroup; items: SelectedWatchlistItemRow[] } | null | undefined
-
-  const effectiveWatchlist = shouldUseBootstrapItems
-    ? defaultWatchlistItems
-    : selectedGroupData?.items
-
-  const selectedGroupItems = useMemo((): SelectedWatchlistItemRow[] => {
-    if (!effectiveWatchlist || !Array.isArray(effectiveWatchlist)) return []
-    return effectiveWatchlist.map((item) => ({
-      coinId: item.coinId,
-      ...(item.holdings !== undefined ? { holdings: item.holdings } : {}),
-    }))
-  }, [effectiveWatchlist])
-
-  const selectedGroupCoins = useMemo(() => {
-    if (effectiveWatchlist && Array.isArray(effectiveWatchlist)) return effectiveWatchlist.map(item => item.coinId)
-    if (selectedGroup) return []
+  const watchlist = useMemo(() => {
+    if (selectedGroup?.isDefault) return selectedGroupCoins
+    if (isLoaded && !user) return []
     return []
-  }, [effectiveWatchlist, selectedGroup])
+  }, [selectedGroup?.isDefault, selectedGroupCoins, isLoaded, user])
 
-  const addToWatchlist = useCallback(async (coinId: string) => {
-    if (!user) throw new Error('Not authenticated')
-    await addToConvexWatchlistGroup(coinId)
-  }, [user, addToConvexWatchlistGroup])
-
-  const removeFromWatchlist = useCallback(async (coinId: string) => {
-    if (!user) return
-    await removeFromConvexWatchlistGroup(coinId)
-  }, [user, removeFromConvexWatchlistGroup])
-
-  const removeBulkFromWatchlist = useCallback(async (coinIds: string[]) => {
-    if (!user) return
-    await removeBulkFromConvexWatchlist(coinIds)
-  }, [user, removeBulkFromConvexWatchlist])
-
-  const selectWatchlistGroup = useCallback((group: WatchlistGroup | null) => {
-    if (isDebug) console.log('Selecting watchlist group:', group?.name)
-    setSelectedGroupSlug(group?.slug || '')
-  }, [setSelectedGroupSlug])
-
-  const addToSelectedGroup = useCallback(async (coinId: string) => {
-    if (!user || !selectedGroup) throw new Error('Not authenticated or no group selected')
-    await addToConvexWatchlistGroup(coinId, selectedGroup._id)
-  }, [user, selectedGroup, addToConvexWatchlistGroup])
-
-  const removeFromSelectedGroup = useCallback(async (coinId: string) => {
-    if (!user || !selectedGroup) return
-    await removeFromConvexWatchlistGroup(coinId, selectedGroup._id)
-  }, [user, selectedGroup, removeFromConvexWatchlistGroup])
-
-  const removeBulkFromSelectedGroup = useCallback(async (coinIds: string[]) => {
-    if (!user || !selectedGroup) return
-    await Promise.all(coinIds.map((coinId) => removeFromConvexWatchlistGroup(coinId, selectedGroup._id)))
-  }, [user, selectedGroup, removeFromConvexWatchlistGroup])
-
-  const isLoading = !isLoaded
-  const isGroupsLoading = watchlistGroups.length === 0 && !isLoaded
-
-  const contextValue = useMemo(() => ({
-    watchlist,
-    isLoading: isLoading || false,
-    isInitialized,
-    addToWatchlist,
-    removeFromWatchlist,
-    removeBulkFromWatchlist,
-    watchlistGroups: watchlistGroups || [],
-    selectedGroup,
-    selectedGroupCoins,
-    selectedGroupItems,
-    isGroupsLoading,
-    selectWatchlistGroup,
-    addToSelectedGroup,
-    removeFromSelectedGroup,
-    removeBulkFromSelectedGroup
-  }), [
-    watchlist, isLoading, isInitialized, addToWatchlist, removeFromWatchlist, removeBulkFromWatchlist,
-    watchlistGroups, selectedGroup, selectedGroupCoins, selectedGroupItems, isGroupsLoading,
-    selectWatchlistGroup, addToSelectedGroup, removeFromSelectedGroup, removeBulkFromSelectedGroup
-  ])
-
-  const Provider = WatchlistContext.Provider as React.FC<{ value: WatchlistContextType; children: ReactNode }>;
-  return (
-    <Provider value={contextValue}>
-      {props.children}
-    </Provider>
+  const addToWatchlist = useCallback(
+    async (coinId: string) => {
+      if (!user) throw new Error('Not authenticated')
+      await addToConvexWatchlistGroup(coinId)
+    },
+    [user, addToConvexWatchlistGroup],
   )
+
+  const removeFromWatchlist = useCallback(
+    async (coinId: string) => {
+      if (!user) return
+      await removeFromConvexWatchlistGroup(coinId)
+    },
+    [user, removeFromConvexWatchlistGroup],
+  )
+
+  const removeBulkFromWatchlist = useCallback(
+    async (coinIds: string[]) => {
+      if (!user) return
+      await removeBulkFromConvexWatchlist(coinIds)
+    },
+    [user, removeBulkFromConvexWatchlist],
+  )
+
+  const selectWatchlistGroup = useCallback(
+    (group: WatchlistGroup | null) => {
+      if (isDebug) console.log('Selecting watchlist group:', group?.name)
+      void setSelectedGroupSlug(group?.slug || '')
+    },
+    [setSelectedGroupSlug],
+  )
+
+  const addToSelectedGroup = useCallback(
+    async (coinId: string) => {
+      if (!user || !selectedGroup) throw new Error('Not authenticated or no group selected')
+      await addToConvexWatchlistGroup(coinId, selectedGroup._id)
+    },
+    [user, selectedGroup, addToConvexWatchlistGroup],
+  )
+
+  const removeFromSelectedGroup = useCallback(
+    async (coinId: string) => {
+      if (!user || !selectedGroup) return
+      await removeFromConvexWatchlistGroup(coinId, selectedGroup._id)
+    },
+    [user, selectedGroup, removeFromConvexWatchlistGroup],
+  )
+
+  const removeBulkFromSelectedGroup = useCallback(
+    async (coinIds: string[]) => {
+      if (!user || !selectedGroup) return
+      await removeBulkFromConvexWatchlist(coinIds, selectedGroup._id)
+    },
+    [user, selectedGroup, removeBulkFromConvexWatchlist],
+  )
+
+  const contextValue = useMemo(
+    () =>
+      buildContextValue({
+        watchlist,
+        isLoading: !isLoaded,
+        isInitialized: isLoaded,
+        watchlistGroups,
+        selectedGroup,
+        selectedGroupCoins,
+        selectedGroupItems,
+        isGroupsLoading: false,
+        addToWatchlist,
+        removeFromWatchlist,
+        removeBulkFromWatchlist,
+        selectWatchlistGroup,
+        addToSelectedGroup,
+        removeFromSelectedGroup,
+        removeBulkFromSelectedGroup,
+      }),
+    [
+      watchlist,
+      isLoaded,
+      watchlistGroups,
+      selectedGroup,
+      selectedGroupCoins,
+      selectedGroupItems,
+      addToWatchlist,
+      removeFromWatchlist,
+      removeBulkFromWatchlist,
+      selectWatchlistGroup,
+      addToSelectedGroup,
+      removeFromSelectedGroup,
+      removeBulkFromSelectedGroup,
+    ],
+  )
+
+  const Provider = WatchlistContext.Provider as React.FC<{
+    value: WatchlistContextType
+    children: ReactNode
+  }>
+  return <Provider value={contextValue}>{props.children}</Provider>
 }
 
 function WatchlistProviderLive({ children }: { children: React.ReactNode }) {
   const { user, isLoaded } = useUser()
-  
-  // Legacy hooks
   const convexWatchlist = useConvexWatchlist() as Array<WatchlistItemModel> | undefined
+  const watchlistGroups = (useWatchlistGroups() as WatchlistGroup[] | undefined) ?? []
   const addToConvexWatchlistGroup = useAddToWatchlistGroup()
   const removeFromConvexWatchlistGroup = useRemoveFromWatchlistGroup()
   const removeBulkFromConvexWatchlist = useRemoveBulkFromWatchlist()
-  
-  // New hooks for multiple groups
-  const watchlistGroups = useWatchlistGroups() as WatchlistGroup[] | undefined
-  
-  // ✅ IMPROVED: Derive state instead of using useState + useEffect
-  // MIGRATED TO COINGECKO: Convert Convex watchlist data to CoinGecko string array
-  const watchlist = useMemo(() => {
-    if (Array.isArray(convexWatchlist) && isLoaded) {
-      const coinIds = convexWatchlist.map(item => item.coinId) // Keep as CoinGecko string IDs
-      return coinIds
-    }if (isLoaded && !user) {
-      // User not logged in
-      return []
-    }
-    return []
-  }, [convexWatchlist, isLoaded, user])
-  
-  // ✅ IMPROVED: Derive initialization state directly
-  const isInitialized = useMemo(() => isLoaded, [isLoaded])
-  
-  // URL state for selected group using nuqs (now using slug)
-  const [selectedGroupSlug, setSelectedGroupSlug] = useQueryState('wg', {
-    defaultValue: '',
-    shallow: false, // Ensure updates trigger across components
+
+  const defaultGroupSlug =
+    watchlistGroups.find((group) => group.isDefault)?.slug ?? watchlistGroups[0]?.slug ?? ''
+  const { selectedGroupSlug, setSelectedGroupSlug, selectedGroup } = useSelectedGroupState({
+    watchlistGroups,
+    defaultGroupSlug,
   })
-  
-  // Derive selected group from slug and available groups
-  const selectedGroup = useMemo(() => {
-    if (!selectedGroupSlug || !watchlistGroups) return null
-    return watchlistGroups.find(g => g.slug === selectedGroupSlug) || null
-  }, [selectedGroupSlug, watchlistGroups])
-  
-  const selectedGroupData = useWatchlistBySlug(selectedGroupSlug) as
-    | { group: WatchlistGroup; items: WatchlistItemModel[] }
-    | null
-    | undefined
-  const selectedGroupWatchlist = selectedGroupData?.items
 
-  const selectedGroupWatchlistById = useWatchlistByGroup(selectedGroup?._id) as
-    | WatchlistItemModel[]
-    | undefined
-  
-  const effectiveWatchlist = selectedGroupWatchlist || selectedGroupWatchlistById
-
-  const selectedGroupItems = useMemo((): SelectedWatchlistItemRow[] => {
-    if (!effectiveWatchlist || !Array.isArray(effectiveWatchlist)) return []
-    return effectiveWatchlist.map((item) => ({
-      coinId: item.coinId,
-      ...(item.holdings !== undefined ? { holdings: item.holdings } : {}),
-    }))
-  }, [effectiveWatchlist])
-  
-  const selectedGroupCoins = useMemo(() => {
-    
-    if (effectiveWatchlist && Array.isArray(effectiveWatchlist)) {
-      const coinIds = effectiveWatchlist.map(item => item.coinId) // Keep as CoinGecko string IDs
-      return coinIds
-    }if (selectedGroup) {
-      return []
-    }
-      return []
-  }, [effectiveWatchlist, selectedGroup])
-
-
-  // Auto-select default group when groups load and no group is selected via URL
-  useEffect(() => {
-    if (!watchlistGroups || watchlistGroups.length === 0) return
-    
-    // If no group is selected via URL, auto-select the default group
-    if (!selectedGroupSlug) {
-      const defaultGroup = watchlistGroups.find(g => g.isDefault) || watchlistGroups[0]
-      if (defaultGroup) {
-        if (isDebug) console.log('Auto-selecting default/first group:', defaultGroup.name)
-        setSelectedGroupSlug(defaultGroup.slug)
-      }
-    } else {
-      // Validate that the selected group still exists
-      const groupExists = watchlistGroups.find(g => g.slug === selectedGroupSlug)
-      if (!groupExists) {
-        if (isDebug) console.log('Selected group no longer exists, falling back to default')
-        const defaultGroup = watchlistGroups.find(g => g.isDefault) || watchlistGroups[0]
-        if (defaultGroup) {
-          setSelectedGroupSlug(defaultGroup.slug)
-        }
-      }
-    }
-  }, [watchlistGroups, selectedGroupSlug, setSelectedGroupSlug])
-
-
-  // MIGRATED TO COINGECKO: Legacy functions (for backward compatibility)
-  const addToWatchlist = useCallback(async (coinId: string) => {
-    if (!user) throw new Error('Not authenticated')
-
-    try {
-      await addToConvexWatchlistGroup(coinId) // Adds to default group - no conversion needed
-    } catch (error) {
-      console.error('Error adding to watchlist:', error)
-      throw error
-    }
-  }, [user, addToConvexWatchlistGroup])
-
-  const removeFromWatchlist = useCallback(async (coinId: string) => {
-    if (!user) return
-    
-    try {
-      await removeFromConvexWatchlistGroup(coinId) // Removes from default group - no conversion needed
-    } catch (error) {
-      console.error('Error removing from watchlist:', error)
-      throw error;
-    }
-  }, [user, removeFromConvexWatchlistGroup])
-
-  const removeBulkFromWatchlist = useCallback(async (coinIds: string[]) => {
-    if (!user) return
-    
-    try {
-      await removeBulkFromConvexWatchlist(coinIds) // No conversion needed for CoinGecko string IDs
-      // State will update automatically via derived watchlist from convexWatchlist
-    } catch (error) {
-      console.error('Error bulk removing from watchlist:', error)
-      throw error;
-    }
-  }, [user, removeBulkFromConvexWatchlist])
-
-  const selectWatchlistGroup = useCallback((group: WatchlistGroup | null) => {
-    if (isDebug) console.log('Selecting watchlist group:', group?.name)
-    setSelectedGroupSlug(group?.slug || '')
-  }, [setSelectedGroupSlug])
-
-  const addToSelectedGroup = useCallback(async (coinId: string) => {
-    if (!user || !selectedGroup) throw new Error('Not authenticated or no group selected')
-
-    try {
-      await addToConvexWatchlistGroup(coinId, selectedGroup._id) // No conversion needed
-    } catch (error) {
-      console.error('Error adding to selected group:', error)
-      throw error
-    }
-  }, [user, selectedGroup, addToConvexWatchlistGroup])
-
-  const removeFromSelectedGroup = useCallback(async (coinId: string) => {
-    if (!user || !selectedGroup) return
-    
-    try {
-      await removeFromConvexWatchlistGroup(coinId, selectedGroup._id) // No conversion needed
-    } catch (error) {
-      console.error('Error removing from selected group:', error)
-      throw error;
-    }
-  }, [user, selectedGroup, removeFromConvexWatchlistGroup])
-
-  const removeBulkFromSelectedGroup = useCallback(async (coinIds: string[]) => {
-    if (!user || !selectedGroup) return
-    
-    try {
-      // Remove each CoinGecko coin individually from the selected group
-      await Promise.all(
-        coinIds.map(coinId => 
-          removeFromConvexWatchlistGroup(coinId, selectedGroup._id) // No conversion needed
-        )
-      )
-      // State will update automatically via derived selectedGroupCoins from effectiveWatchlist
-    } catch (error) {
-      console.error('Error bulk removing from selected group:', error)
-      throw error;
-    }
-  }, [user, selectedGroup, removeFromConvexWatchlistGroup])
-
-  const isLoading = !isLoaded || (user && convexWatchlist === undefined && !isInitialized)
-  const isGroupsLoading = !watchlistGroups
-
-  // Make sure the context value is memoized
-  const contextValue = useMemo(() => ({
-    // Legacy
-    watchlist, 
-    isLoading: isLoading || false, 
-    isInitialized,
-    addToWatchlist, 
-    removeFromWatchlist,
-    removeBulkFromWatchlist,
-    
-    // New group functionality
-    watchlistGroups: watchlistGroups || [],
-    selectedGroup,
-    selectedGroupCoins,
-    selectedGroupItems,
-    isGroupsLoading,
-    selectWatchlistGroup,
-    addToSelectedGroup,
-    removeFromSelectedGroup,
-    removeBulkFromSelectedGroup
-  }), [
-    watchlist, isLoading, isInitialized, addToWatchlist, removeFromWatchlist, removeBulkFromWatchlist,
-    watchlistGroups, selectedGroup, selectedGroupCoins, selectedGroupItems, isGroupsLoading,
-    selectWatchlistGroup, addToSelectedGroup, removeFromSelectedGroup, removeBulkFromSelectedGroup
-  ])
-
-  const Provider = WatchlistContext.Provider as React.FC<{ value: WatchlistContextType; children: ReactNode }>;
-  return (
-    <Provider value={contextValue}>
-      {children}
-    </Provider>
+  const selectedGroupData = useWatchlistBySlug(selectedGroupSlug) as SelectedGroupData
+  const selectedGroupItems = useMemo(
+    () => toSelectedWatchlistItems(selectedGroupData?.items),
+    [selectedGroupData?.items],
   )
+  const selectedGroupCoins = useMemo(
+    () => selectedGroupItems.map((item) => item.coinId),
+    [selectedGroupItems],
+  )
+
+  const watchlist = useMemo(() => {
+    if (selectedGroup?.isDefault) return selectedGroupCoins
+    if (Array.isArray(convexWatchlist) && isLoaded) {
+      return convexWatchlist.map((item) => item.coinId)
+    }
+    if (isLoaded && !user) return []
+    return []
+  }, [selectedGroup?.isDefault, selectedGroupCoins, convexWatchlist, isLoaded, user])
+
+  const addToWatchlist = useCallback(
+    async (coinId: string) => {
+      if (!user) throw new Error('Not authenticated')
+      await addToConvexWatchlistGroup(coinId)
+    },
+    [user, addToConvexWatchlistGroup],
+  )
+
+  const removeFromWatchlist = useCallback(
+    async (coinId: string) => {
+      if (!user) return
+      await removeFromConvexWatchlistGroup(coinId)
+    },
+    [user, removeFromConvexWatchlistGroup],
+  )
+
+  const removeBulkFromWatchlist = useCallback(
+    async (coinIds: string[]) => {
+      if (!user) return
+      await removeBulkFromConvexWatchlist(coinIds)
+    },
+    [user, removeBulkFromConvexWatchlist],
+  )
+
+  const selectWatchlistGroup = useCallback(
+    (group: WatchlistGroup | null) => {
+      if (isDebug) console.log('Selecting watchlist group:', group?.name)
+      void setSelectedGroupSlug(group?.slug || '')
+    },
+    [setSelectedGroupSlug],
+  )
+
+  const addToSelectedGroup = useCallback(
+    async (coinId: string) => {
+      if (!user || !selectedGroup) throw new Error('Not authenticated or no group selected')
+      await addToConvexWatchlistGroup(coinId, selectedGroup._id)
+    },
+    [user, selectedGroup, addToConvexWatchlistGroup],
+  )
+
+  const removeFromSelectedGroup = useCallback(
+    async (coinId: string) => {
+      if (!user || !selectedGroup) return
+      await removeFromConvexWatchlistGroup(coinId, selectedGroup._id)
+    },
+    [user, selectedGroup, removeFromConvexWatchlistGroup],
+  )
+
+  const removeBulkFromSelectedGroup = useCallback(
+    async (coinIds: string[]) => {
+      if (!user || !selectedGroup) return
+      await removeBulkFromConvexWatchlist(coinIds, selectedGroup._id)
+    },
+    [user, selectedGroup, removeBulkFromConvexWatchlist],
+  )
+
+  const contextValue = useMemo(
+    () =>
+      buildContextValue({
+        watchlist,
+        isLoading: !isLoaded || (Boolean(user) && convexWatchlist === undefined),
+        isInitialized: isLoaded,
+        watchlistGroups,
+        selectedGroup,
+        selectedGroupCoins,
+        selectedGroupItems,
+        isGroupsLoading: Boolean(user) && watchlistGroups.length === 0 && !selectedGroupSlug,
+        addToWatchlist,
+        removeFromWatchlist,
+        removeBulkFromWatchlist,
+        selectWatchlistGroup,
+        addToSelectedGroup,
+        removeFromSelectedGroup,
+        removeBulkFromSelectedGroup,
+      }),
+    [
+      watchlist,
+      isLoaded,
+      user,
+      convexWatchlist,
+      watchlistGroups,
+      selectedGroup,
+      selectedGroupCoins,
+      selectedGroupItems,
+      selectedGroupSlug,
+      addToWatchlist,
+      removeFromWatchlist,
+      removeBulkFromWatchlist,
+      selectWatchlistGroup,
+      addToSelectedGroup,
+      removeFromSelectedGroup,
+      removeBulkFromSelectedGroup,
+    ],
+  )
+
+  const Provider = WatchlistContext.Provider as React.FC<{
+    value: WatchlistContextType
+    children: ReactNode
+  }>
+  return <Provider value={contextValue}>{children}</Provider>
 }
 
 export function useWatchlist() {
