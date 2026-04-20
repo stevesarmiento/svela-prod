@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import { useClerk, useSignIn, useSignUp } from "@clerk/nextjs";
 import { Button } from "@v1/ui/button";
 import { cn } from "@v1/ui/cn";
 import { IconGoogleLogo } from "symbols-react";
-import { SolanaWalletPickerDialog } from "@/components/solana-wallet-picker-dialog";
+import { SolanaWalletStep } from "@/components/solana-wallet-step";
 import { SolanaLogo } from "@/components/solana-logo";
 import {
   isAccountAlreadyExistsError,
@@ -15,10 +16,13 @@ import {
 } from "@/lib/sign-in/clerk-errors";
 import { getRedirectUrlComplete } from "@/lib/sign-in/redirect-url";
 import { listSolanaWalletOptions } from "@/lib/sign-in/solana-wallets";
+import { DURATION_UI_S, EASE_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens";
 
 type AuthMethod = "google" | "solana";
+type LoginView = "providers" | "solana_wallets";
 
 export function LoginMethods() {
+  const shouldReduceMotion = useReducedMotion();
   const searchParams = useSearchParams();
   const clerk = useClerk();
   const signInState = useSignIn();
@@ -31,10 +35,11 @@ export function LoginMethods() {
 
   const [activeMethod, setActiveMethod] = useState<AuthMethod | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isSolanaPickerOpen, setIsSolanaPickerOpen] = useState(false);
+  const [view, setView] = useState<LoginView>("providers");
 
   const redirectUrlComplete = useMemo(() => getRedirectUrlComplete(searchParams), [searchParams]);
-  const walletOptions = useMemo(() => listSolanaWalletOptions(), [isSolanaPickerOpen]);
+  const walletOptions = useMemo(() => listSolanaWalletOptions(), [view]);
+  const durationUi = motionDuration(shouldReduceMotion, DURATION_UI_S);
 
   async function startGoogle() {
     if (!isLoaded || !signIn || activeMethod) return;
@@ -136,49 +141,98 @@ export function LoginMethods() {
     }
   }
 
+  function handleOpenSolanaStep() {
+    if (isSolanaDisabled) return;
+    setError(null);
+    setView("solana_wallets");
+  }
+
+  function handleBackToProviders() {
+    if (activeMethod === "solana") return;
+    setError(null);
+    setView("providers");
+  }
+
   const isBusy = activeMethod !== null;
   const isGoogleDisabled = !isLoaded || !signIn || isBusy;
   const isSolanaDisabled = !isLoaded || !signIn || !signUp || !setActive || isBusy;
 
   return (
     <div className="space-y-3">
-      <Button
-        type="button"
-        onClick={() => void startGoogle()}
-        variant="default"
-        className={cn("w-full text-sm", isBusy && activeMethod !== "google" && "opacity-60")}
-        disabled={isGoogleDisabled}
-        startIcon={<IconGoogleLogo className="size-4 fill-black/40 dark:fill-white/40" />}
-      >
-        Connect with Google
-      </Button>
+      <AnimatePresence mode="wait" initial={false}>
+        {view === "providers" ? (
+          <motion.div
+            key="providers"
+            initial={shouldReduceMotion ? false : { opacity: 0, x: -16 }}
+            animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+            exit={
+              shouldReduceMotion
+                ? { opacity: 0 }
+                : {
+                    opacity: 0,
+                    x: -16,
+                    transition: { duration: durationUi, ease: EASE_OUT_CUBIC },
+                  }
+            }
+            transition={{ duration: durationUi, ease: EASE_OUT_CUBIC }}
+            className="space-y-3"
+          >
+            <Button
+              type="button"
+              onClick={() => void startGoogle()}
+              variant="default"
+              className={cn("w-full text-sm", isBusy && activeMethod !== "google" && "opacity-60")}
+              disabled={isGoogleDisabled}
+              startIcon={<IconGoogleLogo className="size-4 fill-black/40 dark:fill-white/40" />}
+            >
+              Connect with Google
+            </Button>
 
-      <Button
-        type="button"
-        onClick={() => setIsSolanaPickerOpen(true)}
-        variant="default"
-        className={cn("w-full text-sm", isBusy && activeMethod !== "solana" && "opacity-60")}
-        disabled={isSolanaDisabled}
-        startIcon={<SolanaLogo width={16} height={16} className="opacity-40" />}
-      >
-        Connect with Solana
-      </Button>
+            <Button
+              type="button"
+              onClick={handleOpenSolanaStep}
+              variant="default"
+              className={cn("w-full text-sm", isBusy && activeMethod !== "solana" && "opacity-60")}
+              disabled={isSolanaDisabled}
+              startIcon={<SolanaLogo width={16} height={16} className="opacity-40" />}
+            >
+              Connect with Solana
+            </Button>
 
-      <SolanaWalletPickerDialog
-        open={isSolanaPickerOpen}
-        onOpenChange={setIsSolanaPickerOpen}
-        walletOptions={walletOptions}
-        isBusy={isBusy}
-        onPickWallet={(walletName) => void startSolana(walletName)}
-      />
+            {error ? (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                {error}
+              </div>
+            ) : null}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="solana_wallets"
+            initial={shouldReduceMotion ? false : { opacity: 0, x: 16 }}
+            animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
+            exit={
+              shouldReduceMotion
+                ? { opacity: 0 }
+                : {
+                    opacity: 0,
+                    x: 16,
+                    transition: { duration: durationUi, ease: EASE_OUT_CUBIC },
+                  }
+            }
+            transition={{ duration: durationUi, ease: EASE_OUT_CUBIC }}
+          >
+            <SolanaWalletStep
+              walletOptions={walletOptions}
+              isBusy={activeMethod === "solana"}
+              error={error}
+              onBack={handleBackToProviders}
+              onPickWallet={(walletName) => void startSolana(walletName)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div id="clerk-captcha" data-cl-theme="auto" data-cl-size="flexible" />
-
-      {error ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      ) : null}
     </div>
   );
 }
