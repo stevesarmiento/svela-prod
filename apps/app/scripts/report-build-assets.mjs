@@ -4,10 +4,32 @@ import { extname, join, relative } from "node:path";
 
 const root = process.cwd();
 const staticDir = join(root, ".next", "static");
+const routeStatsPath = join(root, ".next", "diagnostics", "route-bundle-stats.json");
 const cssBudgetKb = Number(process.env.APP_MAIN_CSS_GZIP_BUDGET_KB ?? "40");
+const routeBudgetsBytes = {
+  "/[locale]": 1.75 * 1024 * 1024,
+  "/[locale]/settings": 1.75 * 1024 * 1024,
+  "/[locale]/watchlist": 1.75 * 1024 * 1024,
+  "/[locale]/overview": 2.35 * 1024 * 1024,
+  "/[locale]/charts/[id]": 2.10 * 1024 * 1024,
+  "/[locale]/watchlists": 2.10 * 1024 * 1024,
+};
+const reportedRoutes = [
+  "/[locale]",
+  "/[locale]/settings",
+  "/[locale]/watchlist",
+  "/[locale]/overview",
+  "/[locale]/charts/[id]",
+  "/[locale]/watchlists",
+  "/[locale]/screener",
+];
 
 function formatKb(bytes) {
   return `${(bytes / 1024).toFixed(1)}KB`;
+}
+
+function formatMb(bytes) {
+  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
 }
 
 function walk(dir) {
@@ -50,6 +72,13 @@ const jsFiles = files
   .sort((a, b) => b.gzipBytes - a.gzipBytes);
 
 const mainCss = cssFiles[0] ?? null;
+const hasRouteStats = Boolean(statSync(routeStatsPath, { throwIfNoEntry: false }));
+const routeStats = hasRouteStats
+  ? JSON.parse(readFileSync(routeStatsPath, "utf8"))
+  : [];
+const routeStatsByRoute = new Map(
+  routeStats.map((entry) => [entry.route, entry]),
+);
 
 console.log("Build asset report");
 if (mainCss) {
@@ -66,9 +95,47 @@ for (const file of jsFiles.slice(0, 5)) {
   );
 }
 
+if (hasRouteStats) {
+  for (const route of reportedRoutes) {
+    const stat = routeStatsByRoute.get(route);
+    if (!stat) {
+      console.log(`route ${route} missing`);
+      continue;
+    }
+
+    console.log(
+      `route ${route} first-load=${formatMb(stat.firstLoadUncompressedJsBytes)}`,
+    );
+  }
+}
+
 if (mainCss && mainCss.gzipBytes > cssBudgetKb * 1024) {
   console.error(
     `Main CSS gzip ${formatKb(mainCss.gzipBytes)} exceeds budget ${cssBudgetKb.toFixed(1)}KB.`,
   );
   process.exit(1);
+}
+
+if (hasRouteStats) {
+  let routeBudgetExceeded = false;
+
+  for (const [route, budgetBytes] of Object.entries(routeBudgetsBytes)) {
+    const stat = routeStatsByRoute.get(route);
+    if (!stat) {
+      console.error(`Missing route bundle stats for ${route}.`);
+      routeBudgetExceeded = true;
+      continue;
+    }
+
+    if (stat.firstLoadUncompressedJsBytes > budgetBytes) {
+      console.error(
+        `Route ${route} first-load ${formatMb(stat.firstLoadUncompressedJsBytes)} exceeds budget ${formatMb(budgetBytes)}.`,
+      );
+      routeBudgetExceeded = true;
+    }
+  }
+
+  if (routeBudgetExceeded) {
+    process.exit(1);
+  }
 }

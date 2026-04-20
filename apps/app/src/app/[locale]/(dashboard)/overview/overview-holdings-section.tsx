@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { OverviewPerformanceChart } from "@/components/charts/overview-performance-chart";
 import { COLOR_THEMES } from "@/components/color-picker";
 import { useCoinGeckoQuotesBulk } from "@/hooks/use-coingecko-quotes";
@@ -29,7 +30,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconTriangleFill } from "symbols-react";
 import { api } from "../../../../../convex/_generated/api";
 import { TimeScaleSelector } from "../charts/_components/multi-line-lightweight-time-scale-selector";
-import { OverviewActivityFeedCard } from "./overview-events-feed-card/activity-feed-card";
 import { OverviewEmptyState } from "./overview-empty-state";
 
 interface HoldingsGroupRow {
@@ -101,6 +101,36 @@ type OverviewBootstrap = FunctionReturnType<
   typeof api.overview.getMyOverviewBootstrap
 >;
 
+function loadOverviewActivityFeedPanel() {
+  return import("./overview-activity-feed-panel");
+}
+
+const LazyOverviewActivityFeedPanel = dynamic(
+  () =>
+    loadOverviewActivityFeedPanel().then(
+      (module) => module.OverviewActivityFeedPanel,
+    ),
+  {
+    ssr: false,
+    loading: () => <OverviewActivityFeedPanelSkeleton />,
+  },
+);
+
+function OverviewActivityFeedPanelSkeleton() {
+  return (
+    <Card className="border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] bg-white dark:bg-zinc-950/50 min-h-[520px] shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+      <CardContent className="p-5 space-y-4">
+        <div className="h-8 w-44 rounded-md bg-zinc-950/10 dark:bg-white/10" />
+        <div className="space-y-3">
+          <div className="h-20 rounded-xl bg-zinc-950/10 dark:bg-white/10" />
+          <div className="h-20 rounded-xl bg-zinc-950/10 dark:bg-white/10" />
+          <div className="h-20 rounded-xl bg-zinc-950/10 dark:bg-white/10" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function OverviewHoldingsSection(props: {
   preloadedOverview?: Preloaded<
     typeof api.overview.getMyOverviewBootstrap
@@ -134,6 +164,7 @@ function OverviewHoldingsSectionInner(props: {
   const [activeTimeScale, setActiveTimeScale] = useState<string>("1d");
   const [scrubTime, setScrubTime] = useState<number | null>(null);
   const [commandWindow, setCommandWindow] = useState<"24h" | "7d">("24h");
+  const [shouldLoadFeedPanel, setShouldLoadFeedPanel] = useState(false);
 
   const overviewBootstrap = props.overviewBootstrap;
 
@@ -160,6 +191,7 @@ function OverviewHoldingsSectionInner(props: {
   );
 
   const snapshotRequestKeyRef = useRef<string>("");
+  const feedPanelSentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!overviewBootstrap) return;
     if (overviewBootstrap.status === "fresh") return;
@@ -169,10 +201,54 @@ function OverviewHoldingsSectionInner(props: {
     refreshOverviewSnapshot({ force: false }).catch(() => {});
   }, [overviewBootstrap, refreshOverviewSnapshot]);
 
-  const groupsBreakdown = useQuery(
+  useEffect(() => {
+    if (shouldLoadFeedPanel) return;
+
+    const loadPanel = () => {
+      setShouldLoadFeedPanel(true);
+      void loadOverviewActivityFeedPanel();
+    };
+
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    let idleCallbackId: number | null = null;
+
+    if ("requestIdleCallback" in window) {
+      idleCallbackId = window.requestIdleCallback(loadPanel, { timeout: 2_000 });
+    } else {
+      idleTimer = setTimeout(loadPanel, 1_000);
+    }
+
+    const node = feedPanelSentinelRef.current;
+    if (!node || typeof IntersectionObserver !== "function") {
+      return () => {
+        if (idleCallbackId !== null) window.cancelIdleCallback(idleCallbackId);
+        if (idleTimer !== null) clearTimeout(idleTimer);
+      };
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        loadPanel();
+        observer.disconnect();
+      },
+      { rootMargin: "400px 0px" },
+    );
+
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      if (idleCallbackId !== null) window.cancelIdleCallback(idleCallbackId);
+      if (idleTimer !== null) clearTimeout(idleTimer);
+    };
+  }, [shouldLoadFeedPanel]);
+
+  const liveGroupsBreakdown = useQuery(
     api.watchlists.getMyHoldingsBreakdownByWatchlistGroup,
     {},
   ) as HoldingsGroupRow[] | undefined;
+  const groupsBreakdown =
+    liveGroupsBreakdown ?? overviewBootstrap?.holdingsBreakdown ?? [];
 
   const positions = useMemo(() => {
     const byCoinId = new Map<string, number>();
@@ -214,7 +290,7 @@ function OverviewHoldingsSectionInner(props: {
     const quotes = quotesQuery.data ?? {};
     const total = totalValueUsd;
 
-    const rows = (groupsBreakdown ?? []).map((row) => {
+    const rows = groupsBreakdown.map((row) => {
       let valueUsd = 0;
       for (const position of row.positions) {
         const price = quotes[position.coinId]?.current_price ?? 0;
@@ -519,65 +595,70 @@ function OverviewHoldingsSectionInner(props: {
         </div>
 
         <div className="space-y-4 lg:col-span-7">
-          <OverviewActivityFeedCard
-            events={
-              overviewBootstrap?.events ?? {
-                generatedAt: 0,
-                coinCount: 0,
-                limited: false,
-                events: [],
+          <div ref={feedPanelSentinelRef} className="h-px w-full" />
+          {shouldLoadFeedPanel ? (
+            <LazyOverviewActivityFeedPanel
+              events={
+                overviewBootstrap?.events ?? {
+                  generatedAt: 0,
+                  coinCount: 0,
+                  limited: false,
+                  events: [],
+                }
               }
-            }
-            movers={{
-              window: commandWindow,
-              onWindowChange: setCommandWindow,
-              watchlistCoinCount: overviewBootstrap?.watchlistCoinCount ?? 0,
-              limited: overviewBootstrap?.limited ?? false,
-              movers24h: overviewBootstrap?.movers24h ?? {
-                generatedAt: 0,
-                coinCount: 0,
-                missingMarketDataCount: 0,
-                gainers: [],
-                losers: [],
-              },
-              movers7d: overviewBootstrap?.movers7d ?? {
-                generatedAt: 0,
-                coinCount: 0,
-                missingMarketDataCount: 0,
-                gainers: [],
-                losers: [],
-              },
-              onRefreshNow: async () => {
-                const result = await refreshMyDataNow({ force: false });
-                await refreshOverviewSnapshot({ force: true });
-                return result;
-              },
-            }}
-            dailyBrief={{
-              status: overviewBootstrap?.status ?? "missing",
-              window: commandWindow,
-              movers24h: overviewBootstrap?.movers24h ?? null,
-              movers7d: overviewBootstrap?.movers7d ?? null,
-              events: overviewBootstrap?.events ?? null,
-              brief24h:
-                overviewBootstrap?.brief24h ?? {
-                  status: "missing",
-                  stale: true,
-                  expiresAt: null,
-                  generatedAt: null,
-                  brief: null,
+              movers={{
+                window: commandWindow,
+                onWindowChange: setCommandWindow,
+                watchlistCoinCount: overviewBootstrap?.watchlistCoinCount ?? 0,
+                limited: overviewBootstrap?.limited ?? false,
+                movers24h: overviewBootstrap?.movers24h ?? {
+                  generatedAt: 0,
+                  coinCount: 0,
+                  missingMarketDataCount: 0,
+                  gainers: [],
+                  losers: [],
                 },
-              brief7d:
-                overviewBootstrap?.brief7d ?? {
-                  status: "missing",
-                  stale: true,
-                  expiresAt: null,
-                  generatedAt: null,
-                  brief: null,
+                movers7d: overviewBootstrap?.movers7d ?? {
+                  generatedAt: 0,
+                  coinCount: 0,
+                  missingMarketDataCount: 0,
+                  gainers: [],
+                  losers: [],
                 },
-              onGenerate: generateOverviewBrief,
-            }}
-          />
+                onRefreshNow: async () => {
+                  const result = await refreshMyDataNow({ force: false });
+                  await refreshOverviewSnapshot({ force: true });
+                  return result;
+                },
+              }}
+              dailyBrief={{
+                status: overviewBootstrap?.status ?? "missing",
+                window: commandWindow,
+                movers24h: overviewBootstrap?.movers24h ?? null,
+                movers7d: overviewBootstrap?.movers7d ?? null,
+                events: overviewBootstrap?.events ?? null,
+                brief24h:
+                  overviewBootstrap?.brief24h ?? {
+                    status: "missing",
+                    stale: true,
+                    expiresAt: null,
+                    generatedAt: null,
+                    brief: null,
+                  },
+                brief7d:
+                  overviewBootstrap?.brief7d ?? {
+                    status: "missing",
+                    stale: true,
+                    expiresAt: null,
+                    generatedAt: null,
+                    brief: null,
+                  },
+                onGenerate: generateOverviewBrief,
+              }}
+            />
+          ) : (
+            <OverviewActivityFeedPanelSkeleton />
+          )}
         </div>
       </div>
     </div>

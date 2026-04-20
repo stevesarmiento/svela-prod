@@ -119,6 +119,7 @@ export function OverviewDailyBriefCard(props: {
   window: BriefWindow
   brief24h: DailyBriefCache
   brief7d: DailyBriefCache
+  enableGeneration?: boolean
   movers24h?: SnapshotMovers | null
   movers7d?: SnapshotMovers | null
   events?: SnapshotEvents | null
@@ -140,6 +141,7 @@ export function OverviewDailyBriefCard(props: {
   useEffect(() => {
     if (props.status === "missing") return
     if (cache.status === "fresh" && cache.brief) return
+    if (!props.enableGeneration) return
 
     const shouldGenerate = cache.status === "missing" || cache.status === "stale"
     if (!shouldGenerate) return
@@ -152,7 +154,7 @@ export function OverviewDailyBriefCard(props: {
       .then((next) => setGeneratedBrief(next))
       .catch(() => {})
       .finally(() => setIsGenerating(false))
-  }, [cache, generateBrief, key, props.status, props.window])
+  }, [cache, generateBrief, key, props.enableGeneration, props.status, props.window])
 
   useEffect(() => {
     if (!generatedBrief) return

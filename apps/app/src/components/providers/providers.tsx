@@ -12,9 +12,6 @@ import { NuqsAdapter } from "nuqs/adapters/next/app";
 import type React from "react";
 import { useMemo } from "react";
 import { ConvexProvider } from "./convex-provider";
-import { NotifToaster } from "@v1/ui/sonner-notif";
-import { LinkIntentPrefetch } from "@/components/navigation/link-intent-prefetch";
-import { ServiceWorkerRegistrar } from "@/components/service-worker/service-worker-registrar";
 
 const ReactQueryDevtools =
   process.env.NODE_ENV === "development"
@@ -108,10 +105,8 @@ export function Providers({ children }: ProvidersProps) {
       <PersistedQueryProvider>
         <NuqsAdapter>
           <ConvexProvider>
-            <LinkIntentPrefetch />
-            <ServiceWorkerRegistrar />
             {children}
-            <NotifToaster position="top-center" offset={-10} />
+            <LazyNotifToaster />
             {ReactQueryDevtools ? <ReactQueryDevtools initialIsOpen={false} /> : null}
           </ConvexProvider>
         </NuqsAdapter>
@@ -119,3 +114,11 @@ export function Providers({ children }: ProvidersProps) {
     </ClerkProvider>
   );
 }
+
+const LazyNotifToaster = dynamic(
+  () =>
+    import("./notif-toaster-idle").then(
+      (module) => module.NotifToasterIdle,
+    ),
+  { ssr: false, loading: () => null },
+);

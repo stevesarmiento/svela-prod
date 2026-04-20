@@ -12,6 +12,7 @@ import {
 import { useUser } from '@clerk/nextjs'
 import type { Preloaded } from 'convex/react'
 import { usePreloadedQuery } from 'convex/react'
+import { usePathname } from 'next/navigation'
 import { useQueryState } from 'nuqs'
 import { env } from '@/env.mjs'
 import type {
@@ -152,6 +153,19 @@ function buildContextValue(args: {
   }
 }
 
+function shouldResolveSelectedGroupForPath(pathname: string): boolean {
+  const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/'
+
+  return (
+    cleanPath === '/watchlist' ||
+    cleanPath.startsWith('/watchlist/') ||
+    cleanPath === '/watchlists' ||
+    cleanPath.startsWith('/watchlists/') ||
+    cleanPath === '/charts' ||
+    cleanPath.startsWith('/charts/')
+  )
+}
+
 export function WatchlistProvider(props: {
   children: React.ReactNode
   preloadedBootstrap?: Preloaded<typeof api.watchlists.getMyWatchlistNavBootstrap>
@@ -172,6 +186,7 @@ function WatchlistProviderPreloaded(props: {
   preloadedBootstrap: Preloaded<typeof api.watchlists.getMyWatchlistNavBootstrap>
 }) {
   const { user, isLoaded } = useUser()
+  const pathname = usePathname()
   const bootstrap = usePreloadedQuery(props.preloadedBootstrap)
   const addToConvexWatchlistGroup = useAddToWatchlistGroup()
   const removeFromConvexWatchlistGroup = useRemoveFromWatchlistGroup()
@@ -183,8 +198,11 @@ function WatchlistProviderPreloaded(props: {
     watchlistGroups,
     defaultGroupSlug,
   })
+  const shouldResolveSelectedGroup = shouldResolveSelectedGroupForPath(pathname)
 
-  const selectedGroupData = useWatchlistBySlug(selectedGroupSlug) as SelectedGroupData
+  const selectedGroupData = useWatchlistBySlug(
+    shouldResolveSelectedGroup ? selectedGroupSlug : undefined,
+  ) as SelectedGroupData
   const selectedGroupItems = useMemo(
     () => toSelectedWatchlistItems(selectedGroupData?.items),
     [selectedGroupData?.items],
@@ -301,6 +319,7 @@ function WatchlistProviderPreloaded(props: {
 
 function WatchlistProviderLive({ children }: { children: React.ReactNode }) {
   const { user, isLoaded } = useUser()
+  const pathname = usePathname()
   const convexWatchlist = useConvexWatchlist() as Array<WatchlistItemModel> | undefined
   const watchlistGroups = (useWatchlistGroups() as WatchlistGroup[] | undefined) ?? []
   const addToConvexWatchlistGroup = useAddToWatchlistGroup()
@@ -313,8 +332,11 @@ function WatchlistProviderLive({ children }: { children: React.ReactNode }) {
     watchlistGroups,
     defaultGroupSlug,
   })
+  const shouldResolveSelectedGroup = shouldResolveSelectedGroupForPath(pathname)
 
-  const selectedGroupData = useWatchlistBySlug(selectedGroupSlug) as SelectedGroupData
+  const selectedGroupData = useWatchlistBySlug(
+    shouldResolveSelectedGroup ? selectedGroupSlug : undefined,
+  ) as SelectedGroupData
   const selectedGroupItems = useMemo(
     () => toSelectedWatchlistItems(selectedGroupData?.items),
     [selectedGroupData?.items],
