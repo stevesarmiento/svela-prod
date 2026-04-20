@@ -41,6 +41,7 @@
     "@v1/kv": "workspace:*",
     "@v1/logger": "workspace:*",
     "@v1/ui": "workspace:*",
+    "@wallet-standard/app": "^1.1.0",
     "ai": "^6.0.158",
     "apexcharts": "^4.7.0",
     "convex": "^1.35.1",

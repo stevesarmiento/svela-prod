@@ -12,6 +12,7 @@ interface AuthUser {
   email?: string;
   fullName?: string;
   avatarUrl?: string;
+  walletAddress?: string;
   createdAt?: Date | number | null;
 }
 
@@ -27,6 +28,7 @@ export function useAuth() {
           email: user.emailAddresses[0]?.emailAddress,
           fullName: user.fullName ?? undefined,
           avatarUrl: user.imageUrl,
+          walletAddress: user.primaryWeb3Wallet?.web3Wallet ?? undefined,
           createdAt: user.createdAt ?? null,
         } satisfies AuthUser)
       : null,
@@ -35,7 +37,7 @@ export function useAuth() {
         clerkSignIn.authenticateWithRedirect({
           strategy: "oauth_google",
           redirectUrl: "/sso-callback",
-          redirectUrlComplete: "/overview",
+          redirectUrlComplete: "/watchlists",
         });
       } else {
         clerk.openSignIn({

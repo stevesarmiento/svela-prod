@@ -30,6 +30,7 @@ import { useTokenHeader } from "@/hooks/use-token-header";
 import { WatchlistButton } from "./watchlist-button";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { formatWalletAddress, getUserDisplayName } from "@/lib/user-display";
 
 function loadAnalysisDialog() {
   return import("@/components/navigation/analysis-dialog");
@@ -223,9 +224,17 @@ export function TopNav() {
   // Use Clerk user data for faster loading, fallback to Convex user
   const userData = clerkUser || user;
   const name = userData?.fullName;
-  const firstName = name?.split(' ')[0] || (clerkUser?.primaryEmailAddress?.emailAddress || user?.email)?.split('@')[0];
   const email = clerkUser?.primaryEmailAddress?.emailAddress || user?.email;
+  const walletAddress = clerkUser?.primaryWeb3Wallet?.web3Wallet || user?.walletAddress;
+  const displayName = getUserDisplayName({
+    fullName: name,
+    email,
+    walletAddress,
+    fallback: "User",
+  });
+  const firstName = displayName.split(" ")[0] || displayName;
   const avatarUrl = clerkUser?.imageUrl || user?.avatarUrl;
+  const walletLabel = formatWalletAddress(walletAddress);
 
   // Keep the first client render identical to SSR.
   const showPersonalizedGreeting = hasHydrated && isLoaded && firstName;
@@ -351,12 +360,12 @@ export function TopNav() {
                     {avatarUrl && (
                       <AvatarImage 
                         src={avatarUrl} 
-                        alt={name || email?.split('@')[0] || 'User'}
+                        alt={displayName}
                         loading="lazy" // Lazy load user avatars
                       />
                     )}
                     <AvatarFallback>
-                      {email ? email.substring(0, 2).toUpperCase() : "UN"}
+                      {displayName.slice(0, 2).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 </Button>
@@ -365,11 +374,17 @@ export function TopNav() {
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
                     <p className="text-sm font-medium leading-none">
-                      {name || email?.split('@')[0] || 'User'}
+                      {displayName}
                     </p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {email}
-                    </p>
+                    {email ? (
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {email}
+                      </p>
+                    ) : walletLabel ? (
+                      <p className="text-xs leading-none text-muted-foreground">
+                        {walletLabel}
+                      </p>
+                    ) : null}
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
