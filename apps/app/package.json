@@ -28,6 +28,7 @@
     "@effect/platform": "^0.92.1",
     "@effect/schema": "^0.75.5",
     "@number-flow/react": "^0.3.5",
+    "@radix-ui/react-dialog": "^1.1.2",
     "@solana/design-system": "^1.0.0",
     "@tanstack/query-async-storage-persister": "^5.97.0",
     "@tanstack/react-pacer": "^0.19.4",
