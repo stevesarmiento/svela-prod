@@ -4,10 +4,8 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import type { CoinMarketData } from "@/types/coins";
-import { useCoinGeckoQuotesBulk } from "@/hooks/use-coingecko-quotes";
-import type { CoinGeckoQuoteMarketData } from "@/lib/effect/coingecko-api";
 
-interface CoingeckoMarketRow {
+export interface ScreenerTopMarketRow {
   coingeckoId: string;
   symbol: string;
   name: string;
@@ -20,7 +18,7 @@ interface CoingeckoMarketRow {
   updatedAt?: number;
 }
 
-function isCoingeckoMarketRow(value: unknown): value is CoingeckoMarketRow {
+function isScreenerTopMarketRow(value: unknown): value is ScreenerTopMarketRow {
   if (typeof value !== "object" || value === null) return false;
   const record = value as Record<string, unknown>;
 
@@ -32,12 +30,36 @@ function isCoingeckoMarketRow(value: unknown): value is CoingeckoMarketRow {
   );
 }
 
-function toCoinMarketData(row: CoingeckoMarketRow, quote: CoinGeckoQuoteMarketData | undefined): CoinMarketData {
-  const price = quote?.current_price ?? row.currentPrice ?? 0;
-  const marketCap = quote?.market_cap ?? row.marketCap ?? 0;
-  const marketCapRank = quote?.market_cap_rank ?? row.marketCapRank ?? 0;
-  const totalVolume = quote?.total_volume ?? row.totalVolume ?? 0;
-  const change24h = quote?.price_change_percentage_24h ?? row.priceChangePercentage24h ?? 0;
+function normalizeTopMarketsLimit(limit: number) {
+  if (!Number.isFinite(limit)) return 500;
+  return Math.min(500, Math.max(1, Math.floor(limit)));
+}
+
+export function screenerTopMarketsQueryKey(limit = 500) {
+  return ["screener", "top-markets", String(normalizeTopMarketsLimit(limit))] as const;
+}
+
+export async function fetchScreenerTopMarkets(limit = 500): Promise<ScreenerTopMarketRow[]> {
+  const normalizedLimit = normalizeTopMarketsLimit(limit);
+  const response = await fetch(
+    `/api/internal/markets/top?limit=${encodeURIComponent(String(normalizedLimit))}`,
+  );
+  if (!response.ok) throw new Error(`Top markets error: ${response.status}`);
+
+  const json: unknown = await response.json();
+  if (!Array.isArray(json) || !json.every(isScreenerTopMarketRow)) {
+    throw new Error("Invalid top markets response");
+  }
+
+  return json;
+}
+
+function toCoinMarketData(row: ScreenerTopMarketRow): CoinMarketData {
+  const price = row.currentPrice ?? 0;
+  const marketCap = row.marketCap ?? 0;
+  const marketCapRank = row.marketCapRank ?? 0;
+  const totalVolume = row.totalVolume ?? 0;
+  const change24h = row.priceChangePercentage24h ?? 0;
 
   return {
     id: row.coingeckoId,
@@ -74,16 +96,8 @@ export function useScreenerTopMarkets(limit = 500): {
   error: Error | null;
 } {
   const query = useQuery({
-    queryKey: ["screener", "top-markets", String(limit)],
-    queryFn: async (): Promise<CoingeckoMarketRow[]> => {
-      const response = await fetch(`/api/internal/markets/top?limit=${encodeURIComponent(String(limit))}`);
-      if (!response.ok) throw new Error(`Top markets error: ${response.status}`);
-      const json: unknown = await response.json();
-      if (!Array.isArray(json) || !json.every(isCoingeckoMarketRow)) {
-        throw new Error("Invalid top markets response");
-      }
-      return json;
-    },
+    queryKey: screenerTopMarketsQueryKey(limit),
+    queryFn: async () => await fetchScreenerTopMarkets(limit),
     enabled: limit > 0,
     staleTime: 60 * 60 * 1000,
     refetchInterval: 60 * 60 * 1000,
@@ -91,39 +105,25 @@ export function useScreenerTopMarkets(limit = 500): {
     retry: 1,
   });
 
-  const coingeckoIds = useMemo(
-    () => (query.data ?? []).map((row) => row.coingeckoId).filter(Boolean),
-    [query.data],
-  );
-  const quotesQuery = useCoinGeckoQuotesBulk(coingeckoIds, {
-    // Screener tolerates partial quote maps — don't fast-poll to backfill missing IDs.
-    mode: "bestEffort",
-    refetchOnWindowFocus: false,
-  });
-
   const coins = useMemo(() => {
-    const quotesById = quotesQuery.data as Record<string, CoinGeckoQuoteMarketData> | undefined;
-    return (query.data ?? []).map((row) => toCoinMarketData(row, quotesById?.[row.coingeckoId]));
-  }, [query.data, quotesQuery.data]);
+    return (query.data ?? []).map((row) => toCoinMarketData(row));
+  }, [query.data]);
 
   const lastUpdatedAtMs = useMemo(() => {
-    const quotesById = quotesQuery.data as Record<string, CoinGeckoQuoteMarketData> | undefined;
     const ids = query.data ?? [];
     let max = 0;
     for (const row of ids) {
-      const q = quotesById?.[row.coingeckoId];
-      const ts = q?.last_updated ? Date.parse(q.last_updated) : row.updatedAt ?? 0;
+      const ts = row.updatedAt ?? 0;
       if (Number.isFinite(ts) && ts > max) max = ts;
     }
     return max > 0 ? max : null;
-  }, [query.data, quotesQuery.data]);
+  }, [query.data]);
 
   return {
     data: coins,
     lastUpdatedAtMs,
-    isLoading: query.isLoading || quotesQuery.isLoading,
-    isFetching: query.isFetching || quotesQuery.isFetching,
-    error: (query.error as Error | null) ?? (quotesQuery.error as Error | null) ?? null,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: (query.error as Error | null) ?? null,
   };
 }
-

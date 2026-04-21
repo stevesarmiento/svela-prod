@@ -3,9 +3,12 @@
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { SvelaLogo } from "@v1/ui/svela-logo";
+import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import { Button } from "@v1/ui/button";
+import { getUserDisplayName } from "@/lib/user-display";
 import { TopNavShell } from "./top-nav-shell";
 
 function loadTopNavProfileClient() {
@@ -136,6 +139,15 @@ function ProfileLauncherButton(props: {
   onIntent?: () => void;
   onClick?: () => void;
 }) {
+  const { user } = useUser();
+  const displayName = getUserDisplayName({
+    fullName: user?.fullName ?? undefined,
+    email: user?.primaryEmailAddress?.emailAddress ?? undefined,
+    walletAddress: user?.primaryWeb3Wallet?.web3Wallet ?? undefined,
+    fallback: "User",
+  });
+  const avatarUrl = user?.imageUrl;
+
   return (
     <Button
       variant="ghost"
@@ -146,15 +158,21 @@ function ProfileLauncherButton(props: {
       onClick={props.onClick}
       aria-label="Open profile"
     >
-      <div className="flex h-8 w-8 items-center justify-center rounded-md shadow-sm shadow-black/30 ring-1 ring-black/10 dark:ring-white/10 transition-all ease-in-out duration-150 bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
-        U
-      </div>
+      <Avatar className="h-8 w-8 rounded-md shadow-sm shadow-black/30 hover:ring-4 ring-1 ring-black/10 dark:ring-white/10 transition-all ease-in-out duration-150">
+        {avatarUrl ? (
+          <AvatarImage src={avatarUrl} alt={displayName} />
+        ) : null}
+        <AvatarFallback>
+          {displayName.slice(0, 2).toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
     </Button>
   );
 }
 
 export function TopNav() {
   const pathname = usePathname();
+  const { user, isLoaded } = useUser();
   const [hasHydrated, setHasHydrated] = useState(false);
   const [overviewGreeting, setOverviewGreeting] = useState<string | null>(null);
   const [shouldLoadProfile, setShouldLoadProfile] = useState(false);
@@ -172,6 +190,14 @@ export function TopNav() {
     cleanPath === "/overview" ||
     cleanPath.startsWith("/overview/");
   const staticGreeting = getStaticRouteGreeting(pathname);
+  const displayName = getUserDisplayName({
+    fullName: user?.fullName ?? undefined,
+    email: user?.primaryEmailAddress?.emailAddress ?? undefined,
+    walletAddress: user?.primaryWeb3Wallet?.web3Wallet ?? undefined,
+    fallback: "User",
+  });
+  const firstName = displayName.split(" ")[0] || displayName;
+  const showPersonalizedGreeting = hasHydrated && isLoaded && firstName;
 
   useEffect(() => {
     setHasHydrated(true);
@@ -209,18 +235,20 @@ export function TopNav() {
         </Link>
         <span className="text-xl font-diatype-bold text-zinc-950 dark:text-white">
           {isOverviewRoute
-            ? hasHydrated
-              ? overviewGreeting ?? "Good morning"
+            ? showPersonalizedGreeting
+              ? `${overviewGreeting ?? "Good morning"}, ${firstName}`
               : overviewGreeting ?? "Good morning"
             : staticGreeting ?? "Watchlist"}
         </span>
       </>
     );
   }, [
+    firstName,
     hasHydrated,
     isChartDetailPage,
     isOverviewRoute,
     overviewGreeting,
+    showPersonalizedGreeting,
     staticGreeting,
   ]);
 

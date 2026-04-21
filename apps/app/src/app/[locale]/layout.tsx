@@ -83,10 +83,8 @@ export const metadata: Metadata = {
 
 
 export const viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)" },
-    { media: "(prefers-color-scheme: dark)" },
-  ],
+  themeColor: "#09090b",
+  colorScheme: "dark" as const,
 };
 
 const DevRuntimeDiagnostics =
@@ -108,12 +106,12 @@ export default async function RootLayout({
 }>) {
   const { locale } = await params;
   return (
-    <html lang={locale} className="dark">
+    <html lang={locale} className="dark" data-theme="dark" style={{ colorScheme: "dark" }}>
       <head />
       <body
         className={cn(
           `${GeistSans.variable} ${GeistMono.variable} ${abcDiatype.variable} ${abcDiatypeMono.variable}`,
-          "antialiased",
+          "antialiased bg-zinc-950 text-white",
         )}
       >
         <Suspense fallback={null}>

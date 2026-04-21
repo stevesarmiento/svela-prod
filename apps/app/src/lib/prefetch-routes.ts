@@ -11,6 +11,10 @@ import {
   fetchCoinGeckoQuote,
 } from "@/hooks/use-coingecko-quotes"
 import { fetchCoinGeckoCombinedChartData } from "@/hooks/use-coingecko-chart-data"
+import {
+  fetchScreenerTopMarkets,
+  screenerTopMarketsQueryKey,
+} from "@/hooks/use-screener-top-markets"
 
 const DASHBOARD_PREFETCH_PATHS = new Set(["/overview", "/watchlists", "/screener"])
 
@@ -53,6 +57,23 @@ export function prefetchDashboardRoute(
   href: string,
 ) {
   void router.prefetch(href)
+}
+
+export async function prefetchScreenerRoute(args: {
+  router: Pick<AppRouterInstance, "prefetch">
+  queryClient: QueryClient
+  href?: string
+  limit?: number
+}) {
+  const href = args.href ?? "/screener"
+  const limit = args.limit ?? 500
+
+  void args.router.prefetch(href)
+  await args.queryClient.prefetchQuery({
+    queryKey: screenerTopMarketsQueryKey(limit),
+    queryFn: async () => await fetchScreenerTopMarkets(limit),
+    staleTime: 60 * 60 * 1000,
+  })
 }
 
 export async function prefetchChartRoute(args: {

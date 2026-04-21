@@ -59,6 +59,8 @@ interface AnalysisDialogProps {
   triggerAriaLabel?: string;
   /** Visible label when `triggerVariant` is `explain` (default: Analyze). */
   triggerLabel?: string;
+  /** Open immediately after mount; primarily for lazy-loaded trigger wrappers. */
+  defaultOpen?: boolean;
 }
 
 export function AnalysisDialog({
@@ -70,8 +72,9 @@ export function AnalysisDialog({
   showTriggerTooltip = true,
   triggerAriaLabel,
   triggerLabel = "Analyze",
+  defaultOpen = false,
 }: AnalysisDialogProps) {
-  const [isDialogOpen, setIsDialogOpen] = React.useState(false);
+  const [isDialogOpen, setIsDialogOpen] = React.useState(defaultOpen);
 
   // Preload heavy dialog chunks on user intent (hover/focus).
   const preloadDialogChunks = React.useCallback(() => {

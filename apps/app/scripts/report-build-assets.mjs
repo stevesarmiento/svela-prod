@@ -13,6 +13,7 @@ const routeBudgetsBytes = {
   "/[locale]/overview": 2.35 * 1024 * 1024,
   "/[locale]/charts/[id]": 2.10 * 1024 * 1024,
   "/[locale]/watchlists": 2.10 * 1024 * 1024,
+  "/[locale]/screener": 1.75 * 1024 * 1024,
 };
 const reportedRoutes = [
   "/[locale]",
