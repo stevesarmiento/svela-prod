@@ -22,7 +22,7 @@ async function staleWhileRevalidate(request, cacheName) {
 
   const network = fetch(request)
     .then((response) => {
-      if (response && response.ok) {
+      if (response?.ok) {
         void cache.put(request, response.clone());
       }
       return response;
@@ -38,7 +38,7 @@ async function cacheFirst(request, cacheName) {
   if (cached) return cached;
 
   const response = await fetch(request);
-  if (response && response.ok) {
+  if (response?.ok) {
     void cache.put(request, response.clone());
   }
   return response;

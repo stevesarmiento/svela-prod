@@ -3,7 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "sideEffects": false,
-  "files": ["postcss.config.js", "src/globals.css", "src/globals.app.css", "src/globals.shared.css"],
+  "files": [
+    "postcss.config.js",
+    "src/globals.css",
+    "src/globals.app.css",
+    "src/globals.shared.css"
+  ],
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "lint": "biome check .",

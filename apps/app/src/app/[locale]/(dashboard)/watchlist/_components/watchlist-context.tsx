@@ -19,7 +19,7 @@ import type {
   WatchlistGroup as WatchlistGroupModel,
   WatchlistItem as WatchlistItemModel,
 } from '@/lib/effect/watchlist-models'
-import { api } from '../../../../../../convex/_generated/api'
+import type { api } from '../../../../../../convex/_generated/api'
 import {
   useAddToWatchlistGroup,
   useRemoveBulkFromWatchlist,
