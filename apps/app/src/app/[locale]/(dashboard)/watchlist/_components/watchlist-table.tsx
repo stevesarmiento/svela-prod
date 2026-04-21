@@ -11,14 +11,14 @@ import { Spinner } from "@v1/ui/spinner"
 import { env } from "@/env.mjs"
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { AvatarCircles } from '@v1/ui/token-stacks'
-import { useWatchlistGroups, useWatchlistByGroup } from '@/lib/convex-hooks'
+import { useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import {
   useCoinGeckoWatchlistAggregateChartIsolated,
   getWatchlistAggregateRangeEndMs,
 } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
 import { useDeleteWatchlistGroup } from '@/lib/convex-hooks'
-import type { WatchlistGroup } from './watchlist-context'
+import { useWatchlist, type WatchlistGroup } from './watchlist-context'
 import { getTokenLogoURL } from '@/lib/logo-overrides'
 import { formatUsdPrice } from '@/lib/format-usd'
 import { IconTriangleFill } from "symbols-react"
@@ -482,6 +482,7 @@ function WatchlistCard({
 
 export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
   const deleteGroup = useDeleteWatchlistGroup()
+  const { watchlistGroups } = useWatchlist()
   const [removingWatchlists, setRemovingWatchlists] = useState<Set<WatchlistGroupId>>(
     new Set(),
   )
@@ -502,18 +503,14 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
     [],
   )
   
-  const watchlistGroupsData = useWatchlistGroups()
-  // TanStack Query generics can get lost across module boundaries in this file; keep this typed for build.
-  const typedWatchlistGroupsData = watchlistGroupsData as Array<WatchlistGroup> | undefined
-
   const rangeEndTimeMs = useMemo(
     () => getWatchlistAggregateRangeEndMs(activeTimeScale),
     [activeTimeScale],
   )
 
   const sortedWatchlistGroups = useMemo((): WatchlistGroup[] => {
-    if (!typedWatchlistGroupsData?.length) return []
-    const groups = typedWatchlistGroupsData.slice()
+    if (watchlistGroups.length === 0) return []
+    const groups = watchlistGroups.slice()
     groups.sort((a, b) => {
       const aReady = holdingsValueByGroupId.has(a._id)
       const bReady = holdingsValueByGroupId.has(b._id)
@@ -530,7 +527,7 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
       return 0
     })
     return groups
-  }, [typedWatchlistGroupsData, holdingsValueByGroupId])
+  }, [watchlistGroups, holdingsValueByGroupId])
 
   const handleRemove = async (watchlistId: WatchlistGroupId) => {
     setRemovingWatchlists(prev => new Set([...prev, watchlistId]))
@@ -558,7 +555,7 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
     })
   }
 
-  if (!typedWatchlistGroupsData?.length) {
+  if (watchlistGroups.length === 0) {
     return null
   }
 

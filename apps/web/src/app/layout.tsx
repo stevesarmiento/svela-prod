@@ -1,4 +1,4 @@
-import "@v1/ui/globals.css";
+import "./globals.css";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
 import { Provider as AnalyticsProvider } from "@v1/analytics/client";

@@ -19,8 +19,11 @@ import {
   IconTriangleFill,
 } from "symbols-react"
 import { AvatarCircles } from "@v1/ui/token-stacks"
-import { useCoinGeckoWatchlistAggregateChartIsolated } from "@/hooks/use-coingecko-watchlist-aggregate-chart-isolated"
 import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
+import {
+  getWatchlistAggregateRangeEndMs,
+  useCoinGeckoWatchlistAggregateChartIsolated,
+} from "@/hooks/use-coingecko-watchlist-aggregate-chart-isolated"
 import { getTokenLogoURL } from "@/lib/logo-overrides"
 
 // Loading shine CSS
@@ -90,6 +93,7 @@ interface WatchlistCardProps {
   group: WatchlistCardGroup
   coins: CoinGeckoWatchlistCoin[]
   isLoading?: boolean
+  itemCount?: number
   onEdit?: (group: WatchlistGroup) => void
   onDelete?: (group: WatchlistGroup) => void
   onSelect?: (group: WatchlistGroup) => void
@@ -103,6 +107,7 @@ export function WatchlistCard({
   group, 
   coins = [],
   isLoading = false,
+  itemCount,
   onEdit,
   onDelete,
   onSelect,
@@ -115,40 +120,25 @@ export function WatchlistCard({
   const displayName = nameOverride ?? group.name
   const displayIcon = iconOverride ?? group.icon
   const displayColor = colorOverride ?? group.color
+  const coinsCount = itemCount ?? coins.length
 
   // Calculate aggregate stats
   const stats = useMemo(() => {
     if (!coins.length) {
       return {
-        totalValue: 0,
-        averageChange: 0,
         positiveCount: 0,
         negativeCount: 0,
-        topPerformer: null,
-        worstPerformer: null
       }
     }
 
-    const totalValue = coins.reduce((sum, coin) => sum + coin.quote.USD.market_cap, 0)
-    const averageChange = coins.reduce((sum, coin) => sum + coin.quote.USD.percent_change_24h, 0) / coins.length
     const positiveCount = coins.filter(coin => coin.quote.USD.percent_change_24h > 0).length
     const negativeCount = coins.filter(coin => coin.quote.USD.percent_change_24h < 0).length
-    
-    const sortedByChange = [...coins].sort((a, b) => b.quote.USD.percent_change_24h - a.quote.USD.percent_change_24h)
-    const topPerformer = sortedByChange[0]
-    const worstPerformer = sortedByChange[sortedByChange.length - 1]
 
     return {
-      totalValue,
-      averageChange,
       positiveCount,
       negativeCount,
-      topPerformer,
-      worstPerformer
     }
   }, [coins])
-
-  const isPositive = stats.averageChange >= 0
 
   // Create avatar data for coin logos
   const avatarData = useMemo(() => {
@@ -165,32 +155,40 @@ export function WatchlistCard({
       .filter((item): item is { imageUrl: string; profileUrl: string } => item !== null)
   }, [coins])
 
-  // Get aggregate chart data - using isolated CoinGecko API calls  
-  const { aggregateData, isLoading: isChartLoading, performance } = useCoinGeckoWatchlistAggregateChartIsolated({
+  const rangeEndTimeMs = useMemo(() => getWatchlistAggregateRangeEndMs('1d'), [])
+  const {
+    aggregateData,
+    isLoading: isChartLoading,
+    isFetching: isChartFetching,
+    isPlaceholderData: isChartPlaceholder,
+    isChangeUnavailable,
+  } = useCoinGeckoWatchlistAggregateChartIsolated({
     coins,
-    timeScale: '1d'
+    timeScale: '1d',
+    rangeEndTimeMs,
   })
 
-  // Use the latest aggregate value so the displayed % matches the sparkline timeframe.
-  const latestAggregateChange = useMemo(() => {
-    return aggregateData[aggregateData.length - 1]?.value ?? 0
-  }, [aggregateData])
+  const isChartReady =
+    !isChangeUnavailable &&
+    !isChartPlaceholder &&
+    aggregateData.length > 0
+  const isChartPending =
+    coinsCount > 0 &&
+    !isChangeUnavailable &&
+    !isChartReady &&
+    (isChartLoading || isChartFetching || isChartPlaceholder)
 
-  const isAggregatePositive = latestAggregateChange >= 0
+  const latestAggregateChange = useMemo(() => {
+    if (!isChartReady) return null
+    return aggregateData[aggregateData.length - 1]?.value ?? null
+  }, [aggregateData, isChartReady])
+
+  const isAggregatePositive = (latestAggregateChange ?? 0) >= 0
 
   // Get color theme for this group
   const colorTheme = COLOR_THEMES[displayColor as keyof typeof COLOR_THEMES] || COLOR_THEMES.default
 
-  console.log('WatchlistCard chart data:', {
-    groupName: group.name,
-    coinsCount: coins.length,
-    aggregateDataLength: aggregateData.length,
-    isChartLoading,
-    isPositive,
-    sampleAggregateData: aggregateData.slice(0, 3)
-  })
-
-  const shouldShowLoadingState = isLoading || isChartLoading
+  const shouldShowLoadingState = coinsCount > 0 && (isLoading || isChartPending)
 
   return (
     <Card 
@@ -333,13 +331,9 @@ export function WatchlistCard({
           <div className="w-full">
             {shouldShowLoadingState ? (
               <div className="flex items-center justify-center h-full relative">
-                <div className="flex items-center gap-2 z-10 h-[70px]">
-                  <span className="text-white/50 text-xs sr-only">
-                    Cache: {performance.cacheHitRate.toFixed(0)}%
-                  </span>
-                </div>
+                <div className="h-[70px]" />
               </div>
-            ) : coins.length === 0 ? (
+            ) : coinsCount === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center text-sm text-white/60 mx-auto">
                   <span>To add tokens to this watchlist </span>
                   <div className="flex items-center gap-1">
@@ -357,26 +351,30 @@ export function WatchlistCard({
                 maskImage: 'linear-gradient(to right, transparent 0%, black 30%, black 100%)'
               }}
               >
-              <WatchlistAggregateChart
-                data={aggregateData}
-                isPositive={isAggregatePositive}
-                width={0}
-                height={70}
-              />
+                {isChartReady ? (
+                  <WatchlistAggregateChart
+                    data={aggregateData}
+                    isPositive={isAggregatePositive}
+                    width={0}
+                    height={70}
+                  />
+                ) : (
+                  <div className="h-[70px]" />
+                )}
               </div>
 
             )}
           </div>
           
           {/* Performance indicators - Only show if there are coins */}
-          {coins.length > 0 && (
+          {coinsCount > 0 && (
             <div className="flex items-end justify-between text-xs mt-4">            
               {/* Avatar circles */}
               {avatarData.length > 0 && (
                 <div className="flex items-center gap-2">
                   <AvatarCircles
                     avatarUrls={avatarData}
-                    numPeople={coins.length > 4 ? coins.length - 4 : 0}
+                    numPeople={coinsCount > 4 ? coinsCount - 4 : 0}
                     className=""
                   />
                 </div>
@@ -406,16 +404,22 @@ export function WatchlistCard({
                   "text-zinc-300", // default
                   isAggregatePositive ? "opacity-100" : "opacity-100"
                 )}>
-                  {isAggregatePositive ? "+" : "-"}
-                  <NumberFlow
-                    value={Math.abs(latestAggregateChange)}
-                    format={{ 
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2
-                    }}
-                    suffix="%"
-                    transformTiming={{ duration: 400, easing: 'ease-out' }}
-                  />
+                  {latestAggregateChange === null ? (
+                    <span>—</span>
+                  ) : (
+                    <>
+                      <span>{isAggregatePositive ? "+" : "-"}</span>
+                      <NumberFlow
+                        value={Math.abs(latestAggregateChange)}
+                        format={{ 
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2
+                        }}
+                        suffix="%"
+                        transformTiming={{ duration: 400, easing: 'ease-out' }}
+                      />
+                    </>
+                  )}
                 </div>
               </div>
             </div>

@@ -57,12 +57,48 @@ export const coingeckoQuoteQueryKeys = {
     ] as const,
 } as const
 
-const COINGECKO_QUOTES_QUERY_OPTIONS = {
+export const COINGECKO_QUOTES_QUERY_OPTIONS = {
   staleTime: 60 * 60 * 1000, // 1 hour
   refetchInterval: 60 * 60 * 1000, // 1 hour
   refetchOnWindowFocus: true,
   refetchIntervalInBackground: false,
 } as const
+
+function mergeQuoteMaps(args: {
+  stableIds: ReadonlyArray<string>
+  previous: Record<string, CoinGeckoQuoteMarketData> | undefined
+  incoming: Record<string, CoinGeckoQuoteMarketData>
+}): Record<string, CoinGeckoQuoteMarketData> {
+  const { stableIds, previous, incoming } = args
+  if (!previous) return incoming
+
+  let didMerge = false
+  const merged: Record<string, CoinGeckoQuoteMarketData> = { ...incoming }
+
+  for (const id of stableIds) {
+    const previousQuote = previous[id]
+    if (!previousQuote) continue
+
+    const incomingQuote = incoming[id]
+    if (!incomingQuote) {
+      merged[id] = previousQuote
+      didMerge = true
+      continue
+    }
+
+    const incomingSparklineLength = incomingQuote.sparkline7d?.length ?? 0
+    const previousSparklineLength = previousQuote.sparkline7d?.length ?? 0
+    if (incomingSparklineLength >= 2 || previousSparklineLength < 2) continue
+
+    merged[id] = {
+      ...incomingQuote,
+      sparkline7d: previousQuote.sparkline7d,
+    }
+    didMerge = true
+  }
+
+  return didMerge ? merged : incoming
+}
 
 function isSameQuote(a: CoinGeckoQuoteMarketData | undefined, b: CoinGeckoQuoteMarketData | undefined): boolean {
   if (!a || !b) return false
@@ -94,24 +130,29 @@ function formatCoinGeckoError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+export async function fetchCoinGeckoQuote(
+  coinId: string,
+): Promise<CoinGeckoQuoteMarketData | null> {
+  if (!coinId) return null
+
+  try {
+    const result = await runPromise(CoinGeckoApi.getQuotes({ ids: [coinId] }))
+    if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
+      throw new Error(result.status.error_message || "API error")
+    }
+    return result.data[coinId] ?? null
+  } catch (error) {
+    throw new Error(formatCoinGeckoError(error))
+  }
+}
+
 export function useCoinGeckoQuote(coinId: string | null | undefined) {
   const queryClient = useQueryClient()
 
   const query = useQuery<CoinGeckoQuoteMarketData | null, Error>({
     queryKey: coingeckoQuoteQueryKeys.single(coinId ?? ""),
-    queryFn: async (): Promise<CoinGeckoQuoteMarketData | null> => {
-      if (!coinId) return null
-
-      try {
-        const result = await runPromise(CoinGeckoApi.getQuotes({ ids: [coinId] }))
-        if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
-          throw new Error(result.status.error_message || "API error")
-        }
-        return result.data[coinId] ?? null
-      } catch (error) {
-        throw new Error(formatCoinGeckoError(error))
-      }
-    },
+    queryFn: async (): Promise<CoinGeckoQuoteMarketData | null> =>
+      await fetchCoinGeckoQuote(coinId ?? ""),
     enabled: !!coinId,
     retry: 1,
     ...COINGECKO_QUOTES_QUERY_OPTIONS,
@@ -165,9 +206,13 @@ export function useCoinGeckoQuotesBulk(
   }, [coingeckoIds])
 
   const stableIdsKey = useMemo(() => stableIds.join(","), [stableIds])
+  const bulkQueryKey = useMemo(
+    () => coingeckoQuoteQueryKeys.bulk(stableIdsKey),
+    [stableIdsKey],
+  )
 
   const query = useQuery<Record<string, CoinGeckoQuoteMarketData>, Error>({
-    queryKey: coingeckoQuoteQueryKeys.bulk(stableIdsKey),
+    queryKey: bulkQueryKey,
     queryFn: async (): Promise<Record<string, CoinGeckoQuoteMarketData>> => {
       if (!stableIds.length) return {}
 
@@ -176,7 +221,14 @@ export function useCoinGeckoQuotesBulk(
         if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
           throw new Error(result.status.error_message || "API error")
         }
-        return result.data
+        const previousData = queryClient.getQueryData<Record<string, CoinGeckoQuoteMarketData>>(
+          bulkQueryKey,
+        )
+        return mergeQuoteMaps({
+          stableIds,
+          previous: previousData,
+          incoming: result.data,
+        })
       } catch (error) {
         throw new Error(formatCoinGeckoError(error))
       }
@@ -244,7 +296,7 @@ export function useCoinGeckoQuotesBulk(
         return didChange ? next : old
       })
     }
-  }, [query.data, queryClient])
+  }, [query.data, queryClient, stableIdsKey])
 
   return query
 }

@@ -1,25 +1,23 @@
 'use client'
 
+import dynamic from "next/dynamic"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { SortingState } from "@tanstack/react-table"
 import { useQueryClient } from "@tanstack/react-query"
+import { RefreshCw } from "lucide-react"
 
 import { Spinner } from "@v1/ui/spinner"
 import { Button } from "@v1/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
-import { toast } from "sonner"
-import { RefreshCw } from "lucide-react"
 
-import { WatchlistAutoRefreshIndicator } from "../../watchlist/_components/watchlist-auto-refresh-indicator"
-import { WatchlistFilters } from "../../watchlist/_components/watchlist-filters"
-import { WatchlistEmptyState } from "../../watchlist/_components/watchlist-empty-states"
-import { WatchlistTableSection, type WatchlistTableStatus } from "../../watchlist/_components/watchlist-table-section"
 import type { FilterState } from "@/hooks/use-watchlist-data"
-import { useHybridCoinSearch } from "@/hooks/use-hybrid-coin-search"
 import { useScreenerTopMarkets } from "@/hooks/use-screener-top-markets"
 import { useSmartScreenerTakerMetrics } from "@/hooks/use-smart-screener-taker-metrics"
 import type { SmartScreenerScreenResponse } from "@/lib/smart-screener/screen-api"
 import type { CoinMarketData } from "@/types/coins"
+import { ScreenerFiltersBar } from "./screener-filters-bar"
+import type { ScreenerSearchQueryState } from "./screener-search-state-loader"
+import type { ScreenerTableStatus } from "./screener-table-types"
 
 const SCREENER_REFRESH_INTERVAL_MS = 60 * 60 * 1000
 const SCREENER_DEFAULT_LIMIT = 500
@@ -28,11 +26,107 @@ const SCREENER_DEFAULT_PRICE_MAX = 1_000_000
 const SCREENER_DEFAULT_MC_MAX = 10_000_000_000_000
 const SCREENER_DEFAULT_VOL_MAX = 1_000_000_000_000
 
+function notifyMessage(message: string, description: string) {
+  void import("sonner").then(({ toast }) => {
+    toast.message(message, { description })
+  })
+}
+
+function notifyError(message: string, description: string) {
+  void import("sonner").then(({ toast }) => {
+    toast.error(message, { description })
+  })
+}
+
+function loadScreenerSearchStateLoader() {
+  return import("./screener-search-state-loader")
+}
+
+function loadScreenerAutoRefreshIndicator() {
+  return import("./screener-auto-refresh-indicator")
+}
+
+function loadScreenerEmptyState() {
+  return import("./screener-empty-state")
+}
+
+function loadScreenerTableSection() {
+  return import("./screener-table-section")
+}
+
+const LazyScreenerSearchStateLoader = dynamic(
+  () =>
+    loadScreenerSearchStateLoader().then(
+      (module) => module.ScreenerSearchStateLoader,
+    ),
+  { ssr: false, loading: () => null },
+)
+
+const LazyScreenerAutoRefreshIndicator = dynamic(
+  () =>
+    loadScreenerAutoRefreshIndicator().then(
+      (module) => module.ScreenerAutoRefreshIndicator,
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex shrink-0 items-center gap-2">
+        <div className="flex items-center gap-2 rounded-md px-2 py-1">
+          <div className="flex flex-col items-end leading-tight">
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-primary/40">Refreshes in:</span>
+              <span className="text-[11px] tabular-nums text-primary/80">--:--</span>
+            </div>
+            <div className="hidden md:flex items-center gap-1">
+              <span className="text-[10px] text-primary/40">Last updated:</span>
+              <span className="text-[11px] tabular-nums text-primary/80">--</span>
+            </div>
+          </div>
+          <span className="size-7 rounded-full border border-primary/20" aria-hidden="true" />
+        </div>
+      </div>
+    ),
+  },
+)
+
+const LazyScreenerEmptyState = dynamic(
+  () => loadScreenerEmptyState().then((module) => module.ScreenerEmptyState),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="py-6 border border-dashed border-border rounded-lg">
+        <div className="flex flex-col items-center justify-center gap-3">
+          <div className="text-center">
+            <h3 className="font-medium">Loading…</h3>
+          </div>
+        </div>
+      </div>
+    ),
+  },
+)
+
+const LazyScreenerTableSection = dynamic(
+  () => loadScreenerTableSection().then((module) => module.ScreenerTableSection),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center py-8">
+        <Spinner size={24} />
+      </div>
+    ),
+  },
+)
+
 export function ScreenerPageView() {
   const [sorting, setSorting] = useState<SortingState>([])
-  const [smartScreenerStatus, setSmartScreenerStatus] = useState<WatchlistTableStatus | null>(null)
+  const [smartScreenerStatus, setSmartScreenerStatus] = useState<ScreenerTableStatus | null>(null)
   const [screenResult, setScreenResult] = useState<SmartScreenerScreenResponse | null>(null)
   const [isRefreshingData, setIsRefreshingData] = useState(false)
+  const [searchQueryState, setSearchQueryState] = useState<ScreenerSearchQueryState>({
+    data: [],
+    isLoading: false,
+    error: null,
+  })
   const queryClient = useQueryClient()
 
   const topMarketsQuery = useScreenerTopMarkets(SCREENER_DEFAULT_LIMIT)
@@ -52,24 +146,21 @@ export function ScreenerPageView() {
 
   const appliedSearch = filters.searchText.trim()
   const globalSearchText = screenResult ? "" : appliedSearch
-  const globalSearchQuery = useHybridCoinSearch(globalSearchText, { limit: 50 })
+  const globalSearchQuery = searchQueryState
 
-  const searchCoins = useMemo((): CoinMarketData[] => {
-    if (!globalSearchText) return []
-    return (globalSearchQuery.data ?? []).map((coin) => ({
-      id: coin.id,
-      name: coin.name,
-      symbol: coin.symbol,
-      slug: coin.id,
-      image: coin.image,
-      sparkline7d: undefined,
-      cmc_rank: coin.cmc_rank,
-      circulating_supply: 0,
-      max_supply: null,
-      quote: coin.quote,
-      fundingRate: null,
-    }))
-  }, [globalSearchQuery.data, globalSearchText])
+  useEffect(() => {
+    const preloadTableSection = () => {
+      void loadScreenerTableSection()
+    }
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(preloadTableSection)
+      return () => window.cancelIdleCallback?.(idleId)
+    }
+
+    const timeoutId = setTimeout(preloadTableSection, 0)
+    return () => clearTimeout(timeoutId)
+  }, [])
 
   const screenCoins = useMemo((): CoinMarketData[] => {
     const rows = screenResult?.rows ?? []
@@ -100,7 +191,16 @@ export function ScreenerPageView() {
     }))
   }, [screenResult])
 
-  const coins = screenResult ? screenCoins : globalSearchText ? searchCoins : topCoins
+  const coins = screenResult ? screenCoins : globalSearchText ? globalSearchQuery.data : topCoins
+
+  useEffect(() => {
+    if (globalSearchText) return
+    setSearchQueryState({
+      data: [],
+      isLoading: false,
+      error: null,
+    })
+  }, [globalSearchText])
 
   const takerSymbols = useMemo(() => {
     if (!filters.takerFilter) return []
@@ -114,7 +214,7 @@ export function ScreenerPageView() {
     enabled: Boolean(filters.takerFilter),
   })
 
-  const tableStatus = useMemo((): WatchlistTableStatus | null => {
+  const tableStatus = useMemo((): ScreenerTableStatus | null => {
     if (smartScreenerStatus) return smartScreenerStatus
     if (filters.takerFilter && takerMetricsQuery.isLoading) {
       return { kind: "loadingDerivatives", text: "Loading taker data…" }
@@ -256,15 +356,17 @@ export function ScreenerPageView() {
     const missing = takerMetricsQuery.counts.missing
 
     if (total > 0 && missing / total >= 0.5) {
-      toast.message("Taker data is warming up", {
-        description: "Some tokens don’t have taker data yet. Try again in a moment.",
-      })
+      notifyMessage(
+        "Taker data is warming up",
+        "Some tokens don’t have taker data yet. Try again in a moment.",
+      )
       return
     }
 
-    toast.error("No matches", {
-      description: "Try lowering thresholds (e.g. net buy > $1m) or switching timeframe.",
-    })
+    notifyError(
+      "No matches",
+      "Try lowering thresholds (e.g. net buy > $1m) or switching timeframe.",
+    )
   }, [
     appliedSearch,
     coins.length,
@@ -292,14 +394,6 @@ export function ScreenerPageView() {
     })
   }, [])
 
-  const selectedCoins = useMemo(() => new Set<string>(), [])
-  const removingCoins = useMemo(() => new Set<string>(), [])
-  const noopRemove = useCallback(async (_coinId: number | string) => {}, [])
-  const noopRemoveSelected = useCallback(async () => {}, [])
-  const noopCoinSelect = useCallback((_coinId: string, _selected: boolean) => {}, [])
-  const noopFiltersSelectAll = useCallback((_checked: boolean) => {}, [])
-  const noopTableSelectAll = useCallback((_checked: boolean, _coinIds?: string[]) => {}, [])
-
   if (topMarketsQuery.error) {
     // Keep consistent with existing UI: don't hard-crash the page for a transient quotes error.
     // The table/empty state below is still safe to render.
@@ -314,10 +408,17 @@ export function ScreenerPageView() {
 
   return (
     <div className="space-y-2 px-8 w-full">
+      {globalSearchText ? (
+        <LazyScreenerSearchStateLoader
+          query={globalSearchText}
+          limit={50}
+          onStateChange={setSearchQueryState}
+        />
+      ) : null}
+
       <div className="flex items-center justify-between gap-4 py-1">
         <div className="flex-1 min-w-0">
-          <WatchlistFilters
-            mode="screener"
+          <ScreenerFiltersBar
             searchText={filters.searchText}
             priceRange={filters.priceRange}
             marketCapRange={filters.marketCapRange}
@@ -325,11 +426,7 @@ export function ScreenerPageView() {
             changeFilter={filters.changeFilter}
             sortBy={filters.sortBy}
             sortOrder={filters.sortOrder}
-            watchlistGroupId={filters.watchlistGroupId}
-            watchlistGroupOptions={[]}
             takerFilter={filters.takerFilter}
-            selectedCoins={selectedCoins}
-            totalCoins={filteredCoins.length}
             onSearchTextChange={(value) => setFilters((prev) => ({ ...prev, searchText: value }))}
             onPriceRangeChange={(range) => setFilters((prev) => ({ ...prev, priceRange: range }))}
             onMarketCapRangeChange={(range) => setFilters((prev) => ({ ...prev, marketCapRange: range }))}
@@ -337,20 +434,15 @@ export function ScreenerPageView() {
             onChangeFilterChange={(value) => setFilters((prev) => ({ ...prev, changeFilter: value }))}
             onSortByChange={(value) => setFilters((prev) => ({ ...prev, sortBy: value }))}
             onSortOrderChange={(value) => setFilters((prev) => ({ ...prev, sortOrder: value }))}
-            onWatchlistGroupIdChange={() => setFilters((prev) => ({ ...prev, watchlistGroupId: null }))}
             onTakerFilterChange={(value) => setFilters((prev) => ({ ...prev, takerFilter: value }))}
             onClearAllFilters={handleClearAllFilters}
-            onSelectAll={noopFiltersSelectAll}
-            onRemoveSelected={noopRemoveSelected}
-            isRemoving={false}
-            align="left"
             onSmartScreenerStatusChange={setSmartScreenerStatus}
             smartScreenerSummary={screenResult?.summary ?? null}
             onSmartScreenerScreenResultChange={setScreenResult}
           />
         </div>
         <div className="flex items-center gap-2">
-          <WatchlistAutoRefreshIndicator
+          <LazyScreenerAutoRefreshIndicator
             status={{
               lastUpdatedAtMs: topMarketsQuery.lastUpdatedAtMs,
               refreshIntervalMs: SCREENER_REFRESH_INTERVAL_MS,
@@ -371,14 +463,15 @@ export function ScreenerPageView() {
                   try {
                     await Promise.all([
                       queryClient.invalidateQueries({ queryKey: ["screener"] }),
-                      queryClient.invalidateQueries({ queryKey: ["coingecko-quotes"] }),
+                      queryClient.invalidateQueries({ queryKey: ["smart-screener"] }),
                       queryClient.invalidateQueries({ queryKey: ["coingecko-inline-market-chart"] }),
                       queryClient.invalidateQueries({ queryKey: ["spotTakerBuySellVolumeHistory"] }),
                     ])
                   } catch (error) {
-                    toast.error("Refresh failed", {
-                      description: error instanceof Error ? error.message : "Failed to refresh screener data.",
-                    })
+                    notifyError(
+                      "Refresh failed",
+                      error instanceof Error ? error.message : "Failed to refresh screener data.",
+                    )
                   } finally {
                     setIsRefreshingData(false)
                   }
@@ -407,22 +500,14 @@ export function ScreenerPageView() {
             <Spinner size={24} />
           </div>
         ) : coins.length === 0 ? (
-          <WatchlistEmptyState type="no-coins" />
+          <LazyScreenerEmptyState type="no-coins" />
         ) : filteredCoins.length === 0 ? (
-          <WatchlistEmptyState type="no-filtered-coins" onClearFilters={handleClearAllFilters} />
+          <LazyScreenerEmptyState type="no-filtered-coins" onClearFilters={handleClearAllFilters} />
         ) : (
-          <WatchlistTableSection
+          <LazyScreenerTableSection
             coins={filteredCoins}
             sorting={sorting}
             onSortingChange={setSorting}
-            selectedCoins={selectedCoins}
-            watchlistGroup={null}
-            removingCoins={removingCoins}
-            hasSelectedCoins={false}
-            onRemove={noopRemove}
-            onCoinSelect={noopCoinSelect}
-            onSelectAll={noopTableSelectAll}
-            mode="screener"
             status={tableStatus}
             tokenHeaderCountBadge={tokenHeaderCountBadge}
           />
@@ -431,4 +516,3 @@ export function ScreenerPageView() {
     </div>
   )
 }
-

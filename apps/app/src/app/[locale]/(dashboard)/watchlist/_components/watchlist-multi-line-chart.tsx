@@ -6,12 +6,11 @@ import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
-import { useWatchlistGroups } from '@/lib/convex-hooks'
 import { useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useCoinGeckoWatchlistAggregateChartIsolated } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
 import { ChartLoadingSkeleton } from "@/components/charts/chart-loading-skeleton"
-import type { WatchlistGroup } from './watchlist-context'
+import { useWatchlist, type WatchlistGroup } from './watchlist-context'
 import { WatchlistMultiLineTimeScaleSelector } from "./watchlist-multi-line-time-scale-selector"
 import type { TooltipWatchlistDataRow, WatchlistSeries } from "./watchlist-multi-line.types"
 import { WatchlistMultiLineTooltipContent } from "./watchlist-multi-line-tooltip"
@@ -169,16 +168,13 @@ export function WatchlistMultiLineChart({
 }: WatchlistMultiLineChartProps) {
   const [hoveredWatchlist, setHoveredWatchlist] = useState<WatchlistGroupId | null>(null)
   const [watchlistData, setWatchlistData] = useState<Map<WatchlistGroupId, WatchlistSeries>>(new Map())
+  const { watchlistGroups: watchlistGroupsData } = useWatchlist()
   
   const isDarkMode = true
   
-  
-  const watchlistGroupsData = useWatchlistGroups() as WatchlistGroup[] | undefined
-  
   // Filter to only selected watchlists
   const activeWatchlists = useMemo(() => {
-    const groups = watchlistGroupsData || []
-    return groups.filter(group => selectedWatchlists.has(group._id))
+    return watchlistGroupsData.filter(group => selectedWatchlists.has(group._id))
   }, [watchlistGroupsData, selectedWatchlists])
 
   // Compute a single shared range end so ALL watchlists end together.

@@ -129,6 +129,64 @@ async function getCurrentUser(ctx: QueryCtx) {
   return user ?? null;
 }
 
+async function getOverviewHoldingsBreakdown(
+  ctx: QueryCtx,
+  userId: Id<"users">,
+): Promise<OverviewHoldingsGroupRow[]> {
+  const [groups, rows] = await Promise.all([
+    ctx.db
+      .query("watchlistGroups")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect(),
+    ctx.db
+      .query("watchlists")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .collect(),
+  ]);
+
+  const groupsById = new Map(groups.map((group) => [group._id, group] as const));
+  const holdingsByGroupId = new Map<Id<"watchlistGroups">, Map<string, number>>();
+
+  for (const row of rows) {
+    const holdings = row.holdings;
+    if (typeof holdings !== "number") continue;
+    if (!Number.isFinite(holdings) || holdings <= 0) continue;
+
+    const groupId = row.watchlistGroupId;
+    if (!groupsById.has(groupId)) continue;
+
+    const byCoin = holdingsByGroupId.get(groupId) ?? new Map<string, number>();
+    byCoin.set(row.coinId, (byCoin.get(row.coinId) ?? 0) + holdings);
+    holdingsByGroupId.set(groupId, byCoin);
+  }
+
+  const result = Array.from(holdingsByGroupId.entries())
+    .map(([groupId, byCoin]) => {
+      const group = groupsById.get(groupId);
+      if (!group) return null;
+
+      const positions = Array.from(byCoin.entries())
+        .map(([coinId, coinHoldings]) => ({ coinId, holdings: coinHoldings }))
+        .sort((a, b) => a.coinId.localeCompare(b.coinId));
+
+      const totalHoldings = positions.reduce((sum, row) => sum + row.holdings, 0);
+
+      return {
+        group,
+        positions,
+        totalHoldings,
+        coinsWithHoldings: positions.length,
+      };
+    })
+    .filter(
+      (row): row is NonNullable<typeof row> =>
+        row !== null && row.positions.length > 0,
+    );
+
+  result.sort((a, b) => a.group.name.localeCompare(b.group.name));
+  return result;
+}
+
 const windowValidator = v.union(v.literal("24h"), v.literal("7d"));
 
 const overviewStatusValidator = v.union(
@@ -136,6 +194,31 @@ const overviewStatusValidator = v.union(
   v.literal("fresh"),
   v.literal("stale"),
 );
+
+const overviewHoldingsGroupValidator = v.object({
+  group: v.object({
+    _id: v.id("watchlistGroups"),
+    _creationTime: v.number(),
+    userId: v.id("users"),
+    name: v.string(),
+    slug: v.string(),
+    description: v.optional(v.string()),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
+    portfolioWalletId: v.optional(v.id("portfolioWallets")),
+    isDefault: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }),
+  positions: v.array(
+    v.object({
+      coinId: v.string(),
+      holdings: v.number(),
+    }),
+  ),
+  totalHoldings: v.number(),
+  coinsWithHoldings: v.number(),
+});
 
 const moverRowValidator = v.object({
   coingeckoId: v.string(),
@@ -450,11 +533,35 @@ type DailyBriefCache = {
   } | null;
 };
 
+type OverviewHoldingsGroupRow = {
+  group: {
+    _id: Id<"watchlistGroups">;
+    _creationTime: number;
+    userId: Id<"users">;
+    name: string;
+    slug: string;
+    description?: string;
+    icon?: string;
+    color?: string;
+    portfolioWalletId?: Id<"portfolioWallets">;
+    isDefault: boolean;
+    createdAt: number;
+    updatedAt: number;
+  };
+  positions: Array<{
+    coinId: string;
+    holdings: number;
+  }>;
+  totalHoldings: number;
+  coinsWithHoldings: number;
+};
+
 type OverviewBootstrap = {
   status: "missing" | "fresh" | "stale";
   generatedAt: number | null;
   watchlistCoinCount: number;
   limited: boolean;
+  holdingsBreakdown: OverviewHoldingsGroupRow[];
   movers24h: MoversSnapshot;
   movers7d: MoversSnapshot;
   events: EventsSnapshot;
@@ -1165,6 +1272,7 @@ export const getMyOverviewBootstrap = query({
     generatedAt: v.union(v.number(), v.null()),
     watchlistCoinCount: v.number(),
     limited: v.boolean(),
+    holdingsBreakdown: v.array(overviewHoldingsGroupValidator),
     movers24h: moversSnapshotValidator,
     movers7d: moversSnapshotValidator,
     events: eventsSnapshotValidator,
@@ -1180,6 +1288,23 @@ export const getMyOverviewBootstrap = query({
         generatedAt: null,
         watchlistCoinCount: 0,
         limited: false,
+        holdingsBreakdown: [],
+        movers24h: emptyMoversSnapshot(now),
+        movers7d: emptyMoversSnapshot(now),
+        events: emptyEventsSnapshot(now),
+        brief24h: emptyBriefCache(),
+        brief7d: emptyBriefCache(),
+      };
+    }
+
+    const user = await getCurrentUser(ctx);
+    if (!user) {
+      return {
+        status: "missing",
+        generatedAt: null,
+        watchlistCoinCount: 0,
+        limited: false,
+        holdingsBreakdown: [],
         movers24h: emptyMoversSnapshot(now),
         movers7d: emptyMoversSnapshot(now),
         events: emptyEventsSnapshot(now),
@@ -1204,9 +1329,10 @@ export const getMyOverviewBootstrap = query({
 
     const brief24hKey = buildDailyBriefCacheKey({ clerkId: identity.subject, window: "24h" });
     const brief7dKey = buildDailyBriefCacheKey({ clerkId: identity.subject, window: "7d" });
-    const [brief24hRow, brief7dRow] = await Promise.all([
+    const [brief24hRow, brief7dRow, holdingsBreakdown] = await Promise.all([
       ctx.db.query("apiCache").withIndex("by_key", (q) => q.eq("cacheKey", brief24hKey)).first(),
       ctx.db.query("apiCache").withIndex("by_key", (q) => q.eq("cacheKey", brief7dKey)).first(),
+      getOverviewHoldingsBreakdown(ctx, user._id),
     ]);
 
     const brief24h = brief24hRow
@@ -1236,6 +1362,7 @@ export const getMyOverviewBootstrap = query({
       generatedAt,
       watchlistCoinCount,
       limited,
+      holdingsBreakdown,
       movers24h,
       movers7d,
       events,

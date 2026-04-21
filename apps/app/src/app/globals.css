@@ -1,3 +1,2 @@
-/* Single Tailwind v4 entry: shared UI tokens + Solana DS (tabs, etc.) in one graph. */
-@import "@v1/ui/globals.css";
+@import "@v1/ui/globals.app.css";
 @import "@solana/design-system/styles";

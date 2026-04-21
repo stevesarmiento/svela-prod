@@ -59,6 +59,21 @@ async function markOverviewSnapshotStale(ctx: MutationCtx, clerkId: string) {
   }
 }
 
+async function listWatchlistGroupsForUser(ctx: QueryCtx, userId: Id<"users">) {
+  return await ctx.db
+    .query("watchlistGroups")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .order("desc")
+    .collect();
+}
+
+async function getDefaultWatchlistGroupForUser(ctx: QueryCtx, userId: Id<"users">) {
+  return await ctx.db
+    .query("watchlistGroups")
+    .withIndex("by_user_default", (q) => q.eq("userId", userId).eq("isDefault", true))
+    .first();
+}
+
 // Watchlist Group functions
 export const getWatchlistGroups = query({
   args: { serverToken: v.string(), clerkId: v.string() },
@@ -1502,6 +1517,79 @@ export const getMyWatchlistBootstrap = query({
       defaultGroup: defaultGroup ?? null,
       defaultItems,
       allCoinIds,
+    };
+  },
+});
+
+export const getMyWatchlistNavBootstrap = query({
+  args: {},
+  returns: v.object({
+    groups: v.array(watchlistGroupValidator),
+    defaultGroup: v.union(watchlistGroupValidator, v.null()),
+  }),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) {
+      return {
+        groups: [],
+        defaultGroup: null,
+      };
+    }
+
+    const [groups, defaultGroup] = await Promise.all([
+      listWatchlistGroupsForUser(ctx, user._id),
+      getDefaultWatchlistGroupForUser(ctx, user._id),
+    ]);
+
+    return {
+      groups,
+      defaultGroup: defaultGroup ?? null,
+    };
+  },
+});
+
+export const getMyWatchlistsPageBootstrap = query({
+  args: {},
+  returns: v.object({
+    groups: v.array(watchlistGroupValidator),
+    defaultGroup: v.union(watchlistGroupValidator, v.null()),
+    itemsByGroupId: v.record(v.string(), v.array(watchlistItemValidator)),
+  }),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    if (!user) {
+      return {
+        groups: [],
+        defaultGroup: null,
+        itemsByGroupId: {},
+      };
+    }
+
+    const [groups, defaultGroup, items] = await Promise.all([
+      listWatchlistGroupsForUser(ctx, user._id),
+      getDefaultWatchlistGroupForUser(ctx, user._id),
+      ctx.db
+        .query("watchlists")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect(),
+    ]);
+
+    const itemsByGroupId: Record<string, Array<(typeof items)[number]>> = {};
+    for (const group of groups) {
+      itemsByGroupId[group._id] = [];
+    }
+    for (const item of items) {
+      const groupId = item.watchlistGroupId;
+      if (!itemsByGroupId[groupId]) {
+        itemsByGroupId[groupId] = [];
+      }
+      itemsByGroupId[groupId]!.push(item);
+    }
+
+    return {
+      groups,
+      defaultGroup: defaultGroup ?? null,
+      itemsByGroupId,
     };
   },
 });

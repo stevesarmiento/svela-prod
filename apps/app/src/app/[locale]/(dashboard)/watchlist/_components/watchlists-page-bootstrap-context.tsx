@@ -1,0 +1,118 @@
+'use client'
+
+import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import type { Preloaded } from 'convex/react'
+import { usePreloadedQuery } from 'convex/react'
+import { useCoinGeckoQuotesBulk } from '@/hooks/use-coingecko-quotes'
+import {
+  buildCoinGeckoWatchlistCoin,
+  type CoinGeckoWatchlistCoin,
+} from '@/hooks/use-coingecko-watchlist-coins'
+import type { api } from '../../../../../../convex/_generated/api'
+import type { SelectedWatchlistItemRow, WatchlistGroup } from './watchlist-context'
+
+interface WatchlistsPageBootstrapValue {
+  groups: WatchlistGroup[]
+  defaultGroup: WatchlistGroup | null
+  itemsByGroupId: Record<string, SelectedWatchlistItemRow[]>
+}
+
+export interface WatchlistsOverviewEntry {
+  group: WatchlistGroup
+  items: SelectedWatchlistItemRow[]
+  coins: CoinGeckoWatchlistCoin[]
+}
+
+const WatchlistsPageBootstrapContext =
+  createContext<WatchlistsPageBootstrapValue | null>(null)
+
+function normalizeItemsByGroupId(
+  input: Record<string, Array<{ coinId: string; holdings?: number }>>,
+): Record<string, SelectedWatchlistItemRow[]> {
+  const out: Record<string, SelectedWatchlistItemRow[]> = {}
+  for (const [groupId, items] of Object.entries(input)) {
+    out[groupId] = items.map((item) => ({
+      coinId: item.coinId,
+      ...(item.holdings !== undefined ? { holdings: item.holdings } : {}),
+    }))
+  }
+  return out
+}
+
+export function WatchlistsPageBootstrapProvider(props: {
+  children: ReactNode
+  preloadedBootstrap: Preloaded<typeof api.watchlists.getMyWatchlistsPageBootstrap>
+}) {
+  const bootstrap = usePreloadedQuery(props.preloadedBootstrap)
+
+  const value = useMemo<WatchlistsPageBootstrapValue>(
+    () => ({
+      groups: bootstrap.groups,
+      defaultGroup: bootstrap.defaultGroup,
+      itemsByGroupId: normalizeItemsByGroupId(bootstrap.itemsByGroupId),
+    }),
+    [bootstrap],
+  )
+
+  return (
+    <WatchlistsPageBootstrapContext.Provider value={value}>
+      {props.children}
+    </WatchlistsPageBootstrapContext.Provider>
+  )
+}
+
+export function useOptionalWatchlistsPageBootstrap() {
+  return useContext(WatchlistsPageBootstrapContext)
+}
+
+export function useWatchlistsPageBootstrap() {
+  const context = useOptionalWatchlistsPageBootstrap()
+  if (!context) {
+    throw new Error(
+      'useWatchlistsPageBootstrap must be used within a WatchlistsPageBootstrapProvider',
+    )
+  }
+  return context
+}
+
+export function useWatchlistsOverviewData() {
+  const bootstrap = useWatchlistsPageBootstrap()
+
+  const stableCoinIds = useMemo(() => {
+    const ids = Object.values(bootstrap.itemsByGroupId).flatMap((items) =>
+      items.map((item) => item.coinId),
+    )
+    const unique = Array.from(new Set(ids)).filter((id) => id.length > 0)
+    unique.sort()
+    return unique
+  }, [bootstrap.itemsByGroupId])
+
+  const quotesQuery = useCoinGeckoQuotesBulk(stableCoinIds)
+
+  const overviewByGroupId = useMemo(() => {
+    const quotesById = quotesQuery.data ?? {}
+    const out = new Map<string, WatchlistsOverviewEntry>()
+
+    for (const group of bootstrap.groups) {
+      const items = bootstrap.itemsByGroupId[group._id] ?? []
+      const coins = items.map((item) =>
+        buildCoinGeckoWatchlistCoin(item.coinId, quotesById[item.coinId]),
+      )
+
+      out.set(group._id, {
+        group,
+        items,
+        coins,
+      })
+    }
+
+    return out
+  }, [bootstrap.groups, bootstrap.itemsByGroupId, quotesQuery.data])
+
+  return {
+    ...bootstrap,
+    overviewByGroupId,
+    isLoading: quotesQuery.isLoading,
+    isFetching: quotesQuery.isFetching,
+  }
+}

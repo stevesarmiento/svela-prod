@@ -90,7 +90,7 @@ export function BottomNav() {
               isOpen={isCommandOpen}
               setIsOpen={handleCloseCommand}
               onCommandSelect={handleCommandSelect}
-              context={commandContext}
+              context={commandContext ?? undefined}
             />
           </div>
         ) : null}
