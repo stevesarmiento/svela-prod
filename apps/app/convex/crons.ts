@@ -14,9 +14,9 @@ crons.interval(
 // Refresh market quotes for tracked coins (watchlists + portfolios).
 crons.interval(
   "coingecko_refresh_tracked_markets",
-  { hours: 1 },
+  { minutes: 5 },
   internal.coingeckoJobs.refreshTrackedMarketsBatch,
-  { batchSize: 250 },
+  { batchSize: 500 },
 );
 
 // CoinGecko news (cached in DB; rotating batches).
@@ -58,9 +58,9 @@ crons.interval(
 
 crons.interval(
   "coingecko_refresh_market_chart_1d",
-  { hours: 1 },
+  { minutes: 5 },
   internal.coingeckoJobs.refreshTrackedMarketChartBatch,
-  { days: "1", batchSize: 15 },
+  { days: "1", batchSize: 30 },
 );
 
 crons.interval(
@@ -72,9 +72,9 @@ crons.interval(
 
 crons.interval(
   "coingecko_refresh_market_chart_14d",
-  { hours: 1 },
+  { minutes: 15 },
   internal.coingeckoJobs.refreshTrackedMarketChartBatch,
-  { days: "14", batchSize: 12 },
+  { days: "14", batchSize: 24 },
 );
 
 crons.interval(
@@ -122,9 +122,9 @@ crons.interval(
 // OHLC refresh (used by technical analysis & tooltips).
 crons.interval(
   "coingecko_refresh_ohlc_1",
-  { hours: 4 },
+  { minutes: 15 },
   internal.coingeckoJobs.refreshTrackedOhlcBatch,
-  { days: "1", batchSize: 4 },
+  { days: "1", batchSize: 8 },
 );
 
 crons.interval(

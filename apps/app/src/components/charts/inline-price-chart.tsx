@@ -114,7 +114,12 @@ function useInlineMarketChartSeries(args: {
 
   return useQuery({
     queryKey: ["coingecko-inline-market-chart", args.coingeckoId, args.timeScale],
-    queryFn: async (): Promise<{ points: Array<{ time: number; value: number }>; cached: boolean }> => {
+    queryFn: async (): Promise<{
+      points: Array<{ time: number; value: number }>
+      cached: boolean
+      stale: boolean
+      warmupRequested: boolean
+    }> => {
       const swallowToNull = (_: unknown) => Effect.succeed(null)
 
       const result = await runPromise(
@@ -136,7 +141,12 @@ function useInlineMarketChartSeries(args: {
 
       const prices = result?.data?.prices
       if (!Array.isArray(prices) || prices.length === 0) {
-        return { points: [], cached: false }
+        return {
+          points: [],
+          cached: result?.status?.cached ?? false,
+          stale: result?.status?.stale ?? true,
+          warmupRequested: result?.status?.warmupRequested ?? true,
+        }
       }
 
       // De-dupe + ensure strict ascending time ordering.
@@ -152,14 +162,24 @@ function useInlineMarketChartSeries(args: {
         .sort(([a], [b]) => a - b)
         .map(([time, value]) => ({ time, value }))
 
-      return { points, cached: result?.status?.cached ?? false }
+      return {
+        points,
+        cached: result?.status?.cached ?? false,
+        stale: result?.status?.stale ?? false,
+        warmupRequested: result?.status?.warmupRequested ?? false,
+      }
     },
-    // Inline trails should be "mostly stable" and follow the app-wide hourly cadence.
-    staleTime: 60 * 60 * 1000,
-    refetchInterval: 60 * 60 * 1000,
+    staleTime: 30 * 1000,
+    refetchInterval: (query) => {
+      const data = query.state.data
+      if (!data || data.warmupRequested || data.stale || data.points.length < 2) {
+        return 15 * 1000
+      }
+      return 5 * 60 * 1000
+    },
     enabled: (args.enabled ?? true) && args.coingeckoId.length > 0,
     retry: 1,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   })
 }
 

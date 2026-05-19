@@ -37,14 +37,14 @@ const CHUNK_SIZE = 4096;
 const MAX_CHUNKS = 6;
 
 function getStaleWindowMs(timeframe: string): number {
+  const isOhlc = timeframe.endsWith("_ohlc");
   const base = timeframe.replace(/_ohlc$/, "");
-  // Stale windows are tuned to our cron cadence:
-  // - Quotes/charts: ~hourly
-  // - Medium windows: ~4h
-  // - Long windows / OHLC: ~daily
-  if (base === "1") return 60 * 60 * 1000;
+  // Stale windows are tuned to cron cadence. Keep 1d chart surfaces warm because
+  // watchlist cards and the default chart view depend on this range.
+  if (isOhlc && base === "1") return 15 * 60 * 1000;
+  if (base === "1") return 10 * 60 * 1000;
   if (base === "7") return 60 * 60 * 1000;
-  if (base === "14") return 60 * 60 * 1000;
+  if (base === "14") return 30 * 60 * 1000;
   if (base === "30") return 4 * 60 * 60 * 1000;
   if (base === "90") return 4 * 60 * 60 * 1000;
   if (base === "365") return 24 * 60 * 60 * 1000;

@@ -29,13 +29,12 @@ interface ProvidersProps {
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const PERSISTED_QUERY_CACHE_VERSION = "v2";
 
 function shouldPersistQuery(query: Query): boolean {
   if (query.state.status !== "success") return false;
   const key0 = query.queryKey[0];
   if (key0 === "watchlists") return true;
-  if (key0 === "coingecko-quotes") return true;
-  if (key0 === "coingecko-quote") return true;
   return false;
 }
 
@@ -60,7 +59,7 @@ function PersistedQueryProvider({ children }: ProvidersProps) {
     const storage = typeof window !== "undefined" ? window.localStorage : undefined;
     return createAsyncStoragePersister({
       storage,
-      key: `REACT_QUERY_OFFLINE_CACHE:${userId}`,
+      key: `REACT_QUERY_OFFLINE_CACHE:${PERSISTED_QUERY_CACHE_VERSION}:${userId}`,
     });
   }, [userId]);
 

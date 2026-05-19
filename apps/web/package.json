@@ -16,7 +16,7 @@
     "@v1/analytics": "workspace:*",
     "@v1/ui": "workspace:*",
     "geist": "^1.7.0",
-    "next": "^16.2.3",
+    "next": "^16.2.5",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "usehooks-ts": "^3.1.0"

@@ -14,6 +14,7 @@ import React from "react";
 
 import { useAnalysisData } from "@/hooks/use-analysis-data";
 import { getAlignedPriceFromChartPoints } from "@/lib/aligned-price";
+import { getTokenLogoURL } from "@/lib/logo-overrides";
 import { ScrollArea } from "@v1/ui/scroll-area";
 import Image from "next/image";
 import { IconBookPages, IconSparkles, IconTextAppend } from "symbols-react";
@@ -222,6 +223,22 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
     };
   }, [marketData, chartData]);
 
+  const logoSrc = React.useMemo(() => {
+    const symbol = tokenData?.symbol ?? marketData?.symbol;
+    const fallbackLogoUrl = tokenData?.logoUrl ?? marketData?.image;
+    const resolvedLogoUrl = getTokenLogoURL(symbol, fallbackLogoUrl);
+
+    if (
+      resolvedLogoUrl?.startsWith("http://") ||
+      resolvedLogoUrl?.startsWith("https://") ||
+      resolvedLogoUrl?.startsWith("/")
+    ) {
+      return resolvedLogoUrl;
+    }
+
+    return "/favicon.ico";
+  }, [marketData?.image, marketData?.symbol, tokenData?.logoUrl, tokenData?.symbol]);
+
   return (
     <div className="relative">
       {/* Header */}
@@ -230,10 +247,7 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
           <div className="flex items-center">
             <div className="flex items-center gap-4 pt-3 pl-4">
               <Image
-                src={
-                  tokenData?.logoUrl ||
-                  "https://assets.coingecko.com/coins/images/1/standard/bitcoin.png"
-                }
+                src={logoSrc}
                 alt={tokenData?.name || marketData?.name || "Token"}
                 className="w-8 h-8 rounded-full ring-1 ring-gray-200 dark:ring-white/10"
                 width={32}

@@ -249,8 +249,8 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
       }
     },
     enabled: historicalQueryEnabled,
-    staleTime: 60 * 60 * 1000, // 1 hour
-    refetchInterval: 60 * 60 * 1000, // 1 hour
+    staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
     placeholderData: keepPreviousData,
   })
 

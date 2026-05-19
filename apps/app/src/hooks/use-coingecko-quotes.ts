@@ -58,8 +58,8 @@ export const coingeckoQuoteQueryKeys = {
 } as const
 
 export const COINGECKO_QUOTES_QUERY_OPTIONS = {
-  staleTime: 60 * 60 * 1000, // 1 hour
-  refetchInterval: 60 * 60 * 1000, // 1 hour
+  staleTime: 30 * 1000,
+  refetchInterval: 5 * 60 * 1000,
   refetchOnWindowFocus: true,
   refetchIntervalInBackground: false,
 } as const
