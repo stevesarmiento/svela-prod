@@ -101,7 +101,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
                 }`}
               >
                 <item.icon
-                  className={`size-4.5 ${
+                  className={`size-5 ${
                     isActive
                       ? "fill-white"
                       : "fill-gray-500 group-hover:fill-gray-900 dark:fill-white/40 dark:group-hover:fill-white"
