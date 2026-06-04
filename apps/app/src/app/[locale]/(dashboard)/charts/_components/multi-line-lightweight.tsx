@@ -7,7 +7,17 @@ import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import type { CoinMarketData } from '@/types/coins'
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
 import { cn } from "@v1/ui/cn";
+import { useMediaQuery } from "@v1/ui/hooks"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@v1/ui/dropdown-menu"
 import { IconXmarkCircleFill, IconPlus } from 'symbols-react'
+import { ChevronDown } from "lucide-react"
 import { toast } from "@v1/ui/use-toast"
 import Link from 'next/link'
 import { useBottomNav } from '@/components/navigation/bottom-nav-context'
@@ -105,7 +115,10 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   
   // Use isomorphic theme hook - eliminates hydration mismatch
   const { isDarkMode } = useIsomorphicTheme()
+  const isCompactLayout = useMediaQuery("(max-width: 767px)")
+  const isMediumLayout = useMediaQuery("(max-width: 1023px)")
   
+  const chartHeight = isCompactLayout ? 280 : isMediumLayout ? 340 : 400
   
   // Use the bottom nav context to trigger contextual command search
   const { openContextualCommandSearch } = useBottomNav()
@@ -165,6 +178,31 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
     setHoveredRemoveId(coinId)
   }, [])
 
+  const handleRemoveCoin = useCallback(
+    async (coin: OptimisticCoinMarketData) => {
+      try {
+        if (selectedGroup) {
+          await removeFromSelectedGroup(coin.id.toString())
+        } else {
+          await removeFromWatchlist(coin.id.toString())
+        }
+
+        const targetName = selectedGroup ? selectedGroup.name : "watchlist"
+        toast({
+          title: "Removed",
+          description: `${coin.name} removed from ${targetName}`,
+        })
+      } catch {
+        toast({
+          title: "Error",
+          description: "Failed to remove from watchlist",
+          variant: "destructive",
+        })
+      }
+    },
+    [removeFromSelectedGroup, removeFromWatchlist, selectedGroup],
+  )
+
   // Create avatar data for coin logos (filter out optimistic coins) - using deferred coins
   const avatarData = useMemo(() => {
     return deferredCoins
@@ -200,6 +238,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
         const color = isDimmed ? addOpacityToColor(row.color, 0.25) : row.color
 
         const latestPctText = `${latestValue > 0 ? "+" : ""}${latestValue.toFixed(2)}%`
+        const compactLabel = row.symbol.toUpperCase()
 
         return {
           id: row.id,
@@ -207,11 +246,11 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
           value: latestValue,
           color,
           // Render the latest % directly on the line endpoint.
-          label: `${row.symbol.toUpperCase()} ${latestPctText}`,
+          label: isCompactLayout ? compactLabel : `${compactLabel} ${latestPctText}`,
         }
       })
       .filter((row): row is LivelineSeries => row !== null)
-  }, [coinSeriesWithColors, hoveredCoin])
+  }, [coinSeriesWithColors, hoveredCoin, isCompactLayout])
 
   const tooltipSeries = useMemo(() => {
     return coinSeriesWithColors
@@ -392,23 +431,87 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   // Always show the main UI structure
   return (
     <div className={cn(
-      "grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/50 border-zinc-800/10 overflow-hidden p-1",
+      "grid grid-cols-1 gap-1 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/50 border-zinc-800/10 overflow-hidden p-1 lg:grid-cols-12 lg:gap-0",
       showPending && "opacity-60 transition-opacity duration-200"
     )}>
       {/* Legend */}
-      <div className="flex flex-col col-span-3 p-3 pt-2 space-y-2">   
-        <div className="flex flex-row items-center justify-between gap-2 mb-3"> 
+      <div className="col-span-1 flex min-w-0 flex-col p-2 space-y-2 lg:col-span-3 lg:p-3 lg:pt-2">
+        <div className="flex items-center gap-2 lg:hidden">
           <Button
             variant="outline"
             onClick={() => openContextualCommandSearch('charts')}
-            className="group w-full border-zinc-800/50 dark:hover:border-zinc-800 bg-transparent hover:bg-transparent flex items-center gap-2 justify-between p-3 rounded-lg"
+            className="group flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border-zinc-800/50 bg-transparent p-3 hover:bg-transparent dark:hover:border-zinc-800"
           >
-            <span className="text-muted-foreground font-normal text-sm group-hover:text-primary">Add to comparison</span>
+            <span className="truncate text-sm font-normal text-muted-foreground group-hover:text-primary">Add to comparison</span>
             <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
           </Button>
-        </div> 
-        
-        <div className="flex flex-col gap-2 p-3 space-y-3">
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                aria-label="Manage comparison tokens"
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border-zinc-800/50 bg-transparent px-3 text-sm font-normal text-muted-foreground hover:bg-transparent hover:text-primary dark:hover:border-zinc-800"
+              >
+                Tokens
+                <ChevronDown className="size-3.5" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="max-h-[min(70dvh,24rem)] w-72 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-xl border-zinc-800/10 p-1.5 dark:border-zinc-800/60"
+            >
+              <DropdownMenuLabel className="px-2 py-1 text-xs font-medium text-muted-foreground">
+                Remove from chart
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {coins.map((coin) => {
+                const realCoin = latestValuesById.get(coin.id.toString())
+                const color = realCoin?.color ?? "currentColor"
+
+                return (
+                  <DropdownMenuItem
+                    key={coin.id}
+                    disabled={coin.isOptimistic}
+                    onSelect={() => {
+                      void handleRemoveCoin(coin)
+                    }}
+                    className="flex items-center gap-2 rounded-lg px-2 py-2"
+                  >
+                    <span
+                      className="h-6 w-1.5 shrink-0 rounded-full border border-black/40"
+                      style={{ backgroundColor: color }}
+                      aria-hidden="true"
+                    />
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="shrink-0 text-xs font-medium">
+                        {coin.symbol.toUpperCase()}
+                      </span>
+                      <span className="truncate text-xs font-berkeley-mono text-muted-foreground">
+                        {coin.isOptimistic ? "Loading..." : coin.name}
+                      </span>
+                    </span>
+                    <IconXmarkCircleFill className="size-4 shrink-0 fill-muted-foreground" />
+                  </DropdownMenuItem>
+                )
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <div className="mb-3 hidden flex-row items-center justify-between gap-2 lg:flex">
+          <Button
+            variant="outline"
+            onClick={() => openContextualCommandSearch('charts')}
+            className="group flex w-full items-center justify-between gap-2 rounded-lg border-zinc-800/50 bg-transparent p-3 hover:bg-transparent dark:hover:border-zinc-800"
+          >
+            <span className="truncate text-sm font-normal text-muted-foreground group-hover:text-primary">Add to comparison</span>
+            <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
+          </Button>
+        </div>
+
+        <div className="hidden flex-col gap-2 p-3 space-y-3 lg:flex">
           {/* Show loading coins in legend */}
           {coins.map((coin) => {
             const realCoin = latestValuesById.get(coin.id.toString())
@@ -469,25 +572,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                         handleRemoveHover(null)
                       }}
                       onClick={async () => {
-                        try {
-                          if (selectedGroup) {
-                            await removeFromSelectedGroup(coin.id.toString())
-                          } else {
-                            await removeFromWatchlist(coin.id.toString())
-                          }
-
-                          const targetName = selectedGroup ? selectedGroup.name : "watchlist"
-                          toast({
-                            title: "Removed",
-                            description: `${coin.name} removed from ${targetName}`,
-                          })
-                        } catch {
-                          toast({
-                            title: "Error",
-                            description: "Failed to remove from watchlist",
-                            variant: "destructive",
-                          })
-                        }
+                        await handleRemoveCoin(coin)
                       }}
                     >
                       <IconXmarkCircleFill
@@ -507,7 +592,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
         </div>
       </div>
       
-      <div className="col-span-9 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+      <div className="col-span-1 min-w-0 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)] lg:col-span-9">
         {/* Chart Content */}
         <div className="p-0 relative">
           <div
@@ -518,14 +603,16 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
             }}
           />
           <Card className="border-none bg-transparent">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-3 sm:p-6">
               {/* Coin Avatar Stacks */}
-              {avatarData.length > 0 && (
-                <AvatarCircles
-                  avatarUrls={avatarData}
-                  className="scale-75 -ml-2"
-                />
-              )}
+              <div className="min-w-0 flex-1 overflow-hidden">
+                {avatarData.length > 0 && (
+                  <AvatarCircles
+                    avatarUrls={avatarData}
+                    className="-ml-2 origin-left scale-75"
+                  />
+                )}
+              </div>
               
               {/* Time Scale Selector */}
               <TimeScaleSelector
@@ -533,18 +620,18 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                 setActiveTimeScale={setActiveTimeScale}
               />
             </CardHeader>
-            <CardContent className="pl-8">
+            <CardContent className="px-2 pb-2 pt-0 sm:px-6 lg:pl-8">
               <div className="p-0 relative">
                 {coins.length > 0 && coinSeriesWithColors.length === 0 ? (
-                  <div className="relative h-[400px]">
+                  <div className="relative" style={{ height: chartHeight }}>
                     <ChartLoadingSkeleton
-                      height={400}
+                      height={chartHeight}
                       lines={Math.max(1, coins.length)}
                       className="opacity-80"
                     />
                   </div>
                 ) : coinSeriesWithColors.length === 0 ? (
-                  <div className="flex items-center justify-center h-[400px]">
+                  <div className="flex items-center justify-center" style={{ height: chartHeight }}>
                     <div className="text-center">
                       <p className="text-sm text-muted-foreground">No coins to display</p>
                     </div>
@@ -567,7 +654,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                         `
                       }}
                     />
-                    <div ref={chartWrapperRef} className="h-[400px] w-full">
+                    <div ref={chartWrapperRef} className="w-full" style={{ height: chartHeight }}>
                       <Liveline
                         data={[]}
                         value={0}
