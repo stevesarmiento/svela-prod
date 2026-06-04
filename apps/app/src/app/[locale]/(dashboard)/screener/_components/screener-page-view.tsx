@@ -407,7 +407,7 @@ export function ScreenerPageView() {
   }
 
   return (
-    <div className="space-y-2 px-8 w-full">
+    <div className="w-full space-y-2 px-3 sm:px-4 lg:px-8">
       {globalSearchText ? (
         <LazyScreenerSearchStateLoader
           query={globalSearchText}

@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { IconWalletBifoldFill, IconSafariFill } from "symbols-react";
 import { BookmarkIcon } from "./bookmark-icon";
+import { ExploreIcon } from "./explore-icon";
 import { HomeIcon } from "./home-icon";
 import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
 import { getShortcutForRoute } from "@/lib/keyboard-shortcuts";
@@ -26,7 +27,7 @@ export const MENU_ITEMS = [
   {
     title: "Screener",
     href: "/screener",
-    icon: IconSafariFill,
+    icon: ExploreIcon,
   },
 ] as const;
   
@@ -42,7 +43,7 @@ const screenerCommandItem = {
   title: "Screener",
   subtitle: "Filter and browse all watchlist coins",
   href: "/screener",
-  icon: IconSafariFill,
+  icon: ExploreIcon,
   shortcut: getShortcutForRoute("/screener"),
 } as const;
 

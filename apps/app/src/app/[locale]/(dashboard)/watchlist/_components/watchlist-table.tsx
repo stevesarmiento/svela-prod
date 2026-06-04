@@ -305,7 +305,7 @@ function WatchlistCard({
   return (
     <div className="rounded-[10px] bg-primary/5 p-0.5">
       {/* Header with Watchlist Name */}
-      <div className="px-3 py-2">
+      <div className="hidden px-3 py-2 sm:block">
         <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
           <div className="grid grid-cols-4 gap-4">
             <div className="flex items-center gap-2">
@@ -337,27 +337,33 @@ function WatchlistCard({
       <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden hover:ring-2 hover:ring-zinc-200/30 transition-all duration-100">
         {watchlist.isLoading ? (
           // Show loading state
-          <div className="grid grid-cols-4 gap-4 px-4 py-2 pr-2 opacity-60 w-full">
+          <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 opacity-60 sm:grid-cols-4 sm:gap-4 sm:px-4 sm:py-2 sm:pr-2">
             {/* Watchlist Name */}
-            <div className="flex no-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
               <Skeleton className="h-3 w-16 rounded-full" />
-              <span className="text-primary/40 text-xs">watchlist has</span>
+              <span className="text-primary/40 text-xs whitespace-nowrap">watchlist has</span>
               <Skeleton className="h-3 w-8 rounded-full" />
-              <span className="text-primary/40 text-xs">coins</span>
+              <span className="text-primary/40 text-xs whitespace-nowrap">coins</span>
             </div>
 
             {/* Holdings Value */}
-            <div className="flex items-center justify-end">
+            <div className="col-start-1 row-start-2 flex min-w-0 flex-col gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                Holdings
+              </span>
               <Skeleton className="h-3 w-14 rounded-full" />
             </div>
 
             {/* Change */}
-            <div className="flex items-center justify-end">
+            <div className="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                {getTimeScaleLabel(activeTimeScale)}
+              </span>
               <Skeleton className="h-3 w-10 rounded-full" />
             </div>
 
             {/* Remove */}
-            <div className="flex items-center justify-end">
+            <div className="col-start-2 row-start-1 flex items-center justify-end sm:col-start-auto sm:row-start-auto">
               <Button
                 variant="ghost"
                 size="sm"
@@ -372,12 +378,15 @@ function WatchlistCard({
           // Show clickable link for real watchlists
           <Link 
             href={group.slug ? `/watchlist?wg=${encodeURIComponent(group.slug)}&wt=chart` : "/watchlist?wt=chart"}
-            className="grid grid-cols-4 gap-4 px-4 py-2 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer"
+            className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer sm:grid-cols-4 sm:gap-4 sm:px-4 sm:py-2 sm:pr-2"
           >
             {/* Watchlist Info */}
-            <div className="flex no-wrap items-center gap-2">
-              <span className="font-bold text-nowrap text-xs">{watchlist.name}</span>
-              <span className="text-primary/40 text-nowrap text-xs">watchlist has</span>
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
+              <span className="min-w-0 truncate font-bold text-xs sm:text-nowrap">{watchlist.name}</span>
+              <span className="text-primary/40 text-nowrap text-xs">
+                <span className="sm:hidden">has</span>
+                <span className="hidden sm:inline">watchlist has</span>
+              </span>
               <span className="font-berkeley-mono text-nowrap text-xs font-semibold bg-black/20 border border-primary/10 px-1 py-0.5 rounded-md">
                 {watchlist.coinsCount}
               </span>
@@ -386,13 +395,16 @@ function WatchlistCard({
                 <AvatarCircles 
                   avatarUrls={watchlist.coinImages}
                   numPeople={Math.max(0, watchlist.coinsCount - watchlist.coinImages.length)}
-                  className="scale-75 -ml-1"
+                  className="-ml-1 scale-75"
                 />
               )}
             </div>
 
             {/* Holdings Value (Σ holdings × spot USD when any holdings set) */}
-            <div className="flex min-w-0 items-center justify-end">
+            <div className="col-start-1 row-start-2 flex min-w-0 flex-col gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                Holdings
+              </span>
               {watchlist.holdingsValueUsd === null ? (
                 <span className="font-berkeley-mono text-xs tabular-nums text-muted-foreground">—</span>
               ) : (
@@ -403,7 +415,10 @@ function WatchlistCard({
             </div>
 
             {/* Aggregate Change (chart aggregate, or quote est. while loading / if chart empty) */}
-            <div className="flex items-center justify-end">
+            <div className="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                {getTimeScaleLabel(activeTimeScale)}
+              </span>
               {watchlist.aggregateChangeUnavailable ? (
                 <span className="font-berkeley-mono text-xs tabular-nums text-muted-foreground">
                   N/A
@@ -454,7 +469,7 @@ function WatchlistCard({
             </div>
 
             {/* Remove */}
-            <div className="flex items-center justify-end">
+            <div className="col-start-2 row-start-1 flex items-center justify-end sm:col-start-auto sm:row-start-auto">
               <Button
                 variant="ghost"
                 size="sm"

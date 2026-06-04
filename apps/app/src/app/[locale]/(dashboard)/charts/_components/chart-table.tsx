@@ -398,7 +398,7 @@ export const ChartTable = memo(function ChartTable({
             )}
           >
           {/* Header with Token Name */}
-          <div className="px-3 py-2">
+          <div className="hidden px-3 py-2 sm:block">
             <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
               <div className="grid grid-cols-5 gap-4">
                 <div className="flex items-center gap-2">
@@ -453,37 +453,49 @@ export const ChartTable = memo(function ChartTable({
           <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden hover:ring-2 hover:ring-zinc-200/30 transition-all duration-100">
             {coin.isOptimistic ? (
               // Show non-clickable loading state for optimistic coins
-              <div className="grid grid-cols-5 gap-4 px-4 py-2 pr-2 opacity-60">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 pr-2 opacity-60 sm:grid-cols-5 sm:gap-4 sm:px-4 sm:py-2">
                 {/* Price */}
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
+                  <Skeleton className="h-5 w-5 shrink-0 rounded-full sm:hidden" />
                   <Skeleton className="h-3 w-8 rounded-full" />
-                  <span className="text-primary/40 text-xs">price is currently</span>
+                  <span className="text-primary/40 text-xs whitespace-nowrap">price is currently</span>
                   <Skeleton className="h-3 w-16 rounded-full" />
                 </div>
 
                 {/* 24h Volume */}
-                <div className="flex items-center justify-end">
+                <div className="col-start-1 row-start-2 flex min-w-0 flex-col gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                    Volume 24h
+                  </span>
                   <Skeleton className="h-3 w-12 rounded-full" />
                 </div>
 
                 {/* Interval Change */}
-                <div className="flex items-center justify-end">
+                <div className="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                    {getTimeScaleLabel(activeTimeScale)}
+                  </span>
                   <Skeleton className="h-3 w-10 rounded-full" />
                 </div>
 
                 {/* Holdings */}
-                <ChartHoldingsCell
-                  coinId={String(coin.id)}
-                  holdings={coin.holdings}
-                  priceUsd={coin.quote.USD.price}
-                  isOptimistic
-                  showPending={showPending}
-                  groupId={holdingsGroupId}
-                  canEdit={canEditHoldings}
-                />
+                <div className="col-span-2 row-start-3 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-auto sm:block">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                    Holdings
+                  </span>
+                  <ChartHoldingsCell
+                    coinId={String(coin.id)}
+                    holdings={coin.holdings}
+                    priceUsd={coin.quote.USD.price}
+                    isOptimistic
+                    showPending={showPending}
+                    groupId={holdingsGroupId}
+                    canEdit={canEditHoldings}
+                  />
+                </div>
 
                 {/* Remove */}
-                <div className="flex items-center justify-end">
+                <div className="col-start-2 row-start-1 flex items-center justify-end sm:col-start-auto sm:row-start-auto">
                   <Tooltip delayDuration={500}>
                     <TooltipTrigger asChild>
                       <span>
@@ -511,26 +523,46 @@ export const ChartTable = memo(function ChartTable({
               // Show clickable link for real coins
               <Link 
                 href={watchlistGroup ? `/charts/${coin.id}?wg=${watchlistGroup}` : `/charts/${coin.id}`}
-                className="grid grid-cols-5 gap-4 px-4 py-2 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer"
+                className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer sm:grid-cols-5 sm:gap-4 sm:px-4 sm:py-2"
               >
                 {/* Price */}
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
+                  {safeTokenLogoUrl ? (
+                    <TokenLogo
+                      src={safeTokenLogoUrl}
+                      alt={tokenName}
+                      sizePx={20}
+                      fallbackText={coin.symbol}
+                      className="shrink-0 ring-1 ring-zinc-200 dark:ring-black/80 sm:hidden"
+                      quality={70}
+                    />
+                  ) : (
+                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary/70 sm:hidden">
+                      {coin.symbol?.charAt(0) || '?'}
+                    </div>
+                  )}
                   <span className="font-bold text-xs">{coin.symbol.toUpperCase()}</span>
-                  <span className="text-primary/40 text-xs">price is currently</span>
-                  <span className="font-berkeley-mono text-xs font-semibold">
+                  <span className="text-primary/40 text-xs whitespace-nowrap">price is currently</span>
+                  <span className="font-berkeley-mono text-xs font-semibold tabular-nums">
                     {formatUsdPrice(coin.quote.USD.price)}
                   </span>
                 </div>
 
                 {/* 24h Volume */}
-                <div className="flex items-center justify-end">
-                  <span className="font-berkeley-mono text-xs">
+                <div className="col-start-1 row-start-2 flex min-w-0 flex-col gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                    Volume 24h
+                  </span>
+                  <span className="font-berkeley-mono text-xs tabular-nums">
                     ${formatLargeNumber(coin.quote.USD.volume_24h || 0)}
                   </span>
                 </div>
 
                 {/* Interval Change */}
-                <div className="flex items-center justify-end">
+                <div className="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                    {getTimeScaleLabel(activeTimeScale)}
+                  </span>
                   {Number.isNaN(coin.intervalChange) ? (
                     <span className="font-berkeley-mono text-xs text-muted-foreground">
                       N/A
@@ -568,19 +600,24 @@ export const ChartTable = memo(function ChartTable({
                 </div>
 
                 {/* Holdings (editable token quantity) */}
-                <ChartHoldingsCell
-                  coinId={String(coin.id)}
-                  holdings={coin.holdings}
-                  priceUsd={coin.quote.USD.price}
-                  isOptimistic={false}
-                  showPending={showPending}
-                  groupId={holdingsGroupId}
-                  canEdit={canEditHoldings}
-                />
+                <div className="col-span-2 row-start-3 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-auto sm:block">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+                    Holdings
+                  </span>
+                  <ChartHoldingsCell
+                    coinId={String(coin.id)}
+                    holdings={coin.holdings}
+                    priceUsd={coin.quote.USD.price}
+                    isOptimistic={false}
+                    showPending={showPending}
+                    groupId={holdingsGroupId}
+                    canEdit={canEditHoldings}
+                  />
+                </div>
 
                 {/* Remove */}
                 <div 
-                  className="flex items-center justify-end gap-1"
+                  className="col-start-2 row-start-1 flex items-center justify-end gap-1 sm:col-start-auto sm:row-start-auto"
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()

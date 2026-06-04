@@ -25,7 +25,7 @@ export function CommandSearchTrigger(props: CommandSearchTriggerProps) {
         >
           <Tooltip delayDuration={500}>
             <TooltipTrigger asChild>
-              <SearchIcon className="h-4 w-4 fill-white/40 group-hover:fill-white" />
+              <SearchIcon className="size-6 text-white/50 group-hover:text-white/50" />
             </TooltipTrigger>
             <TooltipContent
               side="top"
