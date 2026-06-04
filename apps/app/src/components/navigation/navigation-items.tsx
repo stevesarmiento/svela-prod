@@ -94,7 +94,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
                 onClick={handleItemClick(item, isActive)}
                 onMouseEnter={() => handleItemPrefetch(item)}
                 onFocus={() => handleItemPrefetch(item)}
-                className={`group p-2 rounded-[13px] transition-colors duration-100 cursor-pointer active:scale-[0.98] hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus:[&_svg]:!fill-white focus-visible:[&_svg]:!fill-white dark:focus-visible:ring-zinc-500 dark:focus-visible:ring-offset-zinc-800 ${
+                className={`group p-2 rounded-[13px] transition-colors duration-100 cursor-pointer active:scale-[0.98] hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus:[&_svg]:!text-white focus-visible:[&_svg]:!text-white dark:focus-visible:ring-zinc-500 dark:focus-visible:ring-offset-zinc-800 ${
                   isActive 
                     ? "bg-black/10 hover:bg-black/15 dark:bg-white/10 dark:hover:bg-white/15" 
                     : ""
@@ -103,8 +103,8 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
                 <item.icon
                   className={`size-5 ${
                     isActive
-                      ? "fill-white"
-                      : "fill-gray-500 group-hover:fill-gray-900 dark:fill-white/40 dark:group-hover:fill-white"
+                      ? "text-white"
+                      : "text-gray-500 group-hover:text-gray-700 dark:text-white/50 dark:group-hover:text-white/50"
                   }`}
                 />
               </button>
