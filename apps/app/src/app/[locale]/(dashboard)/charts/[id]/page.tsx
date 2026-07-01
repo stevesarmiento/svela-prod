@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { cache } from "react"
 import { createMetadata, getAppBaseUrl } from "@/lib/metadata"
 import { TokenPageShell } from "./token-page-shell"
 
@@ -13,14 +14,19 @@ interface PageProps {
   params: Promise<{ locale: string; id: string }>
 }
 
-async function fetchCoinGeckoCoin(id: string): Promise<CoinGeckoCoin | null> {
-  const baseUrl = getAppBaseUrl()
-  const url = new URL(`/api/internal/coins/coingecko/${encodeURIComponent(id)}`, baseUrl)
+const fetchCoinGeckoCoin = cache(async (id: string): Promise<CoinGeckoCoin | null> => {
+  try {
+    const baseUrl = getAppBaseUrl()
+    const url = new URL(`/api/internal/coins/coingecko/${encodeURIComponent(id)}`, baseUrl)
 
-  const response = await fetch(url, { next: { revalidate: 60 * 60 } })
-  if (!response.ok) return null
-  return (await response.json()) as CoinGeckoCoin | null
-}
+    const response = await fetch(url, { next: { revalidate: 60 * 60 } })
+    if (!response.ok) return null
+    return (await response.json()) as CoinGeckoCoin | null
+  } catch (error) {
+    console.error("[TokenPage] Failed to load token metadata", { id, error })
+    return null
+  }
+})
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { locale, id } = await params

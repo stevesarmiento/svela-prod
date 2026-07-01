@@ -25,12 +25,11 @@ export function DashboardProviders(props: DashboardProvidersProps) {
   const isWatchlistHeavyRoute =
     pathname.includes("/watchlist") || pathname.includes("/watchlists")
 
-  const inner =
-    preloadedWatchlist != null ? (
-      <WatchlistProvider preloadedBootstrap={preloadedWatchlist}>{children}</WatchlistProvider>
-    ) : (
-      children
-    )
+  const inner = (
+    <WatchlistProvider preloadedBootstrap={preloadedWatchlist ?? undefined}>
+      {children}
+    </WatchlistProvider>
+  )
 
   const wrappedInner = isWatchlistHeavyRoute ? (
     <LoadingStateManager blockingQueryKeyPrefixes={["watchlists"]}>

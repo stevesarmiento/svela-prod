@@ -6,15 +6,24 @@ import { api } from "../../../../convex/_generated/api"
 import { DashboardProviders } from "./dashboard-providers"
 import { Suspense } from "react"
 
+async function preloadWatchlistNavBootstrap() {
+  try {
+    const token = await getAuthToken()
+    return token
+      ? await preloadQuery(api.watchlists.getMyWatchlistNavBootstrap, {}, { token })
+      : await preloadQuery(api.watchlists.getMyWatchlistNavBootstrap, {})
+  } catch (error) {
+    console.error("[DashboardLayout] Failed to preload watchlist nav", error)
+    return null
+  }
+}
+
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const token = await getAuthToken()
-  const preloadedWatchlist = token
-    ? await preloadQuery(api.watchlists.getMyWatchlistNavBootstrap, {}, { token })
-    : await preloadQuery(api.watchlists.getMyWatchlistNavBootstrap, {})
+  const preloadedWatchlist = await preloadWatchlistNavBootstrap()
 
   return (
     <DashboardProviders preloadedWatchlist={preloadedWatchlist}>

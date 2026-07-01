@@ -65,4 +65,5 @@ references/
 .cursor
 .claude
 .opencode/
+migration-output/
 /prds/
