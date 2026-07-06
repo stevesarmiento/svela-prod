@@ -1,6 +1,7 @@
 // Server-side only encryption utilities
 import { createCipheriv, createDecipheriv, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
+import { env } from '@/env.mjs';
 
 // Ensure this only runs on the server
 if (typeof window !== 'undefined') {
@@ -19,7 +20,7 @@ const TAG_LENGTH = 16; // 128 bits
 
 // Generate a secret key from environment with proper validation
 function initializeMasterKey(): string {
-  const apiEncryptionKey = process.env.API_ENCRYPTION_KEY;
+  const apiEncryptionKey = env.API_ENCRYPTION_KEY;
   
   // Only require encryption key at runtime in production, not during build
   const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' || 

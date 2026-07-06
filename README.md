@@ -16,7 +16,6 @@ Originally bootstrapped from the [midday-ai/v1](https://github.com/midday-ai/v1)
 | `packages/logger` | Pino logger wrapper. |
 | `packages/armadura` | Self-contained Solana wallet-connector/SDK workspace (own lockfile; not wired into the apps yet). |
 | `tooling/typescript` | Shared tsconfigs. |
-| `scripts/` | Operational scripts (e.g. Clerk → Convex production user migration). |
 
 ## Getting started
 

@@ -1,7 +1,6 @@
 {
   "extends": "@v1/typescript/nextjs.json",
   "compilerOptions": {
-    "target": "ES2017",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
@@ -26,11 +25,9 @@
   },
   "include": [
     "next-env.d.ts",
-    "next.config.js",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".cursorrules"
+    ".next/types/**/*.ts"
   ],
   "exclude": ["node_modules", ".turbo", ".next", "**/*.test.ts", "**/*.test.tsx"]
 }

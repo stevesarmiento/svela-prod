@@ -342,8 +342,17 @@ async function patchDistFile(filePath) {
     "    ctx.arc(hoverX, y, dotRadius, 0, Math.PI * 2);",
   ].join("\n")
 
-  if (next.includes(crosshairHorizontalNew)) {
-    // already patched
+  // The shipped liveline 0.0.7 dist already draws a horizontal crosshair
+  // natively (`ctx.moveTo(pad.left, y)` inside the scrub block) — detect
+  // that as satisfied. This patch had been warn-failing silently for a
+  // while because upstream absorbed the feature with slightly different
+  // styling.
+  const hasNativeHorizontalCrosshair =
+    next.includes("ctx.moveTo(pad.left, y);") &&
+    next.includes("ctx.lineTo(layout.w - pad.right, y);")
+
+  if (next.includes(crosshairHorizontalNew) || hasNativeHorizontalCrosshair) {
+    // already patched (or upstream ships the horizontal crosshair natively)
   } else if (next.includes(crosshairHorizontalOld)) {
     next = next.replace(crosshairHorizontalOld, crosshairHorizontalNew)
     didChange = true
@@ -494,14 +503,19 @@ async function main() {
   if (okCount === results.length) {
     console.log(`[patch-liveline] Done (changed ${changedCount}/${results.length})`)
   } else {
-    console.warn(
-      `[patch-liveline] Done with issues (changed ${changedCount}/${results.length})`,
+    // Fail the install loudly: a liveline upgrade that shifts these patterns
+    // would otherwise silently un-patch the charts (dashed price line and
+    // time axis reappear) with no signal until someone eyeballs the UI.
+    console.error(
+      `[patch-liveline] Pattern mismatch (changed ${changedCount}/${results.length}). ` +
+        "liveline's dist output changed — update scripts/patch-liveline.mjs or pin the previous version.",
     )
+    process.exit(1)
   }
 }
 
 main().catch((error) => {
-  // Best-effort: never block installs/builds on cosmetic chart tweaks.
-  console.warn("[patch-liveline] Failed to patch liveline:", error)
+  console.error("[patch-liveline] Failed to patch liveline:", error)
+  process.exit(1)
 })
 
