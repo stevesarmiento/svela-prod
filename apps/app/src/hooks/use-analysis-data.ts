@@ -54,16 +54,18 @@ export function useAnalysisData({
   const activeTimeScale = "30d";
   const EMPTY_ARRAY = useMemo(() => [], []);
 
-  // Fetch market data from CoinGecko
+  // Fetch market data from CoinGecko.
+  // Canonical key family for /api/coingecko/markets — keeps this cache
+  // entry deduped with (and invalidated alongside) other consumers.
   const { data: marketData } = useQuery({
-    queryKey: ["coinGeckoMarketData", coinId],
+    queryKey: ["coingecko-market-data", coinId],
     queryFn: async () => {
       const response = await fetch(`/api/coingecko/markets?ids=${coinId}`);
       if (!response.ok) throw new Error("Failed to fetch market data");
       const data = await response.json();
       return data.data?.[0]; // CoinGecko returns an array, get the first item
     },
-    staleTime: 30 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 
   // Safe fallback for market data

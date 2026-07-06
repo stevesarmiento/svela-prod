@@ -32,7 +32,6 @@ export const env = createEnv({
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
     NEXT_PUBLIC_SOLANA_NETWORK: z.string().optional(),
     NEXT_PUBLIC_SOLANA_RPC_URL: z.string().optional(),
-    NEXT_PUBLIC_HELIUS_API_KEY: z.string().optional(),
     NEXT_PUBLIC_DISABLE_ALPHA_FEATURES: z.string().optional().default('true'),
   },
   runtimeEnv: {
@@ -42,7 +41,6 @@ export const env = createEnv({
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
     NEXT_PUBLIC_SOLANA_NETWORK: process.env.NEXT_PUBLIC_SOLANA_NETWORK,
     NEXT_PUBLIC_SOLANA_RPC_URL: process.env.NEXT_PUBLIC_SOLANA_RPC_URL,
-    NEXT_PUBLIC_HELIUS_API_KEY: process.env.NEXT_PUBLIC_HELIUS_API_KEY,
     NEXT_PUBLIC_DISABLE_ALPHA_FEATURES: process.env.NEXT_PUBLIC_DISABLE_ALPHA_FEATURES,
     PORT: process.env.PORT,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,

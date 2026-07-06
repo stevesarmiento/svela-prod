@@ -1,11 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { auth } from "@clerk/nextjs/server";
 import { api } from "../../../../../../../convex/_generated/api";
 import { convex, getServerToken } from "@/lib/convex-server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   let userId: string | null = null;
   try {
     userId = (await auth()).userId;
@@ -71,3 +72,7 @@ export async function GET(request: NextRequest) {
   );
 }
 
+
+export const GET = withAuthRatelimit(handleGet, {
+  name: "coinglass-spot-taker-volume",
+});

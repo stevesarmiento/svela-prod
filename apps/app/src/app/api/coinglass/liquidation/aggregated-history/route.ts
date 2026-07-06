@@ -1,4 +1,5 @@
 import { convex, getServerToken } from "@/lib/convex-server";
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { type NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../../convex/_generated/api";
 
@@ -8,7 +9,7 @@ function isProbablyCoinGeckoId(value: string): boolean {
   return value.includes("-") || value.toLowerCase() === value;
 }
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const rawSymbol = (searchParams.get("symbol") || "BTC").trim();
   const interval = (searchParams.get("interval") || "1d").trim();
@@ -63,24 +64,14 @@ export async function GET(request: NextRequest) {
     if (coin) symbol = coin.symbol.toUpperCase();
   }
 
-  const isSupported = await convex.query(api.coins.isCoinglassSupported, {
-    serverToken,
-    symbol,
-  });
-  if (!isSupported) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: `Symbol ${symbol} is not supported by CoinGlass`,
-        inputSymbol: rawSymbol,
-      },
-      { status: 400 },
-    );
-  }
-
-  const series = await convex.query(
-    api.coinglassReads.getLiquidationHistorySeries,
-    {
+  // Support check and series read are independent — run them concurrently
+  // instead of paying two sequential Convex round trips.
+  const [isSupported, series] = await Promise.all([
+    convex.query(api.coins.isCoinglassSupported, {
+      serverToken,
+      symbol,
+    }),
+    convex.query(api.coinglassReads.getLiquidationHistorySeries, {
       serverToken,
       symbol,
       interval,
@@ -94,8 +85,18 @@ export async function GET(request: NextRequest) {
         typeof endTime === "number" && Number.isFinite(endTime)
           ? endTime
           : undefined,
-    },
-  );
+    }),
+  ]);
+  if (!isSupported) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Symbol ${symbol} is not supported by CoinGlass`,
+        inputSymbol: rawSymbol,
+      },
+      { status: 400 },
+    );
+  }
 
   if (series.data.length < 2 || series.stale) {
     void convex
@@ -135,3 +136,7 @@ export async function GET(request: NextRequest) {
     },
   );
 }
+
+export const GET = withAuthRatelimit(handleGet, {
+  name: "coinglass-liquidation",
+});

@@ -28,6 +28,8 @@ import { createTooltipManager } from '../tooltip/tooltip-manager';
 
 export interface ChartController {
     setData: (ohlcvData: OHLCVDataPoint[]) => void;
+    /** O(1) last-bar patch for realtime ticks — avoids re-feeding the whole series. */
+    updateLivePrice: (priceUsd: number) => void;
     setHighlightRange: (range: ChartHighlightRange | null) => void;
     setHullSuite: (overlay: HullSuiteOverlay | null) => void;
     setCallbacks: (callbacks: Pick<UseChartInstanceOptions, 'onCrosshairMove' | 'onCrosshairTimeMove'>) => void;
@@ -551,6 +553,41 @@ export function createChartController({
         updateScrubLine();
     }
 
+    // Patch only the last bar with a realtime spot price. lightweight-charts'
+    // series.update() is O(1) — the previous approach re-ran setData() (full
+    // series normalization + re-feed) on every ~1s tick.
+    function updateLivePrice(priceUsd: number) {
+        if (!Number.isFinite(priceUsd) || priceUsd <= 0) return;
+        if (safeOhlcvData.length === 0) return;
+
+        const last = safeOhlcvData[safeOhlcvData.length - 1]!;
+        const prevClose = Number.isFinite(last.close) ? last.close : priceUsd;
+        const prevHigh = Number.isFinite(last.high) ? last.high : prevClose;
+        const prevLow = Number.isFinite(last.low) ? last.low : prevClose;
+        if (last.close === priceUsd && prevHigh >= priceUsd && prevLow <= priceUsd) return;
+
+        const updated: OHLCVDataPoint = {
+            ...last,
+            close: priceUsd,
+            high: Math.max(prevHigh, priceUsd),
+            low: Math.min(prevLow, priceUsd),
+        };
+        safeOhlcvData[safeOhlcvData.length - 1] = updated;
+
+        const epoch = timeToEpochSeconds(updated.time);
+        if (epoch != null) ohlcvByEpochSecond.set(epoch, updated);
+
+        if (chartType === 'candlestick') {
+            (priceSeries as ISeriesApi<'Candlestick'>).update(updated);
+        } else {
+            const linePoint: PriceDataPoint = { time: updated.time, value: priceUsd };
+            if (lineData && lineData.length > 0) lineData[lineData.length - 1] = linePoint;
+            (priceSeries as ISeriesApi<'Line'>).update(linePoint);
+        }
+
+        axisOverlay.scheduleUpdate();
+    }
+
     function setHighlightRange(range: ChartHighlightRange | null) {
         highlightOverlay.setRange(range);
         axisOverlay.scheduleUpdate();
@@ -636,5 +673,5 @@ export function createChartController({
     // Initial size
     resize();
 
-    return { setData, setHighlightRange, setHullSuite, setCallbacks, resize, destroy };
+    return { setData, updateLivePrice, setHighlightRange, setHullSuite, setCallbacks, resize, destroy };
 }

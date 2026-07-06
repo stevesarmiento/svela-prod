@@ -173,6 +173,11 @@ function useInlineMarketChartSeries(args: {
     refetchInterval: (query) => {
       const data = query.state.data
       if (!data || data.warmupRequested || data.stale || data.points.length < 2) {
+        // Cap fast warmup polling: a cold table renders ~24 of these hooks
+        // at once — unbounded 15s polling multiplies into request storms.
+        const failures = query.state.fetchFailureCount ?? 0
+        const updates = query.state.dataUpdateCount ?? 0
+        if (updates + failures > 8) return 5 * 60 * 1000
         return 15 * 1000
       }
       return 5 * 60 * 1000
@@ -180,6 +185,8 @@ function useInlineMarketChartSeries(args: {
     enabled: (args.enabled ?? true) && args.coingeckoId.length > 0,
     retry: 1,
     refetchOnWindowFocus: true,
+    // Don't keep warm-up polling alive in background tabs.
+    refetchIntervalInBackground: false,
   })
 }
 

@@ -418,6 +418,9 @@ export function AddWalletDialog({ open, onOpenChange }: AddWalletDialogProps) {
                                         className="rounded-full ring-1 ring-border"
                                         fill
                                         sizes="20px"
+                                        // Arbitrary wallet-token hosts; skip the
+                                        // optimizer (locked-down remotePatterns).
+                                        unoptimized
                                       />
                                     ) : (
                                       <div className="size-5 rounded-full bg-primary/10 ring-1 ring-border flex items-center justify-center text-[10px] font-semibold text-muted-foreground">

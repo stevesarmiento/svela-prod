@@ -54,8 +54,11 @@ export function useSmartScreenerTakerMetrics(args: {
       return (await res.json()) as TakerMetricsResponse
     },
     enabled: args.enabled && normalizedSymbols.length > 0,
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    // Backend refreshes CoinGlass taker data every 4h (convex/crons.ts).
+    // These are POSTs (never CDN-cached) over up to 300 symbols — every
+    // poll is a full Convex batch read, so keep the cadence coarse.
+    staleTime: 10 * 60 * 1000,
+    refetchInterval: 15 * 60 * 1000,
     retry: 0,
   })
 

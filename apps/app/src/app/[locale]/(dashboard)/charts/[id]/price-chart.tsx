@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useTransition, useDeferredValue, useCallback, useMemo, memo, useState } from 'react'
+import React, { useTransition, useDeferredValue, useCallback, useEffect, useMemo, memo, useRef, useState, useSyncExternalStore } from 'react'
 import { useIsomorphicTheme } from '@/hooks/use-isomorphic-theme'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
@@ -12,13 +12,11 @@ import type { CoinMarketData } from '@/types/coins'
 import { useHullSuite } from '@/hooks/use-hull-suite'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { IconTriangleFill } from 'symbols-react'
-import NumberFlow from '@/components/number-flow'
 import { useQuery as useTanStackQuery } from '@tanstack/react-query'
 import { CoinsInternalApi } from '@/lib/effect/coins-internal-api'
 import { runPromise } from '@/lib/effect/runtime-coins-internal'
 import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
-import { formatUsdPrice, getUsdPriceFormatOptions } from '@/lib/format-usd'
-import type { Format } from '@/lib/number-flow/lite'
+import { formatUsdPrice } from '@/lib/format-usd'
 import type { Time } from 'lightweight-charts'
 import { cleanTokenName, getTokenLogoURL } from '@/lib/logo-overrides'
 import { TokenLogo } from "@/components/token-logo"
@@ -260,6 +258,87 @@ const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, set
   )
 })
 
+// Crosshair position lives in a tiny external store instead of React state:
+// lightweight-charts fires crosshair callbacks at mousemove frequency, and a
+// setState here re-rendered the entire 600-line PriceChart per pointer frame.
+// Only the small ScrubPriceValue component subscribes.
+interface CrosshairSnapshot {
+  price: number | null
+  timeEpochSec: number | null
+}
+
+function createCrosshairStore() {
+  let snapshot: CrosshairSnapshot = { price: null, timeEpochSec: null }
+  const listeners = new Set<() => void>()
+  return {
+    get: () => snapshot,
+    set(next: Partial<CrosshairSnapshot>) {
+      const merged = { ...snapshot, ...next }
+      if (merged.price === snapshot.price && merged.timeEpochSec === snapshot.timeEpochSec) return
+      snapshot = merged
+      for (const listener of listeners) listener()
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+      }
+    },
+  }
+}
+
+type CrosshairStore = ReturnType<typeof createCrosshairStore>
+
+// The only part of the header that changes while scrubbing. Subscribes to the
+// crosshair store so pointer moves re-render just this fragment.
+function ScrubPriceValue(props: {
+  store: CrosshairStore
+  livePrice: number
+  liveChange24h: number
+  basePrice: number | null
+  showPending: boolean
+}) {
+  const { store, livePrice, liveChange24h, basePrice, showPending } = props
+  const snapshot = useSyncExternalStore(store.subscribe, store.get, store.get)
+
+  const crosshairPrice = snapshot.price
+  const scrubPriceChange =
+    crosshairPrice != null && basePrice != null && Number.isFinite(basePrice) && basePrice !== 0
+      ? ((crosshairPrice - basePrice) / basePrice) * 100
+      : null
+
+  const currentPrice = crosshairPrice ?? livePrice
+  const priceChange24h = scrubPriceChange ?? liveChange24h
+
+  return (
+    <>
+      <div className="flex items-center">
+        <span className={cn("text-4xl font-bold font-sans text-gray-900 dark:text-white", showPending && "animate-pulse motion-reduce:animate-none",)}>
+          {formatUsdPrice(currentPrice)}
+        </span>
+        {showPending && (
+          <div className="inline-flex items-center ml-2">
+            <div className="w-2 h-2 bg-gray-400 dark:bg-white/50 rounded-full animate-pulse motion-reduce:animate-none" />
+          </div>
+        )}
+      </div>
+
+      <div className="mt-1">
+        {Number.isNaN(priceChange24h) ? (
+          <Badge
+            variant="outline"
+            className="inline-flex align-middle h-6 px-2 font-berkeley-mono text-[12px] tabular-nums border-zinc-200/60 text-muted-foreground dark:border-white/10"
+          >
+            N/A
+          </Badge>
+        ) : (
+          <PriceChangeBadge pct={priceChange24h} />
+        )}
+      </div>
+    </>
+  )
+}
+
 export const PriceChart = memo(function PriceChart({
   coinId,
   initialData,
@@ -270,9 +349,11 @@ export const PriceChart = memo(function PriceChart({
 }: PriceChartProps) {
   // React 19: Add concurrent features
   const [isDataPending, startDataTransition] = useTransition()
-  const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null)
-  const [crosshairTime, setCrosshairTime] = useState<Time | null>(null)
-  
+
+  const crosshairStoreRef = useRef<CrosshairStore | null>(null)
+  if (!crosshairStoreRef.current) crosshairStoreRef.current = createCrosshairStore()
+  const crosshairStore = crosshairStoreRef.current
+
   // React 19: Defer expensive computations
   const deferredCoinId = useDeferredValue(coinId)
   const deferredTimeScale = useDeferredValue(activeTimeScale)
@@ -285,12 +366,12 @@ export const PriceChart = memo(function PriceChart({
   }, [setActiveTimeScale])
 
   const handleCrosshairTimeMove = useCallback((time: Time | null) => {
-    setCrosshairTime(time)
-  }, [])
+    crosshairStore.set({ timeEpochSec: time == null ? null : timeToEpochSeconds(time) })
+  }, [crosshairStore])
 
   const handleCrosshairMove = useCallback((price: number | null) => {
-    setCrosshairPrice(price)
-  }, [])
+    crosshairStore.set({ price })
+  }, [crosshairStore])
 
   const { data: coingeckoCoinData } = useTanStackQuery({
     queryKey: ["coingecko-coin", deferredCoinId],
@@ -374,55 +455,63 @@ export const PriceChart = memo(function PriceChart({
       return { ...point, volume }
     })
 
-    // Patch the last point so the right edge reflects the realtime spot feed.
-    if (typeof liveSpotPriceUsd === "number" && Number.isFinite(liveSpotPriceUsd) && liveSpotPriceUsd > 0 && base.length > 0) {
-      const last = base[base.length - 1]
-      if (last) {
-        const prevClose = typeof last.close === "number" && Number.isFinite(last.close) ? last.close : liveSpotPriceUsd
-        const prevHigh = typeof last.high === "number" && Number.isFinite(last.high) ? last.high : prevClose
-        const prevLow = typeof last.low === "number" && Number.isFinite(last.low) ? last.low : prevClose
-
-        base[base.length - 1] = {
-          ...last,
-          close: liveSpotPriceUsd,
-          high: Math.max(prevHigh, liveSpotPriceUsd),
-          low: Math.min(prevLow, liveSpotPriceUsd),
-        }
-      }
-    }
-
+    // NOTE: the realtime spot price is intentionally NOT merged here — it
+    // flows to the chart as an O(1) last-bar update via the livePriceUsd
+    // option. Including it in this memo re-mapped/re-sorted the entire
+    // series (and re-fed setData) on every ~1s tick.
     return base
-  }, [ohlcData, volumeData, liveSpotPriceUsd])
+  }, [ohlcData, volumeData])
 
   const isSeriesReady = ohlcvDataForChart.length >= 2
 
   // Highlight the period under the crosshair and dim the rest:
   // - 1Q + 1Y: highlight month
   // - Max: highlight quarter
-  const highlightRange = useMemo(() => {
-    if (crosshairTime == null) return null
+  // Derived from the crosshair store via subscription: the range only
+  // changes when the cursor crosses a month/quarter boundary, so the
+  // identity-preserving setState below makes pointer moves render-free
+  // for this component.
+  type HighlightRange = { from: Time; to: Time; dimOpacity: number; boundaryColor: string }
+  const [highlightRange, setHighlightRange] = useState<HighlightRange | null>(null)
 
-    const crosshairEpochSeconds = timeToEpochSeconds(crosshairTime)
-    if (crosshairEpochSeconds == null) return null
+  useEffect(() => {
+    const compute = () => {
+      const { timeEpochSec } = crosshairStore.get()
+      if (timeEpochSec == null) {
+        setHighlightRange((prev) => (prev == null ? prev : null))
+        return
+      }
 
-    const isQuarterly = deferredTimeScale === '2y' || deferredTimeScale === 'max'
-    const range = isQuarterly
-      ? getUtcQuarterRange(crosshairEpochSeconds)
-      : getUtcMonthRange(crosshairEpochSeconds)
+      const isQuarterly = deferredTimeScale === '2y' || deferredTimeScale === 'max'
+      const range = isQuarterly
+        ? getUtcQuarterRange(timeEpochSec)
+        : getUtcMonthRange(timeEpochSec)
 
-    const boundaryColor = isDarkMode ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)'
+      const boundaryColor = isDarkMode ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)'
 
-    return {
-      from: range.fromEpochSeconds as Time,
-      to: range.toEpochSeconds as Time,
-      dimOpacity: 0.18,
-      boundaryColor,
+      setHighlightRange((prev) =>
+        prev != null &&
+        prev.from === (range.fromEpochSeconds as Time) &&
+        prev.to === (range.toEpochSeconds as Time) &&
+        prev.boundaryColor === boundaryColor
+          ? prev
+          : {
+              from: range.fromEpochSeconds as Time,
+              to: range.toEpochSeconds as Time,
+              dimOpacity: 0.18,
+              boundaryColor,
+            },
+      )
     }
-  }, [crosshairTime, deferredTimeScale, isDarkMode])
+
+    compute()
+    return crosshairStore.subscribe(compute)
+  }, [crosshairStore, deferredTimeScale, isDarkMode])
 
   const chartContainerRef = useChartInstance(isSeriesReady ? ohlcvDataForChart : [], {
     chartType: 'line',
     showVolume: true,
+    livePriceUsd: liveSpotPriceUsd,
     isDarkMode,
     hullSuite: hullSuiteOverlay,
     onCrosshairMove: handleCrosshairMove,
@@ -440,10 +529,6 @@ export const PriceChart = memo(function PriceChart({
   
   // React 19: Show pending states and optimize price display
   const basePrice = ohlcvDataForChart[0]?.open || ohlcvDataForChart[0]?.close || null
-  const scrubPriceChange =
-    crosshairPrice != null && basePrice != null && Number.isFinite(basePrice) && basePrice !== 0
-      ? ((crosshairPrice - basePrice) / basePrice) * 100
-      : null
 
   const liveChange24h = liveQuote?.price_change_percentage_24h ?? calculatePercentageChange ?? 0
   const chartLastPrice =
@@ -482,8 +567,6 @@ export const PriceChart = memo(function PriceChart({
     displayPrice ??
     liveQuote?.current_price ??
     0
-  const currentPrice = crosshairPrice ?? livePrice
-  const priceChange24h = scrubPriceChange ?? liveChange24h
 
   // Only treat loading as "blocking" when we can’t render a proper series yet.
   // Warmup (stale DB refresh) can run in the background without pulsing the whole chart.
@@ -533,29 +616,13 @@ export const PriceChart = memo(function PriceChart({
                     <span className="text-gray-900 dark:text-white font-bold text-sm">{coinName}</span>
                     <span className="text-primary/60 text-sm">is currently</span>
                     </div>
-                    <div className="flex items-center">
-                      <span className={cn("text-4xl font-bold font-sans text-gray-900 dark:text-white", showPending && "animate-pulse motion-reduce:animate-none",)}>
-                        {formatUsdPrice(currentPrice)}
-                        </span>
-                      {showPending && (
-                        <div className="inline-flex items-center ml-2">
-                          <div className="w-2 h-2 bg-gray-400 dark:bg-white/50 rounded-full animate-pulse motion-reduce:animate-none" />
-                        </div>
-                      )}
-                    </div>
-
-                  <div className="mt-1">
-                    {Number.isNaN(priceChange24h) ? (
-                      <Badge
-                        variant="outline"
-                        className="inline-flex align-middle h-6 px-2 font-berkeley-mono text-[12px] tabular-nums border-zinc-200/60 text-muted-foreground dark:border-white/10"
-                      >
-                        N/A
-                      </Badge>
-                    ) : (
-                      <PriceChangeBadge pct={priceChange24h} />
-                    )}
-                  </div>
+                  <ScrubPriceValue
+                    store={crosshairStore}
+                    livePrice={livePrice}
+                    liveChange24h={liveChange24h}
+                    basePrice={basePrice}
+                    showPending={showPending}
+                  />
                 </div>
               </div>
                <div className="absolute right-4 top-4 z-20 pointer-events-auto flex flex-col items-end gap-2">

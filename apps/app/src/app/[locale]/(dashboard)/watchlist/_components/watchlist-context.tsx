@@ -317,11 +317,16 @@ function WatchlistProviderPreloaded(props: {
   return <Provider value={contextValue}>{props.children}</Provider>
 }
 
+// Stable identity for the loading state — an inline `?? []` creates a new
+// array every render, churning every downstream memo/effect/context value
+// until Convex resolves.
+const EMPTY_GROUPS: WatchlistGroup[] = []
+
 function WatchlistProviderLive({ children }: { children: React.ReactNode }) {
   const { user, isLoaded } = useUser()
   const pathname = usePathname()
   const convexWatchlist = useConvexWatchlist() as Array<WatchlistItemModel> | undefined
-  const watchlistGroups = (useWatchlistGroups() as WatchlistGroup[] | undefined) ?? []
+  const watchlistGroups = (useWatchlistGroups() as WatchlistGroup[] | undefined) ?? EMPTY_GROUPS
   const addToConvexWatchlistGroup = useAddToWatchlistGroup()
   const removeFromConvexWatchlistGroup = useRemoveFromWatchlistGroup()
   const removeBulkFromConvexWatchlist = useRemoveBulkFromWatchlist()

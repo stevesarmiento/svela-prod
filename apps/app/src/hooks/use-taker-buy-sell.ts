@@ -84,7 +84,9 @@ export function useTakerBuySell({
       }
     },
     enabled: !!symbol,
-    refetchInterval: 60 * 1000, // Refetch every minute (data updates every second)
-    staleTime: 30 * 1000, // Consider data stale after 30 seconds
+    // Backend refreshes CoinGlass derivatives every 4h (convex/crons.ts);
+    // polling faster just re-reads an unchanged snapshot.
+    refetchInterval: 15 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
   })
 }

@@ -1,6 +1,7 @@
 import { createOpenAI } from '@ai-sdk/openai'
+import { env } from '@/env.mjs'
 
-const apiKey = process.env.OPENAI_API_KEY
+const apiKey = env.OPENAI_API_KEY
 
 if (!apiKey) {
   console.warn('OPENAI_API_KEY is not set. OpenAI features will be disabled.')

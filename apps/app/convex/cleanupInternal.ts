@@ -1,23 +1,20 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
 
-export const _cleanupOldData = internalMutation({
+// Expired apiCache rows only. Historical/series retention lives in
+// convex/retention.ts (windowed per timeframe, batched delete chains).
+export const _cleanupExpiredApiCache = internalMutation({
   args: {
-    olderThanDays: v.number(),
     batchSize: v.optional(v.number()),
   },
   returns: v.object({
     success: v.boolean(),
-    deletedHistorical: v.number(),
     deletedCache: v.number(),
     hasMore: v.boolean(),
     batchSize: v.number(),
   }),
   handler: async (ctx, args) => {
     const batchSize = args.batchSize ?? 100;
-    // `priceHistory` is our source of truth for charting and indicators.
-    // Do not delete historical rows based on `lastUpdated`, since older candles
-    // are naturally immutable and can appear "stale" even when still needed.
     const oldCacheData = await ctx.db
       .query("apiCache")
       .withIndex("by_expiry", (q) => q.lt("expiresAt", Date.now()))
@@ -27,7 +24,6 @@ export const _cleanupOldData = internalMutation({
 
     return {
       success: true,
-      deletedHistorical: 0,
       deletedCache: oldCacheData.length,
       hasMore: oldCacheData.length === batchSize,
       batchSize,

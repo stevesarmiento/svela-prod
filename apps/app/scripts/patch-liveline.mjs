@@ -342,8 +342,20 @@ async function patchDistFile(filePath) {
     "    ctx.arc(hoverX, y, dotRadius, 0, Math.PI * 2);",
   ].join("\n")
 
-  if (next.includes(crosshairHorizontalNew)) {
-    // already patched
+  // Idempotency: the follow-up "crosshair stroke restyle" patch rewrites
+  // this block again (0.3 → 0.68 alpha, dashed strokes), so on an
+  // already-fully-patched dist neither this patch's old nor new form
+  // exists anymore. Detect that final form via its unique 0.68 alpha —
+  // do NOT match generic strings like `moveTo(pad.left, y)`, which also
+  // appear in unrelated gridline code in the pristine dist and would
+  // wrongly skip this patch on a fresh install (breaking the follow-up
+  // patch that depends on this one's output).
+  const hasFinalRestyledCrosshair = next.includes(
+    "ctx.globalAlpha = scrubOpacity * 0.68;",
+  )
+
+  if (next.includes(crosshairHorizontalNew) || hasFinalRestyledCrosshair) {
+    // already patched (directly, or through the follow-up restyle)
   } else if (next.includes(crosshairHorizontalOld)) {
     next = next.replace(crosshairHorizontalOld, crosshairHorizontalNew)
     didChange = true
@@ -494,14 +506,18 @@ async function main() {
   if (okCount === results.length) {
     console.log(`[patch-liveline] Done (changed ${changedCount}/${results.length})`)
   } else {
-    console.warn(
-      `[patch-liveline] Done with issues (changed ${changedCount}/${results.length})`,
+    // Fail the install loudly: a liveline upgrade that shifts these patterns
+    // would otherwise silently un-patch the charts (dashed price line and
+    // time axis reappear) with no signal until someone eyeballs the UI.
+    console.error(
+      `[patch-liveline] Pattern mismatch (changed ${changedCount}/${results.length}). liveline's dist output changed — update scripts/patch-liveline.mjs or pin the previous version.`,
     )
+    process.exit(1)
   }
 }
 
 main().catch((error) => {
-  // Best-effort: never block installs/builds on cosmetic chart tweaks.
-  console.warn("[patch-liveline] Failed to patch liveline:", error)
+  console.error("[patch-liveline] Failed to patch liveline:", error)
+  process.exit(1)
 })
 

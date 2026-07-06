@@ -11,12 +11,6 @@ export default defineSchema({
     .index("by_clerk_id", ["clerkId"])
     .index("by_email", ["email"]),
 
-  posts: defineTable({
-    userId: v.id("users"),
-    title: v.string(),
-    content: v.string(),
-  }).index("by_user", ["userId"]),
-
   watchlistGroups: defineTable({
     userId: v.id("users"),
     name: v.string(),

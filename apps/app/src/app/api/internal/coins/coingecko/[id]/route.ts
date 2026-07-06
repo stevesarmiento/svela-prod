@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../../../convex/_generated/api";
 
@@ -13,10 +14,8 @@ function getServerToken(): string {
   return token;
 }
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
+async function handleGet(_req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },) {
   const { id } = await params;
   const coin = await convex.query(api.coins.getCoinGeckoCoinById, {
     serverToken: getServerToken(),
@@ -26,3 +25,7 @@ export async function GET(
   return NextResponse.json(coin);
 }
 
+
+export const GET = withAuthRatelimit(handleGet, {
+  name: "internal-coin-by-id",
+});

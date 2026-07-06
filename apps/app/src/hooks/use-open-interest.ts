@@ -79,7 +79,8 @@ export function useOpenInterest({
       }
     },
     enabled: !!symbol,
-    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
-    staleTime: 2 * 60 * 1000, // Consider data stale after 2 minutes
+    // Backend refreshes CoinGlass open interest every 4h (convex/crons.ts).
+    refetchInterval: 15 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
   });
 }

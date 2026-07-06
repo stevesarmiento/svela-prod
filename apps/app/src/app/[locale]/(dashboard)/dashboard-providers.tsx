@@ -7,7 +7,6 @@ import { usePathname } from "next/navigation"
 import { BottomNavProvider } from "@/components/navigation/bottom-nav-context"
 import { LinkIntentPrefetch } from "@/components/navigation/link-intent-prefetch"
 import { RateLimitErrorBoundary } from "@/components/error-boundary/rate-limit-error-boundary"
-import { LoadingStateManager } from "@/components/loading/loading-state-manager"
 import { ServiceWorkerRegistrar } from "@/components/service-worker/service-worker-registrar"
 import { WatchlistProvider } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context"
 import type { api } from "../../../../convex/_generated/api"
@@ -31,10 +30,12 @@ export function DashboardProviders(props: DashboardProvidersProps) {
     </WatchlistProvider>
   )
 
+  // Note: the old LoadingStateManager wrapper was removed — its blocking
+  // prefix ("watchlists") never matched a real TanStack query key, so the
+  // stuck-loading overlay could never fire (watchlist data flows through
+  // Convex useQuery, not TanStack Query).
   const wrappedInner = isWatchlistHeavyRoute ? (
-    <LoadingStateManager blockingQueryKeyPrefixes={["watchlists"]}>
-      <RateLimitErrorBoundary>{inner}</RateLimitErrorBoundary>
-    </LoadingStateManager>
+    <RateLimitErrorBoundary>{inner}</RateLimitErrorBoundary>
   ) : (
     inner
   )

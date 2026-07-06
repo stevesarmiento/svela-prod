@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { z } from "zod";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../../convex/_generated/api";
@@ -75,7 +76,7 @@ async function fetchWithErrorHandling(url: string) {
   }
 }
 
-export async function GET(request: Request) {
+async function handleGet(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const symbolOrId = searchParams.get('symbol') || 'BTC';
@@ -244,3 +245,6 @@ export async function GET(request: Request) {
     );
   }
 }
+export const GET = withAuthRatelimit(handleGet, {
+  name: "coinglass-funding-rate",
+});

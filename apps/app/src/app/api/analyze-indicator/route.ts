@@ -1,4 +1,6 @@
 import { streamText } from "ai"
+import type { NextRequest } from "next/server"
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit"
 import { z } from "zod"
 import { gemini } from "@/lib/gemini"
 
@@ -948,7 +950,14 @@ function encodeBase64Json(value: unknown): string {
   return ""
 }
 
-export async function POST(request: Request) {
+export const POST = withAuthRatelimit(
+  async (request: NextRequest) => {
+    return handleAnalyzeIndicator(request)
+  },
+  { name: "analyze-indicator", requireAuth: true, limiter: "llm" },
+)
+
+async function handleAnalyzeIndicator(request: Request) {
   try {
     const raw = await request.text()
     let json: unknown

@@ -28,3 +28,18 @@ export const ratelimit: RatelimitLike = isRedisConfigured()
       redis: client,
     })
   : mockRatelimit;
+
+/**
+ * Create a rate limiter with a custom budget, e.g. `createRatelimit(120, "60s")`.
+ * Falls back to a no-op limiter when Redis is not configured (local dev).
+ */
+export function createRatelimit(
+  tokens: number,
+  window: `${number}s` | `${number}m` | `${number}h`,
+): RatelimitLike {
+  if (!isRedisConfigured()) return mockRatelimit;
+  return new Ratelimit({
+    limiter: Ratelimit.slidingWindow(tokens, window),
+    redis: client,
+  });
+}

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 
 import { SmartScreenerScreenRequestSchema } from "@/lib/smart-screener/screen-api"
 import {
@@ -10,7 +11,7 @@ function getDevToken(): string | null {
   return process.env.SMART_SCREENER_DEV_TOKEN ?? null
 }
 
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   if (process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
@@ -69,3 +70,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(result, { status: 200 })
 }
 
+
+export const POST = withAuthRatelimit(handlePost, {
+  name: "internal-smart-screener",
+});

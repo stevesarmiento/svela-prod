@@ -1,12 +1,7 @@
 "use client";
 
 import { ClerkProvider, useUser } from "@clerk/nextjs";
-import {
-  QueryClient,
-  type Query,
-} from "@tanstack/react-query";
-import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
-import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import dynamic from "next/dynamic";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import type React from "react";
@@ -29,16 +24,8 @@ interface ProvidersProps {
 }
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const PERSISTED_QUERY_CACHE_VERSION = "v2";
 
-function shouldPersistQuery(query: Query): boolean {
-  if (query.state.status !== "success") return false;
-  const key0 = query.queryKey[0];
-  if (key0 === "watchlists") return true;
-  return false;
-}
-
-function PersistedQueryProvider({ children }: ProvidersProps) {
+function ScopedQueryProvider({ children }: ProvidersProps) {
   const { user } = useUser();
   const userId = user?.id ?? "anonymous";
 
@@ -48,46 +35,24 @@ function PersistedQueryProvider({ children }: ProvidersProps) {
         queries: {
           staleTime: 5 * 60 * 1000,
           refetchOnWindowFocus: true,
-          retry: 3,
+          // One retry is enough for transient blips; 4xx responses will
+          // not improve on retry, so skip them entirely.
+          retry: (failureCount, error) => {
+            const message = error instanceof Error ? error.message : "";
+            if (/\b4\d\d\b/.test(message)) return false;
+            return failureCount < 1;
+          },
           gcTime: ONE_DAY_MS,
         },
       },
     });
   }, [userId]);
 
-  const persister = useMemo(() => {
-    const storage = typeof window !== "undefined" ? window.localStorage : undefined;
-    return createAsyncStoragePersister({
-      storage,
-      key: `REACT_QUERY_OFFLINE_CACHE:${PERSISTED_QUERY_CACHE_VERSION}:${userId}`,
-    });
-  }, [userId]);
-
-  const buster =
-    process.env.NEXT_PUBLIC_APP_BUSTER ??
-    process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ??
-    process.env.NEXT_PUBLIC_BUILD_ID ??
-    "local";
-
   return (
-    <PersistQueryClientProvider
-      // Remount per user to avoid any cross-user cache bleed.
-      key={userId}
-      client={queryClient}
-      persistOptions={{
-        persister,
-        maxAge: ONE_DAY_MS,
-        buster,
-        dehydrateOptions: {
-          shouldDehydrateQuery: shouldPersistQuery,
-        },
-      }}
-      onSuccess={() => {
-        void queryClient.resumePausedMutations();
-      }}
-    >
+    // Remount per user to avoid any cross-user cache bleed.
+    <QueryClientProvider key={userId} client={queryClient}>
       {children}
-    </PersistQueryClientProvider>
+    </QueryClientProvider>
   );
 }
 
@@ -101,7 +66,7 @@ export function Providers({ children }: ProvidersProps) {
         },
       }}
     >
-      <PersistedQueryProvider>
+      <ScopedQueryProvider>
         <NuqsAdapter>
           <ConvexProvider>
             {children}
@@ -109,7 +74,7 @@ export function Providers({ children }: ProvidersProps) {
             {ReactQueryDevtools ? <ReactQueryDevtools initialIsOpen={false} /> : null}
           </ConvexProvider>
         </NuqsAdapter>
-      </PersistedQueryProvider>
+      </ScopedQueryProvider>
     </ClerkProvider>
   );
 }
