@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from "next/dynamic"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import type { SortingState } from "@tanstack/react-table"
 import { useQueryClient } from "@tanstack/react-query"
 import { RefreshCw } from "lucide-react"
@@ -222,10 +222,15 @@ export function ScreenerPageView() {
     return null
   }, [filters.takerFilter, smartScreenerStatus, takerMetricsQuery.isLoading])
 
+  // Defer search filtering so keystrokes stay responsive — filtering + sorting
+  // 500 coins per keypress blocks the input otherwise. (Same pattern as
+  // token-page-client.tsx.)
+  const deferredSearchText = useDeferredValue(filters.searchText)
+
   const filteredCoins = useMemo(() => {
     if (!coins.length) return []
 
-    const searchLower = filters.searchText ? filters.searchText.toLowerCase() : null
+    const searchLower = deferredSearchText ? deferredSearchText.toLowerCase() : null
 
     const filtered = coins.filter((coin) => {
       const usd = coin.quote.USD
@@ -309,7 +314,7 @@ export function ScreenerPageView() {
     })
 
     return filtered
-  }, [coins, filters, takerMetricsQuery.bySymbol])
+  }, [coins, filters, deferredSearchText, takerMetricsQuery.bySymbol])
 
   const hasActiveScreenerFilters = useMemo(() => {
     if (screenResult != null) return true

@@ -44,6 +44,12 @@ export interface ChartHighlightRange {
 export interface UseChartInstanceOptions {
     chartType?: ChartType;
     showVolume?: boolean;
+    /**
+     * Realtime spot price. Applied as an O(1) last-bar update on the live
+     * chart instance — intentionally NOT part of the series data, so ~1s
+     * ticks never trigger a full setData() re-feed.
+     */
+    livePriceUsd?: number | null;
     onCrosshairMove?: (price: number | null) => void;
     /** Optional crosshair time callback (useful for day-window highlighting). */
     onCrosshairTimeMove?: (time: Time | null) => void;

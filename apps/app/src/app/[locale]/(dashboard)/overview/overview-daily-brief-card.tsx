@@ -375,18 +375,17 @@ export function OverviewDailyBriefCard(props: {
       .filter((x) => Boolean(x)) as BriefCard[]
   }, [cards])
 
-  // Autoplay timer -- the active indicator fills up, then advances to the next slide
+  // Autoplay timer -- the active indicator fills up, then advances to the
+  // next slide. The fill is a pure CSS animation (keyed per slide, paused
+  // via animation-play-state) and the advance is a single timeout — the old
+  // 50ms setInterval re-rendered this whole card 20×/second while visible.
   const [isPaused, setIsPaused] = useState(false)
-  const [progress, setProgress] = useState(0)
   const slideKeys = useMemo<Array<string>>(() => ["summary", ...orderedCards.map((c) => c.kind)], [orderedCards])
   const slideCount = slideKeys.length
   const progressRef = useRef(0)
-  const lastTickRef = useRef(Date.now())
 
   const resetProgress = useCallback(() => {
     progressRef.current = 0
-    lastTickRef.current = Date.now()
-    setProgress(0)
   }, [])
 
   useEffect(() => {
@@ -396,21 +395,22 @@ export function OverviewDailyBriefCard(props: {
   useEffect(() => {
     if (!carouselApi || isPaused || slideCount <= 1) return
 
-    const tick = () => {
-      const now = Date.now()
-      const delta = now - lastTickRef.current
-      lastTickRef.current = now
-      progressRef.current = Math.min(progressRef.current + delta, SLIDE_INTERVAL_MS)
-      setProgress(progressRef.current)
+    const remainingMs = Math.max(0, SLIDE_INTERVAL_MS - progressRef.current)
+    const startedAt = Date.now()
+    const id = setTimeout(() => {
+      progressRef.current = 0
+      carouselApi.scrollTo((selectedSlide + 1) % slideCount)
+    }, remainingMs)
 
-      if (progressRef.current >= SLIDE_INTERVAL_MS) {
-        const next = (selectedSlide + 1) % slideCount
-        carouselApi.scrollTo(next)
-      }
+    return () => {
+      clearTimeout(id)
+      // Bank elapsed time so pause/resume continues where it left off,
+      // mirroring the CSS animation's own paused progress.
+      progressRef.current = Math.min(
+        SLIDE_INTERVAL_MS,
+        progressRef.current + (Date.now() - startedAt),
+      )
     }
-
-    const id = setInterval(tick, 50)
-    return () => clearInterval(id)
   }, [carouselApi, isPaused, selectedSlide, slideCount])
 
   const handleDotClick = useCallback(
@@ -495,11 +495,9 @@ export function OverviewDailyBriefCard(props: {
           </Carousel>
 
           <div className="flex items-center justify-start gap-1.5 px-2">
+            <style>{`@keyframes brief-progress-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }`}</style>
             {slideKeys.map((slideKey, idx) => {
               const isActive = idx === selectedSlide
-              const fillPct = isActive
-                ? Math.min((progress / SLIDE_INTERVAL_MS) * 100, 100)
-                : 0
 
               return (
                 <button
@@ -514,8 +512,13 @@ export function OverviewDailyBriefCard(props: {
                 >
                   {isActive ? (
                     <span
-                      className="absolute inset-y-0 left-0 rounded-full bg-zinc-900 dark:bg-white"
-                      style={{ width: `${fillPct}%` }}
+                      // Keyed per slide so the animation restarts on change.
+                      key={`fill-${selectedSlide}`}
+                      className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-zinc-900 dark:bg-white"
+                      style={{
+                        animation: `brief-progress-fill ${SLIDE_INTERVAL_MS}ms linear forwards`,
+                        animationPlayState: isPaused ? "paused" : "running",
+                      }}
                     />
                   ) : null}
                 </button>

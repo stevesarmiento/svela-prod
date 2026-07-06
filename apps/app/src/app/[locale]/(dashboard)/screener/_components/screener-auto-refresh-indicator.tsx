@@ -159,11 +159,13 @@ export function ScreenerAutoRefreshIndicator({
 
   useEffect(() => {
     if (!status.lastUpdatedAtMs) return
-    const tickMs = shouldReduceMotion ? 1000 : 250
+    // 1s resolution is indistinguishable for an mm:ss countdown label;
+    // a 4Hz state tick was ~14k renders per hour-long refresh cycle.
+    const tickMs = 1000
     setNowMs(Date.now())
     const id = window.setInterval(() => setNowMs(Date.now()), tickMs)
     return () => window.clearInterval(id)
-  }, [status.lastUpdatedAtMs, status.refreshIntervalMs, shouldReduceMotion])
+  }, [status.lastUpdatedAtMs, status.refreshIntervalMs])
 
   return (
     <div className={cn("flex shrink-0 items-center gap-2", className)}>

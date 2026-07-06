@@ -25,7 +25,9 @@ const nextConfig = {
   },
   experimental: {
     //optimizeCss: isProd,
-    optimizePackageImports: isProd ? ["@v1/ui"] : [],
+    // Unconditional: symbols-react's barrel re-exports 6k+ modules, and
+    // optimizing it matters *most* in dev (cold compile + HMR graph size).
+    optimizePackageImports: ["@v1/ui", "symbols-react"],
     serverActions: {
       bodySizeLimit: "2mb",
     },

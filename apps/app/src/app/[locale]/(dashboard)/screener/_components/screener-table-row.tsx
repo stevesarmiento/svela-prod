@@ -2,11 +2,12 @@
 
 import { flexRender, type Row } from '@tanstack/react-table'
 import Link from "next/link"
+import { memo } from "react"
 import { cn } from "@v1/ui/cn"
 import type { CoinMarketData } from '@/types/coins'
 import { SCREENER_TABLE_GRID_TEMPLATE_COLUMNS } from "./screener-table-layout"
 
-export function ScreenerTableRow({ row }: { row: Row<CoinMarketData> }) {
+function ScreenerTableRowInner({ row }: { row: Row<CoinMarketData> }) {
   const isLoadingRow = row.original.quote.USD.price <= 0
 
   const className = cn(
@@ -77,3 +78,14 @@ export function ScreenerTableRow({ row }: { row: Row<CoinMarketData> }) {
     </Link>
   )
 }
+
+// TanStack recreates Row wrappers whenever any table state changes, so a
+// plain memo() on the `row` prop never bails out. The row's rendered output
+// only depends on its underlying data object — compare that instead. This
+// keeps search keystrokes / bulk-quote refetches from re-rendering all
+// visible rows (each containing lazy inline chart cells).
+export const ScreenerTableRow = memo(
+  ScreenerTableRowInner,
+  (prev, next) =>
+    prev.row.id === next.row.id && prev.row.original === next.row.original,
+)
