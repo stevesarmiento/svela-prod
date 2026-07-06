@@ -342,17 +342,20 @@ async function patchDistFile(filePath) {
     "    ctx.arc(hoverX, y, dotRadius, 0, Math.PI * 2);",
   ].join("\n")
 
-  // The shipped liveline 0.0.7 dist already draws a horizontal crosshair
-  // natively (`ctx.moveTo(pad.left, y)` inside the scrub block) — detect
-  // that as satisfied. This patch had been warn-failing silently for a
-  // while because upstream absorbed the feature with slightly different
-  // styling.
-  const hasNativeHorizontalCrosshair =
-    next.includes("ctx.moveTo(pad.left, y);") &&
-    next.includes("ctx.lineTo(layout.w - pad.right, y);")
+  // Idempotency: the follow-up "crosshair stroke restyle" patch rewrites
+  // this block again (0.3 → 0.68 alpha, dashed strokes), so on an
+  // already-fully-patched dist neither this patch's old nor new form
+  // exists anymore. Detect that final form via its unique 0.68 alpha —
+  // do NOT match generic strings like `moveTo(pad.left, y)`, which also
+  // appear in unrelated gridline code in the pristine dist and would
+  // wrongly skip this patch on a fresh install (breaking the follow-up
+  // patch that depends on this one's output).
+  const hasFinalRestyledCrosshair = next.includes(
+    "ctx.globalAlpha = scrubOpacity * 0.68;",
+  )
 
-  if (next.includes(crosshairHorizontalNew) || hasNativeHorizontalCrosshair) {
-    // already patched (or upstream ships the horizontal crosshair natively)
+  if (next.includes(crosshairHorizontalNew) || hasFinalRestyledCrosshair) {
+    // already patched (directly, or through the follow-up restyle)
   } else if (next.includes(crosshairHorizontalOld)) {
     next = next.replace(crosshairHorizontalOld, crosshairHorizontalNew)
     didChange = true
