@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { z } from "zod"
 import { auth } from "@clerk/nextjs/server"
 
@@ -13,7 +14,7 @@ const RequestSchema = z.object({
   exchange: z.string().min(1).optional().nullable(),
 })
 
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   const userId = (await auth().catch(() => null))?.userId ?? null
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -119,3 +120,7 @@ export async function POST(request: NextRequest) {
   )
 }
 
+
+export const POST = withAuthRatelimit(handlePost, {
+  name: "smart-screener-taker-metrics",
+});

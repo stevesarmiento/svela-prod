@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../../convex/_generated/api";
 
@@ -21,7 +22,7 @@ function parseLimit(req: NextRequest): number {
   return Math.min(500, Math.max(1, Math.floor(limit)));
 }
 
-export async function GET(req: NextRequest) {
+async function handleGet(req: NextRequest) {
   const limit = parseLimit(req);
 
   const rows = await convex.query(api.coingeckoMarkets.getTopMarketDataByRank, {
@@ -35,3 +36,7 @@ export async function GET(req: NextRequest) {
     },
   });
 }
+
+export const GET = withAuthRatelimit(handleGet, {
+  name: "internal-markets-top",
+});

@@ -1,4 +1,6 @@
 import { streamText } from 'ai'
+import type { NextRequest } from 'next/server'
+import { withAuthRatelimit } from '@/lib/api/with-auth-ratelimit'
 import { z } from 'zod'
 import { gemini } from '@/lib/gemini'
 import { formatLargeNumber } from '@v1/ui/format-numbers'
@@ -343,7 +345,14 @@ ${volumeSpike ? 'VOLUME SPIKE DETECTED' : 'Normal volume activity'}`)
   return sections.join('\n')
 }
 
-export async function POST(req: Request) {
+export const POST = withAuthRatelimit(
+  async (req: NextRequest) => {
+    return handleAnalyze(req)
+  },
+  { name: 'analyze', requireAuth: true, limiter: 'llm' },
+)
+
+async function handleAnalyze(req: Request) {
   try {
     const rawData = await req.text()
     let data: unknown

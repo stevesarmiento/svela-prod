@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../../convex/_generated/api";
 
@@ -13,7 +14,7 @@ function getServerToken(): string {
   return token;
 }
 
-export async function GET(req: NextRequest) {
+async function handleGet(req: NextRequest) {
   const limitParam = req.nextUrl.searchParams.get("limit");
   const limit = limitParam ? Number(limitParam) : undefined;
 
@@ -25,3 +26,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(coins);
 }
 
+
+export const GET = withAuthRatelimit(handleGet, {
+  name: "internal-coins-top",
+});

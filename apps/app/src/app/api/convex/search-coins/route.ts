@@ -1,4 +1,5 @@
 import { ConvexHttpClient } from "convex/browser";
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { api } from "../../../../../convex/_generated/api";
 import { type NextRequest, NextResponse } from "next/server";
 
@@ -10,7 +11,7 @@ function getServerToken(): string {
   return token;
 }
 
-export async function POST(req: NextRequest) {
+async function handlePost(req: NextRequest) {
   try {
     const { query, limit = 20 } = await req.json();
 
@@ -41,3 +42,6 @@ export async function POST(req: NextRequest) {
     );
   }
 } 
+export const POST = withAuthRatelimit(handlePost, {
+  name: "convex-search-coins",
+});

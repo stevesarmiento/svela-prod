@@ -24,7 +24,6 @@
     "lint": "turbo run lint && bun lint:repo",
     "lint:repo": "bunx sherif@latest",
     "lint:repo:fix": "bunx sherif@latest --fix",
-    "migrate:clerk-production-users": "bun scripts/migrate-clerk-production-users.mjs",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {

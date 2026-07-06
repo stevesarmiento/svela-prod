@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { z } from "zod";
 import { auth } from "@clerk/nextjs/server";
 import { api } from "../../../../convex/_generated/api";
@@ -17,7 +18,7 @@ const ListQuerySchema = z.object({
   include_platform: z.string().optional().transform(val => val === 'true'),
 });
 
-export async function GET(request: Request) {
+async function handleGet(request: Request) {
   let userId: string | null = null;
   try {
     userId = (await auth()).userId;
@@ -125,3 +126,6 @@ export async function GET(request: Request) {
     );
   }
 }
+export const GET = withAuthRatelimit(handleGet, {
+  name: "coingecko-base",
+});

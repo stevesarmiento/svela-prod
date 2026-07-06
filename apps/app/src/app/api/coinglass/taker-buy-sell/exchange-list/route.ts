@@ -1,4 +1,5 @@
 import { convex, getServerToken } from "@/lib/convex-server";
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { type NextRequest, NextResponse } from "next/server";
 import { api } from "../../../../../../convex/_generated/api";
 
@@ -8,7 +9,7 @@ function isProbablyCoinGeckoId(value: string): boolean {
   return value.includes("-") || value.toLowerCase() === value;
 }
 
-export async function GET(request: NextRequest) {
+async function handleGet(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const rawSymbol = (searchParams.get("symbol") || "").trim();
   const range = (searchParams.get("range") || "24h").trim();
@@ -131,3 +132,7 @@ export async function GET(request: NextRequest) {
     },
   );
 }
+
+export const GET = withAuthRatelimit(handleGet, {
+  name: "coinglass-taker-exchange",
+});

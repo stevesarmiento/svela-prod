@@ -35,11 +35,14 @@ const nextConfig = {
     removeConsole: isProd,
   },
   images: {
+    // Known logo/avatar CDNs only — a "**" wildcard turns the image
+    // optimizer into an open proxy. Arbitrary wallet-token logos render
+    // with `unoptimized` instead (see add-wallet-dialog).
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "**",
-      },
+      { protocol: "https" as const, hostname: "coin-images.coingecko.com" },
+      { protocol: "https" as const, hostname: "assets.coingecko.com" },
+      { protocol: "https" as const, hostname: "s2.coinmarketcap.com" },
+      { protocol: "https" as const, hostname: "img.clerk.com" },
     ],
     minimumCacheTTL: 31536000,
   },
