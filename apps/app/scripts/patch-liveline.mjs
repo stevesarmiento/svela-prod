@@ -510,8 +510,7 @@ async function main() {
     // would otherwise silently un-patch the charts (dashed price line and
     // time axis reappear) with no signal until someone eyeballs the UI.
     console.error(
-      `[patch-liveline] Pattern mismatch (changed ${changedCount}/${results.length}). ` +
-        "liveline's dist output changed — update scripts/patch-liveline.mjs or pin the previous version.",
+      `[patch-liveline] Pattern mismatch (changed ${changedCount}/${results.length}). liveline's dist output changed — update scripts/patch-liveline.mjs or pin the previous version.`,
     )
     process.exit(1)
   }

@@ -495,7 +495,7 @@ export function OverviewDailyBriefCard(props: {
           </Carousel>
 
           <div className="flex items-center justify-start gap-1.5 px-2">
-            <style>{`@keyframes brief-progress-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }`}</style>
+            <style>{"@keyframes brief-progress-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }"}</style>
             {slideKeys.map((slideKey, idx) => {
               const isActive = idx === selectedSlide
 
