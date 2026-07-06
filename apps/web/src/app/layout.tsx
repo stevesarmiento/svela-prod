@@ -16,8 +16,7 @@ const DepartureMono = localFont({
 
 export const metadata: Metadata = {
   ...createWebLayoutMetadata({
-    description:
-      "A free, open-source starter kit for your next project, built with insights from Midday.",
+    description: "Svela — crypto market intelligence.",
   }),
 };
 

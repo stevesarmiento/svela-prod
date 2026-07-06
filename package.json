@@ -4,9 +4,6 @@
   "workspaces": [
     "apps/*",
     "packages/analytics",
-    "packages/convex",
-    "packages/email",
-    "packages/jobs",
     "packages/kv",
     "packages/logger",
     "packages/ui",
@@ -16,9 +13,8 @@
     "build": "turbo run build",
     "clean": "git clean -xdf node_modules",
     "clean:workspaces": "turbo run clean",
-    "dev": "turbo run dev --filter=!@v1/api",
+    "dev": "turbo run dev",
     "dev:web": "turbo run dev --filter=@v1/web",
-    "dev:jobs": "turbo run jobs --filter=@v1/jobs",
     "dev:app": "turbo run dev --filter=@v1/app",
     "dev:convex": "cd apps/app && bunx convex dev",
     "start:web": "turbo run start --filter=@v1/web",
@@ -29,8 +25,7 @@
     "lint:repo": "bunx sherif@latest",
     "lint:repo:fix": "bunx sherif@latest --fix",
     "migrate:clerk-production-users": "bun scripts/migrate-clerk-production-users.mjs",
-    "typecheck": "turbo run typecheck",
-    "dev:with-api": "turbo run dev"
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
     "@biomejs/biome": "1.8.3",

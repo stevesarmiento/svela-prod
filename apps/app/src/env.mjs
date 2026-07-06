@@ -11,8 +11,6 @@ export const env = createEnv({
     NODE_ENV: z.enum(["development", "production", "test"]),
   },
   server: {
-    OPENPANEL_SECRET_KEY: z.string().optional(),
-    RESEND_API_KEY: z.string().optional(),
     UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
     UPSTASH_REDIS_REST_URL: z.string().optional(),
     CLERK_SECRET_KEY: z.string().optional(),
@@ -28,7 +26,7 @@ export const env = createEnv({
     INTERNAL_CONVEX_SERVER_TOKEN: z.string().min(1),
   },
   client: {
-    NEXT_PUBLIC_OPENPANEL_CLIENT_ID: z.string().optional(),
+    NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
     NEXT_PUBLIC_CONVEX_URL: z.string().optional(),
     NEXT_PUBLIC_APP_URL: z.string().optional(),
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().optional(),
@@ -38,8 +36,7 @@ export const env = createEnv({
     NEXT_PUBLIC_DISABLE_ALPHA_FEATURES: z.string().optional().default('true'),
   },
   runtimeEnv: {
-    NEXT_PUBLIC_OPENPANEL_CLIENT_ID:
-      process.env.NEXT_PUBLIC_OPENPANEL_CLIENT_ID,
+    NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
     NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
@@ -47,9 +44,7 @@ export const env = createEnv({
     NEXT_PUBLIC_SOLANA_RPC_URL: process.env.NEXT_PUBLIC_SOLANA_RPC_URL,
     NEXT_PUBLIC_HELIUS_API_KEY: process.env.NEXT_PUBLIC_HELIUS_API_KEY,
     NEXT_PUBLIC_DISABLE_ALPHA_FEATURES: process.env.NEXT_PUBLIC_DISABLE_ALPHA_FEATURES,
-    OPENPANEL_SECRET_KEY: process.env.OPENPANEL_SECRET_KEY,
     PORT: process.env.PORT,
-    RESEND_API_KEY: process.env.RESEND_API_KEY,
     CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
     UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
