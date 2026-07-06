@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-export const WEB_NAME = "Create v1";
+export const WEB_NAME = "Svela";
 
 export interface CreateWebLayoutMetadataOptions {
   description?: string;

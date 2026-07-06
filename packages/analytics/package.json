@@ -24,7 +24,6 @@
   },
   "exports": {
     "./server": "./src/server.ts",
-    "./client": "./src/client.tsx",
-    "./events": "./src/events.ts"
+    "./client": "./src/client.tsx"
   }
 }
