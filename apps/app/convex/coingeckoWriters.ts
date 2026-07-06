@@ -29,6 +29,48 @@ const marketWriteItemValidator = v.object({
   lastUpdated: v.string(),
 });
 
+// Fields that represent real market movement. `lastUpdated` (a CoinGecko
+// response string) changes on every fetch even when nothing moved, so it
+// must not participate in the diff.
+const MARKET_DIFF_FIELDS = [
+  "symbol",
+  "name",
+  "image",
+  "currentPrice",
+  "marketCap",
+  "marketCapRank",
+  "fullyDilutedValuation",
+  "totalVolume",
+  "high24h",
+  "low24h",
+  "priceChange24h",
+  "priceChangePercentage24h",
+  "marketCapChange24h",
+  "marketCapChangePercentage24h",
+  "circulatingSupply",
+  "totalSupply",
+  "maxSupply",
+  "ath",
+  "athChangePercentage",
+  "athDate",
+  "atl",
+  "atlChangePercentage",
+  "atlDate",
+] as const;
+
+function marketItemUnchanged(
+  existing: Record<string, unknown>,
+  item: Record<string, unknown>,
+): boolean {
+  for (const field of MARKET_DIFF_FIELDS) {
+    // Treat `undefined` in the incoming item as "no data" — don't clobber
+    // (or diff against) an existing value with it.
+    if (item[field] === undefined) continue;
+    if (existing[field] !== item[field]) return false;
+  }
+  return true;
+}
+
 export const _upsertMarketDataBatch = internalMutation({
   args: {
     items: v.array(marketWriteItemValidator),
@@ -36,11 +78,13 @@ export const _upsertMarketDataBatch = internalMutation({
   returns: v.object({
     inserted: v.number(),
     updated: v.number(),
+    unchanged: v.number(),
   }),
   handler: async (ctx, args) => {
     const now = Date.now();
     let inserted = 0;
     let updated = 0;
+    let unchanged = 0;
 
     for (const item of args.items) {
       const existing = await ctx.db
@@ -51,6 +95,14 @@ export const _upsertMarketDataBatch = internalMutation({
         .first();
 
       if (existing) {
+        // Diff before patching: this runs for ~500 coins every 5 minutes.
+        // A blind patch creates a new document version (write bandwidth +
+        // reactive-query invalidation) even when CoinGecko returned
+        // identical numbers.
+        if (marketItemUnchanged(existing, item)) {
+          unchanged++;
+          continue;
+        }
         await ctx.db.patch(existing._id, {
           ...item,
           updatedAt: now,
@@ -67,7 +119,7 @@ export const _upsertMarketDataBatch = internalMutation({
       inserted++;
     }
 
-    return { inserted, updated };
+    return { inserted, updated, unchanged };
   },
 });
 
@@ -402,6 +454,18 @@ export const _bulkUpsertCoinGeckoCoins = internalMutation({
         .first();
 
       if (existing) {
+        // Skip the patch when nothing material changed — a blind patch
+        // creates a new document version on every sync pass.
+        const unchanged =
+          existing.name === coin.name &&
+          existing.symbol === coin.symbol &&
+          existing.logoUrl === coin.logoUrl &&
+          existing.isActive === coin.isActive &&
+          (coin.imageUpdated === undefined ||
+            existing.imageUpdated === coin.imageUpdated) &&
+          areStringRecordsEqual(existing.platforms, coin.platforms);
+        if (unchanged) continue;
+
         await ctx.db.patch(existing._id, {
           ...coin,
           lastUpdated: now,

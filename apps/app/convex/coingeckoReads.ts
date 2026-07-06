@@ -201,13 +201,19 @@ export const getGlobalMarketHistorySeries = query({
       return { data: [], lastUpdated: 0, stale: false };
     }
 
+    // Bound the read to the timeframe's own window and cap the row count —
+    // an unbounded collect() over the whole partition gets slower every day
+    // and would eventually exceed Convex's 8192-element array limit.
+    const windowStartMs =
+      now - Number(args.timeframe) * DAY_MS - 60 * 60 * 1000;
+
     const data = await ctx.db
       .query("globalMarketHistory")
       .withIndex("by_timeframe_timestamp", (q) =>
-        q.eq("timeframe", args.timeframe),
+        q.eq("timeframe", args.timeframe).gte("timestamp", windowStartMs),
       )
       .order("asc")
-      .collect();
+      .take(MAX_RETURN_POINTS);
 
     return {
       data,

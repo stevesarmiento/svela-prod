@@ -36,31 +36,6 @@ const coinglassSupportedCoinValidator = v.object({
   lastUpdated: v.number(),
 });
 
-// Legacy CoinMarketCap search - deprecated, use searchCoinGeckoCoins instead
-export const searchCoins = query({
-  args: { serverToken: v.string(), query: v.string(), limit: v.optional(v.number()) },
-  returns: v.array(coinValidator),
-  handler: async (ctx, args) => {
-    requireServerToken(args.serverToken);
-    const searchTerm = args.query.toLowerCase();
-    const limit = args.limit || 20;
-
-    // Get ALL coins for comprehensive search
-    const allCoins = await ctx.db.query("coins").collect();
-
-    // Filter in memory for substring matching
-    const filtered = allCoins
-      .filter(coin => 
-        coin.name.toLowerCase().includes(searchTerm) ||
-        coin.symbol.toLowerCase().includes(searchTerm)
-      )
-      .sort((a, b) => (a.rank ?? 999999) - (b.rank ?? 999999))
-      .slice(0, limit);
-
-    return filtered;
-  },
-});
-
 // CoinGecko coins search with improved relevance ranking
 export const searchCoinGeckoCoins = query({
   args: { serverToken: v.string(), query: v.string(), limit: v.optional(v.number()) },

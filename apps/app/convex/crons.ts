@@ -70,9 +70,12 @@ crons.interval(
   { days: "7", batchSize: 15 },
 );
 
+// 14d data is hourly-granularity upstream; refreshing more often than the
+// higher-resolution 7d chart (hourly) just burns CoinGecko calls on diffs
+// that skip.
 crons.interval(
   "coingecko_refresh_market_chart_14d",
-  { minutes: 15 },
+  { hours: 1 },
   internal.coingeckoJobs.refreshTrackedMarketChartBatch,
   { days: "14", batchSize: 24 },
 );
@@ -203,12 +206,12 @@ crons.interval(
   { batchSize: 25 },
 );
 
-// Data cleanup (rolling).
+// Expired API-cache rows (rolling).
 crons.interval(
-  "cleanup_old_market_data",
+  "cleanup_expired_api_cache",
   { hours: 6 },
-  internal.cleanupInternal._cleanupOldData,
-  { olderThanDays: 30, batchSize: 250 },
+  internal.cleanupInternal._cleanupExpiredApiCache,
+  { batchSize: 250 },
 );
 
 // Cleanup ephemeral last-known spot snapshots (per-session writers).
@@ -219,13 +222,14 @@ crons.interval(
   { olderThanHours: 48, batchSize: 1000 },
 );
 
-// One-time-ish cleanup: remove legacy tracked coin membership.
-// After `refreshTopMarkets` stopped writing `reason: "top"`, this will converge to 0 deletions.
+// Retention: trim unbounded history tables (priceHistory short timeframes,
+// globalMarketHistory, coinglass histories, orphaned news articles) back to
+// their read windows. See convex/retention.ts for the per-table policies.
 crons.interval(
-  "cleanup_tracked_coins_top_reason",
-  { hours: 24 },
-  internal.coingeckoState._deleteTrackedCoinsByReasonBatch,
-  { reason: "top", batchSize: 2000 },
+  "retention_prune_history",
+  { hours: 6 },
+  internal.retention._runRetention,
+  {},
 );
 
 export default crons;

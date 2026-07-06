@@ -122,6 +122,13 @@ export const _removeTrackedCoinReason = internalMutation({
   },
 });
 
+// trackedCoins freshness only needs to be coarse (the 5-min market cron
+// reads membership, and pruning keys off multi-hour windows). Skip the
+// patch when the row was touched recently — overview snapshot refreshes
+// call this for every watchlist coin, and blind patches invalidate
+// subscriptions + burn write bandwidth for no behavioral change.
+const TRACKED_COIN_TOUCH_MIN_INTERVAL_MS = 30 * 60 * 1000;
+
 export const _touchTrackedCoinsBatch = internalMutation({
   args: {
     coingeckoIds: v.array(v.string()),
@@ -143,6 +150,9 @@ export const _touchTrackedCoinsBatch = internalMutation({
         .first();
 
       if (existing) {
+        if (lastSeen - existing.lastSeen < TRACKED_COIN_TOUCH_MIN_INTERVAL_MS) {
+          continue;
+        }
         await ctx.db.patch(existing._id, {
           lastSeen,
           updatedAt: now,

@@ -16,6 +16,12 @@ const lastKnownPriceValidator = v.object({
 
 const DEFAULT_SOURCE = "pyth";
 const MIN_WRITE_INTERVAL_MS = 15 * 1000;
+// When the price hasn't moved, heartbeat at most this often. Every write
+// re-runs every other viewer's subscription on the same (coin, source)
+// index range, so unchanged-price patches are pure reactive fan-out —
+// N viewers of a stablecoin cost ~N² query re-executions per 15s without
+// this. A slow heartbeat still keeps rows ahead of the 48h cleanup cron.
+const UNCHANGED_HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000;
 
 export const getLastKnownPrice = query({
   args: {
@@ -112,6 +118,13 @@ export const upsertLastKnownPrice = mutation({
     if (existing) {
       if (now - existing.updatedAt < MIN_WRITE_INTERVAL_MS) {
         return { didWrite: false, reason: "cooldown", updatedAt: existing.updatedAt };
+      }
+
+      if (
+        existing.priceUsd === args.priceUsd &&
+        now - existing.updatedAt < UNCHANGED_HEARTBEAT_INTERVAL_MS
+      ) {
+        return { didWrite: false, reason: "unchanged", updatedAt: existing.updatedAt };
       }
 
       await ctx.db.patch(existing._id, {
