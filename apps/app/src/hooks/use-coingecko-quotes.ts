@@ -192,6 +192,13 @@ export interface CoinGeckoQuotesBulkOptions {
   refetchOnWindowFocus?: boolean
 }
 
+// Strict-mode backfill bookkeeping: how many fast refetches we've spent on a
+// given set of missing ids. Some CoinGecko ids are permanently missing
+// (delisted/renamed) — without a cap, one bad id in a watchlist makes every
+// viewer poll at 20s forever.
+const MAX_STRICT_BACKFILL_ATTEMPTS = 3
+const strictBackfillAttempts = new Map<string, number>()
+
 export function useCoinGeckoQuotesBulk(
   coingeckoIds: ReadonlyArray<string>,
   options: CoinGeckoQuotesBulkOptions = {},
@@ -254,8 +261,21 @@ export function useCoinGeckoQuotesBulk(
       }
 
       if (mode === "strict") {
-        for (const id of stableIds) {
-          if (!data[id]) return Math.max(20_000, backoffMs)
+        const missing = stableIds.filter((id) => !data[id])
+        if (missing.length > 0) {
+          const attemptKey = `${stableIdsKey}:${missing.join(",")}`
+          const attempts = strictBackfillAttempts.get(attemptKey) ?? 0
+          if (attempts < MAX_STRICT_BACKFILL_ATTEMPTS) {
+            strictBackfillAttempts.set(attemptKey, attempts + 1)
+            return Math.max(20_000, backoffMs)
+          }
+          // Same ids still missing after several fast retries: treat them as
+          // known-missing and fall back to the normal cadence.
+        } else if (strictBackfillAttempts.size > 0) {
+          // Everything resolved — reset bookkeeping for this id set.
+          for (const key of strictBackfillAttempts.keys()) {
+            if (key.startsWith(`${stableIdsKey}:`)) strictBackfillAttempts.delete(key)
+          }
         }
       }
 

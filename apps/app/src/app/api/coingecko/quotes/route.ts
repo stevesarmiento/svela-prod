@@ -328,11 +328,18 @@ async function handleGet(request: NextRequest) {
 
           const stillMissing = missingIds.filter((id) => data[id] === undefined);
 
-          await convex.mutation(api.coingeckoWarmup.requestMarketsRefresh, {
-            serverToken,
-            coingeckoIds: stillMissing,
-          });
-
+          // Only schedule a backend refresh when something is actually missing;
+          // don't make every read pay for a no-op mutation round trip.
+          if (stillMissing.length > 0) {
+            void convex
+              .mutation(api.coingeckoWarmup.requestMarketsRefresh, {
+                serverToken,
+                coingeckoIds: stillMissing,
+              })
+              .catch((error) => {
+                console.warn("[coingecko-quotes] requestMarketsRefresh failed:", error);
+              });
+          }
         }
 
         // Persist what we *did* fetch into Convex so portfolio/watchlist rendering works even
@@ -372,12 +379,19 @@ async function handleGet(request: NextRequest) {
         }
 
         if (marketItems.length > 0) {
-          for (const itemChunk of chunk(marketItems, 100)) {
-            await convex.mutation(api.coingeckoMarkets.upsertMarketDataBatch, {
-              serverToken,
-              items: itemChunk,
-            });
-          }
+          // Fire-and-forget: persisting fresh quotes into Convex is a cache
+          // warm, not part of the response. Don't serialize mutation chunks
+          // on the hot read path.
+          void Promise.all(
+            chunk(marketItems, 100).map((itemChunk) =>
+              convex.mutation(api.coingeckoMarkets.upsertMarketDataBatch, {
+                serverToken,
+                items: itemChunk,
+              }),
+            ),
+          ).catch((error) => {
+            console.warn("[coingecko-quotes] upsertMarketDataBatch failed:", error);
+          });
         }
       }
     } else {

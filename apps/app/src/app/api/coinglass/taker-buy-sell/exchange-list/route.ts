@@ -61,10 +61,19 @@ async function handleGet(request: NextRequest) {
     if (coin) symbol = coin.symbol.toUpperCase();
   }
 
-  const isSupported = await convex.query(api.coins.isCoinglassSupported, {
-    serverToken,
-    symbol,
-  });
+  // Support check and snapshot read are independent — run them concurrently
+  // instead of paying two sequential Convex round trips.
+  const [isSupported, snapshot] = await Promise.all([
+    convex.query(api.coins.isCoinglassSupported, {
+      serverToken,
+      symbol,
+    }),
+    convex.query(api.coinglassReads.getTakerBuySellExchangeListSnapshot, {
+      serverToken,
+      symbol,
+      range,
+    }),
+  ]);
   if (!isSupported) {
     return NextResponse.json(
       {
@@ -75,15 +84,6 @@ async function handleGet(request: NextRequest) {
       { status: 400 },
     );
   }
-
-  const snapshot = await convex.query(
-    api.coinglassReads.getTakerBuySellExchangeListSnapshot,
-    {
-      serverToken,
-      symbol,
-      range,
-    },
-  );
 
   if (!snapshot.data || snapshot.stale) {
     void convex

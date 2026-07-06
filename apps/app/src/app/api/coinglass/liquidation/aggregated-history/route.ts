@@ -64,24 +64,14 @@ async function handleGet(request: NextRequest) {
     if (coin) symbol = coin.symbol.toUpperCase();
   }
 
-  const isSupported = await convex.query(api.coins.isCoinglassSupported, {
-    serverToken,
-    symbol,
-  });
-  if (!isSupported) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: `Symbol ${symbol} is not supported by CoinGlass`,
-        inputSymbol: rawSymbol,
-      },
-      { status: 400 },
-    );
-  }
-
-  const series = await convex.query(
-    api.coinglassReads.getLiquidationHistorySeries,
-    {
+  // Support check and series read are independent — run them concurrently
+  // instead of paying two sequential Convex round trips.
+  const [isSupported, series] = await Promise.all([
+    convex.query(api.coins.isCoinglassSupported, {
+      serverToken,
+      symbol,
+    }),
+    convex.query(api.coinglassReads.getLiquidationHistorySeries, {
       serverToken,
       symbol,
       interval,
@@ -95,8 +85,18 @@ async function handleGet(request: NextRequest) {
         typeof endTime === "number" && Number.isFinite(endTime)
           ? endTime
           : undefined,
-    },
-  );
+    }),
+  ]);
+  if (!isSupported) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Symbol ${symbol} is not supported by CoinGlass`,
+        inputSymbol: rawSymbol,
+      },
+      { status: 400 },
+    );
+  }
 
   if (series.data.length < 2 || series.stale) {
     void convex
