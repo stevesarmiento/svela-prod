@@ -24,6 +24,13 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
         setContainerEl(node)
     }, [])
     const controllerRef = useRef<ChartController | null>(null);
+    // Bumped every time a controller is (re)created so the update effects
+    // below re-run and feed the fresh (empty) chart. Without this, a chart
+    // created *after* the last data-identity change never receives setData —
+    // e.g. on first load, where the container div only mounts once data is
+    // ready, the controller is created one render later than the data change
+    // and the chart stays empty until the next refetch.
+    const [controllerGeneration, setControllerGeneration] = useState(0);
 
     const callbacksRef = useRef<Pick<UseChartInstanceOptions, 'onCrosshairMove' | 'onCrosshairTimeMove'>>({
         onCrosshairMove,
@@ -50,6 +57,7 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
         });
 
         controllerRef.current = controller;
+        setControllerGeneration((generation) => generation + 1);
 
         return () => {
             controller.destroy();
@@ -68,7 +76,7 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
         if (livePriceRef.current != null) {
             controllerRef.current?.updateLivePrice(livePriceRef.current);
         }
-    }, [ohlcvData]);
+    }, [ohlcvData, controllerGeneration]);
 
     // Realtime ticks are O(1) last-bar updates — they must never re-feed the
     // whole series (the old code rebuilt + setData() on every ~1s tick).
@@ -81,7 +89,7 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
     const hasHullSuite = !!(hullSuite?.mhull?.length || hullSuite?.shull?.length);
     useEffect(() => {
         controllerRef.current?.setHullSuite(hasHullSuite ? hullSuite : null);
-    }, [hasHullSuite, hullSuite]);
+    }, [hasHullSuite, hullSuite, controllerGeneration]);
 
     // Highlight updates should not recreate the chart.
     const highlightFromEpochSec = highlightRange ? timeToEpochSeconds(highlightRange.from) : null;
@@ -92,7 +100,7 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
     useEffect(() => {
         const range: ChartHighlightRange | null = highlightRange ?? null;
         controllerRef.current?.setHighlightRange(range);
-    }, [highlightFromEpochSec, highlightToEpochSec, highlightDimOpacity, highlightBoundaryColor, highlightRange]);
+    }, [highlightFromEpochSec, highlightToEpochSec, highlightDimOpacity, highlightBoundaryColor, highlightRange, controllerGeneration]);
 
     return chartContainerRef;
 }
