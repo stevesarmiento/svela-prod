@@ -24,7 +24,8 @@
     "lint": "turbo run lint && bun lint:repo",
     "lint:repo": "bunx sherif@latest",
     "lint:repo:fix": "bunx sherif@latest --fix",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "migrate:clerk-production-users": "bun scripts/migrate-clerk-production-users.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "1.8.3",

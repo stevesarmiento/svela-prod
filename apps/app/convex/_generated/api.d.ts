@@ -13,6 +13,7 @@ import type * as _lib_server_token from "../_lib/server_token.js";
 import type * as apiKeys from "../apiKeys.js";
 import type * as apiKeysActions from "../apiKeysActions.js";
 import type * as cleanupInternal from "../cleanupInternal.js";
+import type * as clerkUserMigration from "../clerkUserMigration.js";
 import type * as coingeckoCoinsInternal from "../coingeckoCoinsInternal.js";
 import type * as coingeckoJobs from "../coingeckoJobs.js";
 import type * as coingeckoMarkets from "../coingeckoMarkets.js";
@@ -52,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   apiKeys: typeof apiKeys;
   apiKeysActions: typeof apiKeysActions;
   cleanupInternal: typeof cleanupInternal;
+  clerkUserMigration: typeof clerkUserMigration;
   coingeckoCoinsInternal: typeof coingeckoCoinsInternal;
   coingeckoJobs: typeof coingeckoJobs;
   coingeckoMarkets: typeof coingeckoMarkets;
