@@ -63,19 +63,54 @@ interface HybridSearchOptions {
   limit?: number;
 }
 
+// How many candidates to pull from the DB before re-ranking client-side.
+// Deliberately larger than the display limit: the DB ranks lexically only
+// (exact id > exact symbol > ...), so ticker-squatting joke coins (symbol
+// literally "BITCOIN") would otherwise fill a small slate before legitimate
+// partial matches ever reach the client.
+const SEARCH_SLATE_SIZE = 50;
+
+/** Ticker-like queries ("btc", "sol") should let exact-symbol matches win. */
+function isTickerLikeQuery(query: string): boolean {
+  return query.length <= 6 && /^[a-z0-9]+$/.test(query);
+}
+
+/**
+ * Lexical relevance boost, blended with log10(market cap) for final ranking.
+ *
+ * Exact symbol matches only get the full boost for ticker-like queries:
+ * for name-like queries ("bitcoin"), a symbol-exact match is usually a
+ * squatter riding a famous name, so market cap decides instead.
+ */
+function exactnessBoost(
+  coin: { id: string; name: string; symbol: string },
+  normalizedQuery: string,
+  tickerLike: boolean,
+): number {
+  const id = coin.id.toLowerCase();
+  const name = coin.name.toLowerCase();
+  const symbol = coin.symbol.toLowerCase();
+
+  if (id === normalizedQuery || name === normalizedQuery) return 6;
+  if (symbol === normalizedQuery) return tickerLike ? 6 : 1.5;
+  if (name.startsWith(normalizedQuery) || symbol.startsWith(normalizedQuery)) return 2;
+  if (name.includes(normalizedQuery)) return 0.5;
+  return 0;
+}
+
 /**
  * Optimized hybrid search that leverages database-first approach
- * 
+ *
  * 1. Searches our coingeckoCoins database for name/symbol matches (fast, with real images)
  * 2. Gets live pricing data from API for only the matched coins
  * 3. Combines static DB data (names, symbols, images) with dynamic API data (prices, changes)
- * 4. Sorts results by market cap (highest first) for better relevance
- * 
+ * 4. Re-ranks by blended score: log10(market cap) + lexical exactness boost
+ *
  * Benefits:
  * - Reduced API payload (only pricing data, not static data)
  * - Faster initial display (static data from DB)
  * - Real CoinGecko images from updated database
- * - Most relevant coins (by market cap) appear first
+ * - Popular coins outrank ticker-squatters; exact tickers still win for short queries
  */
 export function useHybridCoinSearch(
   query: string,
@@ -88,17 +123,19 @@ export function useHybridCoinSearch(
   totalResults: number;
 } {
   const { limit = 50 } = options;
-  
+  // Over-fetch so the client-side re-rank has real candidates to work with.
+  const fetchLimit = Math.max(SEARCH_SLATE_SIZE, limit);
+
   // Step 1: Search our database for matching coins (very fast)
   const {
     data: dbSearchResults,
     isLoading: isDbLoading,
     error: dbError,
   } = useQuery({
-    queryKey: ["coins", "search", query.trim(), limit],
+    queryKey: ["coins", "search", query.trim(), fetchLimit],
     queryFn: async (): Promise<CoinSearchResult[]> => {
       const response = await fetch(
-        `/api/internal/coins/search?query=${encodeURIComponent(query.trim())}&limit=${limit}`,
+        `/api/internal/coins/search?query=${encodeURIComponent(query.trim())}&limit=${fetchLimit}`,
       );
       if (!response.ok) throw new Error(`Search error: ${response.status}`);
       const json: unknown = await response.json();
@@ -119,9 +156,12 @@ export function useHybridCoinSearch(
   // Step 2: Get pricing data from API for only the matched coins
   const quotesQuery = useCoinGeckoQuotesBulk(coingeckoIds)
 
-  // Step 3: Combine database static data with API pricing data
+  // Step 3: Combine database static data with API pricing data, then re-rank
   const combinedResults = useMemo((): HybridCoinSearchResult[] => {
     if (!dbSearchResults) return [];
+
+    const normalizedQuery = query.trim().toLowerCase();
+    const tickerLike = isTickerLikeQuery(normalizedQuery);
 
     return dbSearchResults
       .map(dbCoin => {
@@ -146,26 +186,19 @@ export function useHybridCoinSearch(
           }
         };
       })
-      .sort((a, b) => {
-        // Sort by market cap descending (highest first)
-        const marketCapA = a.quote.USD.market_cap || 0;
-        const marketCapB = b.quote.USD.market_cap || 0;
-        
-        // If both have market caps, sort by market cap
-        if (marketCapA > 0 && marketCapB > 0) {
-          return marketCapB - marketCapA;
-        }
-        
-        // If only one has market cap, prioritize it
-        if (marketCapA > 0 && marketCapB === 0) return -1;
-        if (marketCapB > 0 && marketCapA === 0) return 1;
-        
-        // If neither has market cap, sort by CMC rank (lower rank = higher position)
-        const rankA = a.cmc_rank || 999999;
-        const rankB = b.cmc_rank || 999999;
-        return rankA - rankB;
-      });
-  }, [dbSearchResults, quotesQuery.data]);
+      .map((coin) => ({
+        coin,
+        // Blend popularity (log10 mcap: BTC ≈ 12, dead coins = 0) with lexical
+        // relevance so exact matches win among peers but a $10k squatter can't
+        // outrank a real project.
+        score:
+          Math.log10(Math.max(coin.quote.USD.market_cap, 1)) +
+          exactnessBoost(coin, normalizedQuery, tickerLike),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map(({ coin }) => coin);
+  }, [dbSearchResults, quotesQuery.data, query, limit]);
 
   // Determine search type based on query characteristics
   const searchType = useMemo(() => {
