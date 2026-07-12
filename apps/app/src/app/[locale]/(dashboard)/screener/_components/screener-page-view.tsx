@@ -3,12 +3,8 @@
 import dynamic from "next/dynamic"
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import type { SortingState } from "@tanstack/react-table"
-import { useQueryClient } from "@tanstack/react-query"
-import { RefreshCw } from "lucide-react"
 
 import { Spinner } from "@v1/ui/spinner"
-import { Button } from "@v1/ui/button"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 
 import type { FilterState } from "@/hooks/use-watchlist-data"
 import { useScreenerTopMarkets } from "@/hooks/use-screener-top-markets"
@@ -19,7 +15,6 @@ import { ScreenerFiltersBar } from "./screener-filters-bar"
 import type { ScreenerSearchQueryState } from "./screener-search-state-loader"
 import type { ScreenerTableStatus } from "./screener-table-types"
 
-const SCREENER_REFRESH_INTERVAL_MS = 60 * 60 * 1000
 const SCREENER_DEFAULT_LIMIT = 500
 /** Match initial / cleared `FilterState` slider maxima so we only treat ranges as “active” when narrowed. */
 const SCREENER_DEFAULT_PRICE_MAX = 1_000_000
@@ -72,17 +67,11 @@ const LazyScreenerAutoRefreshIndicator = dynamic(
     loading: () => (
       <div className="flex shrink-0 items-center gap-2">
         <div className="flex items-center gap-2 rounded-md px-2 py-1">
-          <div className="flex flex-col items-end leading-tight">
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] text-primary/40">Refreshes in:</span>
-              <span className="text-[11px] tabular-nums text-primary/80">--:--</span>
-            </div>
-            <div className="hidden md:flex items-center gap-1">
-              <span className="text-[10px] text-primary/40">Last updated:</span>
-              <span className="text-[11px] tabular-nums text-primary/80">--</span>
-            </div>
+          <span className="size-1.5 rounded-full bg-primary/20" aria-hidden="true" />
+          <div className="flex items-center gap-1 leading-tight">
+            <span className="text-[10px] text-primary/40">Updated:</span>
+            <span className="text-[11px] tabular-nums text-primary/80">--</span>
           </div>
-          <span className="size-7 rounded-full border border-primary/20" aria-hidden="true" />
         </div>
       </div>
     ),
@@ -121,13 +110,11 @@ export function ScreenerPageView() {
   const [sorting, setSorting] = useState<SortingState>([])
   const [smartScreenerStatus, setSmartScreenerStatus] = useState<ScreenerTableStatus | null>(null)
   const [screenResult, setScreenResult] = useState<SmartScreenerScreenResponse | null>(null)
-  const [isRefreshingData, setIsRefreshingData] = useState(false)
   const [searchQueryState, setSearchQueryState] = useState<ScreenerSearchQueryState>({
     data: [],
     isLoading: false,
     error: null,
   })
-  const queryClient = useQueryClient()
 
   const topMarketsQuery = useScreenerTopMarkets(SCREENER_DEFAULT_LIMIT)
   const topCoins = topMarketsQuery.data
@@ -447,53 +434,17 @@ export function ScreenerPageView() {
           />
         </div>
         <div className="flex items-center gap-2">
+          {/* Manual refresh removed: the markets store is kept fresh
+              server-side (5-min quotes cron + demand-driven chart scheduler)
+              and the hooks refetch on interval/focus — the button only
+              invalidated client caches that already self-refresh. The old
+              countdown was display-only (it never triggered anything). */}
           <LazyScreenerAutoRefreshIndicator
             status={{
               lastUpdatedAtMs: topMarketsQuery.lastUpdatedAtMs,
-              refreshIntervalMs: SCREENER_REFRESH_INTERVAL_MS,
-              isRefreshing: topMarketsQuery.isFetching || isRefreshingData,
+              isRefreshing: topMarketsQuery.isFetching,
             }}
           />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                aria-label="Refresh screener data"
-                variant="ghost"
-                size="sm"
-                disabled={isRefreshingData}
-                onClick={async () => {
-                  if (isRefreshingData) return
-                  setIsRefreshingData(true)
-                  try {
-                    await Promise.all([
-                      queryClient.invalidateQueries({ queryKey: ["screener"] }),
-                      queryClient.invalidateQueries({ queryKey: ["smart-screener"] }),
-                      queryClient.invalidateQueries({ queryKey: ["coingecko-inline-market-chart"] }),
-                      queryClient.invalidateQueries({ queryKey: ["spotTakerBuySellVolumeHistory"] }),
-                    ])
-                  } catch (error) {
-                    notifyError(
-                      "Refresh failed",
-                      error instanceof Error ? error.message : "Failed to refresh screener data.",
-                    )
-                  } finally {
-                    setIsRefreshingData(false)
-                  }
-                }}
-                className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10 disabled:opacity-60"
-              >
-                {isRefreshingData ? (
-                  <Spinner size={14} />
-                ) : (
-                  <RefreshCw className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left" align="center" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
-              <span>Refresh data</span>
-            </TooltipContent>
-          </Tooltip>
         </div>
       </div>
 
