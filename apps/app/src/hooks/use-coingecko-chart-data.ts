@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
@@ -641,6 +641,10 @@ export function useCoinGeckoChartData(
   const quoteQuery = useCoinGeckoQuote(coinId)
   const preferMarketChart = options?.preferMarketChart ?? false
 
+  // Bound the fast warmup polling so a series that can't heal (e.g. delisted
+  // coin) doesn't pin this hook at 5s forever.
+  const fastPollCountRef = useRef(0)
+
   // Fetch data from both routes with intelligent prioritization
   const { data: combinedData, isLoading } = useQuery({
     queryKey: ['coingecko-combined-chart-data', coinId, activeTimeScale, preferMarketChart],
@@ -656,7 +660,11 @@ export function useCoinGeckoChartData(
       const points = query.state.data?.data?.lineChart?.length ?? 0
       const warmupRequested = Boolean(query.state.data?.warmupRequested)
       // When warmup is in-flight, poll quickly so token pages don't stay empty.
-      if (points < 2 || warmupRequested) return 5_000
+      if ((points < 2 || warmupRequested) && fastPollCountRef.current < 24) {
+        fastPollCountRef.current += 1
+        return 5_000 // ~2 minutes of fast polling max per warm cycle
+      }
+      fastPollCountRef.current = 0
       return 5 * 60 * 1000
     },
     enabled: !!coinId,

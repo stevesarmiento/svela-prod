@@ -56,85 +56,23 @@ crons.interval(
   { days: "365" },
 );
 
+// Demand-prioritized chart refresh (replaces the old per-timeframe blind
+// round-robin rotation). The tick drains due chartSeries rows oldest-first
+// within timeframe-class shares under a hard daily budget; the reconciler
+// keeps chartSeries rows seeded for watchlist/portfolio coins. See
+// convex/chartScheduler.ts.
 crons.interval(
-  "coingecko_refresh_market_chart_1d",
-  { minutes: 5 },
-  internal.coingeckoJobs.refreshTrackedMarketChartBatch,
-  { days: "1", batchSize: 30 },
+  "chart_scheduler_tick",
+  { minutes: 1 },
+  internal.chartScheduler.tick,
+  {},
 );
 
 crons.interval(
-  "coingecko_refresh_market_chart_7d",
+  "chart_series_reconcile",
   { hours: 1 },
-  internal.coingeckoJobs.refreshTrackedMarketChartBatch,
-  { days: "7", batchSize: 15 },
-);
-
-// 14d data is hourly-granularity upstream; refreshing more often than the
-// higher-resolution 7d chart (hourly) just burns CoinGecko calls on diffs
-// that skip.
-crons.interval(
-  "coingecko_refresh_market_chart_14d",
-  { hours: 1 },
-  internal.coingeckoJobs.refreshTrackedMarketChartBatch,
-  { days: "14", batchSize: 24 },
-);
-
-crons.interval(
-  "coingecko_refresh_market_chart_30d",
-  { hours: 4 },
-  internal.coingeckoJobs.refreshTrackedMarketChartBatch,
-  { days: "30", batchSize: 10 },
-);
-
-crons.interval(
-  "coingecko_refresh_market_chart_90d",
-  { hours: 4 },
-  internal.coingeckoJobs.refreshTrackedMarketChartBatch,
-  { days: "90", batchSize: 10 },
-);
-
-crons.interval(
-  "coingecko_refresh_market_chart_365d",
-  { hours: 24 },
-  internal.coingeckoJobs.refreshTrackedMarketChartBatch,
-  { days: "365", batchSize: 8 },
-);
-
-crons.interval(
-  "coingecko_refresh_market_chart_730d",
-  { hours: 24 },
-  internal.coingeckoJobs.refreshTrackedMarketChartBatch,
-  { days: "730", batchSize: 6 },
-);
-
-crons.interval(
-  "coingecko_refresh_market_chart_1825d",
-  { hours: 24 },
-  internal.coingeckoJobs.refreshTrackedMarketChartBatch,
-  { days: "1825", batchSize: 2 },
-);
-
-crons.interval(
-  "coingecko_refresh_market_chart_max",
-  { hours: 24 },
-  internal.coingeckoJobs.refreshTrackedMarketChartBatch,
-  { days: "max", batchSize: 2 },
-);
-
-// OHLC refresh (used by technical analysis & tooltips).
-crons.interval(
-  "coingecko_refresh_ohlc_1",
-  { minutes: 15 },
-  internal.coingeckoJobs.refreshTrackedOhlcBatch,
-  { days: "1", batchSize: 8 },
-);
-
-crons.interval(
-  "coingecko_refresh_ohlc_7",
-  { hours: 4 },
-  internal.coingeckoJobs.refreshTrackedOhlcBatch,
-  { days: "7", batchSize: 3 },
+  internal.chartScheduler.reconcileChartSeries,
+  {},
 );
 
 // Coin image backfill for new/older rows.

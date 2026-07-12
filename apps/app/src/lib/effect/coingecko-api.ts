@@ -172,6 +172,9 @@ export interface MarketChartApiResponse {
     cached?: boolean;
     stale?: boolean;
     warmupRequested?: boolean;
+    warming?: boolean;
+    coverage?: "full" | "unknown";
+    lastFetchedAt?: number | null;
     points?: number;
     lastUpdated?: number;
   };
@@ -186,6 +189,9 @@ export interface GlobalMarketCapChartApiResponse {
     cached?: boolean;
     stale?: boolean;
     warmupRequested?: boolean;
+    warming?: boolean;
+    coverage?: "full" | "unknown";
+    lastFetchedAt?: number | null;
     points?: number;
     lastUpdated?: number;
   };
@@ -207,6 +213,9 @@ const MarketChartApiResponseSchema = Schema.Struct({
       cached: Schema.optional(Schema.Boolean),
       stale: Schema.optional(Schema.Boolean),
       warmupRequested: Schema.optional(Schema.Boolean),
+      warming: Schema.optional(Schema.Boolean),
+      coverage: Schema.optional(Schema.Literal("full", "unknown")),
+      lastFetchedAt: Schema.optional(Schema.NullOr(Schema.Number)),
       points: Schema.optional(Schema.Number),
       lastUpdated: Schema.optional(Schema.Number),
     }),
@@ -223,6 +232,9 @@ const GlobalMarketCapChartApiResponseSchema = Schema.Struct({
       cached: Schema.optional(Schema.Boolean),
       stale: Schema.optional(Schema.Boolean),
       warmupRequested: Schema.optional(Schema.Boolean),
+      warming: Schema.optional(Schema.Boolean),
+      coverage: Schema.optional(Schema.Literal("full", "unknown")),
+      lastFetchedAt: Schema.optional(Schema.NullOr(Schema.Number)),
       points: Schema.optional(Schema.Number),
       lastUpdated: Schema.optional(Schema.Number),
     }),
@@ -244,6 +256,9 @@ export interface OHLCApiResponse {
     cached?: boolean;
     stale?: boolean;
     warmupRequested?: boolean;
+    warming?: boolean;
+    coverage?: "full" | "unknown";
+    lastFetchedAt?: number | null;
     points?: number;
     lastUpdated?: number;
   };
@@ -265,6 +280,9 @@ const OHLCApiResponseSchema = Schema.Struct({
       cached: Schema.optional(Schema.Boolean),
       stale: Schema.optional(Schema.Boolean),
       warmupRequested: Schema.optional(Schema.Boolean),
+      warming: Schema.optional(Schema.Boolean),
+      coverage: Schema.optional(Schema.Literal("full", "unknown")),
+      lastFetchedAt: Schema.optional(Schema.NullOr(Schema.Number)),
       points: Schema.optional(Schema.Number),
       lastUpdated: Schema.optional(Schema.Number),
     }),

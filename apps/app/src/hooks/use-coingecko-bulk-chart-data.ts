@@ -27,6 +27,8 @@ interface CoinSeries {
   symbol: string
   color?: string
   data: Array<{ time: Time; value: number }>
+  /** True while a background refresh is healing this series — its tail may be missing. */
+  warming?: boolean
 }
 
 interface BulkChartDataResult {
@@ -54,6 +56,9 @@ function alignSeriesToSharedTimeAxis(series: CoinSeries[]): CoinSeries[] {
     if (row.data.length === 0) return row
 
     if (row.data.length === 1) {
+      // A warming single-point series is mid-heal: don't fabricate a flat
+      // line across the whole axis — let it render as-is until data lands.
+      if (row.warming) return row
       const onlyValue = row.data[0]?.value ?? 0
       return {
         ...row,
@@ -78,6 +83,11 @@ function alignSeriesToSharedTimeAxis(series: CoinSeries[]): CoinSeries[] {
         alignedData.push({ time: time as Time, value: firstValue })
         continue
       }
+
+      // Honest gaps: while the series is warming, its tail is un-fetched —
+      // stop the line at the last real point instead of forward-filling a
+      // fake flat segment across the gap.
+      if (row.warming && time > lastTime) continue
 
       if (time >= lastTime) {
         alignedData.push({ time: time as Time, value: lastValue })
@@ -160,18 +170,22 @@ export function useCoinGeckoBulkChartData(
               value: basePrice > 0 ? ((value - basePrice) / basePrice) * 100 : 0,
             }))
 
+            const needsWarmup =
+              (response.status?.warmupRequested ?? false) ||
+              (response.status?.warming ?? false) ||
+              (response.status?.stale ?? false)
+
             return {
               cached: response.status?.cached ?? false,
               // Server schedules a background refresh when the stored series is
               // stale or thin; keep polling until it lands instead of waiting 5min.
-              needsWarmup:
-                (response.status?.warmupRequested ?? false) ||
-                (response.status?.stale ?? false),
+              needsWarmup,
               series: {
                 id: coinId,
                 name: coinMeta?.name || "Unknown",
                 symbol: coinMeta?.symbol || "UNK",
                 data: finalData,
+                warming: needsWarmup,
               },
             }
           }),

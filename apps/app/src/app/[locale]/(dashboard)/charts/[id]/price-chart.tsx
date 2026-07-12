@@ -511,7 +511,10 @@ export const PriceChart = memo(function PriceChart({
   const chartContainerRef = useChartInstance(isSeriesReady ? ohlcvDataForChart : [], {
     chartType: 'line',
     showVolume: true,
-    livePriceUsd: liveSpotPriceUsd,
+    // Honest gaps: while the series is warming (stored tail un-fetched),
+    // pinning the live spot price to the last bar draws a fake straight
+    // segment across the gap — hold off until the backfill lands.
+    livePriceUsd: isWarmingUp ? undefined : liveSpotPriceUsd,
     isDarkMode,
     hullSuite: hullSuiteOverlay,
     onCrosshairMove: handleCrosshairMove,

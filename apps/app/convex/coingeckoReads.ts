@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
+import { getStaleWindowMs } from "./_lib/chartFreshness";
 import type { Doc } from "./_generated/dataModel";
 
 const priceHistoryPointValidator = v.object({
@@ -36,23 +37,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const CHUNK_SIZE = 4096;
 const MAX_CHUNKS = 6;
 
-function getStaleWindowMs(timeframe: string): number {
-  const isOhlc = timeframe.endsWith("_ohlc");
-  const base = timeframe.replace(/_ohlc$/, "");
-  // Stale windows are tuned to cron cadence. Keep 1d chart surfaces warm because
-  // watchlist cards and the default chart view depend on this range.
-  if (isOhlc && base === "1") return 15 * 60 * 1000;
-  if (base === "1") return 10 * 60 * 1000;
-  if (base === "7") return 60 * 60 * 1000;
-  if (base === "14") return 30 * 60 * 1000;
-  if (base === "30") return 4 * 60 * 60 * 1000;
-  if (base === "90") return 4 * 60 * 60 * 1000;
-  if (base === "365") return 24 * 60 * 60 * 1000;
-  if (base === "730") return 24 * 60 * 60 * 1000;
-  if (base === "1825") return 24 * 60 * 60 * 1000;
-  if (base === "max") return 24 * 60 * 60 * 1000;
-  return 10 * 60 * 1000;
-}
+// Per-series stale windows live in _lib/chartFreshness.ts — one source of
+// truth shared by this reader, the warmup mutations, and the chart scheduler.
 
 function getGlobalMarketStaleWindowMs(timeframe: string): number {
   if (timeframe === "1") return 90 * 60 * 1000;
@@ -83,6 +69,12 @@ function downsampleEvenly<T>(items: Array<T>, maxPoints: number): Array<T> {
   return out;
 }
 
+const seriesFreshnessValidator = v.object({
+  lastFetchedAt: v.optional(v.number()),
+  warming: v.boolean(),
+  coverage: v.union(v.literal("full"), v.literal("unknown")),
+});
+
 export const getPriceHistorySeries = query({
   args: {
     serverToken: v.string(),
@@ -93,11 +85,30 @@ export const getPriceHistorySeries = query({
     data: v.array(priceHistoryPointValidator),
     lastUpdated: v.number(),
     stale: v.boolean(),
+    freshness: seriesFreshnessValidator,
   }),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     const now = Date.now();
     const endMs = now + 5 * 60 * 1000;
+
+    // Series-level refresh state: lastFetchedAt records the last SUCCESSFUL
+    // upstream fetch even when no point rows changed, and doubles as proof of
+    // full-window coverage (a market_chart response always contains the whole
+    // window) — see _lib/chartFreshness.ts.
+    const meta = await ctx.db
+      .query("chartSeries")
+      .withIndex("by_coin_timeframe", (q) =>
+        q.eq("coingeckoId", args.coingeckoId).eq("timeframe", args.timeframe),
+      )
+      .first();
+    const freshness = {
+      lastFetchedAt: meta?.lastFetchedAt,
+      warming: (meta?.leaseUntil ?? 0) > now,
+      coverage: (meta?.lastFetchedAt ? "full" : "unknown") as
+        | "full"
+        | "unknown",
+    };
 
     const latest = await ctx.db
       .query("priceHistory")
@@ -108,7 +119,7 @@ export const getPriceHistorySeries = query({
       .first();
 
     if (!latest) {
-      return { data: [], lastUpdated: 0, stale: false };
+      return { data: [], lastUpdated: 0, stale: false, freshness };
     }
 
     const startMs = getWindowStartMs(args.timeframe, now);
@@ -161,11 +172,16 @@ export const getPriceHistorySeries = query({
       (a, b) => a.timestamp - b.timestamp,
     );
 
+    // Freshness is the max of point-write time and series-fetch time: a
+    // refresh that found no diffs (CoinGecko's ~5min response cache) still
+    // clears staleness via lastFetchedAt.
     const staleWindowMs = getStaleWindowMs(args.timeframe);
+    const freshAsOf = Math.max(latest.lastUpdated, meta?.lastFetchedAt ?? 0);
     return {
       data,
       lastUpdated: latest.lastUpdated,
-      stale: latest.lastUpdated <= now - staleWindowMs,
+      stale: freshAsOf <= now - staleWindowMs,
+      freshness,
     };
   },
 });
