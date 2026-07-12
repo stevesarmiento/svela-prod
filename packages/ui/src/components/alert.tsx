@@ -10,7 +10,8 @@ const alertVariants = cva(
         default: "bg-background text-foreground",
         destructive:
           "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
-        warning: "dark:border-[oklch(0.3145_0.0714_63.6)] dark:bg-[oklch(0.2003_0.0412_83.21)]",
+        warning:
+          "dark:border-[oklch(0.3145_0.0714_63.6)] dark:bg-[oklch(0.2003_0.0412_83.21)]",
       },
     },
     defaultVariants: {

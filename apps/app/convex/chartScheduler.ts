@@ -470,7 +470,7 @@ export const _cleanupLegacyChartJobState = internalMutation({
       const rows = await ctx.db
         .query("jobState")
         .withIndex("by_job_key", (q) =>
-          q.gte("jobKey", prefix).lt("jobKey", prefix + "\uffff"),
+          q.gte("jobKey", prefix).lt("jobKey", `${prefix}\uffff`),
         )
         .take(200);
       await Promise.all(rows.map((row) => ctx.db.delete(row._id)));
