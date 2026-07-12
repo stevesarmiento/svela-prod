@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { getUserByClerkId } from "./_lib/user_lookup";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
 import { internal } from "./_generated/api";
@@ -31,10 +32,7 @@ const watchlistItemValidator = v.object({
 async function getCurrentUser(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-    .first();
+  const user = await getUserByClerkId(ctx.db, identity.subject);
   return user ?? null;
 }
 
@@ -80,10 +78,7 @@ export const getWatchlistGroups = query({
   returns: v.array(watchlistGroupValidator),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) return [];
 
@@ -118,10 +113,7 @@ export const createWatchlistGroup = mutation({
   returns: v.id("watchlistGroups"),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) throw new Error("User not found");
 
@@ -174,10 +166,7 @@ export const updateWatchlistGroup = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) throw new Error("User not found");
 
@@ -256,10 +245,7 @@ export const deleteWatchlistGroup = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) throw new Error("User not found");
 
@@ -312,10 +298,7 @@ export const getWatchlist = query({
   returns: v.array(watchlistItemValidator),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) return [];
 
@@ -348,10 +331,7 @@ export const getWatchlistByGroup = query({
   returns: v.array(watchlistItemValidator),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) return [];
 
@@ -383,10 +363,7 @@ export const getWatchlistBySlug = query({
   ),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) return null;
 
@@ -419,10 +396,7 @@ export const getWatchlistGroupBySlug = query({
   returns: v.union(watchlistGroupValidator, v.null()),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) return null;
 
@@ -445,10 +419,7 @@ export const addToWatchlist = mutation({
   returns: v.id("watchlists"),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) throw new Error("User not found");
 
@@ -545,10 +516,7 @@ export const removeFromWatchlist = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) throw new Error("User not found");
 
@@ -605,10 +573,7 @@ export const removeBulkFromWatchlist = mutation({
   returns: v.object({ removedCount: v.number() }),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) throw new Error("User not found");
 
@@ -674,10 +639,7 @@ export const isInWatchlist = query({
   returns: v.boolean(),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) return false;
 
@@ -715,10 +677,7 @@ export const getWatchlistCoinIds = query({
   returns: v.array(v.string()),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     
     if (!user) return [];
 
@@ -750,10 +709,7 @@ export const getAllWatchlistCoinIds = query({
   returns: v.array(v.string()),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (!user) return [];
 
@@ -777,10 +733,7 @@ export const removeFromAllWatchlists = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (!user) throw new Error("User not found");
 
@@ -819,10 +772,7 @@ export const removeBulkFromAllWatchlists = mutation({
   returns: v.object({ removedCount: v.number() }),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (!user) throw new Error("User not found");
 

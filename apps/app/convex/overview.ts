@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { getUserByClerkId } from "./_lib/user_lookup";
 import {
   action,
   internalMutation,
@@ -122,10 +123,7 @@ async function compute7dChangePctFromHistory(
 async function getCurrentUser(ctx: QueryCtx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-    .first();
+  const user = await getUserByClerkId(ctx.db, identity.subject);
   return user ?? null;
 }
 
@@ -921,10 +919,7 @@ export const _getMyRankedOverviewCoinIds = internalQuery({
     limited: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     if (!user) {
       return { coinIds: [], watchlistCoinCount: 0, limited: false };
     }
@@ -1015,10 +1010,7 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
   returns: overviewSnapshotValidator,
   handler: async (ctx, args) => {
     const now = Date.now();
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
     if (!user) {
       return {
         generatedAt: now,

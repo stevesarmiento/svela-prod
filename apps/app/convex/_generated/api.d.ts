@@ -10,6 +10,7 @@
 
 import type * as _lib_overview_signals from "../_lib/overview_signals.js";
 import type * as _lib_server_token from "../_lib/server_token.js";
+import type * as _lib_user_lookup from "../_lib/user_lookup.js";
 import type * as apiKeys from "../apiKeys.js";
 import type * as apiKeysActions from "../apiKeysActions.js";
 import type * as cleanupInternal from "../cleanupInternal.js";
@@ -50,6 +51,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   "_lib/overview_signals": typeof _lib_overview_signals;
   "_lib/server_token": typeof _lib_server_token;
+  "_lib/user_lookup": typeof _lib_user_lookup;
   apiKeys: typeof apiKeys;
   apiKeysActions: typeof apiKeysActions;
   cleanupInternal: typeof cleanupInternal;

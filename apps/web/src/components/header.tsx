@@ -1,26 +1,37 @@
-"use client";
-
+import { SvelaLogo } from "@v1/ui/svela-logo";
 import Link from "next/link";
+
+const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 export function Header() {
   return (
-    <header className="absolute top-0 w-full flex items-center justify-between p-4 z-10">
-      <Link href="/" className="text-sm font-medium">
-        Svela
-      </Link>
+    <header className="site-header">
+      <div className="page-rail header-inner">
+        <Link href="/" className="site-brand" aria-label="Svela home">
+          <SvelaLogo
+            width={21}
+            height={21}
+            adaptive={false}
+            fillColor="currentColor"
+          />
+          <span>
+            aggr<span className="brand-dot">.</span>watch
+          </span>
+          <small>by Svela</small>
+        </Link>
 
-      <nav className="md:mt-2">
-        <ul className="flex items-center gap-4">
-          <li>
-            <Link
-              href="/talk-to-us"
-              className="text-sm px-4 py-2 bg-primary text-secondary rounded-full font-medium"
-            >
-              Talk to us
-            </Link>
-          </li>
-        </ul>
-      </nav>
+        <nav aria-label="Main navigation">
+          <Link href="#product" className="nav-link">
+            Product
+          </Link>
+          <Link href="/talk-to-us" className="nav-link nav-link-muted">
+            Talk to us
+          </Link>
+          <a href={appUrl} className="header-cta">
+            Open app <span>↗</span>
+          </a>
+        </nav>
+      </div>
     </header>
   );
 }

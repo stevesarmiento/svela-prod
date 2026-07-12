@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { getUserByClerkId } from "./_lib/user_lookup";
 import { mutation, query } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
 
@@ -8,6 +9,7 @@ const userValidator = v.object({
   _id: v.id("users"),
   _creationTime: v.number(),
   clerkId: v.string(),
+  devClerkId: v.optional(v.string()),
   email: v.optional(v.string()),
   fullName: v.optional(v.string()),
   avatarUrl: v.optional(v.string()),
@@ -18,10 +20,7 @@ export const getCurrentUser = query({
   returns: v.union(userValidator, v.null()),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    return await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    return await getUserByClerkId(ctx.db, args.clerkId);
   },
 });
 
@@ -40,18 +39,18 @@ export const createUser = mutation({
     const email = args.email?.trim() || undefined;
 
     // Check if user already exists
-    const existingUser = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const existingUser = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (existingUser) {
-      // Update existing user
-      await ctx.db.patch(existingUser._id, {
-        email,
-        fullName: args.fullName,
-        avatarUrl: args.avatarUrl,
-      });
+      // Update existing user. When matched via the linked devClerkId (local
+      // dev session), don't overwrite production profile data.
+      if (existingUser.clerkId === args.clerkId) {
+        await ctx.db.patch(existingUser._id, {
+          email,
+          fullName: args.fullName,
+          avatarUrl: args.avatarUrl,
+        });
+      }
       return existingUser._id;
     }
 
@@ -77,10 +76,7 @@ export const updateUser = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (!user) throw new Error("User not found");
 
@@ -107,17 +103,18 @@ export const upsertCurrentUser = mutation({
     const clerkId = identity.subject;
     const email = args.email?.trim() || undefined;
 
-    const existing = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", clerkId))
-      .first();
+    const existing = await getUserByClerkId(ctx.db, clerkId);
 
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        email,
-        fullName: args.fullName,
-        avatarUrl: args.avatarUrl,
-      });
+      // When matched via the linked devClerkId (local dev session), don't
+      // overwrite production profile data with dev-instance values.
+      if (existing.clerkId === clerkId) {
+        await ctx.db.patch(existing._id, {
+          email,
+          fullName: args.fullName,
+          avatarUrl: args.avatarUrl,
+        });
+      }
       return existing._id;
     }
 

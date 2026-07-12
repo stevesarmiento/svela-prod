@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { getUserByClerkId } from "./_lib/user_lookup";
 import { action, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
 import { internal } from "./_generated/api";
@@ -82,10 +83,7 @@ async function getUserIdByClerkId(
   ctx: QueryCtx,
   clerkId: string,
 ): Promise<Id<"users"> | null> {
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", clerkId))
-    .first();
+  const user = await getUserByClerkId(ctx.db, clerkId);
   return user?._id ?? null;
 }
 
@@ -457,10 +455,7 @@ async function getAuthedUserId(ctx: QueryCtx): Promise<Id<"users">> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not authenticated");
 
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-    .first();
+  const user = await getUserByClerkId(ctx.db, identity.subject);
   if (!user) throw new Error("User not found");
   return user._id;
 }

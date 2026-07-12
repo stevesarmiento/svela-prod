@@ -1,5 +1,6 @@
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { getUserByClerkId } from "./_lib/user_lookup";
 import { requireServerToken } from "./_lib/server_token";
 import type { Id } from "./_generated/dataModel";
 
@@ -55,10 +56,7 @@ export const getUserSettings = query({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     // First get the user by Clerk ID
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (!user) {
       throw new Error("User not found");
@@ -116,10 +114,7 @@ export const upsertUserSettings = mutation({
     requireServerToken(serverToken);
     
     // First get the user by Clerk ID
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, clerkId);
 
     if (!user) {
       throw new Error("User not found");
@@ -220,10 +215,7 @@ export const updateMemorySettings = mutation({
     const { clerkId, ...memorySettings } = args;
     
     // First get the user by Clerk ID
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, clerkId);
 
     if (!user) {
       throw new Error("User not found");
@@ -279,10 +271,7 @@ export const getMemorySettings = query({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     // First get the user by Clerk ID
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (!user) {
       throw new Error("User not found");
@@ -314,10 +303,7 @@ async function getCurrentUserId(ctx: QueryCtx | MutationCtx): Promise<Id<"users"
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not authenticated");
 
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-    .first();
+  const user = await getUserByClerkId(ctx.db, identity.subject);
   if (!user) throw new Error("User not found");
   return user._id;
 }

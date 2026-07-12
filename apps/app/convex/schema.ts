@@ -4,11 +4,15 @@ import { v } from "convex/values";
 export default defineSchema({
   users: defineTable({
     clerkId: v.string(),
+    // Linked Clerk ID from the development Clerk instance, so the same user
+    // row resolves for both production and local-dev sessions (shared DB).
+    devClerkId: v.optional(v.string()),
     email: v.optional(v.string()),
     fullName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
   })
     .index("by_clerk_id", ["clerkId"])
+    .index("by_dev_clerk_id", ["devClerkId"])
     .index("by_email", ["email"]),
 
   watchlistGroups: defineTable({
