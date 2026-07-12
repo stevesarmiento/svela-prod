@@ -401,7 +401,7 @@ async function patchDistFile(filePath) {
     "  ctx.save();",
     "  ctx.globalAlpha = scrubOpacity * 0.82;",
     "  ctx.strokeStyle = palette.crosshairLine;",
-    "  ctx.lineWidth = 1.5;",
+    "  ctx.lineWidth = 1;",
     "  ctx.setLineDash([5, 5]);",
     "  ctx.beginPath();",
     "  ctx.moveTo(hoverX, pad.top);",
@@ -416,10 +416,21 @@ async function patchDistFile(filePath) {
     "  ctx.restore();",
   ].join("\n")
 
+  // Stale variant: an earlier revision of this patch used lineWidth 1.5.
+  // Vercel restores node_modules from the build cache, so a dist patched by
+  // the old script survives into new builds — upgrade it instead of failing.
+  const crosshairStrokesDashedStale = crosshairStrokesDashedNew.replace(
+    "  ctx.lineWidth = 1;",
+    "  ctx.lineWidth = 1.5;",
+  )
+
   if (next.includes(crosshairStrokesDashedNew)) {
     // already patched
   } else if (next.includes(crosshairStrokesSolidOld)) {
     next = next.replace(crosshairStrokesSolidOld, crosshairStrokesDashedNew)
+    didChange = true
+  } else if (next.includes(crosshairStrokesDashedStale)) {
+    next = next.replace(crosshairStrokesDashedStale, crosshairStrokesDashedNew)
     didChange = true
   } else {
     console.warn(`[patch-liveline] Crosshair stroke restyle pattern not found: ${filePath}`)
@@ -447,7 +458,7 @@ async function patchDistFile(filePath) {
     "  ctx.save();",
     "  ctx.globalAlpha = scrubOpacity * 0.82;",
     "  ctx.strokeStyle = palette.crosshairLine;",
-    "  ctx.lineWidth = 1.5;",
+    "  ctx.lineWidth = 1;",
     "  ctx.setLineDash([5, 5]);",
     "  ctx.beginPath();",
     "  ctx.moveTo(hoverX, pad.top);",
@@ -461,14 +472,84 @@ async function patchDistFile(filePath) {
     "    for (const entry of entries) {",
   ].join("\n")
 
+  // Stale variant (see crosshairStrokesDashedStale above).
+  const multiCrosshairVerticalDashedStale = multiCrosshairVerticalDashedNew.replace(
+    "  ctx.lineWidth = 1;",
+    "  ctx.lineWidth = 1.5;",
+  )
+
   if (next.includes(multiCrosshairVerticalDashedNew)) {
     // already patched
   } else if (next.includes(multiCrosshairVerticalSolidOld)) {
     next = next.replace(multiCrosshairVerticalSolidOld, multiCrosshairVerticalDashedNew)
     didChange = true
+  } else if (next.includes(multiCrosshairVerticalDashedStale)) {
+    next = next.replace(multiCrosshairVerticalDashedStale, multiCrosshairVerticalDashedNew)
+    didChange = true
   } else {
     console.warn(`[patch-liveline] Multi crosshair stroke pattern not found: ${filePath}`)
     ok = false
+  }
+
+  // 9) Teach liveline's color parser oklch(). The app authors all colors as
+  // `oklch(L C H / A)` strings; liveline's parseColorRgb only understands
+  // hex/rgb and falls back to gray [128,128,128] for anything else, which
+  // breaks fills/glows/badges. The raw `line` color is passed straight to
+  // canvas strokeStyle (which parses oklch natively), so only parseColorRgb
+  // needs the branch. Alpha is intentionally ignored (matches the previous
+  // 8-digit-hex behavior where the alpha byte was sliced off).
+  const parseColorFnSignature = "function parseColorRgb(color) {"
+  const oklchHelperSignature = "function __parseOklchRgb(color) {"
+
+  if (!next.includes(oklchHelperSignature)) {
+    if (!next.includes(parseColorFnSignature)) {
+      console.warn(`[patch-liveline] parseColorRgb signature not found: ${filePath}`)
+      ok = false
+    } else {
+      const oklchHelper = [
+        oklchHelperSignature,
+        "  const m = /^oklch\\(\\s*([\\d.]+%?)\\s+([\\d.]+%?)\\s+([\\d.]+)(?:deg)?\\s*(?:\\/\\s*[\\d.]+%?)?\\s*\\)$/i.exec(color.trim());",
+        "  if (!m) return null;",
+        "  const L = m[1].endsWith('%') ? parseFloat(m[1]) / 100 : parseFloat(m[1]);",
+        "  const C = m[2].endsWith('%') ? (parseFloat(m[2]) / 100) * 0.4 : parseFloat(m[2]);",
+        "  const H = parseFloat(m[3]);",
+        "  const hr = (H * Math.PI) / 180;",
+        "  const a = C * Math.cos(hr);",
+        "  const b = C * Math.sin(hr);",
+        "  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;",
+        "  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;",
+        "  const s_ = L - 0.0894841775 * a - 1.291485548 * b;",
+        "  const l = l_ ** 3, mm = m_ ** 3, s = s_ ** 3;",
+        "  const lr = 4.0767416621 * l - 3.3077115913 * mm + 0.2309699292 * s;",
+        "  const lg = -1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * s;",
+        "  const lb = -0.0041960863 * l - 0.7034186147 * mm + 1.707614701 * s;",
+        "  const gamma = (c) => {",
+        "    const x = Math.min(1, Math.max(0, c));",
+        "    return x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055;",
+        "  };",
+        "  return [Math.round(gamma(lr) * 255), Math.round(gamma(lg) * 255), Math.round(gamma(lb) * 255)];",
+        "}",
+        "",
+      ].join("\n")
+
+      const parseColorFnPatched = [
+        parseColorFnSignature,
+        "  const okl = __parseOklchRgb(color);",
+        "  if (okl) return okl;",
+      ].join("\n")
+
+      const inserted = next.replace(
+        parseColorFnSignature,
+        `${oklchHelper}${parseColorFnPatched}`,
+      )
+      if (inserted === next) {
+        console.warn(`[patch-liveline] Failed to insert oklch parser: ${filePath}`)
+        ok = false
+      } else {
+        next = inserted
+        didChange = true
+      }
+    }
   }
 
   if (!didChange) return { ok, changed: false }

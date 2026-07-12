@@ -1,12 +1,10 @@
 import { internalAction, type ActionCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-
-function getCoinGeckoApiKey(): string {
-  const key = process.env.X_CG_PRO_API_KEY;
-  if (!key) throw new Error("Missing X_CG_PRO_API_KEY in Convex environment");
-  return key;
-}
+import {
+  fetchCoinGeckoJson,
+  getCoinGeckoApiKey,
+} from "./_lib/coingeckoFetch";
 
 function chunk<T>(items: ReadonlyArray<T>, size: number): Array<Array<T>> {
   const out: Array<Array<T>> = [];
@@ -43,22 +41,9 @@ type CoinGeckoMarketRow = {
   last_updated: string | null;
 };
 
+// Retry-capable fetch (429/5xx/network, honors Retry-After) — _lib/coingeckoFetch.
 async function fetchJson(endpoint: string, apiKey: string): Promise<unknown> {
-  const response = await fetch(endpoint, {
-    headers: {
-      "x-cg-pro-api-key": apiKey,
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(
-      `CoinGecko request failed (${response.status}): ${body.slice(0, 200)}`,
-    );
-  }
-
-  return await response.json();
+  return await fetchCoinGeckoJson(endpoint, apiKey);
 }
 
 function mapMarketRows(rows: ReadonlyArray<CoinGeckoMarketRow>): Array<{
@@ -389,7 +374,7 @@ type GlobalMarketCapChartApiResponse = {
   };
 };
 
-async function upsertMarketChart(
+export async function upsertMarketChart(
   ctx: ActionCtx,
   args: {
     coingeckoId: string;
@@ -421,6 +406,7 @@ async function upsertMarketChart(
     };
   });
 
+  const fetchedAt = Date.now();
   await ctx.runMutation(
     internal.coingeckoWriters._upsertCoinGeckoHistoricalData,
     {
@@ -428,9 +414,17 @@ async function upsertMarketChart(
       timeframe: args.days,
       dataPoints: points,
       dataSource: args.dataSource,
-      asOfMs: Date.now(),
+      asOfMs: fetchedAt,
     },
   );
+
+  // Record series freshness + coverage even when every point skipped as
+  // no-diff (CoinGecko's ~5min response cache) — staleness must still clear.
+  await ctx.runMutation(internal.chartScheduler._markSeriesFetched, {
+    coingeckoId: args.coingeckoId,
+    timeframe: args.days,
+    fetchedAt,
+  });
 }
 
 async function upsertGlobalMarketHistory(
@@ -473,62 +467,9 @@ async function upsertGlobalMarketHistory(
   );
 }
 
-export const refreshTrackedMarketChartBatch = internalAction({
-  args: {
-    days: v.string(), // "1" | "7" | "90" | "365" | "1825" | "max"
-    batchSize: v.optional(v.number()),
-  },
-  returns: v.object({ processed: v.number(), days: v.string() }),
-  handler: async (ctx, args) => {
-    const apiKey = getCoinGeckoApiKey();
-    const batchSize = args.batchSize ?? 6;
-    const jobKey = `coingecko:market-chart:${args.days}`;
-
-    const state = await ctx.runQuery(internal.coingeckoState._getJobState, {
-      jobKey,
-    });
-    const cursor = state?.cursor ?? null;
-
-    const page = await ctx.runQuery(
-      internal.coingeckoState._getTrackedCoinsPage,
-      {
-        paginationOpts: { numItems: batchSize, cursor },
-      },
-    );
-
-    const uniqueIds: Array<string> = [];
-    const seen = new Set<string>();
-    for (const row of page.page) {
-      if (seen.has(row.coingeckoId)) continue;
-      seen.add(row.coingeckoId);
-      uniqueIds.push(row.coingeckoId);
-    }
-
-    if (uniqueIds.length === 0) {
-      await ctx.runMutation(internal.coingeckoState._setJobCursor, {
-        jobKey,
-        cursor: null,
-      });
-      return { processed: 0, days: args.days };
-    }
-
-    for (const coingeckoId of uniqueIds) {
-      await upsertMarketChart(ctx, {
-        coingeckoId,
-        days: args.days,
-        apiKey,
-        dataSource: "coingecko-cron-market-chart",
-      });
-    }
-
-    await ctx.runMutation(internal.coingeckoState._setJobCursor, {
-      jobKey,
-      cursor: page.continueCursor,
-    });
-
-    return { processed: uniqueIds.length, days: args.days };
-  },
-});
+// NOTE: the blind round-robin `refreshTrackedMarketChartBatch` /
+// `refreshTrackedOhlcBatch` rotation jobs were replaced by the
+// demand-prioritized scheduler in convex/chartScheduler.ts.
 
 export const refreshGlobalMarketCapHistory = internalAction({
   args: {
@@ -629,19 +570,30 @@ export const refreshSingleMarketChart = internalAction({
   returns: v.null(),
   handler: async (ctx, args) => {
     const apiKey = getCoinGeckoApiKey();
-    await upsertMarketChart(ctx, {
-      coingeckoId: args.coingeckoId,
-      days: args.days,
-      apiKey,
-      dataSource: "coingecko-warmup-market-chart",
-    });
+    try {
+      await upsertMarketChart(ctx, {
+        coingeckoId: args.coingeckoId,
+        days: args.days,
+        apiKey,
+        dataSource: "coingecko-warmup-market-chart",
+      });
+    } catch (error) {
+      // Clear the warmup lease with a short backoff so the client's next poll
+      // can re-trigger in ~30s instead of a hard 5-minute flat line.
+      await ctx.runMutation(internal.chartScheduler._markSeriesError, {
+        coingeckoId: args.coingeckoId,
+        timeframe: args.days,
+        message:
+          error instanceof Error ? error.message : "Unknown fetch error",
+      });
+    }
     return null;
   },
 });
 
 type OhlcApiRow = [number, number, number, number, number];
 
-async function upsertOhlc(
+export async function upsertOhlc(
   ctx: ActionCtx,
   args: {
     coingeckoId: string;
@@ -670,6 +622,7 @@ async function upsertOhlc(
     close: row[4],
   }));
 
+  const fetchedAt = Date.now();
   await ctx.runMutation(
     internal.coingeckoWriters._upsertCoinGeckoHistoricalData,
     {
@@ -677,9 +630,15 @@ async function upsertOhlc(
       timeframe: `${args.days}_ohlc`,
       dataPoints: points,
       dataSource: args.dataSource,
-      asOfMs: Date.now(),
+      asOfMs: fetchedAt,
     },
   );
+
+  await ctx.runMutation(internal.chartScheduler._markSeriesFetched, {
+    coingeckoId: args.coingeckoId,
+    timeframe: `${args.days}_ohlc`,
+    fetchedAt,
+  });
 }
 
 export const refreshSingleOhlc = internalAction({
@@ -690,70 +649,22 @@ export const refreshSingleOhlc = internalAction({
   returns: v.null(),
   handler: async (ctx, args) => {
     const apiKey = getCoinGeckoApiKey();
-    await upsertOhlc(ctx, {
-      coingeckoId: args.coingeckoId,
-      days: args.days,
-      apiKey,
-      dataSource: "coingecko-warmup-ohlc",
-    });
-    return null;
-  },
-});
-
-export const refreshTrackedOhlcBatch = internalAction({
-  args: {
-    days: v.string(), // CoinGecko OHLC supported windows
-    batchSize: v.optional(v.number()),
-  },
-  returns: v.object({ processed: v.number(), days: v.string() }),
-  handler: async (ctx, args) => {
-    const apiKey = getCoinGeckoApiKey();
-    const batchSize = args.batchSize ?? 4;
-    const jobKey = `coingecko:ohlc:${args.days}`;
-
-    const state = await ctx.runQuery(internal.coingeckoState._getJobState, {
-      jobKey,
-    });
-    const cursor = state?.cursor ?? null;
-
-    const page = await ctx.runQuery(
-      internal.coingeckoState._getTrackedCoinsPage,
-      {
-        paginationOpts: { numItems: batchSize, cursor },
-      },
-    );
-
-    const uniqueIds: Array<string> = [];
-    const seen = new Set<string>();
-    for (const row of page.page) {
-      if (seen.has(row.coingeckoId)) continue;
-      seen.add(row.coingeckoId);
-      uniqueIds.push(row.coingeckoId);
-    }
-
-    if (uniqueIds.length === 0) {
-      await ctx.runMutation(internal.coingeckoState._setJobCursor, {
-        jobKey,
-        cursor: null,
-      });
-      return { processed: 0, days: args.days };
-    }
-
-    for (const coingeckoId of uniqueIds) {
+    try {
       await upsertOhlc(ctx, {
-        coingeckoId,
+        coingeckoId: args.coingeckoId,
         days: args.days,
         apiKey,
-        dataSource: "coingecko-cron-ohlc",
+        dataSource: "coingecko-warmup-ohlc",
+      });
+    } catch (error) {
+      await ctx.runMutation(internal.chartScheduler._markSeriesError, {
+        coingeckoId: args.coingeckoId,
+        timeframe: `${args.days}_ohlc`,
+        message:
+          error instanceof Error ? error.message : "Unknown fetch error",
       });
     }
-
-    await ctx.runMutation(internal.coingeckoState._setJobCursor, {
-      jobKey,
-      cursor: page.continueCursor,
-    });
-
-    return { processed: uniqueIds.length, days: args.days };
+    return null;
   },
 });
 

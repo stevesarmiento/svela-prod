@@ -1,5 +1,6 @@
 import { query, mutation, internalMutation, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { getUserByClerkId } from "./_lib/user_lookup";
 import { API_PROVIDERS } from "../src/constants/api-providers";
 import { requireServerToken } from "./_lib/server_token";
 
@@ -29,10 +30,7 @@ export const getUserApiKeys = query({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     // First get the user by Clerk ID
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (!user) {
       throw new Error("User not found");
@@ -81,10 +79,7 @@ export const getActiveApiKey = query({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     // First get the user by Clerk ID
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (!user) {
       return null; // Don't throw error, just return null for fallback
@@ -127,10 +122,7 @@ export const upsertApiKey = mutation({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     // First get the user by Clerk ID
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (!user) {
       throw new Error("User not found");
@@ -191,10 +183,7 @@ export const updateApiKeyStatus = mutation({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     // First get the user by Clerk ID
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (!user) {
       throw new Error("User not found");
@@ -225,10 +214,7 @@ export const deleteApiKey = mutation({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     // First get the user by Clerk ID
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (!user) {
       throw new Error("User not found");
@@ -295,10 +281,7 @@ export const getApiKeyStats = query({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     // First get the user by Clerk ID
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
 
     if (!user) {
       throw new Error("User not found");
@@ -346,10 +329,7 @@ export const getApiKeyStats = query({
 async function getCurrentUser(ctx: QueryCtx | MutationCtx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) return null;
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-    .first();
+  const user = await getUserByClerkId(ctx.db, identity.subject);
   return user ?? null;
 }
 

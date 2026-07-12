@@ -29,8 +29,8 @@ const SolanaLogo = memo(({ width = 24, height = 20, className = "" }: SolanaLogo
           y2="20"
           gradientUnits="userSpaceOnUse"
         >
-          <stop stopColor="#3C3633" />
-          <stop offset="1" stopColor="#5F5149" />
+          <stop stopColor="oklch(0.3381 0.01 48.41)" />
+          <stop offset="1" stopColor="oklch(0.4464 0.0227 51.59)" />
         </linearGradient>
       </defs>
     </svg>

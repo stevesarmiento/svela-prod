@@ -8,7 +8,7 @@ interface SpinnerProps {
 
 export function SpinnerEllipsis({
   size = 36,
-  color = "#fff",
+  color = "oklch(1 0 0)",
   className,
 }: SpinnerProps) {
   return (

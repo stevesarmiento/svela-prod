@@ -98,7 +98,7 @@ const LoaderCore = ({
               <span
                 className={cn(
                   onDarkPanel &&
-                    "[--base-color:rgba(255,255,255,0.55)] [--base-gradient-color:#ffffff]",
+                    "[--base-color:oklch(1_0_0_/_0.55)] [--base-gradient-color:oklch(1_0_0)]",
                 )}
               >
                 {loadingState.text}

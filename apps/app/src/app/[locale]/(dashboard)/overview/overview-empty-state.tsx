@@ -43,9 +43,9 @@ const DOT_PATTERN_STYLE = {
 
 const ILLUSTRATION_MASK_STYLE = {
   WebkitMaskImage:
-    'radial-gradient(ellipse 115% 95% at 50% 14%, black 28%, rgba(0,0,0,0.5) 54%, transparent 78%)',
+    'radial-gradient(ellipse 115% 95% at 50% 14%, black 28%, oklch(0 0 0 / 0.5) 54%, transparent 78%)',
   maskImage:
-    'radial-gradient(ellipse 115% 95% at 50% 14%, black 28%, rgba(0,0,0,0.5) 54%, transparent 78%)',
+    'radial-gradient(ellipse 115% 95% at 50% 14%, black 28%, oklch(0 0 0 / 0.5) 54%, transparent 78%)',
   WebkitMaskRepeat: 'no-repeat' as const,
   maskRepeat: 'no-repeat' as const,
   WebkitMaskSize: '100% 100%',
@@ -97,8 +97,8 @@ function OverviewDashboardIllustration() {
     const v1 = s1[s1.length - 1]?.value ?? 0
     const v2 = s2[s2.length - 1]?.value ?? 0
     return [
-      { id: 'portfolio', data: s1, value: v1, color: 'rgba(255,255,255,0.5)' },
-      { id: 'market', data: s2, value: v2, color: 'rgba(244,114,182,0.5)' },
+      { id: 'portfolio', data: s1, value: v1, color: 'oklch(1 0 0 / 0.5)' },
+      { id: 'market', data: s2, value: v2, color: 'oklch(0.7253 0.1752 349.76 / 0.5)' },
     ]
   }, [])
 
@@ -123,7 +123,7 @@ function OverviewDashboardIllustration() {
 
         {/* ─── Left: Overview Card ─── */}
         <div className="col-span-5">
-          <div className="bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[14px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+          <div className="bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[14px] overflow-hidden shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)]">
             <div className="p-3 relative">
               {/* Portfolio value */}
               <div className="absolute top-2 left-2 flex flex-col items-start">
@@ -140,8 +140,8 @@ function OverviewDashboardIllustration() {
                   className="pointer-events-none absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
                   style={{
                     ...DOT_PATTERN_STYLE,
-                    maskImage: 'radial-gradient(ellipse 62% 48% at 50% 48%, #000 28%, #000 42%, transparent 78%)',
-                    WebkitMaskImage: 'radial-gradient(ellipse 62% 48% at 50% 48%, #000 28%, #000 42%, transparent 78%)',
+                    maskImage: 'radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)',
+                    WebkitMaskImage: 'radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)',
                   }}
                 />
 
@@ -161,7 +161,7 @@ function OverviewDashboardIllustration() {
                       data={[]}
                       value={0}
                       series={fakeSeries}
-                      color="#e5e7eb"
+                      color="oklch(0.9276 0.0058 264.53)"
                       lineWidth={1.4}
                       window={windowSecs}
                       grid={false}

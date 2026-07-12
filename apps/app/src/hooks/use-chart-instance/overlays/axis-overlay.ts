@@ -44,8 +44,8 @@ export function createAxisOverlay({
     volumeScrubMarker.style.height = '10px';
     volumeScrubMarker.style.borderRadius = '9999px';
     volumeScrubMarker.style.boxSizing = 'border-box';
-    volumeScrubMarker.style.border = '2px solid rgba(255, 255, 255, 0.95)';
-    volumeScrubMarker.style.backgroundColor = 'rgba(63, 63, 70, 0.95)'; // zinc-700
+    volumeScrubMarker.style.border = '2px solid oklch(1 0 0 / 0.95)';
+    volumeScrubMarker.style.backgroundColor = 'oklch(0.3703 0.0119 285.81 / 0.95)'; // zinc-700
     volumeScrubMarker.style.transform = 'translate3d(0, 0, 0) translate(-50%, -50%)';
 
     const prefersReducedMotion =
@@ -104,7 +104,7 @@ export function createAxisOverlay({
     hoverPriceLine.style.transformOrigin = 'left center';
     hoverPriceLine.style.transition = axisTagTransitionHover;
     hoverPriceLine.style.backgroundImage =
-        'repeating-linear-gradient(to right, rgba(161, 161, 170, 0.55) 0, rgba(161, 161, 170, 0.55) 6px, rgba(161, 161, 170, 0) 6px, rgba(161, 161, 170, 0) 10px)';
+        'repeating-linear-gradient(to right, oklch(0.7118 0.0129 286.07 / 0.55) 0, oklch(0.7118 0.0129 286.07 / 0.55) 6px, oklch(0.7118 0.0129 286.07 / 0) 6px, oklch(0.7118 0.0129 286.07 / 0) 10px)';
     hoverPriceLineWrap.appendChild(hoverPriceLine);
     axisLabelsEl.appendChild(hoverPriceLineWrap);
 
@@ -120,7 +120,7 @@ export function createAxisOverlay({
     hoverVolumeLine.style.transformOrigin = 'left center';
     hoverVolumeLine.style.transition = axisTagTransitionHover;
     hoverVolumeLine.style.backgroundImage =
-        'repeating-linear-gradient(to right, rgba(161, 161, 170, 0.55) 0, rgba(161, 161, 170, 0.55) 6px, rgba(161, 161, 170, 0) 6px, rgba(161, 161, 170, 0) 10px)';
+        'repeating-linear-gradient(to right, oklch(0.7118 0.0129 286.07 / 0.55) 0, oklch(0.7118 0.0129 286.07 / 0.55) 6px, oklch(0.7118 0.0129 286.07 / 0) 6px, oklch(0.7118 0.0129 286.07 / 0) 10px)';
     hoverVolumeLineWrap.appendChild(hoverVolumeLine);
     axisLabelsEl.appendChild(hoverVolumeLineWrap);
 

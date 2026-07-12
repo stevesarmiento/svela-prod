@@ -37,7 +37,7 @@ export interface ChartHighlightRange {
     to: Time;
     /** Opacity to apply to the non-highlighted price series. Default: 0.25 */
     dimOpacity?: number;
-    /** Vertical boundary line color. Default: rgba(168, 162, 158, 0.65) */
+    /** Vertical boundary line color. Default: oklch(0.7161 0.0091 56.26 / 0.65) */
     boundaryColor?: string;
 }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
@@ -229,7 +229,7 @@ function bucketizeMarketChart(args: {
 
   return {
     lineChart: ohlcData.map((bar) => ({ time: bar.time, value: bar.close })),
-    volumeChart: ohlcBars.map((bar) => ({ time: bar.time, value: bar.volume, color: '#ffffff40' })),
+    volumeChart: ohlcBars.map((bar) => ({ time: bar.time, value: bar.volume, color: 'oklch(1 0 0 / 0.251)' })),
     ohlcData,
   }
 }
@@ -262,7 +262,7 @@ function parseOHLCData(data: OHLCAPIResponse): ParsedChartData | null {
     const volumeChart = ohlcPoints.map((point: { time: Time; open: number; high: number; low: number; close: number }) => ({
       time: point.time,
       value: 0, // OHLC route doesn't provide volume
-      color: '#ffffff40'
+      color: 'oklch(1 0 0 / 0.251)'
     }))
 
     return {
@@ -328,7 +328,7 @@ function generateFallbackData(
   })
 
   const lineChart = fallbackPoints.map(p => ({ time: p.time, value: p.price }))
-  const volumeChart = fallbackPoints.map(p => ({ time: p.time, value: p.volume, color: '#ffffff40' }))
+  const volumeChart = fallbackPoints.map(p => ({ time: p.time, value: p.volume, color: 'oklch(1 0 0 / 0.251)' }))
   const ohlcData = fallbackPoints.map(p => ({ 
     time: p.time, 
     open: p.open, 
@@ -365,7 +365,7 @@ function combineOHLCWithVolume(
     const volumePoints = marketData.data.volumes.map((point: MarketChartPoint) => ({
       time: point.time as Time,
       value: point.value || 0,
-      color: '#ffffff40'
+      color: 'oklch(1 0 0 / 0.251)'
     }))
 
     if (ohlcPoints.length < 2) return null
@@ -407,7 +407,7 @@ function upsertLatestPricePoint(parsedData: ParsedChartData, latestPrice: number
   if (parsedData.lineChart.length === 0 || lastSeconds == null) {
     return {
       lineChart: [{ time: nextTime, value: latestPrice }],
-      volumeChart: [{ time: nextTime, value: 0, color: '#ffffff40' }],
+      volumeChart: [{ time: nextTime, value: 0, color: 'oklch(1 0 0 / 0.251)' }],
       ohlcData: [{ time: nextTime, open: latestPrice, high: latestPrice, low: latestPrice, close: latestPrice }],
     }
   }
@@ -437,7 +437,7 @@ function upsertLatestPricePoint(parsedData: ParsedChartData, latestPrice: number
   // Otherwise append a new point so startup always reflects the latest quote.
   return {
     lineChart: [...parsedData.lineChart, { time: nextTime, value: latestPrice }],
-    volumeChart: [...parsedData.volumeChart, { time: nextTime, value: 0, color: '#ffffff40' }],
+    volumeChart: [...parsedData.volumeChart, { time: nextTime, value: 0, color: 'oklch(1 0 0 / 0.251)' }],
     ohlcData: [
       ...parsedData.ohlcData,
       { time: nextTime, open: latestPrice, high: latestPrice, low: latestPrice, close: latestPrice },
@@ -641,6 +641,10 @@ export function useCoinGeckoChartData(
   const quoteQuery = useCoinGeckoQuote(coinId)
   const preferMarketChart = options?.preferMarketChart ?? false
 
+  // Bound the fast warmup polling so a series that can't heal (e.g. delisted
+  // coin) doesn't pin this hook at 5s forever.
+  const fastPollCountRef = useRef(0)
+
   // Fetch data from both routes with intelligent prioritization
   const { data: combinedData, isLoading } = useQuery({
     queryKey: ['coingecko-combined-chart-data', coinId, activeTimeScale, preferMarketChart],
@@ -656,7 +660,11 @@ export function useCoinGeckoChartData(
       const points = query.state.data?.data?.lineChart?.length ?? 0
       const warmupRequested = Boolean(query.state.data?.warmupRequested)
       // When warmup is in-flight, poll quickly so token pages don't stay empty.
-      if (points < 2 || warmupRequested) return 5_000
+      if ((points < 2 || warmupRequested) && fastPollCountRef.current < 24) {
+        fastPollCountRef.current += 1
+        return 5_000 // ~2 minutes of fast polling max per warm cycle
+      }
+      fastPollCountRef.current = 0
       return 5 * 60 * 1000
     },
     enabled: !!coinId,

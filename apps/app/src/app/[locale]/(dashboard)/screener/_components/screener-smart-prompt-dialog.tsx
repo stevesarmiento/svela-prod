@@ -501,7 +501,7 @@ export function ScreenerSmartPromptDialog({
         aria-label="Smart screener"
         data-state={dialogState}
         className={cn(
-          "relative w-full max-w-3xl overflow-hidden rounded-[28px] border border-gray-200/50 bg-white/95 shadow-[0_3px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)] backdrop-blur-md dark:border-transparent dark:bg-zinc-900/80 dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.4)]",
+          "relative w-full max-w-3xl overflow-hidden rounded-[28px] border border-gray-200/50 bg-white/95 shadow-[0_3px_8px_oklch(0_0_0_/_0.1),0_2px_4px_oklch(0_0_0_/_0.06)] backdrop-blur-md dark:border-transparent dark:bg-zinc-900/80 dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.4)]",
           "motion-safe:data-[state=open]:animate-in motion-safe:data-[state=closed]:animate-out",
           "motion-safe:data-[state=closed]:fade-out-0 motion-safe:data-[state=open]:fade-in-0",
           "motion-safe:data-[state=closed]:zoom-out-95 motion-safe:data-[state=open]:zoom-in-95",

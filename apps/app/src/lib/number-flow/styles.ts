@@ -73,7 +73,7 @@ export const halfMaskHeight = `calc(${maskHeight} / 2)`
 const maskWidth = 'var(--number-flow-mask-width, 0.5em)'
 const scaledMaskWidth = `calc(${maskWidth} / var(--scale-x))`
 
-const cornerGradient = "#000 0, transparent 71%" // or transparent ${maskWidth}
+const cornerGradient = "oklch(0 0 0) 0, transparent 71%" // or transparent ${maskWidth}
 
 const styles = css`
 	:host {
@@ -109,16 +109,16 @@ const styles = css`
 			linear-gradient(
 				to right,
 				transparent 0,
-				#000 ${scaledMaskWidth},
-				#000 calc(100% - ${scaledMaskWidth}),
+				oklch(0 0 0) ${scaledMaskWidth},
+				oklch(0 0 0) calc(100% - ${scaledMaskWidth}),
 				transparent
 			),
 			/* Vertical: */
 				linear-gradient(
 					to bottom,
 					transparent 0,
-					#000 ${maskHeight},
-					#000 calc(100% - ${maskHeight}),
+					oklch(0 0 0) ${maskHeight},
+					oklch(0 0 0) calc(100% - ${maskHeight}),
 					transparent 100%
 				),
 			/* TL corner */ radial-gradient(at bottom right, ${cornerGradient}),

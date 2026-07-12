@@ -38,8 +38,8 @@ export function TextShimmerWave({
     <MotionComponent
       className={cn(
         "relative inline-block [perspective:500px]",
-        "[--base-color:#a1a1aa] [--base-gradient-color:#000]",
-        "dark:[--base-color:#71717a] dark:[--base-gradient-color:#ffffff]",
+        "[--base-color:oklch(0.7118_0.0129_286.07)] [--base-gradient-color:oklch(0_0_0)]",
+        "dark:[--base-color:oklch(0.5517_0.0138_285.94)] dark:[--base-gradient-color:oklch(1_0_0)]",
         className,
       )}
       style={{ color: "var(--base-color)" }}

@@ -1,45 +1,49 @@
-// Predefined pastel color palette
+import { withAlpha } from './oklch'
+
+// Candle up/down pair shared by the chart controller and highlight overlay
+// (dedupe: previously declared separately in both files).
+export const CANDLE_UP_COLOR = 'oklch(0.7227 0.192 149.58)' // green-500
+export const CANDLE_DOWN_COLOR = 'oklch(0.6368 0.2078 25.33)' // red-500
+
+// Predefined pastel color palette (oklch — converted 1:1 from the original HSL pastels)
 const PASTEL_COLORS = [
-    'hsl(210, 40%, 75%)', // Soft blue
-    'hsl(340, 45%, 78%)', // Soft pink
-    'hsl(160, 42%, 72%)', // Soft green
-    'hsl(45, 55%, 78%)',  // Soft yellow
-    'hsl(280, 40%, 75%)', // Soft purple
-    'hsl(15, 50%, 76%)',  // Soft coral
-    'hsl(190, 45%, 72%)', // Soft cyan
-    'hsl(120, 38%, 72%)', // Soft lime
-    'hsl(300, 42%, 78%)', // Soft magenta
-    'hsl(35, 48%, 75%)',  // Soft orange
-    'hsl(200, 40%, 75%)', // Soft sky blue
-    'hsl(85, 40%, 75%)',  // Soft sage
-  ]
-  
-  export function generatePastelColors(count: number): string[] {
-    if (count <= PASTEL_COLORS.length) {
-      return PASTEL_COLORS.slice(0, count)
-    }
-  
-    // If we need more colors than predefined, generate additional pastels
-    const colors = [...PASTEL_COLORS]
-    const hueStep = 360 / count
-    
-    for (let i = PASTEL_COLORS.length; i < count; i++) {
-      const hue = (i * hueStep) % 360
-      const saturation = 38 + (i % 3) * 4 // Low saturation (38-46%)
-      const lightness = 72 + (i % 2) * 4  // High lightness (72-76%)
-      colors.push(`hsl(${hue}, ${saturation}%, ${lightness}%)`)
-    }
-    
-    return colors
+  'oklch(0.7945 0.046 249.44)', // Soft blue
+  'oklch(0.8008 0.0617 357.54)', // Soft pink
+  'oklch(0.8295 0.0677 171.92)', // Soft green
+  'oklch(0.8778 0.0628 91.15)', // Soft yellow
+  'oklch(0.7722 0.0802 314.32)', // Soft purple
+  'oklch(0.8028 0.0572 40.48)', // Soft coral
+  'oklch(0.8146 0.0578 211.58)', // Soft cyan
+  'oklch(0.8144 0.0952 144.64)', // Soft lime
+  'oklch(0.8111 0.0828 326.31)', // Soft magenta
+  'oklch(0.8335 0.0553 75.1)', // Soft orange
+  'oklch(0.8135 0.0436 229.59)', // Soft sky blue
+  'oklch(0.8566 0.0719 126.06)', // Soft sage
+]
+
+export function generatePastelColors(count: number): string[] {
+  if (count <= PASTEL_COLORS.length) {
+    return PASTEL_COLORS.slice(0, count)
   }
-  
-  export function addOpacityToColor(color: string, opacity: number): string {
-    if (color.startsWith('hsl(')) {
-      const hslMatch = color.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/)
-      if (hslMatch) {
-        const [, h, s, l] = hslMatch
-        return `hsla(${h}, ${s}%, ${l}%, ${opacity})`
-      }
-    }
-    return color
+
+  // If we need more colors than predefined, generate additional pastels.
+  const colors = [...PASTEL_COLORS]
+  const hueStep = 360 / count
+
+  for (let i = PASTEL_COLORS.length; i < count; i++) {
+    const hue = Math.round(((i * hueStep) % 360) * 100) / 100
+    const chroma = 0.055 + (i % 3) * 0.008 // low chroma (pastel)
+    const lightness = 0.8 + (i % 2) * 0.03 // high lightness
+    colors.push(`oklch(${lightness} ${chroma} ${hue})`)
   }
+
+  return colors
+}
+
+/**
+ * Apply an opacity to an `oklch()` color string. Non-oklch inputs (e.g.
+ * `var(--primary)` fallbacks) are returned unchanged.
+ */
+export function addOpacityToColor(color: string, opacity: number): string {
+  return withAlpha(color, opacity)
+}

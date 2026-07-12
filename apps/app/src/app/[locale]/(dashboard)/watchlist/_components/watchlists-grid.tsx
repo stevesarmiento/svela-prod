@@ -1,9 +1,13 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { WatchlistCard } from './watchlist-card'
 import { WatchlistGroupEditorPanel } from './watchlist-group-editor-panel'
 import { Button } from '@v1/ui/button'
+import { cn } from '@v1/ui/cn'
+import { useMediaQuery } from '@v1/ui/hooks'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { EASE_OUT_CUBIC, motionDuration } from '@/lib/motion-tokens'
 import { Grid3X3 } from 'lucide-react'
 import { toast } from '@v1/ui/use-toast'
 import { env } from '@/env.mjs'
@@ -22,6 +26,18 @@ import {
 } from './watchlists-page-bootstrap-context'
 
 const isDebug = env.NODE_ENV === "development"
+
+// Above this count, desktop switches from one big grid to a paged carousel.
+const WATCHLISTS_PAGE_SIZE = 12
+
+const PAGE_TRANSITION_S = 0.15
+
+// Vertical page-slide: new page enters from the direction you're heading.
+const pageVariants = {
+  enter: (direction: number) => ({ opacity: 0, y: direction * 24 }),
+  center: { opacity: 1, y: 0 },
+  exit: (direction: number) => ({ opacity: 0, y: direction * -24 }),
+}
 
 interface WatchlistsGridProps {
   onSelectWatchlist?: (group: WatchlistGroup) => void
@@ -57,6 +73,65 @@ export function WatchlistsGrid({
     // Keep the existing "newest first" behavior, but render all groups in one grid.
     return watchlistGroups.slice().reverse()
   }, [watchlistGroups])
+
+  // Paged carousel (desktop only, when there are more than PAGE_SIZE watchlists).
+  // 12 divides evenly into the md (2), lg (3), and xl (4) column counts, so every
+  // full page renders as complete rows at any desktop breakpoint.
+  // useMediaQuery returns false pre-mount, so defaulting to the plain grid avoids
+  // a carousel flash on mobile's first paint.
+  const isDesktop = useMediaQuery('(min-width: 768px)')
+  const usePagedCarousel = isDesktop && gridGroups.length > WATCHLISTS_PAGE_SIZE
+  const shouldReduceMotion = useReducedMotion()
+  const [pageState, setPageState] = useState<{ index: number; direction: 1 | -1 }>({
+    index: 0,
+    direction: 1,
+  })
+
+  const gridPages = useMemo(() => {
+    const pages: WatchlistGroup[][] = []
+    for (let i = 0; i < gridGroups.length; i += WATCHLISTS_PAGE_SIZE) {
+      pages.push(gridGroups.slice(i, i + WATCHLISTS_PAGE_SIZE))
+    }
+    return pages
+  }, [gridGroups])
+
+  const goToPage = useCallback((index: number) => {
+    setPageState((prev) =>
+      index === prev.index ? prev : { index, direction: index > prev.index ? 1 : -1 },
+    )
+  }, [])
+
+  // Keep the current page in range when watchlists are removed.
+  useEffect(() => {
+    setPageState((prev) =>
+      prev.index < gridPages.length
+        ? prev
+        : { index: Math.max(0, gridPages.length - 1), direction: -1 },
+    )
+  }, [gridPages.length])
+
+  // Lock the carousel viewport to the height of a full page so a shorter last
+  // page doesn't shrink the layout (which would shift the centered dot rail).
+  const pageAreaRef = useRef<HTMLDivElement | null>(null)
+  const [fullPageHeight, setFullPageHeight] = useState<number>()
+
+  useEffect(() => {
+    if (!usePagedCarousel) {
+      setFullPageHeight(undefined)
+      return
+    }
+    const node = pageAreaRef.current
+    if (!node) return
+    // Only full pages define the locked height; short pages just sit inside it.
+    if ((gridPages[pageState.index]?.length ?? 0) < WATCHLISTS_PAGE_SIZE) return
+
+    const observer = new ResizeObserver(([entry]) => {
+      const height = entry?.contentRect.height
+      if (height) setFullPageHeight(height)
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [usePagedCarousel, gridPages, pageState.index])
 
   const editingCoinIds = useMemo(() => {
     if (!editingGroup) return []
@@ -162,6 +237,25 @@ export function WatchlistsGrid({
     [watchlistGroups],
   )
 
+  const renderWatchlistCard = (group: WatchlistGroup) => {
+    const overviewEntry = overviewByGroupId.get(group._id)
+
+    return (
+      <div key={group._id}>
+        <WatchlistCard
+          group={group}
+          coins={overviewEntry?.coins ?? []}
+          itemCount={overviewEntry?.items.length ?? 0}
+          isLoading={isOverviewLoading}
+          onEdit={openEditDialog}
+          onDelete={handleDeleteWatchlist}
+          onSelect={onSelectWatchlist}
+          selected={selectedGroup?._id === group._id}
+        />
+      </div>
+    )
+  }
+
 
   if (!watchlistGroups.length && isOverviewLoading) {
     return (
@@ -181,26 +275,67 @@ export function WatchlistsGrid({
           ) : (
             <>
               {/* Watchlists Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 relative">
-                {gridGroups.map((group) => {
-                  const overviewEntry = overviewByGroupId.get(group._id)
+              {usePagedCarousel ? (
+                <div className="relative overflow-visible">
+                  {/* Vertical page indicator — floats in the left gutter so the
+                      grid keeps its original alignment with the page header. */}
+                  <div
+                    className="absolute -left-9 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 rounded-full border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/5 px-1.5 py-2.5"
+                    role="tablist"
+                    aria-label="Watchlist pages"
+                  >
+                    {gridPages.map((page, idx) => {
+                      const isActive = idx === pageState.index
+                      return (
+                        <button
+                          key={page[0]?._id ?? idx}
+                          type="button"
+                          role="tab"
+                          aria-selected={isActive}
+                          aria-label={`Go to page ${idx + 1}`}
+                          className={cn(
+                            "w-1.5 rounded-full transition-all duration-150",
+                            isActive
+                              ? "h-6 bg-zinc-900 dark:bg-white"
+                              : "h-1.5 bg-zinc-200 dark:bg-white/10 hover:bg-zinc-300 dark:hover:bg-white/20",
+                          )}
+                          onClick={() => goToPage(idx)}
+                        />
+                      )
+                    })}
+                  </div>
 
-                  return (
-                    <div key={group._id}>
-                      <WatchlistCard
-                        group={group}
-                        coins={overviewEntry?.coins ?? []}
-                        itemCount={overviewEntry?.items.length ?? 0}
-                        isLoading={isOverviewLoading}
-                        onEdit={openEditDialog}
-                        onDelete={handleDeleteWatchlist}
-                        onSelect={onSelectWatchlist}
-                        selected={selectedGroup?._id === group._id}
-                      />
+                  {/* Active page (vertical slide between pages) */}
+                  <div
+                    className="relative"
+                    style={{ minHeight: fullPageHeight }}
+                  >
+                    <div ref={pageAreaRef}>
+                      <AnimatePresence mode="popLayout" initial={false} custom={pageState.direction}>
+                        <motion.div
+                          key={pageState.index}
+                          custom={pageState.direction}
+                          variants={pageVariants}
+                          initial="enter"
+                          animate="center"
+                          exit="exit"
+                          transition={{
+                            duration: motionDuration(shouldReduceMotion, PAGE_TRANSITION_S),
+                            ease: EASE_OUT_CUBIC,
+                          }}
+                          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                        >
+                          {(gridPages[pageState.index] ?? []).map(renderWatchlistCard)}
+                        </motion.div>
+                      </AnimatePresence>
                     </div>
-                  )
-                })}
-              </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 relative">
+                  {gridGroups.map(renderWatchlistCard)}
+                </div>
+              )}
 
               {/* Edit Watchlist Modal (centered) */}
               <Dialog

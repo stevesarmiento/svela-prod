@@ -4,7 +4,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from "react-dom/client"
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
+import { Eye, EyeOff } from "lucide-react"
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
+import { adjustOklch } from '@/lib/oklch'
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
@@ -167,6 +169,7 @@ export function WatchlistMultiLineChart({
   onSelectWatchlist
 }: WatchlistMultiLineChartProps) {
   const [hoveredWatchlist, setHoveredWatchlist] = useState<WatchlistGroupId | null>(null)
+  const [hiddenWatchlists, setHiddenWatchlists] = useState<Set<WatchlistGroupId>>(new Set())
   const [watchlistData, setWatchlistData] = useState<Map<WatchlistGroupId, WatchlistSeries>>(new Map())
   const { watchlistGroups: watchlistGroupsData } = useWatchlist()
   
@@ -182,6 +185,18 @@ export function WatchlistMultiLineChart({
     const bucketMs = getBucketMsFromTimeScale(activeTimeScale)
     return floorToBucket(Date.now(), bucketMs)
   }, [activeTimeScale])
+
+  const toggleWatchlistVisibility = useCallback((watchlistId: WatchlistGroupId) => {
+    setHiddenWatchlists(prev => {
+      const next = new Set(prev)
+      if (next.has(watchlistId)) {
+        next.delete(watchlistId)
+      } else {
+        next.add(watchlistId)
+      }
+      return next
+    })
+  }, [])
 
   const handleDataUpdate = React.useCallback((groupId: WatchlistGroupId, data: WatchlistSeries | null) => {
     setWatchlistData(prev => {
@@ -203,14 +218,12 @@ export function WatchlistMultiLineChart({
     const colors = generatePastelColors(seriesArray.length)
     
     return seriesArray.map((series, index) => {
-      const baseColor = colors[index] || `hsl(${Math.random() * 360}, 40%, 75%)`
+      const baseColor = colors[index] || `oklch(0.8 0.06 ${Math.round(Math.random() * 360)})`
       // For light mode, make colors darker and more saturated
-      const themeAwareColor = isDarkMode 
-        ? baseColor 
-        : baseColor.replace(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/, (_, h, s, l) => {
-            // Increase saturation and decrease lightness for light mode
-            return `hsl(${h}, ${Math.min(100, Number.parseInt(s) + 20)}%, ${Math.max(30, Number.parseInt(l) - 40)}%)`
-          })
+      // (was hsl s+20 / l-40; equivalent perceptual shift in OKLCH).
+      const themeAwareColor = isDarkMode
+        ? baseColor
+        : adjustOklch(baseColor, { dl: -0.4, dc: 0.05 })
       
       return {
         ...series,
@@ -227,9 +240,10 @@ export function WatchlistMultiLineChart({
   }, [watchlistSeriesData])
 
   const livelineSeries = useMemo((): LivelineSeries[] => {
-    const isHovering = Boolean(hoveredWatchlist)
+    const isHovering = hoveredWatchlist !== null && !hiddenWatchlists.has(hoveredWatchlist)
 
     return watchlistSeriesData
+      .filter(row => !hiddenWatchlists.has(row.id))
       .map((row): LivelineSeries | null => {
         const data: LivelinePoint[] = []
         for (const point of row.data) {
@@ -255,10 +269,11 @@ export function WatchlistMultiLineChart({
         }
       })
       .filter((row): row is LivelineSeries => row !== null)
-  }, [watchlistSeriesData, hoveredWatchlist])
+  }, [watchlistSeriesData, hoveredWatchlist, hiddenWatchlists])
 
   const tooltipSeries = useMemo(() => {
     return watchlistSeriesData
+      .filter(row => !hiddenWatchlists.has(row.id))
       .map((row) => {
         const data: LivelinePoint[] = []
         for (const point of row.data) {
@@ -277,7 +292,7 @@ export function WatchlistMultiLineChart({
         }
       })
       .filter((row) => row.data.length > 0)
-  }, [watchlistSeriesData])
+  }, [watchlistSeriesData, hiddenWatchlists])
 
   const windowSecs = useMemo(() => {
     let min: number | null = null
@@ -448,51 +463,88 @@ export function WatchlistMultiLineChart({
       {/* Legend */}
       <div className="flex flex-col col-span-3 p-4 space-y-2">           
         <div className="flex flex-col gap-1">
-          {latestValues.map((watchlist) => (
-            <div key={watchlist.id}>
-              <button
-                type="button"
-                className={cn(
-                  "relative flex h-8 w-full flex-1 items-center gap-1 overflow-hidden border border-zinc-200 dark:border-zinc-800/70 rounded-lg",
-                  hoveredWatchlist && hoveredWatchlist !== watchlist.id ? "opacity-40" : "opacity-100",
-                  hoveredWatchlist === watchlist.id ? "bg-foreground/5" : ""
-                )}
-                style={{ backgroundColor: addOpacityToColor(watchlist.color, 0.1) }}
-                onMouseEnter={() => setHoveredWatchlist(watchlist.id)}
-                onMouseLeave={() => setHoveredWatchlist(null)}
-                onFocus={() => setHoveredWatchlist(watchlist.id)}
-                onBlur={() => setHoveredWatchlist(null)}
-                onClick={() => onSelectWatchlist?.(watchlist.id)}
-              >
-                <div 
-                  className="absolute left-1.5 h-3 w-1.5 rounded-full border border-black"
-                  style={{ backgroundColor: watchlist.color }}
-                />
-                
-                <div className="flex flex-row items-center gap-2 flex-1 ml-6">
-                  <WatchlistGroupIcon 
-                    icon={watchlist.icon} 
-                    className="w-4 h-4 text-foreground/70"
-                    size={16}
-                  />
-                  <span className="text-xs font-medium text-foreground">{watchlist.name}</span>
-                  <span className="text-xs font-berkeley-mono text-muted-foreground">({watchlist.coinsCount})</span>
+          {latestValues.map((watchlist) => {
+            const isHidden = hiddenWatchlists.has(watchlist.id)
+            return (
+              <div key={watchlist.id}>
+                <div
+                  className={cn(
+                    "relative flex h-8 w-full flex-1 items-center gap-1 overflow-hidden border border-zinc-200 dark:border-zinc-800/70 rounded-lg",
+                    hoveredWatchlist && hoveredWatchlist !== watchlist.id ? "opacity-40" : "opacity-100",
+                    hoveredWatchlist === watchlist.id ? "bg-foreground/5" : "",
+                    isHidden ? "opacity-40" : ""
+                  )}
+                  style={{ backgroundColor: addOpacityToColor(watchlist.color, isHidden ? 0.03 : 0.1) }}
+                  onMouseEnter={() => setHoveredWatchlist(watchlist.id)}
+                  onMouseLeave={() => setHoveredWatchlist(null)}
+                >
+                  <button
+                    type="button"
+                    className="relative flex h-full min-w-0 flex-1 items-center gap-1"
+                    onFocus={() => setHoveredWatchlist(watchlist.id)}
+                    onBlur={() => setHoveredWatchlist(null)}
+                    onClick={() => onSelectWatchlist?.(watchlist.id)}
+                  >
+                    <div
+                      className={cn(
+                        "absolute left-1.5 h-3 w-1.5 rounded-full border border-black",
+                        isHidden && "opacity-30"
+                      )}
+                      style={{ backgroundColor: watchlist.color }}
+                    />
+
+                    <div className="flex flex-row items-center gap-2 flex-1 min-w-0 ml-6">
+                      <WatchlistGroupIcon
+                        icon={watchlist.icon}
+                        className="w-4 h-4 text-foreground/70"
+                        size={16}
+                      />
+                      <span className={cn(
+                        "text-xs font-medium truncate",
+                        isHidden ? "text-muted-foreground" : "text-foreground"
+                      )}>{watchlist.name}</span>
+                      <span className="text-xs font-berkeley-mono text-muted-foreground">({watchlist.coinsCount})</span>
+                    </div>
+
+                    {/* Performance */}
+                    <div className={cn(
+                      "text-xs font-berkeley-mono",
+                      isHidden
+                        ? 'text-muted-foreground'
+                        : watchlist.latestValue > 0 ? 'text-green-500' : 'text-red-500'
+                    )}>
+                      {watchlist.latestValue > 0 ? '+' : ''}{watchlist.latestValue.toFixed(2)}%
+                    </div>
+                  </button>
+
+                  {/* Visibility toggle */}
+                  <button
+                    type="button"
+                    className="flex h-full shrink-0 items-center px-2 text-muted-foreground/60 hover:text-foreground"
+                    onClick={() => toggleWatchlistVisibility(watchlist.id)}
+                    title={isHidden ? "Show on chart" : "Hide from chart"}
+                    aria-label={isHidden ? `Show ${watchlist.name} on chart` : `Hide ${watchlist.name} from chart`}
+                    aria-pressed={isHidden}
+                  >
+                    {isHidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
                 </div>
-                
-                {/* Performance */}
-                <div className={cn(
-                  "text-xs font-berkeley-mono mr-2",
-                  watchlist.latestValue > 0 ? 'text-green-500' : 'text-red-500'
-                )}>
-                  {watchlist.latestValue > 0 ? '+' : ''}{watchlist.latestValue.toFixed(2)}%
-                </div>
-              </button>
-            </div>
-          ))}
+              </div>
+            )
+          })}
+          {hiddenWatchlists.size > 0 && (
+            <button
+              type="button"
+              className="self-start text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"
+              onClick={() => setHiddenWatchlists(new Set())}
+            >
+              Show all ({hiddenWatchlists.size} hidden)
+            </button>
+          )}
         </div>
       </div>
       
-      <div className="col-span-9 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+      <div className="col-span-9 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)]">
         {/* Chart Content */}
         <div className="p-0 relative">
           <div
@@ -543,7 +595,7 @@ export function WatchlistMultiLineChart({
                       value={0}
                       series={livelineSeries}
                       theme={isDarkMode ? "dark" : "light"}
-                      color={isDarkMode ? "#e5e7eb" : "#0f172a"}
+                      color={isDarkMode ? "oklch(0.9276 0.0058 264.53)" : "oklch(0.2077 0.0398 265.75)"}
                       lineWidth={2}
                       window={windowSecs}
                       grid={false}

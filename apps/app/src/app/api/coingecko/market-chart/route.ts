@@ -58,15 +58,32 @@ async function handleGet(request: NextRequest) {
     timeframe,
   });
 
+  // Record the view as a demand signal for the chart scheduler — on every
+  // request, even when data is fresh (writes are throttled server-side).
+  void convex
+    .mutation(api.coingeckoState.recordSeriesView, {
+      serverToken: getServerToken(),
+      coingeckoId: coinId,
+      timeframe,
+    })
+    .catch(() => null);
+
+  // Coverage: any recorded successful fetch proves the full window (a
+  // market_chart response always contains everything CoinGecko has), so young
+  // coins stop re-warming forever. The earliest-point heuristic remains only
+  // as a fallback for series that predate chartSeries metadata.
   const expectedDays = expectsWindowCoverage(timeframe);
   const earliest = series.data[0]?.timestamp ?? null;
-  const hasCoverage =
+  const legacyCoverage =
     expectedDays == null || earliest == null
       ? true
       : earliest <= Date.now() - expectedDays * DAY_MS * 0.85;
+  const hasCoverage = series.freshness.coverage === "full" || legacyCoverage;
 
-  const warmupRequested = series.data.length < 2 || series.stale || !hasCoverage;
-  if (warmupRequested) {
+  const warming = series.freshness.warming;
+  const warmupRequested =
+    series.data.length < 2 || series.stale || !hasCoverage;
+  if (warmupRequested && !warming) {
     void convex
       .mutation(api.coingeckoWarmup.requestMarketChartRefresh, {
         serverToken: getServerToken(),
@@ -96,14 +113,23 @@ async function handleGet(request: NextRequest) {
         cached: true,
         stale: series.stale,
         warmupRequested,
+        warming,
+        coverage: series.freshness.coverage,
         points: series.data.length,
         lastUpdated: series.lastUpdated,
+        lastFetchedAt: series.freshness.lastFetchedAt ?? null,
       },
     },
     {
       status: 200,
       headers: {
-        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+        // Don't edge-cache stale/warming payloads: clients fast-poll while a
+        // warmup is in flight, and an s-maxage'd stale body would keep serving
+        // the old series for up to 90s after Convex already has fresh data.
+        "Cache-Control":
+          warmupRequested || warming
+            ? "private, no-store"
+            : "public, s-maxage=30, stale-while-revalidate=60",
       },
     },
   );

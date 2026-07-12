@@ -12,7 +12,7 @@
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "lint": "biome check .",
-    "format": "biome --write .",
+    "format": "biome format --write .",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -97,6 +97,7 @@
     "./progressive-blur": "./src/components/progressive-blur.tsx",
     "./time-range-input": "./src/components/time-range-input.tsx",
     "./use-toast": "./src/components/use-toast.tsx",
+    "./oklch": "./src/lib/oklch.ts",
     "./cn": "./src/utils/cn.ts",
     "./truncate": "./src/utils/truncate.ts",
     "./format-numbers": "./src/utils/format-numbers.ts",

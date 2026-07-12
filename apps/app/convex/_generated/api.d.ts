@@ -8,10 +8,14 @@
  * @module
  */
 
+import type * as _lib_chartFreshness from "../_lib/chartFreshness.js";
+import type * as _lib_coingeckoFetch from "../_lib/coingeckoFetch.js";
 import type * as _lib_overview_signals from "../_lib/overview_signals.js";
 import type * as _lib_server_token from "../_lib/server_token.js";
+import type * as _lib_user_lookup from "../_lib/user_lookup.js";
 import type * as apiKeys from "../apiKeys.js";
 import type * as apiKeysActions from "../apiKeysActions.js";
+import type * as chartScheduler from "../chartScheduler.js";
 import type * as cleanupInternal from "../cleanupInternal.js";
 import type * as clerkUserMigration from "../clerkUserMigration.js";
 import type * as coingeckoCoinsInternal from "../coingeckoCoinsInternal.js";
@@ -48,10 +52,14 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "_lib/chartFreshness": typeof _lib_chartFreshness;
+  "_lib/coingeckoFetch": typeof _lib_coingeckoFetch;
   "_lib/overview_signals": typeof _lib_overview_signals;
   "_lib/server_token": typeof _lib_server_token;
+  "_lib/user_lookup": typeof _lib_user_lookup;
   apiKeys: typeof apiKeys;
   apiKeysActions: typeof apiKeysActions;
+  chartScheduler: typeof chartScheduler;
   cleanupInternal: typeof cleanupInternal;
   clerkUserMigration: typeof clerkUserMigration;
   coingeckoCoinsInternal: typeof coingeckoCoinsInternal;

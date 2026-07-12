@@ -4,11 +4,15 @@ import { v } from "convex/values";
 export default defineSchema({
   users: defineTable({
     clerkId: v.string(),
+    // Linked Clerk ID from the development Clerk instance, so the same user
+    // row resolves for both production and local-dev sessions (shared DB).
+    devClerkId: v.optional(v.string()),
     email: v.optional(v.string()),
     fullName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
   })
     .index("by_clerk_id", ["clerkId"])
+    .index("by_dev_clerk_id", ["devClerkId"])
     .index("by_email", ["email"]),
 
   watchlistGroups: defineTable({
@@ -256,7 +260,7 @@ export default defineSchema({
 
   trackedCoins: defineTable({
     coingeckoId: v.string(),
-    reason: v.string(), // "watchlist" | "portfolio" (string to keep migrations simple)
+    reason: v.string(), // "watchlist" | "portfolio" | "news" | "viewed" (string to keep migrations simple)
     lastSeen: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -265,6 +269,29 @@ export default defineSchema({
     .index("by_reason", ["reason"])
     .index("by_last_seen", ["lastSeen"])
     .index("by_coingecko_id_and_reason", ["coingeckoId", "reason"]),
+
+  /**
+   * Per-(coin, timeframe) chart-series refresh state. `lastFetchedAt` records
+   * the last SUCCESSFUL upstream fetch (series freshness + coverage proof —
+   * every CoinGecko market_chart response contains the full window).
+   * `nextDueAt` is the demand-prioritized scheduler queue key (see
+   * convex/chartScheduler.ts); FAR_FUTURE sentinel = on-view warmup only.
+   */
+  chartSeries: defineTable({
+    coingeckoId: v.string(),
+    timeframe: v.string(), // "1","7","14","30","90","365","730","max","1_ohlc","7_ohlc"
+    lastFetchedAt: v.optional(v.number()),
+    lastRequestedAt: v.optional(v.number()),
+    nextDueAt: v.number(),
+    leaseUntil: v.optional(v.number()),
+    consecutiveErrors: v.number(),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_coin_timeframe", ["coingeckoId", "timeframe"])
+    .index("by_timeframe_next_due", ["timeframe", "nextDueAt"])
+    .index("by_last_requested", ["lastRequestedAt"]),
 
   coingeckoNewsArticles: defineTable({
     url: v.string(),

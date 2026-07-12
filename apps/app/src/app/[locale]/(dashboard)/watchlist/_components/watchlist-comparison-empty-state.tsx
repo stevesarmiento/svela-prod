@@ -6,6 +6,7 @@ import { cn } from '@v1/ui/cn'
 import { Liveline, type LivelinePoint, type LivelineSeries } from 'liveline'
 import { useIsomorphicTheme } from '@/hooks/use-isomorphic-theme'
 import { addOpacityToColor, generatePastelColors } from '@/lib/chart-colors'
+import { adjustOklch } from '@/lib/oklch'
 
 interface WatchlistComparisonEmptyStateProps {
   className?: string
@@ -61,14 +62,7 @@ function ComparisonTinyChartIllustration() {
     if (isDarkMode) return colors
 
     // Keep the same "darker in light mode" adjustment used by multi-line-lightweight.
-    return colors.map((base) =>
-      base.replace(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/, (_, h, s, l) => {
-        return `hsl(${h}, ${Math.min(100, Number.parseInt(s, 10) + 20)}%, ${Math.max(
-          30,
-          Number.parseInt(l, 10) - 40,
-        )}%)`
-      }),
-    )
+    return colors.map((base) => adjustOklch(base, { dl: -0.4, dc: 0.05 }))
   }, [isDarkMode])
 
   const fakeSeries = useMemo((): LivelineSeries[] => {
@@ -85,19 +79,19 @@ function ComparisonTinyChartIllustration() {
         id: 'line-1',
         data: s1,
         value: v1,
-        color: pastelColors[0] ?? 'hsl(var(--primary))',
+        color: pastelColors[0] ?? 'oklch(0.7945 0.046 249.44)',
       },
       {
         id: 'line-2',
         data: s2,
         value: v2,
-        color: pastelColors[1] ?? 'rgba(148,163,184,0.85)',
+        color: pastelColors[1] ?? 'oklch(0.7107 0.0351 256.79 / 0.85)',
       },
       {
         id: 'line-3',
         data: s3,
         value: v3,
-        color: pastelColors[2] ?? 'rgba(34,197,94,0.75)',
+        color: pastelColors[2] ?? 'oklch(0.7227 0.192 149.58 / 0.75)',
       },
     ]
   }, [pastelColors])
@@ -127,11 +121,11 @@ function ComparisonTinyChartIllustration() {
             {/* Row 1 */}
             <div
               className="relative flex h-6 items-center gap-2 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800/70"
-              style={{ backgroundColor: addOpacityToColor(pastelColors[0] ?? 'hsl(var(--primary))', 0.1) }}
+              style={{ backgroundColor: addOpacityToColor(pastelColors[0] ?? 'var(--primary)', 0.1) }}
             >
               <div
                 className="absolute left-1.5 h-2 w-1.5 rounded-full border border-black/10 dark:border-black"
-                style={{ backgroundColor: pastelColors[0] ?? 'hsl(var(--primary))' }}
+                style={{ backgroundColor: pastelColors[0] ?? 'var(--primary)' }}
               />
               <div className="flex h-8 flex-1 items-center gap-2 overflow-hidden pl-4.5 pr-3">
                 <span className="h-2 w-10 rounded-full bg-zinc-500/15" />
@@ -143,7 +137,7 @@ function ComparisonTinyChartIllustration() {
             <div className="relative flex h-6 items-center gap-2 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800/70 bg-white/0">
               <div
                 className="absolute left-1.5 h-2 w-1.5 rounded-full border border-black/10 dark:border-black"
-                style={{ backgroundColor: pastelColors[1] ?? 'rgba(148,163,184,0.85)' }}
+                style={{ backgroundColor: pastelColors[1] ?? 'oklch(0.7107 0.0351 256.79 / 0.85)' }}
               />
               <div className="flex h-8 flex-1 items-center gap-2 overflow-hidden pl-4.5 pr-3">
                 <span className="h-2 w-12 rounded-full bg-zinc-500/15" />
@@ -155,7 +149,7 @@ function ComparisonTinyChartIllustration() {
             <div className="relative flex h-6 items-center gap-2 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800/70 bg-white/0">
               <div
                 className="absolute left-1.5 h-2 w-1.5 rounded-full border border-black/10 dark:border-black"
-                style={{ backgroundColor: pastelColors[2] ?? 'rgba(34,197,94,0.75)' }}
+                style={{ backgroundColor: pastelColors[2] ?? 'oklch(0.7227 0.192 149.58 / 0.75)' }}
               />
               <div className="flex h-8 flex-1 items-center gap-2 overflow-hidden pl-4.5 pr-3">
                 <span className="h-2 w-9 rounded-full bg-zinc-500/15" />
@@ -166,7 +160,7 @@ function ComparisonTinyChartIllustration() {
         </div>
 
         {/* Chart */}
-        <div className="col-span-8 sm:col-span-9 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+        <div className="col-span-8 sm:col-span-9 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)]">
           <div className="p-0 relative">
             <div className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30" style={DOT_PATTERN_STYLE} />
 
@@ -192,7 +186,7 @@ function ComparisonTinyChartIllustration() {
                     to bottom,
                     transparent 0px,
                     transparent 63px,
-                    linear-gradient(to right, transparent 0%, rgba(255, 255, 255, 0.06) 50%, transparent 100%) 64px,
+                    linear-gradient(to right, transparent 0%, oklch(1 0 0 / 0.06) 50%, transparent 100%) 64px,
                     transparent 65px,
                     transparent 128px
                   )
@@ -206,7 +200,7 @@ function ComparisonTinyChartIllustration() {
                   data={[]}
                   value={0}
                   series={fakeSeries}
-                  color="#e5e7eb"
+                  color="oklch(0.9276 0.0058 264.53)"
                   lineWidth={1.6}
                   window={windowSecs}
                   grid={false}

@@ -58,18 +58,33 @@ async function handleGet(request: NextRequest) {
     );
   }
 
+  const timeframe = `${days}_ohlc`;
   const series = await convex.query(api.coingeckoReads.getPriceHistorySeries, {
     serverToken: getServerToken(),
     coingeckoId: coinId,
-    timeframe: `${days}_ohlc`,
+    timeframe,
   });
 
-  const earliest = series.data[0]?.timestamp ?? null;
-  const hasCoverage =
-    earliest == null ? true : earliest <= Date.now() - Number(days === "max" ? 365 : days) * DAY_MS * 0.85;
+  // Demand signal for the chart scheduler (throttled server-side).
+  void convex
+    .mutation(api.coingeckoState.recordSeriesView, {
+      serverToken: getServerToken(),
+      coingeckoId: coinId,
+      timeframe,
+    })
+    .catch(() => null);
 
+  // A recorded successful fetch proves full-window coverage (young coins
+  // simply have less history); the earliest-point heuristic is only a
+  // fallback for series that predate chartSeries metadata.
+  const earliest = series.data[0]?.timestamp ?? null;
+  const legacyCoverage =
+    earliest == null ? true : earliest <= Date.now() - Number(days === "max" ? 365 : days) * DAY_MS * 0.85;
+  const hasCoverage = series.freshness.coverage === "full" || legacyCoverage;
+
+  const warming = series.freshness.warming;
   const warmupRequested = series.data.length < 2 || series.stale || !hasCoverage;
-  if (warmupRequested) {
+  if (warmupRequested && !warming) {
     void convex
       .mutation(api.coingeckoWarmup.requestOhlcRefresh, {
         serverToken: getServerToken(),
@@ -98,14 +113,22 @@ async function handleGet(request: NextRequest) {
         cached: true,
         stale: series.stale,
         warmupRequested,
+        warming,
+        coverage: series.freshness.coverage,
         points: series.data.length,
         lastUpdated: series.lastUpdated,
+        lastFetchedAt: series.freshness.lastFetchedAt ?? null,
       },
     },
     {
       status: 200,
       headers: {
-        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+        // Don't edge-cache stale/warming payloads — warmup polls must see
+        // fresh data as soon as Convex has it.
+        "Cache-Control":
+          warmupRequested || warming
+            ? "private, no-store"
+            : "public, s-maxage=30, stale-while-revalidate=60",
       },
     },
   );

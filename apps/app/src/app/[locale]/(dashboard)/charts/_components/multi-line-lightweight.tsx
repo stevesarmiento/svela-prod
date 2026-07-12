@@ -20,9 +20,10 @@ import { IconXmarkCircleFill, IconPlus } from 'symbols-react'
 import { ChevronDown } from "lucide-react"
 import { toast } from "@v1/ui/use-toast"
 import Link from 'next/link'
-import { useBottomNav } from '@/components/navigation/bottom-nav-context'
+import { useBottomNavActions } from '@/components/navigation/bottom-nav-context'
 import { Button } from '@v1/ui/button'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
+import { adjustOklch } from '@/lib/oklch'
 import { AvatarCircles } from "@v1/ui/token-stacks"
 import { getTokenLogoURL } from "@/lib/logo-overrides"
 import { ChartLoadingSkeleton } from "@/components/charts/chart-loading-skeleton"
@@ -120,8 +121,8 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   
   const chartHeight = isCompactLayout ? 280 : isMediumLayout ? 340 : 400
   
-  // Use the bottom nav context to trigger contextual command search
-  const { openContextualCommandSearch } = useBottomNav()
+  // Actions-only subscription: this heavy chart never re-renders on nav state changes
+  const { openContextualCommandSearch } = useBottomNavActions()
 
   // 🚀 OPTIMIZED: Use CoinGecko BULK multi-chart data hook with intelligent caching
   const { 
@@ -136,14 +137,12 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
     const colors = generatePastelColors(coinSeriesData.length)
     
     return coinSeriesData.map((series, index) => {
-      const baseColor = colors[index] || `hsl(${Math.random() * 360}, 40%, 75%)`
+      const baseColor = colors[index] || `oklch(0.8 0.06 ${Math.round(Math.random() * 360)})`
       // For light mode, make colors darker and more saturated
-      const themeAwareColor = isDarkMode 
-        ? baseColor 
-        : baseColor.replace(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/, (_, h, s, l) => {
-            // Increase saturation and decrease lightness for light mode
-            return `hsl(${h}, ${Math.min(100, Number.parseInt(s) + 20)}%, ${Math.max(30, Number.parseInt(l) - 40)}%)`
-          })
+      // (was hsl s+20 / l-40; equivalent perceptual shift in OKLCH).
+      const themeAwareColor = isDarkMode
+        ? baseColor
+        : adjustOklch(baseColor, { dl: -0.4, dc: 0.05 })
       
       return {
         ...series,
@@ -592,7 +591,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
         </div>
       </div>
       
-      <div className="col-span-1 min-w-0 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)] lg:col-span-9">
+      <div className="col-span-1 min-w-0 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)] lg:col-span-9">
         {/* Chart Content */}
         <div className="p-0 relative">
           <div
@@ -609,7 +608,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                 {avatarData.length > 0 && (
                   <AvatarCircles
                     avatarUrls={avatarData}
-                    className="-ml-2 origin-left scale-75"
+                    className="origin-left scale-75"
                   />
                 )}
               </div>
@@ -647,7 +646,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                             to bottom,
                             transparent 0px,
                             transparent 79px,
-                            linear-gradient(to right, transparent 0%, rgba(255, 255, 255, 0.06) 50%, transparent 100%) 80px,
+                            linear-gradient(to right, transparent 0%, oklch(1 0 0 / 0.06) 50%, transparent 100%) 80px,
                             transparent 81px,
                             transparent 160px
                           )
@@ -660,7 +659,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                         value={0}
                         series={livelineSeries}
                         theme={isDarkMode ? "dark" : "light"}
-                        color={isDarkMode ? "#e5e7eb" : "#0f172a"}
+                        color={isDarkMode ? "oklch(0.9276 0.0058 264.53)" : "oklch(0.2077 0.0398 265.75)"}
                         lineWidth={1}
                         window={windowSecs}
                         grid={false}

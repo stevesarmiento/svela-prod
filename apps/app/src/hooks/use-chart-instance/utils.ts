@@ -1,4 +1,5 @@
 import type { Time } from 'lightweight-charts';
+import { withAlpha } from '@/lib/oklch';
 
 export function formatUsdVolume(value: number) {
     if (!Number.isFinite(value)) return '$0';
@@ -67,24 +68,13 @@ export function isTimeInEpochRange(time: Time, fromEpochSec: number, toEpochSec:
     return t >= fromEpochSec && t < toEpochSec;
 }
 
+/**
+ * Set the alpha of an `oklch()` color string (all chart colors are oklch;
+ * the custom colorParsers bridge handles canvas parsing). Non-oklch inputs
+ * are returned unchanged.
+ */
 export function toRgba(color: string, alpha: number): string {
-    const clampedAlpha = clampNumber(alpha, 0, 1);
-    const trimmed = color.trim();
-    const match = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(trimmed);
-    if (!match) return color;
-
-    const hex = match[1]!;
-    const fullHex =
-        hex.length === 3
-            ? hex
-                  .split('')
-                  .map(c => c + c)
-                  .join('')
-            : hex;
-    const r = Number.parseInt(fullHex.slice(0, 2), 16);
-    const g = Number.parseInt(fullHex.slice(2, 4), 16);
-    const b = Number.parseInt(fullHex.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${clampedAlpha})`;
+    return withAlpha(color.trim(), clampNumber(alpha, 0, 1));
 }
 
 export function getSeriesValue(data: unknown): number | null {

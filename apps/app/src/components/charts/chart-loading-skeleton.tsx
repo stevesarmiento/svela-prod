@@ -173,9 +173,9 @@ export function ChartLoadingSkeleton({ className, height = 400, lines }: ChartLo
 
           {/* Shine gradient (inspired by `.ck-qr-shine`) */}
           <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="rgba(255, 255, 255, 0)" />
-            <stop offset="50%" stopColor="rgba(255, 255, 255, 0.22)" />
-            <stop offset="100%" stopColor="rgba(255, 255, 255, 0)" />
+            <stop offset="0%" stopColor="oklch(1 0 0 / 0)" />
+            <stop offset="50%" stopColor="oklch(1 0 0 / 0.22)" />
+            <stop offset="100%" stopColor="oklch(1 0 0 / 0)" />
           </linearGradient>
         </defs>
 
@@ -185,7 +185,7 @@ export function ChartLoadingSkeleton({ className, height = 400, lines }: ChartLo
             key={d}
             d={d}
             fill="none"
-            stroke="hsl(var(--muted-foreground) / 0.25)"
+            stroke="color-mix(in oklab, var(--muted-foreground) 25%, transparent)"
             strokeWidth={strokeWidthPx}
             strokeLinecap="round"
             strokeLinejoin="round"

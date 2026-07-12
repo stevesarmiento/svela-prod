@@ -403,7 +403,7 @@ export const PriceChart = memo(function PriceChart({
 
   // Generate Hull Suite colors - theme-aware
   const hullColors = generatePastelColors(1)
-  const baseHullColor = isDarkMode ? 'hsl(0, 0.00%, 76.10%)' : 'hsl(210, 22.00%, 57.30%)'
+  const baseHullColor = isDarkMode ? 'oklch(0.8141 0 0)' : 'oklch(0.6498 0.0452 248.52)'
   const primaryHullColor = addOpacityToColor(hullColors[0] || baseHullColor, isDarkMode ? 0.7 : 0.6)
   
   // Always use line chart - simplified approach
@@ -487,7 +487,7 @@ export const PriceChart = memo(function PriceChart({
         ? getUtcQuarterRange(timeEpochSec)
         : getUtcMonthRange(timeEpochSec)
 
-      const boundaryColor = isDarkMode ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)'
+      const boundaryColor = isDarkMode ? 'oklch(1 0 0 / 0.25)' : 'oklch(0 0 0 / 0.25)'
 
       setHighlightRange((prev) =>
         prev != null &&
@@ -511,7 +511,10 @@ export const PriceChart = memo(function PriceChart({
   const chartContainerRef = useChartInstance(isSeriesReady ? ohlcvDataForChart : [], {
     chartType: 'line',
     showVolume: true,
-    livePriceUsd: liveSpotPriceUsd,
+    // Honest gaps: while the series is warming (stored tail un-fetched),
+    // pinning the live spot price to the last bar draws a fake straight
+    // segment across the gap — hold off until the backfill lands.
+    livePriceUsd: isWarmingUp ? undefined : liveSpotPriceUsd,
     isDarkMode,
     hullSuite: hullSuiteOverlay,
     onCrosshairMove: handleCrosshairMove,
@@ -588,7 +591,7 @@ export const PriceChart = memo(function PriceChart({
     )}>
       {/* React 19: Enhanced Main Price Chart with hardware acceleration */}
       <div className={cn(
-        "bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)] will-change-auto",
+        "bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)] will-change-auto",
         showPending && "opacity-95"
       )}>
         <div className="p-0 relative">

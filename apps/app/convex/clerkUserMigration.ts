@@ -280,6 +280,97 @@ export const updateAvatarUrls = mutation({
   },
 });
 
+export const linkDevClerkIds = mutation({
+  args: {
+    secret: v.string(),
+    apply: v.boolean(),
+    links: v.array(
+      v.object({
+        devClerkId: v.string(),
+        prodClerkId: v.string(),
+      }),
+    ),
+  },
+  returns: v.object({
+    apply: v.boolean(),
+    linked: v.number(),
+    alreadyLinked: v.number(),
+    missingProdUsers: v.number(),
+    duplicatesMerged: v.number(),
+    rowsReassigned: v.number(),
+    rowsDeleted: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    requireMigrationSecret(args.secret);
+
+    const result = {
+      apply: args.apply,
+      linked: 0,
+      alreadyLinked: 0,
+      missingProdUsers: 0,
+      duplicatesMerged: 0,
+      rowsReassigned: 0,
+      rowsDeleted: 0,
+    };
+    // mergeDuplicateTargetUser expects a MigrationResult-shaped counter object.
+    const mergeCounters: MigrationResult = {
+      apply: args.apply,
+      mappings: 0,
+      missingSourceUsers: 0,
+      usersPatched: 0,
+      usersMerged: 0,
+      rowsReassigned: 0,
+      rowsDeleted: 0,
+    };
+
+    for (const link of args.links) {
+      const mainUser = await ctx.db
+        .query("users")
+        .withIndex("by_clerk_id", (q) => q.eq("clerkId", link.prodClerkId))
+        .first();
+
+      if (!mainUser) {
+        result.missingProdUsers++;
+        continue;
+      }
+
+      // A stray duplicate row may exist for the dev Clerk ID (created by a
+      // local-dev login before this linking existed). Merge it into the main
+      // row, then delete it.
+      const devDuplicate = await ctx.db
+        .query("users")
+        .withIndex("by_clerk_id", (q) => q.eq("clerkId", link.devClerkId))
+        .first();
+
+      if (devDuplicate && devDuplicate._id !== mainUser._id) {
+        result.duplicatesMerged++;
+        await mergeDuplicateTargetUser(
+          ctx,
+          mainUser,
+          devDuplicate,
+          args.apply,
+          mergeCounters,
+        );
+        if (args.apply) await ctx.db.delete(devDuplicate._id);
+      }
+
+      if (mainUser.devClerkId === link.devClerkId) {
+        result.alreadyLinked++;
+        continue;
+      }
+
+      result.linked++;
+      if (args.apply) {
+        await ctx.db.patch(mainUser._id, { devClerkId: link.devClerkId });
+      }
+    }
+
+    result.rowsReassigned = mergeCounters.rowsReassigned;
+    result.rowsDeleted = mergeCounters.rowsDeleted;
+    return result;
+  },
+});
+
 export const migrateClerkUserIds = mutation({
   args: {
     secret: v.string(),

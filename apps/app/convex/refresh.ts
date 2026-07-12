@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { getUserByClerkId } from "./_lib/user_lookup";
 import { mutation } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -33,10 +34,7 @@ export const refreshMyDataNow = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-      .first();
+    const user = await getUserByClerkId(ctx.db, identity.subject);
     if (!user) throw new Error("User not found");
 
     const now = Date.now();

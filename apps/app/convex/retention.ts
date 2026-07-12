@@ -30,7 +30,15 @@ const PRICE_HISTORY_POLICIES: Array<{ timeframe: string; keepDays: number }> = [
   { timeframe: "7", keepDays: 14 },
   { timeframe: "7_ohlc", keepDays: 14 },
   { timeframe: "14", keepDays: 30 },
+  // "1825" was cron-refreshed for months but is never read by any frontend
+  // surface ("max" reads its own timeframe partition) — reclaim it entirely.
+  { timeframe: "1825", keepDays: 0 },
 ];
+
+/** trackedCoins reason "viewed": demand-driven rows decay after inactivity. */
+const TRACKED_VIEWED_KEEP_DAYS = 45;
+/** chartSeries rows with no standing and no recent views are dead queue state. */
+const CHART_SERIES_KEEP_DAYS = 30;
 
 const GLOBAL_MARKET_HISTORY_POLICIES: Array<{
   timeframe: string;
@@ -188,6 +196,95 @@ export const _pruneOrphanedNewsArticlesBatch = internalMutation({
   },
 });
 
+export const _pruneTrackedCoinsViewedBatch = internalMutation({
+  args: {
+    cutoffMs: v.number(),
+    remainingRounds: v.number(),
+  },
+  returns: v.object({ deleted: v.number(), hasMore: v.boolean() }),
+  handler: async (ctx, args) => {
+    // Only "viewed" rows decay by TTL — watchlist/portfolio rows are managed
+    // by real membership add/remove paths, news rows by the news jobs.
+    const rows = await ctx.db
+      .query("trackedCoins")
+      .withIndex("by_reason", (q) => q.eq("reason", "viewed"))
+      .take(DELETE_BATCH_SIZE);
+
+    const expired = rows.filter((row) => row.lastSeen < args.cutoffMs);
+    await Promise.all(expired.map((row) => ctx.db.delete(row._id)));
+
+    const hasMore = rows.length === DELETE_BATCH_SIZE;
+    if (hasMore && args.remainingRounds > 0) {
+      await ctx.scheduler.runAfter(
+        RESCHEDULE_DELAY_MS,
+        internal.retention._pruneTrackedCoinsViewedBatch,
+        { ...args, remainingRounds: args.remainingRounds - 1 },
+      );
+    }
+    return { deleted: expired.length, hasMore };
+  },
+});
+
+export const _pruneOrphanChartSeriesBatch = internalMutation({
+  args: {
+    cutoffMs: v.number(),
+    remainingRounds: v.number(),
+  },
+  returns: v.object({
+    scanned: v.number(),
+    deleted: v.number(),
+    hasMore: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    // Rows whose lastRequestedAt is old (or unset — sorts first in the index)
+    // are deletion candidates UNLESS the coin has standing demand
+    // (watchlist/portfolio), whose rows the reconciler maintains.
+    const batchSize = 200;
+    const rows = await ctx.db
+      .query("chartSeries")
+      .withIndex("by_last_requested", (q) =>
+        q.lt("lastRequestedAt", args.cutoffMs),
+      )
+      .take(batchSize);
+
+    let deleted = 0;
+    for (const row of rows) {
+      // Never-viewed rows created by the reconciler for standing coins have
+      // lastRequestedAt undefined; keep anything with standing.
+      let hasStanding = false;
+      for (const reason of ["watchlist", "portfolio"]) {
+        const tracked = await ctx.db
+          .query("trackedCoins")
+          .withIndex("by_coingecko_id_and_reason", (q) =>
+            q.eq("coingeckoId", row.coingeckoId).eq("reason", reason),
+          )
+          .first();
+        if (tracked) {
+          hasStanding = true;
+          break;
+        }
+      }
+      if (hasStanding) continue;
+
+      await ctx.db.delete(row._id);
+      deleted += 1;
+    }
+
+    // `hasMore` uses the scanned count; still-standing rows are re-scanned
+    // next run, which is fine at this batch size (same caveat as the news
+    // article prune above).
+    const hasMore = rows.length === batchSize;
+    if (hasMore && args.remainingRounds > 0) {
+      await ctx.scheduler.runAfter(
+        RESCHEDULE_DELAY_MS,
+        internal.retention._pruneOrphanChartSeriesBatch,
+        { ...args, remainingRounds: args.remainingRounds - 1 },
+      );
+    }
+    return { scanned: rows.length, deleted, hasMore };
+  },
+});
+
 /** Cron entry point: kick off one bounded delete chain per policy. */
 export const _runRetention = internalMutation({
   args: {},
@@ -236,6 +333,24 @@ export const _runRetention = internalMutation({
       internal.retention._pruneOrphanedNewsArticlesBatch,
       {
         cutoffMs: now - NEWS_ARTICLE_KEEP_DAYS * DAY_MS,
+        remainingRounds: MAX_ROUNDS_PER_RUN,
+      },
+    );
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.retention._pruneTrackedCoinsViewedBatch,
+      {
+        cutoffMs: now - TRACKED_VIEWED_KEEP_DAYS * DAY_MS,
+        remainingRounds: MAX_ROUNDS_PER_RUN,
+      },
+    );
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.retention._pruneOrphanChartSeriesBatch,
+      {
+        cutoffMs: now - CHART_SERIES_KEEP_DAYS * DAY_MS,
         remainingRounds: MAX_ROUNDS_PER_RUN,
       },
     );

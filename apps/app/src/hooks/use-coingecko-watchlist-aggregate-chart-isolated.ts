@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useLayoutEffect, useMemo } from 'react'
+import { useState, useLayoutEffect, useMemo, useRef } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
 import { Effect } from "effect"
@@ -54,6 +54,8 @@ interface CoinGeckoWatchlistAggregateIsolatedResult {
   isLoading: boolean
   isFetching: boolean
   isPlaceholderData: boolean
+  /** Number of coins whose series are still being refreshed in the background. */
+  warmingCount: number
   /** True when interval has no chart aggregate (e.g. 2Y — same idea as chart-table N/A). */
   isChangeUnavailable: boolean
   currentAggregateChange: number
@@ -68,6 +70,10 @@ interface CoinGeckoWatchlistAggregateIsolatedResult {
 
 interface HistoricalDataResult {
   data: Record<string, CoinHistoricalData[]>
+  /** Per-coin: true while a background refresh is healing that series. */
+  warmingByCoin?: Record<string, boolean>
+  /** True when any coin's stored series was stale/thin and a background refresh was scheduled. */
+  needsWarmup?: boolean
   performance: {
     cacheHits: number
     cacheMisses: number
@@ -179,6 +185,10 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
   const isChangeUnavailable = timeScale === '2y'
   const historicalQueryEnabled = coinIds.length > 0 && !isChangeUnavailable
 
+  // Bound the fast warmup polling so a permanently-stale coin can't keep the
+  // whole watchlist fan-out on a 5s loop forever.
+  const fastPollCountRef = useRef(0)
+
   // Fetch historical market chart data for all coins in the watchlist
   const {
     data: historicalData,
@@ -192,13 +202,20 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
       if (!coinIds.length) return { data: emptyData, performance: { cacheHits: 0, cacheMisses: 0, totalQueries: 0 } }
 
       try {
-        const swallowToNull = (_: unknown) => Effect.succeed({ data: null, cached: false })
+        const swallowToNull = (_: unknown) =>
+          Effect.succeed({ data: null, cached: false, needsWarmup: false })
 
         const fetchEffects = coinIds.map((coinId) =>
           CoinGeckoApi.getMarketChart({ coinId, days }).pipe(
             Effect.map((response) => ({
               data: response.data,
               cached: response.status?.cached ?? false,
+              // Server schedules a background refresh for stale/thin series;
+              // surface it so we can poll until fresh data lands.
+              needsWarmup:
+                (response.status?.warmupRequested ?? false) ||
+                (response.status?.warming ?? false) ||
+                (response.status?.stale ?? false),
             })),
             Effect.catchTags({
               CoinGeckoInvalidParamsError: swallowToNull,
@@ -221,11 +238,15 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
         
         // Process results into a map of historical data
         const historicalDataMap: Record<string, CoinHistoricalData[]> = {}
+        const warmingByCoin: Record<string, boolean> = {}
         let successCount = 0
         let cacheHits = 0
-        
+        let needsWarmup = false
+
         for (const result of results) {
           if (result.cached) cacheHits++
+          if (result.needsWarmup) needsWarmup = true
+          warmingByCoin[result.coinId] = result.needsWarmup
           const prices = result.data?.prices
           if (!Array.isArray(prices)) continue
 
@@ -235,9 +256,11 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
           }))
           successCount++
         }
-        
+
         return {
           data: historicalDataMap,
+          warmingByCoin,
+          needsWarmup,
           performance: {
             cacheHits,
             cacheMisses: Math.max(0, coinIds.length - cacheHits),
@@ -250,7 +273,21 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
     },
     enabled: historicalQueryEnabled,
     staleTime: 5 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
+    refetchInterval: (query) => {
+      const result = query.state.data as HistoricalDataResult | undefined
+      if (!result) return 5 * 60 * 1000
+
+      // Poll fast while any coin in the watchlist is warming (stale series or a
+      // background refresh was just scheduled) so the aggregate doesn't render
+      // flat forward-filled segments for 5 minutes after a cold load.
+      if (result.needsWarmup && fastPollCountRef.current < 24) {
+        fastPollCountRef.current += 1
+        return 5_000 // ~2 minutes of fast polling max per warm cycle
+      }
+
+      fastPollCountRef.current = 0
+      return 5 * 60 * 1000
+    },
     placeholderData: keepPreviousData,
   })
 
@@ -293,6 +330,7 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
 
       // Equal-weighted portfolio return: normalize each coin to 0% at range start, then average returns.
       // This matches "if SOL is -20% and BTC is -10%, aggregate is (-20 + -10) / 2 = -15%" (equal-weight).
+      const warmingMap = historicalData.warmingByCoin ?? {}
       for (const coinId of validCoinIds) {
         const rawSeries = coinDataMap[coinId]
         if (!rawSeries?.length) continue
@@ -300,6 +338,12 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
         const series = [...rawSeries].sort((a, b) => a.time - b.time)
         let cursor = 0
         let lastPrice: number | null = null
+
+        // Honest gaps: while a coin's series is being refreshed, its tail is
+        // un-fetched — stop contributing after its last REAL point instead of
+        // holding lastPrice flat (which dragged the whole aggregate flat).
+        const isWarming = warmingMap[coinId] === true
+        const lastRealTimeSec = series[series.length - 1]!.time
 
         // Baseline: first known price in the returned range.
         // We assume CoinGecko's "days" range aligns with our [startTimeMs, endTimeMs] window.
@@ -316,6 +360,8 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
             cursor++
           }
 
+          if (isWarming && bucketTimeSec > lastRealTimeSec) continue
+
           // If we don't have a price yet for this bucket, assume it's still at baseline.
           // This keeps the aggregate denominator stable and ensures the series starts at 0%.
           const priceForBucket = lastPrice ?? baselinePrice
@@ -325,9 +371,20 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
         }
       }
 
+      // Trailing buckets where no coin contributed are un-fetched tail (all
+      // contributors warming) — drop them rather than forward-filling a flat
+      // segment. Mid-series gaps still carry forward for crosshair continuity.
+      let lastActiveIdx = -1
+      for (let i = bucketTimesMs.length - 1; i >= 0; i--) {
+        if ((countReturnsByBucket[i] ?? 0) > 0) {
+          lastActiveIdx = i
+          break
+        }
+      }
+
       const percentageData: AggregateDataPoint[] = []
       let lastAggregateValue: number | null = null
-      for (let i = 0; i < bucketTimesMs.length; i++) {
+      for (let i = 0; i <= lastActiveIdx; i++) {
         const bucketTimeMs = bucketTimesMs[i]!
         const bucketTimeSec = toEpochSeconds(bucketTimeMs)
         const count = countReturnsByBucket[i] ?? 0
@@ -365,6 +422,12 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
     return aggregateData[aggregateData.length - 1]?.value ?? 0
   }, [aggregateData])
 
+  const warmingCount = useMemo(() => {
+    const warmingMap = historicalData?.warmingByCoin
+    if (!warmingMap) return 0
+    return Object.values(warmingMap).filter(Boolean).length
+  }, [historicalData])
+
   const performance = useMemo(() => {
     if (!historicalData?.performance) return { cacheHits: 0, cacheMisses: 0, totalQueries: 0, cacheHitRate: 0 }
     
@@ -382,6 +445,7 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
     isLoading: historicalQueryEnabled ? isLoading : false,
     isFetching: historicalQueryEnabled ? isFetching : false,
     isPlaceholderData: historicalQueryEnabled ? isPlaceholderData : false,
+    warmingCount,
     isChangeUnavailable,
     currentAggregateChange,
     coinsCount: coins.length,

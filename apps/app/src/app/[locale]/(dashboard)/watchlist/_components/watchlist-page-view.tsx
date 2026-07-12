@@ -9,7 +9,6 @@ import { Tabs, TabsContent } from "@v1/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { Kbd } from "@v1/ui/kbd"
 import { Separator } from "@v1/ui/separator"
-import { toast } from "@v1/ui/use-toast"
 import {
   Popover,
   PopoverContent,
@@ -33,9 +32,6 @@ import {
   IconBinoculars,
   IconBinocularsFill,
 } from "symbols-react"
-import { RefreshCw } from "lucide-react"
-import { useMutation } from "convex/react"
-import { useQueryClient } from "@tanstack/react-query"
 
 import { useWatchlist } from "./watchlist-context"
 import { WatchlistsGrid } from "./watchlists-grid"
@@ -43,7 +39,6 @@ import type { CoinSearchRef } from "./coin-search"
 import { WatchlistGroupIcon } from "@/components/watchlist-group-icon"
 import { matchesShortcut, GLOBAL_SHORTCUTS } from "@/lib/keyboard-shortcuts"
 import { useLatest } from "@/hooks/use-latest"
-import { api } from "../../../../../../convex/_generated/api"
 
 function loadChartsModule() {
   return import("../../charts/_components/chart-client")
@@ -124,12 +119,9 @@ export function WatchlistPageView({
 
   const [isCreatingWatchlist, setIsCreatingWatchlist] = useState(false)
   const [isAddWalletOpen, setIsAddWalletOpen] = useState(false)
-  const [isRefreshingData, setIsRefreshingData] = useState(false)
   const [CoinSearchComponent, setCoinSearchComponent] = useState<LazyCoinSearchComponent | null>(null)
   const [shouldOpenCoinSearch, setShouldOpenCoinSearch] = useState(false)
   const coinSearchRef = useRef<CoinSearchRef>(null)
-  const queryClient = useQueryClient()
-  const refreshMyDataNow = useMutation(api.refresh.refreshMyDataNow)
 
   const contentModeRef = useLatest(contentMode)
   const isCreatingWatchlistRef = useLatest(isCreatingWatchlist)
@@ -436,65 +428,10 @@ export function WatchlistPageView({
             </PopoverContent>
           </Popover>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                aria-label="Refresh data"
-                variant="ghost"
-                size="sm"
-                disabled={isRefreshingData}
-                onClick={async () => {
-                  if (isRefreshingData) return
-                  setIsRefreshingData(true)
-                  try {
-                    const result = await refreshMyDataNow({ force: true })
-                    if (!result.scheduled) {
-                      toast({
-                        title: "Refresh skipped",
-                        description:
-                          result.reason === "cooldown"
-                            ? "You refreshed recently. Try again in a moment."
-                            : "Refresh could not be scheduled.",
-                      })
-                      return
-                    }
-
-                    toast({
-                      title: "Refresh scheduled",
-                      description: `Refreshing ${result.coinsCount} tokens and ${result.walletsCount} wallets.`,
-                    })
-
-                    await Promise.all([
-                      queryClient.invalidateQueries({ queryKey: ["coingecko-quotes"] }),
-                      queryClient.invalidateQueries({ queryKey: ["watchlist-aggregate-historical"] }),
-                      queryClient.invalidateQueries({ queryKey: ["hybrid-top-coins-api-first"] }),
-                      queryClient.invalidateQueries({ queryKey: ["coingecko-ohlc"] }),
-                      queryClient.invalidateQueries({ queryKey: ["coingecko-market-data"] }),
-                    ])
-                  } catch (error) {
-                    toast({
-                      title: "Refresh failed",
-                      description: error instanceof Error ? error.message : "Failed to refresh data.",
-                      variant: "destructive",
-                    })
-                  } finally {
-                    setIsRefreshingData(false)
-                  }
-                }}
-                className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10 disabled:opacity-60"
-              >
-                {isRefreshingData ? (
-                  <Spinner size={14} />
-                ) : (
-                  <RefreshCw className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left" align="center" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
-              <span>Refresh data</span>
-            </TooltipContent>
-          </Tooltip>
+          {/* Manual data refresh removed: quotes refresh via the 5-min cron +
+              on-view warmups, and charts are kept fresh by the demand-driven
+              chart scheduler (convex/chartScheduler.ts). Wallet holdings sync
+              lives on the overview page. */}
         </div>
       </div>
 

@@ -97,7 +97,7 @@ const VARIANT_STYLES: Record<
     subtitleLineClassName: 'bg-white/5',
     footerPillClassName: 'bg-orange-500/10',
     cardClassName: 'border border-white/5',
-    sparklineStroke: 'rgba(249, 115, 22, 1)',
+    sparklineStroke: 'oklch(0.7049 0.1867 47.6)',
   },
   blue: {
     iconRingClassName: 'bg-blue-500/10 border border-blue-500/10',
@@ -106,7 +106,7 @@ const VARIANT_STYLES: Record<
     subtitleLineClassName: 'bg-white/5',
     footerPillClassName: 'bg-blue-500/10',
     cardClassName: 'border border-white/5',
-    sparklineStroke: 'rgba(59, 130, 246, 1)',
+    sparklineStroke: 'oklch(0.6231 0.188 259.81)',
   },
   primary: {
     iconRingClassName: 'bg-primary/10 border border-primary/20',
@@ -115,8 +115,8 @@ const VARIANT_STYLES: Record<
     subtitleLineClassName: 'bg-primary/10',
     footerPillClassName: 'bg-primary/20',
     cardClassName:
-      'border border-primary/20 shadow-[0_0_50px_-12px_hsl(var(--primary)/0.3)] backdrop-blur-md',
-    sparklineStroke: 'hsl(var(--primary))',
+      'border border-primary/20 shadow-[0_0_50px_-12px_color-mix(in_oklab,var(--primary)_30%,transparent)] backdrop-blur-md',
+    sparklineStroke: 'var(--primary)',
   },
 }
 
@@ -215,7 +215,7 @@ function IllustrationWatchlistCard({
                   <Liveline
                     data={sparklineData}
                     value={sparklineLatestValue}
-                    color={"#ffffff80"}
+                    color={"oklch(1 0 0 / 0.502)"}
                     lineWidth={2}
                     window={sparklineWindowSecs}
                     showValue={false}

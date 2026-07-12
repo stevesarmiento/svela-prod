@@ -7,6 +7,7 @@ import { RateLimitErrorBoundary } from "@/components/error-boundary/rate-limit-e
 import { useCoinGeckoChartData } from "@/hooks/use-coingecko-chart-data"
 import { useHullSuite } from "@/hooks/use-hull-suite"
 import { formatUsdPrice } from "@/lib/format-usd"
+import { CHART_COLOR_PARSERS } from "@/lib/oklch"
 import { loadLightweightCharts } from "@/lib/load-lightweight-charts"
 import type { IChartApi, LineData, MouseEventParams, Time } from "lightweight-charts"
 
@@ -167,9 +168,10 @@ export function MiniPriceChart({ coinId, currentPrice }: MiniPriceChartProps) {
       chart = createChart(chartContainerRef.current, {
         layout: {
           background: { type: ColorType.Solid, color: "transparent" },
-          textColor: "#9CA3AF",
+          textColor: "oklch(0.7137 0.0192 261.32)",
           fontSize: 10,
           attributionLogo: false,
+          colorParsers: CHART_COLOR_PARSERS,
         },
         width: chartContainerRef.current.clientWidth,
         height: 160,
@@ -184,7 +186,7 @@ export function MiniPriceChart({ coinId, currentPrice }: MiniPriceChartProps) {
           mode: CrosshairMode.Magnet,
           vertLine: {
             width: 1,
-            color: "#374151",
+            color: "oklch(0.3729 0.0306 259.73)",
             style: LineStyle.Solid,
             visible: true,
           },
@@ -249,7 +251,7 @@ export function MiniPriceChart({ coinId, currentPrice }: MiniPriceChartProps) {
       const volumeSeries = createdChart.addSeries(HistogramSeries, {
         priceFormat: { type: "volume" },
         priceScaleId: "volume",
-        color: "#ffffff30",
+        color: "oklch(1 0 0 / 0.1882)",
         priceLineVisible: false,
         lastValueVisible: false,
       })
@@ -262,7 +264,7 @@ export function MiniPriceChart({ coinId, currentPrice }: MiniPriceChartProps) {
       })
 
       const lineSeries = createdChart.addSeries(LineSeries, {
-        color: priceChange >= 0 ? "#10B981" : "#EF4444",
+        color: priceChange >= 0 ? "oklch(0.6959 0.1491 162.48)" : "oklch(0.6368 0.2078 25.33)",
         lineWidth: 1,
         priceLineVisible: false,
         lastValueVisible: false,
@@ -273,7 +275,7 @@ export function MiniPriceChart({ coinId, currentPrice }: MiniPriceChartProps) {
 
       if (normalizedHullData.length > 0) {
         const hullSeries = createdChart.addSeries(LineSeries, {
-          color: "rgba(59,130,246,0.7)",
+          color: "oklch(0.6231 0.188 259.81 / 0.7)",
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
           priceLineVisible: false,

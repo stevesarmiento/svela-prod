@@ -25,7 +25,6 @@ export const SEQUENTIAL_SHORTCUTS = {
     'h': '/overview',        // go to home/overview
     'w': '/watchlists',      // go to watchlists
     'c': '/screener',        // go to screener
-    'n': '/news',           // go to news
   }
 } as const;
 
@@ -152,7 +151,6 @@ export const NAVIGATION_SHORTCUTS = {
   '/overview': 'g + h',
   '/watchlists': 'g + w',
   '/screener': 'g + c',
-  '/news': 'g + n',
 } as const;
 
 /**

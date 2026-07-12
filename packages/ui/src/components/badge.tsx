@@ -18,7 +18,7 @@ const badgeVariants = cva(
         warning:
           "border-transparent bg-amber-500/10 text-amber-300 hover:bg-amber-500/30",
         outline: "text-foreground",
-        tag: "font-berkeley-mono text-[#878787] bg-[#F2F1EF] text-[10px] dark:bg-[#1D1D1D] border-none font-normal rounded-none",
+        tag: "font-berkeley-mono text-[oklch(0.6234_0_0)] bg-[oklch(0.9584_0.0029_84.56)] text-[10px] dark:bg-[oklch(0.2308_0_0)] border-none font-normal rounded-none",
       },
     },
     defaultVariants: {

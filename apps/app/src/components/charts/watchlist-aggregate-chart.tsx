@@ -85,7 +85,7 @@ export function WatchlistAggregateChart({
   }
 
   const livelineTheme = "dark"
-  const livelineColor = "#e5e7eb"
+  const livelineColor = "oklch(0.9276 0.0058 264.53)"
   const opacityClassName = "opacity-60"
 
   return (

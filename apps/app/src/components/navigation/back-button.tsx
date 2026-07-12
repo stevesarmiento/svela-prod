@@ -20,8 +20,8 @@ export const BackButton = React.memo(({ onExitSelection, selectionState }: BackB
 
   return (
     <div className="relative rounded-[20px] bg-white/95 backdrop-blur-md border border-gray-200/50 dark:bg-zinc-900 dark:border-transparent overflow-hidden px-2 py-2 hover:bg-gray-50/80 dark:hover:bg-zinc-800/80 transition-all duration-200 cursor-pointer
-                   shadow-[0_4px_8px_rgba(0,0,0,0.1),0_2px_4px_rgba(0,0,0,0.06)]
-                   dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
+                   shadow-[0_4px_8px_oklch(0_0_0_/_0.1),0_2px_4px_oklch(0_0_0_/_0.06)]
+                   dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.6)]">
       
       {/* React 19: Optimized shared background pattern */}
       <BackgroundPattern />

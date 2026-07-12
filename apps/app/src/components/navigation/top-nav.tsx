@@ -73,35 +73,7 @@ function getChartCoinId(pathname: string): string | null {
   return pathSegments[chartsIndex + 1] ?? null;
 }
 
-function getRouteGreeting(pathname: string): string {
-  const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, "") || "/";
-
-  if (
-    cleanPath === "/watchlists" ||
-    cleanPath.startsWith("/watchlists/") ||
-    cleanPath === "/watchlist" ||
-    cleanPath.startsWith("/watchlist/") ||
-    cleanPath === "/" ||
-    cleanPath === "/overview" ||
-    cleanPath.startsWith("/overview/")
-  ) {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 17) return "Good afternoon";
-    if (hour < 21) return "Good evening";
-    return "Welcome";
-  }
-
-  const routeGreetings: Record<string, string> = {
-    "/screener": "Market Screener",
-  };
-
-  if (routeGreetings[cleanPath]) return routeGreetings[cleanPath];
-
-  for (const [route, greeting] of Object.entries(routeGreetings)) {
-    if (cleanPath.startsWith(`${route}/`)) return greeting;
-  }
-
+function getRouteGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
@@ -109,28 +81,25 @@ function getRouteGreeting(pathname: string): string {
   return "Welcome";
 }
 
-function getStaticRouteGreeting(pathname: string): string | null {
+function getStaticRouteTitle(pathname: string): string | null {
   const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, "") || "/";
 
   if (
     cleanPath === "/watchlists" ||
     cleanPath.startsWith("/watchlists/") ||
     cleanPath === "/watchlist" ||
-    cleanPath.startsWith("/watchlist/") ||
-    cleanPath === "/" ||
-    cleanPath === "/overview" ||
-    cleanPath.startsWith("/overview/")
+    cleanPath.startsWith("/watchlist/")
   ) {
-    return null;
+    return "Watchlists";
   }
 
-  const routeGreetings: Record<string, string> = {
+  const routeTitles: Record<string, string> = {
     "/screener": "Market Screener",
   };
 
-  if (routeGreetings[cleanPath]) return routeGreetings[cleanPath];
-  for (const [route, greeting] of Object.entries(routeGreetings)) {
-    if (cleanPath.startsWith(`${route}/`)) return greeting;
+  if (routeTitles[cleanPath]) return routeTitles[cleanPath];
+  for (const [route, title] of Object.entries(routeTitles)) {
+    if (cleanPath.startsWith(`${route}/`)) return title;
   }
   return null;
 }
@@ -176,20 +145,16 @@ export function TopNav() {
   const [hasHydrated, setHasHydrated] = useState(false);
   const [overviewGreeting, setOverviewGreeting] = useState<string | null>(null);
   const [shouldLoadProfile, setShouldLoadProfile] = useState(false);
+  const [isProfileReady, setIsProfileReady] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, "") || "/";
   const coinId = useMemo(() => getChartCoinId(pathname), [pathname]);
   const isChartDetailPage = coinId !== null;
-  const isOverviewRoute =
-    cleanPath === "/watchlists" ||
-    cleanPath.startsWith("/watchlists/") ||
-    cleanPath === "/watchlist" ||
-    cleanPath.startsWith("/watchlist/") ||
-    cleanPath === "/" ||
+  const isOverviewGreetingRoute =
     cleanPath === "/overview" ||
     cleanPath.startsWith("/overview/");
-  const staticGreeting = getStaticRouteGreeting(pathname);
+  const staticRouteTitle = getStaticRouteTitle(pathname);
   const displayName = getUserDisplayName({
     fullName: user?.fullName ?? undefined,
     email: user?.primaryEmailAddress?.emailAddress ?? undefined,
@@ -202,17 +167,19 @@ export function TopNav() {
   useEffect(() => {
     setHasHydrated(true);
 
-    if (!isOverviewRoute) {
+    if (!isOverviewGreetingRoute) {
       setOverviewGreeting(null);
     } else {
-      setOverviewGreeting(getRouteGreeting(pathname));
+      setOverviewGreeting(getRouteGreeting());
     }
-  }, [isOverviewRoute, pathname]);
+  }, [isOverviewGreetingRoute, pathname]);
 
   const preloadProfile = useCallback(() => {
     if (shouldLoadProfile) return;
     setShouldLoadProfile(true);
-    void loadTopNavProfileClient();
+    void loadTopNavProfileClient().then(() => {
+      setIsProfileReady(true);
+    });
   }, [shouldLoadProfile]);
 
   const handleOpenProfile = useCallback(() => {
@@ -234,11 +201,11 @@ export function TopNav() {
           <SvelaLogo width={25} height={25} adaptive={true} />
         </Link>
         <span className="text-xl font-diatype-bold text-zinc-950 dark:text-white">
-          {isOverviewRoute
+          {isOverviewGreetingRoute
             ? showPersonalizedGreeting
               ? `${overviewGreeting ?? "Good morning"}, ${firstName}`
               : overviewGreeting ?? "Good morning"
-            : staticGreeting ?? "Watchlist"}
+            : staticRouteTitle ?? "Watchlist"}
         </span>
       </>
     );
@@ -246,15 +213,15 @@ export function TopNav() {
     firstName,
     hasHydrated,
     isChartDetailPage,
-    isOverviewRoute,
+    isOverviewGreetingRoute,
     overviewGreeting,
     showPersonalizedGreeting,
-    staticGreeting,
+    staticRouteTitle,
   ]);
 
   const rightSlot = isChartDetailPage && coinId ? (
     <LazyTopNavChartActions coinId={coinId} />
-  ) : shouldLoadProfile ? (
+  ) : isProfileReady ? (
     <LazyTopNavProfileClient
       open={isProfileOpen}
       onOpenChange={setIsProfileOpen}

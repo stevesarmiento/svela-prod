@@ -1,8 +1,8 @@
 import React, {
   useCallback,
-  useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useDebouncedValue } from "@tanstack/react-pacer";
@@ -53,35 +53,51 @@ export const CommandSearchPopoverContent = React.memo(
     const router = useRouter();
     const navigation = useWatchlistPreservingNavigation();
     const { inputRef } = useCommandInput(isOpen);
+    const triggerRef = useRef<HTMLButtonElement>(null);
 
     const [searchQuery, setSearchQuery] = useState("");
-    const [debouncedSearchQuery] = useDebouncedValue(searchQuery, { wait: 300 });
-    const deferredSearchQuery = useDeferredValue(debouncedSearchQuery);
+    const [debouncedSearchQuery] = useDebouncedValue(searchQuery, { wait: 150 });
 
     const { data: searchResults, isLoading: isSearchLoading } =
-      useHybridCoinSearch(deferredSearchQuery, {
+      useHybridCoinSearch(debouncedSearchQuery, {
         limit: 5,
       });
 
+    // Defer the top-coins fetch off the page's critical loading path: warm it
+    // on browser idle, on hover/focus/touch intent, or when the palette opens —
+    // whichever comes first. React Query caches it for an hour after that.
+    const [isWarm, setIsWarm] = useState(false);
+    const warmUp = useCallback(() => setIsWarm(true), []);
+    useEffect(() => {
+      if (isWarm) return;
+      if (isOpen) {
+        setIsWarm(true);
+        return;
+      }
+      if (typeof window.requestIdleCallback === "function") {
+        const idleId = window.requestIdleCallback(() => setIsWarm(true), {
+          timeout: 5000,
+        });
+        return () => window.cancelIdleCallback(idleId);
+      }
+      const timer = setTimeout(() => setIsWarm(true), 3000);
+      return () => clearTimeout(timer);
+    }, [isOpen, isWarm]);
+
     const { data: topCoins, isLoading: isTopCoinsLoading } =
-      useHybridTopCoins(5);
+      useHybridTopCoins(5, { enabled: isWarm });
+
+    const hasSearch = debouncedSearchQuery.trim().length > 0;
 
     const coinsToDisplay = useMemo(() => {
-      if (deferredSearchQuery.trim()) {
+      if (hasSearch) {
         return searchResults || [];
       }
       return topCoins || [];
-    }, [deferredSearchQuery, searchResults, topCoins]);
+    }, [hasSearch, searchResults, topCoins]);
 
-    const coinResultsLoading = useMemo(() => {
-      if (deferredSearchQuery.trim()) {
-        return isSearchLoading;
-      }
-      return isTopCoinsLoading;
-    }, [deferredSearchQuery, isSearchLoading, isTopCoinsLoading]);
+    const coinResultsLoading = hasSearch ? isSearchLoading : isTopCoinsLoading;
 
-    const hasSearch = deferredSearchQuery.trim().length > 0;
-    const isCoinResultsContext = true;
     const coinSelectMode: "watchlist-add" | "navigate" =
       context === "charts" || context === "watchlist"
         ? "watchlist-add"
@@ -92,7 +108,7 @@ export const CommandSearchPopoverContent = React.memo(
     }, []);
 
     const { contextualCommands, globalCommands, hasContextualCommands } =
-      useContextualCommands(deferredSearchQuery, context);
+      useContextualCommands(debouncedSearchQuery, context);
 
     const { handleAddCoin, isAddingCoin } = useAddCoinToWatchlist();
 
@@ -120,25 +136,9 @@ export const CommandSearchPopoverContent = React.memo(
           case "trending-tokens":
             router.push(navigation.buildUrl("/overview?filter=trending"));
             break;
-          case "add-token":
-            console.log("Open add token modal");
-            break;
-          case "sort-price":
-            console.log("Sort by price");
-            break;
-          case "export-watchlist":
-            console.log("Export watchlist");
-            break;
-          case "timeframe-1h":
-          case "timeframe-1d":
-          case "timeframe-1w":
-            console.log("Change timeframe:", action);
-            break;
           case "share-chart":
             navigator.clipboard?.writeText(window.location.href);
             break;
-          default:
-            console.log("Unknown action:", action);
         }
       },
       [clearSearch, navigation, router, setIsOpen],
@@ -171,6 +171,14 @@ export const CommandSearchPopoverContent = React.memo(
           return;
         }
 
+        if (value.startsWith("href:")) {
+          const href = value.replace("href:", "");
+          clearSearch();
+          setIsOpen(false);
+          router.push(navigation.buildUrl(href));
+          return;
+        }
+
         onCommandSelect(value, setIsOpen);
       },
       [
@@ -179,7 +187,9 @@ export const CommandSearchPopoverContent = React.memo(
         handleAddCoin,
         handleContextualAction,
         handleTokenNavigation,
+        navigation,
         onCommandSelect,
+        router,
         setIsOpen,
       ],
     );
@@ -187,7 +197,13 @@ export const CommandSearchPopoverContent = React.memo(
     useEffect(() => {
       if (!isOpen) {
         clearSearch();
-        inputRef.current?.blur();
+        // Return focus to the trigger when the palette closes while focus is
+        // still inside the input (e.g. Escape); otherwise leave focus alone.
+        if (document.activeElement === inputRef.current) {
+          triggerRef.current?.focus();
+        } else {
+          inputRef.current?.blur();
+        }
       }
     }, [clearSearch, inputRef, isOpen]);
 
@@ -198,8 +214,9 @@ export const CommandSearchPopoverContent = React.memo(
       return "Navigate or search tokens...";
     };
 
+    // NB: no backdrop-blur on the pill — bg-zinc-800 is fully opaque, the filter would burn paint time invisibly
     return (
-      <div className="group relative rounded-[20px] bg-zinc-800 backdrop-blur-md border border-transparent overflow-hidden px-2 py-0 hover:bg-zinc-800 transition-colors duration-150 cursor-pointer shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
+      <div className="group relative rounded-[20px] bg-zinc-800 border border-transparent overflow-hidden px-2 py-0 hover:bg-zinc-800 transition-colors duration-150 cursor-pointer shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.6)]">
         <BackgroundPattern />
 
         <div className="relative z-10">
@@ -209,11 +226,17 @@ export const CommandSearchPopoverContent = React.memo(
             shouldFilter={false}
             trigger={
               <div className="flex items-center">
-                <CommandSearchTrigger onOpen={() => setIsOpen(true)} />
+                <CommandSearchTrigger
+                  onOpen={() => setIsOpen(true)}
+                  onIntent={warmUp}
+                  buttonRef={triggerRef}
+                />
                 <div
                   className={cn(
                     "overflow-hidden transition-[width,opacity] duration-[var(--motion-nav-duration)] ease-[var(--motion-nav-ease-out)] motion-reduce:transition-none",
-                    isOpen ? "w-[445px] opacity-100" : "w-0 opacity-0",
+                    isOpen
+                      ? "w-[min(445px,calc(100vw-7rem))] opacity-100"
+                      : "w-0 opacity-0",
                   )}
                   onMouseDown={(event) => event.stopPropagation()}
                 >
@@ -230,7 +253,7 @@ export const CommandSearchPopoverContent = React.memo(
             }
           >
             <CommandList className="z-[100] bg-transparent border-transparent max-h-[400px]">
-              {(!isCoinResultsContext || !coinResultsLoading) && (
+              {!coinResultsLoading && (
                 <CommandEmpty>
                   <div className="flex flex-col items-center justify-center py-6 gap-2">
                     <IconCircleSlash className="h-8 w-8 fill-white/30 rotate-90" />
@@ -253,7 +276,13 @@ export const CommandSearchPopoverContent = React.memo(
                   {group.items.map((item) => (
                     <CommandItem
                       key={item.title}
-                      value={item.action ? `action:${item.action}` : item.title}
+                      value={
+                        item.action
+                          ? `action:${item.action}`
+                          : item.href
+                            ? `href:${item.href}`
+                            : item.title
+                      }
                       onSelect={handleCommand}
                       className="cursor-pointer bg-transparent aria-selected:bg-zinc-800/30 aria-selected:text-white"
                     >
@@ -420,17 +449,13 @@ export const CommandSearchPopoverContent = React.memo(
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
-                            {"href" in item && item.shortcut ? (
+                            {item.shortcut ? (
                               <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-zinc-200 uppercase">
                                 {item.shortcut}
                               </kbd>
-                            ) : "href" in item ? (
+                            ) : (
                               <span className="text-xs px-2 py-1 bg-zinc-800/60 text-zinc-200 rounded">
                                 Page
-                              </span>
-                            ) : (
-                              <span className="text-xs px-2 py-1 bg-white/10 text-white rounded">
-                                Action
                               </span>
                             )}
                           </div>

@@ -2,12 +2,12 @@
 
 import { useRef, useEffect, useState } from 'react'
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
-import { calculateBollingerBands, type BollingerBandsConfig } from '@/hooks/market-vision/bollinger-bands'
+import { calculateBollingerBands, DEFAULT_BB_COLORS, type BollingerBandsConfig } from '@/hooks/market-vision/bollinger-bands'
 import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
-import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
 import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store'
+import { CHART_COLOR_PARSERS } from '@/lib/oklch'
 import { timeToEpochSeconds } from '@/hooks/use-chart-instance/utils'
 
 interface BollingerBandsChartProps {
@@ -18,25 +18,17 @@ interface BollingerBandsChartProps {
   initialWindowDays?: number
 }
 
-// Generate consistent pastel colors
-const BB_CHART_COLORS = generatePastelColors(8)
-const COLORS = {
-  rsi: BB_CHART_COLORS[0] || 'hsl(340, 45%, 78%)',        // Soft pink for RSI
-  mfi: BB_CHART_COLORS[1] || 'hsl(160, 42%, 72%)',        // Soft green for MFI
-  basis: BB_CHART_COLORS[2] || 'hsl(0, 60%, 70%)',        // Soft red for basis
-  bands: BB_CHART_COLORS[3] || 'hsl(210, 40%, 75%)',      // Soft blue for bands
-  fillArea: addOpacityToColor(BB_CHART_COLORS[3] || 'hsl(210, 40%, 75%)', 0.1),
-  overbought: BB_CHART_COLORS[4] || 'hsl(0, 60%, 70%)',   // Red for overbought
-  oversold: BB_CHART_COLORS[5] || 'hsl(120, 60%, 70%)',   // Green for oversold
-}
+// Single source of truth for the Bollinger palette (dedupe: previously a
+// verbatim copy of the construction in hooks/market-vision/bollinger-bands.ts).
+const COLORS = DEFAULT_BB_COLORS
 
 // Keep bands visually secondary vs RSI + breach points.
-const BANDS_MUTED_COLOR = 'rgba(161, 161, 170, 0.46)' // zinc-400-ish
-const BANDS_MID_MUTED_COLOR = 'rgba(161, 161, 170, 0.75)'
+const BANDS_MUTED_COLOR = 'oklch(0.7118 0.0129 286.07 / 0.46)' // zinc-400-ish
+const BANDS_MID_MUTED_COLOR = 'oklch(0.7118 0.0129 286.07 / 0.75)'
 
 // Extreme breach dots should be the visual focus.
-const EXTREME_OVERBOUGHT_COLOR = 'rgba(244, 63, 94, 0.95)' // rose-500
-const EXTREME_OVERSOLD_COLOR = 'rgba(16, 185, 129, 0.95)' // emerald-500
+const EXTREME_OVERBOUGHT_COLOR = 'oklch(0.645 0.2154 16.44 / 0.95)' // rose-500
+const EXTREME_OVERSOLD_COLOR = 'oklch(0.6959 0.1491 162.48 / 0.95)' // emerald-500
 
 // Default configuration
 const DEFAULT_CONFIG: BollingerBandsConfig = {
@@ -180,12 +172,13 @@ export function BollingerBandsChart({
         handleScroll: true,
         layout: {
           background: { type: ColorType.Solid, color: "transparent" },
-          textColor: "#ffffff50",
+          textColor: "oklch(1 0 0 / 0.3137)",
           attributionLogo: false,
+          colorParsers: CHART_COLOR_PARSERS,
         },
         grid: {
           vertLines: { visible: false },
-          horzLines: { visible: false, color: "#f5f5f510", style: LineStyle.Dotted },
+          horzLines: { visible: false, color: "oklch(0.9702 0 0 / 0.0627)", style: LineStyle.Dotted },
         },
         rightPriceScale: { 
           borderVisible: false, 
@@ -194,7 +187,7 @@ export function BollingerBandsChart({
         },
         crosshair: {
           mode: CrosshairMode.Magnet,
-          vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
+          vertLine: { labelVisible: true, width: 1, color: "oklch(0.8717 0.0093 258.34 / 0.251)", visible: true, style: LineStyle.Solid },
           horzLine: { visible: false, labelVisible: false },
         },
         timeScale: { 
@@ -221,7 +214,7 @@ export function BollingerBandsChart({
       scrubLineEl.style.transform = 'translateX(-9999px)'
       scrubLineEl.style.opacity = '0'
       scrubLineEl.style.pointerEvents = 'none'
-      scrubLineEl.style.background = 'rgba(255,255,255,0.20)'
+      scrubLineEl.style.background = 'oklch(1 0 0 / 0.2)'
       scrubLineEl.style.zIndex = '5'
       chartContainerRef.current.appendChild(scrubLineEl)
 
