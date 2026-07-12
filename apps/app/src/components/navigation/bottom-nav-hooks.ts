@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useState, useRef, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'next/navigation';
-import { COMMAND_ITEMS, type NavigationItem, type ActionItem } from './bottom-nav-constants';
+import { COMMAND_ITEMS, type NavigationItem } from './bottom-nav-constants';
 import { SEQUENTIAL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
 import { useLatest } from '@/hooks/use-latest';
 
@@ -128,7 +128,7 @@ export function useKeyboardShortcuts(
 const ALL_COMMAND_ITEMS = (
   COMMAND_ITEMS as ReadonlyArray<{
     group: string;
-    items: ReadonlyArray<NavigationItem | ActionItem>;
+    items: ReadonlyArray<NavigationItem>;
   }>
 ).flatMap((group) => group.items);
 
@@ -142,22 +142,8 @@ export function useCommandHandler() {
       (item) => item.title.toLowerCase() === value.toLowerCase(),
     );
 
-    if (!selectedItem) return;
-
-    if ('href' in selectedItem) {
+    if (selectedItem) {
       router.push(selectedItem.href);
-    } else if ('action' in selectedItem) {
-      switch (selectedItem.action) {
-        case 'bitcoin-price':
-          router.push('/overview?q=What is the current price of Bitcoin?');
-          break;
-        case 'ethereum-price':
-          router.push('/overview?q=What is the current price of Ethereum?');
-          break;
-        case 'market-overview':
-          router.push('/overview?q=Show me the top 10 cryptocurrencies');
-          break;
-      }
     }
   }, [router]);
 }

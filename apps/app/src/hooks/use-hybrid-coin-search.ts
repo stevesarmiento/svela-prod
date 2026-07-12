@@ -230,15 +230,20 @@ export function useHybridCoinSearch(
 /**
  * Get top coins using API-first approach for real-time market cap rankings
  * Uses direct API data to ensure accurate real-time top 25 by market cap
+ *
+ * Pass `enabled: false` to defer the fetch (e.g. until a palette is about to
+ * open) and keep it off the page's critical loading path.
  */
-export function useHybridTopCoins(limit = 25) {
+export function useHybridTopCoins(limit = 25, options: { enabled?: boolean } = {}) {
+  const { enabled = true } = options;
+
   // Step 1: Get top coins directly from API by market cap (real-time ranking)
   const { data: pricingData, isLoading: isPricingLoading, error: pricingError } = useQuery({
     queryKey: ["hybrid-top-coins-api-first", limit],
     queryFn: async (): Promise<Record<string, CoinGeckoPricingData>> => {
       // Get top coins directly from API by market cap
       const response = await fetch(`/api/coingecko/quotes?limit=${limit}`);
-      
+
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
@@ -246,7 +251,7 @@ export function useHybridTopCoins(limit = 25) {
       const data = await response.json();
       return data.data || {};
     },
-    enabled: true,
+    enabled,
     staleTime: 60 * 60 * 1000,
     refetchInterval: 60 * 60 * 1000,
   });

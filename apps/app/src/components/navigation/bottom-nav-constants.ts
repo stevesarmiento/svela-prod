@@ -1,5 +1,4 @@
 import type { ComponentType } from "react";
-import { IconWalletBifoldFill, IconSafariFill } from "symbols-react";
 import { BookmarkIcon } from "./bookmark-icon";
 import { ExploreIcon } from "./explore-icon";
 import { HomeIcon } from "./home-icon";
@@ -55,27 +54,6 @@ const overviewCommandItem = {
   shortcut: getShortcutForRoute("/overview"),
 } as const;
 
-const quickActionItems = [
-  {
-    title: "Bitcoin Price",
-    subtitle: "Get current BTC price",
-    action: "bitcoin-price",
-    icon: IconSafariFill,
-  },
-  {
-    title: "Ethereum Price",
-    subtitle: "Get current ETH price",
-    action: "ethereum-price",
-    icon: IconSafariFill,
-  },
-  {
-    title: "Market Overview",
-    subtitle: "Top 10 cryptocurrencies",
-    action: "market-overview",
-    icon: IconWalletBifoldFill,
-  },
-] as const;
-
 export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
   ? ([
       {
@@ -88,25 +66,12 @@ export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
         group: "Navigation",
         items: [overviewCommandItem, watchlistCommandItem, screenerCommandItem],
       },
-      {
-        group: "Quick Actions",
-        items: quickActionItems,
-      },
     ] as const);
-  
-  export type NavigationItem = {
-    title: string;
-    subtitle: string;
-    href: string;
-    icon: ComponentType<{ className?: string }>;
-    shortcut?: string;
-  };
-  
-  export type ActionItem = {
-    title: string;
-    subtitle: string;
-    action: string;
-    icon: ComponentType<{ className?: string }>;
-  };
-  
-  export type CommandItem = NavigationItem | ActionItem;
+
+export type NavigationItem = {
+  title: string;
+  subtitle: string;
+  href: string;
+  icon: ComponentType<{ className?: string }>;
+  shortcut?: string;
+};

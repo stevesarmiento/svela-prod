@@ -26,7 +26,21 @@ interface BottomNavContextType {
   openContextualCommandSearch: (context: CommandContext) => void
 }
 
+interface BottomNavActionsType {
+  setNavigationMode: () => void
+  setSelectionMode: (state: SelectionState) => void
+  setIsCommandOpen: Dispatch<SetStateAction<boolean>>
+  setCommandContext: Dispatch<SetStateAction<CommandContext | null>>
+  openCommandSearch: () => void
+  openContextualCommandSearch: (context: CommandContext) => void
+}
+
 const BottomNavContext = createContext<BottomNavContextType | undefined>(undefined)
+
+// Actions only — the value is referentially stable for the provider's lifetime,
+// so consumers of this context NEVER re-render when nav state changes. Prefer
+// this in components that only trigger nav behavior (e.g. heavy chart views).
+const BottomNavActionsContext = createContext<BottomNavActionsType | undefined>(undefined)
 
 export function BottomNavProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<BottomNavMode>('navigation')
@@ -54,33 +68,44 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
     setIsCommandOpen(true)
   }, [])
 
-  const contextValue = useMemo(() => ({
-    mode,
-    selectionState,
+  // Every member is a stable useCallback/useState setter, so this value never
+  // changes identity — actions-only consumers never re-render from nav state.
+  const actionsValue = useMemo(() => ({
     setNavigationMode,
     setSelectionMode,
-    isCommandOpen,
     setIsCommandOpen,
-    commandContext,
     setCommandContext,
     openCommandSearch,
     openContextualCommandSearch,
-  }), [
+  }), [setNavigationMode, setSelectionMode, openCommandSearch, openContextualCommandSearch])
+
+  const contextValue = useMemo(() => ({
     mode,
     selectionState,
-    setNavigationMode,
-    setSelectionMode,
     isCommandOpen,
     commandContext,
-    openCommandSearch,
-    openContextualCommandSearch,
-  ])
+    ...actionsValue,
+  }), [mode, selectionState, isCommandOpen, commandContext, actionsValue])
 
   return (
-    <BottomNavContext.Provider value={contextValue}>
-      {children}
-    </BottomNavContext.Provider>
+    <BottomNavActionsContext.Provider value={actionsValue}>
+      <BottomNavContext.Provider value={contextValue}>
+        {children}
+      </BottomNavContext.Provider>
+    </BottomNavActionsContext.Provider>
   )
+}
+
+/**
+ * Nav actions without state subscription: never triggers a re-render.
+ * Use this from components that only need to open/close nav surfaces.
+ */
+export function useBottomNavActions() {
+  const context = use(BottomNavActionsContext)
+  if (context === undefined) {
+    throw new Error('useBottomNavActions must be used within a BottomNavProvider')
+  }
+  return context
 }
 
 export function useBottomNav() {

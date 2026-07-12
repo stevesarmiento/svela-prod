@@ -20,7 +20,7 @@ import { IconXmarkCircleFill, IconPlus } from 'symbols-react'
 import { ChevronDown } from "lucide-react"
 import { toast } from "@v1/ui/use-toast"
 import Link from 'next/link'
-import { useBottomNav } from '@/components/navigation/bottom-nav-context'
+import { useBottomNavActions } from '@/components/navigation/bottom-nav-context'
 import { Button } from '@v1/ui/button'
 import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { adjustOklch } from '@/lib/oklch'
@@ -121,8 +121,8 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   
   const chartHeight = isCompactLayout ? 280 : isMediumLayout ? 340 : 400
   
-  // Use the bottom nav context to trigger contextual command search
-  const { openContextualCommandSearch } = useBottomNav()
+  // Actions-only subscription: this heavy chart never re-renders on nav state changes
+  const { openContextualCommandSearch } = useBottomNavActions()
 
   // 🚀 OPTIMIZED: Use CoinGecko BULK multi-chart data hook with intelligent caching
   const { 

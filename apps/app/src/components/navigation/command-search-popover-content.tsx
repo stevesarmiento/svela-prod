@@ -63,8 +63,29 @@ export const CommandSearchPopoverContent = React.memo(
         limit: 5,
       });
 
+    // Defer the top-coins fetch off the page's critical loading path: warm it
+    // on browser idle, on hover/focus/touch intent, or when the palette opens —
+    // whichever comes first. React Query caches it for an hour after that.
+    const [isWarm, setIsWarm] = useState(false);
+    const warmUp = useCallback(() => setIsWarm(true), []);
+    useEffect(() => {
+      if (isWarm) return;
+      if (isOpen) {
+        setIsWarm(true);
+        return;
+      }
+      if (typeof window.requestIdleCallback === "function") {
+        const idleId = window.requestIdleCallback(() => setIsWarm(true), {
+          timeout: 5000,
+        });
+        return () => window.cancelIdleCallback(idleId);
+      }
+      const timer = setTimeout(() => setIsWarm(true), 3000);
+      return () => clearTimeout(timer);
+    }, [isOpen, isWarm]);
+
     const { data: topCoins, isLoading: isTopCoinsLoading } =
-      useHybridTopCoins(5);
+      useHybridTopCoins(5, { enabled: isWarm });
 
     const hasSearch = debouncedSearchQuery.trim().length > 0;
 
@@ -193,8 +214,9 @@ export const CommandSearchPopoverContent = React.memo(
       return "Navigate or search tokens...";
     };
 
+    // NB: no backdrop-blur on the pill — bg-zinc-800 is fully opaque, the filter would burn paint time invisibly
     return (
-      <div className="group relative rounded-[20px] bg-zinc-800 backdrop-blur-md border border-transparent overflow-hidden px-2 py-0 hover:bg-zinc-800 transition-colors duration-150 cursor-pointer shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.6)]">
+      <div className="group relative rounded-[20px] bg-zinc-800 border border-transparent overflow-hidden px-2 py-0 hover:bg-zinc-800 transition-colors duration-150 cursor-pointer shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.6)]">
         <BackgroundPattern />
 
         <div className="relative z-10">
@@ -206,6 +228,7 @@ export const CommandSearchPopoverContent = React.memo(
               <div className="flex items-center">
                 <CommandSearchTrigger
                   onOpen={() => setIsOpen(true)}
+                  onIntent={warmUp}
                   buttonRef={triggerRef}
                 />
                 <div
@@ -426,17 +449,13 @@ export const CommandSearchPopoverContent = React.memo(
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
-                            {"href" in item && item.shortcut ? (
+                            {item.shortcut ? (
                               <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-zinc-200 uppercase">
                                 {item.shortcut}
                               </kbd>
-                            ) : "href" in item ? (
+                            ) : (
                               <span className="text-xs px-2 py-1 bg-zinc-800/60 text-zinc-200 rounded">
                                 Page
-                              </span>
-                            ) : (
-                              <span className="text-xs px-2 py-1 bg-white/10 text-white rounded">
-                                Action
                               </span>
                             )}
                           </div>
