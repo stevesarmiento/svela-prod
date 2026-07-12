@@ -14,7 +14,6 @@ Originally bootstrapped from the [midday-ai/v1](https://github.com/midday-ai/v1)
 | `packages/kv` | Upstash Redis client + rate limiter. |
 | `packages/analytics` | OpenPanel analytics wrapper (used by `apps/web`). |
 | `packages/logger` | Pino logger wrapper. |
-| `packages/armadura` | Self-contained Solana wallet-connector/SDK workspace (own lockfile; not wired into the apps yet). |
 | `tooling/typescript` | Shared tsconfigs. |
 
 ## Getting started
