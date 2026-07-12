@@ -26,10 +26,10 @@ const viewGreetings: Record<PreviewView, string> = {
 const allocationPercents = [42, 26, 19, 13] as const;
 
 const allocationTokenSegments = [
-  { color: "#fda4af", width: 38 },
-  { color: "#a5b4fc", width: 27 },
-  { color: "#fde68a", width: 20 },
-  { color: "#6ee7b7", width: 15 },
+  { color: "oklch(0.8097 0.1061 11.64)", width: 38 },
+  { color: "oklch(0.7853 0.1041 274.71)", width: 27 },
+  { color: "oklch(0.9243 0.1151 95.75)", width: 20 },
+  { color: "oklch(0.8452 0.1299 164.98)", width: 15 },
 ] as const;
 
 function buildSmoothPath(
@@ -593,7 +593,7 @@ export function ProductPreview({
                 width={20}
                 height={20}
                 adaptive={false}
-                fillColor="rgba(255,255,255,.45)"
+                fillColor="oklch(1 0 0 / 0.45)"
               />
               <strong className="greeting-swap" key={viewGreetings[view]}>
                 {viewGreetings[view]}

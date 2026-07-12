@@ -118,7 +118,7 @@ const LazyOverviewActivityFeedPanel = dynamic(
 
 function OverviewActivityFeedPanelSkeleton() {
   return (
-    <Card className="border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] bg-white dark:bg-zinc-950/50 min-h-[520px] shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)]">
+    <Card className="border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] bg-white dark:bg-zinc-950/50 min-h-[520px] shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)]">
       <CardContent className="p-5 space-y-4">
         <div className="h-8 w-44 rounded-md bg-zinc-950/10 dark:bg-white/10" />
         <div className="space-y-3">
@@ -319,7 +319,7 @@ function OverviewHoldingsSectionInner(props: {
         return {
           coinId: token.coinId,
           percent: segmentPercent,
-          color: tokenColors[index] ?? "hsl(0,0%,75%)",
+          color: tokenColors[index] ?? "oklch(0.8047 0 0)",
         };
       });
 
@@ -452,7 +452,7 @@ function OverviewHoldingsSectionInner(props: {
         <div className="space-y-4 lg:col-span-5 lg:sticky lg:top-6 lg:self-start">
           <Card
             className={cn(
-              "bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_1990px_rgba(47,44,48,0.3),0_4px_16px_rgba(0,0,0,0.6)] will-change-auto",
+              "bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)] will-change-auto",
             )}
           >
             <CardHeader className="p-0">
@@ -486,9 +486,9 @@ function OverviewHoldingsSectionInner(props: {
                     backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
                     backgroundRepeat: "repeat",
                     maskImage:
-                      "radial-gradient(ellipse 62% 48% at 50% 48%, #000 28%, #000 42%, transparent 78%)",
+                      "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
                     WebkitMaskImage:
-                      "radial-gradient(ellipse 62% 48% at 50% 48%, #000 28%, #000 42%, transparent 78%)",
+                      "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
                   }}
                 />
                 <div className="flex items-center justify-end px-5 pb-2">

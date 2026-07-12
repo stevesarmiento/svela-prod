@@ -7,6 +7,7 @@ import { calculateBBWP, type BBWPConfig, DEFAULT_BBWP_CONFIG } from '@/hooks/mar
 import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
 import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store'
+import { CHART_COLOR_PARSERS, mixOklch, withAlpha as oklchWithAlpha } from '@/lib/oklch'
 import { timeToEpochSeconds } from '@/hooks/use-chart-instance/utils'
 
 type SpectrumPreset = '2point' | '3point' | '5point'
@@ -58,18 +59,18 @@ const DEFAULT_COLORS: Required<BBWPSpectrumColors> & {
   extremeHigh: string
   extremeLow: string
 } = {
-  solid: '#FFFF00',
-  high: '#FF0000',
-  midHigh: '#FFFF00',
-  mid: '#00FF00',
-  midLow: '#00FFFF',
-  low: '#0000FF',
-  ma: '#FFFFFF',
-  scaleHigh: '#FF0000',
-  scaleMid: '#A6A6A6',
-  scaleLow: '#0000FF',
-  extremeHigh: '#FF0000',
-  extremeLow: '#0000FF',
+  solid: 'oklch(0.968 0.211 109.77)',
+  high: 'oklch(0.628 0.2577 29.23)',
+  midHigh: 'oklch(0.968 0.211 109.77)',
+  mid: 'oklch(0.8664 0.2948 142.5)',
+  midLow: 'oklch(0.9054 0.1546 194.77)',
+  low: 'oklch(0.452 0.3132 264.05)',
+  ma: 'oklch(1 0 0)',
+  scaleHigh: 'oklch(0.628 0.2577 29.23)',
+  scaleMid: 'oklch(0.7252 0 0)',
+  scaleLow: 'oklch(0.452 0.3132 264.05)',
+  extremeHigh: 'oklch(0.628 0.2577 29.23)',
+  extremeLow: 'oklch(0.452 0.3132 264.05)',
 }
 
 function normalizeEpochSeconds(value: number | null | undefined): number | null {
@@ -166,34 +167,9 @@ function clampLineWidth(value: number | undefined, fallback: ChartLineWidth): Ch
   return 4
 }
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const cleaned = hex.trim().replace('#', '')
-  if (cleaned.length !== 6) return null
-  const r = Number.parseInt(cleaned.slice(0, 2), 16)
-  const g = Number.parseInt(cleaned.slice(2, 4), 16)
-  const b = Number.parseInt(cleaned.slice(4, 6), 16)
-  if (![r, g, b].every((n) => Number.isFinite(n))) return null
-  return { r, g, b }
-}
-
-function rgbToHex(rgb: { r: number; g: number; b: number }): string {
-  const toHex = (n: number) => clampInt(n, 0, 255).toString(16).padStart(2, '0')
-  return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`
-}
-
-function interpolateHex(a: string, b: string, t: number): string {
-  const ra = hexToRgb(a)
-  const rb = hexToRgb(b)
-  if (!ra || !rb) return a
-  return rgbToHex({
-    r: lerp(ra.r, rb.r, t),
-    g: lerp(ra.g, rb.g, t),
-    b: lerp(ra.b, rb.b, t),
-  })
+function interpolateSpectrum(a: string, b: string, t: number): string {
+  // Perceptual interpolation in OKLCH (shorter hue arc).
+  return mixOklch(a, b, t)
 }
 
 function clampAlpha(alpha: number): number {
@@ -202,26 +178,8 @@ function clampAlpha(alpha: number): number {
 }
 
 function withAlpha(color: string, alpha: number): string {
-  const a = clampAlpha(alpha)
-  const trimmed = color.trim()
-
-  if (trimmed.startsWith('#')) {
-    const rgb = hexToRgb(trimmed)
-    if (rgb) return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${a})`
-  }
-
-  const rgbaMatch =
-    /^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)$/i.exec(trimmed) ??
-    /^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i.exec(trimmed)
-
-  if (rgbaMatch) {
-    const r = Number.parseInt(rgbaMatch[1] ?? '', 10)
-    const g = Number.parseInt(rgbaMatch[2] ?? '', 10)
-    const b = Number.parseInt(rgbaMatch[3] ?? '', 10)
-    if ([r, g, b].every((n) => Number.isFinite(n))) return `rgba(${r}, ${g}, ${b}, ${a})`
-  }
-
-  return color
+  // All chart colors are oklch strings; delegate to the shared helper.
+  return oklchWithAlpha(color.trim(), clampAlpha(alpha))
 }
 
 function buildColorMap(preset: SpectrumPreset, colors: Required<BBWPSpectrumColors>): string[] {
@@ -230,7 +188,7 @@ function buildColorMap(preset: SpectrumPreset, colors: Required<BBWPSpectrumColo
   const grad = (x: number, a: number, b: number, ca: string, cb: string) => {
     if (b === a) return ca
     const t = (x - a) / (b - a)
-    return interpolateHex(ca, cb, Math.min(1, Math.max(0, t)))
+    return interpolateSpectrum(ca, cb, Math.min(1, Math.max(0, t)))
   }
 
   for (let i = 0; i <= 100; i++) {
@@ -322,12 +280,13 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = true, ini
         handleScroll: true,
         layout: {
           background: { type: LwcColorType.Solid, color: 'transparent' },
-          textColor: '#ffffff50',
+          textColor: 'oklch(1 0 0 / 0.3137)',
           attributionLogo: false,
+          colorParsers: CHART_COLOR_PARSERS,
         },
         grid: {
           vertLines: { visible: false },
-          horzLines: { visible: true, color: '#f5f5f510', style: LineStyle.Dotted },
+          horzLines: { visible: true, color: 'oklch(0.9702 0 0 / 0.0627)', style: LineStyle.Dotted },
         },
         rightPriceScale: {
           borderVisible: false,
@@ -336,7 +295,7 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = true, ini
         },
         crosshair: {
           mode: CrosshairMode.Magnet,
-          vertLine: { labelVisible: true, width: 1, color: '#d1d5db40', visible: true, style: LineStyle.Solid },
+          vertLine: { labelVisible: true, width: 1, color: 'oklch(0.8717 0.0093 258.34 / 0.251)', visible: true, style: LineStyle.Solid },
           horzLine: { visible: false, labelVisible: false },
         },
         timeScale: {
@@ -363,7 +322,7 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = true, ini
       scrubLineEl.style.transform = 'translateX(-9999px)'
       scrubLineEl.style.opacity = '0'
       scrubLineEl.style.pointerEvents = 'none'
-      scrubLineEl.style.background = 'rgba(255,255,255,0.20)'
+      scrubLineEl.style.background = 'oklch(1 0 0 / 0.2)'
       scrubLineEl.style.zIndex = '5'
       chartContainerRef.current.appendChild(scrubLineEl)
 

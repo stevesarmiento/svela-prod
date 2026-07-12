@@ -1,5 +1,7 @@
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts';
 import type { ChartHighlightRange, ChartType, OHLCVDataPoint, PriceDataPoint, VolumeDataPoint } from '../types';
+import { CANDLE_DOWN_COLOR, CANDLE_UP_COLOR } from '@/lib/chart-colors';
+import { multiplyAlpha } from '@/lib/oklch';
 import { clampNumber, isTimeInEpochRange, timeToEpochSeconds, toRgba } from '../utils';
 
 export interface HighlightOverlay {
@@ -29,11 +31,11 @@ export function createHighlightOverlay({
     priceSeries,
     highlightPriceSeries,
     volumeSeries,
-    baseLineColor = '#5c5753', // sand-1200
-    candleUpColor = '#22C55E',
-    candleDownColor = '#EF4444',
+    baseLineColor = 'oklch(0.4602 0.0091 61.29)', // sand-1200
+    candleUpColor = CANDLE_UP_COLOR,
+    candleDownColor = CANDLE_DOWN_COLOR,
 }: CreateHighlightOverlayArgs): HighlightOverlay {
-    const DEFAULT_HIGHLIGHT_BOUNDARY_COLOR = 'rgba(168, 162, 158, 0.65)'; // sand-500-ish
+    const DEFAULT_HIGHLIGHT_BOUNDARY_COLOR = 'oklch(0.7161 0.0091 56.26 / 0.65)'; // sand-500-ish
 
     const overlayEl = document.createElement('div');
     overlayEl.className = 'pointer-events-none absolute inset-0 z-10';
@@ -62,31 +64,9 @@ export function createHighlightOverlay({
     let candleEpochSeconds: number[] = [];
 
     function multiplyColorAlpha(color: string, factor: number): string {
-        const clampedFactor = clampNumber(factor, 0, 1);
-        const trimmed = color.trim();
-
-        const rgbaMatch =
-            /^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9]*\.?[0-9]+)\s*\)$/.exec(trimmed);
-        if (rgbaMatch) {
-            const r = Number(rgbaMatch[1]);
-            const g = Number(rgbaMatch[2]);
-            const b = Number(rgbaMatch[3]);
-            const a = Number(rgbaMatch[4]);
-            if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b) || !Number.isFinite(a)) return color;
-            return `rgba(${r}, ${g}, ${b}, ${clampNumber(a * clampedFactor, 0, 1)})`;
-        }
-
-        const rgbMatch = /^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/.exec(trimmed);
-        if (rgbMatch) {
-            const r = Number(rgbMatch[1]);
-            const g = Number(rgbMatch[2]);
-            const b = Number(rgbMatch[3]);
-            if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) return color;
-            return `rgba(${r}, ${g}, ${b}, ${clampedFactor})`;
-        }
-
-        // Hex (#rgb/#rrggbb) support via existing helper.
-        return toRgba(trimmed, clampedFactor);
+        // All chart colors are oklch strings; multiplyAlpha scales the
+        // existing alpha and returns non-oklch inputs unchanged.
+        return multiplyAlpha(color.trim(), clampNumber(factor, 0, 1));
     }
 
     function setDashedLineStyle(el: HTMLDivElement, color: string) {

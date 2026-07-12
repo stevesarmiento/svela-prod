@@ -5,6 +5,7 @@ import { Skeleton } from "@v1/ui/skeleton"
 import { useSpotTakerBuySellVolumeHistory } from "@/hooks/use-spot-taker-buy-sell-volume-history"
 import { cn } from "@v1/ui/cn"
 import { useIsomorphicTheme } from "@/hooks/use-isomorphic-theme"
+import { adjustOklch } from "@/lib/oklch"
 import { motion, useReducedMotion } from "motion/react"
 
 interface InlineSpotTakerBuySellVolumeChartProps {
@@ -30,17 +31,14 @@ function clamp(value: number, min: number, max: number): number {
 
 const SPOT_SCALE_CAP = 4
 // Darker pastels for dark mode (less neon), mapped as: buy=top, sell=bottom.
-const BUY_PASTEL = "hsl(0, 0.00%, 68.60%)" // amber
-const SELL_PASTEL = "hsl(0, 0.00%, 45.50%)" // yellow
+const BUY_PASTEL = "oklch(0.754 0 0)" // amber
+const SELL_PASTEL = "oklch(0.559 0 0)" // yellow
 
 function toThemeAwareColor(color: string, isDarkMode: boolean): string {
   if (isDarkMode) return color
-  return color.replace(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/, (_m, h, s, l) => {
-    // On light backgrounds, increase contrast without going muddy.
-    const nextS = clamp(Number.parseInt(s) + 12, 0, 100)
-    const nextL = clamp(Number.parseInt(l) - 24, 0, 100)
-    return `hsl(${h}, ${nextS}%, ${nextL}%)`
-  })
+  // On light backgrounds, increase contrast without going muddy
+  // (was hsl s+12 / l-24; equivalent perceptual shift in OKLCH).
+  return adjustOklch(color, { dl: -0.24, dc: 0.03 })
 }
 
 export function InlineSpotTakerBuySellVolumeChart({

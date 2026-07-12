@@ -7,6 +7,7 @@ import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
 import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store'
+import { CHART_COLOR_PARSERS, withAlpha as oklchWithAlpha } from '@/lib/oklch'
 import { timeToEpochSeconds } from '@/hooks/use-chart-instance/utils'
 
 interface MarketVisionChartProps {
@@ -149,13 +150,14 @@ export function MarketVisionChart({
         handleScale: true,
         handleScroll: true,
         layout: {
-          background: { type: ColorType.Solid, color: isDarkMode ? "#000000" : "transparent" },
-          textColor: "#ffffff50",
+          background: { type: ColorType.Solid, color: isDarkMode ? "oklch(0 0 0)" : "transparent" },
+          textColor: "oklch(1 0 0 / 0.3137)",
           attributionLogo: false,
+          colorParsers: CHART_COLOR_PARSERS,
         },
         grid: {
           vertLines: { visible: false },
-          horzLines: { visible: true, color: "#f5f5f510", style: LineStyle.Dotted },
+          horzLines: { visible: true, color: "oklch(0.9702 0 0 / 0.0627)", style: LineStyle.Dotted },
         },
         rightPriceScale: { 
           borderVisible: false, 
@@ -164,7 +166,7 @@ export function MarketVisionChart({
         },
         crosshair: {
           mode: CrosshairMode.Magnet,
-          vertLine: { labelVisible: true, width: 1, color: "#d1d5db40", visible: true, style: LineStyle.Solid },
+          vertLine: { labelVisible: true, width: 1, color: "oklch(0.8717 0.0093 258.34 / 0.251)", visible: true, style: LineStyle.Solid },
           horzLine: { visible: false, labelVisible: false },
         },
         timeScale: { 
@@ -219,7 +221,7 @@ export function MarketVisionChart({
       scrubLineEl.style.transform = 'translateX(-9999px)'
       scrubLineEl.style.opacity = '0'
       scrubLineEl.style.pointerEvents = 'none'
-      scrubLineEl.style.background = 'rgba(255,255,255,0.20)'
+      scrubLineEl.style.background = 'oklch(1 0 0 / 0.2)'
       scrubLineEl.style.zIndex = '5'
       chartContainerRef.current.appendChild(scrubLineEl)
 
@@ -236,8 +238,8 @@ export function MarketVisionChart({
 
       const kdPathUp = document.createElementNS('http://www.w3.org/2000/svg', 'path')
       const kdPathDown = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-      kdPathUp.setAttribute('fill', 'rgba(33, 186, 243, 0.05)') // Pine: color.new(#21baf3, 95)
-      kdPathDown.setAttribute('fill', 'rgba(103, 58, 183, 0.10)') // Pine: color.new(#673ab7, 90)
+      kdPathUp.setAttribute('fill', 'oklch(0.7404 0.142 230.37 / 0.05)') // Pine: color.new(oklch(0.7404 0.142 230.37), 95)
+      kdPathDown.setAttribute('fill', 'oklch(0.4742 0.1862 294.78 / 0.1)') // Pine: color.new(oklch(0.4742 0.1862 294.78), 90)
       kdPathUp.setAttribute('stroke', 'none')
       kdPathDown.setAttribute('stroke', 'none')
       kdSvg.appendChild(kdPathUp)
@@ -410,7 +412,7 @@ export function MarketVisionChart({
               el.style.width = `${p.diameterPx}px`
               el.style.height = `${p.diameterPx}px`
               el.style.borderRadius = '9999px'
-              el.style.background = p.color ?? '#ffffff'
+              el.style.background = p.color ?? 'oklch(1 0 0)'
               el.style.opacity = String(p.opacity)
               layer.appendChild(el)
             } else {
@@ -420,7 +422,7 @@ export function MarketVisionChart({
               el.style.left = '0'
               el.style.top = '0'
               el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) translate(-50%, -50%)`
-              el.style.color = p.color ?? '#ffffff'
+              el.style.color = p.color ?? 'oklch(1 0 0)'
               el.style.opacity = String(p.opacity)
               el.style.fontSize = `${p.fontSizePx}px`
               el.style.lineHeight = '1'
@@ -518,29 +520,8 @@ export function MarketVisionChart({
     function withAlpha(color: string | undefined, alpha: number): string | undefined {
       if (!color) return undefined
       if (!Number.isFinite(alpha)) return color
-      const a = Math.max(0, Math.min(1, alpha))
-
-      if (color.startsWith('rgba(')) {
-        const m = color.match(/^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)$/i)
-        if (m) return `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${a})`
-        return color
-      }
-      if (color.startsWith('rgb(')) {
-        const m = color.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i)
-        if (m) return `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${a})`
-        return color
-      }
-      if (color.startsWith('#')) {
-        const hex = color.slice(1)
-        const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex
-        if (full.length === 6) {
-          const r = Number.parseInt(full.slice(0, 2), 16)
-          const g = Number.parseInt(full.slice(2, 4), 16)
-          const b = Number.parseInt(full.slice(4, 6), 16)
-          if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) return `rgba(${r}, ${g}, ${b}, ${a})`
-        }
-      }
-      return color
+      // All chart colors are oklch strings; delegate to the shared helper.
+      return oklchWithAlpha(color, Math.max(0, Math.min(1, alpha)))
     }
 
     const hasAnyData =
@@ -571,7 +552,7 @@ export function MarketVisionChart({
     if (calculations.levels.zero.length) {
       const zeroSeries = chart.addSeries(LineSeries, {
         lineWidth: 1,
-        color: '#ffffff60',
+        color: 'oklch(1 0 0 / 0.3765)',
         title: '',
         lineStyle: LineStyle.Solid,
         lastValueVisible: false,
@@ -585,12 +566,12 @@ export function MarketVisionChart({
     if (calculations.series.wt1.length) {
       const wt1 = chart.addSeries(BaselineSeries, {
         baseValue: { type: 'price', price: 0 },
-        topLineColor: withAlpha('#4994ec', 0.7),
-        bottomLineColor: withAlpha('#4994ec', 0.7),
-        topFillColor1: withAlpha('#4994ec', 0.35),
-        topFillColor2: withAlpha('#4994ec', 0.35),
-        bottomFillColor1: withAlpha('#4994ec', 0.35),
-        bottomFillColor2: withAlpha('#4994ec', 0.35),
+        topLineColor: withAlpha('oklch(0.66 0.1513 254.09)', 0.7),
+        bottomLineColor: withAlpha('oklch(0.66 0.1513 254.09)', 0.7),
+        topFillColor1: withAlpha('oklch(0.66 0.1513 254.09)', 0.35),
+        topFillColor2: withAlpha('oklch(0.66 0.1513 254.09)', 0.35),
+        bottomFillColor1: withAlpha('oklch(0.66 0.1513 254.09)', 0.35),
+        bottomFillColor2: withAlpha('oklch(0.66 0.1513 254.09)', 0.35),
         lineWidth: 2,
         title: '',
         lastValueVisible: true,
@@ -604,12 +585,12 @@ export function MarketVisionChart({
       const wt2 = chart.addSeries(BaselineSeries, {
         baseValue: { type: 'price', price: 0 },
         // Keep WT2 fill dark, but match the line to WT1 blue for visibility.
-        topLineColor: withAlpha('#4994ec', 0.8),
-        bottomLineColor: withAlpha('#4994ec', 0.8),
-        topFillColor1: withAlpha('#1f1559', 0.35),
-        topFillColor2: withAlpha('#1f1559', 0.35),
-        bottomFillColor1: withAlpha('#1f1559', 0.35),
-        bottomFillColor2: withAlpha('#1f1559', 0.35),
+        topLineColor: withAlpha('oklch(0.66 0.1513 254.09)', 0.8),
+        bottomLineColor: withAlpha('oklch(0.66 0.1513 254.09)', 0.8),
+        topFillColor1: withAlpha('oklch(0.2608 0.1153 281.53)', 0.35),
+        topFillColor2: withAlpha('oklch(0.2608 0.1153 281.53)', 0.35),
+        bottomFillColor1: withAlpha('oklch(0.2608 0.1153 281.53)', 0.35),
+        bottomFillColor2: withAlpha('oklch(0.2608 0.1153 281.53)', 0.35),
         lineWidth: 1,
         title: '',
         lastValueVisible: true,
@@ -623,12 +604,12 @@ export function MarketVisionChart({
     if (calculations.series.wtVwap.length) {
       const vwap = chart.addSeries(BaselineSeries, {
         baseValue: { type: 'price', price: 0 },
-        topLineColor: withAlpha('#ffffff', 0.55),
-        bottomLineColor: withAlpha('#ffffff', 0.55),
-        topFillColor1: withAlpha('#ffffff', 0.25),
-        topFillColor2: withAlpha('#ffffff', 0.25),
-        bottomFillColor1: withAlpha('#ffffff', 0.25),
-        bottomFillColor2: withAlpha('#ffffff', 0.25),
+        topLineColor: withAlpha('oklch(1 0 0)', 0.55),
+        bottomLineColor: withAlpha('oklch(1 0 0)', 0.55),
+        topFillColor1: withAlpha('oklch(1 0 0)', 0.25),
+        topFillColor2: withAlpha('oklch(1 0 0)', 0.25),
+        bottomFillColor1: withAlpha('oklch(1 0 0)', 0.25),
+        bottomFillColor2: withAlpha('oklch(1 0 0)', 0.25),
         lineWidth: 1,
         title: '',
         lastValueVisible: false,
@@ -642,12 +623,12 @@ export function MarketVisionChart({
     if (calculations.series.rsiMfi.length) {
       const rsiMfi = chart.addSeries(BaselineSeries, {
         baseValue: { type: 'price', price: 0 },
-        topLineColor: withAlpha('#3ee145', 0.75),
-        bottomLineColor: withAlpha('#ff3d2e', 0.75),
-        topFillColor1: withAlpha('#3ee145', 0.5),
-        topFillColor2: withAlpha('#3ee145', 0.5),
-        bottomFillColor1: withAlpha('#ff3d2e', 0.5),
-        bottomFillColor2: withAlpha('#ff3d2e', 0.5),
+        topLineColor: withAlpha('oklch(0.7978 0.2362 143.47)', 0.75),
+        bottomLineColor: withAlpha('oklch(0.6556 0.231 29.33)', 0.75),
+        topFillColor1: withAlpha('oklch(0.7978 0.2362 143.47)', 0.5),
+        topFillColor2: withAlpha('oklch(0.7978 0.2362 143.47)', 0.5),
+        bottomFillColor1: withAlpha('oklch(0.6556 0.231 29.33)', 0.5),
+        bottomFillColor2: withAlpha('oklch(0.6556 0.231 29.33)', 0.5),
         lineWidth: 1,
         title: '',
         lastValueVisible: false,
@@ -670,7 +651,7 @@ export function MarketVisionChart({
         title: '',
         lastValueVisible: false,
         priceLineVisible: false,
-        color: '#ffffff40',
+        color: 'oklch(1 0 0 / 0.251)',
       })
       mfiBar.setData(
         calculations.series.mfiBarTop.map((p) => ({
@@ -689,7 +670,7 @@ export function MarketVisionChart({
         title: '',
         lastValueVisible: true,
         priceLineVisible: false,
-        color: '#ffffff70',
+        color: 'oklch(1 0 0 / 0.4392)',
       })
       rsi.setData(
         calculations.series.rsi.map((p) => ({
@@ -708,7 +689,7 @@ export function MarketVisionChart({
         title: '',
         lastValueVisible: false,
         priceLineVisible: false,
-        color: calculations.series.stochK[0]?.color ?? '#21baf3',
+        color: calculations.series.stochK[0]?.color ?? 'oklch(0.7404 0.142 230.37)',
       })
       stochK.setData(calculations.series.stochK as { time: Time; value: number; color?: string }[])
       seriesRefs.current.set('stochK', stochK)
@@ -720,7 +701,7 @@ export function MarketVisionChart({
         title: '',
         lastValueVisible: false,
         priceLineVisible: false,
-        color: calculations.series.stochD[0]?.color ?? '#673ab7',
+        color: calculations.series.stochD[0]?.color ?? 'oklch(0.4742 0.1862 294.78)',
       })
       stochD.setData(calculations.series.stochD as { time: Time; value: number; color?: string }[])
       seriesRefs.current.set('stochD', stochD)
@@ -738,7 +719,7 @@ export function MarketVisionChart({
         title: '',
         lastValueVisible: false,
         priceLineVisible: false,
-        color: withAlpha('#673ab7', 0.75),
+        color: withAlpha('oklch(0.4742 0.1862 294.78)', 0.75),
       })
       tcPurple.setData(calculations.series.tc.map((p) => ({ time: p.time as Time, value: p.value })))
       seriesRefs.current.set('tcPurple', tcPurple)
@@ -748,7 +729,7 @@ export function MarketVisionChart({
         title: '',
         lastValueVisible: false,
         priceLineVisible: false,
-        color: withAlpha('#ffffff', 0.5),
+        color: withAlpha('oklch(1 0 0)', 0.5),
       })
       tcWhite.setData(calculations.series.tc.map((p) => ({ time: p.time as Time, value: p.value })))
       seriesRefs.current.set('tcWhite', tcWhite)
@@ -761,7 +742,7 @@ export function MarketVisionChart({
         title: '',
         lastValueVisible: false,
         priceLineVisible: false,
-        color: withAlpha('#ffffff', 0.15),
+        color: withAlpha('oklch(1 0 0)', 0.15),
         lineType: LineType.WithSteps,
       })
       ob2.setData(calculations.levels.obLevel2 as { time: Time; value: number }[])
@@ -774,7 +755,7 @@ export function MarketVisionChart({
         title: '',
         lastValueVisible: false,
         priceLineVisible: false,
-        color: withAlpha('#ffffff', 0.15),
+        color: withAlpha('oklch(1 0 0)', 0.15),
         lineType: LineType.WithSteps,
       })
       os2.setData(calculations.levels.osLevel2 as { time: Time; value: number }[])
@@ -792,7 +773,7 @@ export function MarketVisionChart({
         lastValueVisible: false,
         priceLineVisible: false,
       })
-      ob3.setData(calculations.levels.obLevel3.map((p) => ({ time: p.time as Time, value: p.value, color: withAlpha('#ffffff', 0.05) })))
+      ob3.setData(calculations.levels.obLevel3.map((p) => ({ time: p.time as Time, value: p.value, color: withAlpha('oklch(1 0 0)', 0.05) })))
       seriesRefs.current.set('ob3', ob3)
     }
 
@@ -842,8 +823,8 @@ export function MarketVisionChart({
       .filter((p) => String(p.color ?? '').includes('255, 82, 82'))
       .map((p) => ({ time: p.time, value: p.value }))
 
-    addFixedColorPointSeries('wtCrossCirclesUp', crossUp, 3, 'rgba(0, 230, 118, 0.85)')
-    addFixedColorPointSeries('wtCrossCirclesDown', crossDown, 3, 'rgba(255, 82, 82, 0.85)')
+    addFixedColorPointSeries('wtCrossCirclesUp', crossUp, 3, 'oklch(0.8099 0.2141 151.77 / 0.85)')
+    addFixedColorPointSeries('wtCrossCirclesDown', crossDown, 3, 'oklch(0.6786 0.2095 24.66 / 0.85)')
 
     addPointSeries('wtBearDiv', calculations.series.wtBearDiv, 3)
     addPointSeries('wtBullDiv', calculations.series.wtBullDiv, 3)
@@ -863,7 +844,7 @@ export function MarketVisionChart({
         title: '',
         lastValueVisible: false,
         priceLineVisible: false,
-        color: '#ffe500',
+        color: 'oklch(0.9147 0.1908 101.03)',
       })
       hvwap.setData(calculations.series.sommiHvwap as { time: Time; value: number; color?: string }[])
       seriesRefs.current.set('sommiHvwap', hvwap)

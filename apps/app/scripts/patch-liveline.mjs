@@ -471,6 +471,67 @@ async function patchDistFile(filePath) {
     ok = false
   }
 
+  // 9) Teach liveline's color parser oklch(). The app authors all colors as
+  // `oklch(L C H / A)` strings; liveline's parseColorRgb only understands
+  // hex/rgb and falls back to gray [128,128,128] for anything else, which
+  // breaks fills/glows/badges. The raw `line` color is passed straight to
+  // canvas strokeStyle (which parses oklch natively), so only parseColorRgb
+  // needs the branch. Alpha is intentionally ignored (matches the previous
+  // 8-digit-hex behavior where the alpha byte was sliced off).
+  const parseColorFnSignature = "function parseColorRgb(color) {"
+  const oklchHelperSignature = "function __parseOklchRgb(color) {"
+
+  if (!next.includes(oklchHelperSignature)) {
+    if (!next.includes(parseColorFnSignature)) {
+      console.warn(`[patch-liveline] parseColorRgb signature not found: ${filePath}`)
+      ok = false
+    } else {
+      const oklchHelper = [
+        oklchHelperSignature,
+        "  const m = /^oklch\\(\\s*([\\d.]+%?)\\s+([\\d.]+%?)\\s+([\\d.]+)(?:deg)?\\s*(?:\\/\\s*[\\d.]+%?)?\\s*\\)$/i.exec(color.trim());",
+        "  if (!m) return null;",
+        "  const L = m[1].endsWith('%') ? parseFloat(m[1]) / 100 : parseFloat(m[1]);",
+        "  const C = m[2].endsWith('%') ? (parseFloat(m[2]) / 100) * 0.4 : parseFloat(m[2]);",
+        "  const H = parseFloat(m[3]);",
+        "  const hr = (H * Math.PI) / 180;",
+        "  const a = C * Math.cos(hr);",
+        "  const b = C * Math.sin(hr);",
+        "  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;",
+        "  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;",
+        "  const s_ = L - 0.0894841775 * a - 1.291485548 * b;",
+        "  const l = l_ ** 3, mm = m_ ** 3, s = s_ ** 3;",
+        "  const lr = 4.0767416621 * l - 3.3077115913 * mm + 0.2309699292 * s;",
+        "  const lg = -1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * s;",
+        "  const lb = -0.0041960863 * l - 0.7034186147 * mm + 1.707614701 * s;",
+        "  const gamma = (c) => {",
+        "    const x = Math.min(1, Math.max(0, c));",
+        "    return x <= 0.0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - 0.055;",
+        "  };",
+        "  return [Math.round(gamma(lr) * 255), Math.round(gamma(lg) * 255), Math.round(gamma(lb) * 255)];",
+        "}",
+        "",
+      ].join("\n")
+
+      const parseColorFnPatched = [
+        parseColorFnSignature,
+        "  const okl = __parseOklchRgb(color);",
+        "  if (okl) return okl;",
+      ].join("\n")
+
+      const inserted = next.replace(
+        parseColorFnSignature,
+        `${oklchHelper}${parseColorFnPatched}`,
+      )
+      if (inserted === next) {
+        console.warn(`[patch-liveline] Failed to insert oklch parser: ${filePath}`)
+        ok = false
+      } else {
+        next = inserted
+        didChange = true
+      }
+    }
+  }
+
   if (!didChange) return { ok, changed: false }
   await writeFile(filePath, next, "utf8")
   console.log(`[patch-liveline] Patched: ${filePath}`)

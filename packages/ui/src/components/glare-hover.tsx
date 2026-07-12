@@ -21,11 +21,11 @@ interface GlareHoverProps {
 const GlareHover: React.FC<GlareHoverProps> = ({
   width = "500px",
   height = "500px",
-  background = "#000",
+  background = "oklch(0 0 0)",
   borderRadius = "10px",
-  borderColor = "#333",
+  borderColor = "oklch(0.3211 0 0)",
   children,
-  glareColor = "#ffffff",
+  glareColor = "oklch(1 0 0)",
   glareOpacity = 0.5,
   glareAngle = -45,
   glareSize = 250,
@@ -34,19 +34,8 @@ const GlareHover: React.FC<GlareHoverProps> = ({
   className = "",
   style = {},
 }) => {
-  const hex = glareColor.replace("#", "");
-  let rgba = glareColor;
-  if (/^[\dA-Fa-f]{6}$/.test(hex)) {
-    const r = Number.parseInt(hex.slice(0, 2), 16);
-    const g = Number.parseInt(hex.slice(2, 4), 16);
-    const b = Number.parseInt(hex.slice(4, 6), 16);
-    rgba = `rgba(${r}, ${g}, ${b}, ${glareOpacity})`;
-  } else if (/^[\dA-Fa-f]{3}$/.test(hex)) {
-    const r = Number.parseInt((hex[0] ?? "0") + (hex[0] ?? "0"), 16);
-    const g = Number.parseInt((hex[1] ?? "0") + (hex[1] ?? "0"), 16);
-    const b = Number.parseInt((hex[2] ?? "0") + (hex[2] ?? "0"), 16);
-    rgba = `rgba(${r}, ${g}, ${b}, ${glareOpacity})`;
-  }
+  // Works with any CSS color format (oklch, var(), named, ...) — no parsing.
+  const glare = `color-mix(in srgb, ${glareColor} ${glareOpacity * 100}%, transparent)`;
 
   const overlayRef = useRef<HTMLDivElement | null>(null);
 
@@ -77,9 +66,9 @@ const GlareHover: React.FC<GlareHoverProps> = ({
     position: "absolute",
     inset: 0,
     background: `linear-gradient(${glareAngle}deg,
-        hsla(0,0%,0%,0) 60%,
-        ${rgba} 70%,
-        hsla(0,0%,0%,0) 100%)`,
+        transparent 60%,
+        ${glare} 70%,
+        transparent 100%)`,
     backgroundSize: `${glareSize}% ${glareSize}%, 100% 100%`,
     backgroundRepeat: "no-repeat",
     backgroundPosition: "-100% -100%, 0 0",

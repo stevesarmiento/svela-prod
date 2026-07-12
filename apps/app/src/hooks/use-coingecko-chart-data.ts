@@ -229,7 +229,7 @@ function bucketizeMarketChart(args: {
 
   return {
     lineChart: ohlcData.map((bar) => ({ time: bar.time, value: bar.close })),
-    volumeChart: ohlcBars.map((bar) => ({ time: bar.time, value: bar.volume, color: '#ffffff40' })),
+    volumeChart: ohlcBars.map((bar) => ({ time: bar.time, value: bar.volume, color: 'oklch(1 0 0 / 0.251)' })),
     ohlcData,
   }
 }
@@ -262,7 +262,7 @@ function parseOHLCData(data: OHLCAPIResponse): ParsedChartData | null {
     const volumeChart = ohlcPoints.map((point: { time: Time; open: number; high: number; low: number; close: number }) => ({
       time: point.time,
       value: 0, // OHLC route doesn't provide volume
-      color: '#ffffff40'
+      color: 'oklch(1 0 0 / 0.251)'
     }))
 
     return {
@@ -328,7 +328,7 @@ function generateFallbackData(
   })
 
   const lineChart = fallbackPoints.map(p => ({ time: p.time, value: p.price }))
-  const volumeChart = fallbackPoints.map(p => ({ time: p.time, value: p.volume, color: '#ffffff40' }))
+  const volumeChart = fallbackPoints.map(p => ({ time: p.time, value: p.volume, color: 'oklch(1 0 0 / 0.251)' }))
   const ohlcData = fallbackPoints.map(p => ({ 
     time: p.time, 
     open: p.open, 
@@ -365,7 +365,7 @@ function combineOHLCWithVolume(
     const volumePoints = marketData.data.volumes.map((point: MarketChartPoint) => ({
       time: point.time as Time,
       value: point.value || 0,
-      color: '#ffffff40'
+      color: 'oklch(1 0 0 / 0.251)'
     }))
 
     if (ohlcPoints.length < 2) return null
@@ -407,7 +407,7 @@ function upsertLatestPricePoint(parsedData: ParsedChartData, latestPrice: number
   if (parsedData.lineChart.length === 0 || lastSeconds == null) {
     return {
       lineChart: [{ time: nextTime, value: latestPrice }],
-      volumeChart: [{ time: nextTime, value: 0, color: '#ffffff40' }],
+      volumeChart: [{ time: nextTime, value: 0, color: 'oklch(1 0 0 / 0.251)' }],
       ohlcData: [{ time: nextTime, open: latestPrice, high: latestPrice, low: latestPrice, close: latestPrice }],
     }
   }
@@ -437,7 +437,7 @@ function upsertLatestPricePoint(parsedData: ParsedChartData, latestPrice: number
   // Otherwise append a new point so startup always reflects the latest quote.
   return {
     lineChart: [...parsedData.lineChart, { time: nextTime, value: latestPrice }],
-    volumeChart: [...parsedData.volumeChart, { time: nextTime, value: 0, color: '#ffffff40' }],
+    volumeChart: [...parsedData.volumeChart, { time: nextTime, value: 0, color: 'oklch(1 0 0 / 0.251)' }],
     ohlcData: [
       ...parsedData.ohlcData,
       { time: nextTime, open: latestPrice, high: latestPrice, low: latestPrice, close: latestPrice },

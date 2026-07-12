@@ -64,7 +64,7 @@ export function OverviewPerformanceChart({
         id: "portfolio",
         data: portfolioPoints,
         value: latestPortfolioValue,
-        color: isDarkMode ? "#e5e7eb" : "#111827",
+        color: isDarkMode ? "oklch(0.9276 0.0058 264.53)" : "oklch(0.2101 0.0318 264.66)",
         label: `Portfolio ${latestPortfolioValue - 100 >= 0 ? "+" : ""}${(latestPortfolioValue - 100).toFixed(2)}%`,
       });
     }
@@ -72,8 +72,8 @@ export function OverviewPerformanceChart({
     const latestMarketValue = marketPoints[marketPoints.length - 1]?.value;
     if (typeof latestMarketValue === "number") {
       const marketColor = isDarkMode
-        ? "rgba(45, 212, 191, 0.25)"
-        : "rgba(15, 118, 110, 0.25)";
+        ? "oklch(0.7845 0.1325 181.91 / 0.25)"
+        : "oklch(0.5109 0.0861 186.39 / 0.25)";
       nextSeries.push({
         id: "market",
         data: marketPoints,
@@ -147,7 +147,7 @@ export function OverviewPerformanceChart({
         value={0}
         series={series}
         theme={isDarkMode ? "dark" : "light"}
-        color={isDarkMode ? "#e5e7eb" : "#111827"}
+        color={isDarkMode ? "oklch(0.9276 0.0058 264.53)" : "oklch(0.2101 0.0318 264.66)"}
         lineWidth={1}
         window={windowSecs}
         formatTime={formatTime}

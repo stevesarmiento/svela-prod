@@ -173,7 +173,7 @@ export function useHullSuite(data: OHLCVDataPoint[], config: HullSuiteConfig): H
   const calculations = useMemo(() => {
     // Generate Hull Suite colors - using single pastel color for both lines
     const hullColors = generatePastelColors(1)
-    const primaryHullColor = addOpacityToColor(hullColors[0] || 'hsl(210, 40%, 75%)', 0.2)
+    const primaryHullColor = addOpacityToColor(hullColors[0] || 'oklch(0.7945 0.046 249.44)', 0.2)
     // Default configuration matching Pine Script inputs
     const defaultConfig: HullSuiteConfig = {
       src: 'close',

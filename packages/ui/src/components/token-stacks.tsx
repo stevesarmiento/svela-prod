@@ -52,7 +52,7 @@ export const AvatarCircles = ({
           {/* Inset translucent rim: tints with each token’s colors (no fixed border color). */}
           <span
             aria-hidden
-            className="pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_0_0_1.25px_rgba(0,0,0,0.55)] dark:shadow-[inset_0_0_0_0.7px_rgba(0,0,0,0.40)]"
+            className="pointer-events-none absolute inset-0 rounded-full shadow-[inset_0_0_0_1.25px_oklch(0_0_0_/_0.55)] dark:shadow-[inset_0_0_0_0.7px_oklch(0_0_0_/_0.4)]"
           />
         </div>
       ))}

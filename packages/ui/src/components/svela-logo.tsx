@@ -32,9 +32,9 @@ export function SvelaLogo({
       xmlns="http://www.w3.org/2000/svg"
       style={
         {
-          // Space-separated --primary needs slash alpha, not hsla(var(--primary), 0.1)
+          // --primary holds a full oklch() color; alpha via color-mix
           filter: adaptive
-            ? "drop-shadow(0 0 8px hsl(var(--primary) / 0.1))"
+            ? "drop-shadow(0 0 8px color-mix(in oklab, var(--primary) 10%, transparent))"
             : undefined,
         } as React.CSSProperties
       }

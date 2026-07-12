@@ -34,7 +34,7 @@ const loadingShineStyle = `
     left: 0;
     width: 500%;
     height: 500%;
-    background: linear-gradient(135deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0) 100%);
+    background: linear-gradient(135deg, oklch(1 0 0 / 0) 0%, oklch(1 0 0 / 0.1) 50%, oklch(1 0 0 / 0) 100%);
     animation: ck-qr-slide-diagonal 0.5s infinite;
     z-index: 1;
     pointer-events: none;

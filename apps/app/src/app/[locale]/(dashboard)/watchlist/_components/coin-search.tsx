@@ -194,8 +194,8 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
         </Tooltip>
       {/** Keep sheet inner default !bg-zinc-900/90; only add layout + chrome so body scroll matches panel styling. */}
       <SheetContent className="flex h-full min-h-0 flex-col overflow-hidden p-0 !z-50 rounded-[20px] border-zinc-800
-                               shadow-[inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-4px_30px_rgba(0,0,0,0.1),0_4px_8px_rgba(0,0,0,0.05)]
-                               dark:shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.6)]">
+                               shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)]
+                               dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.6)]">
           {/** Header stays fixed; only the body below scrolls (coins never scroll over the search bar). */}
           <SheetHeader className="shrink-0 space-y-0 bg-zinc-900/90 p-2 text-left border-b border-black">
             <div className="flex w-full min-w-0 items-center">

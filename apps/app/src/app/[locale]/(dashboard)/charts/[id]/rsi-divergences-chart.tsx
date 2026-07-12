@@ -7,6 +7,7 @@ import { calculateRsiDivergences, type RsiDivergence } from '@/hooks/market-visi
 import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
 import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store'
+import { CHART_COLOR_PARSERS } from '@/lib/oklch'
 import { timeToEpochSeconds } from '@/hooks/use-chart-instance/utils'
 
 interface RsiDivergencesChartProps {
@@ -23,12 +24,12 @@ const RIGHT_OFFSET_BARS = 12
 const MAX_DIVERGENCE_LINES = 200
 
 const COLORS = {
-  rsi: 'rgba(59, 130, 246, 0.70)', // blue-500
-  levels: 'rgba(161, 161, 170, 0.35)', // zinc-400
-  bull: 'rgba(16, 185, 129, 0.95)', // emerald-500
-  bear: 'rgba(244, 63, 94, 0.95)', // rose-500
-  hiddenBull: 'rgba(20, 184, 166, 0.95)', // teal-500
-  hiddenBear: 'rgba(249, 115, 22, 0.95)', // orange-500
+  rsi: 'oklch(0.6231 0.188 259.81 / 0.7)', // blue-500
+  levels: 'oklch(0.7118 0.0129 286.07 / 0.35)', // zinc-400
+  bull: 'oklch(0.6959 0.1491 162.48 / 0.95)', // emerald-500
+  bear: 'oklch(0.645 0.2154 16.44 / 0.95)', // rose-500
+  hiddenBull: 'oklch(0.7038 0.123 182.5 / 0.95)', // teal-500
+  hiddenBear: 'oklch(0.7049 0.1867 47.6 / 0.95)', // orange-500
 } as const
 
 function normalizeEpochSeconds(value: number | null | undefined): number | null {
@@ -163,12 +164,13 @@ export function RsiDivergencesChart({
         handleScroll: true,
         layout: {
           background: { type: ColorType.Solid, color: 'transparent' },
-          textColor: '#ffffff50',
+          textColor: 'oklch(1 0 0 / 0.3137)',
           attributionLogo: false,
+          colorParsers: CHART_COLOR_PARSERS,
         },
         grid: {
           vertLines: { visible: false },
-          horzLines: { visible: true, color: '#f5f5f510', style: LineStyle.Dotted },
+          horzLines: { visible: true, color: 'oklch(0.9702 0 0 / 0.0627)', style: LineStyle.Dotted },
         },
         rightPriceScale: {
           borderVisible: false,
@@ -177,7 +179,7 @@ export function RsiDivergencesChart({
         },
         crosshair: {
           mode: CrosshairMode.Magnet,
-          vertLine: { labelVisible: true, width: 1, color: '#d1d5db40', visible: true, style: LineStyle.Solid },
+          vertLine: { labelVisible: true, width: 1, color: 'oklch(0.8717 0.0093 258.34 / 0.251)', visible: true, style: LineStyle.Solid },
           horzLine: { visible: false, labelVisible: false },
         },
         timeScale: {
@@ -230,7 +232,7 @@ export function RsiDivergencesChart({
       scrubLineEl.style.transform = 'translateX(-9999px)'
       scrubLineEl.style.opacity = '0'
       scrubLineEl.style.pointerEvents = 'none'
-      scrubLineEl.style.background = 'rgba(255,255,255,0.20)'
+      scrubLineEl.style.background = 'oklch(1 0 0 / 0.2)'
       scrubLineEl.style.zIndex = '5'
       chartContainerRef.current.appendChild(scrubLineEl)
 
@@ -338,7 +340,7 @@ export function RsiDivergencesChart({
 
     const middleSeries = chart.addSeries(LineSeries, {
       lineWidth: 1,
-      color: 'rgba(161, 161, 170, 0.22)',
+      color: 'oklch(0.7118 0.0129 286.07 / 0.22)',
       title: '',
       lineStyle: LineStyle.Solid,
       lastValueVisible: false,
@@ -396,7 +398,7 @@ export function RsiDivergencesChart({
           const el = document.createElement('div')
           el.className =
             'absolute select-none text-[10px] font-berkeley-mono font-semibold px-1.5 py-0.5 rounded-md shadow-sm shadow-black/20'
-          el.style.color = 'rgba(255,255,255,0.96)'
+          el.style.color = 'oklch(1 0 0 / 0.96)'
           el.style.background = divergenceColor(div)
           el.style.transform = 'translate3d(-9999px, -9999px, 0)'
           el.style.opacity = '0'

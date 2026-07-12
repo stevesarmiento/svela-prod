@@ -12,6 +12,8 @@ import {
     type Time,
 } from 'lightweight-charts';
 import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store';
+import { CANDLE_DOWN_COLOR, CANDLE_UP_COLOR } from '@/lib/chart-colors';
+import { CHART_COLOR_PARSERS } from '@/lib/oklch';
 import type {
     ChartHighlightRange,
     ChartType,
@@ -74,13 +76,14 @@ export function createChartController({
         layout: {
             background: { type: ColorType.Solid, color: 'transparent' },
             // We render our own axis labels; keep built-in text readable for the time label.
-            textColor: '#ffffff',
+            textColor: 'oklch(1 0 0)',
             fontFamily: 'var(--font-inter), system-ui, sans-serif',
             attributionLogo: false,
+            colorParsers: CHART_COLOR_PARSERS,
         },
         grid: {
             vertLines: { visible: false },
-            horzLines: { visible: true, color: 'rgba(233, 230, 227, 0)', style: LineStyle.Solid },
+            horzLines: { visible: true, color: 'oklch(0.9264 0.0052 67.76 / 0)', style: LineStyle.Solid },
         },
         rightPriceScale: {
             borderVisible: false,
@@ -94,18 +97,18 @@ export function createChartController({
                 labelVisible: true,
                 width: 1,
                 // Solid scrub line
-                color: 'rgba(161, 161, 170, 0.55)', // zinc-400/500-ish
+                color: 'oklch(0.7118 0.0129 286.07 / 0.55)', // zinc-400/500-ish
                 visible: true,
                 style: LineStyle.Solid,
-                labelBackgroundColor: '#18181b', // zinc-900
+                labelBackgroundColor: 'oklch(0.2103 0.0059 285.89)', // zinc-900
             },
             horzLine: {
                 // We'll draw our own dashed hover connector in the DOM overlay.
                 visible: false,
                 // Hide built-in price label; we render our own tag label.
                 labelVisible: false,
-                labelBackgroundColor: '#18181b',
-                color: 'rgba(168, 162, 158, 0)',
+                labelBackgroundColor: 'oklch(0.2103 0.0059 285.89)',
+                color: 'oklch(0.7161 0.0091 56.26 / 0)',
                 width: 1,
                 style: LineStyle.Dashed,
             },
@@ -125,10 +128,8 @@ export function createChartController({
     let mhullSeries: ISeriesApi<'Line'> | null = null;
     let shullSeries: ISeriesApi<'Line'> | null = null;
 
-    const BASE_LINE_COLOR = resolvedIsDarkMode ? '#ffffff' : '#000000';
-    const CANDLE_UP_COLOR = '#22C55E';
-    const CANDLE_DOWN_COLOR = '#EF4444';
-    const VOLUME_BAR_COLOR = resolvedIsDarkMode ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)';
+    const BASE_LINE_COLOR = resolvedIsDarkMode ? 'oklch(1 0 0)' : 'oklch(0 0 0)';
+    const VOLUME_BAR_COLOR = resolvedIsDarkMode ? 'oklch(1 0 0 / 0.25)' : 'oklch(0 0 0 / 0.25)';
 
     function computePriceFormat(value: number | null | undefined): { precision: number; minMove: number } {
         if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
@@ -188,7 +189,7 @@ export function createChartController({
             // Distinct scrub point (solid fill + white outline)
             crosshairMarkerVisible: true,
             crosshairMarkerRadius: 3,
-            crosshairMarkerBorderColor: '#ffffff',
+            crosshairMarkerBorderColor: 'oklch(1 0 0)',
             crosshairMarkerBackgroundColor: BASE_LINE_COLOR,
             lastPriceAnimation: LastPriceAnimationMode.Continuous,
             priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
@@ -419,7 +420,7 @@ export function createChartController({
     scrubLineEl.style.transform = 'translateX(-9999px)';
     scrubLineEl.style.opacity = '0';
     scrubLineEl.style.pointerEvents = 'none';
-    scrubLineEl.style.background = resolvedIsDarkMode ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.22)';
+    scrubLineEl.style.background = resolvedIsDarkMode ? 'oklch(1 0 0 / 0.22)' : 'oklch(0 0 0 / 0.22)';
     scrubLineEl.style.zIndex = '5';
     containerEl.appendChild(scrubLineEl);
 
@@ -604,7 +605,7 @@ export function createChartController({
 
         const lineStyle = overlay.lineStyle === 'dotted' ? LineStyle.Dotted : LineStyle.Solid;
         const lineWidth = overlay.lineWidth ?? 1;
-        const color = overlay.color ?? (resolvedIsDarkMode ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.55)');
+        const color = overlay.color ?? (resolvedIsDarkMode ? 'oklch(1 0 0 / 0.45)' : 'oklch(0 0 0 / 0.55)');
 
         if (!mhullSeries) {
             mhullSeries = chart.addSeries(LineSeries, {

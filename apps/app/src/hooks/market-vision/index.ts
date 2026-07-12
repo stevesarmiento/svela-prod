@@ -9,6 +9,7 @@ import type {
   MarketVisionSignalSeries,
   MarketVisionSeriesLevels,
 } from './market-vision-config'
+import { withAlpha as oklchWithAlpha } from '@/lib/oklch'
 import { DEFAULT_MARKET_VISION_CONFIG } from './market-vision-config'
 import { buildCandleSources, pickSourceSeries } from './pine-series'
 import { computeMacd, computeRsiMfi, computeSchaffTc, computeStochRsi, computeWaveTrend } from './vmc-core'
@@ -45,29 +46,8 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 function withAlpha(color: string, alpha: number): string {
-  const a = Math.max(0, Math.min(1, alpha))
-
-  if (color.startsWith('rgba(')) {
-    const m = color.match(/^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([0-9.]+)\s*\)$/i)
-    if (m) return `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${a})`
-    return color
-  }
-  if (color.startsWith('rgb(')) {
-    const m = color.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i)
-    if (m) return `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${a})`
-    return color
-  }
-  if (color.startsWith('#')) {
-    const hex = color.slice(1)
-    const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex
-    if (full.length === 6) {
-      const r = Number.parseInt(full.slice(0, 2), 16)
-      const g = Number.parseInt(full.slice(2, 4), 16)
-      const b = Number.parseInt(full.slice(4, 6), 16)
-      if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) return `rgba(${r}, ${g}, ${b}, ${a})`
-    }
-  }
-  return color
+  // All chart colors are oklch strings; delegate to the shared helper.
+  return oklchWithAlpha(color, Math.max(0, Math.min(1, alpha)))
 }
 
 function emptySeries(): MarketVisionSignalSeries {
@@ -472,7 +452,7 @@ export function useMarketVisionB(
       const w2 = wt2[i]
       if (!isFiniteNumber(w1) || !isFiniteNumber(w2)) return finalConfig.colors.colorWhite
       // Pine: `plot(..., style=circles, transp=15)` → alpha=0.85.
-      return w2 - w1 > 0 ? 'rgba(255, 82, 82, 0.85)' : 'rgba(0, 230, 118, 0.85)'
+      return w2 - w1 > 0 ? 'oklch(0.6786 0.2095 24.66 / 0.85)' : 'oklch(0.8099 0.2141 151.77 / 0.85)'
     }
 
     const wt1Color = (i: number): string | null => macdWT1Color[i] ?? finalConfig.colors.colorWT1Fill
@@ -505,7 +485,7 @@ export function useMarketVisionB(
     }
 
     if (finalConfig.schaff.tcLine) {
-      series.tc = toColoredSeries(times, tcValues, () => 'rgba(103, 58, 183, 0.25)')
+      series.tc = toColoredSeries(times, tcValues, () => 'oklch(0.4742 0.1862 294.78 / 0.25)')
     }
 
     // Divergence plots (pivot bar, offset -2).

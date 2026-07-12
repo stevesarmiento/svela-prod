@@ -15,8 +15,8 @@ export const BackgroundPattern = React.memo(({ className = "" }: BackgroundPatte
       <div className={`absolute inset-0 opacity-5 dark:opacity-5 z-0 ${className}`}
         style={{
           backgroundImage: `
-            radial-gradient(circle at 25% 25%, rgb(0 0 0) 1px, transparent 1px),
-            radial-gradient(circle at 75% 75%, rgb(0 0 0) 1px, transparent 1px)
+            radial-gradient(circle at 25% 25%, oklch(0 0 0) 1px, transparent 1px),
+            radial-gradient(circle at 75% 75%, oklch(0 0 0) 1px, transparent 1px)
           `,
           backgroundSize: "24px 24px",
         }}
@@ -25,8 +25,8 @@ export const BackgroundPattern = React.memo(({ className = "" }: BackgroundPatte
       <div className={`absolute inset-0 opacity-5 dark:opacity-0 z-0 ${className}`}
         style={{
           backgroundImage: `
-            radial-gradient(circle at 25% 25%, rgb(255 255 255) 1px, transparent 1px),
-            radial-gradient(circle at 75% 75%, rgb(255 255 255) 1px, transparent 1px)
+            radial-gradient(circle at 25% 25%, oklch(1 0 0) 1px, transparent 1px),
+            radial-gradient(circle at 75% 75%, oklch(1 0 0) 1px, transparent 1px)
           `,
           backgroundSize: "24px 24px",
         }}

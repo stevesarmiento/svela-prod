@@ -327,7 +327,7 @@ export function InlinePriceChart({
             data={points}
             value={livelineValue}
             theme={livelineTheme}
-            color="#ffffff30"
+            color="oklch(1 0 0 / 0.1882)"
             showValue={false}
             dot={false}
             lineWidth={1}
@@ -356,7 +356,7 @@ export function InlinePriceChart({
             data={points}
             value={livelineValue}
             theme={livelineTheme}
-            color={isPositive ? "#00d492" : "#ff6467"}
+            color={isPositive ? "oklch(0.7688 0.1687 161.95)" : "oklch(0.7022 0.1892 22.23)"}
             showValue={false}
             dot={false}
             lineWidth={1}

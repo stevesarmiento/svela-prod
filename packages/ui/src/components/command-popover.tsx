@@ -54,7 +54,7 @@ const CommandPopover = ({
         <PopoverContent
           ref={contentRef}
           className="dark relative rounded-[20px] bg-zinc-900/95 backdrop-blur-md border border-transparent overflow-hidden p-1 w-[499px] z-[1000] data-[state=open]:slide-in-from-bottom-24 data-[state=closed]:slide-out-to-bottom-24
-                     text-popover-foreground shadow-[inset_0_1px_2px_rgba(255,255,255,0.2),inset_0_-4px_30px_rgba(47,44,48,0.9),0_4px_16px_rgba(0,0,0,0.4)]"
+                     text-popover-foreground shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.4)]"
           side="bottom"
           sideOffset={12}
           // Keep focus on the cmdk input (trigger) so typing + arrow selection work; don't jump into the list.
@@ -65,8 +65,8 @@ const CommandPopover = ({
             className="absolute inset-0 opacity-5 dark:opacity-5 z-0"
             style={{
               backgroundImage: `
-                radial-gradient(circle at 25% 25%, rgb(0 0 0) 1px, transparent 1px),
-                radial-gradient(circle at 75% 75%, rgb(0 0 0) 1px, transparent 1px)
+                radial-gradient(circle at 25% 25%, oklch(0 0 0) 1px, transparent 1px),
+                radial-gradient(circle at 75% 75%, oklch(0 0 0) 1px, transparent 1px)
               `,
               backgroundSize: "24px 24px",
             }}
@@ -75,8 +75,8 @@ const CommandPopover = ({
             className="absolute inset-0 opacity-5 dark:opacity-0 z-0"
             style={{
               backgroundImage: `
-                radial-gradient(circle at 25% 25%, rgb(255 255 255) 1px, transparent 1px),
-                radial-gradient(circle at 75% 75%, rgb(255 255 255) 1px, transparent 1px)
+                radial-gradient(circle at 25% 25%, oklch(1 0 0) 1px, transparent 1px),
+                radial-gradient(circle at 75% 75%, oklch(1 0 0) 1px, transparent 1px)
               `,
               backgroundSize: "24px 24px",
             }}

@@ -37,11 +37,11 @@ export function Toaster() {
                       {props?.variant && (
                         <div className="w-[20px] h-[20px] flex items-center">
                           {props.variant === "ai" && (
-                            <Icons.AI className="text-[#0064D9]" />
+                            <Icons.AI className="text-[oklch(0.5278_0.1961_258.08)]" />
                           )}
                           {props?.variant === "success" && <Icons.Check />}
                           {props?.variant === "error" && (
-                            <Icons.Error className="text-[#FF3638]" />
+                            <Icons.Error className="text-[oklch(0.6514_0.2346_26.34)]" />
                           )}
                           {props?.variant === "progress" && (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -56,7 +56,7 @@ export function Toaster() {
 
                     <div>
                       {props?.variant === "progress" && (
-                        <span className="text-sm text-[#878787]">
+                        <span className="text-sm text-[oklch(0.6234_0_0)]">
                           {progress}%
                         </span>
                       )}

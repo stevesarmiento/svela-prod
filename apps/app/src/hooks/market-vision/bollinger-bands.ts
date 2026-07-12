@@ -64,13 +64,13 @@ const DEFAULT_CONFIG: BollingerBandsConfig = {
 // Generate consistent colors
 const BB_COLORS = generatePastelColors(6)
 const COLORS = {
-  rsi: BB_COLORS[0] || 'hsl(340, 45%, 78%)',        // Soft pink for RSI
-  mfi: BB_COLORS[1] || 'hsl(160, 42%, 72%)',        // Soft green for MFI
-  basis: BB_COLORS[2] || 'hsl(0, 60%, 70%)',        // Soft red for basis (SMA)
-  bands: BB_COLORS[3] || 'hsl(210, 40%, 75%)',      // Soft blue for bands
-  fillArea: addOpacityToColor(BB_COLORS[3] || 'hsl(210, 40%, 75%)', 0.1), // Transparent blue fill
-  overbought: BB_COLORS[4] || 'hsl(0, 60%, 70%)',   // Red for overbought
-  oversold: BB_COLORS[5] || 'hsl(120, 60%, 70%)',   // Green for oversold
+  rsi: BB_COLORS[0] || 'oklch(0.8008 0.0617 357.54)',        // Soft pink for RSI
+  mfi: BB_COLORS[1] || 'oklch(0.8295 0.0677 171.92)',        // Soft green for MFI
+  basis: BB_COLORS[2] || 'oklch(0.7135 0.1122 20.23)',        // Soft red for basis (SMA)
+  bands: BB_COLORS[3] || 'oklch(0.7945 0.046 249.44)',      // Soft blue for bands
+  fillArea: addOpacityToColor(BB_COLORS[3] || 'oklch(0.7945 0.046 249.44)', 0.1), // Transparent blue fill
+  overbought: BB_COLORS[4] || 'oklch(0.7135 0.1122 20.23)',   // Red for overbought
+  oversold: BB_COLORS[5] || 'oklch(0.8277 0.1522 144.05)',   // Green for oversold
 }
 
 // Get source values from OHLCV data

@@ -16,7 +16,7 @@ export function Footer() {
               width={25}
               height={25}
               adaptive={false}
-              fillColor="rgba(255,255,255,.74)"
+              fillColor="oklch(1 0 0 / 0.74)"
             />
             <strong>aggr.watch</strong>
           </div>

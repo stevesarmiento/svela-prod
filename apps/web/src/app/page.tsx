@@ -57,7 +57,7 @@ function DesktopDock() {
                 width={31}
                 height={31}
                 adaptive={false}
-                fillColor="rgba(255,255,255,.92)"
+                fillColor="oklch(1 0 0 / 0.92)"
               />
             )}
           </div>
@@ -217,10 +217,10 @@ export default async function Page() {
                       >
                         <stop
                           offset="0"
-                          stopColor="#a78bfa"
+                          stopColor="oklch(0.709 0.1592 293.54)"
                           stopOpacity=".24"
                         />
-                        <stop offset="1" stopColor="#a78bfa" stopOpacity="0" />
+                        <stop offset="1" stopColor="oklch(0.709 0.1592 293.54)" stopOpacity="0" />
                       </linearGradient>
                     </defs>
                     <path
@@ -307,7 +307,7 @@ export default async function Page() {
               width={28}
               height={28}
               adaptive={false}
-              fillColor="rgba(255,255,255,.85)"
+              fillColor="oklch(1 0 0 / 0.85)"
             />
           </div>
           <h2>
