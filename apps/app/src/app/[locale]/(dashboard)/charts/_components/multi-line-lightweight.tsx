@@ -608,7 +608,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                 {avatarData.length > 0 && (
                   <AvatarCircles
                     avatarUrls={avatarData}
-                    className="-ml-2 origin-left scale-75"
+                    className="origin-left scale-75"
                   />
                 )}
               </div>
