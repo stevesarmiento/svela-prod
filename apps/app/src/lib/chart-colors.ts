@@ -34,12 +34,12 @@ const PASTEL_COLORS = [
   }
   
   export function addOpacityToColor(color: string, opacity: number): string {
-    if (color.startsWith('hsl(')) {
-      const hslMatch = color.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/)
-      if (hslMatch) {
-        const [, h, s, l] = hslMatch
-        return `hsla(${h}, ${s}%, ${l}%, ${opacity})`
-      }
+    // Match integer or decimal HSL components (generated colors can have
+    // fractional hues, e.g. `hsl(332.3076, 42%, 76%)`).
+    const hslMatch = color.match(/hsla?\(\s*([\d.]+)(?:deg)?\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/)
+    if (hslMatch) {
+      const [, h, s, l] = hslMatch
+      return `hsla(${h}, ${s}%, ${l}%, ${opacity})`
     }
     return color
   }
