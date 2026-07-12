@@ -416,10 +416,21 @@ async function patchDistFile(filePath) {
     "  ctx.restore();",
   ].join("\n")
 
+  // Stale variant: an earlier revision of this patch used lineWidth 1.5.
+  // Vercel restores node_modules from the build cache, so a dist patched by
+  // the old script survives into new builds — upgrade it instead of failing.
+  const crosshairStrokesDashedStale = crosshairStrokesDashedNew.replace(
+    "  ctx.lineWidth = 1;",
+    "  ctx.lineWidth = 1.5;",
+  )
+
   if (next.includes(crosshairStrokesDashedNew)) {
     // already patched
   } else if (next.includes(crosshairStrokesSolidOld)) {
     next = next.replace(crosshairStrokesSolidOld, crosshairStrokesDashedNew)
+    didChange = true
+  } else if (next.includes(crosshairStrokesDashedStale)) {
+    next = next.replace(crosshairStrokesDashedStale, crosshairStrokesDashedNew)
     didChange = true
   } else {
     console.warn(`[patch-liveline] Crosshair stroke restyle pattern not found: ${filePath}`)
@@ -461,10 +472,19 @@ async function patchDistFile(filePath) {
     "    for (const entry of entries) {",
   ].join("\n")
 
+  // Stale variant (see crosshairStrokesDashedStale above).
+  const multiCrosshairVerticalDashedStale = multiCrosshairVerticalDashedNew.replace(
+    "  ctx.lineWidth = 1;",
+    "  ctx.lineWidth = 1.5;",
+  )
+
   if (next.includes(multiCrosshairVerticalDashedNew)) {
     // already patched
   } else if (next.includes(multiCrosshairVerticalSolidOld)) {
     next = next.replace(multiCrosshairVerticalSolidOld, multiCrosshairVerticalDashedNew)
+    didChange = true
+  } else if (next.includes(multiCrosshairVerticalDashedStale)) {
+    next = next.replace(multiCrosshairVerticalDashedStale, multiCrosshairVerticalDashedNew)
     didChange = true
   } else {
     console.warn(`[patch-liveline] Multi crosshair stroke pattern not found: ${filePath}`)
