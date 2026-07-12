@@ -2,16 +2,10 @@
 
 import { useMemo } from 'react';
 import { COMMAND_ITEMS } from '../components/navigation/bottom-nav-constants';
-import { 
-  IconPlus, 
-  IconTrash, 
-  IconArrowDownLeftArrowUpRight, 
-
+import {
   IconChartBar,
-
   IconChartLineUptrendXyaxis,
   IconEye,
-  IconTrayAndArrowDown
 } from 'symbols-react';
 import type React from 'react';
 
@@ -65,40 +59,11 @@ export function useContextualCommands(searchQuery: string, context: CommandConte
           }
         ];
 
+      // The watchlist context has no extra commands today: its palette is the
+      // coin search in "add to watchlist" mode. (Former entries here — add
+      // token, sort, export, clear — were unimplemented placeholders.)
       case 'watchlist':
-        return [
-          {
-            group: "Watchlist Actions",
-            items: [
-              {
-                title: "Add Token",
-                subtitle: "Add a new token to watchlist",
-                icon: IconPlus,
-                action: "add-token",
-                shortcut: "a"
-              },
-              {
-                title: "Sort by Price",
-                subtitle: "Sort watchlist by price",
-                icon: IconArrowDownLeftArrowUpRight,
-                action: "sort-price",
-                shortcut: "s"
-              },
-              {
-                title: "Export Watchlist",
-                subtitle: "Download as CSV",
-                icon: IconTrayAndArrowDown,
-                action: "export-watchlist"
-              },
-              {
-                title: "Clear All",
-                subtitle: "Remove all from watchlist",
-                icon: IconTrash,
-                action: "clear-watchlist"
-              }
-            ]
-          }
-        ];
+        return [];
 
       case 'charts':
         return [
@@ -116,12 +81,6 @@ export function useContextualCommands(searchQuery: string, context: CommandConte
                 subtitle: "View ETH price chart",
                 icon: IconChartBar,
                 href: "/charts/1027"
-              },
-              {
-                title: "Trending Charts",
-                subtitle: "Most viewed charts",
-                icon: IconChartLineUptrendXyaxis,
-                action: "trending-charts"
               }
             ]
           }

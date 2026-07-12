@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { getUserByClerkId } from "./_lib/user_lookup";
+import { getCanonicalClerkId, getUserByClerkId } from "./_lib/user_lookup";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
 import { internal } from "./_generated/api";
@@ -41,10 +41,12 @@ function buildOverviewSnapshotCacheKey(clerkId: string): string {
 }
 
 async function markOverviewSnapshotStale(ctx: MutationCtx, clerkId: string) {
+  // Canonicalize so prod + linked dev sessions invalidate the same cache entries.
+  const canonicalClerkId = await getCanonicalClerkId(ctx.db, clerkId);
   const keys = [
-    buildOverviewSnapshotCacheKey(clerkId),
-    `overview:dailyBrief:${clerkId}:watchlist:24h`,
-    `overview:dailyBrief:${clerkId}:watchlist:7d`,
+    buildOverviewSnapshotCacheKey(canonicalClerkId),
+    `overview:dailyBrief:${canonicalClerkId}:watchlist:24h`,
+    `overview:dailyBrief:${canonicalClerkId}:watchlist:7d`,
   ];
 
   for (const cacheKey of keys) {

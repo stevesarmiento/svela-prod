@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, use, useState, useCallback, useMemo, type ReactNode, type Dispatch, type SetStateAction, useTransition, useDeferredValue } from 'react'
+import { createContext, use, useState, useCallback, useMemo, type ReactNode, type Dispatch, type SetStateAction } from 'react'
 
 export type BottomNavMode = 'navigation' | 'selection'
 export type CommandContext = 'overview' | 'watchlist' | 'charts'
@@ -24,15 +24,6 @@ interface BottomNavContextType {
   setCommandContext: Dispatch<SetStateAction<CommandContext | null>>
   openCommandSearch: () => void
   openContextualCommandSearch: (context: CommandContext) => void
-  isChatOpen: boolean
-  setIsChatOpen: Dispatch<SetStateAction<boolean>>
-  isChatDialogOpen: boolean
-  setIsChatDialogOpen: Dispatch<SetStateAction<boolean>>
-  openChat: () => void
-  closeChat: () => void
-  openChatDialog: () => void
-  closeChatDialog: () => void
-  isPending: boolean
 }
 
 const BottomNavContext = createContext<BottomNavContextType | undefined>(undefined)
@@ -42,77 +33,30 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
   const [selectionState, setSelectionState] = useState<SelectionState | null>(null)
   const [isCommandOpen, setIsCommandOpen] = useState(false)
   const [commandContext, setCommandContext] = useState<CommandContext | null>(null)
-  const [isChatOpen, setIsChatOpen] = useState(false)
-  const [isChatDialogOpen, setIsChatDialogOpen] = useState(false)
-  
-  // React 19: Enhanced concurrent features
-  const [isPending, startTransitionHook] = useTransition()
-  
-  // React 19: Defer expensive state updates for better performance
-  const deferredMode = useDeferredValue(mode)
-  const deferredSelectionState = useDeferredValue(selectionState)
 
   const setNavigationMode = useCallback(() => {
-    startTransitionHook(() => {
-      setMode('navigation')
-      setSelectionState(null)
-    })
-  }, [startTransitionHook])
+    setMode('navigation')
+    setSelectionState(null)
+  }, [])
 
   const setSelectionMode = useCallback((state: SelectionState) => {
-    startTransitionHook(() => {
-      setMode('selection')
-      setSelectionState(state)
-    })
-  }, [startTransitionHook])
+    setMode('selection')
+    setSelectionState(state)
+  }, [])
 
   const openCommandSearch = useCallback(() => {
-    startTransitionHook(() => {
-      setCommandContext(null)
-      setIsCommandOpen(true)
-      setIsChatOpen(false) // Close chat when opening command search
-    })
-  }, [startTransitionHook])
+    setCommandContext(null)
+    setIsCommandOpen(true)
+  }, [])
 
   const openContextualCommandSearch = useCallback((context: CommandContext) => {
-    startTransitionHook(() => {
-      setCommandContext(context)
-      setIsCommandOpen(true)
-      setIsChatOpen(false) // Close chat when opening contextual search
-    })
-  }, [startTransitionHook])
-
-  const openChat = useCallback(() => {
-    startTransitionHook(() => {
-      setIsChatOpen(true)
-      setIsCommandOpen(false) // Close command search when opening chat
-      setCommandContext(null)
-    })
-  }, [startTransitionHook])
-
-  const closeChat = useCallback(() => {
-    startTransitionHook(() => {
-      setIsChatOpen(false)
-    })
-  }, [startTransitionHook])
-
-  const openChatDialog = useCallback(() => {
-    startTransitionHook(() => {
-      setIsChatDialogOpen(true)
-      setIsCommandOpen(false) // Close command search when opening chat dialog
-      setCommandContext(null)
-    })
-  }, [startTransitionHook])
-
-  const closeChatDialog = useCallback(() => {
-    startTransitionHook(() => {
-      setIsChatDialogOpen(false)
-    })
-  }, [startTransitionHook])
+    setCommandContext(context)
+    setIsCommandOpen(true)
+  }, [])
 
   const contextValue = useMemo(() => ({
-    mode: deferredMode, // React 19: Use deferred values for better performance
-    selectionState: deferredSelectionState,
+    mode,
+    selectionState,
     setNavigationMode,
     setSelectionMode,
     isCommandOpen,
@@ -121,31 +65,15 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
     setCommandContext,
     openCommandSearch,
     openContextualCommandSearch,
-    isChatOpen,
-    setIsChatOpen,
-    isChatDialogOpen,
-    setIsChatDialogOpen,
-    openChat,
-    closeChat,
-    openChatDialog,
-    closeChatDialog,
-    isPending, // React 19: Expose pending state for UI feedback
   }), [
-    deferredMode, 
-    deferredSelectionState, 
-    setNavigationMode, 
-    setSelectionMode, 
-    isCommandOpen, 
-    commandContext, 
-    openCommandSearch, 
-    openContextualCommandSearch, 
-    isChatOpen, 
-    isChatDialogOpen,
-    openChat, 
-    closeChat,
-    openChatDialog,
-    closeChatDialog,
-    isPending
+    mode,
+    selectionState,
+    setNavigationMode,
+    setSelectionMode,
+    isCommandOpen,
+    commandContext,
+    openCommandSearch,
+    openContextualCommandSearch,
   ])
 
   return (
@@ -155,7 +83,6 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
   )
 }
 
-// React 19: Enhanced context consumption with use() hook
 export function useBottomNav() {
   const context = use(BottomNavContext)
   if (context === undefined) {
@@ -164,71 +91,25 @@ export function useBottomNav() {
   return context
 }
 
-// React 19: Selective context hooks for better performance
+// Convenience selectors. Note: these all subscribe to the same context, so any
+// context change re-renders every consumer — they exist for ergonomics, not
+// render isolation. If a consumer ever becomes render-heavy, split the context.
 export function useNavigationMode() {
-  const context = use(BottomNavContext)
-  if (context === undefined) {
-    throw new Error('useNavigationMode must be used within a BottomNavProvider')
-  }
-  return { 
-    mode: context.mode, 
-    setNavigationMode: context.setNavigationMode,
-    isPending: context.isPending
-  }
+  const { mode, setNavigationMode } = useBottomNav()
+  return { mode, setNavigationMode }
 }
 
 export function useSelectionMode() {
-  const context = use(BottomNavContext)
-  if (context === undefined) {
-    throw new Error('useSelectionMode must be used within a BottomNavProvider')
-  }
-  return { 
-    selectionState: context.selectionState, 
-    setSelectionMode: context.setSelectionMode,
-    isPending: context.isPending
-  }
+  const { selectionState, setSelectionMode } = useBottomNav()
+  return { selectionState, setSelectionMode }
 }
 
 export function useOverlayState() {
-  const context = use(BottomNavContext)
-  if (context === undefined) {
-    throw new Error('useOverlayState must be used within a BottomNavProvider')
-  }
-  return { 
-    isCommandOpen: context.isCommandOpen, 
-    isChatOpen: context.isChatOpen,
-    setIsCommandOpen: context.setIsCommandOpen,
-    setIsChatOpen: context.setIsChatOpen,
-    isPending: context.isPending
-  }
+  const { isCommandOpen, setIsCommandOpen } = useBottomNav()
+  return { isCommandOpen, setIsCommandOpen }
 }
 
 export function useCommandContext() {
-  const context = use(BottomNavContext)
-  if (context === undefined) {
-    throw new Error('useCommandContext must be used within a BottomNavProvider')
-  }
-  return {
-    commandContext: context.commandContext,
-    setCommandContext: context.setCommandContext,
-    openCommandSearch: context.openCommandSearch,
-    openContextualCommandSearch: context.openContextualCommandSearch,
-    isPending: context.isPending
-  }
-}
-
-export function useChatContext() {
-  const context = use(BottomNavContext)
-  if (context === undefined) {
-    throw new Error('useChatContext must be used within a BottomNavProvider')
-  }
-  return {
-    isChatOpen: context.isChatOpen,
-    isChatDialogOpen: context.isChatDialogOpen,
-    openChat: context.openChat,
-    closeChat: context.closeChat,
-    openChatDialog: context.openChatDialog,
-    closeChatDialog: context.closeChatDialog,
-    isPending: context.isPending
-  }
+  const { commandContext, setCommandContext, openCommandSearch, openContextualCommandSearch } = useBottomNav()
+  return { commandContext, setCommandContext, openCommandSearch, openContextualCommandSearch }
 }

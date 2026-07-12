@@ -22,3 +22,16 @@ export async function getUserByClerkId(
     .withIndex("by_dev_clerk_id", (q) => q.eq("devClerkId", clerkId))
     .first();
 }
+
+/**
+ * Map any session Clerk ID (prod or linked dev) to the user's canonical
+ * primary `clerkId`. Use this when building per-user cache keys so prod and
+ * local-dev sessions share the same cached data.
+ */
+export async function getCanonicalClerkId(
+  db: DatabaseReader,
+  clerkId: string,
+): Promise<string> {
+  const user = await getUserByClerkId(db, clerkId);
+  return user?.clerkId ?? clerkId;
+}

@@ -39,6 +39,7 @@ const NavigationDockComponent = ({
             ? 'relative z-10 opacity-100'
             : 'pointer-events-none relative z-0 opacity-0',
         )}
+        aria-hidden={mode !== 'navigation'}
       >
         <div className="flex w-auto items-center gap-1 p-1">
           <NavigationItems onOpenCommandSearch={onOpenCommandSearch || (() => {})} />
@@ -54,6 +55,7 @@ const NavigationDockComponent = ({
               ? 'relative z-10 opacity-100'
               : 'pointer-events-none relative z-0 opacity-0',
           )}
+          aria-hidden={mode !== 'selection'}
         >
           <SelectionContent selectionState={selectionState} />
         </div>

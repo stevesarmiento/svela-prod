@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { getUserByClerkId } from "./_lib/user_lookup";
+import { getCanonicalClerkId, getUserByClerkId } from "./_lib/user_lookup";
 import {
   action,
   internalMutation,
@@ -944,6 +944,12 @@ const OVERVIEW_NEWS_WARMUP_MAX_COINS = 20;
 const OVERVIEW_NEWS_WARMUP_STAGGER_MS = 250;
 
 /** Touch watchlist tracking and schedule CoinGecko news fetches (deduped, staggered). */
+export const _canonicalClerkId = internalQuery({
+  args: { clerkId: v.string() },
+  returns: v.string(),
+  handler: async (ctx, args) => await getCanonicalClerkId(ctx.db, args.clerkId),
+});
+
 export const _scheduleWatchlistNewsWarmup = internalMutation({
   args: { coinIds: v.array(v.string()) },
   returns: v.object({
@@ -1305,7 +1311,7 @@ export const getMyOverviewBootstrap = query({
       };
     }
 
-    const snapshotKey = buildSnapshotCacheKey({ clerkId: identity.subject });
+    const snapshotKey = buildSnapshotCacheKey({ clerkId: user.clerkId });
     const snapshotRow = await ctx.db
       .query("apiCache")
       .withIndex("by_key", (q) => q.eq("cacheKey", snapshotKey))
@@ -1319,8 +1325,8 @@ export const getMyOverviewBootstrap = query({
       snapshot = parsed.success ? parsed.data : null;
     }
 
-    const brief24hKey = buildDailyBriefCacheKey({ clerkId: identity.subject, window: "24h" });
-    const brief7dKey = buildDailyBriefCacheKey({ clerkId: identity.subject, window: "7d" });
+    const brief24hKey = buildDailyBriefCacheKey({ clerkId: user.clerkId, window: "24h" });
+    const brief7dKey = buildDailyBriefCacheKey({ clerkId: user.clerkId, window: "7d" });
     const [brief24hRow, brief7dRow, holdingsBreakdown] = await Promise.all([
       ctx.db.query("apiCache").withIndex("by_key", (q) => q.eq("cacheKey", brief24hKey)).first(),
       ctx.db.query("apiCache").withIndex("by_key", (q) => q.eq("cacheKey", brief7dKey)).first(),
@@ -1400,7 +1406,7 @@ export const getMyOverviewSnapshotForServer = query({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
 
-    const cacheKey = buildSnapshotCacheKey({ clerkId: args.clerkId });
+    const cacheKey = buildSnapshotCacheKey({ clerkId: await getCanonicalClerkId(ctx.db, args.clerkId) });
     const row = await ctx.db
       .query("apiCache")
       .withIndex("by_key", (q) => q.eq("cacheKey", cacheKey))
@@ -1451,7 +1457,7 @@ export const upsertMyOverviewBriefForServer = mutation({
     const now = Date.now();
     const TTL_MS = 6 * 60 * 60 * 1000;
     const expiresAt = now + TTL_MS;
-    const cacheKey = buildDailyBriefCacheKey({ clerkId: args.clerkId, window: args.window as Window });
+    const cacheKey = buildDailyBriefCacheKey({ clerkId: await getCanonicalClerkId(ctx.db, args.clerkId), window: args.window as Window });
 
     const data = {
       summary: args.brief.summary,
@@ -1518,7 +1524,10 @@ export const refreshMyOverviewSnapshot = action({
     }
 
     const now = Date.now();
-    const cacheKey = buildSnapshotCacheKey({ clerkId: identity.subject });
+    const clerkId = await ctx.runQuery(internal.overview._canonicalClerkId, {
+      clerkId: identity.subject,
+    });
+    const cacheKey = buildSnapshotCacheKey({ clerkId });
     const existing = await ctx.runQuery(internal.overview._getApiCacheEntry, { cacheKey });
     if (args.force !== true && existing && isCacheFresh(existing.expiresAt, now)) {
       const parsed = OverviewSnapshotSchema.safeParse(existing.data);
@@ -1533,7 +1542,7 @@ export const refreshMyOverviewSnapshot = action({
     }
 
     const ranked = await ctx.runQuery(internal.overview._getMyRankedOverviewCoinIds, {
-      clerkId: identity.subject,
+      clerkId,
     });
     if (ranked.coinIds.length > 0) {
       await ctx.runMutation(internal.overview._scheduleWatchlistNewsWarmup, {
@@ -1542,7 +1551,7 @@ export const refreshMyOverviewSnapshot = action({
     }
 
     const snapshot = await ctx.runQuery(internal.overview._computeMyOverviewSnapshotPayload, {
-      clerkId: identity.subject,
+      clerkId,
     });
 
     const TTL_MS = 60 * 60 * 1000;
@@ -1584,7 +1593,9 @@ export const generateMyOverviewBrief = action({
       };
     }
 
-    const clerkId = identity.subject;
+    const clerkId = await ctx.runQuery(internal.overview._canonicalClerkId, {
+      clerkId: identity.subject,
+    });
     const now = Date.now();
     const TTL_MS = 6 * 60 * 60 * 1000;
     const expiresAt = now + TTL_MS;

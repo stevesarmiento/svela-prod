@@ -103,7 +103,12 @@ async function handleGet(request: NextRequest) {
     {
       status: 200,
       headers: {
-        "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+        // Don't edge-cache stale payloads: clients fast-poll while a warmup is
+        // in flight, and an s-maxage'd stale body would keep serving the old
+        // series for up to 90s after Convex already has fresh data.
+        "Cache-Control": warmupRequested
+          ? "private, no-store"
+          : "public, s-maxage=30, stale-while-revalidate=60",
       },
     },
   );

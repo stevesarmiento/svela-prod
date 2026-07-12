@@ -1,4 +1,4 @@
-import React from "react";
+import type React from "react";
 import { Button } from "@v1/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { IconCommand } from "symbols-react";
@@ -7,6 +7,7 @@ import { SearchIcon } from "./search-icon";
 interface CommandSearchTriggerProps {
   onOpen: () => void;
   onIntent?: () => void;
+  buttonRef?: React.Ref<HTMLButtonElement>;
 }
 
 export function CommandSearchTrigger(props: CommandSearchTriggerProps) {
@@ -14,9 +15,10 @@ export function CommandSearchTrigger(props: CommandSearchTriggerProps) {
     <div className="group relative">
       <div className="relative z-10 flex items-center">
         <Button
+          ref={props.buttonRef}
           variant="ghost"
           size="icon"
-          className="hover:bg-transparent p-0"
+          className="relative hover:bg-transparent p-0 after:absolute after:-inset-1 after:content-['']"
           onPointerEnter={props.onIntent}
           onFocus={props.onIntent}
           onTouchStart={props.onIntent}

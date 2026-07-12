@@ -176,6 +176,7 @@ export function TopNav() {
   const [hasHydrated, setHasHydrated] = useState(false);
   const [overviewGreeting, setOverviewGreeting] = useState<string | null>(null);
   const [shouldLoadProfile, setShouldLoadProfile] = useState(false);
+  const [isProfileReady, setIsProfileReady] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   const cleanPath = pathname.replace(/^\/[a-z]{2}(?=\/|$)/, "") || "/";
@@ -212,7 +213,9 @@ export function TopNav() {
   const preloadProfile = useCallback(() => {
     if (shouldLoadProfile) return;
     setShouldLoadProfile(true);
-    void loadTopNavProfileClient();
+    void loadTopNavProfileClient().then(() => {
+      setIsProfileReady(true);
+    });
   }, [shouldLoadProfile]);
 
   const handleOpenProfile = useCallback(() => {
@@ -254,7 +257,7 @@ export function TopNav() {
 
   const rightSlot = isChartDetailPage && coinId ? (
     <LazyTopNavChartActions coinId={coinId} />
-  ) : shouldLoadProfile ? (
+  ) : isProfileReady ? (
     <LazyTopNavProfileClient
       open={isProfileOpen}
       onOpenChange={setIsProfileOpen}

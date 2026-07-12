@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from "react"
+import { useMemo, useRef } from "react"
 import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
 import { Effect } from "effect"
@@ -128,12 +128,16 @@ export function useCoinGeckoBulkChartData(
     return map
   }, [realCoins])
   
+  // Bound the fast warmup polling so a permanently-stale coin (e.g. delisted)
+  // can't keep the whole fan-out on a 5s loop forever.
+  const fastPollCountRef = useRef(0)
+
   const { data, isLoading } = useQuery({
     queryKey: ['coingecko-bulk-chart', coinIds.join(','), activeTimeScale],
-    queryFn: async (): Promise<{ series: CoinSeries[]; cacheHitRate: number }> => {
-      if (coinIds.length === 0) return { series: [], cacheHitRate: 0 }
+    queryFn: async (): Promise<{ series: CoinSeries[]; cacheHitRate: number; needsWarmup: boolean }> => {
+      if (coinIds.length === 0) return { series: [], cacheHitRate: 0, needsWarmup: false }
 
-      type SeriesWithCache = { series: CoinSeries; cached: boolean }
+      type SeriesWithCache = { series: CoinSeries; cached: boolean; needsWarmup: boolean }
       const swallowToNull = (_: unknown) => Effect.succeed(null)
 
       const fetchEffects = coinIds.map((coinId) =>
@@ -158,6 +162,11 @@ export function useCoinGeckoBulkChartData(
 
             return {
               cached: response.status?.cached ?? false,
+              // Server schedules a background refresh when the stored series is
+              // stale or thin; keep polling until it lands instead of waiting 5min.
+              needsWarmup:
+                (response.status?.warmupRequested ?? false) ||
+                (response.status?.stale ?? false),
               series: {
                 id: coinId,
                 name: coinMeta?.name || "Unknown",
@@ -194,19 +203,28 @@ export function useCoinGeckoBulkChartData(
       return {
         series: alignedSeries,
         cacheHitRate,
+        needsWarmup: validResults.some((r) => r.needsWarmup),
       }
     },
     staleTime: 2 * 60 * 1000, // 2 minutes
     refetchInterval: (query) => {
-      const result = query.state.data as { series: CoinSeries[]; cacheHitRate: number } | undefined
+      const result = query.state.data as
+        | { series: CoinSeries[]; cacheHitRate: number; needsWarmup?: boolean }
+        | undefined
       if (!result) return 2_000
 
-      // If any coin has insufficient chart points, we likely just scheduled a warmup fetch.
-      // Poll faster for a short period so the UI fills in quickly.
-      for (const row of result.series) {
-        if ((row.data?.length ?? 0) < 2) return 5_000
+      // Poll fast while any coin is warming (stale series or a background refresh
+      // was just scheduled) or has insufficient points, so flat/stale lines fill
+      // in within seconds instead of after the 5min interval.
+      const hasSparseSeries = result.series.some((row) => (row.data?.length ?? 0) < 2)
+      const warming = hasSparseSeries || (result.needsWarmup ?? false)
+
+      if (warming && fastPollCountRef.current < 24) {
+        fastPollCountRef.current += 1
+        return 5_000 // ~2 minutes of fast polling max per warm cycle
       }
 
+      fastPollCountRef.current = 0
       return 5 * 60 * 1000 // 5 minutes
     },
     enabled: coinIds.length > 0,

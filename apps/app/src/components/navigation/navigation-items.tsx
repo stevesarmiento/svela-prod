@@ -94,7 +94,9 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
                 onClick={handleItemClick(item, isActive)}
                 onMouseEnter={() => handleItemPrefetch(item)}
                 onFocus={() => handleItemPrefetch(item)}
-                className={`group p-2 rounded-[13px] transition-colors duration-100 cursor-pointer active:scale-[0.98] hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus:[&_svg]:!text-white focus-visible:[&_svg]:!text-white dark:focus-visible:ring-zinc-500 dark:focus-visible:ring-offset-zinc-800 ${
+                aria-label={item.title}
+                aria-current={isActive ? "page" : undefined}
+                className={`group relative p-2 rounded-[13px] transition-colors duration-100 cursor-pointer active:scale-[0.98] hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus:[&_svg]:!text-white focus-visible:[&_svg]:!text-white dark:focus-visible:ring-zinc-500 dark:focus-visible:ring-offset-zinc-800 after:absolute after:-inset-1 after:content-[''] ${
                   isActive 
                     ? "bg-black/10 hover:bg-black/15 dark:bg-white/10 dark:hover:bg-white/15" 
                     : ""

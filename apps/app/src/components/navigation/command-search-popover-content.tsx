@@ -1,8 +1,8 @@
 import React, {
   useCallback,
-  useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useDebouncedValue } from "@tanstack/react-pacer";
@@ -53,35 +53,30 @@ export const CommandSearchPopoverContent = React.memo(
     const router = useRouter();
     const navigation = useWatchlistPreservingNavigation();
     const { inputRef } = useCommandInput(isOpen);
+    const triggerRef = useRef<HTMLButtonElement>(null);
 
     const [searchQuery, setSearchQuery] = useState("");
-    const [debouncedSearchQuery] = useDebouncedValue(searchQuery, { wait: 300 });
-    const deferredSearchQuery = useDeferredValue(debouncedSearchQuery);
+    const [debouncedSearchQuery] = useDebouncedValue(searchQuery, { wait: 150 });
 
     const { data: searchResults, isLoading: isSearchLoading } =
-      useHybridCoinSearch(deferredSearchQuery, {
+      useHybridCoinSearch(debouncedSearchQuery, {
         limit: 5,
       });
 
     const { data: topCoins, isLoading: isTopCoinsLoading } =
       useHybridTopCoins(5);
 
+    const hasSearch = debouncedSearchQuery.trim().length > 0;
+
     const coinsToDisplay = useMemo(() => {
-      if (deferredSearchQuery.trim()) {
+      if (hasSearch) {
         return searchResults || [];
       }
       return topCoins || [];
-    }, [deferredSearchQuery, searchResults, topCoins]);
+    }, [hasSearch, searchResults, topCoins]);
 
-    const coinResultsLoading = useMemo(() => {
-      if (deferredSearchQuery.trim()) {
-        return isSearchLoading;
-      }
-      return isTopCoinsLoading;
-    }, [deferredSearchQuery, isSearchLoading, isTopCoinsLoading]);
+    const coinResultsLoading = hasSearch ? isSearchLoading : isTopCoinsLoading;
 
-    const hasSearch = deferredSearchQuery.trim().length > 0;
-    const isCoinResultsContext = true;
     const coinSelectMode: "watchlist-add" | "navigate" =
       context === "charts" || context === "watchlist"
         ? "watchlist-add"
@@ -92,7 +87,7 @@ export const CommandSearchPopoverContent = React.memo(
     }, []);
 
     const { contextualCommands, globalCommands, hasContextualCommands } =
-      useContextualCommands(deferredSearchQuery, context);
+      useContextualCommands(debouncedSearchQuery, context);
 
     const { handleAddCoin, isAddingCoin } = useAddCoinToWatchlist();
 
@@ -120,25 +115,9 @@ export const CommandSearchPopoverContent = React.memo(
           case "trending-tokens":
             router.push(navigation.buildUrl("/overview?filter=trending"));
             break;
-          case "add-token":
-            console.log("Open add token modal");
-            break;
-          case "sort-price":
-            console.log("Sort by price");
-            break;
-          case "export-watchlist":
-            console.log("Export watchlist");
-            break;
-          case "timeframe-1h":
-          case "timeframe-1d":
-          case "timeframe-1w":
-            console.log("Change timeframe:", action);
-            break;
           case "share-chart":
             navigator.clipboard?.writeText(window.location.href);
             break;
-          default:
-            console.log("Unknown action:", action);
         }
       },
       [clearSearch, navigation, router, setIsOpen],
@@ -171,6 +150,14 @@ export const CommandSearchPopoverContent = React.memo(
           return;
         }
 
+        if (value.startsWith("href:")) {
+          const href = value.replace("href:", "");
+          clearSearch();
+          setIsOpen(false);
+          router.push(navigation.buildUrl(href));
+          return;
+        }
+
         onCommandSelect(value, setIsOpen);
       },
       [
@@ -179,7 +166,9 @@ export const CommandSearchPopoverContent = React.memo(
         handleAddCoin,
         handleContextualAction,
         handleTokenNavigation,
+        navigation,
         onCommandSelect,
+        router,
         setIsOpen,
       ],
     );
@@ -187,7 +176,13 @@ export const CommandSearchPopoverContent = React.memo(
     useEffect(() => {
       if (!isOpen) {
         clearSearch();
-        inputRef.current?.blur();
+        // Return focus to the trigger when the palette closes while focus is
+        // still inside the input (e.g. Escape); otherwise leave focus alone.
+        if (document.activeElement === inputRef.current) {
+          triggerRef.current?.focus();
+        } else {
+          inputRef.current?.blur();
+        }
       }
     }, [clearSearch, inputRef, isOpen]);
 
@@ -209,11 +204,16 @@ export const CommandSearchPopoverContent = React.memo(
             shouldFilter={false}
             trigger={
               <div className="flex items-center">
-                <CommandSearchTrigger onOpen={() => setIsOpen(true)} />
+                <CommandSearchTrigger
+                  onOpen={() => setIsOpen(true)}
+                  buttonRef={triggerRef}
+                />
                 <div
                   className={cn(
                     "overflow-hidden transition-[width,opacity] duration-[var(--motion-nav-duration)] ease-[var(--motion-nav-ease-out)] motion-reduce:transition-none",
-                    isOpen ? "w-[445px] opacity-100" : "w-0 opacity-0",
+                    isOpen
+                      ? "w-[min(445px,calc(100vw-7rem))] opacity-100"
+                      : "w-0 opacity-0",
                   )}
                   onMouseDown={(event) => event.stopPropagation()}
                 >
@@ -230,7 +230,7 @@ export const CommandSearchPopoverContent = React.memo(
             }
           >
             <CommandList className="z-[100] bg-transparent border-transparent max-h-[400px]">
-              {(!isCoinResultsContext || !coinResultsLoading) && (
+              {!coinResultsLoading && (
                 <CommandEmpty>
                   <div className="flex flex-col items-center justify-center py-6 gap-2">
                     <IconCircleSlash className="h-8 w-8 fill-white/30 rotate-90" />
@@ -253,7 +253,13 @@ export const CommandSearchPopoverContent = React.memo(
                   {group.items.map((item) => (
                     <CommandItem
                       key={item.title}
-                      value={item.action ? `action:${item.action}` : item.title}
+                      value={
+                        item.action
+                          ? `action:${item.action}`
+                          : item.href
+                            ? `href:${item.href}`
+                            : item.title
+                      }
                       onSelect={handleCommand}
                       className="cursor-pointer bg-transparent aria-selected:bg-zinc-800/30 aria-selected:text-white"
                     >
