@@ -5,7 +5,7 @@ import * as React from "react";
 import { type RefObject, useRef } from "react";
 import useClickOutside from "../hooks/use-click-outside";
 import { cn } from "../utils";
-import { Popover, PopoverContent, PopoverTrigger } from "./popover";
+import { Popover, PopoverContentWithoutPortal, PopoverTrigger } from "./popover";
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
@@ -28,6 +28,15 @@ interface CommandPopoverProps {
   onOpenChange: (open: boolean) => void;
   trigger: React.ReactNode;
   shouldFilter?: boolean;
+  /**
+   * Controlled highlight (cmdk `value`). Useful with async item lists: when
+   * results replace the list, cmdk's highlight can point at an unmounted item
+   * and Enter silently no-ops — control it to re-anchor on the first result.
+   * cmdk normalizes item values with trim().toLowerCase(); pass values in
+   * that form.
+   */
+  value?: string;
+  onValueChange?: (value: string) => void;
 }
 
 const CommandPopover = ({
@@ -36,6 +45,8 @@ const CommandPopover = ({
   onOpenChange,
   trigger,
   shouldFilter = true,
+  value,
+  onValueChange,
 }: CommandPopoverProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -48,10 +59,18 @@ const CommandPopover = ({
   });
 
   return (
-    <Command className="relative" shouldFilter={shouldFilter}>
+    <Command
+      className="relative"
+      shouldFilter={shouldFilter}
+      value={value}
+      onValueChange={onValueChange}
+    >
       <Popover open={open} onOpenChange={onOpenChange}>
         <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-        <PopoverContent
+        {/* No portal: cmdk's keyboard selection walks the DOM under <Command>,
+            so the list must stay inside that subtree. Portaling it to <body>
+            silently breaks ↑/↓/Enter (items are never found). */}
+        <PopoverContentWithoutPortal
           ref={contentRef}
           className="dark relative rounded-[20px] bg-zinc-900 border border-transparent overflow-hidden p-1 w-full sm:w-[499px] max-w-[calc(100vw-2rem)] z-[1000] data-[state=open]:slide-in-from-bottom-24 data-[state=closed]:slide-out-to-bottom-24
                      text-popover-foreground shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.4)]"
@@ -82,7 +101,7 @@ const CommandPopover = ({
             }}
           />
           <div className="relative z-10">{children}</div>
-        </PopoverContent>
+        </PopoverContentWithoutPortal>
       </Popover>
     </Command>
   );
