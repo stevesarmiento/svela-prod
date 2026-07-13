@@ -37,7 +37,7 @@ export function TopNavProfileClient(props: TopNavProfileClientProps) {
     <DropdownMenu open={props.open} onOpenChange={props.onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-8 w-8">
-          <Avatar className="h-8 w-8 rounded-md shadow-sm shadow-black/30 hover:ring-4 ring-1 ring-black/10 dark:ring-white/10 transition-all ease-in-out duration-150">
+          <Avatar className="h-8 w-8 rounded-md shadow-sm shadow-black/30 hover:ring-4 ring-1 ring-black/10 dark:ring-white/10 transition-shadow duration-[var(--duration-micro)]">
             {avatarUrl ? (
               <AvatarImage src={avatarUrl} alt={displayName} loading="lazy" />
             ) : null}

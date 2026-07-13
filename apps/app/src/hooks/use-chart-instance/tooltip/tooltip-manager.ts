@@ -16,7 +16,7 @@ export function createTooltipManager(): TooltipManager {
     const tooltipRoot: Root = createRoot(tooltipEl);
 
     tooltipEl.className =
-        'fixed hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-50 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50 transition-all duration-100 ease-in-out';
+        'fixed hidden overflow-hidden text-[11px] text-white rounded-xl w-[200px] shadow-2xl pointer-events-none z-50 backdrop-blur-xl bg-zinc-900/95 border border-zinc-700/50';
 
     document.body.appendChild(tooltipEl);
 

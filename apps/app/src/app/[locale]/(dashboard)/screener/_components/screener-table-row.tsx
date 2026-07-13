@@ -68,7 +68,7 @@ function ScreenerTableRowInner({ row }: { row: Row<CoinMarketData> }) {
   }
 
   return (
-    <Link key={row.id} href={`/charts/${row.original.id}`}>
+    <Link key={row.id} href={`/watchlists/${row.original.id}`}>
       <div
         className={className}
         style={{ gridTemplateColumns: SCREENER_TABLE_GRID_TEMPLATE_COLUMNS }}

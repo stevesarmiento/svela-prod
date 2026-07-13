@@ -5,7 +5,7 @@ import type { ChartHighlightRange, OHLCVDataPoint, UseChartInstanceOptions } fro
 import { createChartController, type ChartController } from './controller/create-chart-controller';
 import { timeToEpochSeconds } from './utils';
 
-export type { ChartHighlightRange, HullSuiteOverlay, UseChartInstanceOptions } from './types';
+export type { ChartHighlightRange, HullSuiteOverlay, ProjectionOverlay, UseChartInstanceOptions } from './types';
 
 export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartInstanceOptions = {}) {
     const {
@@ -16,6 +16,7 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
         onCrosshairTimeMove,
         isDarkMode,
         hullSuite = null,
+        projection = null,
         highlightRange = null,
     } = options;
 
@@ -90,6 +91,12 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
     useEffect(() => {
         controllerRef.current?.setHullSuite(hasHullSuite ? hullSuite : null);
     }, [hasHullSuite, hullSuite, controllerGeneration]);
+
+    // Projection updates should not recreate the chart.
+    const hasProjection = !!projection?.base?.length;
+    useEffect(() => {
+        controllerRef.current?.setProjection(hasProjection ? projection : null);
+    }, [hasProjection, projection, controllerGeneration]);
 
     // Highlight updates should not recreate the chart.
     const highlightFromEpochSec = highlightRange ? timeToEpochSeconds(highlightRange.from) : null;

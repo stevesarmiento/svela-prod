@@ -205,7 +205,7 @@ function useWatchlistData(
       .slice(0, 5) // Limit to first 5 coins
       .map((coin) => ({
         imageUrl: coin.logoUrl,
-        profileUrl: `/charts/${coin.coinId}`
+        profileUrl: `/watchlists/${coin.coinId}`
       }))
 
     return {
@@ -334,7 +334,7 @@ function WatchlistCard({
       </div>
 
       {/* Table Body */}
-      <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden hover:ring-2 hover:ring-zinc-200/30 transition-all duration-100">
+      <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden hover:ring-2 hover:ring-zinc-200/30 transition-shadow duration-[var(--duration-micro)]">
         {watchlist.isLoading ? (
           // Show loading state
           <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 opacity-60 sm:grid-cols-4 sm:gap-4 sm:px-4 sm:py-2 sm:pr-2">
