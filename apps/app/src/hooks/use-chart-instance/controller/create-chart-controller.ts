@@ -1,5 +1,6 @@
 import {
     createChart,
+    createSeriesMarkers,
     CandlestickSeries,
     ColorType,
     CrosshairMode,
@@ -7,6 +8,8 @@ import {
     LastPriceAnimationMode,
     LineSeries,
     LineStyle,
+    type IPriceLine,
+    type ISeriesMarkersPluginApi,
     type MouseEventParams,
     type ISeriesApi,
     type Time,
@@ -20,10 +23,11 @@ import type {
     HullSuiteOverlay,
     OHLCVDataPoint,
     PriceDataPoint,
+    ProjectionOverlay,
     UseChartInstanceOptions,
     VolumeDataPoint,
 } from '../types';
-import { timeToEpochSeconds } from '../utils';
+import { formatUsdPrice, timeToEpochSeconds, toRgba } from '../utils';
 import { createAxisOverlay } from '../overlays/axis-overlay';
 import { createHighlightOverlay } from '../overlays/highlight-overlay';
 import { createTooltipManager } from '../tooltip/tooltip-manager';
@@ -34,6 +38,7 @@ export interface ChartController {
     updateLivePrice: (priceUsd: number) => void;
     setHighlightRange: (range: ChartHighlightRange | null) => void;
     setHullSuite: (overlay: HullSuiteOverlay | null) => void;
+    setProjection: (overlay: ProjectionOverlay | null) => void;
     setCallbacks: (callbacks: Pick<UseChartInstanceOptions, 'onCrosshairMove' | 'onCrosshairTimeMove'>) => void;
     resize: () => void;
     destroy: () => void;
@@ -127,6 +132,16 @@ export function createChartController({
     let volumeSeries: ISeriesApi<'Histogram'> | null = null;
     let mhullSeries: ISeriesApi<'Line'> | null = null;
     let shullSeries: ISeriesApi<'Line'> | null = null;
+    let projBaseSeries: ISeriesApi<'Line'> | null = null;
+    let projBullSeries: ISeriesApi<'Line'> | null = null;
+    let projBearSeries: ISeriesApi<'Line'> | null = null;
+    let projBaseMarkers: ISeriesMarkersPluginApi<Time> | null = null;
+    let projBullMarkers: ISeriesMarkersPluginApi<Time> | null = null;
+    let projBearMarkers: ISeriesMarkersPluginApi<Time> | null = null;
+    let projectionActive = false;
+    let lastProjectionEndEpoch: number | null = null;
+    let projectionAnchorEpoch: number | null = null;
+    let currentPriceLine: IPriceLine | null = null;
 
     const BASE_LINE_COLOR = resolvedIsDarkMode ? 'oklch(1 0 0)' : 'oklch(0 0 0)';
     const VOLUME_BAR_COLOR = resolvedIsDarkMode ? 'oklch(1 0 0 / 0.25)' : 'oklch(0 0 0 / 0.25)';
@@ -300,6 +315,7 @@ export function createChartController({
     const handleCrosshairMove = (param: MouseEventParams<Time>) => {
         if (param.point === undefined || !param.time || param.point.x < 0 || param.point.y < 0) {
             tooltip.hide();
+            setProjectionReadout(null);
             onCrosshairMove?.(null);
             onCrosshairTimeMove?.(null);
             axisOverlay.onCrosshairLeave();
@@ -350,6 +366,39 @@ export function createChartController({
             currentVolume = typeof volData.value === 'number' && Number.isFinite(volData.value) ? volData.value : null;
         }
 
+        // Scrub the projected (future) region like the real series: past the
+        // last real bar the price series has no datum, but the projection
+        // series do. Use the base path as the scrub price so the header,
+        // axis hover tag and cross-chart scrub line all keep working.
+        let currentProjection: { base: number; bull: number; bear: number; lastClose: number } | null = null;
+        if (currentPrice == null && projectionActive && projBaseSeries) {
+            const hoverEpoch = timeToEpochSeconds(param.time);
+            const lastBar = safeOhlcvData[safeOhlcvData.length - 1];
+            const lastBarEpoch = lastBar ? timeToEpochSeconds(lastBar.time) : null;
+
+            if (hoverEpoch != null && lastBarEpoch != null && hoverEpoch > lastBarEpoch && lastBar) {
+                const readLineValue = (series: ISeriesApi<'Line'> | null): number | null => {
+                    if (!series) return null;
+                    const data = param.seriesData.get(series);
+                    if (data && 'value' in data && typeof data.value === 'number' && Number.isFinite(data.value)) {
+                        return data.value;
+                    }
+                    return null;
+                };
+
+                const baseValue = readLineValue(projBaseSeries);
+                if (baseValue != null) {
+                    currentProjection = {
+                        base: baseValue,
+                        bull: readLineValue(projBullSeries) ?? baseValue,
+                        bear: readLineValue(projBearSeries) ?? baseValue,
+                        lastClose: lastBar.close,
+                    };
+                    currentPrice = baseValue;
+                }
+            }
+        }
+
         onCrosshairMove?.(currentPrice);
         onCrosshairTimeMove?.(param.time ?? null);
         setChartScrub(timeToEpochSeconds(param.time) ?? null, 'price');
@@ -358,7 +407,22 @@ export function createChartController({
             price: currentPrice,
             volume: currentVolume,
             x: param.point.x,
+            scenario: currentProjection ? { bull: currentProjection.bull, bear: currentProjection.bear } : null,
         });
+
+        // In the projected region the floating tooltip is replaced by the
+        // bull/base/bear readout under the "Projection" label (the bull/bear
+        // axis tags come from the axisOverlay scenario above).
+        if (currentProjection) {
+            tooltip.hide();
+            setProjectionReadout({
+                bull: currentProjection.bull,
+                base: currentProjection.base,
+                bear: currentProjection.bear,
+            });
+            return;
+        }
+        setProjectionReadout(null);
 
         // Tooltip (fixed to top, moves horizontally with crosshair)
         if (currentPrice && Number.isFinite(currentPrice)) {
@@ -447,6 +511,133 @@ export function createChartController({
     chart.timeScale().subscribeVisibleTimeRangeChange(updateScrubLine);
     chart.timeScale().subscribeVisibleLogicalRangeChange(updateScrubLine);
     updateScrubLine();
+
+    // Projection divider: vertical dashed line at the last real bar, with a
+    // "Projection" label (plus a live bull/base/bear readout while scrubbing).
+    const dividerLineColor = resolvedIsDarkMode ? 'oklch(1 0 0 / 0.45)' : 'oklch(0 0 0 / 0.45)';
+    const dividerLabelColor = resolvedIsDarkMode ? 'oklch(1 0 0 / 0.45)' : 'oklch(0 0 0 / 0.5)';
+
+    const projectionDividerEl = document.createElement('div');
+    projectionDividerEl.setAttribute('aria-hidden', 'true');
+    {
+        const s = projectionDividerEl.style;
+        s.position = 'absolute';
+        s.top = '0';
+        s.bottom = '0';
+        s.left = '0';
+        s.width = '1px';
+        s.transform = 'translateX(-9999px)';
+        s.pointerEvents = 'none';
+        s.zIndex = '5';
+        s.background = `repeating-linear-gradient(to bottom, ${dividerLineColor} 0px, ${dividerLineColor} 4px, transparent 4px, transparent 8px)`;
+    }
+    containerEl.appendChild(projectionDividerEl);
+
+    function makeDividerLabel(text: string): HTMLDivElement {
+        const el = document.createElement('div');
+        el.textContent = text;
+        el.setAttribute('aria-hidden', 'true');
+        el.className = 'font-berkeley-mono';
+        const s = el.style;
+        s.position = 'absolute';
+        s.top = '8px';
+        s.left = '0';
+        s.fontSize = '9px';
+        s.letterSpacing = '0.08em';
+        s.whiteSpace = 'nowrap';
+        s.pointerEvents = 'none';
+        s.userSelect = 'none';
+        s.zIndex = '5';
+        s.color = dividerLabelColor;
+        s.transform = 'translateX(-9999px)';
+        containerEl.appendChild(el);
+        return el;
+    }
+    const dividerRightLabel = makeDividerLabel('Projection');
+
+    // Live bull/base/bear readout under the "Projection" label — replaces the
+    // floating tooltip while scrubbing the projected region.
+    const projectionReadoutEl = document.createElement('div');
+    projectionReadoutEl.setAttribute('aria-hidden', 'true');
+    projectionReadoutEl.className = 'font-berkeley-mono';
+    {
+        const s = projectionReadoutEl.style;
+        s.position = 'absolute';
+        s.top = '22px';
+        s.left = '0';
+        s.display = 'none';
+        s.flexDirection = 'column';
+        s.gap = '3px';
+        s.fontSize = '9px';
+        s.letterSpacing = '0.05em';
+        s.whiteSpace = 'nowrap';
+        s.pointerEvents = 'none';
+        s.userSelect = 'none';
+        s.zIndex = '6';
+        s.transform = 'translateX(-9999px)';
+    }
+    function makeReadoutRow(label: string): { valueEl: HTMLSpanElement; rowEl: HTMLDivElement } {
+        const rowEl = document.createElement('div');
+        rowEl.style.display = 'flex';
+        rowEl.style.gap = '6px';
+        const labelEl = document.createElement('span');
+        labelEl.textContent = label;
+        labelEl.style.width = '26px';
+        const valueEl = document.createElement('span');
+        rowEl.appendChild(labelEl);
+        rowEl.appendChild(valueEl);
+        projectionReadoutEl.appendChild(rowEl);
+        return { valueEl, rowEl };
+    }
+    const readoutBull = makeReadoutRow('Bull');
+    const readoutBase = makeReadoutRow('Base');
+    const readoutBear = makeReadoutRow('Bear');
+    readoutBase.rowEl.style.color = dividerLabelColor;
+    containerEl.appendChild(projectionReadoutEl);
+
+    let projectionReadoutVisible = false;
+
+    function setProjectionReadout(values: { bull: number; base: number; bear: number } | null) {
+        projectionReadoutVisible = values != null;
+        if (!values) {
+            projectionReadoutEl.style.display = 'none';
+            return;
+        }
+        readoutBull.valueEl.textContent = formatUsdPrice(values.bull);
+        readoutBase.valueEl.textContent = formatUsdPrice(values.base);
+        readoutBear.valueEl.textContent = formatUsdPrice(values.bear);
+        projectionReadoutEl.style.display = 'flex';
+        updateProjectionDivider();
+    }
+
+    function hideProjectionDivider() {
+        projectionDividerEl.style.transform = 'translateX(-9999px)';
+        dividerRightLabel.style.transform = 'translateX(-9999px)';
+        projectionReadoutEl.style.transform = 'translateX(-9999px)';
+    }
+
+    function updateProjectionDivider() {
+        if (!projectionActive || projectionAnchorEpoch == null) {
+            hideProjectionDivider();
+            return;
+        }
+
+        const x = chart.timeScale().timeToCoordinate(projectionAnchorEpoch as Time);
+        if (x == null || !Number.isFinite(x) || x < 0 || x > containerEl.clientWidth) {
+            hideProjectionDivider();
+            return;
+        }
+
+        const xRounded = Math.round(x);
+        projectionDividerEl.style.transform = `translateX(${xRounded}px)`;
+        dividerRightLabel.style.transform = `translateX(${xRounded + 8}px)`;
+        if (projectionReadoutVisible) {
+            projectionReadoutEl.style.transform = `translateX(${xRounded + 8}px)`;
+        }
+    }
+
+    chart.timeScale().subscribeVisibleTimeRangeChange(updateProjectionDivider);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(updateProjectionDivider);
 
     function setData(ohlcvData: OHLCVDataPoint[]) {
         // Defensive: prevent lightweight-charts from crashing on invalid points.
@@ -537,6 +728,7 @@ export function createChartController({
 
         axisOverlay.setFallbackValues({ dataLastPrice, dataLastVolume });
         highlightOverlay.setData({ ohlcvData: safeOhlcvData, lineData, volumeData });
+        updateCurrentPriceLine(dataLastPrice);
 
         const firstEpoch = safeOhlcvData.length ? timeToEpochSeconds(safeOhlcvData[0]!.time) : null;
         const lastEpoch = safeOhlcvData.length ? timeToEpochSeconds(safeOhlcvData[safeOhlcvData.length - 1]!.time) : null;
@@ -552,11 +744,38 @@ export function createChartController({
 
         resize();
         updateScrubLine();
+        updateProjectionDivider();
     }
 
     // Patch only the last bar with a realtime spot price. lightweight-charts'
     // series.update() is O(1) — the previous approach re-ran setData() (full
     // series normalization + re-feed) on every ~1s tick.
+    // Horizontal dashed line at the current price, spanning the full chart
+    // width up to the right-edge price tag (built-in price line, custom
+    // axis label suppressed — the DOM tag is the label).
+    function updateCurrentPriceLine(price: number | null) {
+        if (price == null || !Number.isFinite(price) || price <= 0) {
+            if (currentPriceLine) {
+                priceSeries.removePriceLine(currentPriceLine);
+                currentPriceLine = null;
+            }
+            return;
+        }
+
+        if (!currentPriceLine) {
+            currentPriceLine = priceSeries.createPriceLine({
+                price,
+                color: resolvedIsDarkMode ? 'oklch(1 0 0 / 0.35)' : 'oklch(0 0 0 / 0.35)',
+                lineWidth: 1,
+                lineStyle: LineStyle.Dashed,
+                lineVisible: true,
+                axisLabelVisible: false,
+            });
+        } else {
+            currentPriceLine.applyOptions({ price });
+        }
+    }
+
     function updateLivePrice(priceUsd: number) {
         if (!Number.isFinite(priceUsd) || priceUsd <= 0) return;
         if (safeOhlcvData.length === 0) return;
@@ -586,6 +805,7 @@ export function createChartController({
             (priceSeries as ISeriesApi<'Line'>).update(linePoint);
         }
 
+        updateCurrentPriceLine(priceUsd);
         axisOverlay.scheduleUpdate();
     }
 
@@ -640,6 +860,110 @@ export function createChartController({
         shullSeries.setData(shull);
     }
 
+    function ensureProjectionSeries(
+        existing: ISeriesApi<'Line'> | null,
+        color: string,
+        lineWidth: NonNullable<ProjectionOverlay['lineWidth']>,
+    ): ISeriesApi<'Line'> {
+        const options = {
+            lineWidth,
+            color,
+            lineStyle: LineStyle.Dashed,
+            lastValueVisible: false,
+            priceLineVisible: false,
+            // Match the price series' scrub dot so the projected region
+            // scrubs with the same affordances as real data.
+            crosshairMarkerVisible: true,
+            crosshairMarkerRadius: 3,
+            crosshairMarkerBorderColor: 'oklch(1 0 0)',
+            crosshairMarkerBackgroundColor: color,
+            lastPriceAnimation: LastPriceAnimationMode.Disabled,
+            visible: true,
+        };
+        if (!existing) return chart.addSeries(LineSeries, options);
+        existing.applyOptions(options);
+        return existing;
+    }
+
+    function setProjection(overlay: ProjectionOverlay | null) {
+        if (!overlay || !overlay.base?.length) {
+            for (const series of [projBaseSeries, projBullSeries, projBearSeries]) {
+                series?.applyOptions({ visible: false });
+                series?.setData([]);
+            }
+            for (const markers of [projBaseMarkers, projBullMarkers, projBearMarkers]) {
+                markers?.setMarkers([]);
+            }
+            projectionAnchorEpoch = null;
+            hideProjectionDivider();
+            if (projectionActive) {
+                projectionActive = false;
+                lastProjectionEndEpoch = null;
+                // Restore the price-only view (fitContent spans all series;
+                // with the projection cleared this refits to the real data).
+                chart.timeScale().fitContent();
+            }
+            return;
+        }
+
+        const lineWidth = overlay.lineWidth ?? 1;
+        const baseColor =
+            overlay.baseColor ?? (resolvedIsDarkMode ? 'oklch(1 0 0 / 0.5)' : 'oklch(0 0 0 / 0.5)');
+        const bullColor = overlay.bullColor ?? toRgba(CANDLE_UP_COLOR, 0.5);
+        const bearColor = overlay.bearColor ?? toRgba(CANDLE_DOWN_COLOR, 0.5);
+
+        projBaseSeries = ensureProjectionSeries(projBaseSeries, baseColor, lineWidth);
+        projBullSeries = ensureProjectionSeries(projBullSeries, bullColor, lineWidth);
+        projBearSeries = ensureProjectionSeries(projBearSeries, bearColor, lineWidth);
+
+        readoutBull.rowEl.style.color = bullColor;
+        readoutBear.rowEl.style.color = bearColor;
+
+        const base = normalizeLineSeries(overlay.base);
+        const bull = normalizeLineSeries(overlay.bull);
+        const bear = normalizeLineSeries(overlay.bear);
+
+        projBaseSeries.setData(base);
+        projBullSeries.setData(bull);
+        projBearSeries.setData(bear);
+
+        // Endpoint dots — mark where each scenario path lands at the horizon.
+        projBaseMarkers ??= createSeriesMarkers(projBaseSeries);
+        projBullMarkers ??= createSeriesMarkers(projBullSeries);
+        projBearMarkers ??= createSeriesMarkers(projBearSeries);
+        const endpointMarker = (points: typeof base, color: string) => {
+            const lastPoint = points[points.length - 1];
+            return lastPoint
+                ? [{ time: lastPoint.time, position: 'inBar' as const, shape: 'circle' as const, color, size: 0.4 }]
+                : [];
+        };
+        projBaseMarkers.setMarkers(endpointMarker(base, baseColor));
+        projBullMarkers.setMarkers(endpointMarker(bull, bullColor));
+        projBearMarkers.setMarkers(endpointMarker(bear, bearColor));
+
+        // Future-dated points extend the shared time scale, but the setData()
+        // fit logic only frames the price series — bring the projection into
+        // view on toggle-on, or when its end jumps by more than ~1 bar
+        // (timeframe switch while active). Small refresh drift keeps the
+        // user's pan/zoom.
+        const endEpoch = base.length ? timeToEpochSeconds(base[base.length - 1]!.time) : null;
+        const firstEpoch = base.length ? timeToEpochSeconds(base[0]!.time) : null;
+        const intervalSec =
+            base.length >= 2 && endEpoch != null && firstEpoch != null
+                ? (endEpoch - firstEpoch) / (base.length - 1)
+                : 0;
+        const endJumped =
+            endEpoch != null &&
+            lastProjectionEndEpoch != null &&
+            Math.abs(endEpoch - lastProjectionEndEpoch) > intervalSec;
+
+        if (!projectionActive || endJumped) chart.timeScale().fitContent();
+        projectionActive = true;
+        lastProjectionEndEpoch = endEpoch;
+        projectionAnchorEpoch = firstEpoch;
+        updateProjectionDivider();
+    }
+
     function setCallbacks(next: Pick<UseChartInstanceOptions, 'onCrosshairMove' | 'onCrosshairTimeMove'>) {
         onCrosshairMove = next.onCrosshairMove;
         onCrosshairTimeMove = next.onCrosshairTimeMove;
@@ -650,6 +974,8 @@ export function createChartController({
         chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
         chart.timeScale().unsubscribeVisibleTimeRangeChange(updateScrubLine);
         chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateScrubLine);
+        chart.timeScale().unsubscribeVisibleTimeRangeChange(updateProjectionDivider);
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateProjectionDivider);
         unsubscribeScrub();
 
         if (resizeObserver) {
@@ -668,11 +994,15 @@ export function createChartController({
             containerEl.removeChild(scrubLineEl);
         }
 
+        for (const el of [projectionDividerEl, dividerRightLabel, projectionReadoutEl]) {
+            if (containerEl.contains(el)) containerEl.removeChild(el);
+        }
+
         chart.remove();
     }
 
     // Initial size
     resize();
 
-    return { setData, updateLivePrice, setHighlightRange, setHullSuite, setCallbacks, resize, destroy };
+    return { setData, updateLivePrice, setHighlightRange, setHullSuite, setProjection, setCallbacks, resize, destroy };
 }
