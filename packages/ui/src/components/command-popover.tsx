@@ -5,7 +5,11 @@ import * as React from "react";
 import { type RefObject, useRef } from "react";
 import useClickOutside from "../hooks/use-click-outside";
 import { cn } from "../utils";
-import { Popover, PopoverContentWithoutPortal, PopoverTrigger } from "./popover";
+import {
+  Popover,
+  PopoverContentWithoutPortal,
+  PopoverTrigger,
+} from "./popover";
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
