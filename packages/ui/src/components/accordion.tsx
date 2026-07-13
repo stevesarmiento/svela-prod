@@ -32,7 +32,7 @@ const AccordionTrigger = React.forwardRef<
     <AccordionPrimitive.Trigger
       ref={ref}
       className={cn(
-        "flex flex-1 items-center justify-between py-4 font-medium transition-all [&[data-state=open]>svg]:rotate-180",
+        "flex flex-1 items-center justify-between py-4 font-medium [&>svg]:transition-transform [&>svg]:duration-[var(--duration-ui)] [&[data-state=open]>svg]:rotate-180",
         chevronBefore && "[&[data-state=open]>svg]:rotate-0",
         className,
       )}
@@ -55,14 +55,17 @@ const AccordionContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof AccordionPrimitive.Content>
 >(({ className, children, ...props }, ref) => (
   <AccordionPrimitive.Content
+    forceMount
     ref={ref}
     className={cn(
-      "overflow-hidden text-sm transition-all data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down",
+      "grid text-sm grid-rows-[0fr] data-[state=open]:grid-rows-[1fr] data-[state=closed]:invisible transition-[grid-template-rows,visibility] duration-[var(--duration-ui)] ease-[var(--ease-out-cubic)] [&[hidden]]:grid",
       className,
     )}
     {...props}
   >
-    <div className="pb-4 pt-0">{children}</div>
+    <div className="min-h-0 overflow-hidden">
+      <div className="pb-4 pt-0">{children}</div>
+    </div>
   </AccordionPrimitive.Content>
 ));
 AccordionContent.displayName = AccordionPrimitive.Content.displayName;

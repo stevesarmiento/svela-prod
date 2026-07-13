@@ -28,7 +28,7 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "cursor-pointer inline-flex items-center border border-transparent justify-center whitespace-nowrap px-2 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-800/50 data-[state=active]:border data-[state=active]:border-zinc-800/20 dark:data-[state=active]:border-zinc-800/50 data-[state=active]:shadow-md data-[state=active]:shadow-zinc-950/10 dark:data-[state=active]:text-white data-[state=inactive]:bg-transparent data-[state=inactive]:text-muted-foreground hover:bg-muted/80 active:scale-[0.98]",
+      "cursor-pointer inline-flex items-center border border-transparent justify-center whitespace-nowrap px-2 py-1 text-sm font-medium ring-offset-background transition-[color,background-color,border-color,box-shadow,transform] duration-[var(--duration-micro)] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-zinc-800/50 data-[state=active]:border data-[state=active]:border-zinc-800/20 dark:data-[state=active]:border-zinc-800/50 data-[state=active]:shadow-md data-[state=active]:shadow-zinc-950/10 dark:data-[state=active]:text-white data-[state=inactive]:bg-transparent data-[state=inactive]:text-muted-foreground hover:bg-muted/80 active:scale-[0.98]",
       className,
     )}
     {...props}

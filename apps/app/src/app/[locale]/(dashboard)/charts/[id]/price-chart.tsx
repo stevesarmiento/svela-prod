@@ -245,7 +245,7 @@ const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, set
           key={scale.value}
           onClick={() => setActiveTimeScale(scale.value)}
           className={cn(
-            "px-2 py-1 text-xs rounded-lg transition-all duration-100 cursor-pointer ease-in-out",
+            "px-2 py-1 text-xs rounded-lg transition-colors duration-[var(--duration-micro)] cursor-pointer",
             activeTimeScale === scale.value
               ? "border border-gray-300 shadow-md shadow-gray-500/20 text-gray-900 bg-zinc-800/50 hover:bg-zinc-800/70 dark:border-zinc-800/50 dark:shadow-zinc-950/50 dark:text-white"
               : "bg-transparent border border-transparent text-muted-foreground hover:bg-muted/70"

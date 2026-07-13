@@ -294,7 +294,7 @@ export function WatchlistsGrid({
                           aria-selected={isActive}
                           aria-label={`Go to page ${idx + 1}`}
                           className={cn(
-                            "w-1.5 rounded-full transition-all duration-150",
+                            "w-1.5 rounded-full transition-[width] duration-[var(--duration-micro)]",
                             isActive
                               ? "h-6 bg-zinc-900 dark:bg-white"
                               : "h-1.5 bg-zinc-200 dark:bg-white/10 hover:bg-zinc-300 dark:hover:bg-white/20",

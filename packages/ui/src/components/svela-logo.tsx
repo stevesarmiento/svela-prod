@@ -25,7 +25,7 @@ export function SvelaLogo({
       viewBox="0 0 703 671"
       fill="none"
       className={cn(
-        "svela-logo block shrink-0 transition-all duration-300",
+        "svela-logo block shrink-0 transition-colors duration-[var(--duration-ui)]",
         adaptive && "theme-adaptive text-foreground",
         className,
       )}

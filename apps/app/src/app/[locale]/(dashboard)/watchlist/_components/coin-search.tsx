@@ -256,7 +256,7 @@ export const CoinSearch = forwardRef<CoinSearchRef>((props, ref) => {
                         // (e.g. xStocks / wrapped tokens / LST naming conventions)
                         <TableRow
                           key={coin.id}
-                          className="cursor-pointer border-0 font-berkeley-mono transition-colors group hover:bg-transparent active:scale-[0.98] transition-all duration-200"
+                          className="cursor-pointer border-0 font-berkeley-mono transition-[color,background-color,transform] duration-[var(--duration-micro)] group hover:bg-transparent active:scale-[0.98]"
                           onClick={() => handleAddCoin(coin)}
                         >
                           <TableCell className="flex flex-row items-center justify-between overflow-hidden rounded-xl px-3 py-2.5 text-white transition-colors group-hover:bg-zinc-800/50">

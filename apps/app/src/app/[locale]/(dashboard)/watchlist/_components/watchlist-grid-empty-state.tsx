@@ -330,7 +330,7 @@ export function WatchlistEmptyIllustration() {
           absoluteClassName="size-full"
           variant="primary"
           icon={IconTarget}
-          cardBgClassName="bg-yellow-700 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-2 transition-all duration-300"
+          cardBgClassName="bg-yellow-700 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-2 transition-transform duration-[var(--duration-ui)]"
           cardBorderClassName="border-yellow-600"
           titleWidthClassName="w-16"
           subtitleWidthClassName="w-8"
@@ -350,7 +350,7 @@ export function WatchlistEmptyIllustration() {
           absoluteClassName="size-full"
           variant="primary"
           icon={IconSparkles}
-          cardBgClassName="bg-blue-700 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-all duration-300"
+          cardBgClassName="bg-blue-700 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-transform duration-[var(--duration-ui)]"
           cardBorderClassName="border-blue-600"
           titleWidthClassName="w-24"
           subtitleWidthClassName="w-12"
@@ -370,7 +370,7 @@ export function WatchlistEmptyIllustration() {
           absoluteClassName="size-full"
           variant="primary"
           icon={IconRainbow}
-          cardBgClassName="bg-rose-600/80 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-all duration-300"
+          cardBgClassName="bg-rose-600/80 shadow-2xl shadow-black group-hover:scale-105 group-hover:rotate-[-2deg] transition-transform duration-[var(--duration-ui)]"
           cardBorderClassName="border-rose-500"
           titleWidthClassName="w-20"
           subtitleWidthClassName="w-10"

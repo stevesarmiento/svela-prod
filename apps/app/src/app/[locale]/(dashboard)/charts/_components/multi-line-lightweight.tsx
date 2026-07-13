@@ -442,7 +442,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
             className="group flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border-zinc-800/50 bg-transparent p-3 hover:bg-transparent dark:hover:border-zinc-800"
           >
             <span className="truncate text-sm font-normal text-muted-foreground group-hover:text-primary">Add to comparison</span>
-            <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
+            <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-[transform,fill] duration-[var(--duration-ui)] size-3 fill-muted-foreground" />
           </Button>
 
           <DropdownMenu>
@@ -506,7 +506,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
             className="group flex w-full items-center justify-between gap-2 rounded-lg border-zinc-800/50 bg-transparent p-3 hover:bg-transparent dark:hover:border-zinc-800"
           >
             <span className="truncate text-sm font-normal text-muted-foreground group-hover:text-primary">Add to comparison</span>
-            <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-all duration-200 size-3 fill-muted-foreground" />
+            <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-[transform,fill] duration-[var(--duration-ui)] size-3 fill-muted-foreground" />
           </Button>
         </div>
 
@@ -555,7 +555,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                       type="button"
                       aria-label={`Remove ${realCoin.name} from watchlist`}
                       className={cn(
-                        "absolute right-2 rounded-full p-1 opacity-0 transition-all duration-200 hover:bg-red-500/20 group-hover:opacity-100 group-focus-within:opacity-100",
+                        "absolute right-2 rounded-full p-1 opacity-0 transition-[opacity,background-color] duration-[var(--duration-ui)] hover:bg-red-500/20 group-hover:opacity-100 group-focus-within:opacity-100",
                         hoveredRemoveId === coin.id.toString() ? "bg-red-500/30" : "",
                       )}
                       onMouseEnter={() => {

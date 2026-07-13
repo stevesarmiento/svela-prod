@@ -72,7 +72,7 @@ const CommandPopover = ({
             silently breaks ↑/↓/Enter (items are never found). */}
         <PopoverContentWithoutPortal
           ref={contentRef}
-          className="dark relative rounded-[20px] bg-zinc-900 border border-transparent overflow-hidden p-1 w-full sm:w-[499px] max-w-[calc(100vw-2rem)] z-[1000] data-[state=open]:slide-in-from-bottom-24 data-[state=closed]:slide-out-to-bottom-24
+          className="dark relative rounded-[20px] bg-zinc-900 border border-transparent overflow-hidden p-1 w-full sm:w-[499px] max-w-[calc(100vw-2rem)] z-[1000] data-[state=open]:animate-none data-[state=closed]:animate-none
                      text-popover-foreground shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.4)]"
           side="bottom"
           sideOffset={12}
@@ -183,7 +183,7 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-pointer select-none items-center px-2 py-1.5 text-sm outline-none aria-selected:bg-gray-100/80 dark:aria-selected:bg-zinc-800/30 rounded-2xl aria-selected:text-gray-900 dark:aria-selected:text-white active:scale-[0.98] transition-all duration-150 ease-in-out",
+      "relative flex cursor-pointer select-none items-center px-2 py-1.5 text-sm outline-none aria-selected:bg-gray-100/80 dark:aria-selected:bg-zinc-800/30 rounded-2xl aria-selected:text-gray-900 dark:aria-selected:text-white active:scale-[0.98] transition-transform duration-[var(--duration-micro)] ease-[var(--ease-out-cubic)]",
       className,
     )}
     {...props}
