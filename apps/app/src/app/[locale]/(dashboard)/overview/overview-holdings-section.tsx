@@ -330,7 +330,7 @@ function OverviewHoldingsSectionInner(props: {
           if (!quote) return null;
           const imageUrl = getTokenLogoURL(quote.symbol, quote.image);
           if (!imageUrl) return null;
-          return { imageUrl, profileUrl: `/charts/${token.coinId}` };
+          return { imageUrl, profileUrl: `/watchlists/${token.coinId}` };
         })
         .filter(
           (avatar): avatar is { imageUrl: string; profileUrl: string } =>

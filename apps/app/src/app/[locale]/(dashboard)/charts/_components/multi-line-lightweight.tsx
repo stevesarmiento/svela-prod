@@ -211,7 +211,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
         if (!logoUrl) return null
         return {
           imageUrl: logoUrl,
-          profileUrl: `/charts/${coin.id}`,
+          profileUrl: `/watchlists/${coin.id}`,
         }
       })
       .filter((item): item is { imageUrl: string; profileUrl: string } => item !== null)
@@ -539,7 +539,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                     onMouseLeave={() => handleCoinHover(null)}
                   >
                     <Link
-                      href={`/charts/${coin.id}`}
+                      href={`/watchlists/${coin.id}`}
                       className="flex h-8 flex-1 items-center gap-2 overflow-hidden border border-zinc-200 dark:border-zinc-800/70 rounded-lg"
                     >
                       <div className="absolute left-1.5 h-3 w-1.5 rounded-full border border-black" style={{ backgroundColor: realCoin.color }} />

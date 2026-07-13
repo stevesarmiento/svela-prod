@@ -205,7 +205,7 @@ function useWatchlistData(
       .slice(0, 5) // Limit to first 5 coins
       .map((coin) => ({
         imageUrl: coin.logoUrl,
-        profileUrl: `/charts/${coin.coinId}`
+        profileUrl: `/watchlists/${coin.coinId}`
       }))
 
     return {

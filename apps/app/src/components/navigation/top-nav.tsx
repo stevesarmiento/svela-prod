@@ -67,10 +67,16 @@ const LazyTopNavChartActions = dynamic(
 
 function getChartCoinId(pathname: string): string | null {
   const pathSegments = pathname.split("/").filter((segment) => segment.length > 0);
-  if (!pathSegments.includes("charts")) return null;
+  // Token charts live at watchlists/[id] (legacy charts/[id] redirects there).
+  const baseSegment = pathSegments.includes("watchlists")
+    ? "watchlists"
+    : pathSegments.includes("charts")
+      ? "charts"
+      : null;
+  if (!baseSegment) return null;
 
-  const chartsIndex = pathSegments.indexOf("charts");
-  return pathSegments[chartsIndex + 1] ?? null;
+  const baseIndex = pathSegments.indexOf(baseSegment);
+  return pathSegments[baseIndex + 1] ?? null;
 }
 
 function getRouteGreeting(): string {

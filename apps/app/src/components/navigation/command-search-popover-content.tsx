@@ -169,7 +169,7 @@ export const CommandSearchPopoverContent = React.memo(
       (coinId: string) => {
         clearSearch();
         setIsOpen(false);
-        router.push(navigation.buildUrl(`/charts/${coinId}`));
+        router.push(navigation.buildUrl(`/watchlists/${coinId}`));
       },
       [clearSearch, navigation, router, setIsOpen],
     );

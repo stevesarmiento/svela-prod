@@ -522,7 +522,7 @@ export const ChartTable = memo(function ChartTable({
             ) : (
               // Show clickable link for real coins
               <Link 
-                href={watchlistGroup ? `/charts/${coin.id}?wg=${watchlistGroup}` : `/charts/${coin.id}`}
+                href={watchlistGroup ? `/watchlists/${coin.id}?wg=${watchlistGroup}` : `/watchlists/${coin.id}`}
                 className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer sm:grid-cols-5 sm:gap-4 sm:px-4 sm:py-2"
               >
                 {/* Price */}

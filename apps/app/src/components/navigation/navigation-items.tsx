@@ -6,6 +6,8 @@ import { usePathHelper } from './bottom-nav-hooks';
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
 import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
 import { prefetchDashboardRoute } from '@/lib/prefetch-routes';
+import { useTokenHeader } from '@/hooks/use-token-header';
+import { TokenLogo } from '@/components/token-logo';
 
 import type { CommandContext } from './bottom-nav-context';
 
@@ -24,6 +26,7 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
   const router = useRouter();
   const getCleanPath = usePathHelper();
   const navigation = useWatchlistPreservingNavigation();
+  const { isChartDetailPage, tokenData } = useTokenHeader();
 
   // Map menu items to their preserved URLs
   const getItemUrl = useCallback((item: MenuItem) => {
@@ -39,9 +42,12 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
     }
   }, [navigation]);
 
-  const handleItemClick = useCallback((item: MenuItem, isActive: boolean) => {
+  const handleItemClick = useCallback((item: MenuItem, isExactActive: boolean) => {
     return () => {
-      if (isActive) {
+      // On a nested page (e.g. a token chart under /watchlists/[id]) the tab
+      // is highlighted but not exact — clicking it navigates back to the tab
+      // root instead of opening the contextual command menu.
+      if (isExactActive) {
         if (item.href === "/overview") {
           return;
         }
@@ -73,29 +79,40 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
   return (
     <div className="flex items-center gap-2">
       {(MENU_ITEMS as readonly MenuItem[]).map((item) => {
-        const isActive = getCleanPath(pathname) === item.href;
+        const cleanPath = getCleanPath(pathname);
+        const isExactActive = cleanPath === item.href;
+        // Keep the tab highlighted on nested routes (e.g. /watchlists/[id]).
+        const isActive = isExactActive || cleanPath.startsWith(`${item.href}/`);
+        const showTokenBadge =
+          item.href === "/watchlists" && isActive && isChartDetailPage && !!tokenData;
         const shortcut = getShortcutForRoute(item.href);
         const tooltipLabel =
           item.href === "/screener"
             ? "Screener"
-            : isActive
-              ? item.href === "/overview"
-                ? "Overview"
-                : item.href === "/watchlists"
-                ? "Watchlists"
-                : `Search ${item.title}`
-              : item.title;
+            : showTokenBadge
+              ? `${tokenData.symbol} · Back to Watchlists`
+              : isActive
+                ? item.href === "/overview"
+                  ? "Overview"
+                  : item.href === "/watchlists"
+                  ? "Watchlists"
+                  : `Search ${item.title}`
+                : item.title;
 
         return (
           <Tooltip delayDuration={500} key={item.title}>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                onClick={handleItemClick(item, isActive)}
+                onClick={handleItemClick(item, isExactActive)}
                 onMouseEnter={() => handleItemPrefetch(item)}
                 onFocus={() => handleItemPrefetch(item)}
-                aria-label={item.title}
-                aria-current={isActive ? "page" : undefined}
+                aria-label={
+                  showTokenBadge
+                    ? `${item.title} — viewing ${tokenData.symbol} chart`
+                    : item.title
+                }
+                aria-current={isExactActive ? "page" : isActive ? "true" : undefined}
                 className={`group relative p-2 rounded-[13px] transition-colors duration-100 cursor-pointer active:scale-[0.98] hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus:[&_svg]:!text-white focus-visible:[&_svg]:!text-white dark:focus-visible:ring-zinc-500 dark:focus-visible:ring-offset-zinc-800 after:absolute after:-inset-1 after:content-[''] ${
                   isActive 
                     ? "bg-black/10 hover:bg-black/15 dark:bg-white/10 dark:hover:bg-white/15" 
@@ -109,6 +126,17 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
                       : "text-gray-500 group-hover:text-gray-700 dark:text-white/50 dark:group-hover:text-white/50"
                   }`}
                 />
+                {showTokenBadge ? (
+                  <span className="pointer-events-none absolute -top-0.5 -right-0.5 z-10">
+                    <TokenLogo
+                      src={tokenData.logoUrl}
+                      alt={`${tokenData.symbol} logo`}
+                      sizePx={18}
+                      fallbackText={tokenData.symbol}
+                      className="ring-2 ring-white dark:ring-zinc-800 shadow-sm"
+                    />
+                  </span>
+                ) : null}
               </button>
             </TooltipTrigger>
             <TooltipContent

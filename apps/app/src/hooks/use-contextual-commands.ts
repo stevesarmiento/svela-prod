@@ -74,13 +74,13 @@ export function useContextualCommands(searchQuery: string, context: CommandConte
                 title: "Bitcoin Chart",
                 subtitle: "View BTC price chart",
                 icon: IconChartBar,
-                href: "/charts/1"
+                href: "/watchlists/1"
               },
               {
                 title: "Ethereum Chart",
                 subtitle: "View ETH price chart",
                 icon: IconChartBar,
-                href: "/charts/1027"
+                href: "/watchlists/1027"
               }
             ]
           }

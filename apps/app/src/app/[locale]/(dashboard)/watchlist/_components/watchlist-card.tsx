@@ -149,7 +149,7 @@ export function WatchlistCard({
         if (!logoUrl) return null
         return {
           imageUrl: logoUrl,
-          profileUrl: `/charts/${coin.id}`,
+          profileUrl: `/watchlists/${coin.id}`,
         }
       })
       .filter((item): item is { imageUrl: string; profileUrl: string } => item !== null)
