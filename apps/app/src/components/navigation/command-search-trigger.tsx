@@ -1,7 +1,6 @@
 import type React from "react";
 import { Button } from "@v1/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
-import { IconCommand } from "symbols-react";
 import { SearchIcon } from "./search-icon";
 
 interface CommandSearchTriggerProps {
@@ -36,8 +35,7 @@ export function CommandSearchTrigger(props: CommandSearchTriggerProps) {
             >
               <span className="text-xs text-zinc-400">Quick Actions</span>
               <kbd className="flex items-center gap-1 rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-zinc-200 uppercase">
-                <IconCommand className="h-2.5 w-2.5 fill-zinc-200" />
-                <span>+ K</span>
+                <span>/</span>
               </kbd>
             </TooltipContent>
           </Tooltip>

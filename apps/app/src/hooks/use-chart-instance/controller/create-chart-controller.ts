@@ -448,6 +448,112 @@ export function createChartController({
     chart.timeScale().subscribeVisibleLogicalRangeChange(updateScrubLine);
     updateScrubLine();
 
+<<<<<<< Updated upstream
+=======
+    // Projection divider: subtle vertical dashed line at the last real bar
+    // (plus a live bull/base/bear readout while scrubbing the projection).
+    const dividerLineColor = resolvedIsDarkMode ? 'oklch(1 0 0 / 0.18)' : 'oklch(0 0 0 / 0.18)';
+    const dividerLabelColor = resolvedIsDarkMode ? 'oklch(1 0 0 / 0.45)' : 'oklch(0 0 0 / 0.5)';
+
+    const projectionDividerEl = document.createElement('div');
+    projectionDividerEl.setAttribute('aria-hidden', 'true');
+    {
+        const s = projectionDividerEl.style;
+        s.position = 'absolute';
+        s.top = '0';
+        s.bottom = '0';
+        s.left = '0';
+        s.width = '1px';
+        s.transform = 'translateX(-9999px)';
+        s.pointerEvents = 'none';
+        s.zIndex = '5';
+        s.background = `repeating-linear-gradient(to bottom, ${dividerLineColor} 0px, ${dividerLineColor} 4px, transparent 4px, transparent 8px)`;
+    }
+    containerEl.appendChild(projectionDividerEl);
+
+    // Live bull/base/bear readout beside the divider — replaces the
+    // floating tooltip while scrubbing the projected region.
+    const projectionReadoutEl = document.createElement('div');
+    projectionReadoutEl.setAttribute('aria-hidden', 'true');
+    projectionReadoutEl.className = 'font-berkeley-mono';
+    {
+        const s = projectionReadoutEl.style;
+        s.position = 'absolute';
+        s.top = '8px';
+        s.left = '0';
+        s.display = 'none';
+        s.flexDirection = 'column';
+        s.gap = '3px';
+        s.fontSize = '9px';
+        s.letterSpacing = '0.05em';
+        s.whiteSpace = 'nowrap';
+        s.pointerEvents = 'none';
+        s.userSelect = 'none';
+        s.zIndex = '6';
+        s.transform = 'translateX(-9999px)';
+    }
+    function makeReadoutRow(label: string): { valueEl: HTMLSpanElement; rowEl: HTMLDivElement } {
+        const rowEl = document.createElement('div');
+        rowEl.style.display = 'flex';
+        rowEl.style.gap = '6px';
+        const labelEl = document.createElement('span');
+        labelEl.textContent = label;
+        labelEl.style.width = '26px';
+        const valueEl = document.createElement('span');
+        rowEl.appendChild(labelEl);
+        rowEl.appendChild(valueEl);
+        projectionReadoutEl.appendChild(rowEl);
+        return { valueEl, rowEl };
+    }
+    const readoutBull = makeReadoutRow('Bull');
+    const readoutBase = makeReadoutRow('Base');
+    const readoutBear = makeReadoutRow('Bear');
+    readoutBase.rowEl.style.color = dividerLabelColor;
+    containerEl.appendChild(projectionReadoutEl);
+
+    let projectionReadoutVisible = false;
+
+    function setProjectionReadout(values: { bull: number; base: number; bear: number } | null) {
+        projectionReadoutVisible = values != null;
+        if (!values) {
+            projectionReadoutEl.style.display = 'none';
+            return;
+        }
+        readoutBull.valueEl.textContent = formatUsdPrice(values.bull);
+        readoutBase.valueEl.textContent = formatUsdPrice(values.base);
+        readoutBear.valueEl.textContent = formatUsdPrice(values.bear);
+        projectionReadoutEl.style.display = 'flex';
+        updateProjectionDivider();
+    }
+
+    function hideProjectionDivider() {
+        projectionDividerEl.style.transform = 'translateX(-9999px)';
+        projectionReadoutEl.style.transform = 'translateX(-9999px)';
+    }
+
+    function updateProjectionDivider() {
+        if (!projectionActive || projectionAnchorEpoch == null) {
+            hideProjectionDivider();
+            return;
+        }
+
+        const x = chart.timeScale().timeToCoordinate(projectionAnchorEpoch as Time);
+        if (x == null || !Number.isFinite(x) || x < 0 || x > containerEl.clientWidth) {
+            hideProjectionDivider();
+            return;
+        }
+
+        const xRounded = Math.round(x);
+        projectionDividerEl.style.transform = `translateX(${xRounded}px)`;
+        if (projectionReadoutVisible) {
+            projectionReadoutEl.style.transform = `translateX(${xRounded + 8}px)`;
+        }
+    }
+
+    chart.timeScale().subscribeVisibleTimeRangeChange(updateProjectionDivider);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(updateProjectionDivider);
+
+>>>>>>> Stashed changes
     function setData(ohlcvData: OHLCVDataPoint[]) {
         // Defensive: prevent lightweight-charts from crashing on invalid points.
         safeOhlcvData = ohlcvData.filter(d => {
@@ -668,6 +774,13 @@ export function createChartController({
             containerEl.removeChild(scrubLineEl);
         }
 
+<<<<<<< Updated upstream
+=======
+        for (const el of [projectionDividerEl, projectionReadoutEl]) {
+            if (containerEl.contains(el)) containerEl.removeChild(el);
+        }
+
+>>>>>>> Stashed changes
         chart.remove();
     }
 

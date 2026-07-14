@@ -310,11 +310,23 @@ function ScrubPriceValue(props: {
   const currentPrice = crosshairPrice ?? livePrice
   const priceChange24h = scrubPriceChange ?? liveChange24h
 
+  // De-emphasize the "$" and the cents so the whole-dollar amount leads.
+  const formattedPrice = formatUsdPrice(currentPrice)
+  const priceParts = formattedPrice.match(/^\$([\d,]+)(\.\d+)?$/)
+
   return (
     <>
       <div className="flex items-center">
         <span className={cn("text-4xl font-bold font-sans text-gray-900 dark:text-white", showPending && "animate-pulse motion-reduce:animate-none",)}>
-          {formatUsdPrice(currentPrice)}
+          {priceParts ? (
+            <>
+              <span className="opacity-50">$</span>
+              {priceParts[1]}
+              {priceParts[2] ? <span className="opacity-50">{priceParts[2]}</span> : null}
+            </>
+          ) : (
+            formattedPrice
+          )}
         </span>
         {showPending && (
           <div className="inline-flex items-center ml-2">

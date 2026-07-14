@@ -92,8 +92,9 @@ export function useSequentialShortcuts() {
 }
 
 /**
- * Global shortcuts: ⌘/Ctrl+K toggles the command palette; Escape exits
- * selection mode. The palette shortcut works even while typing in a field.
+ * Global shortcuts: `/` toggles the command palette; Escape exits
+ * selection mode. The palette shortcut is ignored while typing in a field
+ * so slashes can still be entered in inputs.
  */
 export function useKeyboardShortcuts(
   mode: 'navigation' | 'selection',
@@ -107,7 +108,12 @@ export function useKeyboardShortcuts(
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
-      const isPaletteShortcut = (event.metaKey || event.ctrlKey) && key === 'k';
+      const isPaletteShortcut =
+        key === '/' &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !isEditableTarget(event.target);
       const isSelectionEscape = key === 'escape' && modeRef.current === 'selection';
 
       if (!isPaletteShortcut && !isSelectionEscape) return;
