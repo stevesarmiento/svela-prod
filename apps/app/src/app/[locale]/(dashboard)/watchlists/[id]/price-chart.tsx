@@ -670,7 +670,7 @@ export const PriceChart = memo(function PriceChart({
                     setActiveTimeScale={handleTimeScaleChange}
                   />
                 </div>
-                <div className="absolute right-4 top-[57px] z-20 pointer-events-auto flex flex-col items-end gap-2">
+                <div className="hidden absolute right-4 top-[57px] z-20 pointer-events-auto flex flex-col items-end gap-2">
                   {spotStatusLabel ? (
                     <Tooltip delayDuration={250}>
                       <TooltipTrigger asChild>
