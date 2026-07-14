@@ -239,7 +239,7 @@ const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, set
   ]
 
   return (
-    <div className="flex gap-1 bg-white/95 dark:bg-black border border-gray-200/50 dark:border-zinc-800/80 rounded-[12px] p-1">
+    <div className="flex gap-1 bg-white/95 dark:bg-black border border-gray-200/50 dark:border-zinc-800/80 rounded-[14px] p-1">
       {scales.map((scale) => (
         <button
           type="button"
@@ -311,11 +311,23 @@ function ScrubPriceValue(props: {
   const currentPrice = crosshairPrice ?? livePrice
   const priceChange24h = scrubPriceChange ?? liveChange24h
 
+  // De-emphasize the "$" and the cents so the whole-dollar amount leads.
+  const formattedPrice = formatUsdPrice(currentPrice)
+  const priceParts = formattedPrice.match(/^\$([\d,]+)(\.\d+)?$/)
+
   return (
     <>
       <div className="flex items-center">
         <span className={cn("text-4xl font-bold font-sans text-gray-900 dark:text-white", showPending && "animate-pulse motion-reduce:animate-none",)}>
-          {formatUsdPrice(currentPrice)}
+          {priceParts ? (
+            <>
+              <span className="opacity-50">$</span>
+              {priceParts[1]}
+              {priceParts[2] ? <span className="opacity-50">{priceParts[2]}</span> : null}
+            </>
+          ) : (
+            formattedPrice
+          )}
         </span>
         {showPending && (
           <div className="inline-flex items-center ml-2">
@@ -612,19 +624,22 @@ export const PriceChart = memo(function PriceChart({
     )}>
       {/* React 19: Enhanced Main Price Chart with hardware acceleration */}
       <div className={cn(
-        "bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)] will-change-auto",
         showPending && "opacity-95"
       )}>
         <div className="p-0 relative">
           <div
             className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-20"
             style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
-                backgroundRepeat: "repeat",
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
+              backgroundRepeat: "repeat",
+              maskImage:
+                "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
+              WebkitMaskImage:
+                 "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
             }}
           />
           <Card className="border-none bg-transparent">
-            <CardHeader className="flex flex-row items-start justify-between p-6 pl-6">
+            <CardHeader className="flex flex-row items-start justify-between">
               {/* Left side - Coin info */}
               <div className="relative flex gap-3 justify-between items-start w-full">
                 <div className="absolute left-0 flex flex-col space-y-1">
@@ -649,13 +664,13 @@ export const PriceChart = memo(function PriceChart({
                   />
                 </div>
               </div>
-               <div className="absolute right-4 top-4 z-20 pointer-events-auto flex flex-col items-end gap-2">
+               <div className="absolute right-0 top-0 z-20 pointer-events-auto flex flex-col items-end gap-2">
                   <TimeScaleSelector
                     activeTimeScale={deferredTimeScale}
                     setActiveTimeScale={handleTimeScaleChange}
                   />
                 </div>
-                <div className="absolute right-4 top-[57px] z-20 pointer-events-auto flex flex-col items-end gap-2">
+                <div className="hidden absolute right-4 top-[57px] z-20 pointer-events-auto flex flex-col items-end gap-2">
                   {spotStatusLabel ? (
                     <Tooltip delayDuration={250}>
                       <TooltipTrigger asChild>
@@ -702,7 +717,7 @@ export const PriceChart = memo(function PriceChart({
                   ) : null}
                 </div>
             </CardHeader>
-            <CardContent className="pl-8 pr-6">
+            <CardContent className="">
               <div className={cn(
                 "p-0 relative will-change-auto",
                 showPending && "opacity-80 transition-opacity duration-300"

@@ -2,6 +2,7 @@
 
 import { AnalysisDialog } from "./analysis-dialog";
 import { WatchlistButton } from "./watchlist-button";
+import { FloatingMarketFeedTrigger } from "@/components/floating-market-feed/floating-market-feed";
 import { useTokenHeader } from "@/hooks/use-token-header";
 
 interface TopNavChartActionsProps {
@@ -21,6 +22,7 @@ export function TopNavChartActions(props: TopNavChartActionsProps) {
         triggerTooltip="Deep Analysis"
         triggerAriaLabel="Deep Analysis"
       />
+      <FloatingMarketFeedTrigger />
       <WatchlistButton coinId={props.coinId} />
     </>
   );

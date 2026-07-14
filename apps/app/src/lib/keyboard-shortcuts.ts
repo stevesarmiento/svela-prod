@@ -33,8 +33,7 @@ export const SEQUENTIAL_SHORTCUTS = {
  */
 export const GLOBAL_SHORTCUTS: KeyboardShortcut[] = [
   {
-    key: 'k',
-    combination: ['cmd', 'ctrl'],
+    key: '/',
     description: 'Open command palette',
     category: 'global',
     handler: 'toggleCommandPalette',
@@ -78,13 +77,6 @@ export const GLOBAL_SHORTCUTS: KeyboardShortcut[] = [
     category: 'global',
     handler: 'escape',
     component: 'Global'
-  },
-  {
-    key: '/',
-    description: 'Focus search',
-    category: 'actions',
-    handler: 'focusSearch',
-    component: 'CommandSearch'
   }
 ];
 

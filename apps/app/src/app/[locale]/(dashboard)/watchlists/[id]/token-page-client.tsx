@@ -18,7 +18,7 @@ import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
 import { useRealtimeQuote } from "@/hooks/use-realtime-quote"
 import { PriceChart } from "./price-chart"
 import { MarketMetrics } from "./market-metrics"
-import { TokenCoingeckoNews } from './token-coingecko-news'
+import { FloatingMarketFeedPageContext } from '@/components/floating-market-feed/floating-market-feed'
 import type { IndicatorOhlcvBar } from './token-indicators-section'
 
 const LazyTokenIndicatorsSection = dynamic(
@@ -241,21 +241,23 @@ export const TokenPageClient = memo(function TokenPageClient({
 
   return (
     <main className={cn("mx-auto py-6 relative z-10", showPending && "opacity-90 transition-opacity duration-200")}>
+      {/* News moved into the floating market feed (bottom right); scope it to this coin. */}
+      <FloatingMarketFeedPageContext
+        displayName={explainTokenName}
+        tokenSymbol={deferredTokenData.symbol}
+        tokenLogoURI={deferredTokenData.image}
+        tokenFeedCoinId={deferredId}
+      />
       <div className="grid grid-cols-1 md:grid-cols-12">
-        <div className="col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-8 xl:col-span-8 min-w-0 sm:space-y-0">
-            <PriceChart
-              coinId={deferredId}
-              initialData={deferredTokenData.quote.USD}
-              activeTimeScale={deferredTimeScale}
-              setActiveTimeScale={handleTimeScaleChange}
-              isPending={showPending}
-              spotStatus={spotStatus}
-            />
-          </div>
-          <div className="lg:col-span-4 xl:col-span-4 min-w-0">
-            <TokenCoingeckoNews coinId={deferredId} isPending={showPending} />
-          </div>
+        <div className="col-span-12 min-w-0 sm:space-y-0">
+          <PriceChart
+            coinId={deferredId}
+            initialData={deferredTokenData.quote.USD}
+            activeTimeScale={deferredTimeScale}
+            setActiveTimeScale={handleTimeScaleChange}
+            isPending={showPending}
+            spotStatus={spotStatus}
+          />
         </div>
 
         <div className="col-span-12 my-12 mt-8">

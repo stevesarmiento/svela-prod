@@ -465,28 +465,36 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const perPage = clampInt(Number(sp.get("per_page") ?? "5"), 1, 20);
+  const perPage = clampInt(Number(sp.get("per_page") ?? "5"), 1, 50);
   const page = clampInt(Number(sp.get("page") ?? "1"), 1, 20);
   const language = (sp.get("language")?.trim() || "en") || "en";
 
-  const url = new URL("https://pro-api.coingecko.com/api/v3/news");
-  url.searchParams.set("page", String(page));
-  url.searchParams.set("per_page", String(perPage));
-  url.searchParams.set("language", language);
-  // Enforce news-only (never guides).
-  url.searchParams.set("type", "news");
-  if (coinId) url.searchParams.set("coin_id", coinId);
+  // CoinGecko caps per_page at 20, so larger pulls fan out across consecutive pages.
+  const CG_MAX_PER_PAGE = 20;
+  const pageCount = Math.max(1, Math.ceil(perPage / CG_MAX_PER_PAGE));
+  const responses = await Promise.all(
+    Array.from({ length: pageCount }, (_, index) => {
+      const url = new URL("https://pro-api.coingecko.com/api/v3/news");
+      url.searchParams.set("page", String(page + index));
+      url.searchParams.set("per_page", String(Math.min(perPage, CG_MAX_PER_PAGE)));
+      url.searchParams.set("language", language);
+      // Enforce news-only (never guides).
+      url.searchParams.set("type", "news");
+      if (coinId) url.searchParams.set("coin_id", coinId);
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      "x-cg-pro-api-key": apiKey,
-      Accept: "application/json",
-    },
-    next: { revalidate: 60 },
-  });
+      return fetch(url.toString(), {
+        headers: {
+          "x-cg-pro-api-key": apiKey,
+          Accept: "application/json",
+        },
+        next: { revalidate: 60 },
+      });
+    }),
+  );
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
+  const failedResponse = responses.find((response) => !response.ok);
+  if (failedResponse) {
+    const body = await failedResponse.text().catch(() => "");
     return NextResponse.json(
       {
         error: "CoinGecko news request failed",
@@ -496,29 +504,39 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  let data: unknown;
-  try {
-    data = await response.json();
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to parse CoinGecko news response", articles: [] as CoinGeckoNewsArticlePublic[] },
-      { status: 502 },
-    );
-  }
+  const data: unknown[] = [];
+  for (const response of responses) {
+    let pageData: unknown;
+    try {
+      pageData = await response.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Failed to parse CoinGecko news response", articles: [] as CoinGeckoNewsArticlePublic[] },
+        { status: 502 },
+      );
+    }
 
-  if (!Array.isArray(data)) {
-    return NextResponse.json(
-      { error: "Unexpected CoinGecko news response", articles: [] as CoinGeckoNewsArticlePublic[] },
-      { status: 502 },
-    );
+    if (!Array.isArray(pageData)) {
+      return NextResponse.json(
+        { error: "Unexpected CoinGecko news response", articles: [] as CoinGeckoNewsArticlePublic[] },
+        { status: 502 },
+      );
+    }
+
+    data.push(...pageData);
   }
 
   const articles: CoinGeckoNewsArticlePublic[] = [];
+  const seenUrls = new Set<string>();
   for (const item of data) {
+    if (articles.length >= perPage) break;
     const parsed = parseArticle(item);
     if (!parsed) continue;
     // Defense in depth: only keep explicit `type=news`.
     if (parsed.type !== "news") continue;
+    // Consecutive pages can shift while the feed updates; drop duplicates.
+    if (seenUrls.has(parsed.url)) continue;
+    seenUrls.add(parsed.url);
     articles.push(parsed);
   }
 

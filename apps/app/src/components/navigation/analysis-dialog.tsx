@@ -17,7 +17,8 @@ import { getAlignedPriceFromChartPoints } from "@/lib/aligned-price";
 import { getTokenLogoURL } from "@/lib/logo-overrides";
 import { ScrollArea } from "@v1/ui/scroll-area";
 import Image from "next/image";
-import { IconBookPages, IconSparkles, IconTextAppend } from "symbols-react";
+import { IconBookPages, IconSparkles } from "symbols-react";
+import { IconAnalyze } from "@/components/icon-analyze";
 import { MultiStepLoader } from "@v1/ui/mult-step-loader";
 import { cn } from "@v1/ui/cn";
 
@@ -110,10 +111,10 @@ export function AnalysisDialog({
       )}
     >
       {triggerVariant === "icon" ? (
-        <IconTextAppend className="size-3.5 fill-zinc-400 dark:group-hover:fill-white transition-colors" />
+        <IconAnalyze className="size-3.5 fill-zinc-400 dark:group-hover:fill-white transition-colors" />
       ) : isExplainTrigger ? (
         <>
-          <IconTextAppend className="size-3 fill-primary/60" />
+          <IconAnalyze className="size-3 fill-primary/60" />
           <span>{triggerLabel}</span>
         </>
       ) : (

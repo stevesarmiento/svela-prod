@@ -23,7 +23,8 @@ export const listNewsByCoinId = query({
     }),
   ),
   handler: async (ctx, args) => {
-    const limit = Math.min(10, Math.max(1, args.limit ?? 5));
+    // Cap matches the floating feed's largest "Pull" size.
+    const limit = Math.min(50, Math.max(1, args.limit ?? 5));
 
     const links = await ctx.db
       .query("coingeckoNewsCoinLinks")

@@ -279,31 +279,29 @@ export function WatchlistsGrid({
                 <div className="relative overflow-visible">
                   {/* Vertical page indicator — floats in the left gutter so the
                       grid keeps its original alignment with the page header. */}
-                  <div
-                    className="absolute -left-9 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 rounded-full border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/5 px-1.5 py-2.5"
-                    role="tablist"
-                    aria-label="Watchlist pages"
+                  <button
+                    type="button"
+                    className="absolute -left-12 top-1/2 -translate-y-1/2 flex cursor-pointer flex-col items-center gap-2 rounded-full border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/5 px-1.5 py-2 hover:bg-zinc-50 dark:hover:bg-white/10 transition-colors"
+                    aria-label={`Watchlist pages — page ${pageState.index + 1} of ${gridPages.length}, click to go to next page`}
+                    onClick={() =>
+                      goToPage((pageState.index + 1) % gridPages.length)
+                    }
                   >
                     {gridPages.map((page, idx) => {
                       const isActive = idx === pageState.index
                       return (
-                        <button
+                        <span
                           key={page[0]?._id ?? idx}
-                          type="button"
-                          role="tab"
-                          aria-selected={isActive}
-                          aria-label={`Go to page ${idx + 1}`}
                           className={cn(
-                            "w-1.5 rounded-full transition-[width] duration-[var(--duration-micro)]",
+                            "w-2 rounded-full transition-[height] duration-[var(--duration-micro)]",
                             isActive
                               ? "h-6 bg-zinc-900 dark:bg-white"
-                              : "h-1.5 bg-zinc-200 dark:bg-white/10 hover:bg-zinc-300 dark:hover:bg-white/20",
+                              : "h-2 bg-zinc-400 dark:bg-white/10",
                           )}
-                          onClick={() => goToPage(idx)}
                         />
                       )
                     })}
-                  </div>
+                  </button>
 
                   {/* Active page (vertical slide between pages) */}
                   <div
