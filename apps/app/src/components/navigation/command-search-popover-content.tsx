@@ -26,6 +26,8 @@ import {
 } from "@/hooks/use-hybrid-coin-search";
 import { useContextualCommands } from "@/hooks/use-contextual-commands";
 import { useAddCoinToWatchlist } from "@/hooks/use-add-coin-to-watchlist";
+import { useWatchlist } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context";
+import { WatchlistGroupIcon } from "@/components/watchlist-group-icon";
 import { BackgroundPattern } from "./background-pattern";
 import { formatUsdPrice } from "@/lib/format-usd";
 import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides";
@@ -164,6 +166,7 @@ export const CommandSearchPopoverContent = React.memo(
     }, [displayedValues, highlightedValue]);
 
     const { handleAddCoin, isAddingCoin } = useAddCoinToWatchlist();
+    const { selectedGroup } = useWatchlist();
 
     const handleTokenNavigation = useCallback(
       (coinId: string) => {
@@ -379,13 +382,31 @@ export const CommandSearchPopoverContent = React.memo(
               {(coinResultsLoading || coinsToDisplay.length > 0) && (
                 <CommandGroup
                   heading={
-                    coinSelectMode === "watchlist-add"
-                      ? hasSearch
-                        ? "Add Tokens"
-                        : "Add to Watchlist"
-                      : hasSearch
-                        ? "Tokens"
-                        : "Popular Tokens"
+                    coinSelectMode === "watchlist-add" ? (
+                      selectedGroup ? (
+                        <span className="flex items-center gap-1.5">
+                          <span>Add to</span>
+                          <span className="inline-flex max-w-[220px] items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-white">
+                            <WatchlistGroupIcon
+                              icon={selectedGroup.icon}
+                              size={12}
+                              className="text-white/80"
+                            />
+                            <span className="truncate">
+                              {selectedGroup.name}
+                            </span>
+                          </span>
+                        </span>
+                      ) : hasSearch ? (
+                        "Add Tokens"
+                      ) : (
+                        "Add to Watchlist"
+                      )
+                    ) : hasSearch ? (
+                      "Tokens"
+                    ) : (
+                      "Popular Tokens"
+                    )
                   }
                   className="text-white [&_[cmdk-group-heading]]:text-white/60"
                 >
