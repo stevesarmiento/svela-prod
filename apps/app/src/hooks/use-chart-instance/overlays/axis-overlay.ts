@@ -9,7 +9,13 @@ export interface AxisOverlay {
         volumeSeries: ISeriesApi<'Histogram'> | null;
     }) => void;
     onCrosshairLeave: () => void;
-    onCrosshairMove: (args: { price: number | null; volume: number | null; x: number | null }) => void;
+    onCrosshairMove: (args: {
+        price: number | null;
+        volume: number | null;
+        x: number | null;
+        /** Bull/bear projected values at the hovered future bar (scrubbing the projection region). */
+        scenario?: { bull: number; bear: number } | null;
+    }) => void;
     scheduleUpdate: () => void;
     onResize: () => void;
     destroy: () => void;
@@ -86,8 +92,29 @@ export function createAxisOverlay({
     volumeHoverLabel.className = TAG_CLASS;
     volumeHoverLabelWrap.appendChild(volumeHoverLabel);
 
+    // Bull/bear scenario hover tags (shown while scrubbing the projection
+    // region) — filled pills in the scenario color with white text.
+    const SCENARIO_TAG_BASE =
+        "relative inline-flex items-center rounded-md text-white px-3 py-1.5 font-berkeley-mono text-[11px] leading-none tabular-nums shadow-sm shadow-black/10 ring-1 ring-black/10 before:content-[''] before:absolute before:-left-[6px] before:top-1/2 before:-translate-y-1/2 before:border-y-[10px] before:border-y-transparent before:border-r-[8px]";
+
+    const bullHoverLabelWrap = document.createElement('div');
+    bullHoverLabelWrap.className = 'pointer-events-none absolute right-0 top-0 z-10';
+    bullHoverLabelWrap.style.transition = axisTagTransitionHover;
+    const bullHoverLabel = document.createElement('div');
+    bullHoverLabel.className = `${SCENARIO_TAG_BASE} bg-green-500 before:border-r-green-500`;
+    bullHoverLabelWrap.appendChild(bullHoverLabel);
+
+    const bearHoverLabelWrap = document.createElement('div');
+    bearHoverLabelWrap.className = 'pointer-events-none absolute right-0 top-0 z-10';
+    bearHoverLabelWrap.style.transition = axisTagTransitionHover;
+    const bearHoverLabel = document.createElement('div');
+    bearHoverLabel.className = `${SCENARIO_TAG_BASE} bg-red-500 before:border-r-red-500`;
+    bearHoverLabelWrap.appendChild(bearHoverLabel);
+
     axisLabelsEl.appendChild(priceLastLabelWrap);
     axisLabelsEl.appendChild(priceHoverLabelWrap);
+    axisLabelsEl.appendChild(bullHoverLabelWrap);
+    axisLabelsEl.appendChild(bearHoverLabelWrap);
     axisLabelsEl.appendChild(volumeLastLabelWrap);
     axisLabelsEl.appendChild(volumeHoverLabelWrap);
     axisLabelsEl.appendChild(volumeScrubMarker);
@@ -124,6 +151,27 @@ export function createAxisOverlay({
     hoverVolumeLineWrap.appendChild(hoverVolumeLine);
     axisLabelsEl.appendChild(hoverVolumeLineWrap);
 
+    // Dashed hover connectors for the bull/bear scenario tags.
+    function makeScenarioHoverLine(): { wrap: HTMLDivElement; line: HTMLDivElement } {
+        const wrap = document.createElement('div');
+        wrap.className = 'pointer-events-none absolute left-0 top-0 z-0';
+        wrap.style.transition = axisTagTransitionHover;
+        wrap.style.display = 'none';
+
+        const line = document.createElement('div');
+        line.style.height = '1px';
+        line.style.width = `${containerEl.clientWidth}px`;
+        line.style.transformOrigin = 'left center';
+        line.style.transition = axisTagTransitionHover;
+        line.style.backgroundImage =
+            'repeating-linear-gradient(to right, oklch(0.7118 0.0129 286.07 / 0.55) 0, oklch(0.7118 0.0129 286.07 / 0.55) 6px, oklch(0.7118 0.0129 286.07 / 0) 6px, oklch(0.7118 0.0129 286.07 / 0) 10px)';
+        wrap.appendChild(line);
+        axisLabelsEl.appendChild(wrap);
+        return { wrap, line };
+    }
+    const { wrap: bullHoverLineWrap, line: bullHoverLine } = makeScenarioHoverLine();
+    const { wrap: bearHoverLineWrap, line: bearHoverLine } = makeScenarioHoverLine();
+
     containerEl.appendChild(axisLabelsEl);
 
     let isMounted = true;
@@ -134,6 +182,7 @@ export function createAxisOverlay({
     let lastCrosshairPrice: number | null = null;
     let lastCrosshairVolume: number | null = null;
     let lastCrosshairX: number | null = null;
+    let lastCrosshairScenario: { bull: number; bear: number } | null = null;
 
     let axisUpdateRaf: number | null = null;
     let interactionRaf: number | null = null;
@@ -258,6 +307,19 @@ export function createAxisOverlay({
 
         setHoverLine(hoverPriceLineWrap, hoverPriceLine, lastCrosshairX, hoveredPriceY, shouldShowHoverPrice);
 
+        // Bull/bear scenario tags — same treatment as the base hover tag,
+        // only while scrubbing the projection region.
+        const scenario = isCrosshairActive ? lastCrosshairScenario : null;
+        const bullY =
+            scenario && Number.isFinite(scenario.bull) ? priceSeries.priceToCoordinate(scenario.bull) : null;
+        setAxisTag(bullHoverLabelWrap, bullHoverLabel, bullY, scenario ? formatUsdPrice(scenario.bull) : null);
+        setHoverLine(bullHoverLineWrap, bullHoverLine, lastCrosshairX, bullY, scenario != null);
+
+        const bearY =
+            scenario && Number.isFinite(scenario.bear) ? priceSeries.priceToCoordinate(scenario.bear) : null;
+        setAxisTag(bearHoverLabelWrap, bearHoverLabel, bearY, scenario ? formatUsdPrice(scenario.bear) : null);
+        setHoverLine(bearHoverLineWrap, bearHoverLine, lastCrosshairX, bearY, scenario != null);
+
         if (!volumeSeries) {
             setAxisTag(volumeLastLabelWrap, volumeLastLabel, null, null);
             setAxisTag(volumeHoverLabelWrap, volumeHoverLabel, null, null);
@@ -339,15 +401,22 @@ export function createAxisOverlay({
         lastCrosshairPrice = null;
         lastCrosshairVolume = null;
         lastCrosshairX = null;
+        lastCrosshairScenario = null;
         volumeScrubMarker.style.display = 'none';
         scheduleUpdate();
     }
 
-    function onCrosshairMove(args: { price: number | null; volume: number | null; x: number | null }) {
+    function onCrosshairMove(args: {
+        price: number | null;
+        volume: number | null;
+        x: number | null;
+        scenario?: { bull: number; bear: number } | null;
+    }) {
         isCrosshairActive = true;
         lastCrosshairPrice = args.price;
         lastCrosshairVolume = args.volume;
         lastCrosshairX = args.x;
+        lastCrosshairScenario = args.scenario ?? null;
         runUpdate();
     }
 
@@ -369,6 +438,8 @@ export function createAxisOverlay({
     function onResize() {
         hoverPriceLine.style.width = `${containerEl.clientWidth}px`;
         hoverVolumeLine.style.width = `${containerEl.clientWidth}px`;
+        bullHoverLine.style.width = `${containerEl.clientWidth}px`;
+        bearHoverLine.style.width = `${containerEl.clientWidth}px`;
         scheduleUpdate();
     }
 

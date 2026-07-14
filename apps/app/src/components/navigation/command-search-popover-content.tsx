@@ -110,13 +110,66 @@ export const CommandSearchPopoverContent = React.memo(
     const { contextualCommands, globalCommands, hasContextualCommands } =
       useContextualCommands(debouncedSearchQuery, context);
 
+    // Controlled cmdk highlight. With async results the item list is replaced
+    // after fetch; cmdk's highlight would keep pointing at an unmounted item,
+    // making Enter a silent no-op. Re-anchor to the first visible item
+    // whenever the displayed set changes. (cmdk stores values lowercased.)
+    const [highlightedValue, setHighlightedValue] = useState("");
+    const displayedValues = useMemo(() => {
+      const values: string[] = [];
+      if (hasContextualCommands && context !== "charts") {
+        for (const group of contextualCommands) {
+          for (const item of group.items) {
+            values.push(
+              item.action
+                ? `action:${item.action}`
+                : item.href
+                  ? `href:${item.href}`
+                  : item.title,
+            );
+          }
+        }
+      }
+      if (!coinResultsLoading) {
+        for (const coin of coinsToDisplay) {
+          values.push(
+            coinSelectMode === "watchlist-add"
+              ? `watchlist-add:${coin.id}`
+              : `coin:${coin.id}`,
+          );
+        }
+      }
+      if (!context) {
+        for (const group of globalCommands) {
+          for (const item of group.items) {
+            values.push(item.title);
+          }
+        }
+      }
+      return values.map((value) => value.trim().toLowerCase());
+    }, [
+      hasContextualCommands,
+      context,
+      contextualCommands,
+      coinResultsLoading,
+      coinsToDisplay,
+      coinSelectMode,
+      globalCommands,
+    ]);
+
+    useEffect(() => {
+      if (!displayedValues.includes(highlightedValue)) {
+        setHighlightedValue(displayedValues[0] ?? "");
+      }
+    }, [displayedValues, highlightedValue]);
+
     const { handleAddCoin, isAddingCoin } = useAddCoinToWatchlist();
 
     const handleTokenNavigation = useCallback(
       (coinId: string) => {
         clearSearch();
         setIsOpen(false);
-        router.push(navigation.buildUrl(`/charts/${coinId}`));
+        router.push(navigation.buildUrl(`/watchlists/${coinId}`));
       },
       [clearSearch, navigation, router, setIsOpen],
     );
@@ -224,6 +277,8 @@ export const CommandSearchPopoverContent = React.memo(
             open={isOpen}
             onOpenChange={setIsOpen}
             shouldFilter={false}
+            value={highlightedValue}
+            onValueChange={setHighlightedValue}
             trigger={
               <div className="flex items-center">
                 <CommandSearchTrigger

@@ -66,7 +66,7 @@ function MoversList(props: {
             return (
               <li key={row.coingeckoId} className="min-w-0">
                 <Link
-                  href={`/charts/${row.coingeckoId}`}
+                  href={`/watchlists/${row.coingeckoId}`}
                   className={cn(
                     "flex items-center justify-between gap-3 min-w-0 active:scale-[0.98]",
                     "-mx-2 rounded-xl p-2",

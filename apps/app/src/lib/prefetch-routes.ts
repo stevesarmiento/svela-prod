@@ -48,7 +48,7 @@ export function isDashboardPrefetchPath(pathname: string) {
 }
 
 export function extractChartCoinId(pathname: string) {
-  const match = pathname.match(/^\/charts\/([^/?#]+)/)
+  const match = pathname.match(/^\/(?:watchlists|charts)\/([^/?#]+)/)
   return match?.[1] ? decodeURIComponent(match[1]) : null
 }
 
@@ -82,7 +82,7 @@ export async function prefetchChartRoute(args: {
   coinId: string
   href?: string
 }) {
-  const href = args.href ?? `/charts/${args.coinId}`
+  const href = args.href ?? `/watchlists/${args.coinId}`
   void args.router.prefetch(href)
 
   const quote = await args.queryClient.fetchQuery({

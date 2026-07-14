@@ -28,7 +28,7 @@ export default async function DashboardLayout({
   return (
     <DashboardProviders preloadedWatchlist={preloadedWatchlist}>
       <div className="relative w-screen font-diatype">
-        <div className="flex flex-grow flex-col max-w-7xl mx-auto">
+        <div className="flex flex-grow flex-col max-w-screen-xl mx-auto">
           <Suspense fallback={null}>
             <TopNav />
           </Suspense>

@@ -68,8 +68,6 @@
 
   --animate-animate-webgl-scale-in-fade: webgl-scale-in-fade 1s ease-in-out;
   --animate-open-scale-up-fade: open-scale-up-fade var(--duration-ui) var(--ease-out-cubic);
-  --animate-accordion-down: accordion-down var(--duration-ui) var(--ease-out-cubic);
-  --animate-accordion-up: accordion-up var(--duration-ui) var(--ease-out-cubic);
   --animate-caret-blink: caret-blink 1.25s ease-out infinite;
   --animate-first: moveVertical 30s ease infinite;
   --animate-second: moveInCircle 20s reverse infinite;
@@ -78,24 +76,6 @@
   --animate-fifth: moveInCircle 20s ease infinite;
   --animate-scroll: scroll var(--animation-duration, 40s)
     var(--animation-direction, forwards) linear infinite;
-
-  @keyframes accordion-down {
-    from {
-      height: 0;
-    }
-    to {
-      height: var(--radix-accordion-content-height);
-    }
-  }
-
-  @keyframes accordion-up {
-    from {
-      height: var(--radix-accordion-content-height);
-    }
-    to {
-      height: 0;
-    }
-  }
 
   @keyframes jiggle {
     0% {
@@ -193,8 +173,6 @@
     /* Tailwind `animate-*` tokens defined in this file */
     --animate-animate-webgl-scale-in-fade: none;
     --animate-open-scale-up-fade: none;
-    --animate-accordion-down: none;
-    --animate-accordion-up: none;
     --animate-caret-blink: none;
     --animate-first: none;
     --animate-second: none;
