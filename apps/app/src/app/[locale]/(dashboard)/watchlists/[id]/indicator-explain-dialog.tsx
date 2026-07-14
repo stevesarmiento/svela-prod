@@ -15,7 +15,8 @@ import { ScrollArea } from "@v1/ui/scroll-area"
 import { MultiStepLoader } from "@v1/ui/mult-step-loader"
 import { cn } from "@v1/ui/cn"
 import { useCompletion } from "@ai-sdk/react"
-import { IconArrowBackward, IconArrowUpRight, IconChevronBackward, IconTextAppend } from "symbols-react"
+import { IconArrowBackward, IconArrowUpRight, IconChevronBackward } from "symbols-react"
+import { IconAnalyze } from "@/components/icon-analyze"
 import NumberFlow from "@/components/number-flow"
 import { TokenLogo } from "@/components/token-logo"
 import { cleanTokenName } from "@/lib/logo-overrides"
@@ -318,7 +319,7 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
         void run()
       }}
     >
-      <IconTextAppend
+      <IconAnalyze
         className="size-3 fill-primary/60"
       />
       Regenerate
@@ -359,7 +360,7 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
           disabled={props.disabled}
           className={cn("flex items-center gap-1.5 shrink-0 h-7 p-2.5 rounded-lg", props.triggerClassName)}
         >
-        <IconTextAppend
+        <IconAnalyze
           className="size-3 fill-primary/60"
         />
           Analyze

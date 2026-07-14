@@ -5,6 +5,10 @@ import Image from "next/image"
 import { TokenPageClient } from './token-page-client'
 import { memo, Suspense, useDeferredValue, useTransition } from 'react'
 import { cn } from "@v1/ui/cn"
+import { useQuery as useTanStackQuery } from '@tanstack/react-query'
+import { CoinsInternalApi } from '@/lib/effect/coins-internal-api'
+import { runPromise } from '@/lib/effect/runtime-coins-internal'
+import { getTokenLogoURL } from '@/lib/logo-overrides'
 
 interface TokenPageShellProps {
   id: string
@@ -47,10 +51,28 @@ const BlurredBackground = memo(function BlurredBackground({
   className?: string
   style: React.CSSProperties
 }) {
+  // Resolve the real logo URL from the internal CoinGecko coin record —
+  // shares the "coingecko-coin" query cache with the price chart, so this
+  // costs no extra request. (The previous CMC URL was built from the
+  // CoinGecko slug, but s2.coinmarketcap.com expects numeric CMC ids, so
+  // every background image 403'd and the glow never rendered.)
+  const { data: coinData } = useTanStackQuery({
+    queryKey: ["coingecko-coin", id],
+    queryFn: async () => {
+      if (!id) return null
+      return await runPromise(CoinsInternalApi.getCoinGeckoCoinById({ id }))
+    },
+    enabled: !!id,
+    staleTime: 10 * 60 * 1000,
+  })
+
+  const logoSrc = getTokenLogoURL(coinData?.symbol, coinData?.logoUrl)
+  if (!logoSrc || !(logoSrc.startsWith('http') || logoSrc.startsWith('/'))) return null
+
   return (
     <div className={cn(className)} style={style}>
       <Image
-        src={`https://s2.coinmarketcap.com/static/img/coins/64x64/${id}.png`}
+        src={logoSrc}
         alt={`${tokenName} background`}
         className="w-full h-full object-cover"
         width={700}

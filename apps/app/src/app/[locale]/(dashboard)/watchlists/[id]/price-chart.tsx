@@ -239,7 +239,7 @@ const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, set
   ]
 
   return (
-    <div className="flex gap-1 bg-white/95 dark:bg-black border border-gray-200/50 dark:border-zinc-800/80 rounded-[12px] p-1">
+    <div className="flex gap-1 bg-white/95 dark:bg-black border border-gray-200/50 dark:border-zinc-800/80 rounded-[14px] p-1">
       {scales.map((scale) => (
         <button
           type="button"
@@ -639,7 +639,7 @@ export const PriceChart = memo(function PriceChart({
             }}
           />
           <Card className="border-none bg-transparent">
-            <CardHeader className="flex flex-row items-start justify-between p-6 pl-6">
+            <CardHeader className="flex flex-row items-start justify-between">
               {/* Left side - Coin info */}
               <div className="relative flex gap-3 justify-between items-start w-full">
                 <div className="absolute left-0 flex flex-col space-y-1">
@@ -664,7 +664,7 @@ export const PriceChart = memo(function PriceChart({
                   />
                 </div>
               </div>
-               <div className="absolute right-4 top-4 z-20 pointer-events-auto flex flex-col items-end gap-2">
+               <div className="absolute right-0 top-0 z-20 pointer-events-auto flex flex-col items-end gap-2">
                   <TimeScaleSelector
                     activeTimeScale={deferredTimeScale}
                     setActiveTimeScale={handleTimeScaleChange}
@@ -717,7 +717,7 @@ export const PriceChart = memo(function PriceChart({
                   ) : null}
                 </div>
             </CardHeader>
-            <CardContent className="pl-8 pr-6">
+            <CardContent className="">
               <div className={cn(
                 "p-0 relative will-change-auto",
                 showPending && "opacity-80 transition-opacity duration-300"

@@ -286,9 +286,16 @@ export function createChartController({
         },
     });
 
+    // Guard against use-after-destroy: when cycling between charts the
+    // controller can be destroyed while a React effect still holds a stale
+    // reference — any lightweight-charts call on the disposed chart throws
+    // ("Value is null"). Every public method no-ops once destroyed.
+    let isDisposed = false;
+
     // Resize handling (ResizeObserver + fallback to window.resize)
     let resizeObserver: ResizeObserver | null = null;
     function resize() {
+        if (isDisposed) return;
         chart.applyOptions({
             width: containerEl.clientWidth,
             height: 400,
@@ -616,6 +623,7 @@ export function createChartController({
     chart.timeScale().subscribeVisibleLogicalRangeChange(updateProjectionDivider);
 
     function setData(ohlcvData: OHLCVDataPoint[]) {
+        if (isDisposed) return;
         // Defensive: prevent lightweight-charts from crashing on invalid points.
         safeOhlcvData = ohlcvData.filter(d => {
             if (!d || d.time === undefined || d.time === null) return false;
@@ -753,6 +761,7 @@ export function createChartController({
     }
 
     function updateLivePrice(priceUsd: number) {
+        if (isDisposed) return;
         if (!Number.isFinite(priceUsd) || priceUsd <= 0) return;
         if (safeOhlcvData.length === 0) return;
 
@@ -786,11 +795,13 @@ export function createChartController({
     }
 
     function setHighlightRange(range: ChartHighlightRange | null) {
+        if (isDisposed) return;
         highlightOverlay.setRange(range);
         axisOverlay.scheduleUpdate();
     }
 
     function setHullSuite(overlay: HullSuiteOverlay | null) {
+        if (isDisposed) return;
         if (!overlay || (!overlay.mhull?.length && !overlay.shull?.length)) {
             mhullSeries?.applyOptions({ visible: false });
             shullSeries?.applyOptions({ visible: false });
@@ -862,6 +873,7 @@ export function createChartController({
     }
 
     function setProjection(overlay: ProjectionOverlay | null) {
+        if (isDisposed) return;
         if (!overlay || !overlay.base?.length) {
             for (const series of [projBaseSeries, projBullSeries, projBearSeries]) {
                 series?.applyOptions({ visible: false });
@@ -899,23 +911,56 @@ export function createChartController({
         const bull = normalizeLineSeries(overlay.bull);
         const bear = normalizeLineSeries(overlay.bear);
 
-        projBaseSeries.setData(base);
-        projBullSeries.setData(bull);
-        projBearSeries.setData(bear);
+        try {
+            // Clear stale endpoint markers BEFORE feeding new data: setData on
+            // one series shifts the shared time scale while sibling series
+            // still hold old data — their marker primitives then recalculate
+            // against inconsistent state and lightweight-charts throws
+            // "Value is null" (ensureNotNull in _recalculateMarkers).
+            projBaseMarkers?.setMarkers([]);
+            projBullMarkers?.setMarkers([]);
+            projBearMarkers?.setMarkers([]);
 
-        // Endpoint dots — mark where each scenario path lands at the horizon.
-        projBaseMarkers ??= createSeriesMarkers(projBaseSeries);
-        projBullMarkers ??= createSeriesMarkers(projBullSeries);
-        projBearMarkers ??= createSeriesMarkers(projBearSeries);
-        const endpointMarker = (points: typeof base, color: string) => {
-            const lastPoint = points[points.length - 1];
-            return lastPoint
-                ? [{ time: lastPoint.time, position: 'inBar' as const, shape: 'circle' as const, color, size: 0.4 }]
-                : [];
-        };
-        projBaseMarkers.setMarkers(endpointMarker(base, baseColor));
-        projBullMarkers.setMarkers(endpointMarker(bull, bullColor));
-        projBearMarkers.setMarkers(endpointMarker(bear, bearColor));
+            projBaseSeries.setData(base);
+            projBullSeries.setData(bull);
+            projBearSeries.setData(bear);
+
+            // Endpoint dots — mark where each scenario path lands at the horizon.
+            projBaseMarkers ??= createSeriesMarkers(projBaseSeries);
+            projBullMarkers ??= createSeriesMarkers(projBullSeries);
+            projBearMarkers ??= createSeriesMarkers(projBearSeries);
+            const endpointMarker = (points: typeof base, color: string) => {
+                const lastPoint = points[points.length - 1];
+                return lastPoint
+                    ? [{ time: lastPoint.time, position: 'inBar' as const, shape: 'circle' as const, color, size: 0.4 }]
+                    : [];
+            };
+            projBaseMarkers.setMarkers(endpointMarker(base, baseColor));
+            projBullMarkers.setMarkers(endpointMarker(bull, bullColor));
+            projBearMarkers.setMarkers(endpointMarker(bear, bearColor));
+        } catch {
+            // Safety net: if lightweight-charts throws from an internal
+            // inconsistency, tear the projection series down instead of
+            // crashing the app — the next setProjection call rebuilds them.
+            for (const series of [projBaseSeries, projBullSeries, projBearSeries]) {
+                try {
+                    if (series) chart.removeSeries(series);
+                } catch {
+                    // already detached
+                }
+            }
+            projBaseSeries = null;
+            projBullSeries = null;
+            projBearSeries = null;
+            projBaseMarkers = null;
+            projBullMarkers = null;
+            projBearMarkers = null;
+            projectionActive = false;
+            lastProjectionEndEpoch = null;
+            projectionAnchorEpoch = null;
+            hideProjectionDivider();
+            return;
+        }
 
         // Future-dated points extend the shared time scale, but the setData()
         // fit logic only frames the price series — bring the projection into
@@ -946,6 +991,9 @@ export function createChartController({
     }
 
     function destroy() {
+        if (isDisposed) return;
+        isDisposed = true;
+
         chart.timeScale().unsubscribeVisibleTimeRangeChange(handleVisibleRangeChange);
         chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange);
         chart.timeScale().unsubscribeVisibleTimeRangeChange(updateScrubLine);
