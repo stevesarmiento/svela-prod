@@ -385,7 +385,7 @@ export function createChartController({
         // Tooltip wants raw dollars-of-mcap; the plotted series is rebased
         // into price space, so read from the raw map instead of the series.
         let currentMarketCap: number | null = null;
-        if (marketCapSeries && marketCapSeries.options().visible) {
+        if (marketCapSeries?.options().visible) {
             const epoch = timeToEpochSeconds(param.time);
             const raw = epoch == null ? undefined : marketCapRawByEpoch.get(epoch);
             if (typeof raw === 'number' && Number.isFinite(raw)) currentMarketCap = raw;
