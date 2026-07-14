@@ -30,6 +30,19 @@ export interface HullSuiteOverlay {
     lineStyle?: 'solid' | 'dotted';
 }
 
+export interface MarketCapOverlay {
+    /**
+     * Historical market cap points (raw USD). The controller rebases them into
+     * price space (fixed anchor: first shared bar) and renders on the SAME
+     * right price scale as price, so pan/zoom can't re-normalize the two
+     * lines independently. Tooltips still report the raw USD values.
+     */
+    points: Array<{ time: Time; value: number }>;
+    color?: string;
+    lineWidth?: LineWidth;
+    lineStyle?: 'solid' | 'dotted' | 'dashed';
+}
+
 export interface ProjectionOverlay {
     /** Drift path; first point anchors at the last real close. Points may be future-dated. */
     base: Array<{ time: Time; value: number }>;
@@ -76,6 +89,14 @@ export interface UseChartInstanceOptions {
      * This keeps the chart implementation modular while preserving indicator overlays.
      */
     hullSuite?: HullSuiteOverlay | null;
+    /**
+     * Optional historical market cap overlay line, price-locked: rebased by a
+     * fixed anchor (price₀/mcap₀ at the first shared bar) onto the price
+     * scale. The line reads as "price implied by market cap at anchor supply"
+     * — divergence from price = supply change, and an mcap ATH without a
+     * price ATH breaks visibly above the price line.
+     */
+    marketCap?: MarketCapOverlay | null;
     /**
      * Optional forward projection overlay (dashed base trend + bull/bear cone).
      * Points are future-dated (past the last real bar); the controller adjusts

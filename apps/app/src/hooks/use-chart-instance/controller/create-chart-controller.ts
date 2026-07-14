@@ -21,6 +21,7 @@ import type {
     ChartHighlightRange,
     ChartType,
     HullSuiteOverlay,
+    MarketCapOverlay,
     OHLCVDataPoint,
     PriceDataPoint,
     ProjectionOverlay,
@@ -38,6 +39,7 @@ export interface ChartController {
     updateLivePrice: (priceUsd: number) => void;
     setHighlightRange: (range: ChartHighlightRange | null) => void;
     setHullSuite: (overlay: HullSuiteOverlay | null) => void;
+    setMarketCap: (overlay: MarketCapOverlay | null) => void;
     setProjection: (overlay: ProjectionOverlay | null) => void;
     setCallbacks: (callbacks: Pick<UseChartInstanceOptions, 'onCrosshairMove' | 'onCrosshairTimeMove'>) => void;
     resize: () => void;
@@ -132,6 +134,13 @@ export function createChartController({
     let volumeSeries: ISeriesApi<'Histogram'> | null = null;
     let mhullSeries: ISeriesApi<'Line'> | null = null;
     let shullSeries: ISeriesApi<'Line'> | null = null;
+    let marketCapSeries: ISeriesApi<'Line'> | null = null;
+    let marketCapHighlightSeries: ISeriesApi<'Line'> | null = null;
+    // Raw market cap (USD) by epoch for the tooltip — the plotted series is
+    // rebased into price space (see setMarketCap), so its values aren't dollars-of-mcap.
+    let marketCapRawByEpoch = new Map<number, number>();
+    // Kept so setData can re-anchor the rebased series when price data changes.
+    let currentMarketCapOverlay: MarketCapOverlay | null = null;
     let projBaseSeries: ISeriesApi<'Line'> | null = null;
     let projBullSeries: ISeriesApi<'Line'> | null = null;
     let projBearSeries: ISeriesApi<'Line'> | null = null;
@@ -373,6 +382,15 @@ export function createChartController({
             currentVolume = typeof volData.value === 'number' && Number.isFinite(volData.value) ? volData.value : null;
         }
 
+        // Tooltip wants raw dollars-of-mcap; the plotted series is rebased
+        // into price space, so read from the raw map instead of the series.
+        let currentMarketCap: number | null = null;
+        if (marketCapSeries && marketCapSeries.options().visible) {
+            const epoch = timeToEpochSeconds(param.time);
+            const raw = epoch == null ? undefined : marketCapRawByEpoch.get(epoch);
+            if (typeof raw === 'number' && Number.isFinite(raw)) currentMarketCap = raw;
+        }
+
         // Scrub the projected (future) region like the real series: past the
         // last real bar the price series has no datum, but the projection
         // series do. Use the base path as the scrub price so the header,
@@ -443,6 +461,7 @@ export function createChartController({
                 percentageChange,
                 timestampMs: Number(param.time) * 1000,
                 volume: currentVolume ?? undefined,
+                marketCap: currentMarketCap ?? undefined,
                 ohlcData: currentOhlcData,
             });
 
@@ -714,6 +733,10 @@ export function createChartController({
         highlightOverlay.setData({ ohlcvData: safeOhlcvData, lineData, volumeData });
         updateCurrentPriceLine(dataLastPrice);
 
+        // Re-anchor the price-locked market cap overlay against the fresh
+        // price series (the rebase constant depends on the first shared bar).
+        if (currentMarketCapOverlay) setMarketCap(currentMarketCapOverlay);
+
         const firstEpoch = safeOhlcvData.length ? timeToEpochSeconds(safeOhlcvData[0]!.time) : null;
         const lastEpoch = safeOhlcvData.length ? timeToEpochSeconds(safeOhlcvData[safeOhlcvData.length - 1]!.time) : null;
 
@@ -845,6 +868,130 @@ export function createChartController({
 
         mhullSeries.setData(mhull);
         shullSeries.setData(shull);
+    }
+
+    function setMarketCap(overlay: MarketCapOverlay | null) {
+        if (isDisposed) return;
+        currentMarketCapOverlay = overlay;
+        if (!overlay || !overlay.points?.length) {
+            marketCapRawByEpoch = new Map();
+            marketCapSeries?.applyOptions({ visible: false });
+            marketCapSeries?.setData([]);
+            marketCapHighlightSeries?.applyOptions({ visible: false });
+            marketCapHighlightSeries?.setData([]);
+            highlightOverlay.setMarketCap(null);
+            return;
+        }
+
+        const rawPoints = normalizeLineSeries(overlay.points);
+        marketCapRawByEpoch = new Map();
+        for (const p of rawPoints) {
+            const epoch = timeToEpochSeconds(p.time);
+            if (epoch != null) marketCapRawByEpoch.set(epoch, p.value);
+        }
+
+        // Price-locked scaling: rebase market cap into price space with a FIXED
+        // anchor (first bar where both series have data): k = price₀ / mcap₀.
+        // Both lines then live on the same right price scale, so pan/zoom can't
+        // re-normalize them independently — the yellow line reads as "price
+        // implied by market cap at anchor supply". Divergence = supply change;
+        // an mcap ATH without a price ATH breaks visibly above the price line.
+        let anchorScale: number | null = null;
+        for (const p of rawPoints) {
+            const epoch = timeToEpochSeconds(p.time);
+            if (epoch == null || !(p.value > 0)) continue;
+            const bar = ohlcvByEpochSecond.get(epoch);
+            if (bar && Number.isFinite(bar.close) && bar.close > 0) {
+                anchorScale = bar.close / p.value;
+                break;
+            }
+        }
+        if (anchorScale == null) {
+            const firstBar = safeOhlcvData.find((d) => Number.isFinite(d.close) && d.close > 0);
+            const firstPoint = rawPoints.find((p) => p.value > 0);
+            if (firstBar && firstPoint) anchorScale = firstBar.close / firstPoint.value;
+        }
+
+        // No price data to anchor against yet — hide and wait; setData()
+        // re-applies the overlay once the price series lands.
+        if (anchorScale == null) {
+            marketCapSeries?.applyOptions({ visible: false });
+            marketCapSeries?.setData([]);
+            marketCapHighlightSeries?.applyOptions({ visible: false });
+            marketCapHighlightSeries?.setData([]);
+            highlightOverlay.setMarketCap(null);
+            return;
+        }
+
+        const scale = anchorScale;
+        const points = rawPoints.map((p) => ({ time: p.time, value: p.value * scale }));
+
+        const lineStyle =
+            overlay.lineStyle === 'dotted'
+                ? LineStyle.Dotted
+                : overlay.lineStyle === 'dashed'
+                  ? LineStyle.Dashed
+                  : LineStyle.Solid;
+        const lineWidth = overlay.lineWidth ?? 1;
+        // Default: yellow at half opacity.
+        const color = overlay.color ?? (resolvedIsDarkMode ? 'oklch(0.85 0.16 95 / 0.5)' : 'oklch(0.68 0.14 95 / 0.5)');
+
+        if (!marketCapSeries) {
+            marketCapSeries = chart.addSeries(LineSeries, {
+                lineWidth,
+                color,
+                lineStyle,
+                lastValueVisible: false,
+                priceLineVisible: false,
+                crosshairMarkerVisible: true,
+                crosshairMarkerRadius: 2,
+                crosshairMarkerBorderColor: 'oklch(1 0 0)',
+                crosshairMarkerBackgroundColor: color,
+                lastPriceAnimation: LastPriceAnimationMode.Disabled,
+                visible: true,
+                // Shared right price scale (values are rebased into price space).
+                priceFormat: { type: 'custom', formatter: () => '' },
+            });
+        } else {
+            marketCapSeries.applyOptions({
+                lineWidth,
+                color,
+                lineStyle,
+                crosshairMarkerBackgroundColor: color,
+                visible: true,
+            });
+        }
+
+        // Twin series for the scrub highlight window: renders the in-window
+        // slice at full strength while the base series is dimmed — mirrors
+        // how the price line scrubs (see highlight-overlay).
+        if (!marketCapHighlightSeries) {
+            marketCapHighlightSeries = chart.addSeries(LineSeries, {
+                lineWidth,
+                color,
+                lineStyle,
+                lastValueVisible: false,
+                priceLineVisible: false,
+                crosshairMarkerVisible: false,
+                lastPriceAnimation: LastPriceAnimationMode.Disabled,
+                visible: false,
+                priceFormat: { type: 'custom', formatter: () => '' },
+            });
+            marketCapHighlightSeries.setData([]);
+        } else {
+            marketCapHighlightSeries.applyOptions({ lineWidth, lineStyle });
+        }
+
+        marketCapSeries.setData(points);
+
+        // Registering re-applies the current highlight range, so the market
+        // cap line picks up the dim/highlight state immediately.
+        highlightOverlay.setMarketCap({
+            series: marketCapSeries,
+            highlightSeries: marketCapHighlightSeries,
+            data: points,
+            color,
+        });
     }
 
     function ensureProjectionSeries(
@@ -1028,5 +1175,5 @@ export function createChartController({
     // Initial size
     resize();
 
-    return { setData, updateLivePrice, setHighlightRange, setHullSuite, setProjection, setCallbacks, resize, destroy };
+    return { setData, updateLivePrice, setHighlightRange, setHullSuite, setMarketCap, setProjection, setCallbacks, resize, destroy };
 }
