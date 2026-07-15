@@ -9,6 +9,7 @@ import type { CoinMarketData } from '@/types/coins'
 import { WatchlistsGrid } from "../../watchlist/_components/watchlists-grid"
 import { WatchlistTable } from "../../watchlist/_components/watchlist-table"
 import { WatchlistChartsEmptyState } from "./watchlist-charts-empty-state"
+import { ComparisonGridSkeleton } from "../../comparison/_components/comparison-skeleton"
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -150,14 +151,30 @@ const ChartSkeleton = memo(function ChartSkeleton({ inset = true }: ChartSkeleto
 // Comparison view component for /chart page
 interface ComparisonChartsContentProps {
   inset?: boolean;
+  /** Controlled time scale (e.g. selector rendered in the page header). Falls back to internal state. */
+  activeTimeScale?: string;
+  onTimeScaleChange?: (scale: string) => void;
 }
 
-const ComparisonChartsContent = memo(function ComparisonChartsContent({ inset = true }: ComparisonChartsContentProps) {
+const ComparisonChartsContent = memo(function ComparisonChartsContent({
+  inset = true,
+  activeTimeScale: controlledTimeScale,
+  onTimeScaleChange,
+}: ComparisonChartsContentProps) {
   const {
-    activeTimeScale,
+    activeTimeScale: internalTimeScale,
     setActiveTimeScale,
     isInitialized,
-  } = useOptimizedChartsData()
+  } = useOptimizedChartsData({ initialTimeScale: "7d" })
+
+  const isControlled = controlledTimeScale !== undefined
+  const activeTimeScale = controlledTimeScale ?? internalTimeScale
+
+  if (process.env.NODE_ENV !== 'production' && isControlled && !onTimeScaleChange) {
+    console.warn(
+      'ComparisonChartsContent: `activeTimeScale` was provided without `onTimeScaleChange`; time scale changes will be ignored.',
+    )
+  }
 
   const [isPending, startTransition] = useTransition()
 
@@ -165,42 +182,38 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent({ inset = 
 
   const handleTimeScaleChange = (scale: string) => {
     startTransition(() => {
-      setActiveTimeScale(scale)
+      if (isControlled) {
+        onTimeScaleChange?.(scale)
+      } else {
+        setActiveTimeScale(scale)
+      }
     })
   }
 
   if (!isInitialized) {
-    return (
-      <div className="space-y-6 w-full px-4">
-        <div className="space-y-14">
-          <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/50 overflow-hidden p-1">
-            <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2" />
-            <div className="col-span-9 border border-zinc-800/30 rounded-[13px] overflow-hidden">
-              <div className="h-[400px] flex items-center justify-center">
-                <Spinner size={24} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
+    return <ComparisonGridSkeleton inset={inset} />
   }
 
   return (
-    <div className={`space-y-6 w-full ${inset ? 'px-4' : ''}`}>
-      <div className={`space-y-4 ${inset ? 'px-4' : ''}`}>
-        {/* Comparison of all watchlists */}
-        <WatchlistsGrid
-          onSelectWatchlist={(group) => {
-            // Handle watchlist selection - could update selected group
-            console.log('Selected watchlist:', group)
-          }}
-          viewMode="chart"
-          activeTimeScale={deferredTimeScale}
-          onTimeScaleChange={handleTimeScaleChange}
-          onViewModeChange={() => {}} // No-op for now
-        />
-        <WatchlistTable activeTimeScale={deferredTimeScale} />
+    <div className={`w-full ${inset ? 'px-4' : ''}`}>
+      {/* Comparison chart left (1/4), table right (3/4); stacks chart-first below lg */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="lg:col-span-5 min-w-0">
+          <div className="lg:sticky lg:top-4">
+            <WatchlistsGrid
+              viewMode="chart"
+              chartLayout="vertical"
+              activeTimeScale={deferredTimeScale}
+              onTimeScaleChange={handleTimeScaleChange}
+              onViewModeChange={() => {}} // No-op for now
+              showChartTimeScaleSelector={!isControlled}
+            />
+          </div>
+        </div>
+
+        <div className="lg:col-span-7 min-w-0">
+          <WatchlistTable activeTimeScale={deferredTimeScale} />
+        </div>
       </div>
     </div>
   )
@@ -218,13 +231,24 @@ export const ChartsClient = memo(function ChartsClient() {
 
 interface ComparisonChartsClientProps {
   inset?: boolean;
+  /** Controlled time scale (e.g. selector rendered in the page header). */
+  activeTimeScale?: string;
+  onTimeScaleChange?: (scale: string) => void;
 }
 
-export const ComparisonChartsClient = memo(function ComparisonChartsClient({ inset = true }: ComparisonChartsClientProps) {
+export const ComparisonChartsClient = memo(function ComparisonChartsClient({
+  inset = true,
+  activeTimeScale,
+  onTimeScaleChange,
+}: ComparisonChartsClientProps) {
   return (
     <ChartErrorBoundary>
-      <Suspense fallback={<ChartSkeleton inset={inset} />}>
-        <ComparisonChartsContent inset={inset} />
+      <Suspense fallback={<ComparisonGridSkeleton inset={inset} />}>
+        <ComparisonChartsContent
+          inset={inset}
+          activeTimeScale={activeTimeScale}
+          onTimeScaleChange={onTimeScaleChange}
+        />
       </Suspense>
     </ChartErrorBoundary>
   )

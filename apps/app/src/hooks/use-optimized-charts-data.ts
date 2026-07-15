@@ -15,11 +15,18 @@ interface OptimisticCoinMarketData extends CoinMarketData {
 
 
 
+interface UseOptimizedChartsDataOptions {
+  /** Initial time scale for the charts (defaults to "1d"). */
+  initialTimeScale?: string;
+}
+
 /**
  * Optimized version of useChartsData that maintains the same interface
  * but uses Convex caching internally for better performance
  */
-export function useOptimizedChartsData() {
+export function useOptimizedChartsData({
+  initialTimeScale = "1d",
+}: UseOptimizedChartsDataOptions = {}) {
   const { 
     watchlist, 
     isInitialized,
@@ -28,7 +35,7 @@ export function useOptimizedChartsData() {
     selectedGroupItems,
   } = useWatchlist()
   
-  const [activeTimeScale, setActiveTimeScale] = useState<string>("1d")
+  const [activeTimeScale, setActiveTimeScale] = useState<string>(initialTimeScale)
   
   // Use selected group coins if available, otherwise fall back to legacy watchlist
   const currentWatchlist = selectedGroup ? selectedGroupCoins : watchlist

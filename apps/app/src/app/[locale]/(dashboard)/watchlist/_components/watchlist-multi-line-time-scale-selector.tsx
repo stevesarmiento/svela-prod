@@ -14,12 +14,11 @@ export function WatchlistMultiLineTimeScaleSelector({
   const scales = [
     { value: "1d", label: "1D" }, // 24h change
     { value: "7d", label: "1W" }, // 7d change
-    { value: "30d", label: "1M" }, // 30d change
     { value: "max", label: "1Y" }, // Longest available
   ]
 
   return (
-    <div className="flex gap-1 rounded-[12px] border border-zinc-800/10 bg-zinc-950/5 p-1 backdrop-blur-xl dark:border-zinc-800/30 dark:bg-zinc-950/10">
+    <div className="flex gap-1 rounded-[14px] border border-zinc-800/10 bg-zinc-950/5 p-1 backdrop-blur-xl dark:border-zinc-800/30 dark:bg-zinc-950/10">
       {scales.map((scale) => (
         <button
           key={scale.value}

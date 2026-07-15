@@ -10,20 +10,10 @@ const watchlistTabParser = parseAsStringLiteral(watchlistTabValues).withDefault(
 function WatchlistContent() {
   const [viewMode, setViewMode] = useQueryState("wt", watchlistTabParser)
   const [activeTimeScale, setActiveTimeScale] = useState<string>('7d')
-  const [contentMode, setContentMode] = useState<'cards' | 'aggregate'>('cards')
 
   // Handle view mode changes from the WatchlistsGrid tabs
   const handleViewModeChange = (mode: 'grid' | 'chart') => {
     setViewMode(mode)
-  }
-
-  // Handle content mode changes (cards vs table)
-  const handleContentModeChange = (mode: 'cards' | 'table' | 'aggregate') => {
-    if (mode === 'table') {
-      setContentMode('aggregate')
-      return
-    }
-    setContentMode(mode)
   }
 
   return (
@@ -33,8 +23,6 @@ function WatchlistContent() {
         onTimeScaleChange={setActiveTimeScale}
         gridViewMode={viewMode}
         onGridViewModeChange={handleViewModeChange}
-        contentMode={contentMode}
-        onContentModeChange={handleContentModeChange}
       />
     </div>
   )

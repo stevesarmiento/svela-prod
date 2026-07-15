@@ -101,7 +101,7 @@ const holdingsDisplayFormatter = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 8,
 })
 
-const ChartHoldingsCell = memo(function ChartHoldingsCell({
+export const ChartHoldingsCell = memo(function ChartHoldingsCell({
   coinId,
   holdings,
   priceUsd,

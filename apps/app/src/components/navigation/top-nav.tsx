@@ -100,6 +100,7 @@ function getStaticRouteTitle(pathname: string): string | null {
   }
 
   const routeTitles: Record<string, string> = {
+    "/comparison": "Compare",
     "/screener": "Market Screener",
   };
 

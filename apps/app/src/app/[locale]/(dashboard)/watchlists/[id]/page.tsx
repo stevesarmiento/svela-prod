@@ -51,13 +51,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function TokenPage({ params }: PageProps) {
   const { id } = await params
 
-  const coin = await fetchCoinGeckoCoin(id)
-
-  return (
-    <TokenPageShell
-      id={id}
-      initialTokenName={coin?.name}
-      initialTokenSymbol={coin?.symbol}
-    />
-  )
+  // Screener-style instant UI: render the page frame immediately instead of
+  // blocking first paint on the coin metadata roundtrip. The client resolves
+  // name/symbol via the shared "coingecko-coin" query (PriceChart and the
+  // blurred background already fetch it), and generateMetadata streams in
+  // parallel without blocking the body.
+  return <TokenPageShell id={id} />
 }

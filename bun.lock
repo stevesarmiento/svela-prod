@@ -9,7 +9,7 @@
         "@t3-oss/env-nextjs": "^0.11.1",
         "@v1/typescript": "workspace:*",
         "latest": "^0.2.0",
-        "turbo": "^2.9.14",
+        "turbo": "^2.10.5",
         "typescript": "^5.9.3",
       },
     },
@@ -208,6 +208,9 @@
     "@biomejs/biome",
     "@sentry/cli",
   ],
+  "patchedDependencies": {
+    "liveline@0.0.7": "patches/liveline@0.0.7.patch",
+  },
   "packages": {
     "@ai-sdk/gateway": ["@ai-sdk/gateway@3.0.95", "", { "dependencies": { "@ai-sdk/provider": "3.0.8", "@ai-sdk/provider-utils": "4.0.23", "@vercel/oidc": "3.1.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-ZmUNNbZl3V42xwQzPaNUi+s8eqR2lnrxf0bvB6YbLXpLjHYv0k2Y78t12cNOfY0bxGeuVVTLyk856uLuQIuXEQ=="],
 

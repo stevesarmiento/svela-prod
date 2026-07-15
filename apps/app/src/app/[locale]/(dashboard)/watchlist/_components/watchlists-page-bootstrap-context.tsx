@@ -2,13 +2,13 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import type { Preloaded } from 'convex/react'
-import { usePreloadedQuery } from 'convex/react'
+import { usePreloadedQuery, useConvexAuth, useQuery } from 'convex/react'
 import { useCoinGeckoQuotesBulk } from '@/hooks/use-coingecko-quotes'
 import {
   buildCoinGeckoWatchlistCoin,
   type CoinGeckoWatchlistCoin,
 } from '@/hooks/use-coingecko-watchlist-coins'
-import type { api } from '../../../../../../convex/_generated/api'
+import { api } from '../../../../../../convex/_generated/api'
 import type { SelectedWatchlistItemRow, WatchlistGroup } from './watchlist-context'
 
 interface WatchlistsPageBootstrapValue {
@@ -53,6 +53,42 @@ export function WatchlistsPageBootstrapProvider(props: {
     }),
     [bootstrap],
   )
+
+  return (
+    <WatchlistsPageBootstrapContext.Provider value={value}>
+      {props.children}
+    </WatchlistsPageBootstrapContext.Provider>
+  )
+}
+
+/**
+ * Client-side variant of the bootstrap provider: fetches the same Convex
+ * bootstrap query from the browser instead of blocking the server render
+ * on `preloadQuery`. Lets pages paint their chrome instantly (screener-style)
+ * and render `fallback` in place of the data region until the query resolves.
+ * Skips the query while Convex auth is still resolving so signed-in users
+ * don't get a flash of the anonymous (empty) result.
+ */
+export function WatchlistsPageBootstrapClientProvider(props: {
+  children: ReactNode
+  fallback?: ReactNode
+}) {
+  const { isLoading: isAuthLoading } = useConvexAuth()
+  const bootstrap = useQuery(
+    api.watchlists.getMyWatchlistsPageBootstrap,
+    isAuthLoading ? 'skip' : {},
+  )
+
+  const value = useMemo<WatchlistsPageBootstrapValue | null>(() => {
+    if (!bootstrap) return null
+    return {
+      groups: bootstrap.groups,
+      defaultGroup: bootstrap.defaultGroup,
+      itemsByGroupId: normalizeItemsByGroupId(bootstrap.itemsByGroupId),
+    }
+  }, [bootstrap])
+
+  if (!value) return <>{props.fallback ?? null}</>
 
   return (
     <WatchlistsPageBootstrapContext.Provider value={value}>

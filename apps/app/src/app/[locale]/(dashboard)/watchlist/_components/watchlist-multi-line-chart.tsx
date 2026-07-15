@@ -27,6 +27,13 @@ interface WatchlistMultiLineChartProps {
   setActiveTimeScale: (scale: string) => void
   selectedWatchlists: Set<WatchlistGroupId>
   onSelectWatchlist?: (watchlistId: WatchlistGroupId) => void
+  /**
+   * 'horizontal' (default): legend sidebar left, chart right (12-col grid).
+   * 'vertical': chart on top, legend stacked below — for narrow columns.
+   */
+  layout?: 'horizontal' | 'vertical'
+  /** Hide the in-card selector when the page renders its own (e.g. comparison header). */
+  showTimeScaleSelector?: boolean
 }
 
 function getBucketMsFromTimeScale(timeScale: string): number {
@@ -112,11 +119,15 @@ function useWatchlistSeriesData(
   }, [groupWatchlist])
   
   // Get coin data using CoinGecko
-  const { data: coins } = useCoinGeckoWatchlistCoins(coinIds)
-  
+  const { data: rawCoins } = useCoinGeckoWatchlistCoins(coinIds)
+
+  // Stable reference while loading: `rawCoins || []` inline would create a new
+  // array every render and re-trigger the aggregate hook's layout effect.
+  const coins = useMemo(() => rawCoins ?? [], [rawCoins])
+
   // Get aggregate chart data using isolated CoinGecko hook
   const { aggregateData } = useCoinGeckoWatchlistAggregateChartIsolated({
-    coins: coins || [],
+    coins,
     timeScale: activeTimeScale,
     rangeEndTimeMs,
   })
@@ -140,12 +151,35 @@ function useWatchlistSeriesData(
   return watchlistSeries
 }
 
-function WatchlistSeriesProvider({ 
-  group, 
+/**
+ * Content equality for series payloads. `seriesData` gets a new object identity
+ * whenever the coins list refreshes (every quote refetch / window focus) even
+ * when the chart data itself is unchanged — compare by content so we only
+ * propagate meaningful updates.
+ */
+function isSameWatchlistSeries(
+  a: WatchlistSeries | null | undefined,
+  b: WatchlistSeries | null | undefined,
+): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.icon === b.icon &&
+    a.coinsCount === b.coinsCount &&
+    // `data` comes from the aggregate hook's state, which already bails out on
+    // deep-equal recomputes — reference equality is a reliable content check.
+    a.data === b.data
+  )
+}
+
+function WatchlistSeriesProvider({
+  group,
   activeTimeScale,
   rangeEndTimeMs,
-  onDataUpdate 
-}: { 
+  onDataUpdate
+}: {
   group: WatchlistGroup
   activeTimeScale: string
   rangeEndTimeMs: number
@@ -153,28 +187,38 @@ function WatchlistSeriesProvider({
 }) {
   // Use our custom hook to get series data
   const seriesData = useWatchlistSeriesData(group, activeTimeScale, rangeEndTimeMs)
-  
+
+  // Track the last payload we sent so unstable identities (new object, same
+  // content) don't re-notify the parent — that setState → render → new
+  // identity cycle is what previously spun "maximum update depth exceeded".
+  const lastSentRef = useRef<WatchlistSeries | null | undefined>(undefined)
+
   // Update parent when data changes
   React.useEffect(() => {
+    const prev = lastSentRef.current
+    if (prev !== undefined && isSameWatchlistSeries(prev, seriesData)) return
+    lastSentRef.current = seriesData
     onDataUpdate(group._id, seriesData)
   }, [group._id, seriesData, onDataUpdate])
-  
+
   return null
 }
 
-export function WatchlistMultiLineChart({ 
-  activeTimeScale, 
+export function WatchlistMultiLineChart({
+  activeTimeScale,
   setActiveTimeScale,
   selectedWatchlists,
-  onSelectWatchlist
+  layout = 'horizontal',
+  showTimeScaleSelector = true
 }: WatchlistMultiLineChartProps) {
+  const isVertical = layout === 'vertical'
   const [hoveredWatchlist, setHoveredWatchlist] = useState<WatchlistGroupId | null>(null)
   const [hiddenWatchlists, setHiddenWatchlists] = useState<Set<WatchlistGroupId>>(new Set())
   const [watchlistData, setWatchlistData] = useState<Map<WatchlistGroupId, WatchlistSeries>>(new Map())
   const { watchlistGroups: watchlistGroupsData } = useWatchlist()
-  
+
   const isDarkMode = true
-  
+
   // Filter to only selected watchlists
   const activeWatchlists = useMemo(() => {
     return watchlistGroupsData.filter(group => selectedWatchlists.has(group._id))
@@ -200,12 +244,20 @@ export function WatchlistMultiLineChart({
 
   const handleDataUpdate = React.useCallback((groupId: WatchlistGroupId, data: WatchlistSeries | null) => {
     setWatchlistData(prev => {
-      const newMap = new Map(prev)
-      if (data) {
-        newMap.set(groupId, data)
-      } else {
+      // Bail out (return `prev`) when nothing actually changed: React skips
+      // the re-render entirely, which hard-stops any update loop driven by
+      // unstable upstream identities (e.g. focus-refetch storms).
+      if (!data) {
+        if (!prev.has(groupId)) return prev
+        const newMap = new Map(prev)
         newMap.delete(groupId)
+        return newMap
       }
+
+      if (isSameWatchlistSeries(prev.get(groupId), data)) return prev
+
+      const newMap = new Map(prev)
+      newMap.set(groupId, data)
       return newMap
     })
   }, [])
@@ -231,13 +283,6 @@ export function WatchlistMultiLineChart({
       }
     })
   }, [watchlistData, isDarkMode])
-
-  const latestValues = useMemo(() => {
-    return watchlistSeriesData.map(series => ({
-      ...series,
-      latestValue: series.data[series.data.length - 1]?.value || 0
-    }))
-  }, [watchlistSeriesData])
 
   const livelineSeries = useMemo((): LivelineSeries[] => {
     const isHovering = hoveredWatchlist !== null && !hiddenWatchlists.has(hoveredWatchlist)
@@ -308,6 +353,31 @@ export function WatchlistMultiLineChart({
 
     if (min === null || max === null) return 30
     return Math.max(30, max - min)
+  }, [livelineSeries])
+
+  // Matches the overview performance chart's time-axis formatting.
+  const formatTime = useMemo(() => {
+    let first: number | null = null
+    let last: number | null = null
+
+    for (const s of livelineSeries) {
+      const f = s.data[0]?.time
+      const l = s.data[s.data.length - 1]?.time
+      if (typeof f === "number" && (first === null || f < first)) first = f
+      if (typeof l === "number" && (last === null || l > last)) last = l
+    }
+
+    const spanSec = first !== null && last !== null ? last - first : 0
+    const includeYear = spanSec > 180 * 24 * 60 * 60
+
+    return (epochSeconds: number) => {
+      const dt = new Date(epochSeconds * 1000)
+      return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        ...(includeYear ? { year: "numeric" as const } : {}),
+      }).format(dt)
+    }
   }, [livelineSeries])
 
   const tooltipClassName = useMemo(
@@ -448,7 +518,11 @@ export function WatchlistMultiLineChart({
   )
 
   return (
-    <div className="grid grid-cols-12 gap-0 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/20 border-zinc-800/10 overflow-hidden p-1">
+    <div
+      className={cn(
+        isVertical ? "flex flex-col" : "grid grid-cols-12",
+      )}
+    >
       {/* ✅ IMPROVED: Data providers using custom hook */}
       {activeWatchlists.map(group => (
         <WatchlistSeriesProvider
@@ -461,9 +535,14 @@ export function WatchlistMultiLineChart({
       ))}
       
       {/* Legend */}
-      <div className="flex flex-col col-span-3 p-4 space-y-2">           
+      <div
+        className={cn(
+          "flex flex-col space-y-2",
+          isVertical ? "order-2 p-3" : "col-span-3 p-4",
+        )}
+      >
         <div className="flex flex-col gap-1">
-          {latestValues.map((watchlist) => {
+          {watchlistSeriesData.map((watchlist) => {
             const isHidden = hiddenWatchlists.has(watchlist.id)
             return (
               <div key={watchlist.id}>
@@ -478,12 +557,16 @@ export function WatchlistMultiLineChart({
                   onMouseEnter={() => setHoveredWatchlist(watchlist.id)}
                   onMouseLeave={() => setHoveredWatchlist(null)}
                 >
+                  {/* Whole row toggles chart visibility */}
                   <button
                     type="button"
                     className="relative flex h-full min-w-0 flex-1 items-center gap-1"
                     onFocus={() => setHoveredWatchlist(watchlist.id)}
                     onBlur={() => setHoveredWatchlist(null)}
-                    onClick={() => onSelectWatchlist?.(watchlist.id)}
+                    onClick={() => toggleWatchlistVisibility(watchlist.id)}
+                    title={isHidden ? "Show on chart" : "Hide from chart"}
+                    aria-label={isHidden ? `Show ${watchlist.name} on chart` : `Hide ${watchlist.name} from chart`}
+                    aria-pressed={isHidden}
                   >
                     <div
                       className={cn(
@@ -503,30 +586,12 @@ export function WatchlistMultiLineChart({
                         "text-xs font-medium truncate",
                         isHidden ? "text-muted-foreground" : "text-foreground"
                       )}>{watchlist.name}</span>
-                      <span className="text-xs font-berkeley-mono text-muted-foreground">({watchlist.coinsCount})</span>
                     </div>
 
-                    {/* Performance */}
-                    <div className={cn(
-                      "text-xs font-berkeley-mono",
-                      isHidden
-                        ? 'text-muted-foreground'
-                        : watchlist.latestValue > 0 ? 'text-green-500' : 'text-red-500'
-                    )}>
-                      {watchlist.latestValue > 0 ? '+' : ''}{watchlist.latestValue.toFixed(2)}%
-                    </div>
-                  </button>
-
-                  {/* Visibility toggle */}
-                  <button
-                    type="button"
-                    className="flex h-full shrink-0 items-center px-2 text-muted-foreground/60 hover:text-foreground"
-                    onClick={() => toggleWatchlistVisibility(watchlist.id)}
-                    title={isHidden ? "Show on chart" : "Hide from chart"}
-                    aria-label={isHidden ? `Show ${watchlist.name} on chart` : `Hide ${watchlist.name} from chart`}
-                    aria-pressed={isHidden}
-                  >
-                    {isHidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                    {/* Visibility indicator */}
+                    <span className="flex h-full shrink-0 items-center px-2 text-muted-foreground/60">
+                      {isHidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -543,60 +608,66 @@ export function WatchlistMultiLineChart({
           )}
         </div>
       </div>
-      
-      <div className="col-span-9 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)]">
+
+      <div
+        className={cn(
+          isVertical ? "order-1" : "col-span-9",
+        )}
+      >
         {/* Chart Content */}
         <div className="p-0 relative">
           <div
-            className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
+            className="pointer-events-none absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
             style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
+                backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
                 backgroundRepeat: "repeat",
+                maskImage:
+                  "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
+                WebkitMaskImage:
+                  "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
             }}
           />
           <Card className="border-none bg-transparent">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">
-                  {selectedWatchlists.size} watchlist{selectedWatchlists.size !== 1 ? 's' : ''} comparison
-                </span>
-                {watchlistSeriesData.length < selectedWatchlists.size && (
-                  <span className="text-xs text-muted-foreground/60">(Loading...)</span>
-                )}
-              </div>
-              
+            <CardHeader
+              className={cn(
+                "flex flex-row items-center justify-between",
+                isVertical && "flex-wrap gap-2 p-4",
+              )}
+            >              
               {/* Time Scale Selector */}
-              <WatchlistMultiLineTimeScaleSelector
-                activeTimeScale={activeTimeScale}
-                setActiveTimeScale={setActiveTimeScale}
-              />
+              {showTimeScaleSelector && (
+                <WatchlistMultiLineTimeScaleSelector
+                  activeTimeScale={activeTimeScale}
+                  setActiveTimeScale={setActiveTimeScale}
+                />
+              )}
             </CardHeader>
-            <CardContent className="pl-8">
+            <CardContent className={cn(isVertical ? "p-2 pt-0" : "pl-8")}>
               <div className="p-0 relative">
                 {/* Show loading message if no chart data yet */}
                 {watchlistSeriesData.length === 0 && selectedWatchlists.size > 0 ? (
-                  <div className="relative h-[400px]">
+                  <div className={cn("relative", isVertical ? "h-[300px]" : "h-[400px]")}>
                     <ChartLoadingSkeleton
-                      height={400}
+                      height={isVertical ? 300 : 400}
                       lines={Math.max(1, selectedWatchlists.size)}
                       className="opacity-80"
                     />
                   </div>
                 ) : watchlistSeriesData.length === 0 ? (
-                  <div className="flex items-center justify-center h-[400px]">
+                  <div className={cn("flex items-center justify-center", isVertical ? "h-[300px]" : "h-[400px]")}>
                     <div className="text-center">
                       <p className="text-sm text-muted-foreground">All watchlists will appear here automatically</p>
                     </div>
                   </div>
                 ) : (
-                  <div ref={chartWrapperRef} className="h-[400px] w-full">
+                  <div ref={chartWrapperRef} className={cn("w-full", isVertical ? "h-[300px]" : "h-[400px]")}>
                     <Liveline
                       data={[]}
                       value={0}
                       series={livelineSeries}
                       theme={isDarkMode ? "dark" : "light"}
-                      color={isDarkMode ? "oklch(0.9276 0.0058 264.53)" : "oklch(0.2077 0.0398 265.75)"}
-                      lineWidth={2}
+                      color={isDarkMode ? "oklch(0.9276 0.0058 264.53)" : "oklch(0.2101 0.0318 264.66)"}
+                      lineWidth={1}
                       window={windowSecs}
                       grid={false}
                       fill={false}
@@ -607,9 +678,9 @@ export function WatchlistMultiLineChart({
                       tooltipY={-9999}
                       tooltipOutline={false}
                       onHover={handleLivelineHover}
-                      formatTime={() => ""}
+                      formatTime={formatTime}
                       formatValue={(v) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%`}
-                      padding={{ top: 12, right: 12, bottom: 12, left: 12 }}
+                      padding={{ top: 12, right: 20, bottom: 20, left: 12 }}
                       className="size-full"
                     />
                   </div>

@@ -1,15 +1,13 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button } from "@v1/ui/button"
-import { X } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Badge } from "@v1/ui/badge"
+import { ChevronDown } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@v1/ui/cn"
-import { toast } from "@v1/ui/use-toast"
 import { Skeleton } from "@v1/ui/skeleton"
-import { Spinner } from "@v1/ui/spinner"
-import { env } from "@/env.mjs"
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
+import { COLOR_THEMES } from '@/components/color-picker'
 import { AvatarCircles } from '@v1/ui/token-stacks'
 import { useWatchlistByGroup } from '@/lib/convex-hooks'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
@@ -17,15 +15,44 @@ import {
   useCoinGeckoWatchlistAggregateChartIsolated,
   getWatchlistAggregateRangeEndMs,
 } from '@/hooks/use-coingecko-watchlist-aggregate-chart-isolated'
-import { useDeleteWatchlistGroup } from '@/lib/convex-hooks'
 import { useWatchlist, type WatchlistGroup } from './watchlist-context'
-import { getTokenLogoURL } from '@/lib/logo-overrides'
+import { cleanTokenName, getTokenLogoURL } from '@/lib/logo-overrides'
+import { TokenLogo } from '@/components/token-logo'
+import { Liveline } from "liveline"
 import { formatUsdPrice } from '@/lib/format-usd'
 import { IconTriangleFill } from "symbols-react"
 
 type WatchlistGroupId = WatchlistGroup["_id"]
 
-const isDebug = env.NODE_ENV === "development"
+/** Per-coin row shown in the expanded accordion panel. */
+interface CoinRow {
+  id: string
+  name: string
+  symbol: string
+  imageUrl: string | null
+  priceUsd: number | null
+  /** % change matched to the active time scale (quote-based). */
+  changePct: number | null
+}
+
+/** Same derivation as the screener table: infer the USD move from spot price + % change. */
+function deriveUsdMoveFromPercentChange(args: {
+  priceUsd: number
+  percentChange: number
+}): number | null {
+  const { priceUsd, percentChange } = args
+
+  if (!Number.isFinite(priceUsd) || priceUsd <= 0) return null
+  if (!Number.isFinite(percentChange)) return null
+
+  const ratio = percentChange / 100
+  const denom = 1 + ratio
+  if (!Number.isFinite(denom) || denom <= 0) return null
+
+  const previousPrice = priceUsd / denom
+  const deltaUsd = priceUsd - previousPrice
+  return Number.isFinite(deltaUsd) ? deltaUsd : null
+}
 
 interface WatchlistData {
   id: WatchlistGroupId
@@ -46,6 +73,10 @@ interface WatchlistData {
   holdingsValueUsd: number | null
   /** Count of watchlist rows with a holdings quantity set. */
   holdingsPositionsCount: number
+  /** Per-coin rows for the expanded accordion panel (market-cap desc). */
+  coins: CoinRow[]
+  /** Aggregate % series for the row's inline trend chart (unix-seconds time). */
+  aggregateSeries: Array<{ time: number; value: number }>
   isLoading?: boolean
 }
 
@@ -117,8 +148,12 @@ function useWatchlistData(
   }, [groupWatchlist])
   
   // Get coin data using CoinGecko
-  const { data: coins } = useCoinGeckoWatchlistCoins(coinIds)
-  
+  const { data: rawCoins } = useCoinGeckoWatchlistCoins(coinIds)
+
+  // Stable reference while loading: `rawCoins || []` inline would create a new
+  // array every render and re-trigger the aggregate hook's layout effect.
+  const coins = useMemo(() => rawCoins ?? [], [rawCoins])
+
   // Get aggregate chart data using isolated CoinGecko hook (time scale matches column header).
   const {
     aggregateData,
@@ -126,8 +161,9 @@ function useWatchlistData(
     isFetching: histFetching,
     isPlaceholderData: histPlaceholder,
     isChangeUnavailable,
+    changePctByCoinId,
   } = useCoinGeckoWatchlistAggregateChartIsolated({
-    coins: coins || [],
+    coins,
     timeScale: activeTimeScale,
     rangeEndTimeMs,
   })
@@ -178,14 +214,40 @@ function useWatchlistData(
     // Total notional for rows with holdings set (same idea as chart-table holdings badge)
     let holdingsPositionsCount = 0
     let holdingsNotionalSum = 0
+    const holdingsByCoinId = new Map<string, number>()
     for (const item of groupWatchlist ?? []) {
       const qty = item.holdings
       if (typeof qty !== "number" || !Number.isFinite(qty) || qty < 0) continue
+      holdingsByCoinId.set(item.coinId, qty)
       holdingsPositionsCount += 1
       const priceUsd = priceUsdByCoinId.get(item.coinId)
       if (priceUsd !== undefined) holdingsNotionalSum += qty * priceUsd
     }
     const holdingsValueUsd = holdingsPositionsCount === 0 ? null : holdingsNotionalSum
+
+    // Per-coin rows for the expanded accordion panel (market-cap desc)
+    const coinRows: CoinRow[] = coins
+      .slice()
+      .sort((a, b) => (b.quote?.USD?.market_cap ?? 0) - (a.quote?.USD?.market_cap ?? 0))
+      .map((coin) => {
+        const priceUsd = priceUsdByCoinId.get(coin.id) ?? null
+        return {
+          id: coin.id,
+          name: cleanTokenName(coin.name),
+          symbol: coin.symbol,
+          imageUrl: getTokenLogoURL(coin.symbol, coin.image) ?? null,
+          priceUsd,
+          // Chart-derived return over the exact interval (works for 1Y too);
+          // quote-based estimate only while the chart series is still loading.
+          changePct:
+            changePctByCoinId[coin.id] ?? pickQuoteIntervalChange(coin, activeTimeScale),
+        }
+      })
+
+    // Aggregate % series for the inline trend chart (Time → unix seconds).
+    const aggregateSeries = chartAggregateReady
+      ? aggregateData.map((p) => ({ time: Number(p.time), value: p.value }))
+      : []
 
     // Calculate aggregates from coin data
     const totalMarketCap = coins.reduce((sum, coin) => sum + (coin.quote.USD.market_cap || 0), 0)
@@ -221,6 +283,8 @@ function useWatchlistData(
       coinImages,
       holdingsValueUsd,
       holdingsPositionsCount,
+      coins: coinRows,
+      aggregateSeries,
       isLoading: false
     }
   }, [
@@ -228,35 +292,197 @@ function useWatchlistData(
     coins,
     aggregateData,
     groupWatchlist,
+    activeTimeScale,
     isChangeUnavailable,
     histLoading,
     histFetching,
     histPlaceholder,
     quoteEstimate,
+    changePctByCoinId,
   ])
 
   return watchlistData
 }
 
-// ✅ IMPROVED: Component that uses the custom hook for individual watchlist cards
-function WatchlistCard({ 
-  group, 
+function getTimeScaleLabel(scale: string) {
+  switch (scale) {
+    case '1d': return '1D'
+    case '7d': return '1W'
+    case '30d': return '1M'
+    case 'max': return '1Y'
+    case '2y': return '2Y'
+    default: return scale.toUpperCase()
+  }
+}
+
+/**
+ * Shared watchlist-row grid (sm+): wide name column so the pill + token stack
+ * always fit, slim trailing column (just the expand/collapse chevron).
+ */
+const ROW_GRID_COLS_SM =
+  "sm:grid-cols-[minmax(0,2fr)_1fr_1fr_32px]"
+
+/** Shared grid template so the coins sub-table header and rows stay aligned. */
+const COIN_GRID_CLASS =
+  "grid grid-cols-[minmax(0,1.6fr)_1fr_1.2fr] items-center gap-3 px-3 sm:gap-4 sm:px-4"
+
+/** Inline aggregate trend chart for a watchlist row (colored by interval change). */
+function TrendSparkline({
+  series,
+  change,
+  isLoading,
+}: {
+  series: Array<{ time: number; value: number }>
+  change: number
+  isLoading: boolean
+}) {
+  const windowSecs = useMemo(() => {
+    if (series.length < 2) return 30
+    const first = series[0]!.time
+    const last = series[series.length - 1]!.time
+    return Math.max(30, last - first)
+  }, [series])
+
+  const lastValue = series.length > 0 ? series[series.length - 1]!.value : 0
+  const color =
+    change > 0
+      ? "oklch(0.7688 0.1687 161.95)" // emerald, matches inline price charts
+      : change < 0
+        ? "oklch(0.7022 0.1892 22.23)" // rose
+        : "oklch(1 0 0 / 0.35)"
+
+  return (
+    <div className="pointer-events-none h-7 w-[224px] overflow-hidden">
+      <Liveline
+        data={series}
+        value={lastValue}
+        theme="dark"
+        color={color}
+        showValue={false}
+        dot={false}
+        lineWidth={1}
+        window={windowSecs}
+        grid={false}
+        badge={false}
+        fill={false}
+        pulse={false}
+        scrub={false}
+        momentum={false}
+        exaggerate
+        loading={isLoading || series.length < 2}
+        emptyText="No data"
+        formatTime={() => ""}
+        padding={{ top: 4, right: 0, bottom: 4, left: 0 }}
+        className="size-full"
+      />
+    </div>
+  )
+}
+
+function CoinRowItem({ coin }: { coin: CoinRow }) {
+  const change = coin.changePct
+  const isPositive = typeof change === 'number' && change > 0
+  const isNegative = typeof change === 'number' && change < 0
+
+  return (
+    <Link
+      href={`/watchlists/${encodeURIComponent(coin.id)}`}
+      className={cn(COIN_GRID_CLASS, "py-2 hover:bg-primary/[0.04] transition-colors duration-200")}
+    >
+      {/* Token */}
+      <div className="flex min-w-0 items-center gap-2">
+        <TokenLogo
+          src={coin.imageUrl}
+          alt={coin.name}
+          sizePx={16}
+          fallbackText={coin.symbol}
+          className="shrink-0 rounded-full ring-1 ring-zinc-200 dark:ring-black/80"
+        />
+        <span className="min-w-0 truncate text-xs font-medium">{coin.name}</span>
+        <span className="shrink-0 text-[10px] uppercase text-muted-foreground">{coin.symbol}</span>
+      </div>
+
+      {/* Price */}
+      <div className="text-right font-berkeley-mono text-xs tabular-nums">
+        {coin.priceUsd === null ? '—' : formatUsdPrice(coin.priceUsd)}
+      </div>
+
+      {/* Returns (matched to active time scale): USD move left, % in a badge — same as screener */}
+      <div className="flex items-center justify-end">
+        {change === null ? (
+          <span className="font-berkeley-mono text-xs tabular-nums text-muted-foreground">N/A</span>
+        ) : (
+          (() => {
+            const isNeutral = !isPositive && !isNegative
+            const usdMove =
+              coin.priceUsd !== null
+                ? deriveUsdMoveFromPercentChange({
+                    priceUsd: coin.priceUsd,
+                    percentChange: change,
+                  })
+                : null
+            const usdSign = isPositive ? "+" : isNegative ? "-" : ""
+
+            return (
+              <div className="inline-flex items-center justify-end gap-2">
+                <span
+                  className={cn(
+                    "font-berkeley-mono text-[11px] tabular-nums",
+                    isPositive && "text-emerald-400",
+                    isNegative && "text-rose-400",
+                    isNeutral && "text-muted-foreground",
+                  )}
+                >
+                  {usdMove === null ? "—" : `${usdSign}${formatUsdPrice(Math.abs(usdMove))}`}
+                </span>
+                <Badge
+                  variant={isPositive ? "success" : isNegative ? "destructive" : "outline"}
+                  className={cn(
+                    isNeutral && "border-zinc-200/60 text-muted-foreground dark:border-white/10",
+                    "h-5 px-1.5 font-berkeley-mono text-[11px] tabular-nums gap-1",
+                  )}
+                >
+                  <IconTriangleFill
+                    aria-hidden="true"
+                    className={cn(
+                      "size-[4px] shrink-0 fill-current",
+                      isNegative && "rotate-180",
+                    )}
+                  />
+                  {Math.abs(change).toFixed(2)}%
+                </Badge>
+              </div>
+            )
+          })()
+        )}
+      </div>
+
+    </Link>
+  )
+}
+
+// ✅ IMPROVED: Row component that uses the custom hook for individual watchlists
+function WatchlistCard({
+  group,
   activeTimeScale,
   rangeEndTimeMs,
-  onRemove,
-  isRemoving,
   onHoldingsValueKnown,
-}: { 
+  isExpanded,
+  onToggleExpanded,
+}: {
   group: WatchlistGroup
   activeTimeScale: string
   rangeEndTimeMs: number
-  onRemove: (groupId: WatchlistGroupId) => void
-  isRemoving: boolean
   /** Fired when quote/holdings data is ready so parent can sort rows by holdings value (desc). */
   onHoldingsValueKnown: (groupId: WatchlistGroupId, holdingsValueUsd: number | null) => void
+  isExpanded: boolean
+  onToggleExpanded: (groupId: WatchlistGroupId) => void
 }) {
   // Use our custom hook to get watchlist data
   const watchlistData = useWatchlistData(group._id, activeTimeScale, rangeEndTimeMs)
+
+  const colorTheme =
+    COLOR_THEMES[group.color as keyof typeof COLOR_THEMES] || COLOR_THEMES.default
 
   useEffect(() => {
     if (watchlistData !== null) {
@@ -287,71 +513,28 @@ function WatchlistCard({
       coinImages: [],
       holdingsValueUsd: null,
       holdingsPositionsCount: 0,
+      coins: [],
+      aggregateSeries: [],
       isLoading: true
     }
   }, [watchlistData, group])
 
-  const getTimeScaleLabel = (scale: string) => {
-    switch (scale) {
-      case '1d': return '1D'
-      case '7d': return '1W'
-      case '30d': return '1M'
-      case 'max': return '1Y'
-      case '2y': return '2Y'
-      default: return scale.toUpperCase()
-    }
-  }
-
   return (
-    <div className="rounded-[10px] bg-primary/5 p-0.5">
-      {/* Header with Watchlist Name */}
-      <div className="hidden px-3 py-2 sm:block">
-        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-          <div className="grid grid-cols-4 gap-4">
-            <div className="flex items-center gap-2">
-              <WatchlistGroupIcon 
-                icon={watchlist.icon} 
-                className="size-4"
-                size={16}
-              />
-              <span className="text-muted-foreground">
-                {watchlist.isLoading ? "Loading..." : watchlist.name}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-end">
-              Holdings Value
-            </div>
-
-            <div className="flex items-center gap-1 justify-end">
-              {getTimeScaleLabel(activeTimeScale)} Change
-            </div>
-            <div className="flex items-center justify-end gap-1">
-              Action
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Table Body */}
-      <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden hover:ring-2 hover:ring-zinc-200/30 transition-shadow duration-[var(--duration-micro)]">
-        {watchlist.isLoading ? (
+    <div>
+      {watchlist.isLoading ? (
           // Show loading state
-          <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 opacity-60 sm:grid-cols-4 sm:gap-4 sm:px-4 sm:py-2 sm:pr-2">
-            {/* Watchlist Name */}
+          <div className={cn("grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 opacity-60 sm:gap-4 sm:px-4 sm:py-2 sm:pr-2", ROW_GRID_COLS_SM)}>
+            {/* Watchlist name pill */}
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
-              <Skeleton className="h-3 w-16 rounded-full" />
-              <span className="text-primary/40 text-xs whitespace-nowrap">watchlist has</span>
-              <Skeleton className="h-3 w-8 rounded-full" />
-              <span className="text-primary/40 text-xs whitespace-nowrap">coins</span>
+              <Skeleton className="h-5 w-24 rounded-full" />
             </div>
 
-            {/* Holdings Value */}
+            {/* Trend chart */}
             <div className="col-start-1 row-start-2 flex min-w-0 flex-col gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
-                Holdings
+                Trend
               </span>
-              <Skeleton className="h-3 w-14 rounded-full" />
+              <TrendSparkline series={[]} change={0} isLoading />
             </div>
 
             {/* Change */}
@@ -362,56 +545,73 @@ function WatchlistCard({
               <Skeleton className="h-3 w-10 rounded-full" />
             </div>
 
-            {/* Remove */}
+            {/* Expand/collapse indicator */}
             <div className="col-start-2 row-start-1 flex items-center justify-end sm:col-start-auto sm:row-start-auto">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled
-                className="h-6 w-6 p-0 rounded-lg bg-transparent opacity-50"
-              >
-                <X className="h-4 w-4 text-muted-foreground" />
-              </Button>
+              <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground opacity-50" />
             </div>
           </div>
         ) : (
-          // Show clickable link for real watchlists
-          <Link 
-            href={group.slug ? `/watchlist?wg=${encodeURIComponent(group.slug)}&wt=chart` : "/watchlist?wt=chart"}
-            className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer sm:grid-cols-4 sm:gap-4 sm:px-4 sm:py-2 sm:pr-2"
+          // Accordion trigger row: toggles the coins panel below
+          <div
+            role="button"
+            tabIndex={0}
+            aria-expanded={isExpanded}
+            onClick={() => onToggleExpanded(watchlist.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onToggleExpanded(watchlist.id)
+              }
+            }}
+            className={cn(
+              "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer sm:gap-4 sm:px-4 sm:py-2 sm:pr-2",
+              ROW_GRID_COLS_SM,
+            )}
           >
-            {/* Watchlist Info */}
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
-              <span className="min-w-0 truncate font-bold text-xs sm:text-nowrap">{watchlist.name}</span>
-              <span className="text-primary/40 text-nowrap text-xs">
-                <span className="sm:hidden">has</span>
-                <span className="hidden sm:inline">watchlist has</span>
-              </span>
-              <span className="font-berkeley-mono text-nowrap text-xs font-semibold bg-black/20 border border-primary/10 px-1 py-0.5 rounded-md">
-                {watchlist.coinsCount}
-              </span>
-              <span className="text-primary/40 text-xs">{watchlist.coinsCount === 1 ? 'token' : 'tokens'}</span>
-              {!watchlist.isLoading && watchlist.coinImages.length > 0 && (
-                <AvatarCircles 
-                  avatarUrls={watchlist.coinImages}
-                  numPeople={Math.max(0, watchlist.coinsCount - watchlist.coinImages.length)}
-                  className="-ml-1 scale-75"
+            {/* Watchlist name pill */}
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 overflow-hidden sm:flex-nowrap">
+              {/* The pill is the flexible piece: long names truncate with an
+                  ellipsis while the token stack stays fully visible */}
+              <span
+                className={cn(
+                  "inline-flex min-w-0 items-center gap-1.5 rounded-full border px-2 py-0.5",
+                  colorTheme.bg,
+                  colorTheme.border,
+                )}
+              >
+                <WatchlistGroupIcon
+                  icon={watchlist.icon}
+                  className="size-3.5 shrink-0 text-white/80"
+                  size={14}
                 />
+                <span className="min-w-0 truncate text-xs font-bold text-white">
+                  {watchlist.name}
+                </span>
+              </span>
+              {/* Token stack only while collapsed — redundant with the coin list when expanded.
+                  shrink-0: always fully visible; the name pill truncates instead. */}
+              {!isExpanded && !watchlist.isLoading && watchlist.coinImages.length > 0 && (
+                <div className="shrink-0">
+                  <AvatarCircles
+                    avatarUrls={watchlist.coinImages}
+                    numPeople={Math.max(0, watchlist.coinsCount - watchlist.coinImages.length)}
+                    sizePx={20}
+                    className="-space-x-1.5"
+                  />
+                </div>
               )}
             </div>
 
-            {/* Holdings Value (Σ holdings × spot USD when any holdings set) */}
+            {/* Aggregate trend chart (this watchlist over the active interval) */}
             <div className="col-start-1 row-start-2 flex min-w-0 flex-col gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
-                Holdings
+                {getTimeScaleLabel(activeTimeScale)} Trend
               </span>
-              {watchlist.holdingsValueUsd === null ? (
-                <span className="font-berkeley-mono text-xs tabular-nums text-muted-foreground">—</span>
-              ) : (
-                <span className="font-berkeley-mono text-xs font-semibold tabular-nums">
-                  {formatUsdPrice(watchlist.holdingsValueUsd)}
-                </span>
-              )}
+              <TrendSparkline
+                series={watchlist.aggregateSeries}
+                change={watchlist.aggregateChange}
+                isLoading={Boolean(watchlist.isLoading) || watchlist.aggregateChangeLoading}
+              />
             </div>
 
             {/* Aggregate Change (chart aggregate, or quote est. while loading / if chart empty) */}
@@ -468,39 +668,104 @@ function WatchlistCard({
               )}
             </div>
 
-            {/* Remove */}
+            {/* Expand/collapse indicator (whole row toggles) */}
             <div className="col-start-2 row-start-1 flex items-center justify-end sm:col-start-auto sm:row-start-auto">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  onRemove(watchlist.id)
-                }}
-                disabled={isRemoving}
-                className="h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/10 transition-colors group"
-              >
-                {isRemoving ? (
-                  <Spinner size={16} />
-                ) : (
-                  <X className="h-4 w-4 text-muted-foreground group-hover:text-rose-500 transition-colors" />
+              <ChevronDown
+                aria-hidden="true"
+                className={cn(
+                  "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                  !isExpanded && "-rotate-90",
                 )}
-              </Button>
+              />
             </div>
-          </Link>
+          </div>
         )}
-      </div>
+
+      {/* Expanded panel: coins in this watchlist */}
+      {isExpanded && (
+        <div className="border-t border-primary/5 bg-primary/[0.02] dark:bg-black/10">
+          {/* Sub-table header */}
+          <div
+            className={cn(
+              COIN_GRID_CLASS,
+              "py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground",
+            )}
+          >
+            <div>Token</div>
+            <div className="text-right">Price</div>
+            <div className="text-right">{getTimeScaleLabel(activeTimeScale)} Returns</div>
+          </div>
+
+          <div className="divide-y divide-primary/5">
+            {watchlist.coins.length === 0 ? (
+              // Loading / empty coins state
+              <div className={cn(COIN_GRID_CLASS, "py-2")}>
+                {watchlist.isLoading || watchlist.coinsCount > 0 ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="size-4 rounded-full" />
+                      <Skeleton className="h-3 w-20 rounded-full" />
+                    </div>
+                    <div className="flex justify-end"><Skeleton className="h-3 w-12 rounded-full" /></div>
+                    <div className="flex justify-end"><Skeleton className="h-3 w-10 rounded-full" /></div>
+                  </>
+                ) : (
+                  <span className="col-span-full py-1 text-xs text-muted-foreground">
+                    No tokens in this watchlist yet
+                  </span>
+                )}
+              </div>
+            ) : (
+              watchlist.coins.map((coin) => (
+                <CoinRowItem key={coin.id} coin={coin} />
+              ))
+            )}
+          </div>
+
+          {/* Dig deeper: full watchlist view */}
+          <div className="flex justify-end border-t border-primary/5 px-3 py-1.5 sm:px-4">
+            <Link
+              href={group.slug ? `/watchlist?wg=${encodeURIComponent(group.slug)}&wt=chart` : "/watchlist?wt=chart"}
+              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Open watchlist →
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
-  const deleteGroup = useDeleteWatchlistGroup()
   const { watchlistGroups } = useWatchlist()
-  const [removingWatchlists, setRemovingWatchlists] = useState<Set<WatchlistGroupId>>(
-    new Set(),
-  )
+  const [expandedIds, setExpandedIds] = useState<Set<WatchlistGroupId>>(new Set())
+  const seenGroupIdsRef = useRef<Set<WatchlistGroupId>>(new Set())
+
+  // Default: every watchlist starts expanded (newly added ones too);
+  // user collapses are respected because we only auto-open unseen ids.
+  useEffect(() => {
+    const unseen = watchlistGroups.filter(g => !seenGroupIdsRef.current.has(g._id))
+    if (unseen.length === 0) return
+    for (const g of unseen) seenGroupIdsRef.current.add(g._id)
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      for (const g of unseen) next.add(g._id)
+      return next
+    })
+  }, [watchlistGroups])
+
+  const toggleExpanded = useCallback((groupId: WatchlistGroupId) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(groupId)) {
+        next.delete(groupId)
+      } else {
+        next.add(groupId)
+      }
+      return next
+    })
+  }, [])
   /** Populated by each card when CoinGecko + Convex data is ready; used to sort by holdings value. */
   const [holdingsValueByGroupId, setHoldingsValueByGroupId] = useState<
     Map<WatchlistGroupId, number | null>
@@ -544,49 +809,48 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
     return groups
   }, [watchlistGroups, holdingsValueByGroupId])
 
-  const handleRemove = async (watchlistId: WatchlistGroupId) => {
-    setRemovingWatchlists(prev => new Set([...prev, watchlistId]))
-    
-    try {
-      await deleteGroup(watchlistId)
-        toast({
-          title: "Removed",
-          description: "Watchlist removed successfully",
-        })
-    } catch (error) {
-      toast({
-        title: "Request Error",
-        description: error instanceof Error ? error.message : String(error),
-        variant: "destructive",
-      })
-      if (isDebug) console.error("Failed to remove watchlist:", error)
-    }
-    
-    // Clean up removing state
-    setRemovingWatchlists(prev => {
-      const newSet = new Set(prev)
-      newSet.delete(watchlistId)
-      return newSet
-    })
-  }
-
   if (watchlistGroups.length === 0) {
     return null
   }
 
   return (
-    <div className="space-y-4">
-      {sortedWatchlistGroups.map(group => (
-        <WatchlistCard
-          key={group._id}
-          group={group}
-          activeTimeScale={activeTimeScale}
-          rangeEndTimeMs={rangeEndTimeMs}
-          onRemove={handleRemove}
-          isRemoving={removingWatchlists.has(group._id)}
-          onHoldingsValueKnown={registerHoldingsValue}
-        />
-      ))}
+    <div className="rounded-[10px] bg-primary/5 p-0.5">
+      {/* Shared table header */}
+      <div className="hidden px-4 py-2 sm:block">
+        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+          <div className={cn("grid gap-4", ROW_GRID_COLS_SM)}>
+            <div className="flex items-center">
+              Watchlist
+            </div>
+
+            <div className="flex items-center justify-end">
+              {getTimeScaleLabel(activeTimeScale)} Trend
+            </div>
+
+            <div className="flex items-center gap-1 justify-end">
+              {getTimeScaleLabel(activeTimeScale)} Returns
+            </div>
+
+            {/* Expand/collapse indicator column */}
+            <div aria-hidden="true" />
+          </div>
+        </div>
+      </div>
+
+      {/* Table body: contiguous rows in a single card */}
+      <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden divide-y divide-primary/5">
+        {sortedWatchlistGroups.map(group => (
+          <WatchlistCard
+            key={group._id}
+            group={group}
+            activeTimeScale={activeTimeScale}
+            rangeEndTimeMs={rangeEndTimeMs}
+            onHoldingsValueKnown={registerHoldingsValue}
+            isExpanded={expandedIds.has(group._id)}
+            onToggleExpanded={toggleExpanded}
+          />
+        ))}
+      </div>
     </div>
   )
 }

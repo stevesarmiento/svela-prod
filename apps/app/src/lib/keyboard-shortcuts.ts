@@ -24,6 +24,7 @@ export const SEQUENTIAL_SHORTCUTS = {
   'g': {
     'h': '/overview',        // go to home/overview
     'w': '/watchlists',      // go to watchlists
+    's': '/comparison',      // go to sector comparison
     'c': '/screener',        // go to screener
   }
 } as const;
@@ -142,6 +143,7 @@ export const CHART_SHORTCUTS: KeyboardShortcut[] = [
 export const NAVIGATION_SHORTCUTS = {
   '/overview': 'g + h',
   '/watchlists': 'g + w',
+  '/comparison': 'g + s',
   '/screener': 'g + c',
 } as const;
 

@@ -33,7 +33,7 @@ export default async function DashboardLayout({
     <DashboardProviders preloadedWatchlist={preloadedWatchlist}>
       <FloatingMarketFeedProvider>
         <div className="relative w-screen font-diatype">
-          <div className="flex flex-grow flex-col max-w-screen-xl mx-auto">
+          <div className="flex flex-grow flex-col max-w-[1440px] mx-auto">
             <Suspense fallback={null}>
               <TopNav />
             </Suspense>

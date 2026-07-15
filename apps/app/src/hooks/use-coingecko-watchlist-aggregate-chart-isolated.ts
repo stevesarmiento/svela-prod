@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useLayoutEffect, useMemo, useRef } from 'react'
+import { useCallback, useState, useLayoutEffect, useMemo, useRef } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
 import { Effect } from "effect"
@@ -59,6 +59,13 @@ interface CoinGeckoWatchlistAggregateIsolatedResult {
   /** True when interval has no chart aggregate (e.g. 2Y — same idea as chart-table N/A). */
   isChangeUnavailable: boolean
   currentAggregateChange: number
+  /**
+   * Per-coin % return over the fetched range (first → last price of the
+   * market-chart series). Chart-accurate for every time scale — unlike quote
+   * percent-change fields, which top out at 30d and can't represent 1Y.
+   * Empty while loading / showing placeholder data.
+   */
+  changePctByCoinId: Record<string, number>
   coinsCount: number
   performance: {
     cacheHits: number
@@ -291,6 +298,14 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
     placeholderData: keepPreviousData,
   })
 
+  // Reset without triggering a re-render when already empty. Callers often pass
+  // an unstable `coins` array (e.g. `coins || []`) while data loads; a plain
+  // setAggregateData([]) would create a new state reference every effect run and
+  // spin an infinite render loop (layout effect → setState → render → new deps).
+  const clearAggregateData = useCallback(() => {
+    setAggregateData(prev => (prev.length === 0 ? prev : []))
+  }, [])
+
   // Aggregate historical data into a combined price line (layout effect avoids one frame of stale %).
   useLayoutEffect(() => {
     // Do not mix previous query `data` (keepPreviousData) with a new timeScale / coin set.
@@ -300,18 +315,18 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
       !historicalData?.data ||
       !coins.length
     ) {
-      setAggregateData([])
+      clearAggregateData()
       return
     }
 
     try {
       const coinDataMap = historicalData.data
-      const validCoinIds = Object.keys(coinDataMap).filter(coinId => 
+      const validCoinIds = Object.keys(coinDataMap).filter(coinId =>
         coinDataMap[coinId] && coinDataMap[coinId].length > 0
       )
 
       if (validCoinIds.length === 0) {
-        setAggregateData([])
+        clearAggregateData()
         return
       }
 
@@ -403,10 +418,34 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
         })
       }
 
-      setAggregateData(percentageData)
+      // Functional update with deep-equality bailout: window-focus refetches
+      // often recompute an identical series; returning `prev` skips the
+      // re-render (and hard-stops any update loop from an unstable dep).
+      setAggregateData(prev => {
+        if (prev.length === percentageData.length) {
+          let same = true
+          for (let i = 0; i < prev.length; i++) {
+            const a = prev[i]!
+            const b = percentageData[i]!
+            if (a.time !== b.time || a.value !== b.value) {
+              same = false
+              break
+            }
+          }
+          if (same) return prev
+        }
+        return percentageData
+      })
     } catch (error) {
-      console.error('Error processing watchlist aggregate data:', error)
-      setAggregateData([])
+      // The dev log forwarder serializes Error objects to `{}` — log
+      // primitives so the actual failure is visible in the console.
+      const message = error instanceof Error ? error.message : String(error)
+      const stack = error instanceof Error ? error.stack : undefined
+      console.error(
+        `Error processing watchlist aggregate data: ${message}`,
+        { timeScale, coinCount: coins.length, stack },
+      )
+      clearAggregateData()
     }
   }, [
     historicalData,
@@ -415,12 +454,40 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
     rangeEndTimeMs,
     isChangeUnavailable,
     isPlaceholderData,
+    clearAggregateData,
   ])
 
   // Calculate current aggregate performance for display
   const currentAggregateChange = useMemo(() => {
     return aggregateData[aggregateData.length - 1]?.value ?? 0
   }, [aggregateData])
+
+  // Per-coin % return over the fetched range (first → last real data point).
+  // Placeholder data is skipped: it belongs to the PREVIOUS time scale
+  // (keepPreviousData) and would be labeled with the new interval.
+  const changePctByCoinId = useMemo((): Record<string, number> => {
+    const map: Record<string, number> = {}
+    const dataMap = historicalData?.data
+    if (!dataMap || isChangeUnavailable || isPlaceholderData) return map
+
+    for (const [coinId, series] of Object.entries(dataMap)) {
+      if (!series?.length) continue
+
+      let first = series[0]!
+      let last = series[0]!
+      for (const point of series) {
+        if (point.time < first.time) first = point
+        if (point.time > last.time) last = point
+      }
+
+      const baseline = first.value
+      if (!Number.isFinite(baseline) || baseline <= 0) continue
+      if (!Number.isFinite(last.value)) continue
+      map[coinId] = ((last.value - baseline) / baseline) * 100
+    }
+
+    return map
+  }, [historicalData, isChangeUnavailable, isPlaceholderData])
 
   const warmingCount = useMemo(() => {
     const warmingMap = historicalData?.warmingByCoin
@@ -448,6 +515,7 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
     warmingCount,
     isChangeUnavailable,
     currentAggregateChange,
+    changePctByCoinId,
     coinsCount: coins.length,
     performance
   }
