@@ -9,6 +9,7 @@ import type { CoinMarketData } from '@/types/coins'
 import { WatchlistsGrid } from "../../watchlist/_components/watchlists-grid"
 import { WatchlistTable } from "../../watchlist/_components/watchlist-table"
 import { WatchlistChartsEmptyState } from "./watchlist-charts-empty-state"
+import { ComparisonGridSkeleton } from "../../comparison/_components/comparison-skeleton"
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -184,20 +185,7 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent({
   }
 
   if (!isInitialized) {
-    return (
-      <div className="space-y-6 w-full px-4">
-        <div className="space-y-14">
-          <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/50 overflow-hidden p-1">
-            <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2" />
-            <div className="col-span-9 border border-zinc-800/30 rounded-[13px] overflow-hidden">
-              <div className="h-[400px] flex items-center justify-center">
-                <Spinner size={24} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
+    return <ComparisonGridSkeleton inset={inset} />
   }
 
   return (
@@ -253,7 +241,7 @@ export const ComparisonChartsClient = memo(function ComparisonChartsClient({
 }: ComparisonChartsClientProps) {
   return (
     <ChartErrorBoundary>
-      <Suspense fallback={<ChartSkeleton inset={inset} />}>
+      <Suspense fallback={<ComparisonGridSkeleton inset={inset} />}>
         <ComparisonChartsContent
           inset={inset}
           activeTimeScale={activeTimeScale}

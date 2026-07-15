@@ -375,7 +375,8 @@ export function WatchlistCard({
                   <AvatarCircles
                     avatarUrls={avatarData}
                     numPeople={coinsCount > 4 ? coinsCount - 4 : 0}
-                    className=""
+                    sizePx={26}
+                    className="-space-x-2"
                   />
                 </div>
               )}

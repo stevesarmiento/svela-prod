@@ -3,6 +3,7 @@
 import type { CoinMarketData } from '@/types/coins'
 import Image from "next/image"
 import { TokenPageClient } from './token-page-client'
+import { TokenPageSkeleton } from './token-page-skeleton'
 import { memo, Suspense, useDeferredValue, useTransition } from 'react'
 import { cn } from "@v1/ui/cn"
 import { useQuery as useTanStackQuery } from '@tanstack/react-query'
@@ -156,23 +157,6 @@ const TokenPageContent = memo(function TokenPageContent({
 function TokenPageErrorBoundary({ children }: { children: React.ReactNode }) {
   return <div className="min-h-screen w-full px-4 relative">{children}</div>
 }
-
-const TokenPageSkeleton = memo(function TokenPageSkeleton() {
-  return (
-    <div className="min-h-screen w-full px-4 relative">
-      <div className="mx-auto py-6 px-4 relative z-10">
-        <div className="animate-pulse motion-reduce:animate-none">
-          <div className="h-96 bg-zinc-950/20 rounded-[20px] mb-6" />
-          <div className="h-32 bg-zinc-950/20 rounded-[20px] mb-6" />
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            <div className="col-span-12 h-64 bg-zinc-950/20 rounded-[20px]" />
-            <div className="col-span-12 h-64 bg-zinc-950/20 rounded-[20px]" />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-})
 
 export const TokenPageShell = memo(function TokenPageShell({
   id,

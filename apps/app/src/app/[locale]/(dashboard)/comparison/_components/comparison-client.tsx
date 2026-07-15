@@ -2,9 +2,10 @@
 
 import { useState } from "react"
 import dynamic from "next/dynamic"
-import { Spinner } from "@v1/ui/spinner"
 import { IconBinocularsFill } from "symbols-react"
 import { WatchlistMultiLineTimeScaleSelector } from "../../watchlist/_components/watchlist-multi-line-time-scale-selector"
+import { WatchlistsPageBootstrapClientProvider } from "../../watchlist/_components/watchlists-page-bootstrap-context"
+import { ComparisonGridSkeleton } from "./comparison-skeleton"
 
 const LazyComparisonChartsClient = dynamic(
   () =>
@@ -13,11 +14,7 @@ const LazyComparisonChartsClient = dynamic(
     ),
   {
     ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center py-12">
-        <Spinner size={24} />
-      </div>
-    ),
+    loading: () => <ComparisonGridSkeleton />,
   },
 )
 
@@ -40,11 +37,13 @@ export function ComparisonClient() {
           setActiveTimeScale={setActiveTimeScale}
         />
       </div>
-      <LazyComparisonChartsClient
-        inset={false}
-        activeTimeScale={activeTimeScale}
-        onTimeScaleChange={setActiveTimeScale}
-      />
+      <WatchlistsPageBootstrapClientProvider fallback={<ComparisonGridSkeleton />}>
+        <LazyComparisonChartsClient
+          inset={false}
+          activeTimeScale={activeTimeScale}
+          onTimeScaleChange={setActiveTimeScale}
+        />
+      </WatchlistsPageBootstrapClientProvider>
     </div>
   )
 }

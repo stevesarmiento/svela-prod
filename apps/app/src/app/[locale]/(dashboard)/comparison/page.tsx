@@ -1,9 +1,5 @@
 import type { Metadata } from "next"
 import { createMetadata } from "@/lib/metadata"
-import { preloadQuery } from "convex/nextjs"
-import { getAuthToken } from "@/lib/auth"
-import { api } from "../../../../../convex/_generated/api"
-import { WatchlistsPageBootstrapProvider } from "../watchlist/_components/watchlists-page-bootstrap-context"
 import { ComparisonClient } from "./_components/comparison-client"
 
 export async function generateMetadata({
@@ -19,15 +15,10 @@ export async function generateMetadata({
   })
 }
 
-export default async function ComparisonPage() {
-  const token = await getAuthToken()
-  const preloadedBootstrap = token
-    ? await preloadQuery(api.watchlists.getMyWatchlistsPageBootstrap, {}, { token })
-    : await preloadQuery(api.watchlists.getMyWatchlistsPageBootstrap, {})
-
-  return (
-    <WatchlistsPageBootstrapProvider preloadedBootstrap={preloadedBootstrap}>
-      <ComparisonClient />
-    </WatchlistsPageBootstrapProvider>
-  )
+// Screener-style instant UI: no server awaits — the page frame (header +
+// timescale pills) paints immediately and the watchlists bootstrap loads
+// client-side via Convex inside ComparisonClient, with the grid skeleton
+// shown only in the data region.
+export default function ComparisonPage() {
+  return <ComparisonClient />
 }
