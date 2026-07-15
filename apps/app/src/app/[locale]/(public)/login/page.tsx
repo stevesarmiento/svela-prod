@@ -31,7 +31,7 @@ export default function Page() {
         <div className="group relative w-full rounded-xl p-4">
           <AuthCardDashes />
 
-          <Card className="relative overflow-hidden rounded-2xl bg-card shadow-sm">
+          <Card className="relative overflow-hidden rounded-2xl bg-card shadow-sm p-4">
             {/* Texture layers (behind content) */}
             <div
               className="pointer-events-none absolute inset-0 z-0 size-full opacity-40 dark:opacity-30"
