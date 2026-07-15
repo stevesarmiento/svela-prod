@@ -1,12 +1,23 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useWatchlist } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context";
+import { TokenLogo } from "@/components/token-logo";
+import { WatchlistGroupIcon } from "@/components/watchlist-group-icon";
+import { useAddCoinToWatchlist } from "@/hooks/use-add-coin-to-watchlist";
+import { useCommandInput } from "@/hooks/use-command-input";
+import { useContextualCommands } from "@/hooks/use-contextual-commands";
+import {
+  useHybridCoinSearch,
+  useHybridTopCoins,
+} from "@/hooks/use-hybrid-coin-search";
+import {
+  WATCHLIST_PICKER_STACK_SIZE,
+  useWatchlistPickerExtras,
+} from "@/hooks/use-watchlist-picker-extras";
+import { formatUsdPrice } from "@/lib/format-usd";
+import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides";
+import { useWatchlistPreservingNavigation } from "@/lib/navigation-utils";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { Button } from "@v1/ui/button";
+import { cn } from "@v1/ui/cn";
 import {
   CommandEmpty,
   CommandGroup,
@@ -17,24 +28,18 @@ import {
 } from "@v1/ui/command-popover";
 import { Skeleton } from "@v1/ui/skeleton";
 import { useRouter } from "next/navigation";
-import { IconCircleSlash } from "symbols-react";
-import { useWatchlistPreservingNavigation } from "@/lib/navigation-utils";
-import { useCommandInput } from "@/hooks/use-command-input";
-import {
-  useHybridCoinSearch,
-  useHybridTopCoins,
-} from "@/hooks/use-hybrid-coin-search";
-import { useContextualCommands } from "@/hooks/use-contextual-commands";
-import { useAddCoinToWatchlist } from "@/hooks/use-add-coin-to-watchlist";
-import { useWatchlist } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context";
-import { WatchlistGroupIcon } from "@/components/watchlist-group-icon";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { IconCheckmark, IconCircleSlash } from "symbols-react";
 import { BackgroundPattern } from "./background-pattern";
-import { formatUsdPrice } from "@/lib/format-usd";
-import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides";
-import { TokenLogo } from "@/components/token-logo";
-import { cn } from "@v1/ui/cn";
-import { SearchIcon } from "./search-icon";
 import { CommandSearchTrigger } from "./command-search-trigger";
+import { SearchIcon } from "./search-icon";
+import { WatchlistTargetPill } from "./watchlist-target-pill";
 
 import type { CommandContext } from "./bottom-nav-context";
 
@@ -58,7 +63,9 @@ export const CommandSearchPopoverContent = React.memo(
     const triggerRef = useRef<HTMLButtonElement>(null);
 
     const [searchQuery, setSearchQuery] = useState("");
-    const [debouncedSearchQuery] = useDebouncedValue(searchQuery, { wait: 150 });
+    const [debouncedSearchQuery] = useDebouncedValue(searchQuery, {
+      wait: 150,
+    });
 
     const { data: searchResults, isLoading: isSearchLoading } =
       useHybridCoinSearch(debouncedSearchQuery, {
@@ -86,8 +93,10 @@ export const CommandSearchPopoverContent = React.memo(
       return () => clearTimeout(timer);
     }, [isOpen, isWarm]);
 
-    const { data: topCoins, isLoading: isTopCoinsLoading } =
-      useHybridTopCoins(5, { enabled: isWarm });
+    const { data: topCoins, isLoading: isTopCoinsLoading } = useHybridTopCoins(
+      5,
+      { enabled: isWarm },
+    );
 
     const hasSearch = debouncedSearchQuery.trim().length > 0;
 
@@ -109,6 +118,39 @@ export const CommandSearchPopoverContent = React.memo(
       setSearchQuery("");
     }, []);
 
+    const { watchlistGroups, selectedGroup, selectWatchlistGroup } =
+      useWatchlist();
+
+    // Tab flips the palette list between token results and a watchlist picker
+    // so the add-target can be chosen without leaving the keyboard.
+    const [listMode, setListMode] = useState<"tokens" | "watchlists">("tokens");
+    const canPickWatchlist =
+      coinSelectMode === "watchlist-add" && watchlistGroups.length > 0;
+    const showWatchlistPicker = listMode === "watchlists" && canPickWatchlist;
+
+    const filteredWatchlistGroups = useMemo(() => {
+      if (!showWatchlistPicker) return [];
+      // Groups arrive newest-first from the backend; show oldest first so the
+      // list order stays stable as new watchlists are created.
+      const sorted = [...watchlistGroups].sort(
+        (a, b) => a.createdAt - b.createdAt,
+      );
+      const query = debouncedSearchQuery.trim().toLowerCase();
+      if (!query) return sorted;
+      return sorted.filter((group) => group.name.toLowerCase().includes(query));
+    }, [showWatchlistPicker, watchlistGroups, debouncedSearchQuery]);
+
+    const toggleListMode = useCallback(() => {
+      setListMode((mode) => (mode === "tokens" ? "watchlists" : "tokens"));
+      setSearchQuery("");
+      inputRef.current?.focus();
+    }, [inputRef]);
+
+    // Token counts + logo stacks for picker rows; fetched only once the
+    // picker is first shown.
+    const { extrasByGroupId: watchlistExtrasByGroupId } =
+      useWatchlistPickerExtras(showWatchlistPicker);
+
     const { contextualCommands, globalCommands, hasContextualCommands } =
       useContextualCommands(debouncedSearchQuery, context);
 
@@ -118,6 +160,11 @@ export const CommandSearchPopoverContent = React.memo(
     // whenever the displayed set changes. (cmdk stores values lowercased.)
     const [highlightedValue, setHighlightedValue] = useState("");
     const displayedValues = useMemo(() => {
+      if (showWatchlistPicker) {
+        return filteredWatchlistGroups.map((group) =>
+          `watchlist-select:${group.slug}`.trim().toLowerCase(),
+        );
+      }
       const values: string[] = [];
       if (hasContextualCommands && context !== "charts") {
         for (const group of contextualCommands) {
@@ -157,6 +204,8 @@ export const CommandSearchPopoverContent = React.memo(
       coinsToDisplay,
       coinSelectMode,
       globalCommands,
+      showWatchlistPicker,
+      filteredWatchlistGroups,
     ]);
 
     useEffect(() => {
@@ -166,7 +215,6 @@ export const CommandSearchPopoverContent = React.memo(
     }, [displayedValues, highlightedValue]);
 
     const { handleAddCoin, isAddingCoin } = useAddCoinToWatchlist();
-    const { selectedGroup } = useWatchlist();
 
     const handleTokenNavigation = useCallback(
       (coinId: string) => {
@@ -202,6 +250,22 @@ export const CommandSearchPopoverContent = React.memo(
 
     const handleCommand = useCallback(
       async (value: string) => {
+        if (value.startsWith("watchlist-select:")) {
+          // Picking a target watchlist: switch it, then flip back to token
+          // results with the palette still open so tokens can be added next.
+          const slug = value.replace("watchlist-select:", "");
+          const group = watchlistGroups.find(
+            (g) => g.slug.toLowerCase() === slug,
+          );
+          if (group) {
+            selectWatchlistGroup(group);
+          }
+          setListMode("tokens");
+          clearSearch();
+          inputRef.current?.focus();
+          return;
+        }
+
         if (value.startsWith("watchlist-add:")) {
           const coinId = value.replace("watchlist-add:", "");
           const coin = coinsToDisplay.find((c) => c.id === coinId);
@@ -243,16 +307,20 @@ export const CommandSearchPopoverContent = React.memo(
         handleAddCoin,
         handleContextualAction,
         handleTokenNavigation,
+        inputRef,
         navigation,
         onCommandSelect,
         router,
+        selectWatchlistGroup,
         setIsOpen,
+        watchlistGroups,
       ],
     );
 
     useEffect(() => {
       if (!isOpen) {
         clearSearch();
+        setListMode("tokens");
         // Return focus to the trigger when the palette closes while focus is
         // still inside the input (e.g. Escape); otherwise leave focus alone.
         if (document.activeElement === inputRef.current) {
@@ -264,7 +332,9 @@ export const CommandSearchPopoverContent = React.memo(
     }, [clearSearch, inputRef, isOpen]);
 
     const getPlaceholder = () => {
-      if (context === "watchlist") return "Search tokens or manage watchlist...";
+      if (showWatchlistPicker) return "Search watchlists...";
+      if (context === "watchlist")
+        return "Search tokens or manage watchlist...";
       if (context === "charts") return "Search charts or add tokens...";
       if (context === "overview") return "Search market data and insights...";
       return "Navigate or search tokens...";
@@ -305,13 +375,24 @@ export const CommandSearchPopoverContent = React.memo(
                     autoFocus={isOpen}
                     value={searchQuery}
                     onValueChange={setSearchQuery}
+                    onKeyDown={(event) => {
+                      // Tab flips between token results and the watchlist picker.
+                      if (
+                        event.key === "Tab" &&
+                        !event.shiftKey &&
+                        canPickWatchlist
+                      ) {
+                        event.preventDefault();
+                        toggleListMode();
+                      }
+                    }}
                   />
                 </div>
               </div>
             }
           >
             <CommandList className="z-[100] bg-transparent border-transparent max-h-[400px]">
-              {!coinResultsLoading && (
+              {(showWatchlistPicker || !coinResultsLoading) && (
                 <CommandEmpty>
                   <div className="flex flex-col items-center justify-center py-6 gap-2">
                     <IconCircleSlash className="h-8 w-8 fill-white/30 rotate-90" />
@@ -323,180 +404,254 @@ export const CommandSearchPopoverContent = React.memo(
                 </CommandEmpty>
               )}
 
-              {hasContextualCommands &&
-              context !== "charts" &&
-              contextualCommands.map((group) => (
-                <CommandGroup
-                  key={group.group}
-                  heading={group.group}
-                  className="text-white [&_[cmdk-group-heading]]:text-white/60"
-                >
-                  {group.items.map((item) => (
-                    <CommandItem
-                      key={item.title}
-                      value={
-                        item.action
-                          ? `action:${item.action}`
-                          : item.href
-                            ? `href:${item.href}`
-                            : item.title
-                      }
-                      onSelect={handleCommand}
-                      className="cursor-pointer bg-transparent aria-selected:bg-zinc-800/30 aria-selected:text-white"
-                    >
-                      <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
-                        <div className="flex items-center gap-3 pr-5">
-                          <div className="flex items-center justify-center p-2 bg-primary/10 rounded-lg">
-                            <item.icon className="size-4 fill-primary" />
-                          </div>
-                          <div className="flex flex-col">
-                            <span className="font-medium text-white">
-                              {item.title}
-                            </span>
-                            <span className="text-xs text-white/60">
-                              {item.subtitle}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {item.shortcut ? (
-                            <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-zinc-200 uppercase">
-                              {item.shortcut}
-                            </kbd>
-                          ) : item.href ? (
-                            <span className="text-xs px-2 py-1 bg-zinc-800/60 text-zinc-200 rounded">
-                              Page
-                            </span>
-                          ) : (
-                            <span className="text-xs px-2 py-1 bg-white/10 text-white rounded">
-                              Action
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              ))}
-
-              {(coinResultsLoading || coinsToDisplay.length > 0) && (
+              {showWatchlistPicker && (
                 <CommandGroup
                   heading={
-                    coinSelectMode === "watchlist-add" ? (
-                      selectedGroup ? (
-                        <span className="flex items-center gap-1.5">
-                          <span>Add to</span>
-                          <span className="inline-flex max-w-[220px] items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-white">
-                            <WatchlistGroupIcon
-                              icon={selectedGroup.icon}
-                              size={12}
-                              className="text-white/80"
-                            />
-                            <span className="truncate">
-                              {selectedGroup.name}
-                            </span>
-                          </span>
-                        </span>
-                      ) : hasSearch ? (
-                        "Add Tokens"
-                      ) : (
-                        "Add to Watchlist"
-                      )
-                    ) : hasSearch ? (
-                      "Tokens"
-                    ) : (
-                      "Popular Tokens"
-                    )
+                    <span className="flex items-center gap-1.5">
+                      <span>Add to</span>
+                      <WatchlistTargetPill
+                        selectedGroup={selectedGroup}
+                        active
+                        interactive
+                        onToggle={toggleListMode}
+                      />
+                    </span>
                   }
                   className="text-white [&_[cmdk-group-heading]]:text-white/60"
                 >
-                  {coinResultsLoading ? (
-                    Array.from({ length: 5 }, (_, index) => `skeleton-${index}`).map(
-                      (skeletonKey) => (
-                        <CommandItem key={skeletonKey} disabled>
-                          <div className="flex items-center justify-between w-full bg-transparent p-2 rounded-lg">
-                            <div className="flex items-center gap-3 pr-5">
-                              <Skeleton className="h-6 w-6 rounded-full" />
-                              <div className="flex flex-col gap-1">
-                                <Skeleton className="h-4 w-24" />
-                                <Skeleton className="h-3 w-12" />
-                              </div>
-                            </div>
-                            <div className="flex flex-col items-end gap-1">
-                              <Skeleton className="h-4 w-16" />
-                              <Skeleton className="h-3 w-10" />
-                            </div>
-                          </div>
-                        </CommandItem>
-                      ),
-                    )
-                  ) : (
-                    coinsToDisplay.map((coin) => (
+                  {filteredWatchlistGroups.map((group) => {
+                    const extras = watchlistExtrasByGroupId.get(group._id);
+                    return (
                       <CommandItem
-                        key={coin.id}
-                        value={
-                          coinSelectMode === "watchlist-add"
-                            ? `watchlist-add:${coin.id}`
-                            : `coin:${coin.id}`
-                        }
+                        key={group._id}
+                        value={`watchlist-select:${group.slug}`}
                         onSelect={handleCommand}
                         className="cursor-pointer bg-transparent aria-selected:bg-zinc-800/30 aria-selected:text-white"
-                        disabled={isAddingCoin}
                       >
                         <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
                           <div className="flex items-center gap-3 pr-5">
-                            <div className="relative">
-                              <TokenLogo
-                                src={(() => {
-                                  const logoUrl = getTokenLogoURL(
-                                    coin.symbol,
-                                    coin.image,
-                                  );
-                                  return logoUrl?.startsWith("http") ||
-                                    logoUrl?.startsWith("/")
-                                    ? logoUrl
-                                    : undefined;
-                                })()}
-                                alt={cleanTokenName(coin.name)}
-                                sizePx={24}
-                                fallbackText={coin.symbol}
-                                className="ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800 shadow-sm shadow-zinc-950"
-                                quality={70}
+                            <div className="flex size-9 shrink-0 items-center justify-center bg-white/10 rounded-lg">
+                              <WatchlistGroupIcon
+                                icon={group.icon}
+                                size={16}
+                                className="text-white/80"
                               />
                             </div>
                             <div className="flex flex-col">
                               <span className="font-medium text-white">
-                                {cleanTokenName(coin.name)}
+                                {group.name}
                               </span>
                               <span className="text-xs text-white/60">
-                                {coin.symbol.toUpperCase()}
+                                {extras
+                                  ? `${extras.count} ${extras.count === 1 ? "token" : "tokens"}`
+                                  : null}
+                                {extras && group.isDefault ? " · " : null}
+                                {group.isDefault ? "Default" : null}
                               </span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <div className="text-right">
-                              <div className="text-sm font-berkeley-mono text-white">
-                                {formatUsdPrice(coin.quote.USD.price)}
+                          <div className="flex items-center gap-2 pr-1">
+                            {extras && extras.logos.length > 0 && (
+                              <div className="flex -space-x-2">
+                                {extras.logos.map((logo) => (
+                                  <TokenLogo
+                                    key={logo.coinId}
+                                    src={logo.src}
+                                    alt={logo.symbol}
+                                    sizePx={20}
+                                    fallbackText={logo.symbol}
+                                    quality={70}
+                                    className="ring-2 ring-zinc-900 bg-zinc-800"
+                                  />
+                                ))}
+                                {extras.count > WATCHLIST_PICKER_STACK_SIZE && (
+                                  <div className="z-10 flex size-5 items-center justify-center rounded-full bg-zinc-800 ring-2 ring-zinc-900 text-[9px] font-berkeley-mono text-white/80">
+                                    +
+                                    {extras.count - WATCHLIST_PICKER_STACK_SIZE}
+                                  </div>
+                                )}
                               </div>
-                              <div
-                                className={`text-xs font-berkeley-mono ${
-                                  coin.quote.USD.percent_change_24h > 0
-                                    ? "text-green-400"
-                                    : "text-red-400"
-                                }`}
-                              >
-                                {coin.quote.USD.percent_change_24h.toFixed(2)}%
-                              </div>
-                            </div>
+                            )}
+                            {selectedGroup?._id === group._id && (
+                              <IconCheckmark className="size-3.5 fill-white/80" />
+                            )}
                           </div>
                         </div>
                       </CommandItem>
-                    ))
-                  )}
+                    );
+                  })}
                 </CommandGroup>
               )}
 
-              {!context &&
+              {!showWatchlistPicker &&
+                hasContextualCommands &&
+                context !== "charts" &&
+                contextualCommands.map((group) => (
+                  <CommandGroup
+                    key={group.group}
+                    heading={group.group}
+                    className="text-white [&_[cmdk-group-heading]]:text-white/60"
+                  >
+                    {group.items.map((item) => (
+                      <CommandItem
+                        key={item.title}
+                        value={
+                          item.action
+                            ? `action:${item.action}`
+                            : item.href
+                              ? `href:${item.href}`
+                              : item.title
+                        }
+                        onSelect={handleCommand}
+                        className="cursor-pointer bg-transparent aria-selected:bg-zinc-800/30 aria-selected:text-white"
+                      >
+                        <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
+                          <div className="flex items-center gap-3 pr-5">
+                            <div className="flex items-center justify-center p-2 bg-primary/10 rounded-lg">
+                              <item.icon className="size-4 fill-primary" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-medium text-white">
+                                {item.title}
+                              </span>
+                              <span className="text-xs text-white/60">
+                                {item.subtitle}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {item.shortcut ? (
+                              <kbd className="rounded-md bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-zinc-200 uppercase">
+                                {item.shortcut}
+                              </kbd>
+                            ) : item.href ? (
+                              <span className="text-xs px-2 py-1 bg-zinc-800/60 text-zinc-200 rounded">
+                                Page
+                              </span>
+                            ) : (
+                              <span className="text-xs px-2 py-1 bg-white/10 text-white rounded">
+                                Action
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                ))}
+
+              {!showWatchlistPicker &&
+                (coinResultsLoading || coinsToDisplay.length > 0) && (
+                  <CommandGroup
+                    heading={
+                      coinSelectMode === "watchlist-add" ? (
+                        <span className="flex items-center gap-1.5">
+                          <span>Add to</span>
+                          <WatchlistTargetPill
+                            selectedGroup={selectedGroup}
+                            active={false}
+                            interactive={canPickWatchlist}
+                            onToggle={toggleListMode}
+                          />
+                        </span>
+                      ) : hasSearch ? (
+                        "Tokens"
+                      ) : (
+                        "Popular Tokens"
+                      )
+                    }
+                    className="text-white [&_[cmdk-group-heading]]:text-white/60"
+                  >
+                    {coinResultsLoading
+                      ? Array.from(
+                          { length: 5 },
+                          (_, index) => `skeleton-${index}`,
+                        ).map((skeletonKey) => (
+                          <CommandItem key={skeletonKey} disabled>
+                            <div className="flex items-center justify-between w-full bg-transparent p-2 rounded-lg">
+                              <div className="flex items-center gap-3 pr-5">
+                                <Skeleton className="h-6 w-6 rounded-full" />
+                                <div className="flex flex-col gap-1">
+                                  <Skeleton className="h-4 w-24" />
+                                  <Skeleton className="h-3 w-12" />
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end gap-1">
+                                <Skeleton className="h-4 w-16" />
+                                <Skeleton className="h-3 w-10" />
+                              </div>
+                            </div>
+                          </CommandItem>
+                        ))
+                      : coinsToDisplay.map((coin) => (
+                          <CommandItem
+                            key={coin.id}
+                            value={
+                              coinSelectMode === "watchlist-add"
+                                ? `watchlist-add:${coin.id}`
+                                : `coin:${coin.id}`
+                            }
+                            onSelect={handleCommand}
+                            className="cursor-pointer bg-transparent aria-selected:bg-zinc-800/30 aria-selected:text-white"
+                            disabled={isAddingCoin}
+                          >
+                            <div className="flex items-center justify-between w-full bg-transparent hover:bg-transparent p-2 rounded-lg">
+                              <div className="flex items-center gap-3 pr-5">
+                                <div className="relative">
+                                  <TokenLogo
+                                    src={(() => {
+                                      const logoUrl = getTokenLogoURL(
+                                        coin.symbol,
+                                        coin.image,
+                                      );
+                                      return logoUrl?.startsWith("http") ||
+                                        logoUrl?.startsWith("/")
+                                        ? logoUrl
+                                        : undefined;
+                                    })()}
+                                    alt={cleanTokenName(coin.name)}
+                                    sizePx={24}
+                                    fallbackText={coin.symbol}
+                                    className="ring-1 ring-zinc-200 dark:ring-zinc-950 bg-zinc-800 shadow-sm shadow-zinc-950"
+                                    quality={70}
+                                  />
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="font-medium text-white">
+                                    {cleanTokenName(coin.name)}
+                                  </span>
+                                  <span className="text-xs text-white/60">
+                                    {coin.symbol.toUpperCase()}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="text-right">
+                                  <div className="text-sm font-berkeley-mono text-white">
+                                    {formatUsdPrice(coin.quote.USD.price)}
+                                  </div>
+                                  <div
+                                    className={`text-xs font-berkeley-mono ${
+                                      coin.quote.USD.percent_change_24h > 0
+                                        ? "text-green-400"
+                                        : "text-red-400"
+                                    }`}
+                                  >
+                                    {coin.quote.USD.percent_change_24h.toFixed(
+                                      2,
+                                    )}
+                                    %
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </CommandItem>
+                        ))}
+                  </CommandGroup>
+                )}
+
+              {!showWatchlistPicker &&
+                !context &&
                 globalCommands.map((group) => (
                   <CommandGroup
                     key={group.group}
@@ -559,6 +714,14 @@ export const CommandSearchPopoverContent = React.memo(
                     enter
                   </kbd>
                 </div>
+                {canPickWatchlist && (
+                  <div className="flex items-center gap-1">
+                    <span>{showWatchlistPicker ? "tokens" : "watchlists"}</span>
+                    <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-berkeley-mono text-zinc-200">
+                      tab
+                    </kbd>
+                  </div>
+                )}
                 <div className="flex items-center gap-1">
                   <span>close</span>
                   <kbd className="rounded border border-zinc-700 bg-zinc-800 px-1.5 font-berkeley-mono text-zinc-200">

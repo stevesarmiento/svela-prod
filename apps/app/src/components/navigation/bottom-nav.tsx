@@ -1,20 +1,24 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  useNavigationMode,
-  useSelectionMode,
-  useOverlayState,
-  useCommandContext,
-} from "./bottom-nav-context";
-import { useKeyboardShortcuts, useCommandHandler, useSequentialShortcuts } from "./bottom-nav-hooks";
-import { NavigationDock } from "./navigation-dock";
-import { BackButton } from "./back-button";
-import { CommandSearch } from "./command-search";
-import { MENU_ITEMS } from "./bottom-nav-constants";
 import { SEQUENTIAL_SHORTCUTS } from "@/lib/keyboard-shortcuts";
-import { bottomNavChromeMotionStyle, DURATION_UI_S } from "@/lib/motion-tokens";
+import { DURATION_UI_S, bottomNavChromeMotionStyle } from "@/lib/motion-tokens";
 import { cn } from "@v1/ui/cn";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { BackButton } from "./back-button";
+import { MENU_ITEMS } from "./bottom-nav-constants";
+import {
+  useCommandContext,
+  useNavigationMode,
+  useOverlayState,
+  useSelectionMode,
+} from "./bottom-nav-context";
+import {
+  useCommandHandler,
+  useKeyboardShortcuts,
+  useSequentialShortcuts,
+} from "./bottom-nav-hooks";
+import { CommandSearch } from "./command-search";
+import { NavigationDock } from "./navigation-dock";
 
 import type { CommandContext, SelectionState } from "./bottom-nav-context";
 
@@ -32,7 +36,9 @@ const EXIT_RETAIN_MS = DURATION_UI_S * 1000 + 50;
  * exits, so the selection UI can fade out instead of unmounting instantly.
  */
 function useRetainedSelection(selectionState: SelectionState | null) {
-  const [retained, setRetained] = useState<SelectionState | null>(selectionState);
+  const [retained, setRetained] = useState<SelectionState | null>(
+    selectionState,
+  );
 
   useEffect(() => {
     if (selectionState) {
@@ -54,7 +60,8 @@ function SequenceIndicator({ activeSequence }: { activeSequence: string }) {
     return Object.entries(continuations).map(([key, route]) => ({
       key,
       label:
-        MENU_ITEMS.find((item) => item.href === route)?.title ?? (route as string),
+        MENU_ITEMS.find((item) => item.href === route)?.title ??
+        (route as string),
     }));
   }, [activeSequence]);
 
@@ -91,26 +98,43 @@ export function BottomNav() {
   const { isCommandOpen, setIsCommandOpen } = useOverlayState();
   const { commandContext, setCommandContext } = useCommandContext();
 
-  const { activeSequence } = useSequentialShortcuts();
+  // Handle opening command search from navigation items
+  const handleOpenCommandSearch = useCallback(
+    (context: CommandContext | null) => {
+      setCommandContext(context);
+      setIsCommandOpen(true);
+    },
+    [setIsCommandOpen, setCommandContext],
+  );
+
+  // Sequence shortcut targeting the route we're already on (e.g. `g w` while
+  // on /watchlists): run the tab's secondary action, same as re-clicking it.
+  const handleRouteReactivated = useCallback(
+    (route: string) => {
+      if (route === "/watchlists") {
+        handleOpenCommandSearch("charts");
+      }
+    },
+    [handleOpenCommandSearch],
+  );
+
+  const { activeSequence } = useSequentialShortcuts(handleRouteReactivated);
   useKeyboardShortcuts(mode, setNavigationMode, setIsCommandOpen);
   const handleCommandSelect = useCommandHandler();
 
   // Retained past exit so selection UI can fade out instead of snapping away.
   const retainedSelection = useRetainedSelection(selectionState);
 
-  // Handle opening command search from navigation items
-  const handleOpenCommandSearch = useCallback((context: CommandContext | null) => {
-    setCommandContext(context);
-    setIsCommandOpen(true);
-  }, [setIsCommandOpen, setCommandContext]);
-
   // Reset context when closing
-  const handleCloseCommand = useCallback((open: boolean) => {
-    setIsCommandOpen(open);
-    if (!open) {
-      setCommandContext(null);
-    }
-  }, [setIsCommandOpen, setCommandContext]);
+  const handleCloseCommand = useCallback(
+    (open: boolean) => {
+      setIsCommandOpen(open);
+      if (!open) {
+        setCommandContext(null);
+      }
+    },
+    [setIsCommandOpen, setCommandContext],
+  );
 
   return (
     <nav

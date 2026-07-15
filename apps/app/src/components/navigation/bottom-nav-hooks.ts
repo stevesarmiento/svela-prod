@@ -1,8 +1,15 @@
-import { useEffect, useCallback, useState, useRef, type Dispatch, type SetStateAction } from 'react';
-import { useRouter } from 'next/navigation';
-import { COMMAND_ITEMS, type NavigationItem } from './bottom-nav-constants';
-import { SEQUENTIAL_SHORTCUTS } from '@/lib/keyboard-shortcuts';
-import { useLatest } from '@/hooks/use-latest';
+import { useLatest } from "@/hooks/use-latest";
+import { SEQUENTIAL_SHORTCUTS } from "@/lib/keyboard-shortcuts";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { COMMAND_ITEMS, type NavigationItem } from "./bottom-nav-constants";
 
 const SEQUENCE_TIMEOUT_MS = 2000;
 
@@ -20,13 +27,24 @@ function isEditableTarget(target: EventTarget | null): boolean {
  * Only keys that are part of a valid sequence are swallowed; any other key
  * pressed mid-sequence resets the sequence and passes through untouched, so
  * unrelated single-key shortcuts keep working within the 2s window.
+ *
+ * When the sequence targets the route the user is already on (exact match),
+ * `onReactivateRoute` fires instead of a redundant navigation — mirroring
+ * what re-clicking the active tab does (e.g. `g w` on /watchlists opens the
+ * add-to-comparison palette).
  */
-export function useSequentialShortcuts() {
+export function useSequentialShortcuts(
+  onReactivateRoute?: (route: string) => void,
+) {
   const [activeSequence, setActiveSequence] = useState<string | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
+  const getCleanPath = usePathHelper();
   const sequenceRef = useRef<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routerRef = useLatest(router);
+  const cleanPathRef = useLatest(getCleanPath(pathname));
+  const onReactivateRouteRef = useLatest(onReactivateRoute);
 
   const resetSequence = useCallback(() => {
     if (timeoutRef.current) {
@@ -44,7 +62,10 @@ export function useSequentialShortcuts() {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       sequenceRef.current = key;
       setActiveSequence(key);
-      timeoutRef.current = setTimeout(() => resetSequenceRef.current(), SEQUENCE_TIMEOUT_MS);
+      timeoutRef.current = setTimeout(
+        () => resetSequenceRef.current(),
+        SEQUENCE_TIMEOUT_MS,
+      );
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -63,11 +84,19 @@ export function useSequentialShortcuts() {
 
       // A sequence is active — try to complete it.
       const continuations =
-        SEQUENTIAL_SHORTCUTS[currentSequence as keyof typeof SEQUENTIAL_SHORTCUTS];
+        SEQUENTIAL_SHORTCUTS[
+          currentSequence as keyof typeof SEQUENTIAL_SHORTCUTS
+        ];
       if (continuations && key in continuations) {
         event.preventDefault();
         const route = continuations[key as keyof typeof continuations];
         resetSequenceRef.current();
+        // Already on the target route: trigger its secondary action (same as
+        // re-clicking the active tab) instead of a no-op navigation.
+        if (cleanPathRef.current === route) {
+          onReactivateRouteRef.current?.(route);
+          return;
+        }
         routerRef.current.push(route);
         return;
       }
@@ -81,12 +110,12 @@ export function useSequentialShortcuts() {
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener("keydown", handleKeyDown);
       resetSequenceRef.current();
     };
-  }, [resetSequenceRef, routerRef]);
+  }, [cleanPathRef, onReactivateRouteRef, resetSequenceRef, routerRef]);
 
   return { activeSequence, resetSequence };
 }
@@ -97,9 +126,9 @@ export function useSequentialShortcuts() {
  * so slashes can still be entered in inputs.
  */
 export function useKeyboardShortcuts(
-  mode: 'navigation' | 'selection',
+  mode: "navigation" | "selection",
   setNavigationMode: () => void,
-  setIsOpen: Dispatch<SetStateAction<boolean>>
+  setIsOpen: Dispatch<SetStateAction<boolean>>,
 ) {
   const modeRef = useLatest(mode);
   const setIsOpenRef = useLatest(setIsOpen);
@@ -109,12 +138,13 @@ export function useKeyboardShortcuts(
     const handleKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
       const isPaletteShortcut =
-        key === '/' &&
+        key === "/" &&
         !event.metaKey &&
         !event.ctrlKey &&
         !event.altKey &&
         !isEditableTarget(event.target);
-      const isSelectionEscape = key === 'escape' && modeRef.current === 'selection';
+      const isSelectionEscape =
+        key === "escape" && modeRef.current === "selection";
 
       if (!isPaletteShortcut && !isSelectionEscape) return;
 
@@ -126,8 +156,8 @@ export function useKeyboardShortcuts(
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [modeRef, setIsOpenRef, setNavigationModeRef]);
 }
 
@@ -141,21 +171,24 @@ const ALL_COMMAND_ITEMS = (
 export function useCommandHandler() {
   const router = useRouter();
 
-  return useCallback((value: string, setIsOpen: (open: boolean) => void) => {
-    setIsOpen(false);
+  return useCallback(
+    (value: string, setIsOpen: (open: boolean) => void) => {
+      setIsOpen(false);
 
-    const selectedItem = ALL_COMMAND_ITEMS.find(
-      (item) => item.title.toLowerCase() === value.toLowerCase(),
-    );
+      const selectedItem = ALL_COMMAND_ITEMS.find(
+        (item) => item.title.toLowerCase() === value.toLowerCase(),
+      );
 
-    if (selectedItem) {
-      router.push(selectedItem.href);
-    }
-  }, [router]);
+      if (selectedItem) {
+        router.push(selectedItem.href);
+      }
+    },
+    [router],
+  );
 }
 
 export function usePathHelper() {
   return useCallback((path: string) => {
-    return path.replace(/^\/[a-z]{2}(?=\/|$)/, '') || '/';
+    return path.replace(/^\/[a-z]{2}(?=\/|$)/, "") || "/";
   }, []);
 }
