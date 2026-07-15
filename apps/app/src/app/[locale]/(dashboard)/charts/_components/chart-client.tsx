@@ -170,6 +170,12 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent({
   const isControlled = controlledTimeScale !== undefined
   const activeTimeScale = controlledTimeScale ?? internalTimeScale
 
+  if (process.env.NODE_ENV !== 'production' && isControlled && !onTimeScaleChange) {
+    console.warn(
+      'ComparisonChartsContent: `activeTimeScale` was provided without `onTimeScaleChange`; time scale changes will be ignored.',
+    )
+  }
+
   const [isPending, startTransition] = useTransition()
 
   const deferredTimeScale = useDeferredValue(activeTimeScale)
@@ -195,10 +201,6 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent({
         <div className="lg:col-span-5 min-w-0">
           <div className="lg:sticky lg:top-4">
             <WatchlistsGrid
-              onSelectWatchlist={(group) => {
-                // Handle watchlist selection - could update selected group
-                console.log('Selected watchlist:', group)
-              }}
               viewMode="chart"
               chartLayout="vertical"
               activeTimeScale={deferredTimeScale}
