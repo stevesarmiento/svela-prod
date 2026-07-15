@@ -46,6 +46,8 @@ const nextConfig = {
       { protocol: "https" as const, hostname: "s2.coinmarketcap.com" },
       { protocol: "https" as const, hostname: "img.clerk.com" },
     ],
+    // TokenLogo renders at quality 70; Next only allows [75] unless listed.
+    qualities: [70, 75],
     minimumCacheTTL: 31536000,
   },
   logging: {

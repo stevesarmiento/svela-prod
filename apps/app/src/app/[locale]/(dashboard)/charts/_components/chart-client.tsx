@@ -150,14 +150,24 @@ const ChartSkeleton = memo(function ChartSkeleton({ inset = true }: ChartSkeleto
 // Comparison view component for /chart page
 interface ComparisonChartsContentProps {
   inset?: boolean;
+  /** Controlled time scale (e.g. selector rendered in the page header). Falls back to internal state. */
+  activeTimeScale?: string;
+  onTimeScaleChange?: (scale: string) => void;
 }
 
-const ComparisonChartsContent = memo(function ComparisonChartsContent({ inset = true }: ComparisonChartsContentProps) {
+const ComparisonChartsContent = memo(function ComparisonChartsContent({
+  inset = true,
+  activeTimeScale: controlledTimeScale,
+  onTimeScaleChange,
+}: ComparisonChartsContentProps) {
   const {
-    activeTimeScale,
+    activeTimeScale: internalTimeScale,
     setActiveTimeScale,
     isInitialized,
-  } = useOptimizedChartsData()
+  } = useOptimizedChartsData({ initialTimeScale: "7d" })
+
+  const isControlled = controlledTimeScale !== undefined
+  const activeTimeScale = controlledTimeScale ?? internalTimeScale
 
   const [isPending, startTransition] = useTransition()
 
@@ -165,7 +175,11 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent({ inset = 
 
   const handleTimeScaleChange = (scale: string) => {
     startTransition(() => {
-      setActiveTimeScale(scale)
+      if (isControlled) {
+        onTimeScaleChange?.(scale)
+      } else {
+        setActiveTimeScale(scale)
+      }
     })
   }
 
@@ -187,20 +201,29 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent({ inset = 
   }
 
   return (
-    <div className={`space-y-6 w-full ${inset ? 'px-4' : ''}`}>
-      <div className={`space-y-4 ${inset ? 'px-4' : ''}`}>
-        {/* Comparison of all watchlists */}
-        <WatchlistsGrid
-          onSelectWatchlist={(group) => {
-            // Handle watchlist selection - could update selected group
-            console.log('Selected watchlist:', group)
-          }}
-          viewMode="chart"
-          activeTimeScale={deferredTimeScale}
-          onTimeScaleChange={handleTimeScaleChange}
-          onViewModeChange={() => {}} // No-op for now
-        />
-        <WatchlistTable activeTimeScale={deferredTimeScale} />
+    <div className={`w-full ${inset ? 'px-4' : ''}`}>
+      {/* Comparison chart left (1/4), table right (3/4); stacks chart-first below lg */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="lg:col-span-5 min-w-0">
+          <div className="lg:sticky lg:top-4">
+            <WatchlistsGrid
+              onSelectWatchlist={(group) => {
+                // Handle watchlist selection - could update selected group
+                console.log('Selected watchlist:', group)
+              }}
+              viewMode="chart"
+              chartLayout="vertical"
+              activeTimeScale={deferredTimeScale}
+              onTimeScaleChange={handleTimeScaleChange}
+              onViewModeChange={() => {}} // No-op for now
+              showChartTimeScaleSelector={!isControlled}
+            />
+          </div>
+        </div>
+
+        <div className="lg:col-span-7 min-w-0">
+          <WatchlistTable activeTimeScale={deferredTimeScale} />
+        </div>
       </div>
     </div>
   )
@@ -218,13 +241,24 @@ export const ChartsClient = memo(function ChartsClient() {
 
 interface ComparisonChartsClientProps {
   inset?: boolean;
+  /** Controlled time scale (e.g. selector rendered in the page header). */
+  activeTimeScale?: string;
+  onTimeScaleChange?: (scale: string) => void;
 }
 
-export const ComparisonChartsClient = memo(function ComparisonChartsClient({ inset = true }: ComparisonChartsClientProps) {
+export const ComparisonChartsClient = memo(function ComparisonChartsClient({
+  inset = true,
+  activeTimeScale,
+  onTimeScaleChange,
+}: ComparisonChartsClientProps) {
   return (
     <ChartErrorBoundary>
       <Suspense fallback={<ChartSkeleton inset={inset} />}>
-        <ComparisonChartsContent inset={inset} />
+        <ComparisonChartsContent
+          inset={inset}
+          activeTimeScale={activeTimeScale}
+          onTimeScaleChange={onTimeScaleChange}
+        />
       </Suspense>
     </ChartErrorBoundary>
   )

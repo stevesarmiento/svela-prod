@@ -65,6 +65,11 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
           return;
         }
 
+        // Sector comparison is a focused view — no contextual menu on re-click.
+        if (item.href === "/comparison") {
+          return;
+        }
+
         onOpenCommandSearch(item.title.toLowerCase() as CommandContext);
       } else {
         router.push(getItemUrl(item));
@@ -89,6 +94,8 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
         const tooltipLabel =
           item.href === "/screener"
             ? "Screener"
+            : item.href === "/comparison"
+            ? "Compare"
             : showTokenBadge
               ? `${tokenData.symbol} · Back to Watchlists`
               : isActive

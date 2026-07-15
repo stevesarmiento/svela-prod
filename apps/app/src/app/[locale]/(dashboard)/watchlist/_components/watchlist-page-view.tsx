@@ -29,8 +29,6 @@ import {
   IconBookmark,
   IconWalletBifold,
   IconBookmarkFill,
-  IconBinoculars,
-  IconBinocularsFill,
 } from "symbols-react"
 
 import { useWatchlist } from "./watchlist-context"
@@ -68,18 +66,6 @@ const LazyChartsClient = dynamic(
   },
 )
 
-const LazyComparisonChartsClient = dynamic(
-  () => loadChartsModule().then((module) => module.ComparisonChartsClient),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center py-12">
-        <Spinner size={24} />
-      </div>
-    ),
-  },
-)
-
 const LazyCreateWatchlist = dynamic(
   () => loadCreateWatchlist().then((module) => module.CreateWatchlist),
   { ssr: false },
@@ -99,8 +85,6 @@ export interface WatchlistPageViewProps {
   onTimeScaleChange: (scale: string) => void
   gridViewMode: "grid" | "chart"
   onGridViewModeChange: (mode: "grid" | "chart") => void
-  contentMode: "cards" | "aggregate"
-  onContentModeChange: (mode: "cards" | "aggregate") => void
 }
 
 export function WatchlistPageView({
@@ -108,8 +92,6 @@ export function WatchlistPageView({
   onTimeScaleChange,
   gridViewMode,
   onGridViewModeChange,
-  contentMode,
-  onContentModeChange,
 }: WatchlistPageViewProps) {
   const {
     isInitialized,
@@ -123,16 +105,10 @@ export function WatchlistPageView({
   const [shouldOpenCoinSearch, setShouldOpenCoinSearch] = useState(false)
   const coinSearchRef = useRef<CoinSearchRef>(null)
 
-  const contentModeRef = useLatest(contentMode)
   const isCreatingWatchlistRef = useLatest(isCreatingWatchlist)
   const onGridViewModeChangeRef = useLatest(onGridViewModeChange)
-  const onContentModeChangeRef = useLatest(onContentModeChange)
 
   const preloadChartsClient = useCallback(() => {
-    void loadChartsModule()
-  }, [])
-
-  const preloadComparisonChartsClient = useCallback(() => {
     void loadChartsModule()
   }, [])
 
@@ -191,39 +167,23 @@ export function WatchlistPageView({
         return
       }
 
-      if (event.key === '[' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (event.key.toLowerCase() === "w" && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault()
-        onContentModeChangeRef.current?.("cards")
+        onGridViewModeChangeRef.current?.("grid")
         return
       }
 
-      if (event.key === ']' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (event.key.toLowerCase() === "e" && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault()
-        onContentModeChangeRef.current?.("aggregate")
+        onGridViewModeChangeRef.current?.("chart")
         return
-      }
-
-      if (contentModeRef.current === "cards") {
-        if (event.key.toLowerCase() === "w" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-          event.preventDefault()
-          onGridViewModeChangeRef.current?.("grid")
-          return
-        }
-
-        if (event.key.toLowerCase() === "e" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-          event.preventDefault()
-          onGridViewModeChangeRef.current?.("chart")
-          return
-        }
       }
     }
 
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [
-    contentModeRef,
     isCreatingWatchlistRef,
-    onContentModeChangeRef,
     onGridViewModeChangeRef,
     openCoinSearch,
     preloadAddWalletDialog,
@@ -239,7 +199,7 @@ export function WatchlistPageView({
     )
   }
 
-  const headerLeft = contentMode === "cards" ? (
+  const headerLeft = (
     <div className="flex items-center gap-4">
       <Tooltip>
         <TooltipTrigger asChild>
@@ -293,31 +253,6 @@ export function WatchlistPageView({
         </TooltipContent>
       </Tooltip>
     </div>
-  ) : (
-    <div className="flex items-center gap-4">
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink asChild>
-              <button
-                type="button"
-                onClick={() => onContentModeChange("cards")}
-                className="inline-flex items-center gap-2 rounded-md transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <IconBookmarkFill className="size-4 fill-muted-foreground" />
-                <span>Watchlists</span>
-              </button>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage className="inline-flex items-center gap-2">
-              <span>Sector comparison</span>
-            </BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
-    </div>
   )
 
   return (
@@ -326,31 +261,6 @@ export function WatchlistPageView({
         {headerLeft}
 
         <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onContentModeChange(contentMode === "cards" ? "aggregate" : "cards")}
-                onMouseEnter={preloadComparisonChartsClient}
-                onFocus={preloadComparisonChartsClient}
-                className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
-              >
-                {contentMode === "cards" ? (
-                  <IconBinoculars className="h-4 w-4 fill-muted-foreground group-hover:fill-primary" />
-                ) : (
-                  <IconBinocularsFill className="h-4 w-4 fill-primary" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left" align="center" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
-              <span>Switch between Watchlists and Aggregate</span>
-              <Kbd>[</Kbd>
-              <span>/</span>
-              <Kbd>]</Kbd>
-            </TooltipContent>
-          </Tooltip>
-
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -427,37 +337,28 @@ export function WatchlistPageView({
               </div>
             </PopoverContent>
           </Popover>
-
-          {/* Manual data refresh removed: quotes refresh via the 5-min cron +
-              on-view warmups, and charts are kept fresh by the demand-driven
-              chart scheduler (convex/chartScheduler.ts). Wallet holdings sync
-              lives on the overview page. */}
         </div>
       </div>
 
-      {contentMode === "cards" ? (
-        <Tabs value={gridViewMode}>
-          <TabsContent value="grid" className="mt-0">
-            <WatchlistsGrid
-              onSelectWatchlist={(group) => {
-                selectWatchlistGroup(group)
-                preloadChartsClient()
-                onGridViewModeChange("chart")
-              }}
-              viewMode="grid"
-              activeTimeScale={activeTimeScale}
-              onTimeScaleChange={onTimeScaleChange}
-              onViewModeChange={onGridViewModeChange}
-            />
-          </TabsContent>
+      <Tabs value={gridViewMode}>
+        <TabsContent value="grid" className="mt-0">
+          <WatchlistsGrid
+            onSelectWatchlist={(group) => {
+              selectWatchlistGroup(group)
+              preloadChartsClient()
+              onGridViewModeChange("chart")
+            }}
+            viewMode="grid"
+            activeTimeScale={activeTimeScale}
+            onTimeScaleChange={onTimeScaleChange}
+            onViewModeChange={onGridViewModeChange}
+          />
+        </TabsContent>
 
-          <TabsContent value="chart" className="mt-0">
-            <LazyChartsClient />
-          </TabsContent>
-        </Tabs>
-      ) : (
-        <LazyComparisonChartsClient inset={false} />
-      )}
+        <TabsContent value="chart" className="mt-0">
+          <LazyChartsClient />
+        </TabsContent>
+      </Tabs>
 
       <LazyCreateWatchlist
         isOpen={isCreatingWatchlist}

@@ -119,6 +119,41 @@ function isSameQuote(a: CoinGeckoQuoteMarketData | undefined, b: CoinGeckoQuoteM
   )
 }
 
+function quoteUpdatedAtMs(quote: CoinGeckoQuoteMarketData | undefined): number | null {
+  const raw = quote?.last_updated
+  if (!raw) return null
+  const parsed = Date.parse(raw)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+/**
+ * Whether a cache-sync write should replace `existing` with `incoming`.
+ *
+ * Only strictly-NEWER quotes propagate. This keeps cross-cache syncing
+ * convergent: screens that mount many overlapping bulk maps at once (e.g. the
+ * comparison view) can hold different snapshots of the same coin fetched
+ * moments apart — if both directions were allowed to write, each cache's sync
+ * effect would re-trigger the other's forever ("Maximum update depth
+ * exceeded"). A monotonic newest-wins rule terminates by construction.
+ */
+function shouldSyncQuote(
+  existing: CoinGeckoQuoteMarketData | undefined,
+  incoming: CoinGeckoQuoteMarketData | undefined,
+): boolean {
+  if (!incoming) return false
+  if (!existing) return true
+  if (isSameQuote(existing, incoming)) return false
+
+  const existingMs = quoteUpdatedAtMs(existing)
+  const incomingMs = quoteUpdatedAtMs(incoming)
+  // Without comparable timestamps we can't prove the write converges — only
+  // allow filling in a timestamped quote over an untimestamped one.
+  if (existingMs === null || incomingMs === null) {
+    return existingMs === null && incomingMs !== null
+  }
+  return incomingMs > existingMs
+}
+
 function formatCoinGeckoError(error: unknown): string {
   if (error && typeof error === "object" && "_tag" in error) {
     const tagged = error as { _tag: string; message?: unknown; status?: unknown }
@@ -173,7 +208,7 @@ export function useCoinGeckoQuote(coinId: string | null | undefined) {
       queryClient.setQueryData<Record<string, CoinGeckoQuoteMarketData> | undefined>(key, (old) => {
         if (!old) return old
         if (!(coinId in old)) return old
-        if (isSameQuote(old[coinId], coin)) return old
+        if (!shouldSyncQuote(old[coinId], coin)) return old
         return { ...old, [coinId]: coin }
       })
     }
@@ -290,7 +325,10 @@ export function useCoinGeckoQuotesBulk(
     // Keep per-coin cache warm so table → token page renders identical cached price instantly.
     for (const [id, coin] of Object.entries(data)) {
       if (!coin) continue
-      queryClient.setQueryData(coingeckoQuoteQueryKeys.single(id), coin)
+      queryClient.setQueryData<CoinGeckoQuoteMarketData | undefined>(
+        coingeckoQuoteQueryKeys.single(id),
+        (old) => (shouldSyncQuote(old ?? undefined, coin) ? coin : old),
+      )
     }
 
     // Also keep ALL bulk quote maps in sync so different tables never drift for the same coin.
@@ -308,7 +346,7 @@ export function useCoinGeckoQuotesBulk(
         const next: Record<string, CoinGeckoQuoteMarketData> = { ...old }
         for (const [id, coin] of Object.entries(data)) {
           if (!(id in old)) continue
-          if (isSameQuote(old[id], coin)) continue
+          if (!shouldSyncQuote(old[id], coin)) continue
           next[id] = coin
           didChange = true
         }

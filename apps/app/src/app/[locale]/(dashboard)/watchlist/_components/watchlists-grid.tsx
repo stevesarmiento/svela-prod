@@ -45,14 +45,20 @@ interface WatchlistsGridProps {
   activeTimeScale?: string
   onTimeScaleChange?: (scale: string) => void
   onViewModeChange?: (mode: 'grid' | 'chart') => void
+  /** Layout for the comparison chart in 'chart' view mode. */
+  chartLayout?: 'horizontal' | 'vertical'
+  /** Hide the chart card's built-in selector when the page renders its own. */
+  showChartTimeScaleSelector?: boolean
 }
 
-export function WatchlistsGrid({ 
+export function WatchlistsGrid({
   onSelectWatchlist,
   viewMode = 'grid',
   activeTimeScale = '7d',
   onTimeScaleChange,
-  onViewModeChange
+  onViewModeChange,
+  chartLayout = 'horizontal',
+  showChartTimeScaleSelector = true
 }: WatchlistsGridProps) {
   const [editingGroup, setEditingGroup] = useState<WatchlistGroup | null>(null)
   
@@ -385,6 +391,8 @@ export function WatchlistsGrid({
                 activeTimeScale={activeTimeScale}
                 setActiveTimeScale={onTimeScaleChange || (() => {})}
                 selectedWatchlists={allWatchlistIds}
+                layout={chartLayout}
+                showTimeScaleSelector={showChartTimeScaleSelector}
                 onSelectWatchlist={(watchlistId) => {
                   const group = watchlistGroups.find(g => g._id === watchlistId)
                   if (group) onSelectWatchlist?.(group)

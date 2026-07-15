@@ -12,12 +12,15 @@ interface AvatarCirclesProps {
   className?: string;
   numPeople?: number;
   avatarUrls: Avatar[];
+  /** Circle diameter in px (default 32). */
+  sizePx?: number;
 }
 
 export const AvatarCircles = ({
   numPeople,
   className,
   avatarUrls,
+  sizePx = 32,
 }: AvatarCirclesProps) => {
   const filteredUrls = avatarUrls.filter(
     (url) =>
@@ -34,15 +37,18 @@ export const AvatarCircles = ({
       {filteredUrls.map((url, index) => (
         <div
           key={url.imageUrl}
-          className="relative size-8 overflow-hidden rounded-full bg-muted/30 shadow-sm shadow-black/10"
-          style={{ zIndex: stackDepth - index }}
+          // shrink-0: flex children default to shrink:1, which squishes circles
+          // horizontally (but not vertically) in tight containers — deformed
+          // logos + Next's aspect-ratio warning. Crop via parent instead.
+          className="relative shrink-0 overflow-hidden rounded-full bg-muted/30 shadow-sm shadow-black/10"
+          style={{ zIndex: stackDepth - index, width: sizePx, height: sizePx }}
         >
           <Image
             className="size-full object-cover"
             src={url.imageUrl}
-            width={32}
-            height={32}
-            sizes="32px"
+            width={sizePx}
+            height={sizePx}
+            sizes={`${sizePx}px`}
             alt={`Avatar ${index + 1}`}
             onError={(e) => {
               const target = e.target as HTMLImageElement;
@@ -57,8 +63,15 @@ export const AvatarCircles = ({
         </div>
       ))}
       {(numPeople ?? 0) > 0 && (
-        <div className="flex size-8 items-center justify-center rounded-full border dark:border-white/10 border-zinc-800/10 dark:bg-background bg-zinc-950/5 backdrop-blur-xl text-center text-sm font-bold text-white font-berkeley-mono">
-          <span className="opacity-50 text-xs">+</span>
+        <div
+          className="flex shrink-0 items-center justify-center rounded-full border dark:border-white/10 border-zinc-800/10 dark:bg-background bg-zinc-950/5 backdrop-blur-xl text-center font-bold text-white font-berkeley-mono"
+          style={{
+            width: sizePx,
+            height: sizePx,
+            fontSize: Math.max(9, Math.round(sizePx * 0.44)),
+          }}
+        >
+          <span className="opacity-50">+</span>
           {numPeople}
         </div>
       )}

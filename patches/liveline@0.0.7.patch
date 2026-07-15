@@ -1,0 +1,38 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 4709730f1d6608dee4ffb3a386d1732f776c5f5c..f8576e5c0cdd70b5e0b32ff2abd27d8e2e54105f 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -3585,8 +3585,12 @@ function Liveline({
+   const showSeriesToggle = (lastSeriesPropRef.current?.length ?? 0) > 1;
+   const seriesPalettes = (0, import_react2.useMemo)(() => {
+     if (!seriesProp || seriesProp.length === 0) return null;
+-    return resolveSeriesPalettes(seriesProp, theme);
+-  }, [seriesProp, theme]);
++    const map = resolveSeriesPalettes(seriesProp, theme);
++    if (lineWidth != null) {
++      for (const p of map.values()) p.lineWidth = lineWidth;
++    }
++    return map;
++  }, [seriesProp, theme, lineWidth]);
+   const multiSeries = (0, import_react2.useMemo)(() => {
+     if (!seriesProp || !seriesPalettes) return void 0;
+     return seriesProp.map((s, i) => ({
+diff --git a/dist/index.js b/dist/index.js
+index fd0506272e9a54432a0882c3a389ee74302e4718..1897a41b2c89bce0776be10ea02ed45c2b7a77ac 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -3558,8 +3558,12 @@ function Liveline({
+   const showSeriesToggle = (lastSeriesPropRef.current?.length ?? 0) > 1;
+   const seriesPalettes = useMemo(() => {
+     if (!seriesProp || seriesProp.length === 0) return null;
+-    return resolveSeriesPalettes(seriesProp, theme);
+-  }, [seriesProp, theme]);
++    const map = resolveSeriesPalettes(seriesProp, theme);
++    if (lineWidth != null) {
++      for (const p of map.values()) p.lineWidth = lineWidth;
++    }
++    return map;
++  }, [seriesProp, theme, lineWidth]);
+   const multiSeries = useMemo(() => {
+     if (!seriesProp || !seriesPalettes) return void 0;
+     return seriesProp.map((s, i) => ({

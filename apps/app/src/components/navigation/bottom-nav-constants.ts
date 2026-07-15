@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { BookmarkIcon } from "./bookmark-icon";
+import { ComparisonIcon } from "./comparison-icon";
 import { ExploreIcon } from "./explore-icon";
 import { HomeIcon } from "./home-icon";
 import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
@@ -24,6 +25,11 @@ export const MENU_ITEMS = [
     icon: BookmarkIcon,
   },
   {
+    title: "Compare",
+    href: "/comparison",
+    icon: ComparisonIcon,
+  },
+  {
     title: "Screener",
     href: "/screener",
     icon: ExploreIcon,
@@ -36,6 +42,14 @@ const watchlistCommandItem = {
   href: "/watchlists",
   icon: BookmarkIcon,
   shortcut: getShortcutForRoute("/watchlists"),
+} as const;
+
+const comparisonCommandItem = {
+  title: "Sector comparison",
+  subtitle: "Aggregate view across all your watchlists",
+  href: "/comparison",
+  icon: ComparisonIcon,
+  shortcut: getShortcutForRoute("/comparison"),
 } as const;
 
 const screenerCommandItem = {
@@ -58,13 +72,18 @@ export const COMMAND_ITEMS = isAlphaFeaturesEnabled()
   ? ([
       {
         group: "Navigation",
-        items: [watchlistCommandItem, screenerCommandItem],
+        items: [watchlistCommandItem, comparisonCommandItem, screenerCommandItem],
       },
     ] as const)
   : ([
       {
         group: "Navigation",
-        items: [overviewCommandItem, watchlistCommandItem, screenerCommandItem],
+        items: [
+          overviewCommandItem,
+          watchlistCommandItem,
+          comparisonCommandItem,
+          screenerCommandItem,
+        ],
       },
     ] as const);
 
