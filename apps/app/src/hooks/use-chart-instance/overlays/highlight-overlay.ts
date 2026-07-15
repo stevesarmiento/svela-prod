@@ -4,9 +4,20 @@ import { CANDLE_DOWN_COLOR, CANDLE_UP_COLOR } from '@/lib/chart-colors';
 import { multiplyAlpha } from '@/lib/oklch';
 import { clampNumber, isTimeInEpochRange, timeToEpochSeconds, toRgba } from '../utils';
 
+export interface HighlightMarketCapArgs {
+    /** Base market cap series (dimmed outside the highlighted window). */
+    series: ISeriesApi<'Line'>;
+    /** Duplicate series that renders the in-window slice at full strength. */
+    highlightSeries: ISeriesApi<'Line'>;
+    data: PriceDataPoint[];
+    color: string;
+}
+
 export interface HighlightOverlay {
     setRange: (range: ChartHighlightRange | null) => void;
     setData: (args: { ohlcvData: OHLCVDataPoint[]; lineData: PriceDataPoint[] | null; volumeData: VolumeDataPoint[] }) => void;
+    /** Register (or clear) the market cap overlay so it scrubs/dims like the price series. */
+    setMarketCap: (args: HighlightMarketCapArgs | null) => void;
     apply: () => void;
     updatePositions: () => void;
     destroy: () => void;
@@ -62,6 +73,7 @@ export function createHighlightOverlay({
     let currentLineData: PriceDataPoint[] | null = null;
     let currentVolumeData: VolumeDataPoint[] = [];
     let candleEpochSeconds: number[] = [];
+    let currentMarketCap: HighlightMarketCapArgs | null = null;
 
     function multiplyColorAlpha(color: string, factor: number): string {
         // All chart colors are oklch strings; multiplyAlpha scales the
@@ -128,6 +140,30 @@ export function createHighlightOverlay({
         lineRight.style.transform = `translate3d(${rightX}px, 0, 0)`;
     }
 
+    function clearMarketCapHighlight() {
+        if (!currentMarketCap) return;
+        currentMarketCap.series.applyOptions({ color: currentMarketCap.color });
+        currentMarketCap.highlightSeries.applyOptions({ visible: false });
+        currentMarketCap.highlightSeries.setData([]);
+    }
+
+    function applyMarketCapHighlight(startEpochSec: number, endEpochSec: number, dimOpacity: number) {
+        if (!currentMarketCap) return;
+
+        const highlighted = currentMarketCap.data.filter(d => isTimeInEpochRange(d.time, startEpochSec, endEpochSec));
+        if (highlighted.length === 0) {
+            clearMarketCapHighlight();
+            return;
+        }
+
+        // Multiply (not replace) alpha: the market cap color carries its own
+        // base opacity, so the dim factor scales it the same way the price
+        // line dims from full strength.
+        currentMarketCap.series.applyOptions({ color: multiplyColorAlpha(currentMarketCap.color, dimOpacity) });
+        currentMarketCap.highlightSeries.applyOptions({ visible: true, color: currentMarketCap.color });
+        currentMarketCap.highlightSeries.setData(highlighted);
+    }
+
     function clearHighlight() {
         if (chartType === 'candlestick') {
             (priceSeries as ISeriesApi<'Candlestick'>).applyOptions({
@@ -154,6 +190,7 @@ export function createHighlightOverlay({
             volumeSeries.setData(currentVolumeData);
         }
 
+        clearMarketCapHighlight();
         hideBoundaries();
     }
 
@@ -245,6 +282,8 @@ export function createHighlightOverlay({
             volumeSeries.setData(dimmedVolumeData);
         }
 
+        applyMarketCapHighlight(startEpochSec, endEpochSec, dimOpacity);
+
         updatePositions();
     }
 
@@ -263,10 +302,16 @@ export function createHighlightOverlay({
         apply();
     }
 
+    function setMarketCap(args: HighlightMarketCapArgs | null) {
+        if (currentMarketCap && !args) clearMarketCapHighlight();
+        currentMarketCap = args;
+        apply();
+    }
+
     function destroy() {
         hideBoundaries();
         if (overlayEl.parentNode) overlayEl.parentNode.removeChild(overlayEl);
     }
 
-    return { setRange, setData, apply, updatePositions, destroy };
+    return { setRange, setData, setMarketCap, apply, updatePositions, destroy };
 }

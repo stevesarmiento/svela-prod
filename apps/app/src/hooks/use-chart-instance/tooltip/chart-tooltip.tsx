@@ -14,10 +14,11 @@ export interface ChartTooltipProps {
     percentageChange: number;
     timestampMs: number;
     volume?: number;
+    marketCap?: number;
     ohlcData?: ChartTooltipOhlcData;
 }
 
-export function ChartTooltip({ price, percentageChange, timestampMs, volume, ohlcData }: ChartTooltipProps) {
+export function ChartTooltip({ price, percentageChange, timestampMs, volume, marketCap, ohlcData }: ChartTooltipProps) {
     return (
         <div className="flex flex-col gap-1 overflow-hidden">
             <div className="px-3 py-2">
@@ -51,6 +52,13 @@ export function ChartTooltip({ price, percentageChange, timestampMs, volume, ohl
                             </span>
                         </div>
                     </div>
+
+                    {marketCap !== undefined && (
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] text-white/80">Market cap</span>
+                            <span className="text-[11px] font-berkeley-mono text-white">{formatUsdVolume(marketCap)}</span>
+                        </div>
+                    )}
 
                     {volume !== undefined && (
                         <div className="flex items-center justify-between">

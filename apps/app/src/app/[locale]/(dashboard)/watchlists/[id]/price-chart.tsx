@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
 import { Badge } from "@v1/ui/badge"
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
-import { useChartInstance, type HullSuiteOverlay, type ProjectionOverlay } from '@/hooks/use-chart-instance'
+import { useChartInstance, type HullSuiteOverlay, type MarketCapOverlay, type ProjectionOverlay } from '@/hooks/use-chart-instance'
 import { usePriceCalculations } from '@/hooks/use-price-calculations'
 import type { CoinMarketData } from '@/types/coins'
 import { useHullSuite } from '@/hooks/use-hull-suite'
@@ -403,7 +403,7 @@ export const PriceChart = memo(function PriceChart({
   const liveSpotPriceUsd = liveSpot?.priceUsd ?? null
   
   // React 19: Get line chart data with OHLC data for tooltips using deferred values
-  const { chartData, volumeData, ohlcData, isLoading, isWarmingUp, tokenData } = useCoinGeckoChartData(
+  const { chartData, volumeData, ohlcData, marketCapData, isLoading, isWarmingUp, tokenData } = useCoinGeckoChartData(
     deferredCoinId,
     deferredTimeScale,
     deferredInitialData,
@@ -437,6 +437,22 @@ export const PriceChart = memo(function PriceChart({
       lineWidth: 1,
     }
   }, [hullSuiteData, primaryHullColor])
+
+  // Historical market cap overlaid on the price line, price-locked: rebased
+  // by a fixed anchor (first shared bar) onto the same right price scale, so
+  // pan/zoom keeps the relationship stable. Divergence from price = supply
+  // change; an mcap ATH without a price ATH breaks above the price line.
+  // Yellow at half opacity so it reads as secondary to the price line.
+  const marketCapColor = isDarkMode ? 'oklch(0.85 0.16 95 / 0.5)' : 'oklch(0.68 0.14 95 / 0.5)'
+  const marketCapOverlay = useMemo<MarketCapOverlay | null>(() => {
+    if (marketCapData.length < 2) return null
+    return {
+      points: marketCapData,
+      color: marketCapColor,
+      lineWidth: 1,
+      lineStyle: 'dotted',
+    }
+  }, [marketCapData, marketCapColor])
 
   // Forward projection (dashed base trend + bull/bear scenario curves).
   // Always on. Never projects off a warming/stale tail — recomputes when the
@@ -549,6 +565,7 @@ export const PriceChart = memo(function PriceChart({
     livePriceUsd: isWarmingUp ? undefined : liveSpotPriceUsd,
     isDarkMode,
     hullSuite: hullSuiteOverlay,
+    marketCap: marketCapOverlay,
     projection: projectionOverlay,
     onCrosshairMove: handleCrosshairMove,
     onCrosshairTimeMove: handleCrosshairTimeMove,
@@ -669,6 +686,16 @@ export const PriceChart = memo(function PriceChart({
                     activeTimeScale={deferredTimeScale}
                     setActiveTimeScale={handleTimeScaleChange}
                   />
+                  {marketCapOverlay ? (
+                    <div className="flex items-center gap-1.5 pr-1 text-[9px] font-berkeley-mono tracking-wider text-muted-foreground select-none">
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-[2px] w-3 rounded-full"
+                        style={{ background: marketCapColor }}
+                      />
+                      MKT CAP
+                    </div>
+                  ) : null}
                 </div>
                 <div className="hidden absolute right-4 top-[57px] z-20 pointer-events-auto flex flex-col items-end gap-2">
                   {spotStatusLabel ? (

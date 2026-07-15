@@ -64,6 +64,8 @@ interface ParsedChartData {
   lineChart: Array<{ time: Time; value: number }>
   volumeChart: Array<{ time: Time; value: number; color: string }>
   ohlcData: Array<{ time: Time; open: number; high: number; low: number; close: number }> // For tooltip
+  /** Historical market cap (only available from the /market-chart source). */
+  marketCapChart: Array<{ time: Time; value: number }>
 }
 
 interface DataSourceResult {
@@ -81,6 +83,8 @@ interface CoinGeckoChartDataResult {
   chartData: Array<{ time: Time; value: number }>
   volumeData: Array<{ time: Time; value: number; color: string }>
   ohlcData: Array<{ time: Time; open: number; high: number; low: number; close: number }> // For tooltip
+  /** Historical market cap series (empty when the data source doesn't provide it). */
+  marketCapData: Array<{ time: Time; value: number }>
   isLoading: boolean
   /**
    * When true, the server told us it’s returning cached/stale data and has scheduled a warmup.
@@ -157,6 +161,7 @@ function pickMarketChartBucketSeconds(args: {
 function bucketizeMarketChart(args: {
   prices: ReadonlyArray<MarketChartPoint>
   volumes: ReadonlyArray<MarketChartPoint>
+  marketCaps: ReadonlyArray<MarketChartPoint>
   bucketSeconds: number
 }): ParsedChartData | null {
   const pricePoints = args.prices
@@ -213,6 +218,23 @@ function bucketizeMarketChart(args: {
     volumeBuckets.set(bucketStart, (volumeBuckets.get(bucketStart) ?? 0) + value)
   }
 
+  // Market cap: keep the last observation per bucket (a "close", like price).
+  const marketCapBuckets = new Map<number, number>()
+  const sortedMarketCaps = args.marketCaps
+    .map((point) => {
+      const time = Math.floor(Number(point.time))
+      const value = Number(point.value ?? 0)
+      if (!Number.isFinite(time)) return null
+      if (!Number.isFinite(value) || value <= 0) return null
+      return { time, value }
+    })
+    .filter((p): p is { time: number; value: number } => p !== null)
+    .sort((a, b) => a.time - b.time)
+  for (const point of sortedMarketCaps) {
+    const bucketStart = Math.floor(point.time / bucketSeconds) * bucketSeconds
+    marketCapBuckets.set(bucketStart, point.value)
+  }
+
   const ohlcBars = Array.from(priceBuckets.entries())
     .map(([bucketStart, bar]) => ({
       ...bar,
@@ -227,10 +249,15 @@ function bucketizeMarketChart(args: {
     close: bar.close,
   }))
 
+  const marketCapChart = Array.from(marketCapBuckets.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([bucketStart, value]) => ({ time: bucketStart as Time, value }))
+
   return {
     lineChart: ohlcData.map((bar) => ({ time: bar.time, value: bar.close })),
     volumeChart: ohlcBars.map((bar) => ({ time: bar.time, value: bar.volume, color: 'oklch(1 0 0 / 0.251)' })),
     ohlcData,
+    marketCapChart,
   }
 }
 
@@ -268,7 +295,8 @@ function parseOHLCData(data: OHLCAPIResponse): ParsedChartData | null {
     return {
       lineChart,
       volumeChart,
-      ohlcData: ohlcPoints // Real OHLC data for tooltip
+      ohlcData: ohlcPoints, // Real OHLC data for tooltip
+      marketCapChart: [] // OHLC route doesn't provide market caps
     }
   } catch (error) {
     console.error('Failed to parse OHLC data:', error)
@@ -285,9 +313,9 @@ function parseMarketChartData(data: MarketChartAPIResponse, activeTimeScale: str
   }
 
   try {
-    const { prices, volumes = [] } = data.data
+    const { prices, volumes = [], market_caps = [] } = data.data
     const bucketSeconds = pickMarketChartBucketSeconds({ activeTimeScale, prices })
-    return bucketizeMarketChart({ prices, volumes, bucketSeconds })
+    return bucketizeMarketChart({ prices, volumes, marketCaps: market_caps, bucketSeconds })
   } catch (error) {
     console.error('Failed to parse market chart data:', error)
     return null
@@ -311,7 +339,7 @@ function generateFallbackData(
 
   // If we don't have a real price to anchor on, return empty data (no fake charting).
   if (!basePrice || basePrice <= 0) {
-    return { lineChart: [], volumeChart: [], ohlcData: [] }
+    return { lineChart: [], volumeChart: [], ohlcData: [], marketCapChart: [] }
   }
 
   const fallbackPoints = Array.from({ length: dataPoints }, (_, i) => {
@@ -329,15 +357,15 @@ function generateFallbackData(
 
   const lineChart = fallbackPoints.map(p => ({ time: p.time, value: p.price }))
   const volumeChart = fallbackPoints.map(p => ({ time: p.time, value: p.volume, color: 'oklch(1 0 0 / 0.251)' }))
-  const ohlcData = fallbackPoints.map(p => ({ 
-    time: p.time, 
-    open: p.open, 
-    high: p.high, 
-    low: p.low, 
-    close: p.close 
+  const ohlcData = fallbackPoints.map(p => ({
+    time: p.time,
+    open: p.open,
+    high: p.high,
+    low: p.low,
+    close: p.close
   }))
 
-  return { lineChart, volumeChart, ohlcData }
+  return { lineChart, volumeChart, ohlcData, marketCapChart: [] }
 }
 
 /**
@@ -376,10 +404,20 @@ function combineOHLCWithVolume(
       value: point.close
     }))
 
+    // Parse real market cap data (same source as volumes)
+    const marketCapChart = (marketData.data.market_caps ?? [])
+      .map((point: MarketChartPoint) => ({
+        time: Math.floor(Number(point.time)) as Time,
+        value: Number(point.value ?? 0),
+      }))
+      .filter((point) => Number.isFinite(Number(point.time)) && Number.isFinite(point.value) && point.value > 0)
+      .sort((a, b) => Number(a.time) - Number(b.time))
+
     return {
       lineChart,
       volumeChart: volumePoints,
-      ohlcData: ohlcPoints // Real OHLC data for tooltip
+      ohlcData: ohlcPoints, // Real OHLC data for tooltip
+      marketCapChart
     }
   } catch (error) {
     console.error('Failed to combine OHLC with volume data:', error)
@@ -409,6 +447,7 @@ function upsertLatestPricePoint(parsedData: ParsedChartData, latestPrice: number
       lineChart: [{ time: nextTime, value: latestPrice }],
       volumeChart: [{ time: nextTime, value: 0, color: 'oklch(1 0 0 / 0.251)' }],
       ohlcData: [{ time: nextTime, open: latestPrice, high: latestPrice, low: latestPrice, close: latestPrice }],
+      marketCapChart: parsedData.marketCapChart,
     }
   }
 
@@ -431,6 +470,7 @@ function upsertLatestPricePoint(parsedData: ParsedChartData, latestPrice: number
       lineChart,
       volumeChart: parsedData.volumeChart,
       ohlcData,
+      marketCapChart: parsedData.marketCapChart,
     }
   }
 
@@ -442,6 +482,7 @@ function upsertLatestPricePoint(parsedData: ParsedChartData, latestPrice: number
       ...parsedData.ohlcData,
       { time: nextTime, open: latestPrice, high: latestPrice, low: latestPrice, close: latestPrice },
     ],
+    marketCapChart: parsedData.marketCapChart,
   }
 }
 
@@ -690,7 +731,8 @@ export function useCoinGeckoChartData(
       parsedData = {
         lineChart: [],
         volumeChart: [],
-        ohlcData: []
+        ohlcData: [],
+        marketCapChart: []
       };
     }
   } else if (isLoading) {
@@ -698,7 +740,8 @@ export function useCoinGeckoChartData(
     parsedData = {
       lineChart: [],
       volumeChart: [],
-      ohlcData: []
+      ohlcData: [],
+      marketCapChart: []
     };
   } else {
     // No data and not loading - only use fallback if we have valid initial data
@@ -708,7 +751,8 @@ export function useCoinGeckoChartData(
       parsedData = {
         lineChart: [],
         volumeChart: [],
-        ohlcData: []
+        ohlcData: [],
+        marketCapChart: []
       };
     }
   }
@@ -733,6 +777,7 @@ export function useCoinGeckoChartData(
     chartData: dataWithLatestQuote.lineChart,
     volumeData: dataWithLatestQuote.volumeChart,
     ohlcData: dataWithLatestQuote.ohlcData, // OHLC data for tooltip
+    marketCapData: dataWithLatestQuote.marketCapChart,
     isLoading,
     isWarmingUp: isWarmingUp || (typeof serverPoints === "number" ? serverPoints < 2 : false),
     isStale,
