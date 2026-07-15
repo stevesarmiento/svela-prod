@@ -541,7 +541,11 @@ export function WatchlistMultiLineChart({
           isVertical ? "order-2 p-3" : "col-span-3 p-4",
         )}
       >
-        <div className="flex flex-col gap-1">
+        <div
+          className={cn(
+            isVertical ? "grid grid-cols-3 gap-1.5" : "flex flex-col gap-1",
+          )}
+        >
           {watchlistSeriesData.map((watchlist) => {
             const isHidden = hiddenWatchlists.has(watchlist.id)
             return (
@@ -600,7 +604,10 @@ export function WatchlistMultiLineChart({
           {hiddenWatchlists.size > 0 && (
             <button
               type="button"
-              className="self-start text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1"
+              className={cn(
+                "self-start text-xs text-muted-foreground hover:text-foreground transition-colors mt-1 px-1",
+                isVertical && "col-span-3",
+              )}
               onClick={() => setHiddenWatchlists(new Set())}
             >
               Show all ({hiddenWatchlists.size} hidden)

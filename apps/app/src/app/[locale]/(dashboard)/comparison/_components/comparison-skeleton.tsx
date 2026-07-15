@@ -28,7 +28,7 @@ export function ComparisonGridSkeleton({ inset = false }: { inset?: boolean }) {
             <div className="px-2">
               <div className="h-[300px] w-full rounded-[13px] bg-zinc-950/5 dark:bg-white/5" />
             </div>
-            <div className="flex flex-col gap-1 p-3">
+            <div className="grid grid-cols-3 gap-1.5 p-3">
               {LEGEND_ROWS.map((key) => (
                 <div
                   key={key}
