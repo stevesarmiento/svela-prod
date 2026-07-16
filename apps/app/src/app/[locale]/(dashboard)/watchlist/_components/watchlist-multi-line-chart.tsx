@@ -34,6 +34,8 @@ interface WatchlistMultiLineChartProps {
   layout?: 'horizontal' | 'vertical'
   /** Hide the in-card selector when the page renders its own (e.g. comparison header). */
   showTimeScaleSelector?: boolean
+  /** Scrub without overlay tooltip; show % labels beside each scrub dot instead. */
+  scrubDotLabels?: boolean
 }
 
 function getBucketMsFromTimeScale(timeScale: string): number {
@@ -102,6 +104,48 @@ function findClosestPoint(
   const leftDiff = Math.abs(left.time - targetTimeSec)
   const rightDiff = Math.abs(right.time - targetTimeSec)
   return leftDiff <= rightDiff ? left : right
+}
+
+const CHART_PADDING = { top: 12, right: 20, bottom: 20, left: 12 } as const
+
+function formatPctChange(value: number): string {
+  return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`
+}
+
+function getSeriesValueRange(series: LivelineSeries[]): { min: number; span: number } {
+  let min = Infinity
+  let max = -Infinity
+
+  for (const row of series) {
+    for (const point of row.data) {
+      if (point.value < min) min = point.value
+      if (point.value > max) max = point.value
+    }
+  }
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return { min: 0, span: 1 }
+  }
+
+  const margin = Math.max((max - min) * 0.08, 0.5)
+  return { min: min - margin, span: max - min + margin * 2 }
+}
+
+function valueToPlotY(
+  value: number,
+  min: number,
+  span: number,
+  plotHeight: number,
+): number {
+  return CHART_PADDING.top + (1 - (value - min) / span) * plotHeight
+}
+
+interface ScrubDotLabel {
+  id: string
+  color: string
+  x: number
+  y: number
+  text: string
 }
 
 function useWatchlistSeriesData(
@@ -209,10 +253,14 @@ export function WatchlistMultiLineChart({
   setActiveTimeScale,
   selectedWatchlists,
   layout = 'horizontal',
-  showTimeScaleSelector = true
+  showTimeScaleSelector = true,
+  scrubDotLabels = false,
 }: WatchlistMultiLineChartProps) {
   const isVertical = layout === 'vertical'
+  const chartHeightPx = isVertical ? 300 : 400
+  const useCustomTooltip = !scrubDotLabels
   const [hoveredWatchlist, setHoveredWatchlist] = useState<WatchlistGroupId | null>(null)
+  const [scrubDotLabelRows, setScrubDotLabelRows] = useState<ScrubDotLabel[] | null>(null)
   const [hiddenWatchlists, setHiddenWatchlists] = useState<Set<WatchlistGroupId>>(new Set())
   const [watchlistData, setWatchlistData] = useState<Map<WatchlistGroupId, WatchlistSeries>>(new Map())
   const { watchlistGroups: watchlistGroupsData } = useWatchlist()
@@ -317,6 +365,7 @@ export function WatchlistMultiLineChart({
   }, [watchlistSeriesData, hoveredWatchlist, hiddenWatchlists])
 
   const tooltipSeries = useMemo(() => {
+    if (!useCustomTooltip) return []
     return watchlistSeriesData
       .filter(row => !hiddenWatchlists.has(row.id))
       .map((row) => {
@@ -337,7 +386,7 @@ export function WatchlistMultiLineChart({
         }
       })
       .filter((row) => row.data.length > 0)
-  }, [watchlistSeriesData, hiddenWatchlists])
+  }, [watchlistSeriesData, hiddenWatchlists, useCustomTooltip])
 
   const windowSecs = useMemo(() => {
     let min: number | null = null
@@ -380,6 +429,11 @@ export function WatchlistMultiLineChart({
     }
   }, [livelineSeries])
 
+  const scrubValueRange = useMemo(
+    () => getSeriesValueRange(livelineSeries),
+    [livelineSeries],
+  )
+
   const tooltipClassName = useMemo(
     () =>
       `fixed overflow-hidden text-[11px] rounded-xl w-[220px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-opacity duration-100 ease-out ${
@@ -397,6 +451,8 @@ export function WatchlistMultiLineChart({
   const lastTooltipTimeRef = useRef<number | null>(null)
 
   useEffect(() => {
+    if (!useCustomTooltip) return
+
     const tooltipEl = document.createElement("div")
     const tooltipRoot = createRoot(tooltipEl)
     tooltipElRef.current = tooltipEl
@@ -427,15 +483,19 @@ export function WatchlistMultiLineChart({
         }
       })
     }
-  }, [])
+  }, [useCustomTooltip])
 
   useEffect(() => {
+    if (!useCustomTooltip) return
+
     const tooltipEl = tooltipElRef.current
     if (tooltipEl) tooltipEl.className = tooltipClassName
-  }, [tooltipClassName])
+  }, [tooltipClassName, useCustomTooltip])
 
   const handleLivelineHover = useCallback(
     (hover: { time: number; value: number; x: number; y: number } | null) => {
+      if (!useCustomTooltip) return
+
       const tooltipEl = tooltipElRef.current
       const tooltipRoot = tooltipRootRef.current
       const container = chartWrapperRef.current
@@ -514,7 +574,44 @@ export function WatchlistMultiLineChart({
 
       tooltipEl.style.transform = `translate3d(${left}px, ${top}px, 0)`
     },
-    [tooltipSeries],
+    [tooltipSeries, useCustomTooltip],
+  )
+
+  const handleScrubDotLabels = useCallback(
+    (hover: { time: number; value: number; x: number; y: number } | null) => {
+      if (!scrubDotLabels) return
+
+      if (!hover) {
+        setScrubDotLabelRows(null)
+        return
+      }
+
+      const timeSec = Math.round(hover.time)
+      const plotHeight =
+        chartHeightPx - CHART_PADDING.top - CHART_PADDING.bottom
+      const labels: ScrubDotLabel[] = []
+
+      for (const series of livelineSeries) {
+        const closest = findClosestPoint(series.data, timeSec)
+        if (!closest) continue
+
+        labels.push({
+          id: series.id,
+          color: series.color,
+          x: hover.x,
+          y: valueToPlotY(
+            closest.value,
+            scrubValueRange.min,
+            scrubValueRange.span,
+            plotHeight,
+          ),
+          text: formatPctChange(closest.value),
+        })
+      }
+
+      setScrubDotLabelRows(labels.length > 0 ? labels : null)
+    },
+    [scrubDotLabels, livelineSeries, scrubValueRange, chartHeightPx],
   )
 
   return (
@@ -667,7 +764,10 @@ export function WatchlistMultiLineChart({
                     </div>
                   </div>
                 ) : (
-                  <div ref={chartWrapperRef} className={cn("w-full", isVertical ? "h-[300px]" : "h-[400px]")}>
+                  <div
+                    ref={chartWrapperRef}
+                    className={cn("relative w-full", isVertical ? "h-[300px]" : "h-[400px]")}
+                  >
                     <Liveline
                       data={[]}
                       value={0}
@@ -684,12 +784,29 @@ export function WatchlistMultiLineChart({
                       scrub
                       tooltipY={-9999}
                       tooltipOutline={false}
-                      onHover={handleLivelineHover}
+                      onHover={scrubDotLabels ? handleScrubDotLabels : handleLivelineHover}
                       formatTime={formatTime}
-                      formatValue={(v) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%`}
-                      padding={{ top: 12, right: 20, bottom: 20, left: 12 }}
+                      formatValue={formatPctChange}
+                      padding={CHART_PADDING}
                       className="size-full"
                     />
+                    {scrubDotLabels && scrubDotLabelRows?.map((label, index) => (
+                      <span
+                        key={label.id}
+                        className="pointer-events-none absolute whitespace-nowrap font-berkeley-mono text-[10px] tabular-nums [text-shadow:0_0_4px_rgba(0,0,0,0.95),0_1px_2px_rgba(0,0,0,0.8)]"
+                        style={{
+                          left: label.x + (index % 2 === 0 ? 7 : -7),
+                          top: label.y,
+                          color: label.color,
+                          transform:
+                            index % 2 === 0
+                              ? "translateY(-50%)"
+                              : "translate(-100%, -50%)",
+                        }}
+                      >
+                        {label.text}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>

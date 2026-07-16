@@ -69,6 +69,53 @@ function toUnixSeconds(time: LightweightTime): number | null {
   return null
 }
 
+// Matches the watchlist comparison view's chart framing.
+const CHART_PADDING_Y = { top: 12, bottom: 20 } as const
+/** Minimum vertical distance between right-axis labels before they nudge apart. */
+const AXIS_LABEL_GAP = 14
+
+function formatPctChange(value: number): string {
+  return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`
+}
+
+/**
+ * Mirrors liveline's internal `computeRange` (12% margin, minimum span) so the
+ * DOM y-axis overlay lines up with the canvas-rendered lines at steady state.
+ */
+function computeLivelineSeriesRange(
+  data: LivelinePoint[],
+  value: number,
+): { min: number; max: number } | null {
+  let min = Infinity
+  let max = -Infinity
+  for (const p of data) {
+    if (p.value < min) min = p.value
+    if (p.value > max) max = p.value
+  }
+  if (value < min) min = value
+  if (value > max) max = value
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null
+
+  const rawRange = max - min
+  const minRange = rawRange * 0.1 || 0.4
+  if (rawRange < minRange) {
+    const mid = (min + max) / 2
+    return { min: mid - minRange / 2, max: mid + minRange / 2 }
+  }
+  const margin = rawRange * 0.12
+  return { min: min - margin, max: max + margin }
+}
+
+/** 1-2-5 progression tick step so axis values land on round numbers. */
+function niceTickStep(span: number, maxTicks: number): number {
+  const rough = span / Math.max(1, maxTicks)
+  const pow = 10 ** Math.floor(Math.log10(rough))
+  for (const multiple of [1, 2, 5]) {
+    if (multiple * pow >= rough) return multiple * pow
+  }
+  return 10 * pow
+}
+
 function findClosestPoint(
   data: Array<LivelinePoint>,
   targetTimeSec: number,
@@ -236,20 +283,16 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
         const isDimmed = isHovering && hoveredCoin !== row.id
         const color = isDimmed ? addOpacityToColor(row.color, 0.25) : row.color
 
-        const latestPctText = `${latestValue > 0 ? "+" : ""}${latestValue.toFixed(2)}%`
-        const compactLabel = row.symbol.toUpperCase()
-
         return {
           id: row.id,
           data,
           value: latestValue,
           color,
-          // Render the latest % directly on the line endpoint.
-          label: isCompactLayout ? compactLabel : `${compactLabel} ${latestPctText}`,
+          // No `label`: latest values render on the right y-axis overlay instead.
         }
       })
       .filter((row): row is LivelineSeries => row !== null)
-  }, [coinSeriesWithColors, hoveredCoin, isCompactLayout])
+  }, [coinSeriesWithColors, hoveredCoin])
 
   const tooltipSeries = useMemo(() => {
     return coinSeriesWithColors
@@ -288,6 +331,109 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
     if (min === null || max === null) return 30
     return Math.max(30, max - min)
   }, [livelineSeries])
+
+  // Matches the watchlist comparison view's time-axis formatting.
+  const formatTime = useMemo(() => {
+    let first: number | null = null
+    let last: number | null = null
+
+    for (const s of livelineSeries) {
+      const f = s.data[0]?.time
+      const l = s.data[s.data.length - 1]?.time
+      if (typeof f === "number" && (first === null || f < first)) first = f
+      if (typeof l === "number" && (last === null || l > last)) last = l
+    }
+
+    const spanSec = first !== null && last !== null ? last - first : 0
+    const includeYear = spanSec > 180 * 24 * 60 * 60
+
+    return (epochSeconds: number) => {
+      const dt = new Date(epochSeconds * 1000)
+      return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        ...(includeYear ? { year: "numeric" as const } : {}),
+      }).format(dt)
+    }
+  }, [livelineSeries])
+
+  // Right gutter reserved for the y-axis labels.
+  const axisGutter = isCompactLayout ? 48 : 88
+
+  const chartPadding = useMemo(
+    () => ({ ...CHART_PADDING_Y, right: axisGutter, left: 12 }),
+    [axisGutter],
+  )
+
+  // Right y-axis: % ticks plus each series' latest value at its line endpoint.
+  const yAxisModel = useMemo(() => {
+    if (livelineSeries.length === 0) return null
+
+    let min = Infinity
+    let max = -Infinity
+    for (const s of livelineSeries) {
+      const range = computeLivelineSeriesRange(s.data, s.value)
+      if (!range) continue
+      if (range.min < min) min = range.min
+      if (range.max > max) max = range.max
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return null
+
+    const span = max - min
+    const plotHeight = chartHeight - CHART_PADDING_Y.top - CHART_PADDING_Y.bottom
+    const toY = (v: number) => CHART_PADDING_Y.top + (1 - (v - min) / span) * plotHeight
+    const minY = CHART_PADDING_Y.top + AXIS_LABEL_GAP / 2
+    const maxY = chartHeight - CHART_PADDING_Y.bottom - AXIS_LABEL_GAP / 2
+
+    const symbolById = new Map(
+      coinSeriesWithColors.map((row) => [row.id, row.symbol.toUpperCase()]),
+    )
+
+    const seriesLabels = livelineSeries
+      .map((s) => {
+        const symbol = symbolById.get(s.id) ?? ""
+        return {
+          id: s.id,
+          color: s.color,
+          y: toY(s.value),
+          text: isCompactLayout ? symbol : `${symbol} ${formatPctChange(s.value)}`.trim(),
+        }
+      })
+      .sort((a, b) => a.y - b.y)
+
+    // Collision pass: nudge overlapping labels apart, keep them inside the plot.
+    for (let i = 0; i < seriesLabels.length; i++) {
+      const label = seriesLabels[i]
+      const prev = seriesLabels[i - 1]
+      if (!label) continue
+      label.y = Math.max(label.y, minY, prev ? prev.y + AXIS_LABEL_GAP : -Infinity)
+    }
+    for (let i = seriesLabels.length - 1; i >= 0; i--) {
+      const label = seriesLabels[i]
+      const next = seriesLabels[i + 1]
+      if (!label) continue
+      label.y = Math.min(label.y, maxY, next ? next.y - AXIS_LABEL_GAP : Infinity)
+    }
+
+    const step = niceTickStep(span, 5)
+    const decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2
+    const ticks: Array<{ key: number; y: number; text: string }> = []
+    for (let i = Math.ceil(min / step); i * step <= max + step * 1e-6; i++) {
+      const raw = i * step
+      const value = Math.abs(raw) < step * 1e-6 ? 0 : raw
+      const y = toY(value)
+      if (y < minY || y > maxY) continue
+      // Series labels win over ticks when they'd overlap.
+      if (seriesLabels.some((label) => Math.abs(label.y - y) < AXIS_LABEL_GAP)) continue
+      ticks.push({
+        key: i,
+        y,
+        text: `${value > 0 ? "+" : ""}${value.toFixed(decimals)}%`,
+      })
+    }
+
+    return { ticks, seriesLabels }
+  }, [livelineSeries, coinSeriesWithColors, chartHeight, isCompactLayout])
 
   const tooltipClassName = useMemo(
     () =>
@@ -595,10 +741,14 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
         {/* Chart Content */}
         <div className="p-0 relative">
           <div
-            className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
+            className="pointer-events-none absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
             style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
+                backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
                 backgroundRepeat: "repeat",
+                maskImage:
+                  "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
+                WebkitMaskImage:
+                  "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
             }}
           />
           <Card className="border-none bg-transparent">
@@ -636,47 +786,62 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                     </div>
                   </div>
                 ) : (
-                  <div className="relative">
-                    {/* Custom gradient grid lines overlay */}
-                    <div 
-                      className="absolute inset-0 pointer-events-none z-10"
-                      style={{
-                        backgroundImage: `
-                          repeating-linear-gradient(
-                            to bottom,
-                            transparent 0px,
-                            transparent 79px,
-                            linear-gradient(to right, transparent 0%, oklch(1 0 0 / 0.06) 50%, transparent 100%) 80px,
-                            transparent 81px,
-                            transparent 160px
-                          )
-                        `
-                      }}
+                  <div ref={chartWrapperRef} className="relative w-full" style={{ height: chartHeight }}>
+                    <Liveline
+                      data={[]}
+                      value={0}
+                      series={livelineSeries}
+                      theme={isDarkMode ? "dark" : "light"}
+                      color={isDarkMode ? "oklch(0.9276 0.0058 264.53)" : "oklch(0.2077 0.0398 265.75)"}
+                      lineWidth={1}
+                      window={windowSecs}
+                      grid={false}
+                      fill={false}
+                      pulse={false}
+                      badge={false}
+                      momentum={false}
+                      scrub
+                      tooltipY={-9999}
+                      tooltipOutline={false}
+                      onHover={handleLivelineHover}
+                      formatTime={formatTime}
+                      formatValue={formatPctChange}
+                      padding={chartPadding}
+                      className="size-full"
                     />
-                    <div ref={chartWrapperRef} className="w-full" style={{ height: chartHeight }}>
-                      <Liveline
-                        data={[]}
-                        value={0}
-                        series={livelineSeries}
-                        theme={isDarkMode ? "dark" : "light"}
-                        color={isDarkMode ? "oklch(0.9276 0.0058 264.53)" : "oklch(0.2077 0.0398 265.75)"}
-                        lineWidth={1}
-                        window={windowSecs}
-                        grid={false}
-                        fill={false}
-                        pulse={false}
-                        badge={false}
-                        momentum={false}
-                        scrub
-                        tooltipY={-9999}
-                        tooltipOutline={false}
-                        onHover={handleLivelineHover}
-                        formatTime={() => ""}
-                        formatValue={(v) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%`}
-                        padding={{ top: 12, right: 12, bottom: 12, left: 12 }}
-                        className="size-full"
-                      />
-                    </div>
+                    {/* Right y-axis: % ticks + per-series latest values. */}
+                    {yAxisModel && (
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-y-0 right-0 z-20"
+                        style={{ width: axisGutter }}
+                      >
+                        {yAxisModel.ticks.map((tick) => (
+                          <span
+                            key={tick.key}
+                            className="absolute left-1.5 -translate-y-1/2 whitespace-nowrap font-berkeley-mono text-[10px] tabular-nums text-muted-foreground/60"
+                            style={{ top: tick.y }}
+                          >
+                            {tick.text}
+                          </span>
+                        ))}
+                        {yAxisModel.seriesLabels.map((label) => (
+                          <span
+                            key={label.id}
+                            className="absolute left-1.5 -translate-y-1/2 whitespace-nowrap font-berkeley-mono text-[10px] font-medium tabular-nums"
+                            style={{
+                              top: label.y,
+                              color: label.color,
+                              textShadow: isDarkMode
+                                ? "0 0 4px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.8)"
+                                : "0 0 4px rgba(255,255,255,0.95), 0 1px 2px rgba(255,255,255,0.8)",
+                            }}
+                          >
+                            {label.text}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

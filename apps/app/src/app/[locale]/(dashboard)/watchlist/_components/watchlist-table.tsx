@@ -387,7 +387,10 @@ function CoinRowItem({ coin }: { coin: CoinRow }) {
   return (
     <Link
       href={`/watchlists/${encodeURIComponent(coin.id)}`}
-      className={cn(COIN_GRID_CLASS, "py-2 hover:bg-primary/[0.04] transition-colors duration-200")}
+      className={cn(
+        COIN_GRID_CLASS,
+        "py-2 hover:rounded-[7px] hover:bg-primary/[0.04] hover:ring-2 hover:ring-inset hover:ring-zinc-200/30",
+      )}
     >
       {/* Token */}
       <div className="flex min-w-0 items-center gap-2">
@@ -456,7 +459,6 @@ function CoinRowItem({ coin }: { coin: CoinRow }) {
           })()
         )}
       </div>
-
     </Link>
   )
 }

@@ -392,6 +392,7 @@ export function WatchlistsGrid({
                 setActiveTimeScale={onTimeScaleChange || (() => {})}
                 selectedWatchlists={allWatchlistIds}
                 layout={chartLayout}
+                scrubDotLabels={chartLayout === 'vertical'}
                 showTimeScaleSelector={showChartTimeScaleSelector}
                 onSelectWatchlist={(watchlistId) => {
                   const group = watchlistGroups.find(g => g._id === watchlistId)
