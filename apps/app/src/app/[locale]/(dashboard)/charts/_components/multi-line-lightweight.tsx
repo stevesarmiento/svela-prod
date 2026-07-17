@@ -46,6 +46,12 @@ interface MultiPriceChartLightweightProps {
   activeTimeScale: string
   setActiveTimeScale: (scale: string) => void
   isPending?: boolean
+  /**
+   * 'horizontal' (default): legend sidebar left, chart right (12-col grid card).
+   * 'vertical': chart on top, legend grid below — matches the comparison view's
+   * narrow chart column.
+   */
+  layout?: 'horizontal' | 'vertical'
 }
 
 function toUnixSeconds(time: LightweightTime): number | null {
@@ -144,29 +150,32 @@ function findClosestPoint(
   return leftDiff <= rightDiff ? left : right
 }
 
-export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweight({ 
-  coins, 
-  activeTimeScale, 
+export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweight({
+  coins,
+  activeTimeScale,
   setActiveTimeScale,
-  isPending 
+  isPending,
+  layout = 'horizontal',
 }: MultiPriceChartLightweightProps) {
+  const isVertical = layout === 'vertical'
   const { removeFromSelectedGroup, removeFromWatchlist, selectedGroup } = useWatchlist()
   const [hoveredCoin, setHoveredCoin] = useState<string | null>(null)
   const [hoveredRemoveId, setHoveredRemoveId] = useState<string | null>(null)
-  
+
   // React 19: Add concurrent features
   const [isChartPending, startChartTransition] = useTransition()
-  
+
   // React 19: Defer expensive computations
   const deferredCoins = useDeferredValue(coins)
   const deferredTimeScale = useDeferredValue(activeTimeScale)
-  
+
   // Use isomorphic theme hook - eliminates hydration mismatch
   const { isDarkMode } = useIsomorphicTheme()
   const isCompactLayout = useMediaQuery("(max-width: 767px)")
   const isMediumLayout = useMediaQuery("(max-width: 1023px)")
-  
-  const chartHeight = isCompactLayout ? 280 : isMediumLayout ? 340 : 400
+
+  // Vertical (comparison-style) column uses the comparison chart's 300px height.
+  const chartHeight = isVertical ? 300 : isCompactLayout ? 280 : isMediumLayout ? 340 : 400
   
   // Actions-only subscription: this heavy chart never re-renders on nav state changes
   const { openContextualCommandSearch } = useBottomNavActions()
@@ -437,7 +446,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
 
   const tooltipClassName = useMemo(
     () =>
-      `fixed overflow-hidden text-[11px] rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-opacity duration-100 ease-out ${
+      `fixed overflow-hidden text-[11px] rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-[opacity,transform] duration-100 ease-out motion-reduce:transition-opacity ${
         isDarkMode
           ? "text-white bg-zinc-900/95 border border-zinc-700/50"
           : "text-gray-900 bg-white/95 border border-gray-200/50"
@@ -549,8 +558,13 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
       const tooltipWidth = tooltipEl.offsetWidth || 200
       const tooltipHeight = tooltipEl.offsetHeight || 120
 
-      // Pin tooltip to a stable position (top-right of chart) so it doesn't jump while scrubbing.
-      let left = chartRect.right - tooltipWidth - 12
+      // Follow the scrub line: sit just right of the cursor, flipping to the
+      // left side when it would run past the chart's right edge.
+      const gap = 14
+      let left = chartRect.left + hover.x + gap
+      if (left + tooltipWidth > chartRect.right - 8) {
+        left = chartRect.left + hover.x - tooltipWidth - gap
+      }
       let top = chartRect.top + 12
 
       // Clamp into viewport.
@@ -576,12 +590,19 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
   // Always show the main UI structure
   return (
     <div className={cn(
-      "grid grid-cols-1 gap-1 rounded-[16px] dark:bg-zinc-950/50 bg-zinc-100/50 border dark:border-zinc-800/50 border-zinc-800/10 overflow-hidden p-1 lg:grid-cols-12 lg:gap-0",
+      isVertical
+        ? "flex flex-col"
+        : "grid grid-cols-1 gap-1 lg:grid-cols-12 lg:gap-3",
       showPending && "opacity-60 transition-opacity duration-200"
     )}>
       {/* Legend */}
-      <div className="col-span-1 flex min-w-0 flex-col p-2 space-y-2 lg:col-span-3 lg:p-3 lg:pt-2">
-        <div className="flex items-center gap-2 lg:hidden">
+      <div
+        className={cn(
+          "flex min-w-0 flex-col space-y-2",
+          isVertical ? "order-2" : "col-span-1 lg:col-span-3",
+        )}
+      >
+        <div className={cn("flex items-center gap-2", isVertical ? "hidden" : "lg:hidden")}>
           <Button
             variant="outline"
             onClick={() => openContextualCommandSearch('charts')}
@@ -645,7 +666,12 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
           </DropdownMenu>
         </div>
 
-        <div className="mb-3 hidden flex-row items-center justify-between gap-2 lg:flex">
+        <div
+          className={cn(
+            "flex-row items-center justify-between gap-2",
+            isVertical ? "flex" : "mb-3 hidden lg:flex",
+          )}
+        >
           <Button
             variant="outline"
             onClick={() => openContextualCommandSearch('charts')}
@@ -656,16 +682,22 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
           </Button>
         </div>
 
-        <div className="hidden flex-col gap-2 p-3 space-y-3 lg:flex">
+        <div
+          className={cn(
+            isVertical
+              ? "grid grid-cols-2 gap-1.5 sm:grid-cols-3"
+              : "hidden flex-col gap-2 p-3 space-y-3 lg:flex",
+          )}
+        >
           {/* Show loading coins in legend */}
           {coins.map((coin) => {
             const realCoin = latestValuesById.get(coin.id.toString())
-            
+
             return (
               <div key={coin.id}>
                 {coin.isOptimistic ? (
                   // Loading state in legend
-                  <div className="flex items-center gap-2 opacity-50 rounded-lg p-0 -m-2">
+                  <div className={cn("flex items-center gap-2 opacity-50 rounded-lg", !isVertical && "p-0 -m-2")}>
                     <div className="w-1 h-9 rounded-full bg-muted animate-pulse motion-reduce:animate-none" />
                     <div className="flex flex-row items-center gap-2 flex-1 ml-2">
                       <span className="text-xs font-medium">...</span>
@@ -676,7 +708,8 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                   // Real coin in legend
                   <div
                     className={cn(
-                      "relative flex items-center gap-2 overflow-hidden rounded-lg p-0 -m-2 group hover:bg-white/10",
+                      "relative flex items-center gap-2 overflow-hidden rounded-lg group hover:bg-white/10",
+                      !isVertical && "p-0 -m-2",
                       hoveredCoin && hoveredCoin !== coin.id.toString() ? "opacity-40" : "opacity-100",
                       hoveredCoin === coin.id.toString() ? "bg-white/5" : "",
                     )}
@@ -737,7 +770,14 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
         </div>
       </div>
       
-      <div className="col-span-1 min-w-0 dark:bg-zinc-950/50 bg-white border dark:border-zinc-800/30 border-zinc-800/20 rounded-[13px] overflow-hidden shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)] lg:col-span-9">
+      <div
+        className={cn(
+          "min-w-0",
+          isVertical
+            ? "order-1"
+            : "col-span-1 lg:col-span-9",
+        )}
+      >
         {/* Chart Content */}
         <div className="p-0 relative">
           <div
@@ -752,7 +792,11 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
             }}
           />
           <Card className="border-none bg-transparent">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-3 sm:p-6">
+            <CardHeader
+              className={cn(
+                "flex flex-row items-center justify-between gap-2 space-y-0",
+              )}
+            >
               {/* Coin Avatar Stacks */}
               <div className="min-w-0 flex-1 overflow-hidden">
                 {avatarData.length > 0 && (
@@ -769,7 +813,7 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
                 setActiveTimeScale={setActiveTimeScale}
               />
             </CardHeader>
-            <CardContent className="px-2 pb-2 pt-0 sm:px-6 lg:pl-8">
+            <CardContent>
               <div className="p-0 relative">
                 {coins.length > 0 && coinSeriesWithColors.length === 0 ? (
                   <div className="relative" style={{ height: chartHeight }}>

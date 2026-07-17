@@ -106,10 +106,43 @@ function findClosestPoint(
   return leftDiff <= rightDiff ? left : right
 }
 
-const CHART_PADDING = { top: 12, right: 20, bottom: 20, left: 12 } as const
+/** Right gutter reserved for the y-axis tick + series labels. */
+const AXIS_GUTTER = 56
+/** Minimum vertical distance between right-axis labels before they nudge apart. */
+const AXIS_LABEL_GAP = 14
+
+const CHART_PADDING = { top: 12, right: AXIS_GUTTER, bottom: 20, left: 12 } as const
 
 function formatPctChange(value: number): string {
   return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`
+}
+
+/**
+ * Mirrors liveline's internal `computeRange` (12% margin, minimum span) so the
+ * DOM y-axis / scrub-dot overlays line up with the canvas-rendered lines.
+ */
+function computeLivelineSeriesRange(
+  data: LivelinePoint[],
+  value: number,
+): { min: number; max: number } | null {
+  let min = Infinity
+  let max = -Infinity
+  for (const p of data) {
+    if (p.value < min) min = p.value
+    if (p.value > max) max = p.value
+  }
+  if (value < min) min = value
+  if (value > max) max = value
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null
+
+  const rawRange = max - min
+  const minRange = rawRange * 0.1 || 0.4
+  if (rawRange < minRange) {
+    const mid = (min + max) / 2
+    return { min: mid - minRange / 2, max: mid + minRange / 2 }
+  }
+  const margin = rawRange * 0.12
+  return { min: min - margin, max: max + margin }
 }
 
 function getSeriesValueRange(series: LivelineSeries[]): { min: number; span: number } {
@@ -117,18 +150,27 @@ function getSeriesValueRange(series: LivelineSeries[]): { min: number; span: num
   let max = -Infinity
 
   for (const row of series) {
-    for (const point of row.data) {
-      if (point.value < min) min = point.value
-      if (point.value > max) max = point.value
-    }
+    const range = computeLivelineSeriesRange(row.data, row.value)
+    if (!range) continue
+    if (range.min < min) min = range.min
+    if (range.max > max) max = range.max
   }
 
-  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
     return { min: 0, span: 1 }
   }
 
-  const margin = Math.max((max - min) * 0.08, 0.5)
-  return { min: min - margin, span: max - min + margin * 2 }
+  return { min, span: max - min }
+}
+
+/** 1-2-5 progression tick step so axis values land on round numbers. */
+function niceTickStep(span: number, maxTicks: number): number {
+  const rough = span / Math.max(1, maxTicks)
+  const pow = 10 ** Math.floor(Math.log10(rough))
+  for (const multiple of [1, 2, 5]) {
+    if (multiple * pow >= rough) return multiple * pow
+  }
+  return 10 * pow
 }
 
 function valueToPlotY(
@@ -351,14 +393,13 @@ export function WatchlistMultiLineChart({
 
         const isDimmed = isHovering && hoveredWatchlist !== row.id
         const color = isDimmed ? addOpacityToColor(row.color, 0.25) : row.color
-        const latestPctText = `${latestValue > 0 ? "+" : ""}${latestValue.toFixed(2)}%`
 
         return {
           id: row.id,
           data,
           value: latestValue,
           color,
-          label: latestPctText,
+          // No `label`: latest values render on the right y-axis overlay instead.
         }
       })
       .filter((row): row is LivelineSeries => row !== null)
@@ -433,6 +474,60 @@ export function WatchlistMultiLineChart({
     () => getSeriesValueRange(livelineSeries),
     [livelineSeries],
   )
+
+  // Right y-axis: % ticks plus each series' latest value at its line endpoint.
+  const yAxisModel = useMemo(() => {
+    if (livelineSeries.length === 0) return null
+
+    const { min, span } = scrubValueRange
+    if (!(span > 0)) return null
+
+    const plotHeight = chartHeightPx - CHART_PADDING.top - CHART_PADDING.bottom
+    const minY = CHART_PADDING.top + AXIS_LABEL_GAP / 2
+    const maxY = chartHeightPx - CHART_PADDING.bottom - AXIS_LABEL_GAP / 2
+
+    const seriesLabels = livelineSeries
+      .map((s) => ({
+        id: s.id,
+        color: s.color,
+        y: valueToPlotY(s.value, min, span, plotHeight),
+        text: formatPctChange(s.value),
+      }))
+      .sort((a, b) => a.y - b.y)
+
+    // Collision pass: nudge overlapping labels apart, keep them inside the plot.
+    for (let i = 0; i < seriesLabels.length; i++) {
+      const label = seriesLabels[i]
+      const prev = seriesLabels[i - 1]
+      if (!label) continue
+      label.y = Math.max(label.y, minY, prev ? prev.y + AXIS_LABEL_GAP : -Infinity)
+    }
+    for (let i = seriesLabels.length - 1; i >= 0; i--) {
+      const label = seriesLabels[i]
+      const next = seriesLabels[i + 1]
+      if (!label) continue
+      label.y = Math.min(label.y, maxY, next ? next.y - AXIS_LABEL_GAP : Infinity)
+    }
+
+    const step = niceTickStep(span, 5)
+    const decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2
+    const ticks: Array<{ key: number; y: number; text: string }> = []
+    for (let i = Math.ceil(min / step); i * step <= min + span + step * 1e-6; i++) {
+      const raw = i * step
+      const value = Math.abs(raw) < step * 1e-6 ? 0 : raw
+      const y = valueToPlotY(value, min, span, plotHeight)
+      if (y < minY || y > maxY) continue
+      // Series labels win over ticks when they'd overlap.
+      if (seriesLabels.some((label) => Math.abs(label.y - y) < AXIS_LABEL_GAP)) continue
+      ticks.push({
+        key: i,
+        y,
+        text: `${value > 0 ? "+" : ""}${value.toFixed(decimals)}%`,
+      })
+    }
+
+    return { ticks, seriesLabels }
+  }, [livelineSeries, scrubValueRange, chartHeightPx])
 
   const tooltipClassName = useMemo(
     () =>
@@ -790,6 +885,33 @@ export function WatchlistMultiLineChart({
                       padding={CHART_PADDING}
                       className="size-full"
                     />
+                    {/* Right y-axis: % ticks + per-series latest values. */}
+                    {yAxisModel && (
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-y-0 right-0 z-20"
+                        style={{ width: AXIS_GUTTER }}
+                      >
+                        {yAxisModel.ticks.map((tick) => (
+                          <span
+                            key={tick.key}
+                            className="absolute left-1.5 -translate-y-1/2 whitespace-nowrap font-berkeley-mono text-[10px] tabular-nums text-muted-foreground/60"
+                            style={{ top: tick.y }}
+                          >
+                            {tick.text}
+                          </span>
+                        ))}
+                        {yAxisModel.seriesLabels.map((label) => (
+                          <span
+                            key={label.id}
+                            className="absolute left-1.5 -translate-y-1/2 whitespace-nowrap font-berkeley-mono text-[10px] font-medium tabular-nums [text-shadow:0_0_4px_rgba(0,0,0,0.95),0_1px_2px_rgba(0,0,0,0.8)]"
+                            style={{ top: label.y, color: label.color }}
+                          >
+                            {label.text}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {scrubDotLabels && scrubDotLabelRows?.map((label, index) => (
                       <span
                         key={label.id}

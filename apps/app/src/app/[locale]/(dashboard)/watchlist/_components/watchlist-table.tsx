@@ -401,8 +401,8 @@ function CoinRowItem({ coin }: { coin: CoinRow }) {
           fallbackText={coin.symbol}
           className="shrink-0 rounded-full ring-1 ring-zinc-200 dark:ring-black/80"
         />
-        <span className="min-w-0 truncate text-xs font-medium">{coin.name}</span>
-        <span className="shrink-0 text-[10px] uppercase text-muted-foreground">{coin.symbol}</span>
+        <span className="shrink-0 text-xs font-bold">{coin.symbol.toUpperCase()}</span>
+        <span className="min-w-0 truncate font-berkeley-mono text-xs text-muted-foreground">{coin.name}</span>
       </div>
 
       {/* Price */}
@@ -727,7 +727,7 @@ function WatchlistCard({
           {/* Dig deeper: full watchlist view */}
           <div className="flex justify-end border-t border-primary/5 px-3 py-1.5 sm:px-4">
             <Link
-              href={group.slug ? `/watchlist?wg=${encodeURIComponent(group.slug)}&wt=chart` : "/watchlist?wt=chart"}
+              href={group.slug ? `/watchlists?wg=${encodeURIComponent(group.slug)}&wt=chart` : "/watchlists?wt=chart"}
               className="text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
               Open watchlist →

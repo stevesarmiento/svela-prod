@@ -4,7 +4,6 @@ import { Suspense, useTransition, useDeferredValue, memo, Component, type ErrorI
 import { MultiPriceChartLightweight } from "./multi-line-lightweight"
 import { ChartTable } from "./chart-table"
 import { useOptimizedChartsData } from '@/hooks/use-optimized-charts-data'
-import { Spinner } from "@v1/ui/spinner"
 import type { CoinMarketData } from '@/types/coins'
 import { WatchlistsGrid } from "../../watchlist/_components/watchlists-grid"
 import { WatchlistTable } from "../../watchlist/_components/watchlist-table"
@@ -49,23 +48,29 @@ const ChartsContent = memo(function ChartsContent() {
   }
 
   return (
-    <div className="space-y-6 w-full">
-      <div className="space-y-14">
-        {/* React 19: Show loading state during transitions */}
-        <div className={isPending ? 'opacity-60 transition-opacity duration-200' : ''}>
-          <MultiPriceChartLightweight
-            coins={deferredCoins as OptimisticCoinMarketData[]}
+    <div className="w-full">
+      {/* Comparison-style layout: chart left (2/5, sticky), table right (3/5); stacks chart-first below lg */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-1">
+        <div className="lg:col-span-6 min-w-0">
+          {/* React 19: Show loading state during transitions */}
+          <div className={`lg:sticky lg:top-4 ${isPending ? 'opacity-60 transition-opacity duration-200' : ''}`}>
+            <MultiPriceChartLightweight
+              coins={deferredCoins as OptimisticCoinMarketData[]}
+              activeTimeScale={deferredTimeScale}
+              setActiveTimeScale={handleTimeScaleChange}
+              isPending={isPending}
+              layout="horizontal"
+            />
+          </div>
+        </div>
+
+        <div className="lg:col-span-6 min-w-0">
+          <ChartTable
+            coins={deferredCoins}
             activeTimeScale={deferredTimeScale}
-            setActiveTimeScale={handleTimeScaleChange}
             isPending={isPending}
           />
         </div>
-
-        <ChartTable
-          coins={deferredCoins}
-          activeTimeScale={deferredTimeScale}
-          isPending={isPending}
-        />
       </div>
     </div>
   )
@@ -126,28 +131,6 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
   }
 }
 
-interface ChartSkeletonProps {
-  inset?: boolean;
-}
-
-// React 19: Optimized suspense fallback
-const ChartSkeleton = memo(function ChartSkeleton({ inset = true }: ChartSkeletonProps) {
-  return (
-    <div className={`space-y-6 w-full ${inset ? 'px-4' : ''}`}>
-      <div className="space-y-14">
-        <div className="grid grid-cols-12 gap-0 rounded-[13px] bg-zinc-950/50 border border-zinc-800/50 overflow-hidden p-1">
-          <div className="flex flex-col col-span-3 p-6 pt-2 space-y-2" />
-          <div className="col-span-9 border border-zinc-800/30 rounded-[13px] overflow-hidden">
-            <div className="h-[400px] flex items-center justify-center">
-              <Spinner size={24} />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-})
-
 // Comparison view component for /chart page
 interface ComparisonChartsContentProps {
   inset?: boolean;
@@ -198,7 +181,7 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent({
     <div className={`w-full ${inset ? 'px-4' : ''}`}>
       {/* Comparison chart left (1/4), table right (3/4); stacks chart-first below lg */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-5 min-w-0">
+        <div className="lg:col-span-6 min-w-0">
           <div className="lg:sticky lg:top-4">
             <WatchlistsGrid
               viewMode="chart"
@@ -211,7 +194,7 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent({
           </div>
         </div>
 
-        <div className="lg:col-span-7 min-w-0">
+        <div className="lg:col-span-6 min-w-0">
           <WatchlistTable activeTimeScale={deferredTimeScale} />
         </div>
       </div>
@@ -222,7 +205,7 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent({
 export const ChartsClient = memo(function ChartsClient() {
   return (
     <ChartErrorBoundary>
-      <Suspense fallback={<ChartSkeleton />}>
+      <Suspense fallback={<ComparisonGridSkeleton inset={false} />}>
         <ChartsContent />
       </Suspense>
     </ChartErrorBoundary>
