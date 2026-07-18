@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { getCanonicalClerkId, getUserByClerkId } from "./_lib/user_lookup";
+import { pruneCanonicalHoldingsIfUnlisted } from "./_lib/holdings";
 import { action, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
 import { internal } from "./_generated/api";
@@ -367,11 +368,13 @@ export const upsertPortfolioWalletSelection = mutation({
       });
     }
 
-    // Delete removed items.
+    // Delete removed items and drop canonical holdings for coins that no
+    // longer appear on any of the user's watchlists.
     const nextSet = new Set(nextIds);
     for (const item of existingItems) {
       if (nextSet.has(item.coinId)) continue;
       await ctx.db.delete(item._id);
+      await pruneCanonicalHoldingsIfUnlisted(ctx.db, userId, item.coinId);
     }
 
     await markOverviewSnapshotStale(ctx, args.clerkId);
@@ -421,6 +424,9 @@ export const deletePortfolioWallet = mutation({
       const watchlistCoinIds = Array.from(new Set(watchlistItems.map((row) => row.coinId)));
 
       await Promise.all(watchlistItems.map((row) => ctx.db.delete(row._id)));
+      await Promise.all(
+        watchlistCoinIds.map((coinId) => pruneCanonicalHoldingsIfUnlisted(ctx.db, userId, coinId)),
+      );
 
       // Remove global watchlist tracking when the coin is no longer watched by anyone.
       await Promise.all(
@@ -664,6 +670,7 @@ export const upsertMyPortfolioWalletSelection = mutation({
     for (const item of existingItems) {
       if (nextSet.has(item.coinId)) continue;
       await ctx.db.delete(item._id);
+      await pruneCanonicalHoldingsIfUnlisted(ctx.db, userId, item.coinId);
     }
 
     await markMyOverviewSnapshotStale(ctx);
@@ -705,6 +712,9 @@ export const deleteMyPortfolioWallet = mutation({
 
       const watchlistCoinIds = Array.from(new Set(watchlistItems.map((row) => row.coinId)));
       await Promise.all(watchlistItems.map((row) => ctx.db.delete(row._id)));
+      await Promise.all(
+        watchlistCoinIds.map((coinId) => pruneCanonicalHoldingsIfUnlisted(ctx.db, userId, coinId)),
+      );
 
       await Promise.all(
         watchlistCoinIds.map(async (coinId) => {

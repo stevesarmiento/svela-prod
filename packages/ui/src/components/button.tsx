@@ -9,7 +9,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "border-white/20 bg-zinc-800/50 hover:bg-zinc-800/80 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-zinc-700/80 dark:ring-zinc-700/80 text-white",
+          "border-t border-white/30 bg-zinc-800/50 hover:bg-zinc-800/80 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-zinc-700/80 dark:ring-zinc-700/80 text-white",
         destructive:
           "border-t border-white/40 bg-gradient-to-b from-rose-500 to-rose-500 shadow-md active:shadow-sm shadow-black/60 ring-1 ring-rose-700 dark:ring-rose-700 text-white",
         outline:

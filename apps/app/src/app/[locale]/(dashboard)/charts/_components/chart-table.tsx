@@ -2,7 +2,6 @@
 
 import {
   useMemo,
-  useTransition,
   useDeferredValue,
   memo,
   useCallback,
@@ -11,14 +10,15 @@ import {
   useRef,
 } from 'react'
 import { useSearchParams } from "next/navigation"
-import dynamic from "next/dynamic"
 import { useUser } from "@clerk/nextjs"
-import { formatLargeNumber } from "@v1/ui/format-numbers"
-import { Button } from "@v1/ui/button"
 import { Input } from "@v1/ui/input"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
-import { X } from "lucide-react"
+import { Checkbox } from "@v1/ui/checkbox"
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
+import {
+  useWatchlistSelection,
+  useBottomNavSelectionBridge,
+} from "@/hooks/use-watchlist-selection"
+import { useAnalyzeSelection } from "@/hooks/use-analyze-selection"
 import Link from "next/link"
 import { cn } from "@v1/ui/cn"
 import { toast } from "@v1/ui/use-toast"
@@ -30,20 +30,14 @@ import { useSetWatchlistItemHoldings } from "@/lib/convex-hooks"
 import { Badge } from "@v1/ui/badge"
 import { IconTriangleFill } from "symbols-react"
 import { TokenLogo } from "@/components/token-logo"
+import { motion } from "motion/react"
+import {
+  SELECT_CELL_VARIANTS,
+  SELECT_CHECKBOX_VARIANTS,
+  SELECT_CONTENT_VARIANTS,
+  useSelectRevealTransition,
+} from "@/hooks/use-watchlist-selection"
 
-function loadAnalysisDialog() {
-  return import("@/components/navigation/analysis-dialog")
-}
-
-const AnalysisDialog = dynamic(
-  () => loadAnalysisDialog().then((module) => module.AnalysisDialog),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-8 w-[92px] rounded-xl bg-zinc-950/10 dark:bg-white/10" />
-    ),
-  },
-)
 // Accept whatever data format the existing hook provides
 interface OptimisticCoinData {
   id: string | number;
@@ -251,6 +245,33 @@ export const ChartHoldingsCell = memo(function ChartHoldingsCell({
   )
 })
 
+/**
+ * Shared row grid (sm+) so the table header and rows stay aligned — mirrors
+ * the comparison view's WatchlistTable structure: wide token column, value
+ * columns, fixed trailing actions column.
+ */
+const ROW_GRID_COLS_SM =
+  "sm:grid-cols-[minmax(0,1.6fr)_1fr_1.2fr_1.4fr]"
+
+/** Same derivation as the comparison table: infer the USD move from spot price + % change. */
+function deriveUsdMoveFromPercentChange(args: {
+  priceUsd: number
+  percentChange: number
+}): number | null {
+  const { priceUsd, percentChange } = args
+
+  if (!Number.isFinite(priceUsd) || priceUsd <= 0) return null
+  if (!Number.isFinite(percentChange)) return null
+
+  const ratio = percentChange / 100
+  const denom = 1 + ratio
+  if (!Number.isFinite(denom) || denom <= 0) return null
+
+  const previousPrice = priceUsd / denom
+  const deltaUsd = priceUsd - previousPrice
+  return Number.isFinite(deltaUsd) ? deltaUsd : null
+}
+
 interface ChartTableProps {
   coins: OptimisticCoinData[]
   activeTimeScale: string
@@ -262,11 +283,31 @@ export const ChartTable = memo(function ChartTable({
   activeTimeScale,
   isPending 
 }: ChartTableProps) {
-  const { removeFromSelectedGroup, selectedGroup } = useWatchlist()
+  const {
+    selectedGroup,
+    removeBulkFromSelectedGroup,
+    removeBulkFromWatchlist,
+  } = useWatchlist()
   const { user } = useUser()
   const searchParams = useSearchParams()
-  const [isRemovePending, startRemoveTransition] = useTransition()
-  
+  const selectRevealTransition = useSelectRevealTransition()
+
+  // Group-scoped bulk remove when a group is selected (mirrors the single
+  // remove in multi-line-lightweight.tsx).
+  const removeSelected = useCallback(
+    async (coinIds: string[]) => {
+      if (selectedGroup) {
+        await removeBulkFromSelectedGroup(coinIds)
+      } else {
+        await removeBulkFromWatchlist(coinIds)
+      }
+    },
+    [selectedGroup, removeBulkFromSelectedGroup, removeBulkFromWatchlist],
+  )
+
+  const selection = useWatchlistSelection({ removeSelected })
+  const { selectedCoins, handleCoinSelect, hasSelectedCoins } = selection
+
   // React 19: Defer expensive computations
   const deferredCoins = useDeferredValue(coins)
   const deferredTimeScale = useDeferredValue(activeTimeScale)
@@ -330,6 +371,40 @@ export const ChartTable = memo(function ChartTable({
     return enrichedCoins
   }, [deferredCoins, deferredTimeScale])
 
+  // Selection targets the rows actually rendered (the internally deferred
+  // array), excluding optimistic placeholders.
+  const selectableCoinIds = useMemo(
+    () =>
+      coinsWithIntervalChange
+        .filter((coin) => !coin.isOptimistic)
+        .map((coin) => String(coin.id)),
+    [coinsWithIntervalChange],
+  )
+
+  // Analyze action for the selection dock: resolve selected rows to token
+  // display info; the hook hosts the (multi-)analysis dialog here.
+  const getSelectedTokens = useCallback(
+    () =>
+      coinsWithIntervalChange
+        .filter(
+          (coin) => !coin.isOptimistic && selectedCoins.has(String(coin.id)),
+        )
+        .map((coin) => ({
+          id: String(coin.id),
+          name: cleanTokenName(coin.name),
+          symbol: coin.symbol,
+          logoUrl: getTokenLogoURL(coin.symbol, coin.image),
+        })),
+    [coinsWithIntervalChange, selectedCoins],
+  )
+  const { onAnalyzeSelected, analyzeDialog } =
+    useAnalyzeSelection(getSelectedTokens)
+
+  useBottomNavSelectionBridge(selection, selectableCoinIds, {
+    onAnalyzeSelected,
+    analyzeSelectedCount: selectedCoins.size,
+  })
+
   const getTimeScaleLabel = (scale: string) => {
     switch (scale) {
       case '1d': return '1D'    // 1 Day (24h)
@@ -341,36 +416,8 @@ export const ChartTable = memo(function ChartTable({
     }
   }
 
-  // React 19: Optimized remove handler with transition
-  const handleRemove = useCallback(async (coinId: string | number) => {
-    if (!selectedGroup) {
-      toast({
-        title: "Error",
-        description: "No watchlist group selected",
-        variant: "destructive",
-      })
-      return
-    }
-
-    startRemoveTransition(async () => {
-      try {
-        await removeFromSelectedGroup(String(coinId))
-        toast({
-          title: "Removed",
-          description: `Coin removed from ${selectedGroup.name}`,
-        })
-      } catch {
-        toast({
-          title: "Error",
-          description: "Failed to remove coin",
-          variant: "destructive",
-        })
-      }
-    })
-  }, [selectedGroup, removeFromSelectedGroup])
-
   // React 19: Show pending states
-  const showPending = isPending || isRemovePending
+  const showPending = Boolean(isPending)
   const holdingsGroupId = selectedGroup?._id ?? null
   const canEditHoldings = Boolean(user && selectedGroup)
 
@@ -378,10 +425,34 @@ export const ChartTable = memo(function ChartTable({
 
   return (
     <div className={cn(
-      "space-y-4",
+      "rounded-[10px] bg-primary/5 p-0.5",
       showPending && "opacity-60 transition-opacity duration-200"
     )}>
+      {/* Shared table header */}
+      <div className="hidden px-4 py-2 sm:block">
+        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+          <div className={cn("grid gap-4", ROW_GRID_COLS_SM)}>
+            <div className="flex items-center">
+              Token
+            </div>
+            <div className="flex items-center justify-end">
+              Price
+            </div>
+            <div className="flex items-center gap-1 justify-end">
+              {getTimeScaleLabel(activeTimeScale)} Change
+            </div>
+            <div className="flex items-center justify-end">
+              Holdings
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Table body: contiguous rows in a single card */}
+      <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden divide-y divide-primary/5">
       {coinsWithIntervalChange.map((coin) => {
+        const coinIdStr = String(coin.id)
+        const isSelected = selectedCoins.has(coinIdStr)
         const tokenName = coin.isOptimistic ? "Loading..." : cleanTokenName(coin.name)
         const tokenLogoUrl = getTokenLogoURL(coin.symbol, coin.image)
         const safeTokenLogoUrl =
@@ -390,88 +461,44 @@ export const ChartTable = memo(function ChartTable({
             : undefined
 
         return (
-          <div 
-            key={coin.id} 
-            className={cn(
-              "rounded-[10px] bg-primary/5 p-0.5",
-              isRemovePending && "pointer-events-none"
-            )}
-          >
-          {/* Header with Token Name */}
-          <div className="hidden px-3 py-2 sm:block">
-            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-              <div className="grid grid-cols-5 gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="relative">
+          <div key={coin.id}>
+            {coin.isOptimistic ? (
+              // Show non-clickable loading state for optimistic coins
+              <div className={cn(
+                "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 pr-2 opacity-60 sm:gap-4 sm:px-4 sm:py-2",
+                ROW_GRID_COLS_SM,
+              )}>
+                {/* Token */}
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
+                  <div className="relative shrink-0">
                     {safeTokenLogoUrl ? (
                       <TokenLogo
                         src={safeTokenLogoUrl}
                         alt={tokenName}
                         sizePx={16}
                         fallbackText={coin.symbol}
-                        className={cn(
-                          "ring-1 ring-zinc-200 dark:ring-black/80",
-                          coin.isOptimistic && "opacity-50",
-                        )}
+                        className="opacity-50 rounded-full ring-1 ring-zinc-200 dark:ring-black/80"
                         quality={70}
                       />
                     ) : (
-                      <div className={cn(
-                        "w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center text-[8px] font-bold text-primary/70",
-                        coin.isOptimistic && "opacity-50"
-                      )}>
-                        {coin.symbol?.charAt(0) || '?'}
-                      </div>
+                      <Skeleton className="size-4 rounded-full" />
                     )}
-                    {coin.isOptimistic && (
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <Spinner size={12} />
-                      </div>
-                    )}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Spinner size={12} />
+                    </div>
                   </div>
-                  <span className="text-muted-foreground">
-                    {tokenName}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 justify-end">
-                  Volume 24h
-                </div>
-                <div className="flex items-center gap-1 justify-end">
-                  {getTimeScaleLabel(activeTimeScale)} Change
-                </div>
-                <div className="flex items-center justify-end">
-                  Holdings
-                </div>
-                <div className="flex items-center justify-end gap-1">
-                  Actions
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Table Body */}
-          <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden hover:ring-2 hover:ring-zinc-200/30 transition-shadow duration-[var(--duration-micro)]">
-            {coin.isOptimistic ? (
-              // Show non-clickable loading state for optimistic coins
-              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 pr-2 opacity-60 sm:grid-cols-5 sm:gap-4 sm:px-4 sm:py-2">
-                {/* Price */}
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
-                  <Skeleton className="h-5 w-5 shrink-0 rounded-full sm:hidden" />
                   <Skeleton className="h-3 w-8 rounded-full" />
-                  <span className="text-primary/40 text-xs whitespace-nowrap">price is currently</span>
+                  <span className="text-primary/40 text-xs whitespace-nowrap sm:hidden">price is currently</span>
+                  <Skeleton className="h-3 w-16 rounded-full sm:hidden" />
+                </div>
+
+                {/* Price (sm+ column) */}
+                <div className="hidden min-w-0 items-center justify-end sm:flex">
                   <Skeleton className="h-3 w-16 rounded-full" />
                 </div>
 
-                {/* 24h Volume */}
-                <div className="col-start-1 row-start-2 flex min-w-0 flex-col gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
-                    Volume 24h
-                  </span>
-                  <Skeleton className="h-3 w-12 rounded-full" />
-                </div>
-
                 {/* Interval Change */}
-                <div className="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+                <div className="col-span-2 row-start-2 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
                   <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
                     {getTimeScaleLabel(activeTimeScale)}
                   </span>
@@ -494,72 +521,112 @@ export const ChartTable = memo(function ChartTable({
                   />
                 </div>
 
-                {/* Remove */}
-                <div className="col-start-2 row-start-1 flex items-center justify-end sm:col-start-auto sm:row-start-auto">
-                  <Tooltip delayDuration={500}>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={showPending}
-                          aria-label="Remove from watchlist"
-                          className={cn(
-                            "h-6 w-6 p-0 rounded-lg bg-transparent",
-                            showPending && "opacity-50"
-                          )}
-                        >
-                          <X className="h-4 w-4 text-zinc-800 dark:text-zinc-800" />
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
-                      <span>Remove from watchlist</span>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
               </div>
             ) : (
               // Show clickable link for real coins
-              <Link 
+              <Link
                 href={watchlistGroup ? `/watchlists/${coin.id}?wg=${watchlistGroup}` : `/watchlists/${coin.id}`}
-                className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 pr-2 hover:bg-primary/[0.02] transition-colors duration-200 cursor-pointer sm:grid-cols-5 sm:gap-4 sm:px-4 sm:py-2"
+                aria-selected={hasSelectedCoins ? isSelected : undefined}
+                onClick={
+                  hasSelectedCoins
+                    ? (e) => {
+                        e.preventDefault()
+                        handleCoinSelect(coinIdStr, !isSelected)
+                      }
+                    : undefined
+                }
+                className={cn(
+                  "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 pr-2 cursor-pointer hover:rounded-[7px] hover:bg-primary/[0.04] hover:ring-2 hover:ring-inset hover:ring-zinc-200/30 sm:gap-4 sm:px-4 sm:py-2",
+                  ROW_GRID_COLS_SM,
+                  "transition-opacity duration-200",
+                  hasSelectedCoins && !isSelected && "opacity-40",
+                )}
               >
-                {/* Price */}
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
+                {/* First cell — merged select + token, toggles selection on click */}
+                <div
+                  className="flex min-w-0 items-center"
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.preventDefault() // Always prevent navigation for first cell (selection mode)
+                    e.stopPropagation()
+
+                    // Let the checkbox handle its own toggling (avoid double-toggle).
+                    const target = e.target as HTMLElement
+                    if (target.closest('[data-chart-row-checkbox="true"]')) return
+
+                    handleCoinSelect(coinIdStr, !isSelected)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleCoinSelect(coinIdStr, !isSelected)
+                  }}
+                >
+                <motion.div
+                  className="relative flex h-full w-full min-w-0 items-center justify-start"
+                  // Ensure non-hovered rows animate when selection mode flips on/off.
+                  // Starting from "rest" prevents "jump-to-endstate" on remounts.
+                  variants={SELECT_CELL_VARIANTS}
+                  initial="rest"
+                  animate={hasSelectedCoins ? "revealed" : "rest"}
+                  whileHover={hasSelectedCoins ? undefined : "revealed"}
+                >
+                  {/* Checkbox - stable DOM to avoid "jump" on select/deselect */}
+                  <motion.div
+                    className="absolute left-0 z-10 px-1"
+                    variants={SELECT_CHECKBOX_VARIANTS}
+                    transition={selectRevealTransition}
+                  >
+                    <Checkbox
+                      data-chart-row-checkbox="true"
+                      checked={isSelected}
+                      tabIndex={hasSelectedCoins ? 0 : -1}
+                      onCheckedChange={(checked) =>
+                        handleCoinSelect(coinIdStr, checked === true)
+                      }
+                      aria-label={`Select ${tokenName}`}
+                    />
+                  </motion.div>
+
+                  {/* Token content slides right to make room for the checkbox */}
+                  <motion.div
+                    className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap"
+                    variants={SELECT_CONTENT_VARIANTS}
+                    transition={selectRevealTransition}
+                  >
                   {safeTokenLogoUrl ? (
                     <TokenLogo
                       src={safeTokenLogoUrl}
                       alt={tokenName}
-                      sizePx={20}
+                      sizePx={16}
                       fallbackText={coin.symbol}
-                      className="shrink-0 ring-1 ring-zinc-200 dark:ring-black/80 sm:hidden"
+                      className="shrink-0 rounded-full ring-1 ring-zinc-200 dark:ring-black/80"
                       quality={70}
                     />
                   ) : (
-                    <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary/70 sm:hidden">
+                    <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[8px] font-bold text-primary/70">
                       {coin.symbol?.charAt(0) || '?'}
                     </div>
                   )}
-                  <span className="font-bold text-xs">{coin.symbol.toUpperCase()}</span>
-                  <span className="text-primary/40 text-xs whitespace-nowrap">price is currently</span>
-                  <span className="font-berkeley-mono text-xs font-semibold tabular-nums">
+                  <span className="shrink-0 text-xs font-bold">{coin.symbol.toUpperCase()}</span>
+                  <span className="min-w-0 truncate font-berkeley-mono text-xs text-muted-foreground">{tokenName}</span>
+                  <span className="text-primary/40 text-xs whitespace-nowrap sm:hidden">price is currently</span>
+                  <span className="font-berkeley-mono text-xs font-semibold tabular-nums sm:hidden">
                     {formatUsdPrice(coin.quote.USD.price)}
                   </span>
+                  </motion.div>
+                </motion.div>
                 </div>
 
-                {/* 24h Volume */}
-                <div className="col-start-1 row-start-2 flex min-w-0 flex-col gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
-                    Volume 24h
-                  </span>
-                  <span className="font-berkeley-mono text-xs tabular-nums">
-                    ${formatLargeNumber(coin.quote.USD.volume_24h || 0)}
-                  </span>
+                {/* Price (sm+ column) */}
+                <div className="hidden min-w-0 items-center justify-end font-berkeley-mono text-xs font-semibold tabular-nums sm:flex">
+                  {formatUsdPrice(coin.quote.USD.price)}
                 </div>
 
-                {/* Interval Change */}
-                <div className="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+                {/* Interval Change: USD move left, % in a badge — same as the comparison table */}
+                <div className="col-span-2 row-start-2 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
                   <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
                     {getTimeScaleLabel(activeTimeScale)}
                   </span>
@@ -573,27 +640,41 @@ export const ChartTable = memo(function ChartTable({
                       const isPositive = change > 0
                       const isNegative = change < 0
                       const isNeutral = !isPositive && !isNegative
+                      const usdMove = deriveUsdMoveFromPercentChange({
+                        priceUsd: coin.quote.USD.price,
+                        percentChange: change,
+                      })
+                      const usdSign = isPositive ? "+" : isNegative ? "-" : ""
 
                       return (
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 font-berkeley-mono text-xs tabular-nums",
-                            isPositive && "text-emerald-500",
-                            isNegative && "text-rose-500",
-                            isNeutral && "text-muted-foreground",
-                          )}
-                        >
-                          <IconTriangleFill
-                            aria-hidden="true"
+                        <div className="inline-flex items-center gap-2 sm:justify-end">
+                          <span
                             className={cn(
-                              "size-2 shrink-0 mr-1",
-                              isPositive && "fill-emerald-500",
-                              isNegative && "fill-rose-500 rotate-180",
-                              isNeutral && "fill-zinc-500/60",
+                              "font-berkeley-mono text-[11px] tabular-nums",
+                              isPositive && "text-emerald-400",
+                              isNegative && "text-rose-400",
+                              isNeutral && "text-muted-foreground",
                             )}
-                          />
-                          {(isNegative ? Math.abs(change) : change).toFixed(2)}%
-                        </span>
+                          >
+                            {usdMove === null ? "—" : `${usdSign}${formatUsdPrice(Math.abs(usdMove))}`}
+                          </span>
+                          <Badge
+                            variant={isPositive ? "success" : isNegative ? "destructive" : "outline"}
+                            className={cn(
+                              isNeutral && "border-zinc-200/60 text-muted-foreground dark:border-white/10",
+                              "h-5 px-1.5 font-berkeley-mono text-[11px] tabular-nums gap-1",
+                            )}
+                          >
+                            <IconTriangleFill
+                              aria-hidden="true"
+                              className={cn(
+                                "size-[4px] shrink-0 fill-current",
+                                isNegative && "rotate-180",
+                              )}
+                            />
+                            {Math.abs(change).toFixed(2)}%
+                          </Badge>
+                        </div>
                       )
                     })()
                   )}
@@ -615,66 +696,13 @@ export const ChartTable = memo(function ChartTable({
                   />
                 </div>
 
-                {/* Remove */}
-                <div 
-                  className="col-start-2 row-start-1 flex items-center justify-end gap-1 sm:col-start-auto sm:row-start-auto"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter" && e.key !== " ") return
-                    e.preventDefault()
-                    e.stopPropagation()
-                  }}
-                >
-                  <AnalysisDialog
-                    coinId={String(coin.id)}
-                    tokenData={{
-                      name: tokenName,
-                      symbol: coin.symbol,
-                      id: String(coin.id),
-                      logoUrl: safeTokenLogoUrl,
-                    }}
-                    triggerVariant="icon"
-                    triggerTooltip="Deep Analysis"
-                    triggerAriaLabel="Deep Analysis"
-                  />
-                  <div
-                    aria-hidden="true"
-                    className="mx-1 h-4 w-px shrink-0 bg-zinc-200/70 dark:bg-zinc-700/70"
-                  />
-                  <Tooltip delayDuration={500}>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          handleRemove(coin.id)
-                        }}
-                        disabled={showPending}
-                        aria-label="Remove from watchlist"
-                        className={cn(
-                          "h-6 w-6 p-0 rounded-lg bg-transparent hover:bg-rose-500/15 transition-colors group",
-                          showPending && "opacity-50 cursor-not-allowed"
-                        )}
-                      >
-                        <X className="h-4 w-4 text-zinc-600 dark:text-zinc-400 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
-                      <span>Remove from watchlist</span>
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
               </Link>
             )}
           </div>
-        </div>
         )
       })}
+      </div>
+      {analyzeDialog}
     </div>
   )
 })

@@ -36,7 +36,11 @@ export default defineSchema({
     userId: v.id("users"),
     watchlistGroupId: v.id("watchlistGroups"),
     coinId: v.string(),
-    /** Optional token quantity for this row (manual watchlist or wallet-mirrored group). */
+    /**
+     * DEPRECATED: legacy per-row token quantity. Canonical holdings now live in
+     * `coinHoldings` keyed by (userId, coinId). Kept optional so pre-migration
+     * documents still validate; cleared by the holdings migration.
+     */
     holdings: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
@@ -44,6 +48,21 @@ export default defineSchema({
     .index("by_group", ["watchlistGroupId"])
     .index("by_group_coin", ["watchlistGroupId", "coinId"])
     .index("by_coin", ["coinId"]),
+
+  /**
+   * Canonical token quantity per (user, coin). A coin has ONE holdings value
+   * regardless of how many watchlist groups it appears in; watchlist rows
+   * only record membership. Rows are pruned when the coin leaves the user's
+   * last watchlist.
+   */
+  coinHoldings: defineTable({
+    userId: v.id("users"),
+    coinId: v.string(),
+    holdings: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_coin", ["userId", "coinId"]),
 
   coins: defineTable({
     coinId: v.number(),

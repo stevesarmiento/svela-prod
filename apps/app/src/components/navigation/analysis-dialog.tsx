@@ -63,6 +63,10 @@ interface AnalysisDialogProps {
   triggerLabel?: string;
   /** Open immediately after mount; primarily for lazy-loaded trigger wrappers. */
   defaultOpen?: boolean;
+  /** Render no trigger button — programmatic open only (pair with `defaultOpen`). */
+  hideTrigger?: boolean;
+  /** Notified alongside the internal open state (e.g. to unmount the host on close). */
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function AnalysisDialog({
@@ -75,8 +79,18 @@ export function AnalysisDialog({
   triggerAriaLabel,
   triggerLabel = "Analyze",
   defaultOpen = false,
+  hideTrigger = false,
+  onOpenChange,
 }: AnalysisDialogProps) {
   const [isDialogOpen, setIsDialogOpen] = React.useState(defaultOpen);
+
+  const handleOpenChange = React.useCallback(
+    (open: boolean) => {
+      setIsDialogOpen(open);
+      onOpenChange?.(open);
+    },
+    [onOpenChange],
+  );
 
   // Preload heavy dialog chunks on user intent (hover/focus).
   const preloadDialogChunks = React.useCallback(() => {
@@ -127,8 +141,8 @@ export function AnalysisDialog({
   );
 
   return (
-    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-      {showTriggerTooltip ? (
+    <Dialog open={isDialogOpen} onOpenChange={handleOpenChange}>
+      {hideTrigger ? null : showTriggerTooltip ? (
         <Tooltip delayDuration={500}>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>{triggerButton}</DialogTrigger>

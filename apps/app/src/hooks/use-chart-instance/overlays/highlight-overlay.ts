@@ -18,6 +18,7 @@ export interface HighlightOverlay {
     setData: (args: { ohlcvData: OHLCVDataPoint[]; lineData: PriceDataPoint[] | null; volumeData: VolumeDataPoint[] }) => void;
     /** Register (or clear) the market cap overlay so it scrubs/dims like the price series. */
     setMarketCap: (args: HighlightMarketCapArgs | null) => void;
+    setPriceVisible: (visible: boolean) => void;
     apply: () => void;
     updatePositions: () => void;
     destroy: () => void;
@@ -74,6 +75,7 @@ export function createHighlightOverlay({
     let currentVolumeData: VolumeDataPoint[] = [];
     let candleEpochSeconds: number[] = [];
     let currentMarketCap: HighlightMarketCapArgs | null = null;
+    let isPriceVisible = true;
 
     function multiplyColorAlpha(color: string, factor: number): string {
         // All chart colors are oklch strings; multiplyAlpha scales the
@@ -178,6 +180,7 @@ export function createHighlightOverlay({
             (priceSeries as ISeriesApi<'Line'>).applyOptions({ color: baseLineColor });
         }
 
+        priceSeries.applyOptions({ visible: isPriceVisible });
         highlightPriceSeries.applyOptions({ visible: false });
         if (chartType === 'candlestick') {
             (highlightPriceSeries as ISeriesApi<'Candlestick'>).setData([]);
@@ -284,6 +287,9 @@ export function createHighlightOverlay({
 
         applyMarketCapHighlight(startEpochSec, endEpochSec, dimOpacity);
 
+        priceSeries.applyOptions({ visible: isPriceVisible });
+        if (!isPriceVisible) highlightPriceSeries.applyOptions({ visible: false });
+
         updatePositions();
     }
 
@@ -308,10 +314,15 @@ export function createHighlightOverlay({
         apply();
     }
 
+    function setPriceVisible(visible: boolean) {
+        isPriceVisible = visible;
+        apply();
+    }
+
     function destroy() {
         hideBoundaries();
         if (overlayEl.parentNode) overlayEl.parentNode.removeChild(overlayEl);
     }
 
-    return { setRange, setData, setMarketCap, apply, updatePositions, destroy };
+    return { setRange, setData, setMarketCap, setPriceVisible, apply, updatePositions, destroy };
 }

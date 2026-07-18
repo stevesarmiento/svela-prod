@@ -34,6 +34,8 @@ interface WatchlistMultiLineChartProps {
   layout?: 'horizontal' | 'vertical'
   /** Hide the in-card selector when the page renders its own (e.g. comparison header). */
   showTimeScaleSelector?: boolean
+  /** Scrub without overlay tooltip; show % labels beside each scrub dot instead. */
+  scrubDotLabels?: boolean
 }
 
 function getBucketMsFromTimeScale(timeScale: string): number {
@@ -102,6 +104,90 @@ function findClosestPoint(
   const leftDiff = Math.abs(left.time - targetTimeSec)
   const rightDiff = Math.abs(right.time - targetTimeSec)
   return leftDiff <= rightDiff ? left : right
+}
+
+/** Right gutter reserved for the y-axis tick + series labels. */
+const AXIS_GUTTER = 56
+/** Minimum vertical distance between right-axis labels before they nudge apart. */
+const AXIS_LABEL_GAP = 14
+
+const CHART_PADDING = { top: 12, right: AXIS_GUTTER, bottom: 20, left: 12 } as const
+
+function formatPctChange(value: number): string {
+  return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`
+}
+
+/**
+ * Mirrors liveline's internal `computeRange` (12% margin, minimum span) so the
+ * DOM y-axis / scrub-dot overlays line up with the canvas-rendered lines.
+ */
+function computeLivelineSeriesRange(
+  data: LivelinePoint[],
+  value: number,
+): { min: number; max: number } | null {
+  let min = Number.POSITIVE_INFINITY
+  let max = Number.NEGATIVE_INFINITY
+  for (const p of data) {
+    if (p.value < min) min = p.value
+    if (p.value > max) max = p.value
+  }
+  if (value < min) min = value
+  if (value > max) max = value
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return null
+
+  const rawRange = max - min
+  const minRange = rawRange * 0.1 || 0.4
+  if (rawRange < minRange) {
+    const mid = (min + max) / 2
+    return { min: mid - minRange / 2, max: mid + minRange / 2 }
+  }
+  const margin = rawRange * 0.12
+  return { min: min - margin, max: max + margin }
+}
+
+function getSeriesValueRange(series: LivelineSeries[]): { min: number; span: number } {
+  let min = Number.POSITIVE_INFINITY
+  let max = Number.NEGATIVE_INFINITY
+
+  for (const row of series) {
+    const range = computeLivelineSeriesRange(row.data, row.value)
+    if (!range) continue
+    if (range.min < min) min = range.min
+    if (range.max > max) max = range.max
+  }
+
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
+    return { min: 0, span: 1 }
+  }
+
+  return { min, span: max - min }
+}
+
+/** 1-2-5 progression tick step so axis values land on round numbers. */
+function niceTickStep(span: number, maxTicks: number): number {
+  const rough = span / Math.max(1, maxTicks)
+  const pow = 10 ** Math.floor(Math.log10(rough))
+  for (const multiple of [1, 2, 5]) {
+    if (multiple * pow >= rough) return multiple * pow
+  }
+  return 10 * pow
+}
+
+function valueToPlotY(
+  value: number,
+  min: number,
+  span: number,
+  plotHeight: number,
+): number {
+  return CHART_PADDING.top + (1 - (value - min) / span) * plotHeight
+}
+
+interface ScrubDotLabel {
+  id: string
+  color: string
+  x: number
+  y: number
+  text: string
 }
 
 function useWatchlistSeriesData(
@@ -209,10 +295,14 @@ export function WatchlistMultiLineChart({
   setActiveTimeScale,
   selectedWatchlists,
   layout = 'horizontal',
-  showTimeScaleSelector = true
+  showTimeScaleSelector = true,
+  scrubDotLabels = false,
 }: WatchlistMultiLineChartProps) {
   const isVertical = layout === 'vertical'
+  const chartHeightPx = isVertical ? 300 : 400
+  const useCustomTooltip = !scrubDotLabels
   const [hoveredWatchlist, setHoveredWatchlist] = useState<WatchlistGroupId | null>(null)
+  const [scrubDotLabelRows, setScrubDotLabelRows] = useState<ScrubDotLabel[] | null>(null)
   const [hiddenWatchlists, setHiddenWatchlists] = useState<Set<WatchlistGroupId>>(new Set())
   const [watchlistData, setWatchlistData] = useState<Map<WatchlistGroupId, WatchlistSeries>>(new Map())
   const { watchlistGroups: watchlistGroupsData } = useWatchlist()
@@ -303,20 +393,20 @@ export function WatchlistMultiLineChart({
 
         const isDimmed = isHovering && hoveredWatchlist !== row.id
         const color = isDimmed ? addOpacityToColor(row.color, 0.25) : row.color
-        const latestPctText = `${latestValue > 0 ? "+" : ""}${latestValue.toFixed(2)}%`
 
         return {
           id: row.id,
           data,
           value: latestValue,
           color,
-          label: latestPctText,
+          // No `label`: latest values render on the right y-axis overlay instead.
         }
       })
       .filter((row): row is LivelineSeries => row !== null)
   }, [watchlistSeriesData, hoveredWatchlist, hiddenWatchlists])
 
   const tooltipSeries = useMemo(() => {
+    if (!useCustomTooltip) return []
     return watchlistSeriesData
       .filter(row => !hiddenWatchlists.has(row.id))
       .map((row) => {
@@ -337,7 +427,7 @@ export function WatchlistMultiLineChart({
         }
       })
       .filter((row) => row.data.length > 0)
-  }, [watchlistSeriesData, hiddenWatchlists])
+  }, [watchlistSeriesData, hiddenWatchlists, useCustomTooltip])
 
   const windowSecs = useMemo(() => {
     let min: number | null = null
@@ -380,6 +470,65 @@ export function WatchlistMultiLineChart({
     }
   }, [livelineSeries])
 
+  const scrubValueRange = useMemo(
+    () => getSeriesValueRange(livelineSeries),
+    [livelineSeries],
+  )
+
+  // Right y-axis: % ticks plus each series' latest value at its line endpoint.
+  const yAxisModel = useMemo(() => {
+    if (livelineSeries.length === 0) return null
+
+    const { min, span } = scrubValueRange
+    if (!(span > 0)) return null
+
+    const plotHeight = chartHeightPx - CHART_PADDING.top - CHART_PADDING.bottom
+    const minY = CHART_PADDING.top + AXIS_LABEL_GAP / 2
+    const maxY = chartHeightPx - CHART_PADDING.bottom - AXIS_LABEL_GAP / 2
+
+    const seriesLabels = livelineSeries
+      .map((s) => ({
+        id: s.id,
+        color: s.color,
+        y: valueToPlotY(s.value, min, span, plotHeight),
+        text: formatPctChange(s.value),
+      }))
+      .sort((a, b) => a.y - b.y)
+
+    // Collision pass: nudge overlapping labels apart, keep them inside the plot.
+    for (let i = 0; i < seriesLabels.length; i++) {
+      const label = seriesLabels[i]
+      const prev = seriesLabels[i - 1]
+      if (!label) continue
+      label.y = Math.max(label.y, minY, prev ? prev.y + AXIS_LABEL_GAP : Number.NEGATIVE_INFINITY)
+    }
+    for (let i = seriesLabels.length - 1; i >= 0; i--) {
+      const label = seriesLabels[i]
+      const next = seriesLabels[i + 1]
+      if (!label) continue
+      label.y = Math.min(label.y, maxY, next ? next.y - AXIS_LABEL_GAP : Number.POSITIVE_INFINITY)
+    }
+
+    const step = niceTickStep(span, 5)
+    const decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2
+    const ticks: Array<{ key: number; y: number; text: string }> = []
+    for (let i = Math.ceil(min / step); i * step <= min + span + step * 1e-6; i++) {
+      const raw = i * step
+      const value = Math.abs(raw) < step * 1e-6 ? 0 : raw
+      const y = valueToPlotY(value, min, span, plotHeight)
+      if (y < minY || y > maxY) continue
+      // Series labels win over ticks when they'd overlap.
+      if (seriesLabels.some((label) => Math.abs(label.y - y) < AXIS_LABEL_GAP)) continue
+      ticks.push({
+        key: i,
+        y,
+        text: `${value > 0 ? "+" : ""}${value.toFixed(decimals)}%`,
+      })
+    }
+
+    return { ticks, seriesLabels }
+  }, [livelineSeries, scrubValueRange, chartHeightPx])
+
   const tooltipClassName = useMemo(
     () =>
       `fixed overflow-hidden text-[11px] rounded-xl w-[220px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-opacity duration-100 ease-out ${
@@ -397,6 +546,8 @@ export function WatchlistMultiLineChart({
   const lastTooltipTimeRef = useRef<number | null>(null)
 
   useEffect(() => {
+    if (!useCustomTooltip) return
+
     const tooltipEl = document.createElement("div")
     const tooltipRoot = createRoot(tooltipEl)
     tooltipElRef.current = tooltipEl
@@ -427,15 +578,19 @@ export function WatchlistMultiLineChart({
         }
       })
     }
-  }, [])
+  }, [useCustomTooltip])
 
   useEffect(() => {
+    if (!useCustomTooltip) return
+
     const tooltipEl = tooltipElRef.current
     if (tooltipEl) tooltipEl.className = tooltipClassName
-  }, [tooltipClassName])
+  }, [tooltipClassName, useCustomTooltip])
 
   const handleLivelineHover = useCallback(
     (hover: { time: number; value: number; x: number; y: number } | null) => {
+      if (!useCustomTooltip) return
+
       const tooltipEl = tooltipElRef.current
       const tooltipRoot = tooltipRootRef.current
       const container = chartWrapperRef.current
@@ -514,7 +669,44 @@ export function WatchlistMultiLineChart({
 
       tooltipEl.style.transform = `translate3d(${left}px, ${top}px, 0)`
     },
-    [tooltipSeries],
+    [tooltipSeries, useCustomTooltip],
+  )
+
+  const handleScrubDotLabels = useCallback(
+    (hover: { time: number; value: number; x: number; y: number } | null) => {
+      if (!scrubDotLabels) return
+
+      if (!hover) {
+        setScrubDotLabelRows(null)
+        return
+      }
+
+      const timeSec = Math.round(hover.time)
+      const plotHeight =
+        chartHeightPx - CHART_PADDING.top - CHART_PADDING.bottom
+      const labels: ScrubDotLabel[] = []
+
+      for (const series of livelineSeries) {
+        const closest = findClosestPoint(series.data, timeSec)
+        if (!closest) continue
+
+        labels.push({
+          id: series.id,
+          color: series.color,
+          x: hover.x,
+          y: valueToPlotY(
+            closest.value,
+            scrubValueRange.min,
+            scrubValueRange.span,
+            plotHeight,
+          ),
+          text: formatPctChange(closest.value),
+        })
+      }
+
+      setScrubDotLabelRows(labels.length > 0 ? labels : null)
+    },
+    [scrubDotLabels, livelineSeries, scrubValueRange, chartHeightPx],
   )
 
   return (
@@ -667,7 +859,10 @@ export function WatchlistMultiLineChart({
                     </div>
                   </div>
                 ) : (
-                  <div ref={chartWrapperRef} className={cn("w-full", isVertical ? "h-[300px]" : "h-[400px]")}>
+                  <div
+                    ref={chartWrapperRef}
+                    className={cn("relative w-full", isVertical ? "h-[300px]" : "h-[400px]")}
+                  >
                     <Liveline
                       data={[]}
                       value={0}
@@ -684,12 +879,56 @@ export function WatchlistMultiLineChart({
                       scrub
                       tooltipY={-9999}
                       tooltipOutline={false}
-                      onHover={handleLivelineHover}
+                      onHover={scrubDotLabels ? handleScrubDotLabels : handleLivelineHover}
                       formatTime={formatTime}
-                      formatValue={(v) => `${v > 0 ? "+" : ""}${v.toFixed(2)}%`}
-                      padding={{ top: 12, right: 20, bottom: 20, left: 12 }}
+                      formatValue={formatPctChange}
+                      padding={CHART_PADDING}
                       className="size-full"
                     />
+                    {/* Right y-axis: % ticks + per-series latest values. */}
+                    {yAxisModel && (
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-y-0 right-0 z-20"
+                        style={{ width: AXIS_GUTTER }}
+                      >
+                        {yAxisModel.ticks.map((tick) => (
+                          <span
+                            key={tick.key}
+                            className="absolute left-1.5 -translate-y-1/2 whitespace-nowrap font-berkeley-mono text-[10px] tabular-nums text-muted-foreground/60"
+                            style={{ top: tick.y }}
+                          >
+                            {tick.text}
+                          </span>
+                        ))}
+                        {yAxisModel.seriesLabels.map((label) => (
+                          <span
+                            key={label.id}
+                            className="absolute left-1.5 -translate-y-1/2 whitespace-nowrap font-berkeley-mono text-[10px] font-medium tabular-nums [text-shadow:0_0_4px_rgba(0,0,0,0.95),0_1px_2px_rgba(0,0,0,0.8)]"
+                            style={{ top: label.y, color: label.color }}
+                          >
+                            {label.text}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {scrubDotLabels && scrubDotLabelRows?.map((label, index) => (
+                      <span
+                        key={label.id}
+                        className="pointer-events-none absolute whitespace-nowrap font-berkeley-mono text-[10px] tabular-nums [text-shadow:0_0_4px_rgba(0,0,0,0.95),0_1px_2px_rgba(0,0,0,0.8)]"
+                        style={{
+                          left: label.x + (index % 2 === 0 ? 7 : -7),
+                          top: label.y,
+                          color: label.color,
+                          transform:
+                            index % 2 === 0
+                              ? "translateY(-50%)"
+                              : "translate(-100%, -50%)",
+                        }}
+                      >
+                        {label.text}
+                      </span>
+                    ))}
                   </div>
                 )}
               </div>

@@ -137,6 +137,54 @@ const HULL_SUITE_CONFIG: Parameters<typeof useHullSuite>[1] = {
   transpSwitch: 40,
 }
 
+function SeriesLegendToggle(props: {
+  label: string
+  pressed: boolean
+  onPressedChange: () => void
+  swatch: 'price' | 'market-cap'
+  marketCapColor?: string
+}) {
+  const { label, pressed, onPressedChange, swatch, marketCapColor } = props
+
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      aria-label={`${pressed ? 'Hide' : 'Show'} ${label.toLowerCase()} on chart`}
+      onClick={onPressedChange}
+      className={cn(
+        "inline-flex h-6 items-center gap-1.5 rounded px-1.5 text-[9px] font-berkeley-mono tracking-wider select-none cursor-pointer transition-[background-color,color,opacity,transform] duration-150 ease-out active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/20 dark:focus-visible:ring-white/30",
+        pressed
+          ? "text-zinc-700 hover:bg-black/5 dark:text-zinc-200 dark:hover:bg-white/5"
+          : "text-muted-foreground opacity-40 hover:opacity-65",
+      )}
+    >
+      {swatch === 'price' ? (
+        <span
+          aria-hidden="true"
+          className="h-2 w-4 rounded-[2px] border border-zinc-400/60 bg-white shadow-sm shadow-black/20"
+        />
+      ) : (
+        <svg
+          aria-hidden="true"
+          className="h-2 w-4 shrink-0 overflow-hidden rounded-[2px]"
+          viewBox="0 0 16 8"
+          fill="none"
+        >
+          <rect width="16" height="8" rx="1.5" fill={marketCapColor} fillOpacity="0" />
+          <path
+            d="M-3 9 5 1M1 11 11 1M7 11 17 1M13 11 21 3"
+            stroke={marketCapColor}
+            strokeWidth="1.5"
+          />
+          <rect x="0.5" y="0.5" width="15" height="7" rx="1" stroke={marketCapColor} strokeOpacity="1" />
+        </svg>
+      )}
+      {label}
+    </button>
+  )
+}
+
 interface VolumePointByEpoch {
   epochSeconds: number
   value: number
@@ -362,6 +410,8 @@ export const PriceChart = memo(function PriceChart({
 }: PriceChartProps) {
   // React 19: Add concurrent features
   const [isDataPending, startDataTransition] = useTransition()
+  const [showPrice, setShowPrice] = useState(true)
+  const [showMarketCap, setShowMarketCap] = useState(true)
 
   const crosshairStoreRef = useRef<CrosshairStore | null>(null)
   if (!crosshairStoreRef.current) crosshairStoreRef.current = createCrosshairStore()
@@ -559,13 +609,15 @@ export const PriceChart = memo(function PriceChart({
   const chartContainerRef = useChartInstance(isSeriesReady ? ohlcvDataForChart : [], {
     chartType: 'line',
     showVolume: true,
+    showPrice,
+    showPriceExtrema: true,
     // Honest gaps: while the series is warming (stored tail un-fetched),
     // pinning the live spot price to the last bar draws a fake straight
     // segment across the gap — hold off until the backfill lands.
     livePriceUsd: isWarmingUp ? undefined : liveSpotPriceUsd,
     isDarkMode,
     hullSuite: hullSuiteOverlay,
-    marketCap: marketCapOverlay,
+    marketCap: showMarketCap ? marketCapOverlay : null,
     projection: projectionOverlay,
     onCrosshairMove: handleCrosshairMove,
     onCrosshairTimeMove: handleCrosshairTimeMove,
@@ -686,16 +738,23 @@ export const PriceChart = memo(function PriceChart({
                     activeTimeScale={deferredTimeScale}
                     setActiveTimeScale={handleTimeScaleChange}
                   />
-                  {marketCapOverlay ? (
-                    <div className="flex items-center gap-1.5 pr-1 text-[9px] font-berkeley-mono tracking-wider text-muted-foreground select-none">
-                      <span
-                        aria-hidden="true"
-                        className="inline-block h-[2px] w-3 rounded-full"
-                        style={{ background: marketCapColor }}
+                  <div className="flex items-center gap-0.5 pr-0.5">
+                    <SeriesLegendToggle
+                      label="PRICE"
+                      pressed={showPrice}
+                      onPressedChange={() => setShowPrice((visible) => !visible)}
+                      swatch="price"
+                    />
+                    {marketCapOverlay ? (
+                      <SeriesLegendToggle
+                        label="MKT CAP"
+                        pressed={showMarketCap}
+                        onPressedChange={() => setShowMarketCap((visible) => !visible)}
+                        swatch="market-cap"
+                        marketCapColor={marketCapColor}
                       />
-                      MKT CAP
-                    </div>
-                  ) : null}
+                    ) : null}
+                  </div>
                 </div>
                 <div className="hidden absolute right-4 top-[57px] z-20 pointer-events-auto flex flex-col items-end gap-2">
                   {spotStatusLabel ? (

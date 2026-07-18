@@ -24,6 +24,7 @@ import type {
     MarketCapOverlay,
     OHLCVDataPoint,
     PriceDataPoint,
+    PriceExtremaMarker,
     ProjectionOverlay,
     UseChartInstanceOptions,
     VolumeDataPoint,
@@ -37,6 +38,7 @@ export interface ChartController {
     setData: (ohlcvData: OHLCVDataPoint[]) => void;
     /** O(1) last-bar patch for realtime ticks — avoids re-feeding the whole series. */
     updateLivePrice: (priceUsd: number) => void;
+    setPriceVisible: (visible: boolean) => void;
     setHighlightRange: (range: ChartHighlightRange | null) => void;
     setHullSuite: (overlay: HullSuiteOverlay | null) => void;
     setMarketCap: (overlay: MarketCapOverlay | null) => void;
@@ -50,6 +52,7 @@ interface CreateChartControllerArgs {
     containerEl: HTMLDivElement;
     chartType: ChartType;
     showVolume: boolean;
+    showPriceExtrema?: boolean;
     isDarkMode?: boolean;
     callbacks: Pick<UseChartInstanceOptions, 'onCrosshairMove' | 'onCrosshairTimeMove'>;
 }
@@ -58,6 +61,7 @@ export function createChartController({
     containerEl,
     chartType,
     showVolume,
+    showPriceExtrema = false,
     isDarkMode,
     callbacks,
 }: CreateChartControllerArgs): ChartController {
@@ -151,9 +155,11 @@ export function createChartController({
     let lastProjectionEndEpoch: number | null = null;
     let projectionAnchorEpoch: number | null = null;
     let currentPriceLine: IPriceLine | null = null;
+    let isPriceVisible = true;
 
     const BASE_LINE_COLOR = resolvedIsDarkMode ? 'oklch(1 0 0)' : 'oklch(0 0 0)';
     const VOLUME_BAR_COLOR = resolvedIsDarkMode ? 'oklch(1 0 0 / 0.25)' : 'oklch(0 0 0 / 0.25)';
+    const PROJECTION_DIVIDER_LINE_COLOR = resolvedIsDarkMode ? 'oklch(1 0 0 / 0.18)' : 'oklch(0 0 0 / 0.18)';
 
     function computePriceFormat(value: number | null | undefined): { precision: number; minMove: number } {
         if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
@@ -173,6 +179,33 @@ export function createChartController({
 
     let lineData: PriceDataPoint[] | null = null;
     let lastAppliedPriceFormatKey: string | null = null;
+
+    function computePriceExtremaMarkers(points: PriceDataPoint[] | null): PriceExtremaMarker[] {
+        if (!showPriceExtrema || !points || points.length < 2) return [];
+
+        let high: PriceDataPoint | null = null;
+        let low: PriceDataPoint | null = null;
+        for (const point of points) {
+            if (!Number.isFinite(point.value)) continue;
+            if (!high || point.value > high.value) high = point;
+            if (!low || point.value < low.value) low = point;
+        }
+
+        if (!high || !low) return [];
+
+        if (high.time === low.time && high.value === low.value) {
+            return [{ time: high.time, value: high.value, label: 'HIGH/LOW', color: PROJECTION_DIVIDER_LINE_COLOR }];
+        }
+
+        return [
+            { time: high.time, value: high.value, label: 'HIGH', color: PROJECTION_DIVIDER_LINE_COLOR },
+            { time: low.time, value: low.value, label: 'LOW', color: PROJECTION_DIVIDER_LINE_COLOR },
+        ];
+    }
+
+    function updatePriceExtremaMarkers() {
+        axisOverlay.setPriceExtremaMarkers(isPriceVisible ? computePriceExtremaMarkers(lineData) : []);
+    }
 
     if (chartType === 'candlestick') {
         priceSeries = chart.addSeries(CandlestickSeries, {
@@ -540,7 +573,7 @@ export function createChartController({
 
     // Projection divider: subtle vertical dashed line at the last real bar
     // (plus a live bull/base/bear readout while scrubbing the projection).
-    const dividerLineColor = resolvedIsDarkMode ? 'oklch(1 0 0 / 0.18)' : 'oklch(0 0 0 / 0.18)';
+    const dividerLineColor = PROJECTION_DIVIDER_LINE_COLOR;
     const dividerLabelColor = resolvedIsDarkMode ? 'oklch(1 0 0 / 0.45)' : 'oklch(0 0 0 / 0.5)';
 
     const projectionDividerEl = document.createElement('div');
@@ -706,6 +739,7 @@ export function createChartController({
         }
 
         if (chartType === 'candlestick') {
+            lineData = null;
             (priceSeries as ISeriesApi<'Candlestick'>).setData(safeOhlcvData);
         } else {
             lineData = safeOhlcvData.map(d => ({ time: d.time, value: d.close }));
@@ -730,6 +764,7 @@ export function createChartController({
         }
 
         axisOverlay.setFallbackValues({ dataLastPrice, dataLastVolume });
+        updatePriceExtremaMarkers();
         highlightOverlay.setData({ ohlcvData: safeOhlcvData, lineData, volumeData });
         updateCurrentPriceLine(dataLastPrice);
 
@@ -775,7 +810,7 @@ export function createChartController({
                 color: resolvedIsDarkMode ? 'oklch(1 0 0 / 0.35)' : 'oklch(0 0 0 / 0.35)',
                 lineWidth: 1,
                 lineStyle: LineStyle.Dashed,
-                lineVisible: true,
+                lineVisible: isPriceVisible,
                 axisLabelVisible: false,
             });
         } else {
@@ -814,6 +849,7 @@ export function createChartController({
         }
 
         updateCurrentPriceLine(priceUsd);
+        updatePriceExtremaMarkers();
         axisOverlay.scheduleUpdate();
     }
 
@@ -821,6 +857,15 @@ export function createChartController({
         if (isDisposed) return;
         highlightOverlay.setRange(range);
         axisOverlay.scheduleUpdate();
+    }
+
+    function setPriceVisible(visible: boolean) {
+        if (isDisposed || isPriceVisible === visible) return;
+        isPriceVisible = visible;
+        highlightOverlay.setPriceVisible(visible);
+        axisOverlay.setPriceVisible(visible);
+        currentPriceLine?.applyOptions({ lineVisible: visible });
+        updatePriceExtremaMarkers();
     }
 
     function setHullSuite(overlay: HullSuiteOverlay | null) {
@@ -1175,5 +1220,5 @@ export function createChartController({
     // Initial size
     resize();
 
-    return { setData, updateLivePrice, setHighlightRange, setHullSuite, setMarketCap, setProjection, setCallbacks, resize, destroy };
+    return { setData, updateLivePrice, setPriceVisible, setHighlightRange, setHullSuite, setMarketCap, setProjection, setCallbacks, resize, destroy };
 }
