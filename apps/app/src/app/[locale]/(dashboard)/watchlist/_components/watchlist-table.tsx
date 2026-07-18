@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from "@v1/ui/badge"
 import { ChevronDown } from "lucide-react"
 import Link from "next/link"
@@ -9,7 +9,17 @@ import { Skeleton } from "@v1/ui/skeleton"
 import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { COLOR_THEMES } from '@/components/color-picker'
 import { AvatarCircles } from '@v1/ui/token-stacks'
-import { useWatchlistByGroup } from '@/lib/convex-hooks'
+import { Checkbox } from "@v1/ui/checkbox"
+import { motion } from "motion/react"
+import { useWatchlistByGroup, useRemoveBulkFromWatchlist } from '@/lib/convex-hooks'
+import {
+  useWatchlistSelection,
+  useBottomNavSelectionBridge,
+  useSelectRevealTransition,
+  SELECT_CELL_VARIANTS,
+  SELECT_CHECKBOX_VARIANTS,
+  SELECT_CONTENT_VARIANTS,
+} from '@/hooks/use-watchlist-selection'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import {
   useCoinGeckoWatchlistAggregateChartIsolated,
@@ -23,6 +33,19 @@ import { formatUsdPrice } from '@/lib/format-usd'
 import { IconTriangleFill } from "symbols-react"
 
 type WatchlistGroupId = WatchlistGroup["_id"]
+
+/**
+ * Selection key for a coin row. Coins can appear in multiple watchlists, so
+ * rows are keyed per group; bulk removal splits keys back out per group.
+ */
+function makeRowKey(groupId: WatchlistGroupId, coinId: string): string {
+  return `${groupId}:${coinId}`
+}
+
+function parseRowKey(key: string): { groupId: string; coinId: string } {
+  const idx = key.indexOf(":")
+  return { groupId: key.slice(0, idx), coinId: key.slice(idx + 1) }
+}
 
 /** Per-coin row shown in the expanded accordion panel. */
 interface CoinRow {
@@ -379,30 +402,110 @@ function TrendSparkline({
   )
 }
 
-function CoinRowItem({ coin }: { coin: CoinRow }) {
+// Memoized with a boolean `isSelected` (not the selection Set, whose identity
+// changes on every toggle): a selection click re-renders only the rows whose
+// visual state actually changed instead of every row in every group.
+const CoinRowItem = memo(function CoinRowItem({
+  coin,
+  groupId,
+  isSelected,
+  hasSelectedCoins,
+  onCoinSelect,
+}: {
+  coin: CoinRow
+  groupId: WatchlistGroupId
+  isSelected: boolean
+  hasSelectedCoins: boolean
+  onCoinSelect: (rowKey: string, selected: boolean) => void
+}) {
   const change = coin.changePct
   const isPositive = typeof change === 'number' && change > 0
   const isNegative = typeof change === 'number' && change < 0
+  const rowKey = makeRowKey(groupId, coin.id)
+  const selectRevealTransition = useSelectRevealTransition()
 
   return (
     <Link
       href={`/watchlists/${encodeURIComponent(coin.id)}`}
+      aria-selected={hasSelectedCoins ? isSelected : undefined}
+      onClick={
+        hasSelectedCoins
+          ? (e) => {
+              e.preventDefault()
+              onCoinSelect(rowKey, !isSelected)
+            }
+          : undefined
+      }
       className={cn(
         COIN_GRID_CLASS,
         "py-2 hover:rounded-[7px] hover:bg-primary/[0.04] hover:ring-2 hover:ring-inset hover:ring-zinc-200/30",
+        "transition-opacity duration-200",
+        hasSelectedCoins && !isSelected && "opacity-40",
       )}
     >
-      {/* Token */}
-      <div className="flex min-w-0 items-center gap-2">
-        <TokenLogo
-          src={coin.imageUrl}
-          alt={coin.name}
-          sizePx={16}
-          fallbackText={coin.symbol}
-          className="shrink-0 rounded-full ring-1 ring-zinc-200 dark:ring-black/80"
-        />
-        <span className="shrink-0 text-xs font-bold">{coin.symbol.toUpperCase()}</span>
-        <span className="min-w-0 truncate font-berkeley-mono text-xs text-muted-foreground">{coin.name}</span>
+      {/* First cell — merged select + token, toggles selection on click */}
+      <div
+        className="flex min-w-0 items-center"
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          e.preventDefault() // Always prevent navigation for first cell (selection mode)
+          e.stopPropagation()
+
+          // Let the checkbox handle its own toggling (avoid double-toggle).
+          const target = e.target as HTMLElement
+          if (target.closest('[data-watchlist-row-checkbox="true"]')) return
+
+          onCoinSelect(rowKey, !isSelected)
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return
+          e.preventDefault()
+          e.stopPropagation()
+          onCoinSelect(rowKey, !isSelected)
+        }}
+      >
+        <motion.div
+          className="relative flex h-full w-full min-w-0 items-center justify-start"
+          // Ensure non-hovered rows animate when selection mode flips on/off.
+          // Starting from "rest" prevents "jump-to-endstate" on remounts.
+          variants={SELECT_CELL_VARIANTS}
+          initial="rest"
+          animate={hasSelectedCoins ? "revealed" : "rest"}
+          whileHover={hasSelectedCoins ? undefined : "revealed"}
+        >
+          {/* Checkbox - stable DOM to avoid "jump" on select/deselect */}
+          <motion.div
+            className="absolute left-0 z-10 px-1"
+            variants={SELECT_CHECKBOX_VARIANTS}
+            transition={selectRevealTransition}
+          >
+            <Checkbox
+              data-watchlist-row-checkbox="true"
+              checked={isSelected}
+              tabIndex={hasSelectedCoins ? 0 : -1}
+              onCheckedChange={(checked) => onCoinSelect(rowKey, checked === true)}
+              aria-label={`Select ${coin.name}`}
+            />
+          </motion.div>
+
+          {/* Token content slides right to make room for the checkbox */}
+          <motion.div
+            className="flex min-w-0 items-center gap-2"
+            variants={SELECT_CONTENT_VARIANTS}
+            transition={selectRevealTransition}
+          >
+            <TokenLogo
+              src={coin.imageUrl}
+              alt={coin.name}
+              sizePx={16}
+              fallbackText={coin.symbol}
+              className="shrink-0 rounded-full ring-1 ring-zinc-200 dark:ring-black/80"
+            />
+            <span className="shrink-0 text-xs font-bold">{coin.symbol.toUpperCase()}</span>
+            <span className="min-w-0 truncate font-berkeley-mono text-xs text-muted-foreground">{coin.name}</span>
+          </motion.div>
+        </motion.div>
       </div>
 
       {/* Price */}
@@ -461,7 +564,7 @@ function CoinRowItem({ coin }: { coin: CoinRow }) {
       </div>
     </Link>
   )
-}
+})
 
 // ✅ IMPROVED: Row component that uses the custom hook for individual watchlists
 function WatchlistCard({
@@ -471,6 +574,10 @@ function WatchlistCard({
   onHoldingsValueKnown,
   isExpanded,
   onToggleExpanded,
+  selectedCoins,
+  hasSelectedCoins,
+  onCoinSelect,
+  onVisibleCoinsChange,
 }: {
   group: WatchlistGroup
   activeTimeScale: string
@@ -479,9 +586,30 @@ function WatchlistCard({
   onHoldingsValueKnown: (groupId: WatchlistGroupId, holdingsValueUsd: number | null) => void
   isExpanded: boolean
   onToggleExpanded: (groupId: WatchlistGroupId) => void
+  selectedCoins: Set<string>
+  hasSelectedCoins: boolean
+  onCoinSelect: (rowKey: string, selected: boolean) => void
+  /** Reports the coin ids currently visible (expanded) so the parent can build the selectable set. */
+  onVisibleCoinsChange: (groupId: WatchlistGroupId, coinIds: string[]) => void
 }) {
   // Use our custom hook to get watchlist data
   const watchlistData = useWatchlistData(group._id, activeTimeScale, rangeEndTimeMs)
+
+  // Report visible (selectable) coin rows to the parent; collapsed panels
+  // report none so their rows can't stay selected while hidden.
+  const visibleCoinIds = useMemo(
+    () => (isExpanded && watchlistData ? watchlistData.coins.map((c) => c.id) : []),
+    [isExpanded, watchlistData],
+  )
+  useEffect(() => {
+    onVisibleCoinsChange(group._id, visibleCoinIds)
+  }, [group._id, visibleCoinIds, onVisibleCoinsChange])
+  useEffect(
+    () => () => {
+      onVisibleCoinsChange(group._id, [])
+    },
+    [group._id, onVisibleCoinsChange],
+  )
 
   const colorTheme =
     COLOR_THEMES[group.color as keyof typeof COLOR_THEMES] || COLOR_THEMES.default
@@ -719,7 +847,14 @@ function WatchlistCard({
               </div>
             ) : (
               watchlist.coins.map((coin) => (
-                <CoinRowItem key={coin.id} coin={coin} />
+                <CoinRowItem
+                  key={coin.id}
+                  coin={coin}
+                  groupId={group._id}
+                  isSelected={selectedCoins.has(makeRowKey(group._id, coin.id))}
+                  hasSelectedCoins={hasSelectedCoins}
+                  onCoinSelect={onCoinSelect}
+                />
               ))
             )}
           </div>
@@ -743,6 +878,63 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
   const { watchlistGroups } = useWatchlist()
   const [expandedIds, setExpandedIds] = useState<Set<WatchlistGroupId>>(new Set())
   const seenGroupIdsRef = useRef<Set<WatchlistGroupId>>(new Set())
+
+  // Row multi-selection (bottom-nav selection mode). Rows are keyed
+  // `groupId:coinId` since a coin can appear in several watchlists; bulk
+  // removal fans out one group-scoped call per affected watchlist.
+  const removeBulkFromConvexWatchlist = useRemoveBulkFromWatchlist()
+  const removeSelected = useCallback(
+    async (rowKeys: string[]) => {
+      const coinIdsByGroup = new Map<string, string[]>()
+      for (const key of rowKeys) {
+        const { groupId, coinId } = parseRowKey(key)
+        const ids = coinIdsByGroup.get(groupId) ?? []
+        ids.push(coinId)
+        coinIdsByGroup.set(groupId, ids)
+      }
+      await Promise.all(
+        Array.from(coinIdsByGroup, ([groupId, coinIds]) =>
+          removeBulkFromConvexWatchlist(coinIds, groupId),
+        ),
+      )
+    },
+    [removeBulkFromConvexWatchlist],
+  )
+  const selection = useWatchlistSelection({ removeSelected })
+  const { selectedCoins, handleCoinSelect, hasSelectedCoins } = selection
+
+  /** Coin ids per expanded group, reported by each card as data loads. */
+  const [visibleCoinsByGroup, setVisibleCoinsByGroup] = useState<
+    Map<WatchlistGroupId, string[]>
+  >(() => new Map())
+
+  const handleVisibleCoinsChange = useCallback(
+    (groupId: WatchlistGroupId, coinIds: string[]) => {
+      setVisibleCoinsByGroup((prev) => {
+        const existing = prev.get(groupId)
+        if (existing && existing.join(",") === coinIds.join(",")) return prev
+        if (!existing && coinIds.length === 0) return prev
+        const next = new Map(prev)
+        if (coinIds.length === 0) {
+          next.delete(groupId)
+        } else {
+          next.set(groupId, coinIds)
+        }
+        return next
+      })
+    },
+    [],
+  )
+
+  const selectableRowKeys = useMemo(() => {
+    const keys: string[] = []
+    for (const [groupId, coinIds] of visibleCoinsByGroup) {
+      for (const coinId of coinIds) keys.push(makeRowKey(groupId, coinId))
+    }
+    return keys
+  }, [visibleCoinsByGroup])
+
+  useBottomNavSelectionBridge(selection, selectableRowKeys)
 
   // Default: every watchlist starts expanded (newly added ones too);
   // user collapses are respected because we only auto-open unseen ids.
@@ -850,6 +1042,10 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
             onHoldingsValueKnown={registerHoldingsValue}
             isExpanded={expandedIds.has(group._id)}
             onToggleExpanded={toggleExpanded}
+            selectedCoins={selectedCoins}
+            hasSelectedCoins={hasSelectedCoins}
+            onCoinSelect={handleCoinSelect}
+            onVisibleCoinsChange={handleVisibleCoinsChange}
           />
         ))}
       </div>

@@ -42,6 +42,13 @@ const BottomNavContext = createContext<BottomNavContextType | undefined>(undefin
 // this in components that only trigger nav behavior (e.g. heavy chart views).
 const BottomNavActionsContext = createContext<BottomNavActionsType | undefined>(undefined)
 
+// Mode only — flips just on navigation/selection transitions. Tables watching
+// for selection-mode exit subscribe here instead of BottomNavContext, whose
+// value also changes on every selectionState update (which those same tables
+// trigger per row click — subscribing there re-renders the whole table twice
+// per click).
+const BottomNavModeContext = createContext<BottomNavMode | undefined>(undefined)
+
 export function BottomNavProvider({ children }: { children: ReactNode }) {
   const [mode, setMode] = useState<BottomNavMode>('navigation')
   const [selectionState, setSelectionState] = useState<SelectionState | null>(null)
@@ -89,11 +96,25 @@ export function BottomNavProvider({ children }: { children: ReactNode }) {
 
   return (
     <BottomNavActionsContext.Provider value={actionsValue}>
-      <BottomNavContext.Provider value={contextValue}>
-        {children}
-      </BottomNavContext.Provider>
+      <BottomNavModeContext.Provider value={mode}>
+        <BottomNavContext.Provider value={contextValue}>
+          {children}
+        </BottomNavContext.Provider>
+      </BottomNavModeContext.Provider>
     </BottomNavActionsContext.Provider>
   )
+}
+
+/**
+ * Current nav mode with render isolation: consumers re-render only when the
+ * mode itself flips, not on selectionState/command-palette updates.
+ */
+export function useBottomNavMode(): BottomNavMode {
+  const mode = use(BottomNavModeContext)
+  if (mode === undefined) {
+    throw new Error('useBottomNavMode must be used within a BottomNavProvider')
+  }
+  return mode
 }
 
 /**

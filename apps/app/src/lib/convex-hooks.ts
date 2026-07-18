@@ -160,8 +160,13 @@ export function useRemoveFromWatchlistGroup() {
 
 export function useRemoveBulkFromWatchlist() {
   const bulkRemove = useMutation(api.watchlists.removeBulkFromMyWatchlist);
-  return (coinIds: string[], groupId?: string) =>
-    bulkRemove({ coinIds, groupId: groupId ? (groupId as Id<"watchlistGroups">) : undefined });
+  // Stable identity: callers feed this into effect deps (e.g. the bottom-nav
+  // selection bridge); a fresh closure per render would loop those effects.
+  return useCallback(
+    (coinIds: string[], groupId?: string) =>
+      bulkRemove({ coinIds, groupId: groupId ? (groupId as Id<"watchlistGroups">) : undefined }),
+    [bulkRemove],
+  );
 }
 
 export function useSetWatchlistItemHoldings() {

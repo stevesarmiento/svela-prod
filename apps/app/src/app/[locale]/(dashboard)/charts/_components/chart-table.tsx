@@ -14,8 +14,10 @@ import { useUser } from "@clerk/nextjs"
 import { Input } from "@v1/ui/input"
 import { Checkbox } from "@v1/ui/checkbox"
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
-import { useBottomNav } from "@/components/navigation/bottom-nav-context"
-import { useWatchlistSelection } from "@/hooks/use-watchlist-selection"
+import {
+  useWatchlistSelection,
+  useBottomNavSelectionBridge,
+} from "@/hooks/use-watchlist-selection"
 import Link from "next/link"
 import { cn } from "@v1/ui/cn"
 import { toast } from "@v1/ui/use-toast"
@@ -27,29 +29,13 @@ import { useSetWatchlistItemHoldings } from "@/lib/convex-hooks"
 import { Badge } from "@v1/ui/badge"
 import { IconTriangleFill } from "symbols-react"
 import { TokenLogo } from "@/components/token-logo"
-import { motion, useReducedMotion } from "motion/react"
-import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
-
-/**
- * Hover-revealed row selection (same implementation as the old watchlist
- * table): the checkbox sits absolutely at the cell's left edge and slides in
- * while the token content shifts right. When any row is selected the reveal
- * state is locked open for all rows (selection mode).
- */
-const SELECT_CELL_VARIANTS = {
-  rest: {},
-  revealed: {},
-} as const
-
-const SELECT_CHECKBOX_VARIANTS = {
-  rest: { opacity: 0, x: -20, pointerEvents: "none" as const },
-  revealed: { opacity: 1, x: 0, pointerEvents: "auto" as const },
-} as const
-
-const SELECT_CONTENT_VARIANTS = {
-  rest: { x: 0, opacity: 1 },
-  revealed: { x: 40, opacity: 0.9 },
-} as const
+import { motion } from "motion/react"
+import {
+  SELECT_CELL_VARIANTS,
+  SELECT_CHECKBOX_VARIANTS,
+  SELECT_CONTENT_VARIANTS,
+  useSelectRevealTransition,
+} from "@/hooks/use-watchlist-selection"
 
 // Accept whatever data format the existing hook provides
 interface OptimisticCoinData {
@@ -303,31 +289,23 @@ export const ChartTable = memo(function ChartTable({
   } = useWatchlist()
   const { user } = useUser()
   const searchParams = useSearchParams()
-  const { mode, setSelectionMode, setNavigationMode } = useBottomNav()
-  const shouldReduceMotion = useReducedMotion()
+  const selectRevealTransition = useSelectRevealTransition()
 
-  const selectRevealTransition = useMemo(
-    () => ({
-      type: "tween" as const,
-      duration: motionDuration(shouldReduceMotion, DURATION_UI_S),
-      ease: EASE_IN_OUT_CUBIC,
-    }),
-    [shouldReduceMotion],
+  // Group-scoped bulk remove when a group is selected (mirrors the single
+  // remove in multi-line-lightweight.tsx).
+  const removeSelected = useCallback(
+    async (coinIds: string[]) => {
+      if (selectedGroup) {
+        await removeBulkFromSelectedGroup(coinIds)
+      } else {
+        await removeBulkFromWatchlist(coinIds)
+      }
+    },
+    [selectedGroup, removeBulkFromSelectedGroup, removeBulkFromWatchlist],
   )
 
-  const {
-    selectedCoins,
-    setSelectedCoins,
-    handleCoinSelect,
-    handleSelectAll,
-    handleRemoveSelected,
-    isRemoving,
-    hasSelectedCoins,
-  } = useWatchlistSelection({
-    selectedGroup,
-    removeBulkFromSelectedGroup,
-    removeBulkFromWatchlist,
-  })
+  const selection = useWatchlistSelection({ removeSelected })
+  const { selectedCoins, handleCoinSelect, hasSelectedCoins } = selection
 
   // React 19: Defer expensive computations
   const deferredCoins = useDeferredValue(coins)
@@ -401,77 +379,8 @@ export const ChartTable = memo(function ChartTable({
         .map((coin) => String(coin.id)),
     [coinsWithIntervalChange],
   )
-  const selectableIdSet = useMemo(
-    () => new Set(selectableCoinIds),
-    [selectableCoinIds],
-  )
 
-  // Adapt to SelectionState.onSelectAll(checked) — the bottom nav doesn't know
-  // the row ids.
-  const onSelectAll = useCallback(
-    (checked: boolean) => handleSelectAll(checked, selectableCoinIds),
-    [handleSelectAll, selectableCoinIds],
-  )
-
-  // Sync selection state into the bottom navigation (external system): any
-  // selection flips the dock into its red selection mode; empty exits it.
-  useEffect(() => {
-    if (selectedCoins.size > 0) {
-      setSelectionMode({
-        selectedCoins,
-        totalCoins: selectableCoinIds.length,
-        onSelectAll,
-        onRemoveSelected: handleRemoveSelected,
-        isRemoving,
-      })
-    } else {
-      setNavigationMode()
-    }
-  }, [
-    selectedCoins,
-    selectableCoinIds.length,
-    onSelectAll,
-    handleRemoveSelected,
-    isRemoving,
-    setSelectionMode,
-    setNavigationMode,
-  ])
-
-  // Release the nav if the table unmounts mid-selection (navigating away).
-  const hasSelectedRef = useRef(false)
-  hasSelectedRef.current = hasSelectedCoins
-  useEffect(
-    () => () => {
-      if (hasSelectedRef.current) setNavigationMode()
-    },
-    [setNavigationMode],
-  )
-
-  // Prune selected ids that no longer exist (removed via the chart's
-  // "Remove from chart" dropdown, another tab, or the bulk delete itself).
-  // Skip while the set is empty: the quotes query re-keys whenever the
-  // watchlist ids change, so `coins` is transiently [] during refetch and
-  // pruning then would wipe a live selection.
-  useEffect(() => {
-    if (selectableIdSet.size === 0) return
-    setSelectedCoins((prev) => {
-      if (prev.size === 0) return prev
-      const next = new Set([...prev].filter((id) => selectableIdSet.has(id)))
-      return next.size === prev.size ? prev : next
-    })
-  }, [selectableIdSet, setSelectedCoins])
-
-  // The nav's Escape shortcut only calls setNavigationMode() — it never clears
-  // our local selection. Mirror a selection → navigation transition into a
-  // local clear so rows don't stay checked/dimmed.
-  const prevModeRef = useRef(mode)
-  useEffect(() => {
-    const prevMode = prevModeRef.current
-    prevModeRef.current = mode
-    if (prevMode === 'selection' && mode === 'navigation') {
-      setSelectedCoins((prev) => (prev.size > 0 ? new Set<string>() : prev))
-    }
-  }, [mode, setSelectedCoins])
+  useBottomNavSelectionBridge(selection, selectableCoinIds)
 
   const getTimeScaleLabel = (scale: string) => {
     switch (scale) {
