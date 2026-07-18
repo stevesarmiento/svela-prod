@@ -15,6 +15,11 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { requireServerToken } from "./_lib/server_token";
 import { dedupeAndSortByOccurredAt, isCacheFresh, rankMovers } from "./_lib/overview_signals";
+import {
+  getCanonicalHoldingsByCoinId,
+  partitionHoldingsByGroup,
+  resolveHoldingsByCoinId,
+} from "./_lib/holdings";
 
 type Window = "24h" | "7d";
 
@@ -131,7 +136,7 @@ async function getOverviewHoldingsBreakdown(
   ctx: QueryCtx,
   userId: Id<"users">,
 ): Promise<OverviewHoldingsGroupRow[]> {
-  const [groups, rows] = await Promise.all([
+  const [groups, rows, canonicalByCoinId] = await Promise.all([
     ctx.db
       .query("watchlistGroups")
       .withIndex("by_user", (q) => q.eq("userId", userId))
@@ -140,23 +145,16 @@ async function getOverviewHoldingsBreakdown(
       .query("watchlists")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect(),
+    getCanonicalHoldingsByCoinId(ctx.db, userId),
   ]);
 
   const groupsById = new Map(groups.map((group) => [group._id, group] as const));
-  const holdingsByGroupId = new Map<Id<"watchlistGroups">, Map<string, number>>();
 
-  for (const row of rows) {
-    const holdings = row.holdings;
-    if (typeof holdings !== "number") continue;
-    if (!Number.isFinite(holdings) || holdings <= 0) continue;
-
-    const groupId = row.watchlistGroupId;
-    if (!groupsById.has(groupId)) continue;
-
-    const byCoin = holdingsByGroupId.get(groupId) ?? new Map<string, number>();
-    byCoin.set(row.coinId, (byCoin.get(row.coinId) ?? 0) + holdings);
-    holdingsByGroupId.set(groupId, byCoin);
-  }
+  // Canonical holdings: one value per coin, attributed to a single group so
+  // the client-side sum across groups never double-counts a coin that
+  // appears on several watchlists.
+  const holdingsByCoinId = resolveHoldingsByCoinId(rows, canonicalByCoinId);
+  const holdingsByGroupId = partitionHoldingsByGroup(rows, holdingsByCoinId);
 
   const result = Array.from(holdingsByGroupId.entries())
     .map(([groupId, byCoin]) => {

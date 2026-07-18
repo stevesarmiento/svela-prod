@@ -191,6 +191,29 @@ async function mergeDuplicateTargetUser(
     if (apply) await ctx.db.patch(row._id, { userId: source._id });
   }
 
+  // --- coinHoldings (canonical per userId+coinId; keep source's value on conflict) ---
+  const [targetHoldings, sourceHoldings] = await Promise.all([
+    ctx.db
+      .query("coinHoldings")
+      .withIndex("by_user", (q) => q.eq("userId", target._id))
+      .collect(),
+    ctx.db
+      .query("coinHoldings")
+      .withIndex("by_user", (q) => q.eq("userId", source._id))
+      .collect(),
+  ]);
+
+  const sourceHoldingCoinIds = new Set(sourceHoldings.map((row) => row.coinId));
+  for (const row of targetHoldings) {
+    if (sourceHoldingCoinIds.has(row.coinId)) {
+      result.rowsDeleted++;
+      if (apply) await ctx.db.delete(row._id);
+    } else {
+      result.rowsReassigned++;
+      if (apply) await ctx.db.patch(row._id, { userId: source._id });
+    }
+  }
+
   // --- userSettings (conservative: keep source settings if present) ---
   const [targetSettings, sourceSettings] = await Promise.all([
     ctx.db

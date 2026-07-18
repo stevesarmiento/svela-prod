@@ -10,6 +10,7 @@
 
 import type * as _lib_chartFreshness from "../_lib/chartFreshness.js";
 import type * as _lib_coingeckoFetch from "../_lib/coingeckoFetch.js";
+import type * as _lib_holdings from "../_lib/holdings.js";
 import type * as _lib_overview_signals from "../_lib/overview_signals.js";
 import type * as _lib_server_token from "../_lib/server_token.js";
 import type * as _lib_user_lookup from "../_lib/user_lookup.js";
@@ -34,6 +35,7 @@ import type * as coinglassWarmup from "../coinglassWarmup.js";
 import type * as coinglassWriters from "../coinglassWriters.js";
 import type * as coins from "../coins.js";
 import type * as crons from "../crons.js";
+import type * as holdingsMigration from "../holdingsMigration.js";
 import type * as lastKnownPrices from "../lastKnownPrices.js";
 import type * as overview from "../overview.js";
 import type * as portfolio from "../portfolio.js";
@@ -54,6 +56,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   "_lib/chartFreshness": typeof _lib_chartFreshness;
   "_lib/coingeckoFetch": typeof _lib_coingeckoFetch;
+  "_lib/holdings": typeof _lib_holdings;
   "_lib/overview_signals": typeof _lib_overview_signals;
   "_lib/server_token": typeof _lib_server_token;
   "_lib/user_lookup": typeof _lib_user_lookup;
@@ -78,6 +81,7 @@ declare const fullApi: ApiFromModules<{
   coinglassWriters: typeof coinglassWriters;
   coins: typeof coins;
   crons: typeof crons;
+  holdingsMigration: typeof holdingsMigration;
   lastKnownPrices: typeof lastKnownPrices;
   overview: typeof overview;
   portfolio: typeof portfolio;

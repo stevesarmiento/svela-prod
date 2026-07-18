@@ -1,5 +1,13 @@
 import { v } from "convex/values";
 import { getCanonicalClerkId, getUserByClerkId } from "./_lib/user_lookup";
+import {
+  getCanonicalHoldingsByCoinId,
+  partitionHoldingsByGroup,
+  pruneCanonicalHoldingsIfUnlisted,
+  resolveHoldingsByCoinId,
+  setCanonicalHoldings,
+  withCanonicalHoldings,
+} from "./_lib/holdings";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
 import { internal } from "./_generated/api";
@@ -287,6 +295,12 @@ export const deleteWatchlistGroup = mutation({
       }),
     );
 
+    // Drop canonical holdings for coins that no longer appear on any of the
+    // user's watchlists.
+    await Promise.all(
+      coinIds.map((coinId) => pruneCanonicalHoldingsIfUnlisted(ctx.db, user._id, coinId)),
+    );
+
     // Delete the group
     await ctx.db.delete(args.groupId);
     await markOverviewSnapshotStale(ctx, args.clerkId);
@@ -316,10 +330,11 @@ export const getWatchlist = query({
       return [];
     }
 
-    return await ctx.db
+    const items = await ctx.db
       .query("watchlists")
       .withIndex("by_group", (q) => q.eq("watchlistGroupId", defaultGroup._id))
       .collect();
+    return await withCanonicalHoldings(ctx.db, user._id, items);
   },
 });
 
@@ -342,10 +357,11 @@ export const getWatchlistByGroup = query({
       throw new Error("Watchlist group not found");
     }
 
-    return await ctx.db
+    const items = await ctx.db
       .query("watchlists")
       .withIndex("by_group", (q) => q.eq("watchlistGroupId", args.groupId))
       .collect();
+    return await withCanonicalHoldings(ctx.db, user._id, items);
   },
 });
 
@@ -383,7 +399,7 @@ export const getWatchlistBySlug = query({
 
     return {
       group,
-      items: watchlistItems
+      items: await withCanonicalHoldings(ctx.db, user._id, watchlistItems),
     };
   },
 });
@@ -545,6 +561,7 @@ export const removeFromWatchlist = mutation({
     if (!watchlistItem) throw new Error("Not in watchlist");
 
     await ctx.db.delete(watchlistItem._id);
+    await pruneCanonicalHoldingsIfUnlisted(ctx.db, user._id, args.coinId);
 
     // If nobody is watching this coin anymore, remove it from the tracked set.
     const remaining = await ctx.db
@@ -606,12 +623,15 @@ export const removeBulkFromWatchlist = mutation({
 
     // Filter out null values and delete all found items
     const validItems = watchlistItems.filter(item => item !== null);
-    
+
     await Promise.all(
       validItems.map(item => ctx.db.delete(item!._id))
     );
 
     const uniqueCoinIds = Array.from(new Set(args.coinIds));
+    await Promise.all(
+      uniqueCoinIds.map((coinId) => pruneCanonicalHoldingsIfUnlisted(ctx.db, user._id, coinId)),
+    );
     await Promise.all(
       uniqueCoinIds.map(async (coinId) => {
         const remaining = await ctx.db
@@ -747,6 +767,7 @@ export const removeFromAllWatchlists = mutation({
     if (rows.length === 0) return null;
 
     await Promise.all(rows.map((row) => ctx.db.delete(row._id)));
+    await pruneCanonicalHoldingsIfUnlisted(ctx.db, user._id, args.coinId);
 
     // If nobody is watching this coin anymore, remove it from the tracked set.
     const remaining = await ctx.db
@@ -791,6 +812,7 @@ export const removeBulkFromAllWatchlists = mutation({
         if (rows.length === 0) return { coinId, removed: 0 };
 
         await Promise.all(rows.map((row) => ctx.db.delete(row._id)));
+        await pruneCanonicalHoldingsIfUnlisted(ctx.db, user._id, coinId);
         return { coinId, removed: rows.length };
       }),
     );
@@ -1034,6 +1056,12 @@ export const deleteMyWatchlistGroup = mutation({
       }),
     );
 
+    // Drop canonical holdings for coins that no longer appear on any of the
+    // user's watchlists.
+    await Promise.all(
+      coinIds.map((coinId) => pruneCanonicalHoldingsIfUnlisted(ctx.db, user._id, coinId)),
+    );
+
     await ctx.db.delete(args.groupId);
     await markOverviewSnapshotStale(ctx, identity.subject);
     return null;
@@ -1053,10 +1081,11 @@ export const getMyDefaultWatchlist = query({
       .first();
     if (!defaultGroup) return [];
 
-    return await ctx.db
+    const items = await ctx.db
       .query("watchlists")
       .withIndex("by_group", (q) => q.eq("watchlistGroupId", defaultGroup._id))
       .collect();
+    return await withCanonicalHoldings(ctx.db, user._id, items);
   },
 });
 
@@ -1070,10 +1099,11 @@ export const getMyWatchlistByGroup = query({
     const group = await ctx.db.get(args.groupId);
     if (!group || group.userId !== user._id) return [];
 
-    return await ctx.db
+    const items = await ctx.db
       .query("watchlists")
       .withIndex("by_group", (q) => q.eq("watchlistGroupId", args.groupId))
       .collect();
+    return await withCanonicalHoldings(ctx.db, user._id, items);
   },
 });
 
@@ -1101,7 +1131,7 @@ export const getMyWatchlistBySlug = query({
       .withIndex("by_group", (q) => q.eq("watchlistGroupId", group._id))
       .collect();
 
-    return { group, items };
+    return { group, items: await withCanonicalHoldings(ctx.db, user._id, items) };
   },
 });
 
@@ -1224,6 +1254,7 @@ export const removeFromMyWatchlist = mutation({
     if (!row) return null;
 
     await ctx.db.delete(row._id);
+    await pruneCanonicalHoldingsIfUnlisted(ctx.db, user._id, args.coinId);
 
     const remaining = await ctx.db
       .query("watchlists")
@@ -1241,7 +1272,12 @@ export const removeFromMyWatchlist = mutation({
   },
 });
 
-/** Set or clear token quantity for a coin in a watchlist group (includes wallet-mirrored groups). */
+/**
+ * Set or clear the canonical token quantity for a coin. The `groupId` only
+ * scopes the permission check (the coin must be on that watchlist); the value
+ * itself is stored once per (user, coin) in `coinHoldings`, so it shows up on
+ * every watchlist containing the coin.
+ */
 export const setMyWatchlistItemHoldings = mutation({
   args: {
     groupId: v.id("watchlistGroups"),
@@ -1266,21 +1302,27 @@ export const setMyWatchlistItemHoldings = mutation({
       .first();
     if (!row || row.userId !== user._id) throw new Error("Watchlist item not found");
 
-    if (args.holdings === null) {
-      await ctx.db.replace(row._id, {
-        userId: row.userId,
-        watchlistGroupId: row.watchlistGroupId,
-        coinId: row.coinId,
-      });
-      await markOverviewSnapshotStale(ctx, identity.subject);
-      return null;
-    }
-
-    if (!Number.isFinite(args.holdings) || args.holdings < 0) {
+    if (args.holdings !== null && (!Number.isFinite(args.holdings) || args.holdings < 0)) {
       throw new Error("Holdings must be a non-negative number");
     }
 
-    await ctx.db.patch(row._id, { holdings: args.holdings });
+    await setCanonicalHoldings(ctx.db, user._id, args.coinId, args.holdings);
+
+    // Clear any lingering legacy row-level values for this coin so the
+    // deprecated field can't disagree with the canonical table.
+    const userRows = await ctx.db
+      .query("watchlists")
+      .withIndex("by_user_coin", (q) => q.eq("userId", user._id).eq("coinId", args.coinId))
+      .collect();
+    for (const userRow of userRows) {
+      if (userRow.holdings === undefined) continue;
+      await ctx.db.replace(userRow._id, {
+        userId: userRow.userId,
+        watchlistGroupId: userRow.watchlistGroupId,
+        coinId: userRow.coinId,
+      });
+    }
+
     await markOverviewSnapshotStale(ctx, identity.subject);
     return null;
   },
@@ -1319,6 +1361,9 @@ export const removeBulkFromMyWatchlist = mutation({
 
     const toDelete = rows.filter((r): r is NonNullable<typeof r> => r !== null);
     await Promise.all(toDelete.map((r) => ctx.db.delete(r._id)));
+    await Promise.all(
+      toDelete.map((r) => pruneCanonicalHoldingsIfUnlisted(ctx.db, user._id, r.coinId)),
+    );
 
     await Promise.all(
       uniqueCoinIds.map(async (coinId) => {
@@ -1355,6 +1400,7 @@ export const removeFromAllMyWatchlists = mutation({
     if (rows.length === 0) return null;
 
     await Promise.all(rows.map((row) => ctx.db.delete(row._id)));
+    await pruneCanonicalHoldingsIfUnlisted(ctx.db, user._id, args.coinId);
 
     const remaining = await ctx.db
       .query("watchlists")
@@ -1392,6 +1438,7 @@ export const removeBulkFromAllMyWatchlists = mutation({
           .collect();
         if (rows.length === 0) return { coinId, removed: 0 };
         await Promise.all(rows.map((row) => ctx.db.delete(row._id)));
+        await pruneCanonicalHoldingsIfUnlisted(ctx.db, user._id, coinId);
         return { coinId, removed: rows.length };
       }),
     );
@@ -1467,7 +1514,7 @@ export const getMyWatchlistBootstrap = query({
     return {
       groups,
       defaultGroup: defaultGroup ?? null,
-      defaultItems,
+      defaultItems: await withCanonicalHoldings(ctx.db, user._id, defaultItems),
       allCoinIds,
     };
   },
@@ -1517,7 +1564,7 @@ export const getMyWatchlistsPageBootstrap = query({
       };
     }
 
-    const [groups, defaultGroup, items] = await Promise.all([
+    const [groups, defaultGroup, rawItems] = await Promise.all([
       listWatchlistGroupsForUser(ctx, user._id),
       getDefaultWatchlistGroupForUser(ctx, user._id),
       ctx.db
@@ -1525,6 +1572,8 @@ export const getMyWatchlistsPageBootstrap = query({
         .withIndex("by_user", (q) => q.eq("userId", user._id))
         .collect(),
     ]);
+
+    const items = await withCanonicalHoldings(ctx.db, user._id, rawItems);
 
     const itemsByGroupId: Record<string, Array<(typeof items)[number]>> = {};
     for (const group of groups) {
@@ -1564,19 +1613,17 @@ export const getMyHoldingsAcrossWatchlists = query({
       return { positions: [], totalHoldings: 0, coinsWithHoldings: 0 };
     }
 
-    const rows = await ctx.db
-      .query("watchlists")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
+    const [rows, canonicalByCoinId] = await Promise.all([
+      ctx.db
+        .query("watchlists")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect(),
+      getCanonicalHoldingsByCoinId(ctx.db, user._id),
+    ]);
 
-    const holdingsByCoinId = new Map<string, number>();
-    for (const row of rows) {
-      const holdings = row.holdings;
-      if (typeof holdings !== "number") continue;
-      if (!Number.isFinite(holdings) || holdings <= 0) continue;
-
-      holdingsByCoinId.set(row.coinId, (holdingsByCoinId.get(row.coinId) ?? 0) + holdings);
-    }
+    // One canonical value per coin — a coin on several watchlists is still a
+    // single position and is never summed across rows.
+    const holdingsByCoinId = resolveHoldingsByCoinId(rows, canonicalByCoinId);
 
     const positions = Array.from(holdingsByCoinId.entries())
       .map(([coinId, holdings]) => ({ coinId, holdings }))
@@ -1611,7 +1658,7 @@ export const getMyHoldingsBreakdownByWatchlistGroup = query({
     const user = await getCurrentUser(ctx);
     if (!user) return [];
 
-    const [groups, rows] = await Promise.all([
+    const [groups, rows, canonicalByCoinId] = await Promise.all([
       ctx.db
         .query("watchlistGroups")
         .withIndex("by_user", (q) => q.eq("userId", user._id))
@@ -1620,23 +1667,15 @@ export const getMyHoldingsBreakdownByWatchlistGroup = query({
         .query("watchlists")
         .withIndex("by_user", (q) => q.eq("userId", user._id))
         .collect(),
+      getCanonicalHoldingsByCoinId(ctx.db, user._id),
     ]);
 
     const groupsById = new Map(groups.map((group) => [group._id, group] as const));
 
-    const holdingsByGroupId = new Map<Id<"watchlistGroups">, Map<string, number>>();
-    for (const row of rows) {
-      const holdings = row.holdings;
-      if (typeof holdings !== "number") continue;
-      if (!Number.isFinite(holdings) || holdings <= 0) continue;
-
-      const groupId = row.watchlistGroupId;
-      if (!groupsById.has(groupId)) continue;
-
-      const byCoin = holdingsByGroupId.get(groupId) ?? new Map<string, number>();
-      byCoin.set(row.coinId, (byCoin.get(row.coinId) ?? 0) + holdings);
-      holdingsByGroupId.set(groupId, byCoin);
-    }
+    // Attribute each coin's canonical holdings to exactly one group so
+    // summing group totals never double-counts multi-watchlist coins.
+    const holdingsByCoinId = resolveHoldingsByCoinId(rows, canonicalByCoinId);
+    const holdingsByGroupId = partitionHoldingsByGroup(rows, holdingsByCoinId);
 
     const result = Array.from(holdingsByGroupId.entries())
       .map(([groupId, byCoin]) => {
