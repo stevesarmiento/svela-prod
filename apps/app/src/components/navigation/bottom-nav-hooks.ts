@@ -143,8 +143,20 @@ export function useKeyboardShortcuts(
         !event.ctrlKey &&
         !event.altKey &&
         !isEditableTarget(event.target);
+      // Escape while a dialog is open (e.g. the analysis dialog launched from
+      // the selection dock) should close only the dialog, not also exit
+      // selection mode. Radix dismisses in the capture phase and React may
+      // flush the close before this bubble listener runs, so checking the DOM
+      // for an open dialog is racy — check the event target instead (Radix
+      // focus-locks inside the dialog while it's open).
+      const targetInDialog =
+        event.target instanceof Element &&
+        event.target.closest('[role="dialog"]') !== null;
+      const hasOpenDialog =
+        targetInDialog ||
+        document.querySelector('[role="dialog"][data-state="open"]') !== null;
       const isSelectionEscape =
-        key === "escape" && modeRef.current === "selection";
+        key === "escape" && modeRef.current === "selection" && !hasOpenDialog;
 
       if (!isPaletteShortcut && !isSelectionEscape) return;
 

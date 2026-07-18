@@ -60,7 +60,7 @@ const NavigationDockComponent = ({
               animate={{ opacity: 1, scale: 1 }}
               exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
               transition={uiEnterExitTransition(shouldReduceMotion)}
-              className="w-[320px] flex items-center justify-center"
+              className="w-[400px] flex items-center justify-center"
             >
               <SelectionContent selectionState={selectionState} />
             </motion.div>
@@ -83,6 +83,8 @@ function areNavigationDockPropsEqual(
     prevProps.mode === nextProps.mode &&
     prevProps.selectionState?.selectedCoins === nextProps.selectionState?.selectedCoins &&
     prevProps.selectionState?.totalCoins === nextProps.selectionState?.totalCoins &&
-    prevProps.selectionState?.isRemoving === nextProps.selectionState?.isRemoving
+    prevProps.selectionState?.isRemoving === nextProps.selectionState?.isRemoving &&
+    prevProps.selectionState?.analyzeSelectedCount === nextProps.selectionState?.analyzeSelectedCount &&
+    Boolean(prevProps.selectionState?.onAnalyzeSelected) === Boolean(nextProps.selectionState?.onAnalyzeSelected)
   );
 }

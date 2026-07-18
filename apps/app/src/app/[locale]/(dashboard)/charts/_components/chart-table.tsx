@@ -18,6 +18,7 @@ import {
   useWatchlistSelection,
   useBottomNavSelectionBridge,
 } from "@/hooks/use-watchlist-selection"
+import { useAnalyzeSelection } from "@/hooks/use-analyze-selection"
 import Link from "next/link"
 import { cn } from "@v1/ui/cn"
 import { toast } from "@v1/ui/use-toast"
@@ -380,7 +381,29 @@ export const ChartTable = memo(function ChartTable({
     [coinsWithIntervalChange],
   )
 
-  useBottomNavSelectionBridge(selection, selectableCoinIds)
+  // Analyze action for the selection dock: resolve selected rows to token
+  // display info; the hook hosts the (multi-)analysis dialog here.
+  const getSelectedTokens = useCallback(
+    () =>
+      coinsWithIntervalChange
+        .filter(
+          (coin) => !coin.isOptimistic && selectedCoins.has(String(coin.id)),
+        )
+        .map((coin) => ({
+          id: String(coin.id),
+          name: cleanTokenName(coin.name),
+          symbol: coin.symbol,
+          logoUrl: getTokenLogoURL(coin.symbol, coin.image),
+        })),
+    [coinsWithIntervalChange, selectedCoins],
+  )
+  const { onAnalyzeSelected, analyzeDialog } =
+    useAnalyzeSelection(getSelectedTokens)
+
+  useBottomNavSelectionBridge(selection, selectableCoinIds, {
+    onAnalyzeSelected,
+    analyzeSelectedCount: selectedCoins.size,
+  })
 
   const getTimeScaleLabel = (scale: string) => {
     switch (scale) {
@@ -679,6 +702,7 @@ export const ChartTable = memo(function ChartTable({
         )
       })}
       </div>
+      {analyzeDialog}
     </div>
   )
 })

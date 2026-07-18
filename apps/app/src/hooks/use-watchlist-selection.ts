@@ -143,6 +143,16 @@ export function useWatchlistSelection({
   }
 }
 
+export interface SelectionBridgeOptions {
+  /**
+   * Opens the analysis dialog for the current selection. Routed through a ref
+   * — the caller's identity may be unstable.
+   */
+  onAnalyzeSelected?: () => void
+  /** Distinct coin count for the Analyze cap (primitive; safe effect dep). */
+  analyzeSelectedCount?: number
+}
+
 /**
  * Mirrors a table's row selection into the bottom nav's selection mode
  * (`SelectionState` in bottom-nav-context.tsx) and keeps the two in sync:
@@ -155,6 +165,7 @@ export function useWatchlistSelection({
 export function useBottomNavSelectionBridge(
   selection: WatchlistSelection,
   selectableIds: string[],
+  options?: SelectionBridgeOptions,
 ) {
   const { selectedCoins, setSelectedCoins, isRemoving, hasSelectedCoins } =
     selection
@@ -189,6 +200,17 @@ export function useBottomNavSelectionBridge(
     void selectionRef.current.handleRemoveSelected()
   }, [])
 
+  // Same ref treatment for the optional analyze callback: only the boolean
+  // presence and the count (primitives) enter the effect deps below.
+  const onAnalyzeSelectedRef = useRef(options?.onAnalyzeSelected)
+  onAnalyzeSelectedRef.current = options?.onAnalyzeSelected
+  const hasAnalyze = Boolean(options?.onAnalyzeSelected)
+  const analyzeSelectedCount = options?.analyzeSelectedCount
+
+  const onAnalyzeSelected = useCallback(() => {
+    onAnalyzeSelectedRef.current?.()
+  }, [])
+
   // Sync selection state into the bottom navigation (external system).
   useEffect(() => {
     if (selectedCoins.size > 0) {
@@ -198,6 +220,10 @@ export function useBottomNavSelectionBridge(
         onSelectAll,
         onRemoveSelected,
         isRemoving,
+        onAnalyzeSelected: hasAnalyze ? onAnalyzeSelected : undefined,
+        analyzeSelectedCount: hasAnalyze
+          ? (analyzeSelectedCount ?? selectedCoins.size)
+          : undefined,
       })
     } else {
       setNavigationMode()
@@ -208,6 +234,9 @@ export function useBottomNavSelectionBridge(
     onSelectAll,
     onRemoveSelected,
     isRemoving,
+    hasAnalyze,
+    onAnalyzeSelected,
+    analyzeSelectedCount,
     setSelectionMode,
     setNavigationMode,
   ])

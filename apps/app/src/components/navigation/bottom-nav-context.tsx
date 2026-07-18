@@ -11,6 +11,10 @@ export interface SelectionState {
   onSelectAll: (checked: boolean) => void
   onRemoveSelected: () => void
   isRemoving: boolean
+  /** Present when the hosting table supports multi-token analysis. */
+  onAnalyzeSelected?: () => void
+  /** Distinct selected coin count (comparison-table keys are groupId:coinId). */
+  analyzeSelectedCount?: number
 }
 
 interface BottomNavContextType {

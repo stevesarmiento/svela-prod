@@ -254,6 +254,52 @@ export function useAnalysisData({
     const latestMFValue =
       marketVisionData.series.rsiMfi[marketVisionData.series.rsiMfi.length - 1]?.value || 0;
 
+    // Wave Trend posture: cross detection vs the previous bar, then VMC
+    // overbought/oversold zones (±53).
+    const hasWaveTrendData = marketVisionData.series.wt1.length >= 2;
+    const prevWt1 =
+      marketVisionData.series.wt1[marketVisionData.series.wt1.length - 2]?.value;
+    const prevWt2 =
+      marketVisionData.series.wt2[marketVisionData.series.wt2.length - 2]?.value;
+    const waveTrendSignal =
+      typeof prevWt1 === "number" &&
+      typeof prevWt2 === "number" &&
+      prevWt1 <= prevWt2 &&
+      latestWTValues.wt1 > latestWTValues.wt2
+        ? ("bullish_cross" as const)
+        : typeof prevWt1 === "number" &&
+            typeof prevWt2 === "number" &&
+            prevWt1 >= prevWt2 &&
+            latestWTValues.wt1 < latestWTValues.wt2
+          ? ("bearish_cross" as const)
+          : latestWTValues.wt1 >= 53
+            ? ("overbought" as const)
+            : latestWTValues.wt1 <= -53
+              ? ("oversold" as const)
+              : ("neutral" as const);
+    const waveTrendSpread = Math.abs(latestWTValues.wt1 - latestWTValues.wt2);
+    const waveTrendMomentum =
+      waveTrendSpread >= 10
+        ? ("strong" as const)
+        : waveTrendSpread >= 5
+          ? ("moderate" as const)
+          : ("weak" as const);
+
+    // Money Flow posture from the VMC rsiMfi oscillator (positive = inflow).
+    const hasMoneyFlowData = marketVisionData.series.rsiMfi.length > 0;
+    const moneyFlowDirection =
+      latestMFValue > 0
+        ? ("inflow" as const)
+        : latestMFValue < 0
+          ? ("outflow" as const)
+          : ("neutral" as const);
+    const moneyFlowStrength =
+      Math.abs(latestMFValue) >= 10
+        ? ("strong" as const)
+        : Math.abs(latestMFValue) >= 5
+          ? ("moderate" as const)
+          : ("weak" as const);
+
     // Calculate historical trends
     const bollingerHistory = analysisBBData.indicator
       .slice(-30)
@@ -517,6 +563,21 @@ export function useAnalysisData({
               history: rsiHistory,
               divergence: divergence as "bullish" | "bearish" | "none",
             },
+            waveTrend: hasWaveTrendData
+              ? {
+                  wt1: latestWTValues.wt1,
+                  wt2: latestWTValues.wt2,
+                  signal: waveTrendSignal,
+                  momentum: waveTrendMomentum,
+                }
+              : undefined,
+            moneyFlow: hasMoneyFlowData
+              ? {
+                  direction: moneyFlowDirection,
+                  strength: moneyFlowStrength,
+                  value: latestMFValue,
+                }
+              : undefined,
           }
         : undefined,
 

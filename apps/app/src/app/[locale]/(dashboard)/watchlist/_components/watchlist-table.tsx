@@ -20,6 +20,7 @@ import {
   SELECT_CHECKBOX_VARIANTS,
   SELECT_CONTENT_VARIANTS,
 } from '@/hooks/use-watchlist-selection'
+import { useAnalyzeSelection } from '@/hooks/use-analyze-selection'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import {
   useCoinGeckoWatchlistAggregateChartIsolated,
@@ -589,21 +590,21 @@ function WatchlistCard({
   selectedCoins: Set<string>
   hasSelectedCoins: boolean
   onCoinSelect: (rowKey: string, selected: boolean) => void
-  /** Reports the coin ids currently visible (expanded) so the parent can build the selectable set. */
-  onVisibleCoinsChange: (groupId: WatchlistGroupId, coinIds: string[]) => void
+  /** Reports the coin rows currently visible (expanded) so the parent can build the selectable set and resolve token info. */
+  onVisibleCoinsChange: (groupId: WatchlistGroupId, coins: CoinRow[]) => void
 }) {
   // Use our custom hook to get watchlist data
   const watchlistData = useWatchlistData(group._id, activeTimeScale, rangeEndTimeMs)
 
   // Report visible (selectable) coin rows to the parent; collapsed panels
   // report none so their rows can't stay selected while hidden.
-  const visibleCoinIds = useMemo(
-    () => (isExpanded && watchlistData ? watchlistData.coins.map((c) => c.id) : []),
+  const visibleCoins = useMemo(
+    () => (isExpanded && watchlistData ? watchlistData.coins : []),
     [isExpanded, watchlistData],
   )
   useEffect(() => {
-    onVisibleCoinsChange(group._id, visibleCoinIds)
-  }, [group._id, visibleCoinIds, onVisibleCoinsChange])
+    onVisibleCoinsChange(group._id, visibleCoins)
+  }, [group._id, visibleCoins, onVisibleCoinsChange])
   useEffect(
     () => () => {
       onVisibleCoinsChange(group._id, [])
@@ -903,22 +904,23 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
   const selection = useWatchlistSelection({ removeSelected })
   const { selectedCoins, handleCoinSelect, hasSelectedCoins } = selection
 
-  /** Coin ids per expanded group, reported by each card as data loads. */
+  /** Coin rows per expanded group, reported by each card as data loads. */
   const [visibleCoinsByGroup, setVisibleCoinsByGroup] = useState<
-    Map<WatchlistGroupId, string[]>
+    Map<WatchlistGroupId, CoinRow[]>
   >(() => new Map())
 
   const handleVisibleCoinsChange = useCallback(
-    (groupId: WatchlistGroupId, coinIds: string[]) => {
+    (groupId: WatchlistGroupId, coins: CoinRow[]) => {
       setVisibleCoinsByGroup((prev) => {
         const existing = prev.get(groupId)
-        if (existing && existing.join(",") === coinIds.join(",")) return prev
-        if (!existing && coinIds.length === 0) return prev
+        const idsOf = (rows: CoinRow[]) => rows.map((c) => c.id).join(",")
+        if (existing && idsOf(existing) === idsOf(coins)) return prev
+        if (!existing && coins.length === 0) return prev
         const next = new Map(prev)
-        if (coinIds.length === 0) {
+        if (coins.length === 0) {
           next.delete(groupId)
         } else {
-          next.set(groupId, coinIds)
+          next.set(groupId, coins)
         }
         return next
       })
@@ -928,13 +930,51 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
 
   const selectableRowKeys = useMemo(() => {
     const keys: string[] = []
-    for (const [groupId, coinIds] of visibleCoinsByGroup) {
-      for (const coinId of coinIds) keys.push(makeRowKey(groupId, coinId))
+    for (const [groupId, coins] of visibleCoinsByGroup) {
+      for (const coin of coins) keys.push(makeRowKey(groupId, coin.id))
     }
     return keys
   }, [visibleCoinsByGroup])
 
-  useBottomNavSelectionBridge(selection, selectableRowKeys)
+  // Analyze action: distinct coins across groups (the same coin selected in
+  // two groups counts once, both for the cap and the dialog).
+  const analyzeSelectedCount = useMemo(
+    () =>
+      new Set(Array.from(selectedCoins, (key) => parseRowKey(key).coinId))
+        .size,
+    [selectedCoins],
+  )
+
+  const getSelectedTokens = useCallback(() => {
+    const byId = new Map<
+      string,
+      { id: string; name?: string; symbol?: string; logoUrl?: string }
+    >()
+    for (const key of selectedCoins) {
+      const { groupId, coinId } = parseRowKey(key)
+      if (byId.has(coinId)) continue
+      const row = visibleCoinsByGroup
+        .get(groupId as WatchlistGroupId)
+        ?.find((coin) => coin.id === coinId)
+      if (row) {
+        byId.set(coinId, {
+          id: row.id,
+          name: row.name,
+          symbol: row.symbol,
+          logoUrl: row.imageUrl ?? undefined,
+        })
+      }
+    }
+    return Array.from(byId.values())
+  }, [selectedCoins, visibleCoinsByGroup])
+
+  const { onAnalyzeSelected, analyzeDialog } =
+    useAnalyzeSelection(getSelectedTokens)
+
+  useBottomNavSelectionBridge(selection, selectableRowKeys, {
+    onAnalyzeSelected,
+    analyzeSelectedCount,
+  })
 
   // Default: every watchlist starts expanded (newly added ones too);
   // user collapses are respected because we only auto-open unseen ids.
@@ -1049,6 +1089,7 @@ export function WatchlistTable({ activeTimeScale }: WatchlistTableProps) {
           />
         ))}
       </div>
+      {analyzeDialog}
     </div>
   )
 }
