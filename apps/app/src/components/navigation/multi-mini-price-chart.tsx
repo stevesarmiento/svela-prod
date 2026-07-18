@@ -31,39 +31,58 @@ interface NormalizedLine {
   points: Array<{ time: Time; value: number }>
 }
 
-function buildNormalizedLines(tokens: MultiMiniChartToken[]): NormalizedLine[] {
-  // Common cutoff from the latest timestamp across all series.
-  let maxTime = Number.NEGATIVE_INFINITY
-  for (const token of tokens) {
-    for (const p of token.series) {
-      const t = Number(p.time)
-      if (Number.isFinite(t) && t > maxTime) maxTime = t
-    }
+function bucketSeries(
+  series: Array<{ time: unknown; value: number }>,
+  bucketSeconds: number,
+): Map<number, number> {
+  const byBucket = new Map<number, number>()
+  for (const p of series) {
+    const t = Number(p.time)
+    if (!Number.isFinite(t) || !Number.isFinite(p.value) || p.value <= 0) continue
+    // Last value per bucket wins (series is chronological).
+    byBucket.set(Math.floor(t / bucketSeconds), p.value)
   }
-  if (!Number.isFinite(maxTime)) return []
-  const cutoff = maxTime - WINDOW_SECONDS
+  return byBucket
+}
+
+/**
+ * Percentage moves on a COMMON timeline, matching the watchlist comparison
+ * chart's semantics: every token's series is bucketed to the same grid, only
+ * timestamps present for ALL tokens are kept, and each line is rebased to 0%
+ * at the first shared bucket. This is what makes the lines start together and
+ * end on the same final bar — per-token cache windows can otherwise be offset
+ * by hours.
+ */
+function buildAlignedLines(
+  tokens: MultiMiniChartToken[],
+  bucketSeconds: number,
+): NormalizedLine[] {
+  if (tokens.length === 0) return []
+  const bucketed = tokens.map((t) => bucketSeries(t.series, bucketSeconds))
+
+  let commonKeys = [...(bucketed[0]?.keys() ?? [])]
+  for (let i = 1; i < bucketed.length; i++) {
+    commonKeys = commonKeys.filter((k) => bucketed[i]!.has(k))
+  }
+  commonKeys.sort((a, b) => a - b)
+  if (commonKeys.length < 2) return []
+
+  // Trim to the trailing window, measured from the last COMMON bucket.
+  const lastKey = commonKeys[commonKeys.length - 1]!
+  const windowBuckets = Math.floor(WINDOW_SECONDS / bucketSeconds)
+  const windowKeys = commonKeys.filter((k) => k > lastKey - windowBuckets)
+  if (windowKeys.length < 2) return []
 
   const colors = generatePastelColors(tokens.length)
 
   return tokens.flatMap((token, index) => {
-    const windowPoints = token.series
-      .map((p) => ({ time: Number(p.time), value: p.value }))
-      .filter(
-        (p) =>
-          Number.isFinite(p.time) &&
-          p.time >= cutoff &&
-          Number.isFinite(p.value) &&
-          p.value > 0,
-      )
-      .sort((a, b) => a.time - b.time)
+    const values = bucketed[index]!
+    const base = values.get(windowKeys[0]!)
+    if (base === undefined || base <= 0) return []
 
-    if (windowPoints.length < 2) return []
-    const base = windowPoints[0]!.value
-    if (base <= 0) return []
-
-    const points = windowPoints.map((p) => ({
-      time: p.time as Time,
-      value: (p.value / base - 1) * 100,
+    const points = windowKeys.map((k) => ({
+      time: (k * bucketSeconds) as Time,
+      value: (values.get(k)! / base - 1) * 100,
     }))
 
     return [
@@ -76,6 +95,17 @@ function buildNormalizedLines(tokens: MultiMiniChartToken[]): NormalizedLine[] {
       },
     ]
   })
+}
+
+function buildNormalizedLines(tokens: MultiMiniChartToken[]): NormalizedLine[] {
+  // 4h buckets match the underlying chart data; if the tokens' cache windows
+  // barely overlap at that granularity, coarsen to daily buckets.
+  const fine = buildAlignedLines(tokens, 4 * 60 * 60)
+  if (fine.length === tokens.length && (fine[0]?.points.length ?? 0) >= 8) {
+    return fine
+  }
+  const daily = buildAlignedLines(tokens, 24 * 60 * 60)
+  return daily.length === tokens.length ? daily : fine
 }
 
 export function MultiMiniPriceChart({ tokens }: { tokens: MultiMiniChartToken[] }) {
