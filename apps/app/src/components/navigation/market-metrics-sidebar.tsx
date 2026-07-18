@@ -23,6 +23,7 @@ import {
 import { formatNumber, getTrendBadgeVariant, getBuySellPressure, calculateDivergence, calculateSupportResistance } from '@/lib/analysis-utils'
 import { formatUsdPrice } from "@/lib/format-usd"
 import { MiniPriceChart } from './mini-price-chart'
+import { TickMeter } from '@/components/tick-meter'
 import type { Time } from 'lightweight-charts'
 import { getAlignedPriceFromChartPoints } from '@/lib/aligned-price'
 import type { MarketVisionBResult } from '@/hooks/market-vision'
@@ -98,10 +99,12 @@ interface MetricRowProps {
   label: string
   value: string | React.ReactNode
   badge?: React.ReactNode
+  /** Optional tick meter rendered before the value (decorative reinforcement). */
+  meter?: React.ReactNode
   className?: string
 }
 
-function MetricRow({ icon = <IconChartBarXaxis className="w-3 h-3 fill-zinc-100" />, label, value, badge, className = "" }: MetricRowProps) {
+function MetricRow({ icon = <IconChartBarXaxis className="w-3 h-3 fill-zinc-100" />, label, value, badge, meter, className = "" }: MetricRowProps) {
   return (
     <div className={`flex items-center justify-between ${className}`}>
       <div className="flex items-center gap-1">
@@ -110,7 +113,8 @@ function MetricRow({ icon = <IconChartBarXaxis className="w-3 h-3 fill-zinc-100"
         </div>
         <span className="text-xs text-zinc-400">{label}</span>
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1.5">
+        {meter}
         {typeof value === 'string' ? (
           <span className="font-berkeley-mono text-xs text-white">{value}</span>
         ) : value}
@@ -328,6 +332,20 @@ export function MarketMetricsSidebar({
                 icon={<IconWaveformPathEcgRectangle className="w-3 h-3 fill-zinc-100" />}
                 label="Relative Strength"
                 value={calculations.latestBBIndicator.value.toFixed(1)}
+                meter={
+                  <TickMeter
+                    value={calculations.latestBBIndicator.value}
+                    min={0}
+                    max={100}
+                    className={
+                      calculations.latestBBIndicator.value > 70
+                        ? "text-red-400"
+                        : calculations.latestBBIndicator.value < 30
+                          ? "text-green-400"
+                          : "text-zinc-400"
+                    }
+                  />
+                }
                 badge={
                   <Badge variant={getTrendBadgeVariant(
                     calculations.latestBBIndicator.value > 70 ? 'bearish' : 
@@ -372,6 +390,19 @@ export function MarketMetricsSidebar({
               icon={<IconGaugeWithDotsNeedle67percent className="w-3 h-3 fill-zinc-100" />}
               label="Money Flow"
               value={Math.abs(calculations.latestMoneyFlow.value).toFixed(1)}
+              meter={
+                <TickMeter
+                  value={calculations.latestMoneyFlow.value}
+                  min={-Math.max(15, Math.abs(calculations.latestMoneyFlow.value) * 1.25)}
+                  max={Math.max(15, Math.abs(calculations.latestMoneyFlow.value) * 1.25)}
+                  origin={0}
+                  className={
+                    calculations.latestMoneyFlow.value > 0
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }
+                />
+              }
               badge={
                 <Badge variant={getTrendBadgeVariant(
                   calculations.latestMoneyFlow.value > 0 ? 'bullish' : 'bearish'
@@ -388,6 +419,19 @@ export function MarketMetricsSidebar({
               icon={<IconCharacterDuployan className="w-3 h-3 fill-zinc-100" />}
               label="Wave Trend"
               value={calculations.latestWT1.value.toFixed(1)}
+              meter={
+                <TickMeter
+                  value={calculations.latestWT1.value}
+                  min={-Math.max(60, Math.abs(calculations.latestWT1.value) * 1.1)}
+                  max={Math.max(60, Math.abs(calculations.latestWT1.value) * 1.1)}
+                  origin={0}
+                  className={
+                    calculations.latestWT1.value > calculations.latestWT2.value
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }
+                />
+              }
               badge={
                 <Badge variant={getTrendBadgeVariant(
                   calculations.latestWT1.value > calculations.latestWT2.value ? 'bullish' : 'bearish'
@@ -425,6 +469,19 @@ export function MarketMetricsSidebar({
               icon={<IconCalendarDayTimelineRight className="w-3 h-3 fill-zinc-100" />}
               label="Order Flow"
               value=""
+              meter={
+                <TickMeter
+                  value={takerBuySellData.data.overall.buyRatio || 50}
+                  min={0}
+                  max={100}
+                  origin={50}
+                  className={
+                    (takerBuySellData.data.overall.buyRatio || 50) >= 50
+                      ? "text-green-400"
+                      : "text-red-400"
+                  }
+                />
+              }
               badge={
                 <div className="flex items-center gap-1">
                   <Badge variant={getTrendBadgeVariant(

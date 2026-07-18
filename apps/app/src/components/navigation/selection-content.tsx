@@ -23,7 +23,7 @@ function AnalyzeButton({ selectionState }: SelectionContentProps) {
     <Button
       onClick={selectionState.onAnalyzeSelected}
       disabled={count === 0 || overLimit || selectionState.isRemoving}
-      variant="secondary"
+      variant="default"
       size="sm"
       className="rounded-[10px] text-xs h-7 px-2 !pr-3"
     >
@@ -63,7 +63,7 @@ export const SelectionContent = React.memo(({ selectionState }: SelectionContent
           {selectionState.selectedCoins.size} of {selectionState.totalCoins} selected
         </span>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-4">
         <AnalyzeButton selectionState={selectionState} />
         <Button
           onClick={selectionState.onRemoveSelected}

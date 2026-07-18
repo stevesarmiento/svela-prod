@@ -6,6 +6,11 @@ import { cn } from "@v1/ui/cn";
 import { Skeleton } from "@v1/ui/skeleton";
 import type { ComparativeStats } from "@/lib/comparative-stats";
 import { ScrollArea } from "@v1/ui/scroll-area";
+import { TickMeter } from "@/components/tick-meter";
+import {
+  MultiMiniPriceChart,
+  type MultiMiniChartToken,
+} from "./multi-mini-price-chart";
 
 /**
  * Cross-asset sidebar for the multi-token analysis dialog: the same
@@ -66,14 +71,18 @@ function rsiBadge(rsi: number | null) {
 export function ComparativeStatsPanel({
   stats,
   expectedCount,
+  chartTokens,
 }: {
   stats: ComparativeStats | null;
   /** Number of tokens being collected — sizes the loading skeleton. */
   expectedCount: number;
+  /** Per-token price series for the multi-line mini chart (as collected). */
+  chartTokens?: MultiMiniChartToken[];
 }) {
   if (!stats) {
     return (
       <div className="space-y-3 p-4">
+        <Skeleton className="h-[120px] w-full rounded-md" />
         <Skeleton className="h-3 w-24 rounded-full" />
         {Array.from({ length: Math.max(expectedCount, 2) * 3 }, (_, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: static placeholder list
@@ -86,9 +95,47 @@ export function ComparativeStatsPanel({
   const symbols = stats.tokens.map((t) => t.symbol.toUpperCase());
   const gridCols = "minmax(0,1.2fr) repeat(2, minmax(0,1fr))";
 
+  // Shared meter domains so bar lengths compare ACROSS tokens.
+  const maxAbsReturn = Math.max(
+    1,
+    ...stats.tokens.flatMap((t) =>
+      [t.return7dPct, t.return30dPct].map((v) => Math.abs(v ?? 0)),
+    ),
+  );
+  const maxVol = Math.max(
+    1,
+    ...stats.tokens.map((t) => t.volatility30dAnnualizedPct ?? 0),
+  );
+
+  const returnCell = (v: number | null) => (
+    <span className="flex flex-col items-end gap-0.5">
+      <span className={cn("font-berkeley-mono tabular-nums", pctClass(v))}>
+        {fmtPct(v)}
+      </span>
+      {v !== null ? (
+        <TickMeter
+          value={v}
+          min={-maxAbsReturn}
+          max={maxAbsReturn}
+          origin={0}
+          className={cn("h-1.5 w-14", pctClass(v))}
+        />
+      ) : null}
+    </span>
+  );
+
   return (
     <ScrollArea hideScrollbar className="h-[75vh]">
       <div className="space-y-3 py-4">
+        {/* Multi-line price chart (7d, % change) — same slot as the single
+            dialog's MiniPriceChart */}
+        {chartTokens && chartTokens.length >= 2 ? (
+          <>
+            <MultiMiniPriceChart tokens={chartTokens} />
+            <Divider />
+          </>
+        ) : null}
+
         {/* Returns */}
         <Section title="Returns">
           <div
@@ -106,12 +153,8 @@ export function ComparativeStatsPanel({
                     <span className="text-[9px] font-normal text-zinc-500">bench</span>
                   ) : null}
                 </span>
-                <span className={cn("text-right font-berkeley-mono tabular-nums", pctClass(t.return7dPct))}>
-                  {fmtPct(t.return7dPct)}
-                </span>
-                <span className={cn("text-right font-berkeley-mono tabular-nums", pctClass(t.return30dPct))}>
-                  {fmtPct(t.return30dPct)}
-                </span>
+                {returnCell(t.return7dPct)}
+                {returnCell(t.return30dPct)}
               </React.Fragment>
             ))}
           </div>
@@ -131,10 +174,20 @@ export function ComparativeStatsPanel({
             {stats.tokens.map((t) => (
               <React.Fragment key={t.id}>
                 <span className="text-xs font-bold text-white">{t.symbol.toUpperCase()}</span>
-                <span className="text-right font-berkeley-mono tabular-nums text-zinc-300">
-                  {t.volatility30dAnnualizedPct === null
-                    ? "—"
-                    : `${t.volatility30dAnnualizedPct.toFixed(0)}%`}
+                <span className="flex flex-col items-end gap-0.5">
+                  <span className="text-right font-berkeley-mono tabular-nums text-zinc-300">
+                    {t.volatility30dAnnualizedPct === null
+                      ? "—"
+                      : `${t.volatility30dAnnualizedPct.toFixed(0)}%`}
+                  </span>
+                  {t.volatility30dAnnualizedPct !== null ? (
+                    <TickMeter
+                      value={t.volatility30dAnnualizedPct}
+                      min={0}
+                      max={maxVol}
+                      className="h-1.5 w-14 text-zinc-400"
+                    />
+                  ) : null}
                 </span>
                 <span
                   className={cn(
@@ -270,8 +323,23 @@ export function ComparativeStatsPanel({
                   {rsiBadge(t.rsi)}
                 </span>
                 <span className="flex items-center gap-2 font-berkeley-mono tabular-nums">
-                  <span className="text-zinc-400">
+                  <span className="flex items-center gap-1.5 text-zinc-400">
                     RSI {t.rsi === null ? "—" : t.rsi.toFixed(0)}
+                    {t.rsi !== null ? (
+                      <TickMeter
+                        value={t.rsi}
+                        min={0}
+                        max={100}
+                        className={cn(
+                          "h-1.5 w-10",
+                          t.rsi >= 70
+                            ? "text-red-400"
+                            : t.rsi <= 30
+                              ? "text-green-400"
+                              : "text-zinc-400",
+                        )}
+                      />
+                    ) : null}
                   </span>
                   {/* Only show flow fields when the data source actually has them */}
                   {t.openInterestChangePct !== null ? (

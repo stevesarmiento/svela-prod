@@ -232,6 +232,18 @@ export function MultiAnalysisDialog({
     .map((t) => t.symbol?.toUpperCase() ?? t.name ?? t.id)
     .join(" vs ");
 
+  // Price series for the sidebar's multi-line mini chart, as they collect.
+  const chartTokens = React.useMemo(
+    () =>
+      tokens.flatMap((t) => {
+        const entry = collected.get(t.id);
+        return entry?.series && entry.series.length > 0
+          ? [{ id: t.id, symbol: t.symbol ?? t.id, series: entry.series }]
+          : [];
+      }),
+    [tokens, collected],
+  );
+
   const isPreparing = !startedRef.current && collected.size < tokens.length;
   const showLoader = isPreparing || isStreaming;
 
@@ -296,6 +308,7 @@ export function MultiAnalysisDialog({
                     <ComparativeStatsPanel
                       stats={comparativeStats}
                       expectedCount={tokens.length}
+                      chartTokens={chartTokens}
                     />
                   </div>
 
