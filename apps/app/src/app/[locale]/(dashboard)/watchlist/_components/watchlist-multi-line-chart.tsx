@@ -125,8 +125,8 @@ function computeLivelineSeriesRange(
   data: LivelinePoint[],
   value: number,
 ): { min: number; max: number } | null {
-  let min = Infinity
-  let max = -Infinity
+  let min = Number.POSITIVE_INFINITY
+  let max = Number.NEGATIVE_INFINITY
   for (const p of data) {
     if (p.value < min) min = p.value
     if (p.value > max) max = p.value
@@ -146,8 +146,8 @@ function computeLivelineSeriesRange(
 }
 
 function getSeriesValueRange(series: LivelineSeries[]): { min: number; span: number } {
-  let min = Infinity
-  let max = -Infinity
+  let min = Number.POSITIVE_INFINITY
+  let max = Number.NEGATIVE_INFINITY
 
   for (const row of series) {
     const range = computeLivelineSeriesRange(row.data, row.value)
@@ -500,13 +500,13 @@ export function WatchlistMultiLineChart({
       const label = seriesLabels[i]
       const prev = seriesLabels[i - 1]
       if (!label) continue
-      label.y = Math.max(label.y, minY, prev ? prev.y + AXIS_LABEL_GAP : -Infinity)
+      label.y = Math.max(label.y, minY, prev ? prev.y + AXIS_LABEL_GAP : Number.NEGATIVE_INFINITY)
     }
     for (let i = seriesLabels.length - 1; i >= 0; i--) {
       const label = seriesLabels[i]
       const next = seriesLabels[i + 1]
       if (!label) continue
-      label.y = Math.min(label.y, maxY, next ? next.y - AXIS_LABEL_GAP : Infinity)
+      label.y = Math.min(label.y, maxY, next ? next.y - AXIS_LABEL_GAP : Number.POSITIVE_INFINITY)
     }
 
     const step = niceTickStep(span, 5)
