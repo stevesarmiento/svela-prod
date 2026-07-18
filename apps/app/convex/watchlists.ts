@@ -1276,7 +1276,8 @@ export const removeFromMyWatchlist = mutation({
  * Set or clear the canonical token quantity for a coin. The `groupId` only
  * scopes the permission check (the coin must be on that watchlist); the value
  * itself is stored once per (user, coin) in `coinHoldings`, so it shows up on
- * every watchlist containing the coin.
+ * every watchlist containing the coin. Passing `null` or `0` clears the
+ * position — holdings are strictly positive everywhere else in the system.
  */
 export const setMyWatchlistItemHoldings = mutation({
   args: {
@@ -1306,7 +1307,12 @@ export const setMyWatchlistItemHoldings = mutation({
       throw new Error("Holdings must be a non-negative number");
     }
 
-    await setCanonicalHoldings(ctx.db, user._id, args.coinId, args.holdings);
+    // Zero means "no position": normalize to null so clearing is this
+    // mutation's explicit contract, not a side effect of the canonical
+    // layer's strictly-positive validity gate silently deleting the row.
+    const holdings = args.holdings === 0 ? null : args.holdings;
+
+    await setCanonicalHoldings(ctx.db, user._id, args.coinId, holdings);
 
     // Clear any lingering legacy row-level values for this coin so the
     // deprecated field can't disagree with the canonical table.

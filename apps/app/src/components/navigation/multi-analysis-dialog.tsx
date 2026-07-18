@@ -94,18 +94,24 @@ function TokenAnalysisCollector({
   const hasEnoughChartHistory =
     chartData.length >= 30 && volumeData.length >= 30;
 
-  // Deliberately dep-free + ref-guarded: prepareAnalysisData is a fresh
-  // closure every render, and we must report exactly once.
+  // prepareAnalysisData and onReady are fresh closures every render, so keep
+  // them in refs: the effect deps track only genuine data transitions (no
+  // per-render recompute) while the ref guard keeps the report-exactly-once
+  // contract.
   const reportedRef = React.useRef(false);
+  const prepareAnalysisDataRef = React.useRef(prepareAnalysisData);
+  prepareAnalysisDataRef.current = prepareAnalysisData;
+  const onReadyRef = React.useRef(onReady);
+  onReadyRef.current = onReady;
   React.useEffect(() => {
     if (reportedRef.current || !marketData || !hasEnoughChartHistory) return;
-    const data = prepareAnalysisData();
+    const data = prepareAnalysisDataRef.current();
     if (!data) return;
     reportedRef.current = true;
     // Pass the raw timestamped series too: cross-asset stats must be aligned
     // by day, which the flattened priceHistory can't support.
-    onReady(token.id, data as IndicatorData, chartData);
-  });
+    onReadyRef.current(token.id, data as IndicatorData, chartData);
+  }, [marketData, hasEnoughChartHistory, chartData, token.id]);
 
   return null;
 }
