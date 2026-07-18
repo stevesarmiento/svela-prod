@@ -36,3 +36,25 @@ export function motionDuration(
 ): number {
   return shouldReduceMotion ? 0 : durationSeconds;
 }
+
+/** Opacity / scale enter–exit (e.g. palette, mode chip). */
+export function uiEnterExitTransition(
+  shouldReduceMotion: boolean | null | undefined,
+) {
+  return {
+    type: "tween" as const,
+    duration: motionDuration(shouldReduceMotion, DURATION_UI_S),
+    ease: EASE_OUT_CUBIC,
+  };
+}
+
+/** Layout / size on screen (dock shell, shared layoutId). */
+export function uiLayoutTransition(
+  shouldReduceMotion: boolean | null | undefined,
+) {
+  return {
+    type: "tween" as const,
+    duration: motionDuration(shouldReduceMotion, DURATION_UI_S),
+    ease: EASE_IN_OUT_CUBIC,
+  };
+}

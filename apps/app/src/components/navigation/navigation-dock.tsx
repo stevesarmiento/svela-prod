@@ -1,8 +1,9 @@
 import React from 'react';
+import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { NavigationItems } from './navigation-items';
 import { SelectionContent } from './selection-content';
 import type { CommandContext, SelectionState } from './bottom-nav-context';
-import { cn } from '@v1/ui/cn';
+import { uiEnterExitTransition, uiLayoutTransition } from '@/lib/motion-tokens';
 
 interface NavigationDockProps {
   mode: 'navigation' | 'selection';
@@ -10,19 +11,19 @@ interface NavigationDockProps {
   onOpenCommandSearch?: (context: CommandContext | null) => void;
 }
 
-const layerTransitionClass =
-  'transition-opacity duration-[var(--motion-nav-duration)] ease-[var(--motion-nav-ease-out)] motion-reduce:transition-none';
-
 const NavigationDockComponent = ({
   mode,
   selectionState,
   onOpenCommandSearch,
 }: NavigationDockProps) => {
+  const shouldReduceMotion = useReducedMotion()
+
+  // Visibility when the command palette is open is handled by the BottomNav wrapper (opacity + pointer-events).
   const dockClassName = React.useMemo(() => {
-    return `relative rounded-[20px] overflow-hidden p-1 h-[56px] w-auto
+    return `relative rounded-[20px] overflow-hidden p-1 h-[56px] w-auto flex items-center justify-center
            shadow-[0_3px_8px_oklch(0_0_0_/_0.1),0_2px_4px_oklch(0_0_0_/_0.06)]
            dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.4)]
-           grid grid-cols-1 grid-rows-1 place-items-center
+           transition-colors duration-200
            ${mode === 'selection'
              ? 'bg-rose-950 border border-red-200 dark:border-red-800/50'
              : 'bg-white/95 border border-gray-200/50 dark:bg-zinc-800/80 backdrop-blur-md dark:border-transparent'
@@ -30,37 +31,43 @@ const NavigationDockComponent = ({
   }, [mode]);
 
   return (
-    <div className={dockClassName}>
-      <div
-        className={cn(
-          'col-start-1 row-start-1 w-auto',
-          layerTransitionClass,
-          mode === 'navigation'
-            ? 'relative z-10 opacity-100'
-            : 'pointer-events-none relative z-0 opacity-0',
-        )}
-        aria-hidden={mode !== 'navigation'}
+    <AnimatePresence mode="popLayout">
+      <motion.div
+        className={dockClassName}
+        layout={!shouldReduceMotion}
+        transition={uiLayoutTransition(shouldReduceMotion)}
       >
-        <div className="flex w-auto items-center gap-1 p-1">
-          <NavigationItems onOpenCommandSearch={onOpenCommandSearch || (() => {})} />
-        </div>
-      </div>
-
-      {selectionState ? (
-        <div
-          className={cn(
-            'col-start-1 row-start-1 flex w-[320px] items-center justify-center',
-            layerTransitionClass,
-            mode === 'selection'
-              ? 'relative z-10 opacity-100'
-              : 'pointer-events-none relative z-0 opacity-0',
+        <div className="relative z-10 flex items-center gap-1 p-1 w-auto">
+          {mode === 'navigation' && (
+            <motion.div
+              key="navigation"
+              layoutId={shouldReduceMotion ? undefined : "navigation"}
+              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
+              className="w-auto"
+              transition={uiEnterExitTransition(shouldReduceMotion)}
+            >
+              <NavigationItems onOpenCommandSearch={onOpenCommandSearch || (() => {})} />
+            </motion.div>
           )}
-          aria-hidden={mode !== 'selection'}
-        >
-          <SelectionContent selectionState={selectionState} />
+
+          {mode === 'selection' && selectionState && (
+            <motion.div
+              key="selection"
+              layoutId={shouldReduceMotion ? undefined : "navigation"}
+              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
+              transition={uiEnterExitTransition(shouldReduceMotion)}
+              className="w-[320px] flex items-center justify-center"
+            >
+              <SelectionContent selectionState={selectionState} />
+            </motion.div>
+          )}
         </div>
-      ) : null}
-    </div>
+      </motion.div>
+    </AnimatePresence>
   );
 };
 

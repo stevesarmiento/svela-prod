@@ -12,7 +12,10 @@ import {
 import { useSearchParams } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
 import { Input } from "@v1/ui/input"
+import { Checkbox } from "@v1/ui/checkbox"
 import { useWatchlist } from "../../watchlist/_components/watchlist-context"
+import { useBottomNav } from "@/components/navigation/bottom-nav-context"
+import { useWatchlistSelection } from "@/hooks/use-watchlist-selection"
 import Link from "next/link"
 import { cn } from "@v1/ui/cn"
 import { toast } from "@v1/ui/use-toast"
@@ -24,6 +27,29 @@ import { useSetWatchlistItemHoldings } from "@/lib/convex-hooks"
 import { Badge } from "@v1/ui/badge"
 import { IconTriangleFill } from "symbols-react"
 import { TokenLogo } from "@/components/token-logo"
+import { motion, useReducedMotion } from "motion/react"
+import { DURATION_UI_S, EASE_IN_OUT_CUBIC, motionDuration } from "@/lib/motion-tokens"
+
+/**
+ * Hover-revealed row selection (same implementation as the old watchlist
+ * table): the checkbox sits absolutely at the cell's left edge and slides in
+ * while the token content shifts right. When any row is selected the reveal
+ * state is locked open for all rows (selection mode).
+ */
+const SELECT_CELL_VARIANTS = {
+  rest: {},
+  revealed: {},
+} as const
+
+const SELECT_CHECKBOX_VARIANTS = {
+  rest: { opacity: 0, x: -20, pointerEvents: "none" as const },
+  revealed: { opacity: 1, x: 0, pointerEvents: "auto" as const },
+} as const
+
+const SELECT_CONTENT_VARIANTS = {
+  rest: { x: 0, opacity: 1 },
+  revealed: { x: 40, opacity: 0.9 },
+} as const
 
 // Accept whatever data format the existing hook provides
 interface OptimisticCoinData {
@@ -270,9 +296,38 @@ export const ChartTable = memo(function ChartTable({
   activeTimeScale,
   isPending 
 }: ChartTableProps) {
-  const { selectedGroup } = useWatchlist()
+  const {
+    selectedGroup,
+    removeBulkFromSelectedGroup,
+    removeBulkFromWatchlist,
+  } = useWatchlist()
   const { user } = useUser()
   const searchParams = useSearchParams()
+  const { mode, setSelectionMode, setNavigationMode } = useBottomNav()
+  const shouldReduceMotion = useReducedMotion()
+
+  const selectRevealTransition = useMemo(
+    () => ({
+      type: "tween" as const,
+      duration: motionDuration(shouldReduceMotion, DURATION_UI_S),
+      ease: EASE_IN_OUT_CUBIC,
+    }),
+    [shouldReduceMotion],
+  )
+
+  const {
+    selectedCoins,
+    setSelectedCoins,
+    handleCoinSelect,
+    handleSelectAll,
+    handleRemoveSelected,
+    isRemoving,
+    hasSelectedCoins,
+  } = useWatchlistSelection({
+    selectedGroup,
+    removeBulkFromSelectedGroup,
+    removeBulkFromWatchlist,
+  })
 
   // React 19: Defer expensive computations
   const deferredCoins = useDeferredValue(coins)
@@ -337,6 +392,87 @@ export const ChartTable = memo(function ChartTable({
     return enrichedCoins
   }, [deferredCoins, deferredTimeScale])
 
+  // Selection targets the rows actually rendered (the internally deferred
+  // array), excluding optimistic placeholders.
+  const selectableCoinIds = useMemo(
+    () =>
+      coinsWithIntervalChange
+        .filter((coin) => !coin.isOptimistic)
+        .map((coin) => String(coin.id)),
+    [coinsWithIntervalChange],
+  )
+  const selectableIdSet = useMemo(
+    () => new Set(selectableCoinIds),
+    [selectableCoinIds],
+  )
+
+  // Adapt to SelectionState.onSelectAll(checked) — the bottom nav doesn't know
+  // the row ids.
+  const onSelectAll = useCallback(
+    (checked: boolean) => handleSelectAll(checked, selectableCoinIds),
+    [handleSelectAll, selectableCoinIds],
+  )
+
+  // Sync selection state into the bottom navigation (external system): any
+  // selection flips the dock into its red selection mode; empty exits it.
+  useEffect(() => {
+    if (selectedCoins.size > 0) {
+      setSelectionMode({
+        selectedCoins,
+        totalCoins: selectableCoinIds.length,
+        onSelectAll,
+        onRemoveSelected: handleRemoveSelected,
+        isRemoving,
+      })
+    } else {
+      setNavigationMode()
+    }
+  }, [
+    selectedCoins,
+    selectableCoinIds.length,
+    onSelectAll,
+    handleRemoveSelected,
+    isRemoving,
+    setSelectionMode,
+    setNavigationMode,
+  ])
+
+  // Release the nav if the table unmounts mid-selection (navigating away).
+  const hasSelectedRef = useRef(false)
+  hasSelectedRef.current = hasSelectedCoins
+  useEffect(
+    () => () => {
+      if (hasSelectedRef.current) setNavigationMode()
+    },
+    [setNavigationMode],
+  )
+
+  // Prune selected ids that no longer exist (removed via the chart's
+  // "Remove from chart" dropdown, another tab, or the bulk delete itself).
+  // Skip while the set is empty: the quotes query re-keys whenever the
+  // watchlist ids change, so `coins` is transiently [] during refetch and
+  // pruning then would wipe a live selection.
+  useEffect(() => {
+    if (selectableIdSet.size === 0) return
+    setSelectedCoins((prev) => {
+      if (prev.size === 0) return prev
+      const next = new Set([...prev].filter((id) => selectableIdSet.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [selectableIdSet, setSelectedCoins])
+
+  // The nav's Escape shortcut only calls setNavigationMode() — it never clears
+  // our local selection. Mirror a selection → navigation transition into a
+  // local clear so rows don't stay checked/dimmed.
+  const prevModeRef = useRef(mode)
+  useEffect(() => {
+    const prevMode = prevModeRef.current
+    prevModeRef.current = mode
+    if (prevMode === 'selection' && mode === 'navigation') {
+      setSelectedCoins((prev) => (prev.size > 0 ? new Set<string>() : prev))
+    }
+  }, [mode, setSelectedCoins])
+
   const getTimeScaleLabel = (scale: string) => {
     switch (scale) {
       case '1d': return '1D'    // 1 Day (24h)
@@ -383,6 +519,8 @@ export const ChartTable = memo(function ChartTable({
       {/* Table body: contiguous rows in a single card */}
       <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden divide-y divide-primary/5">
       {coinsWithIntervalChange.map((coin) => {
+        const coinIdStr = String(coin.id)
+        const isSelected = selectedCoins.has(coinIdStr)
         const tokenName = coin.isOptimistic ? "Loading..." : cleanTokenName(coin.name)
         const tokenLogoUrl = getTokenLogoURL(coin.symbol, coin.image)
         const safeTokenLogoUrl =
@@ -456,13 +594,76 @@ export const ChartTable = memo(function ChartTable({
               // Show clickable link for real coins
               <Link
                 href={watchlistGroup ? `/watchlists/${coin.id}?wg=${watchlistGroup}` : `/watchlists/${coin.id}`}
+                aria-selected={hasSelectedCoins ? isSelected : undefined}
+                onClick={
+                  hasSelectedCoins
+                    ? (e) => {
+                        e.preventDefault()
+                        handleCoinSelect(coinIdStr, !isSelected)
+                      }
+                    : undefined
+                }
                 className={cn(
                   "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 pr-2 cursor-pointer hover:rounded-[7px] hover:bg-primary/[0.04] hover:ring-2 hover:ring-inset hover:ring-zinc-200/30 sm:gap-4 sm:px-4 sm:py-2",
                   ROW_GRID_COLS_SM,
+                  "transition-opacity duration-200",
+                  hasSelectedCoins && !isSelected && "opacity-40",
                 )}
               >
-                {/* Token — same structure as the comparison table rows */}
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
+                {/* First cell — merged select + token, toggles selection on click */}
+                <div
+                  className="flex min-w-0 items-center"
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.preventDefault() // Always prevent navigation for first cell (selection mode)
+                    e.stopPropagation()
+
+                    // Let the checkbox handle its own toggling (avoid double-toggle).
+                    const target = e.target as HTMLElement
+                    if (target.closest('[data-chart-row-checkbox="true"]')) return
+
+                    handleCoinSelect(coinIdStr, !isSelected)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleCoinSelect(coinIdStr, !isSelected)
+                  }}
+                >
+                <motion.div
+                  className="relative flex h-full w-full min-w-0 items-center justify-start"
+                  // Ensure non-hovered rows animate when selection mode flips on/off.
+                  // Starting from "rest" prevents "jump-to-endstate" on remounts.
+                  variants={SELECT_CELL_VARIANTS}
+                  initial="rest"
+                  animate={hasSelectedCoins ? "revealed" : "rest"}
+                  whileHover={hasSelectedCoins ? undefined : "revealed"}
+                >
+                  {/* Checkbox - stable DOM to avoid "jump" on select/deselect */}
+                  <motion.div
+                    className="absolute left-0 z-10 px-1"
+                    variants={SELECT_CHECKBOX_VARIANTS}
+                    transition={selectRevealTransition}
+                  >
+                    <Checkbox
+                      data-chart-row-checkbox="true"
+                      checked={isSelected}
+                      tabIndex={hasSelectedCoins ? 0 : -1}
+                      onCheckedChange={(checked) =>
+                        handleCoinSelect(coinIdStr, checked === true)
+                      }
+                      aria-label={`Select ${tokenName}`}
+                    />
+                  </motion.div>
+
+                  {/* Token content slides right to make room for the checkbox */}
+                  <motion.div
+                    className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap"
+                    variants={SELECT_CONTENT_VARIANTS}
+                    transition={selectRevealTransition}
+                  >
                   {safeTokenLogoUrl ? (
                     <TokenLogo
                       src={safeTokenLogoUrl}
@@ -483,6 +684,8 @@ export const ChartTable = memo(function ChartTable({
                   <span className="font-berkeley-mono text-xs font-semibold tabular-nums sm:hidden">
                     {formatUsdPrice(coin.quote.USD.price)}
                   </span>
+                  </motion.div>
+                </motion.div>
                 </div>
 
                 {/* Price (sm+ column) */}
