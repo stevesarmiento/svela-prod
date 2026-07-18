@@ -11,6 +11,7 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
     const {
         chartType = 'candlestick',
         showVolume = true,
+        showPrice = true,
         livePriceUsd = null,
         onCrosshairMove,
         onCrosshairTimeMove,
@@ -19,6 +20,7 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
         marketCap = null,
         projection = null,
         highlightRange = null,
+        showPriceExtrema = false,
     } = options;
 
     const [containerEl, setContainerEl] = useState<HTMLDivElement | null>(null)
@@ -54,6 +56,7 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
             containerEl,
             chartType,
             showVolume,
+            showPriceExtrema,
             isDarkMode,
             callbacks: callbacksRef.current,
         });
@@ -65,7 +68,7 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
             controller.destroy();
             if (controllerRef.current === controller) controllerRef.current = null;
         };
-    }, [containerEl, chartType, showVolume, isDarkMode]);
+    }, [containerEl, chartType, showVolume, showPriceExtrema, isDarkMode]);
 
     // Track the latest realtime price so it can be re-applied after setData
     // (a fresh series feed resets the last bar to the server value).
@@ -86,6 +89,10 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
         if (livePriceUsd == null) return;
         controllerRef.current?.updateLivePrice(livePriceUsd);
     }, [livePriceUsd]);
+
+    useEffect(() => {
+        controllerRef.current?.setPriceVisible(showPrice);
+    }, [showPrice, controllerGeneration]);
 
     // Overlay updates should not recreate the chart.
     const hasHullSuite = !!(hullSuite?.mhull?.length || hullSuite?.shull?.length);

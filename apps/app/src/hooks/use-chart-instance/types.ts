@@ -67,9 +67,18 @@ export interface ChartHighlightRange {
     boundaryColor?: string;
 }
 
+export interface PriceExtremaMarker {
+    time: Time;
+    value: number;
+    label: string;
+    color?: string;
+}
+
 export interface UseChartInstanceOptions {
     chartType?: ChartType;
     showVolume?: boolean;
+    /** Show the primary price series and its related chart annotations. */
+    showPrice?: boolean;
     /**
      * Realtime spot price. Applied as an O(1) last-bar update on the live
      * chart instance — intentionally NOT part of the series data, so ~1s
@@ -109,4 +118,9 @@ export interface UseChartInstanceOptions {
      * When set, the non-highlighted portion of the price series is dimmed.
      */
     highlightRange?: ChartHighlightRange | null;
+    /**
+     * Show highest/lowest price markers with connector lines to the custom
+     * right-side axis labels.
+     */
+    showPriceExtrema?: boolean;
 }

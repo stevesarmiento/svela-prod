@@ -1,5 +1,6 @@
 import type { IChartApi, ISeriesApi } from 'lightweight-charts';
 import { MismatchDirection } from 'lightweight-charts';
+import type { PriceExtremaMarker } from '../types';
 import { clampNumber, formatUsdPrice, formatUsdVolume, getSeriesValue } from '../utils';
 
 export interface AxisOverlay {
@@ -16,6 +17,8 @@ export interface AxisOverlay {
         /** Bull/bear projected values at the hovered future bar (scrubbing the projection region). */
         scenario?: { bull: number; bear: number } | null;
     }) => void;
+    setPriceExtremaMarkers: (markers: PriceExtremaMarker[]) => void;
+    setPriceVisible: (visible: boolean) => void;
     scheduleUpdate: () => void;
     onResize: () => void;
     destroy: () => void;
@@ -62,7 +65,10 @@ export function createAxisOverlay({
     const axisTagTransitionHover = prefersReducedMotion ? '' : 'transform 90ms ease-out';
 
     const TAG_CLASS =
-        "relative inline-flex items-center rounded-md bg-white text-zinc-950 px-3 py-1.5 font-berkeley-mono text-[11px] leading-none tabular-nums shadow-sm shadow-black/10 ring-1 ring-black/10 before:content-[''] before:absolute before:-left-[6px] before:top-1/2 before:-translate-y-1/2 before:border-y-[10px] before:border-y-transparent before:border-r-[8px] before:border-r-white";
+        "relative inline-flex items-center rounded-md bg-white text-zinc-950 px-3 py-1.5 font-berkeley-mono text-[11px] leading-none tabular-nums shadow-sm shadow-black/10 ring-1 ring-black/10 before:content-[''] before:absolute before:-left-[4.8px] before:top-1/2 before:-translate-y-1/2 before:border-y-[10px] before:border-y-transparent before:border-r-[8px] before:border-r-white";
+
+    const EXTREMA_TAG_CLASS =
+        "relative inline-flex items-center rounded-md bg-zinc-700 text-white px-2.5 py-1 font-berkeley-mono text-[9px] leading-none tabular-nums shadow-sm shadow-black/20 ring-1 ring-white/10 before:content-[''] before:absolute before:-left-[2.5px] before:top-1/2 before:-translate-y-1/2 before:border-y-[8px] before:border-y-transparent before:border-r-[7px] before:border-r-zinc-700";
 
     const priceLastLabelWrap = document.createElement('div');
     priceLastLabelWrap.className = 'pointer-events-none absolute right-0 top-0';
@@ -95,7 +101,7 @@ export function createAxisOverlay({
     // Bull/bear scenario hover tags (shown while scrubbing the projection
     // region) — filled pills in the scenario color with white text.
     const SCENARIO_TAG_BASE =
-        "relative inline-flex items-center rounded-md text-white px-3 py-1.5 font-berkeley-mono text-[11px] leading-none tabular-nums shadow-sm shadow-black/10 ring-1 ring-black/10 before:content-[''] before:absolute before:-left-[6px] before:top-1/2 before:-translate-y-1/2 before:border-y-[10px] before:border-y-transparent before:border-r-[8px]";
+        "relative inline-flex items-center rounded-md text-white px-3 py-1.5 font-berkeley-mono text-[11px] leading-none tabular-nums shadow-sm shadow-black/10 ring-1 ring-black/10 before:content-[''] before:absolute before:-left-[4.8px] before:top-1/2 before:-translate-y-1/2 before:border-y-[10px] before:border-y-transparent before:border-r-[8px]";
 
     const bullHoverLabelWrap = document.createElement('div');
     bullHoverLabelWrap.className = 'pointer-events-none absolute right-0 top-0 z-10';
@@ -189,6 +195,15 @@ export function createAxisOverlay({
 
     let dataLastPrice: number | null = null;
     let dataLastVolume: number | null = null;
+    let priceExtremaMarkers: PriceExtremaMarker[] = [];
+    let isPriceVisible = true;
+    const extremaMarkerEls: Array<{
+        tagWrap: HTMLDivElement;
+        tag: HTMLDivElement;
+        lineWrap: HTMLDivElement;
+        line: HTMLDivElement;
+        dot: HTMLDivElement;
+    }> = [];
 
     function setAxisTag(
         wrapEl: HTMLDivElement,
@@ -239,6 +254,93 @@ export function createAxisOverlay({
         lineEl.style.transform = `scaleX(${scaleX})`;
     }
 
+    function ensureExtremaMarkerEl(index: number) {
+        let markerEl = extremaMarkerEls[index];
+        if (markerEl) return markerEl;
+
+        const tagWrap = document.createElement('div');
+        tagWrap.className = 'pointer-events-none absolute right-0 top-0 z-10';
+        const tag = document.createElement('div');
+        tag.className = EXTREMA_TAG_CLASS;
+        tagWrap.appendChild(tag);
+
+        const lineWrap = document.createElement('div');
+        lineWrap.className = 'pointer-events-none absolute left-0 top-0 z-0';
+        lineWrap.style.display = 'none';
+
+        const line = document.createElement('div');
+        line.style.height = '1px';
+        line.style.width = `${containerEl.clientWidth}px`;
+        line.style.transformOrigin = 'left center';
+        lineWrap.appendChild(line);
+
+        const dot = document.createElement('div');
+        dot.className = 'pointer-events-none absolute left-0 top-0 z-10';
+        dot.style.display = 'none';
+        dot.style.width = '7px';
+        dot.style.height = '7px';
+        dot.style.borderRadius = '9999px';
+        dot.style.boxSizing = 'border-box';
+        dot.style.border = '1.5px solid oklch(1 0 0 / 0.9)';
+        dot.style.backgroundColor = 'oklch(1 0 0 / 0.72)';
+        dot.style.boxShadow = '0 1px 3px oklch(0 0 0 / 0.25)';
+        dot.style.transform = 'translate3d(-9999px, -9999px, 0) translate(-50%, -50%)';
+
+        axisLabelsEl.appendChild(lineWrap);
+        axisLabelsEl.appendChild(dot);
+        axisLabelsEl.appendChild(tagWrap);
+        markerEl = { tagWrap, tag, lineWrap, line, dot };
+        extremaMarkerEls[index] = markerEl;
+        return markerEl;
+    }
+
+    function updatePriceExtremaMarkers() {
+        priceExtremaMarkers.forEach((marker, index) => {
+            const markerEl = ensureExtremaMarkerEl(index);
+            const x = chart.timeScale().timeToCoordinate(marker.time);
+            const y = Number.isFinite(marker.value) ? priceSeries.priceToCoordinate(marker.value) : null;
+            const isVisible =
+                x != null &&
+                Number.isFinite(x) &&
+                y != null &&
+                Number.isFinite(y) &&
+                x >= 0 &&
+                x <= containerEl.clientWidth &&
+                y >= 0 &&
+                y <= containerEl.clientHeight;
+            const color = marker.color ?? 'oklch(1 0 0 / 0.18)';
+
+            markerEl.tagWrap.style.display = isVisible ? 'block' : 'none';
+            markerEl.tagWrap.style.transform = isVisible
+                ? `translate3d(${index * -4}px, ${y}px, 0) translateY(-50%)`
+                : 'translate3d(0, -9999px, 0)';
+            markerEl.tag.textContent = isVisible ? `${marker.label} ${formatUsdPrice(marker.value)}` : '';
+            markerEl.line.style.backgroundImage =
+                `repeating-linear-gradient(to right, ${color} 0px, ${color} 4px, transparent 4px, transparent 8px)`;
+            if (isVisible) {
+                const width = Math.max(1, containerEl.clientWidth);
+                const length = Math.max(0, width - 2 - x);
+                markerEl.lineWrap.style.display = 'block';
+                markerEl.lineWrap.style.transform = `translate3d(${x}px, ${y}px, 0) translateY(-50%)`;
+                markerEl.line.style.transform = `scaleX(${clampNumber(length / width, 0, 1)})`;
+            } else {
+                markerEl.lineWrap.style.display = 'none';
+            }
+            markerEl.dot.style.display = isVisible ? 'block' : 'none';
+            markerEl.dot.style.transform = isVisible
+                ? `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`
+                : 'translate3d(-9999px, -9999px, 0) translate(-50%, -50%)';
+        });
+
+        for (let i = priceExtremaMarkers.length; i < extremaMarkerEls.length; i += 1) {
+            const markerEl = extremaMarkerEls[i];
+            if (!markerEl) continue;
+            markerEl.tagWrap.style.display = 'none';
+            markerEl.lineWrap.style.display = 'none';
+            markerEl.dot.style.display = 'none';
+        }
+    }
+
     function setVolumeScrubMarker(x: number | null, volumeValue: number | null) {
         if (
             !isMounted ||
@@ -281,18 +383,21 @@ export function createAxisOverlay({
                   getSeriesValue(volumeSeries.dataByIndex(rightIndex, MismatchDirection.NearestRight)) ??
                   dataLastVolume);
 
+        const displayedPriceValue = isPriceVisible ? mainPriceValue : null;
+
         const lastPriceY =
-            mainPriceValue == null || !Number.isFinite(mainPriceValue)
+            displayedPriceValue == null || !Number.isFinite(displayedPriceValue)
                 ? null
-                : priceSeries.priceToCoordinate(mainPriceValue);
+                : priceSeries.priceToCoordinate(displayedPriceValue);
         setAxisTag(
             priceLastLabelWrap,
             priceLastLabel,
             lastPriceY,
-            mainPriceValue == null ? null : formatUsdPrice(mainPriceValue),
+            displayedPriceValue == null ? null : formatUsdPrice(displayedPriceValue),
         );
 
         const shouldShowHoverPrice =
+            isPriceVisible &&
             isCrosshairActive &&
             hoveredPrice != null &&
             Number.isFinite(hoveredPrice) &&
@@ -356,6 +461,7 @@ export function createAxisOverlay({
 
     function runUpdate() {
         updateAxisLabels(isCrosshairActive ? lastCrosshairPrice : null, isCrosshairActive ? lastCrosshairVolume : null);
+        updatePriceExtremaMarkers();
         setVolumeScrubMarker(lastCrosshairX, isCrosshairActive ? lastCrosshairVolume : null);
         onAfterUpdate?.();
     }
@@ -435,11 +541,22 @@ export function createAxisOverlay({
         scheduleUpdate();
     }
 
+    function setPriceExtremaMarkers(markers: PriceExtremaMarker[]) {
+        priceExtremaMarkers = markers;
+        scheduleUpdate();
+    }
+
+    function setPriceVisible(visible: boolean) {
+        isPriceVisible = visible;
+        scheduleUpdate();
+    }
+
     function onResize() {
         hoverPriceLine.style.width = `${containerEl.clientWidth}px`;
         hoverVolumeLine.style.width = `${containerEl.clientWidth}px`;
         bullHoverLine.style.width = `${containerEl.clientWidth}px`;
         bearHoverLine.style.width = `${containerEl.clientWidth}px`;
+        for (const markerEl of extremaMarkerEls) markerEl.line.style.width = `${containerEl.clientWidth}px`;
         scheduleUpdate();
     }
 
@@ -462,6 +579,8 @@ export function createAxisOverlay({
         setSeries,
         onCrosshairLeave,
         onCrosshairMove,
+        setPriceExtremaMarkers,
+        setPriceVisible,
         scheduleUpdate,
         onResize,
         destroy,
