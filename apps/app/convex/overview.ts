@@ -13,7 +13,7 @@ import type { Id } from "./_generated/dataModel";
 import { z } from "zod";
 import { requireServerToken } from "./_lib/server_token";
 import { dedupeAndSortByOccurredAt, isCacheFresh, rankMovers } from "./_lib/overview_signals";
-import { computeBreadthStats } from "../src/lib/overview-daily-brief";
+import { computeBreadthStats } from "./_lib/breadth";
 import {
   getCanonicalHoldingsByCoinId,
   partitionHoldingsByGroup,

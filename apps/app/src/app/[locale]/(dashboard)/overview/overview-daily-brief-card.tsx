@@ -565,7 +565,12 @@ export function OverviewDailyBriefCard(props: {
     setIsGenerating(true)
     generateBrief({})
       .then((next) => setGeneratedBrief(next))
-      .catch(() => {})
+      .catch(() => {
+        // Allow the effect to retry on the next relevant state change —
+        // otherwise a transient 5xx permanently disables auto-generation
+        // for this mount.
+        hasRequestedRef.current = false
+      })
       .finally(() => setIsGenerating(false))
   }, [cache, generateBrief, props.enableGeneration, props.status])
 
