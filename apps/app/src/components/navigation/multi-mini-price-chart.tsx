@@ -1,11 +1,17 @@
 'use client'
 
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { cn } from "@v1/ui/cn"
 import { generatePastelColors } from "@/lib/chart-colors"
 import { CHART_COLOR_PARSERS } from "@/lib/oklch"
 import { loadLightweightCharts } from "@/lib/load-lightweight-charts"
-import type { IChartApi, Time } from "lightweight-charts"
+import type {
+  IChartApi,
+  ISeriesApi,
+  LineData,
+  MouseEventParams,
+  Time,
+} from "lightweight-charts"
 
 /**
  * Multi-line variant of the single-analysis MiniPriceChart for the compare
@@ -111,6 +117,9 @@ function buildNormalizedLines(tokens: MultiMiniChartToken[]): NormalizedLine[] {
 export function MultiMiniPriceChart({ tokens }: { tokens: MultiMiniChartToken[] }) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
+  // Per-line % at the scrubbed time (keyed by token id); null = not scrubbing,
+  // legend falls back to each line's window change.
+  const [hoverPcts, setHoverPcts] = useState<Record<string, number> | null>(null)
 
   const lines = useMemo(() => buildNormalizedLines(tokens), [tokens])
 
@@ -120,6 +129,9 @@ export function MultiMiniPriceChart({ tokens }: { tokens: MultiMiniChartToken[] 
     let isCancelled = false
     let chart: IChartApi | null = null
     let resizeObserver: ResizeObserver | null = null
+    let crosshairMoveHandler: ((param: MouseEventParams<Time>) => void) | null = null
+
+    setHoverPcts(null)
 
     try {
       chartRef.current?.remove()
@@ -165,6 +177,7 @@ export function MultiMiniPriceChart({ tokens }: { tokens: MultiMiniChartToken[] 
         handleScale: false,
       })
 
+      const seriesHandles: Array<{ id: string; series: ISeriesApi<"Line"> }> = []
       for (const line of lines) {
         const series = chart.addSeries(LineSeries, {
           color: line.color,
@@ -174,10 +187,31 @@ export function MultiMiniPriceChart({ tokens }: { tokens: MultiMiniChartToken[] 
           crosshairMarkerRadius: 3,
         })
         series.setData(line.points)
+        seriesHandles.push({ id: line.id, series })
       }
 
       chart.timeScale().fitContent()
       chartRef.current = chart
+
+      // Scrub: drive the legend percentages from the hovered bar.
+      crosshairMoveHandler = (param) => {
+        if (
+          param.point === undefined ||
+          param.time === undefined ||
+          param.point.x < 0 ||
+          param.point.y < 0
+        ) {
+          setHoverPcts(null)
+          return
+        }
+        const next: Record<string, number> = {}
+        for (const handle of seriesHandles) {
+          const data = param.seriesData.get(handle.series) as LineData<Time> | undefined
+          if (typeof data?.value === "number") next[handle.id] = data.value
+        }
+        setHoverPcts(Object.keys(next).length > 0 ? next : null)
+      }
+      chart.subscribeCrosshairMove(crosshairMoveHandler)
 
       resizeObserver = new ResizeObserver(() => {
         if (chartContainerRef.current && chart) {
@@ -191,6 +225,13 @@ export function MultiMiniPriceChart({ tokens }: { tokens: MultiMiniChartToken[] 
       isCancelled = true
       resizeObserver?.disconnect()
       try {
+        if (chart && crosshairMoveHandler) {
+          chart.unsubscribeCrosshairMove(crosshairMoveHandler)
+        }
+      } catch {
+        // noop
+      }
+      try {
         chart?.remove()
       } catch {
         // noop
@@ -203,34 +244,46 @@ export function MultiMiniPriceChart({ tokens }: { tokens: MultiMiniChartToken[] 
 
   return (
     <div className="space-y-1 px-3">
-      {/* Legend: color dot + symbol + window % change */}
+      {/* Legend: color dot + symbol + % change (live while scrubbing) */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-        {lines.map((line) => (
-          <span key={line.id} className="flex items-center gap-1 text-[10px]">
-            <span
-              className="size-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: line.color }}
-              aria-hidden="true"
-            />
-            <span className="font-bold text-white">{line.symbol}</span>
-            <span
-              className={cn(
-                "font-berkeley-mono tabular-nums",
-                line.changePct > 0
-                  ? "text-green-400"
-                  : line.changePct < 0
-                    ? "text-red-400"
-                    : "text-zinc-400",
-              )}
-            >
-              {line.changePct > 0 ? "+" : ""}
-              {line.changePct.toFixed(1)}%
+        {lines.map((line) => {
+          const pct = hoverPcts?.[line.id] ?? line.changePct
+          return (
+            <span key={line.id} className="flex items-center gap-1 text-[10px]">
+              <span
+                className="size-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: line.color }}
+                aria-hidden="true"
+              />
+              <span className="font-bold text-white">{line.symbol}</span>
+              <span
+                className={cn(
+                  "font-berkeley-mono tabular-nums",
+                  pct > 0
+                    ? "text-green-400"
+                    : pct < 0
+                      ? "text-red-400"
+                      : "text-zinc-400",
+                )}
+              >
+                {pct > 0 ? "+" : ""}
+                {pct.toFixed(1)}%
+              </span>
             </span>
-          </span>
-        ))}
-        <span className="ml-auto text-[9px] uppercase tracking-wide text-zinc-500">7d</span>
+          )
+        })}
       </div>
-      <div ref={chartContainerRef} className="w-full" />
+      <div className="relative w-full">
+        {/* Same dotted backdrop as the single-analysis MiniPriceChart */}
+        <div
+          className="absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-20"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='4' height='4' viewBox='0 0 4 4' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
+            backgroundRepeat: "repeat",
+          }}
+        />
+        <div ref={chartContainerRef} className="w-full" />
+      </div>
     </div>
   )
 }

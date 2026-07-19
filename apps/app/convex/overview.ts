@@ -10,11 +10,10 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText, Output } from "ai";
 import { z } from "zod";
 import { requireServerToken } from "./_lib/server_token";
 import { dedupeAndSortByOccurredAt, isCacheFresh, rankMovers } from "./_lib/overview_signals";
+import { computeBreadthStats } from "../src/lib/overview-daily-brief";
 import {
   getCanonicalHoldingsByCoinId,
   partitionHoldingsByGroup,
@@ -95,34 +94,6 @@ async function getMarketSnapshot(ctx: QueryCtx, coingeckoId: string): Promise<Ma
     change7dPct: null,
     lastUpdatedMs,
   };
-}
-
-async function compute7dChangePctFromHistory(
-  ctx: QueryCtx,
-  coingeckoId: string,
-): Promise<number | null> {
-  const earliest = await ctx.db
-    .query("priceHistory")
-    .withIndex("by_coingecko_timeframe_timestamp", (q) =>
-      q.eq("coingeckoId", coingeckoId).eq("timeframe", "7"),
-    )
-    .order("asc")
-    .first();
-
-  const latest = await ctx.db
-    .query("priceHistory")
-    .withIndex("by_coingecko_timeframe_timestamp", (q) =>
-      q.eq("coingeckoId", coingeckoId).eq("timeframe", "7"),
-    )
-    .order("desc")
-    .first();
-
-  if (!earliest || !latest) return null;
-  if (!Number.isFinite(earliest.price) || earliest.price <= 0) return null;
-  if (!Number.isFinite(latest.price)) return null;
-
-  const pct = ((latest.price - earliest.price) / earliest.price) * 100;
-  return Number.isFinite(pct) ? pct : null;
 }
 
 async function getCurrentUser(ctx: QueryCtx) {
@@ -226,12 +197,23 @@ const moverRowValidator = v.object({
   impactUsd: v.union(v.number(), v.null()),
 });
 
+const breadthStatsValidator = v.object({
+  advancers: v.number(),
+  decliners: v.number(),
+  flat: v.number(),
+  medianChangePct: v.number(),
+  spreadPct: v.number(),
+  bigMovers: v.number(),
+});
+
 const moversSnapshotValidator = v.object({
   generatedAt: v.number(),
   coinCount: v.number(),
   missingMarketDataCount: v.number(),
   gainers: v.array(moverRowValidator),
   losers: v.array(moverRowValidator),
+  // Full-watchlist aggregates (all covered coins, not just ranked movers).
+  breadth: v.optional(v.union(breadthStatsValidator, v.null())),
 });
 
 const MoverRowSchema = z.object({
@@ -244,12 +226,22 @@ const MoverRowSchema = z.object({
   impactUsd: z.number().nullable(),
 });
 
+const BreadthStatsSchema = z.object({
+  advancers: z.number(),
+  decliners: z.number(),
+  flat: z.number(),
+  medianChangePct: z.number(),
+  spreadPct: z.number(),
+  bigMovers: z.number(),
+});
+
 const MoversSnapshotSchema = z.object({
   generatedAt: z.number(),
   coinCount: z.number(),
   missingMarketDataCount: z.number(),
   gainers: z.array(MoverRowSchema),
   losers: z.array(MoverRowSchema),
+  breadth: BreadthStatsSchema.nullable().optional(),
 });
 
 const eventKindValidator = v.union(
@@ -345,11 +337,6 @@ const newsSentimentOverlayRowValidator = v.object({
   sentimentUpdatedAt: v.union(v.number(), v.null()),
 });
 
-function getGemini() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
-  return createGoogleGenerativeAI({ apiKey });
-}
 
 const DailyBriefSchema = z.object({
   summary: z.string().min(1).max(700),
@@ -364,8 +351,11 @@ const DailyBriefSchema = z.object({
         title: z.string().min(1).max(48),
         primary: z.string().min(1).max(120),
         secondary: z.string().min(1).max(160).nullable().default(null),
-        body: z.string().min(1).max(240),
+        body: z.string().min(1).max(400),
         tone: z.enum(["positive", "negative", "neutral"]),
+        // Structured per-kind payload (breadth stats, per-coin technical
+        // groups, headlines) rendered as rich blocks in the card UI.
+        details: z.unknown().optional(),
       }),
     )
     .max(6)
@@ -415,45 +405,6 @@ function normalizeBriefList(items: ReadonlyArray<string>, max: number): string[]
   return out;
 }
 
-function sanitizeDailyBrief(brief: z.infer<typeof DailyBriefSchema>): z.infer<typeof DailyBriefSchema> {
-  const summary =
-    normalizeBriefText(brief.summary).slice(0, 700) || "No major movers/events in cache for this window.";
-  const headline = normalizeBriefText(brief.headline).slice(0, 160) || "Overview brief";
-  const bullets = normalizeBriefList(brief.bullets, 6);
-  const risks = normalizeBriefList(brief.risks ?? [], 4);
-  const opportunities = normalizeBriefList(brief.opportunities ?? [], 4);
-  const cards = (() => {
-    const out: z.infer<typeof DailyBriefSchema>["cards"] = [];
-    const seen = new Set<string>();
-    for (const card of brief.cards ?? []) {
-      if (!card) continue;
-      if (seen.has(card.kind)) continue;
-      seen.add(card.kind);
-      out.push({
-        kind: card.kind,
-        title: normalizeBriefText(card.title).slice(0, 48) || card.kind,
-        primary: normalizeBriefText(card.primary).slice(0, 120) || "—",
-        secondary: (() => {
-          const v = card.secondary == null ? null : normalizeBriefText(card.secondary).slice(0, 160);
-          return v && v.length > 0 ? v : null;
-        })(),
-        body: normalizeBriefText(card.body).slice(0, 240) || "—",
-        tone: card.tone,
-      });
-      if (out.length >= 6) break;
-    }
-    return out;
-  })();
-
-  return {
-    summary,
-    headline,
-    bullets,
-    risks,
-    opportunities,
-    cards,
-  };
-}
 
 const dailyBriefValidator = v.object({
   summary: v.string(),
@@ -476,6 +427,7 @@ const dailyBriefValidator = v.object({
       secondary: v.union(v.string(), v.null()),
       body: v.string(),
       tone: v.union(v.literal("positive"), v.literal("negative"), v.literal("neutral")),
+      details: v.optional(v.any()),
     }),
   ),
   generatedAt: v.number(),
@@ -494,12 +446,17 @@ function buildDailyBriefCacheKey(args: {
   clerkId: string;
   window: Window;
 }): string {
-  return `overview:dailyBrief:${args.clerkId}:watchlist:${args.window}`;
+  // Bump the version when the brief format/copy pipeline changes so stale
+  // cached briefs are regenerated instead of served (v2: specifics + delta,
+  // v3: full-watchlist breadth, v4: holistic technicals w/ Bollinger+squeeze,
+  // v5: structured card details).
+  return `overview:dailyBrief:v5:${args.clerkId}:watchlist:${args.window}`;
 }
 
 function buildSnapshotCacheKey(args: { clerkId: string }): string {
   // Bump when snapshot shape/semantics change (e.g. news-only feed) so stale apiCache rows are not reused.
-  return `overview:watchlist:snapshot:v4:${args.clerkId}`;
+  // v5: movers carry full-watchlist breadth stats. v6: coins list for holistic technicals sampling.
+  return `overview:watchlist:snapshot:v6:${args.clerkId}`;
 }
 
 type MoversSnapshot = z.infer<typeof MoversSnapshotSchema>;
@@ -523,6 +480,7 @@ type DailyBriefCache = {
       secondary: string | null;
       body: string;
       tone: "positive" | "negative" | "neutral";
+      details?: unknown;
     }>;
     generatedAt: number;
     model: string | null;
@@ -559,10 +517,8 @@ type OverviewBootstrap = {
   limited: boolean;
   holdingsBreakdown: OverviewHoldingsGroupRow[];
   movers24h: MoversSnapshot;
-  movers7d: MoversSnapshot;
   events: EventsSnapshot;
   brief24h: DailyBriefCache;
-  brief7d: DailyBriefCache;
 };
 
 type RefreshOverviewSnapshotResult = {
@@ -586,6 +542,7 @@ type DailyBrief = {
     secondary: string | null;
     body: string;
     tone: "positive" | "negative" | "neutral";
+    details?: unknown;
   }>;
   generatedAt: number;
   model: string | null;
@@ -695,70 +652,17 @@ export const _upsertApiCache = internalMutation({
   },
 });
 
-function buildFallbackBrief(args: {
-  window: Window;
-  movers: { gainers: Array<{ symbol: string; changePct: number }>; losers: Array<{ symbol: string; changePct: number }> };
-  events: Array<{ kind: string; symbol: string; title: string }>;
-}): z.infer<typeof DailyBriefSchema> {
-  const topGainer = args.movers.gainers[0];
-  const topLoser = args.movers.losers[0];
-  const eventKinds = new Set(args.events.map((e) => e.kind));
-
-  const bullets: Array<string> = [];
-  if (topGainer) {
-    bullets.push(
-      `${topGainer.symbol.toUpperCase()} leads on ${args.window} momentum (${topGainer.changePct > 0 ? "+" : ""}${topGainer.changePct.toFixed(2)}%).`,
-    );
-  }
-  if (topLoser) {
-    bullets.push(
-      `${topLoser.symbol.toUpperCase()} is the weakest mover (${topLoser.changePct > 0 ? "+" : ""}${topLoser.changePct.toFixed(2)}%).`,
-    );
-  }
-  if (eventKinds.size > 0) {
-    bullets.push(`Events detected across your watchlist: ${Array.from(eventKinds).join(", ")}.`);
-  }
-
-  const headline =
-    topGainer || topLoser
-      ? `Overview brief: watchlist ${args.window} movers`
-      : "Overview brief: watchlist update";
-
-  const summaryParts: string[] = [];
-  if (topGainer) {
-    summaryParts.push(
-      `${topGainer.symbol.toUpperCase()} is leading your watchlist over the last ${args.window} (${topGainer.changePct > 0 ? "+" : ""}${topGainer.changePct.toFixed(2)}%).`,
-    );
-  }
-  if (topLoser) {
-    summaryParts.push(
-      `${topLoser.symbol.toUpperCase()} is the main laggard (${topLoser.changePct > 0 ? "+" : ""}${topLoser.changePct.toFixed(2)}%).`,
-    );
-  }
-  if (eventKinds.size > 0) {
-    summaryParts.push(`Notable event types showing up: ${Array.from(eventKinds).join(", ")}.`);
-  }
-
-  return {
-    summary:
-      summaryParts.length > 0
-        ? summaryParts.join(" ")
-        : "No major movers or notable events were detected in the current cache window.",
-    headline,
-    bullets: bullets.length > 0 ? bullets.slice(0, 6) : [],
-    risks: [],
-    opportunities: [],
-    cards: [],
-  };
-}
 
 const overviewSnapshotValidator = v.object({
   generatedAt: v.number(),
   watchlistCoinCount: v.number(),
   limited: v.boolean(),
   movers24h: moversSnapshotValidator,
-  movers7d: moversSnapshotValidator,
   events: eventsSnapshotValidator,
+  // Full ranked coin universe (id + symbol) so downstream consumers (e.g.
+  // the daily brief's technicals) can sample the whole watchlist instead of
+  // just the ranked movers. Optional for older cached rows.
+  coins: v.optional(v.array(v.object({ coingeckoId: v.string(), symbol: v.string() }))),
 });
 
 const OverviewSnapshotSchema = z.object({
@@ -766,8 +670,8 @@ const OverviewSnapshotSchema = z.object({
   watchlistCoinCount: z.number(),
   limited: z.boolean(),
   movers24h: MoversSnapshotSchema,
-  movers7d: MoversSnapshotSchema,
   events: EventsSnapshotSchema,
+  coins: z.array(z.object({ coingeckoId: z.string(), symbol: z.string() })).optional(),
 });
 
 type OverviewSnapshot = z.infer<typeof OverviewSnapshotSchema>;
@@ -1021,7 +925,6 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
         watchlistCoinCount: 0,
         limited: false,
         movers24h: emptyMoversSnapshot(now),
-        movers7d: emptyMoversSnapshot(now),
         events: emptyEventsSnapshot(now),
       };
     }
@@ -1041,7 +944,6 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
         watchlistCoinCount: universe.watchlistCoinCount,
         limited: universe.limited,
         movers24h: emptyMoversSnapshot(now),
-        movers7d: emptyMoversSnapshot(now),
         events: emptyEventsSnapshot(now),
       };
     }
@@ -1082,37 +984,10 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
       return { name, symbol, logoUrl };
     }
 
-    // Movers (24h and 7d) ----------------------------------------------------
+    // Movers (24h) -----------------------------------------------------------
     const MOVERS_LIMIT = 6;
-    const computed7dById = new Map<string, number>();
-    {
-      const needsCompute = coinIds.filter((id) => {
-        const s = snapshotById.get(id);
-        return s !== null && s !== undefined && s.change7dPct === null;
-      });
-      const MAX_7D_COMPUTE = 60;
-      const computeIds = [...needsCompute]
-        .sort((a, b) => {
-          const av = snapshotById.get(a)?.volume24hUsd ?? 0;
-          const bv = snapshotById.get(b)?.volume24hUsd ?? 0;
-          return bv - av;
-        })
-        .slice(0, MAX_7D_COMPUTE);
 
-      const computed = await Promise.all(
-        computeIds.map(async (coingeckoId) => {
-          const pct = await compute7dChangePctFromHistory(ctx, coingeckoId);
-          return { coingeckoId, pct };
-        }),
-      );
-      for (const row of computed) {
-        if (typeof row.pct === "number" && Number.isFinite(row.pct)) {
-          computed7dById.set(row.coingeckoId, row.pct);
-        }
-      }
-    }
-
-    function buildMovers(window: Window): MoversSnapshot {
+    function buildMovers(): MoversSnapshot {
       const movers: Array<{
         coingeckoId: string;
         name: string;
@@ -1131,10 +1006,7 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
           missingMarketDataCount += 1;
           continue;
         }
-        const changePctRaw =
-          window === "24h"
-            ? snapshot.change24hPct
-            : snapshot.change7dPct ?? computed7dById.get(coingeckoId) ?? null;
+        const changePctRaw = snapshot.change24hPct;
         if (typeof changePctRaw !== "number" || !Number.isFinite(changePctRaw)) {
           missingMarketDataCount += 1;
           continue;
@@ -1159,11 +1031,11 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
         missingMarketDataCount,
         gainers: ranked.gainers,
         losers: ranked.losers,
+        breadth: computeBreadthStats(movers.map((m) => m.changePct)),
       };
     }
 
-    const movers24h = buildMovers("24h");
-    const movers7d = buildMovers("7d");
+    const movers24h = buildMovers();
 
     // Events (news only; latest one article per watchlist coin in ranked universe)
     const events: Array<{
@@ -1215,8 +1087,7 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
         marketSnap && typeof marketSnap.change24hPct === "number" && Number.isFinite(marketSnap.change24hPct)
           ? marketSnap.change24hPct
           : null;
-      const pct7dRaw =
-        marketSnap?.change7dPct ?? computed7dById.get(row.coingeckoId) ?? null;
+      const pct7dRaw = marketSnap?.change7dPct ?? null;
       const pct7d =
         typeof pct7dRaw === "number" && Number.isFinite(pct7dRaw) ? pct7dRaw : null;
       // Prefer 24h for feed badge; fall back to 7d when 24h missing (common on coingeckoMarkets rows).
@@ -1255,8 +1126,11 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
       watchlistCoinCount: universe.watchlistCoinCount,
       limited: universe.limited,
       movers24h,
-      movers7d,
       events: eventsSnapshot,
+      coins: coinIds.map((coingeckoId) => ({
+        coingeckoId,
+        symbol: getMeta(coingeckoId).symbol,
+      })),
     };
   },
 });
@@ -1270,10 +1144,8 @@ export const getMyOverviewBootstrap = query({
     limited: v.boolean(),
     holdingsBreakdown: v.array(overviewHoldingsGroupValidator),
     movers24h: moversSnapshotValidator,
-    movers7d: moversSnapshotValidator,
     events: eventsSnapshotValidator,
     brief24h: dailyBriefCacheValidator,
-    brief7d: dailyBriefCacheValidator,
   }),
   handler: async (ctx): Promise<OverviewBootstrap> => {
     const now = Date.now();
@@ -1286,10 +1158,8 @@ export const getMyOverviewBootstrap = query({
         limited: false,
         holdingsBreakdown: [],
         movers24h: emptyMoversSnapshot(now),
-        movers7d: emptyMoversSnapshot(now),
         events: emptyEventsSnapshot(now),
         brief24h: emptyBriefCache(),
-        brief7d: emptyBriefCache(),
       };
     }
 
@@ -1302,10 +1172,8 @@ export const getMyOverviewBootstrap = query({
         limited: false,
         holdingsBreakdown: [],
         movers24h: emptyMoversSnapshot(now),
-        movers7d: emptyMoversSnapshot(now),
         events: emptyEventsSnapshot(now),
         brief24h: emptyBriefCache(),
-        brief7d: emptyBriefCache(),
       };
     }
 
@@ -1324,10 +1192,8 @@ export const getMyOverviewBootstrap = query({
     }
 
     const brief24hKey = buildDailyBriefCacheKey({ clerkId: user.clerkId, window: "24h" });
-    const brief7dKey = buildDailyBriefCacheKey({ clerkId: user.clerkId, window: "7d" });
-    const [brief24hRow, brief7dRow, holdingsBreakdown] = await Promise.all([
+    const [brief24hRow, holdingsBreakdown] = await Promise.all([
       ctx.db.query("apiCache").withIndex("by_key", (q) => q.eq("cacheKey", brief24hKey)).first(),
-      ctx.db.query("apiCache").withIndex("by_key", (q) => q.eq("cacheKey", brief7dKey)).first(),
       getOverviewHoldingsBreakdown(ctx, user._id),
     ]);
 
@@ -1338,19 +1204,11 @@ export const getMyOverviewBootstrap = query({
           createdAt: brief24hRow.createdAt,
         })
       : emptyBriefCache();
-    const brief7d = brief7dRow
-      ? parseBriefCacheRow({
-          data: brief7dRow.data,
-          expiresAt: brief7dRow.expiresAt,
-          createdAt: brief7dRow.createdAt,
-        })
-      : emptyBriefCache();
 
     const generatedAt = snapshot?.generatedAt ?? null;
     const watchlistCoinCount = snapshot?.watchlistCoinCount ?? 0;
     const limited = snapshot?.limited ?? false;
     const movers24h = snapshot?.movers24h ?? emptyMoversSnapshot(now);
-    const movers7d = snapshot?.movers7d ?? emptyMoversSnapshot(now);
     const events = snapshot?.events ?? emptyEventsSnapshot(now);
 
     return {
@@ -1360,10 +1218,8 @@ export const getMyOverviewBootstrap = query({
       limited,
       holdingsBreakdown,
       movers24h,
-      movers7d,
       events,
       brief24h,
-      brief7d,
     };
   },
 });
@@ -1443,10 +1299,14 @@ export const upsertMyOverviewBriefForServer = mutation({
           secondary: v.union(v.string(), v.null()),
           body: v.string(),
           tone: v.union(v.literal("positive"), v.literal("negative"), v.literal("neutral")),
+          details: v.optional(v.any()),
         }),
       ),
       model: v.union(v.string(), v.null()),
     }),
+    // Compact fact snapshot used by the next generation to describe what
+    // changed since this brief. Stored opaquely alongside the brief copy.
+    facts: v.optional(v.any()),
   },
   returns: dailyBriefValidator,
   handler: async (ctx, args): Promise<DailyBrief> => {
@@ -1466,6 +1326,7 @@ export const upsertMyOverviewBriefForServer = mutation({
       cards: args.brief.cards,
       generatedAt: now,
       model: args.brief.model ?? null,
+      ...(args.facts != null ? { facts: args.facts } : {}),
     };
 
     const existing = await ctx.db
@@ -1503,6 +1364,40 @@ export const upsertMyOverviewBriefForServer = mutation({
       generatedAt: now,
       model: data.model,
     };
+  },
+});
+
+export const getMyOverviewBriefFactsForServer = query({
+  args: {
+    serverToken: v.string(),
+    clerkId: v.string(),
+    window: windowValidator,
+  },
+  returns: v.union(
+    v.object({ generatedAt: v.number(), facts: v.any() }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+
+    const cacheKey = buildDailyBriefCacheKey({
+      clerkId: await getCanonicalClerkId(ctx.db, args.clerkId),
+      window: args.window as Window,
+    });
+
+    const existing = await ctx.db
+      .query("apiCache")
+      .withIndex("by_key", (q) => q.eq("cacheKey", cacheKey))
+      .first();
+    if (!existing) return null;
+
+    const data = existing.data as { generatedAt?: unknown; facts?: unknown } | null;
+    const facts = data && typeof data === "object" ? (data.facts ?? null) : null;
+    if (facts == null) return null;
+
+    const generatedAt =
+      typeof data?.generatedAt === "number" ? data.generatedAt : existing.createdAt;
+    return { generatedAt, facts };
   },
 });
 
@@ -1570,177 +1465,3 @@ export const refreshMyOverviewSnapshot = action({
   },
 });
 
-export const generateMyOverviewBrief = action({
-  args: {
-    window: windowValidator,
-    force: v.optional(v.boolean()),
-  },
-  returns: dailyBriefValidator,
-  handler: async (ctx, args): Promise<DailyBrief> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return {
-        summary: "Sign in to generate a personalized brief for your watchlist.",
-        headline: "Overview brief",
-        bullets: [],
-        risks: [],
-        opportunities: [],
-        cards: [],
-        generatedAt: Date.now(),
-        model: null,
-      };
-    }
-
-    const clerkId = await ctx.runQuery(internal.overview._canonicalClerkId, {
-      clerkId: identity.subject,
-    });
-    const now = Date.now();
-    const TTL_MS = 6 * 60 * 60 * 1000;
-    const expiresAt = now + TTL_MS;
-
-    const cacheKey = buildDailyBriefCacheKey({ clerkId, window: args.window as Window });
-    const existing = await ctx.runQuery(internal.overview._getApiCacheEntry, { cacheKey });
-    if (args.force !== true && existing && isCacheFresh(existing.expiresAt, now)) {
-      const parsed = DailyBriefCacheDataSchema.safeParse(existing.data);
-      if (parsed.success) {
-        const modelName = parsed.data.model ?? null;
-        const generatedAt = parsed.data.generatedAt ?? existing.createdAt;
-        return {
-          summary: parsed.data.summary,
-          headline: parsed.data.headline,
-          bullets: parsed.data.bullets,
-          risks: parsed.data.risks ?? [],
-          opportunities: parsed.data.opportunities ?? [],
-          cards: parsed.data.cards ?? [],
-          generatedAt,
-          model: modelName,
-        };
-      }
-    }
-
-    const snapshotKey = buildSnapshotCacheKey({ clerkId });
-    const snapshotRow = await ctx.runQuery(internal.overview._getApiCacheEntry, { cacheKey: snapshotKey });
-    const snapshotParsed = snapshotRow ? OverviewSnapshotSchema.safeParse(snapshotRow.data) : null;
-    const snapshot = snapshotParsed?.success ? snapshotParsed.data : null;
-
-    const moversBlock =
-      args.window === "7d" ? snapshot?.movers7d ?? null : snapshot?.movers24h ?? null;
-
-    const moversPayload = moversBlock
-      ? {
-          gainers: moversBlock.gainers.map((m) => ({
-            symbol: m.symbol,
-            changePct: m.changePct,
-            impactUsd: m.impactUsd,
-          })),
-          losers: moversBlock.losers.map((m) => ({
-            symbol: m.symbol,
-            changePct: m.changePct,
-            impactUsd: m.impactUsd,
-          })),
-          contributors: [] as Array<{ symbol: string; impactUsd: number; changePct: number }>,
-        }
-      : { gainers: [], losers: [], contributors: [] as Array<{ symbol: string; impactUsd: number; changePct: number }> };
-
-    const eventsPayload = (snapshot?.events.events ?? []).slice(0, 18).map((e) => ({
-      kind: e.kind,
-      symbol: e.symbol,
-      title: e.title,
-      summary: e.summary,
-    }));
-
-    const gem = getGemini();
-    let brief: z.infer<typeof DailyBriefSchema> | null = null;
-    let modelName: string | null = null;
-
-    if (gem) {
-      modelName = "gemini-2.5-flash";
-      const system = `
-You write a concise daily brief for a crypto dashboard.
-
-Input is JSON containing:
-- window ("24h" or "7d")
-- movers (gainers/losers with changePct and optional impactUsd)
-- events (kind + title + summary)
-
-Rules:
-- Do not invent facts or numbers. Use only values provided in the input JSON.
-- Keep it decision-focused and scannable. Write like a helpful, calm analyst.
-- If there is not enough signal, be explicit ("No major movers/events in cache").
-
-Formatting:
-- summary: 1 short paragraph (2-4 sentences), no bullets/markdown
-- headline: short (<= 120 chars)
-- bullets: 0-6 items (optional)
-- risks: 0-4 items
-- opportunities: 0-4 items
-      `.trim();
-
-      const user = JSON.stringify(
-        {
-          window: args.window,
-          movers: moversPayload,
-          events: eventsPayload,
-        },
-        null,
-        2,
-      );
-
-      try {
-        const result = await generateText({
-          model: gem(modelName),
-          system,
-          prompt: user,
-          output: Output.object({
-            schema: DailyBriefSchema,
-            name: "DailyBrief",
-            description: "A concise daily brief for a crypto dashboard (headline, bullets, risks, opportunities).",
-          }),
-          temperature: 0.2,
-          maxOutputTokens: 600,
-          maxRetries: 2,
-        });
-
-        brief = sanitizeDailyBrief(result.output);
-      } catch {
-        brief = null;
-      }
-    }
-
-    if (!brief) {
-      brief = buildFallbackBrief({
-        window: args.window as Window,
-        movers: {
-          gainers: moversPayload.gainers.map((g) => ({ symbol: g.symbol, changePct: g.changePct })),
-          losers: moversPayload.losers.map((l) => ({ symbol: l.symbol, changePct: l.changePct })),
-        },
-        events: eventsPayload.map((e) => ({ kind: e.kind, symbol: e.symbol, title: e.title })),
-      });
-      modelName = null;
-    }
-
-    const cacheData = {
-      ...brief,
-      generatedAt: now,
-      model: modelName,
-    };
-
-    await ctx.runMutation(internal.overview._upsertApiCache, {
-      cacheKey,
-      data: cacheData,
-      expiresAt,
-      dataSource: modelName ? "gemini" : "fallback",
-    });
-
-    return {
-      summary: brief.summary,
-      headline: brief.headline,
-      bullets: brief.bullets,
-      risks: brief.risks ?? [],
-      opportunities: brief.opportunities ?? [],
-      cards: brief.cards ?? [],
-      generatedAt: now,
-      model: modelName,
-    };
-  },
-});

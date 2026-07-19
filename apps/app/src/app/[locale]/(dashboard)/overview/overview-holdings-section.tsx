@@ -21,7 +21,6 @@ import { AvatarCircles } from "@v1/ui/token-stacks";
 import type { Preloaded } from "convex/react";
 import {
   useAction,
-  useMutation,
   usePreloadedQuery,
   useQuery,
 } from "convex/react";
@@ -163,21 +162,19 @@ function OverviewHoldingsSectionInner(props: {
 }) {
   const [activeTimeScale, setActiveTimeScale] = useState<string>("1d");
   const [scrubTime, setScrubTime] = useState<number | null>(null);
-  const [commandWindow, setCommandWindow] = useState<"24h" | "7d">("24h");
   const [shouldLoadFeedPanel, setShouldLoadFeedPanel] = useState(false);
 
   const overviewBootstrap = props.overviewBootstrap;
 
-  const refreshMyDataNow = useMutation(api.refresh.refreshMyDataNow);
   const refreshOverviewSnapshot = useAction(
     api.overview.refreshMyOverviewSnapshot,
   );
   const generateOverviewBrief = useCallback(
-    async ({ window, force }: { window: "24h" | "7d"; force?: boolean }) => {
+    async ({ force }: { force?: boolean }) => {
       const response = await fetch("/api/overview/daily-brief", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ window, force }),
+        body: JSON.stringify({ force }),
       });
 
       if (!response.ok) {
@@ -606,47 +603,12 @@ function OverviewHoldingsSectionInner(props: {
                   events: [],
                 }
               }
-              movers={{
-                window: commandWindow,
-                onWindowChange: setCommandWindow,
-                watchlistCoinCount: overviewBootstrap?.watchlistCoinCount ?? 0,
-                limited: overviewBootstrap?.limited ?? false,
-                movers24h: overviewBootstrap?.movers24h ?? {
-                  generatedAt: 0,
-                  coinCount: 0,
-                  missingMarketDataCount: 0,
-                  gainers: [],
-                  losers: [],
-                },
-                movers7d: overviewBootstrap?.movers7d ?? {
-                  generatedAt: 0,
-                  coinCount: 0,
-                  missingMarketDataCount: 0,
-                  gainers: [],
-                  losers: [],
-                },
-                onRefreshNow: async () => {
-                  const result = await refreshMyDataNow({ force: false });
-                  await refreshOverviewSnapshot({ force: true });
-                  return result;
-                },
-              }}
               dailyBrief={{
                 status: overviewBootstrap?.status ?? "missing",
-                window: commandWindow,
                 movers24h: overviewBootstrap?.movers24h ?? null,
-                movers7d: overviewBootstrap?.movers7d ?? null,
                 events: overviewBootstrap?.events ?? null,
                 brief24h:
                   overviewBootstrap?.brief24h ?? {
-                    status: "missing",
-                    stale: true,
-                    expiresAt: null,
-                    generatedAt: null,
-                    brief: null,
-                  },
-                brief7d:
-                  overviewBootstrap?.brief7d ?? {
                     status: "missing",
                     stale: true,
                     expiresAt: null,

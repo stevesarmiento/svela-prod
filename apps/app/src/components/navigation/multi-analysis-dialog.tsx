@@ -234,9 +234,10 @@ export function MultiAnalysisDialog({
     return () => clearTimeout(timer);
   }, [fire, setCompletion]);
 
-  const combinedTitle = tokens
-    .map((t) => t.symbol?.toUpperCase() ?? t.name ?? t.id)
-    .join(" vs ");
+  const tokenLabels = tokens.map(
+    (t) => t.symbol?.toUpperCase() ?? t.name ?? t.id,
+  );
+  const combinedTitle = tokenLabels.join(" / ");
 
   // Price series for the sidebar's multi-line mini chart, as they collect.
   const chartTokens = React.useMemo(
@@ -280,11 +281,18 @@ export function MultiAnalysisDialog({
                   </div>
                   <div className="flex flex-col gap-0">
                     <h1 className="text-sm font-semibold text-gray-900 dark:text-white">
-                      {combinedTitle}
+                      {tokenLabels.map((label, index) => (
+                        <React.Fragment key={label}>
+                          {index > 0 ? (
+                            <span className="opacity-50"> / </span>
+                          ) : null}
+                          {label}
+                        </React.Fragment>
+                      ))}
                     </h1>
                     <p className="text-xs text-gray-900 dark:text-white">
                       <span className="text-xs text-gray-500 dark:text-white/60">
-                        How these assets move together ·{" "}
+                        Analysis as of{" "}
                       </span>
                       {new Date().toLocaleDateString("en-US", {
                         weekday: "long",

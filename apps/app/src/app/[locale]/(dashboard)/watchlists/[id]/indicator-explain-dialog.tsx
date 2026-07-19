@@ -1,179 +1,185 @@
-"use client"
+"use client";
 
-import React from "react"
-import ReactMarkdown from "react-markdown"
-import { motion, useReducedMotion } from "motion/react"
+import { IconAnalyze } from "@/components/icon-analyze";
+import NumberFlow from "@/components/number-flow";
+import { TokenLogo } from "@/components/token-logo";
+import { getUsdPriceFormatOptions } from "@/lib/format-usd";
+import { cleanTokenName } from "@/lib/logo-overrides";
+import type { Format } from "@/lib/number-flow/lite";
+import { useCompletion } from "@ai-sdk/react";
+import { Button } from "@v1/ui/button";
+import { cn } from "@v1/ui/cn";
 import {
   Dialog,
   DialogClose,
   DialogContent,
   DialogHeader,
   DialogTrigger,
-} from "@v1/ui/dialog"
-import { Button } from "@v1/ui/button"
-import { ScrollArea } from "@v1/ui/scroll-area"
-import { MultiStepLoader } from "@v1/ui/mult-step-loader"
-import { cn } from "@v1/ui/cn"
-import { useCompletion } from "@ai-sdk/react"
-import { IconArrowBackward, IconArrowUpRight, IconChevronBackward } from "symbols-react"
-import { IconAnalyze } from "@/components/icon-analyze"
-import NumberFlow from "@/components/number-flow"
-import { TokenLogo } from "@/components/token-logo"
-import { cleanTokenName } from "@/lib/logo-overrides"
-import { getUsdPriceFormatOptions } from "@/lib/format-usd"
-import type { Format } from "@/lib/number-flow/lite"
+} from "@v1/ui/dialog";
+import { MultiStepLoader } from "@v1/ui/mult-step-loader";
+import { ScrollArea } from "@v1/ui/scroll-area";
+import { motion, useReducedMotion } from "motion/react";
+import React from "react";
+import ReactMarkdown from "react-markdown";
+import {
+  IconArrowBackward,
+  IconArrowUpRight,
+  IconChevronBackward,
+} from "symbols-react";
 
-export type IndicatorType = "marketVision" | "bollinger" | "bbwp" | "rsiDivergences"
+export type IndicatorType =
+  | "marketVision"
+  | "bollinger"
+  | "bbwp"
+  | "rsiDivergences";
 
 interface MarketContext {
-  priceUsd?: number | null
-  change24hPct?: number | null
-  volume24hUsd?: number | null
-  marketCapUsd?: number | null
+  priceUsd?: number | null;
+  change24hPct?: number | null;
+  volume24hUsd?: number | null;
+  marketCapUsd?: number | null;
   /** Same-length trail as indicator series (closes) for price-vs-indicator copy. */
-  closeHistory?: ReadonlyArray<number>
+  closeHistory?: ReadonlyArray<number>;
   /** Unix seconds per bar, same length as closeHistory, for calendar 7d slices. */
-  closeTimesUtc?: ReadonlyArray<number>
+  closeTimesUtc?: ReadonlyArray<number>;
 }
 
 interface MarketVisionSnapshot {
-  rsiCurrent: number | null
-  rsiHistory: Array<number | null>
-  wt1Current: number | null
-  wt2Current: number | null
-  moneyFlowCurrent: number | null
-  moneyFlowHistory: Array<number | null>
+  rsiCurrent: number | null;
+  rsiHistory: Array<number | null>;
+  wt1Current: number | null;
+  wt2Current: number | null;
+  moneyFlowCurrent: number | null;
+  moneyFlowHistory: Array<number | null>;
 }
 
 interface BollingerSnapshot {
-  indicatorCurrent: number | null
-  upperCurrent: number | null
-  lowerCurrent: number | null
-  basisCurrent: number | null
-  indicatorHistory: Array<number | null>
-  upperHistory: Array<number | null>
-  lowerHistory: Array<number | null>
+  indicatorCurrent: number | null;
+  upperCurrent: number | null;
+  lowerCurrent: number | null;
+  basisCurrent: number | null;
+  indicatorHistory: Array<number | null>;
+  upperHistory: Array<number | null>;
+  lowerHistory: Array<number | null>;
 }
 
 interface BBWPSnapshot {
-  bbwpCurrent: number | null
-  bbwpHistory: Array<number | null>
-  lookback: number
+  bbwpCurrent: number | null;
+  bbwpHistory: Array<number | null>;
+  lookback: number;
 }
 
 interface RsiDivergencesSnapshotSettings {
-  rsiLength: number
-  leftBars: number
-  rightBars: number
-  pairMode: "TV-like" | "Same Bar"
-  tolBars: number
-  priceMode: "High/Low" | "Close"
-  allowEqual: boolean
-  priceEps: number
-  rsiEps: number
-  showRegular: boolean
-  showHidden: boolean
+  rsiLength: number;
+  leftBars: number;
+  rightBars: number;
+  pairMode: "TV-like" | "Same Bar";
+  tolBars: number;
+  priceMode: "High/Low" | "Close";
+  allowEqual: boolean;
+  priceEps: number;
+  rsiEps: number;
+  showRegular: boolean;
+  showHidden: boolean;
 }
 
 interface RsiDivergencesSnapshotDivergence {
-  type: "bullish" | "bearish" | "h_bullish" | "h_bearish"
-  startTime: number
-  endTime: number
-  priceStart: number
-  priceEnd: number
-  rsiStart: number
-  rsiEnd: number
+  type: "bullish" | "bearish" | "h_bullish" | "h_bearish";
+  startTime: number;
+  endTime: number;
+  priceStart: number;
+  priceEnd: number;
+  rsiStart: number;
+  rsiEnd: number;
 }
 
 interface RsiDivergencesSnapshot {
-  rsiCurrent: number | null
-  rsiHistory: Array<number | null>
-  divergences: Array<RsiDivergencesSnapshotDivergence>
-  settings: RsiDivergencesSnapshotSettings
+  rsiCurrent: number | null;
+  rsiHistory: Array<number | null>;
+  divergences: Array<RsiDivergencesSnapshotDivergence>;
+  settings: RsiDivergencesSnapshotSettings;
 }
 
 type IndicatorSnapshot =
   | { indicatorType: "marketVision"; snapshot: MarketVisionSnapshot }
   | { indicatorType: "bollinger"; snapshot: BollingerSnapshot }
   | { indicatorType: "bbwp"; snapshot: BBWPSnapshot }
-  | { indicatorType: "rsiDivergences"; snapshot: RsiDivergencesSnapshot }
+  | { indicatorType: "rsiDivergences"; snapshot: RsiDivergencesSnapshot };
 
 interface IndicatorExplainDialogBaseProps {
-  coinId: string
-  tokenSymbol?: string | null
-  tokenName?: string | null
+  coinId: string;
+  tokenSymbol?: string | null;
+  tokenName?: string | null;
   /** Resolved logo URL (e.g. from getTokenLogoURL(symbol, image)). */
-  tokenLogoUrl?: string | null
+  tokenLogoUrl?: string | null;
   /** Pulse price while quote/chart loading (matches price-chart pending UX). */
-  isPricePending?: boolean
-  timeframe: string
-  indicatorTitle: string
+  isPricePending?: boolean;
+  timeframe: string;
+  indicatorTitle: string;
   /** Same chart as the indicator card (Market Vision / RSI+Bands / BBWP) for visual context. */
-  indicatorChart?: React.ReactNode
+  indicatorChart?: React.ReactNode;
   /** Live indicator chips / summary — shown under the title while reading the analysis. */
-  indicatorContext?: React.ReactNode
-  marketContext?: MarketContext
-  disabled?: boolean
-  triggerClassName?: string
+  indicatorContext?: React.ReactNode;
+  marketContext?: MarketContext;
+  disabled?: boolean;
+  triggerClassName?: string;
 }
 
 export type IndicatorExplainDialogProps =
   | (IndicatorExplainDialogBaseProps & {
-      indicatorType: "marketVision"
-      snapshot: MarketVisionSnapshot
+      indicatorType: "marketVision";
+      snapshot: MarketVisionSnapshot;
     })
   | (IndicatorExplainDialogBaseProps & {
-      indicatorType: "bollinger"
-      snapshot: BollingerSnapshot
+      indicatorType: "bollinger";
+      snapshot: BollingerSnapshot;
     })
-  | (IndicatorExplainDialogBaseProps & { indicatorType: "bbwp"; snapshot: BBWPSnapshot })
   | (IndicatorExplainDialogBaseProps & {
-      indicatorType: "rsiDivergences"
-      snapshot: RsiDivergencesSnapshot
+      indicatorType: "bbwp";
+      snapshot: BBWPSnapshot;
     })
+  | (IndicatorExplainDialogBaseProps & {
+      indicatorType: "rsiDivergences";
+      snapshot: RsiDivergencesSnapshot;
+    });
 
 /** Avoid showing page placeholder copy ("Loading...") when quote metadata is not wired yet. */
 function resolveExplainDisplayName(args: {
-  tokenName?: string | null
-  tokenSymbol?: string | null
-  coinId: string
+  tokenName?: string | null;
+  tokenSymbol?: string | null;
+  coinId: string;
 }): string {
-  const raw = args.tokenName?.trim()
+  const raw = args.tokenName?.trim();
   if (raw && raw !== "Loading..." && raw !== "Unknown") {
-    return cleanTokenName(raw)
+    return cleanTokenName(raw);
   }
-  const sym = args.tokenSymbol?.trim()
+  const sym = args.tokenSymbol?.trim();
   if (sym && sym.toUpperCase() !== "LOADING") {
-    return sym.toUpperCase()
+    return sym.toUpperCase();
   }
   return args.coinId
     .split("-")
     .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ")
+    .join(" ");
 }
 
 function ExplainQuoteHeader(props: {
-  displayName: string
-  safeLogoSrc: string
-  fallbackSymbol?: string | null
-  priceUsd: number
-  change24hPct: number | null
-  isPending: boolean
+  displayName: string;
+  safeLogoSrc: string;
+  fallbackSymbol?: string | null;
+  priceUsd: number;
+  change24hPct: number | null;
+  isPending: boolean;
   /** e.g. back / close control — sits immediately before the token logo */
-  leadingAction?: React.ReactNode
+  leadingAction?: React.ReactNode;
 }) {
-  const shouldReduceMotion = useReducedMotion()
-  const change = props.change24hPct
-  const changeOk = change != null && Number.isFinite(change)
+  const shouldReduceMotion = useReducedMotion();
+  const change = props.change24hPct;
+  const changeOk = change != null && Number.isFinite(change);
 
   return (
-    <div
-      className={cn(
-        "",
-        props.isPending && "opacity-95",
-      )}
-    >
+    <div className={cn("", props.isPending && "opacity-95")}>
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2 ml-[-32px]">
           {props.leadingAction}
@@ -185,7 +191,9 @@ function ExplainQuoteHeader(props: {
             className="bg-transparent"
             quality={70}
           />
-          <span className="text-sm font-bold text-white">{props.displayName}</span>
+          <span className="text-sm font-bold text-white">
+            {props.displayName}
+          </span>
           <span className="text-primary/60 text-sm">is currently</span>
         </div>
         <div className="flex items-center">
@@ -207,7 +215,11 @@ function ExplainQuoteHeader(props: {
         <div
           className={cn(
             "text-xs font-bold font-berkeley-mono",
-            !changeOk ? "text-muted-foreground" : change >= 0 ? "text-emerald-500" : "text-rose-500",
+            !changeOk
+              ? "text-muted-foreground"
+              : change >= 0
+                ? "text-emerald-500"
+                : "text-rose-500",
           )}
         >
           {!changeOk ? (
@@ -219,23 +231,30 @@ function ExplainQuoteHeader(props: {
                 initial={{ rotate: change >= 0 ? 0 : 90 }}
                 animate={{ rotate: change >= 0 ? 0 : 90 }}
                 transition={
-                  shouldReduceMotion ? { duration: 0 } : { type: "spring", bounce: 0.3, duration: 0.3 }
+                  shouldReduceMotion
+                    ? { duration: 0 }
+                    : { type: "spring", bounce: 0.3, duration: 0.3 }
                 }
                 className="mr-2 inline-block"
                 style={{ transformOrigin: "center" }}
               >
                 <IconArrowUpRight
-                  className={cn("size-2", change >= 0 ? "fill-emerald-500" : "fill-rose-500")}
+                  className={cn(
+                    "size-2",
+                    change >= 0 ? "fill-emerald-500" : "fill-rose-500",
+                  )}
                 />
               </motion.span>
               <span>{Math.abs(change).toFixed(2)}%</span>
-              <span className="ml-1.5 font-normal text-muted-foreground">24h</span>
+              <span className="ml-1.5 font-normal text-muted-foreground">
+                24h
+              </span>
             </>
           )}
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 function buildRequestBody(args: IndicatorExplainDialogProps) {
@@ -249,47 +268,43 @@ function buildRequestBody(args: IndicatorExplainDialogProps) {
     timeframe: args.timeframe,
     marketContext: args.marketContext ?? {},
     snapshot: args.snapshot,
-  }
+  };
 }
 
 export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
-  const [isOpen, setIsOpen] = React.useState(false)
+  const [isOpen, setIsOpen] = React.useState(false);
   const displayName = resolveExplainDisplayName({
     tokenName: props.tokenName,
     tokenSymbol: props.tokenSymbol,
     coinId: props.coinId,
-  })
+  });
   const safeLogoSrc =
-    props.tokenLogoUrl && (props.tokenLogoUrl.startsWith("http") || props.tokenLogoUrl.startsWith("/"))
+    props.tokenLogoUrl &&
+    (props.tokenLogoUrl.startsWith("http") ||
+      props.tokenLogoUrl.startsWith("/"))
       ? props.tokenLogoUrl
-      : "/favicon.ico"
-  const mc = props.marketContext
-  const priceUsd = mc?.priceUsd
-  const change24h = mc?.change24hPct
+      : "/favicon.ico";
+  const mc = props.marketContext;
+  const priceUsd = mc?.priceUsd;
+  const change24h = mc?.change24hPct;
   const showQuoteHeader =
-    priceUsd != null && Number.isFinite(priceUsd) && priceUsd > 0
+    priceUsd != null && Number.isFinite(priceUsd) && priceUsd > 0;
 
-  const {
-    complete,
-    completion,
-    isLoading,
-    stop,
-    setCompletion,
-    error,
-  } = useCompletion({
-    api: "/api/analyze-indicator",
-    experimental_throttle: 60,
-    onError: (err) => {
-      console.error("indicator explain:", err)
-    },
-  })
+  const { complete, completion, isLoading, stop, setCompletion, error } =
+    useCompletion({
+      api: "/api/analyze-indicator",
+      experimental_throttle: 60,
+      onError: (err) => {
+        console.error("indicator explain:", err);
+      },
+    });
 
   const run = React.useCallback(async () => {
-    const body = buildRequestBody(props)
-    setCompletion("")
-    stop()
-    await complete(JSON.stringify(body))
-  }, [complete, props, setCompletion, stop])
+    const body = buildRequestBody(props);
+    setCompletion("");
+    stop();
+    await complete(JSON.stringify(body));
+  }, [complete, props, setCompletion, stop]);
 
   const explainLoadingSteps = React.useMemo(
     () => [
@@ -301,12 +316,12 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
       { text: "Almost there..." },
     ],
     [],
-  )
+  );
 
-  const showPending = Boolean(isLoading)
-  const showError = Boolean(error)
+  const showPending = Boolean(isLoading);
+  const showError = Boolean(error);
   const showStreamLoader =
-    showPending && completion.trim().length === 0 && !showError
+    showPending && completion.trim().length === 0 && !showError;
 
   const regenerateButton = (
     <Button
@@ -316,15 +331,13 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
       disabled={showPending}
       className="flex items-center gap-1.5 shrink-0 p-1.5 h-7 rounded-lg"
       onClick={() => {
-        void run()
+        void run();
       }}
     >
-      <IconAnalyze
-        className="size-3 fill-primary/60"
-      />
+      <IconAnalyze className="size-3 fill-primary/60" />
       Regenerate
     </Button>
-  )
+  );
 
   const explainBackButton = (
     <DialogClose asChild>
@@ -338,18 +351,18 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
         <IconArrowBackward className="size-3 fill-current" aria-hidden />
       </Button>
     </DialogClose>
-  )
+  );
 
   return (
     <Dialog
       open={isOpen}
       onOpenChange={(open) => {
-        setIsOpen(open)
+        setIsOpen(open);
         if (!open) {
-          stop()
-          return
+          stop();
+          return;
         }
-        void run()
+        void run();
       }}
     >
       <DialogTrigger asChild>
@@ -358,11 +371,12 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
           variant="outline"
           size="sm"
           disabled={props.disabled}
-          className={cn("flex items-center gap-1.5 shrink-0 h-7 p-2.5 rounded-lg", props.triggerClassName)}
+          className={cn(
+            "flex items-center gap-1.5 shrink-0 h-7 p-2.5 rounded-lg",
+            props.triggerClassName,
+          )}
         >
-        <IconAnalyze
-          className="size-3 fill-primary/60"
-        />
+          <IconAnalyze className="size-3 fill-primary/60" />
           Analyze
         </Button>
       </DialogTrigger>
@@ -383,7 +397,9 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
                   fallbackSymbol={props.tokenSymbol}
                   priceUsd={priceUsd}
                   change24hPct={
-                    change24h != null && Number.isFinite(change24h) ? change24h : null
+                    change24h != null && Number.isFinite(change24h)
+                      ? change24h
+                      : null
                   }
                   isPending={Boolean(props.isPricePending)}
                 />
@@ -409,7 +425,8 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
                     {props.indicatorTitle}
                     {props.tokenSymbol ? (
                       <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
-                        analysis for {props.tokenSymbol.toUpperCase()} on a {props.timeframe} timeframe
+                        analysis for {props.tokenSymbol.toUpperCase()} on a{" "}
+                        {props.timeframe} timeframe
                       </span>
                     ) : (
                       <span className="ml-2 text-xs font-normal text-muted-foreground tabular-nums">
@@ -426,7 +443,12 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
                 </div>
               ) : null}
               {props.indicatorContext != null ? (
-                <div className={cn("flex flex-wrap gap-1.5", props.indicatorChart != null ? "mt-2" : "mt-1.5")}>
+                <div
+                  className={cn(
+                    "flex flex-wrap items-center gap-x-3 gap-y-1",
+                    props.indicatorChart != null ? "mt-2" : "mt-1.5",
+                  )}
+                >
                   {props.indicatorContext}
                 </div>
               ) : null}
@@ -439,7 +461,6 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
             <div className="absolute top-[-2px] h-[100px] inset-0 z-[1002] pointer-events-none bg-gradient-to-t from-white via-white/50 dark:via-zinc-950/50 to-transparent dark:from-zinc-950 rotate-180" />
           ) : null}
           <ScrollArea className="h-[min(42vh,20rem)] pr-4 mt-8">
-
             <div className="prose prose-invert max-w-none text-pretty min-h-[min(42vh,20rem)]">
               {showError ? (
                 <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
@@ -482,9 +503,13 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
                         {children}
                       </ul>
                     ),
-                    li: ({ children }) => <li className="text-zinc-300">{children}</li>,
+                    li: ({ children }) => (
+                      <li className="text-zinc-300">{children}</li>
+                    ),
                     strong: ({ children }) => (
-                      <strong className="text-white font-semibold">{children}</strong>
+                      <strong className="text-white font-semibold">
+                        {children}
+                      </strong>
                     ),
                   }}
                 >
@@ -496,7 +521,9 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
               !showError &&
               !showPending &&
               completion.trim().length === 0 ? (
-                <div className="text-sm text-muted-foreground">No explanation yet.</div>
+                <div className="text-sm text-muted-foreground">
+                  No explanation yet.
+                </div>
               ) : null}
             </div>
             <div className="sticky bottom-[-2px] h-[100px] inset-0 z-[1002] pointer-events-none bg-gradient-to-t from-white via-white/50 dark:via-zinc-950/50 to-transparent dark:from-zinc-950" />
@@ -504,6 +531,5 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
         </div>
       </DialogContent>
     </Dialog>
-  )
+  );
 }
-
