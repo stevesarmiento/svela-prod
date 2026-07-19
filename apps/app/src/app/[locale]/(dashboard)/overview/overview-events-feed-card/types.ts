@@ -1,4 +1,20 @@
-import type { MoversSnapshot } from "../overview-movers-card";
+export interface MoverRow {
+  coingeckoId: string;
+  name: string;
+  symbol: string;
+  logoUrl: string | null;
+  priceUsd: number;
+  changePct: number;
+  impactUsd: number | null;
+}
+
+export interface MoversSnapshot {
+  generatedAt: number;
+  coinCount: number;
+  missingMarketDataCount: number;
+  gainers: MoverRow[];
+  losers: MoverRow[];
+}
 
 export type EventKind =
   | "news"
@@ -36,18 +52,3 @@ export interface EventsFeedData {
   events: OverviewEvent[];
 }
 
-/** Shared movers wiring for activity feed header + post. */
-export interface ActivityMoversProps {
-  window: "24h" | "7d";
-  onWindowChange: (window: "24h" | "7d") => void;
-  watchlistCoinCount: number;
-  limited: boolean;
-  movers24h: MoversSnapshot;
-  movers7d: MoversSnapshot;
-  onRefreshNow: () => Promise<{
-    scheduled: boolean;
-    reason: string;
-    coinsCount: number;
-    walletsCount: number;
-  }>;
-}

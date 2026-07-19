@@ -7,18 +7,30 @@ import { api } from "../../../../../convex/_generated/api"
 import { convex, getServerToken } from "@/lib/convex-server"
 import { gemini, isGeminiAvailable } from "@/lib/gemini"
 import {
+  bollingerSignal,
+  computeBbwPercentile,
+  computeBollingerPercentB,
   computeRsiLast,
   dataQualityFromCounts,
+  describeBriefChanges,
+  squeezeSignal,
   dispersionFromChangePcts,
+  dispersionFromSpread,
   dominantThemeLabel,
   filterEventsInWindow,
-  moodFromToneCounts,
+  getWindowMs,
+  moodFromBreadthAndTone,
+  numbersGroundedIn,
   rsiSignal,
+  signedPct,
   summarizeTechnicals,
   toneCountsFromEvents,
   topEventKinds as computeTopEventKinds,
   trendFromCloses,
+  truncateText,
   volatilityLevelFromCloses,
+  type BreadthStats,
+  type BriefFactsCore,
   type TechnicalLabels,
 } from "@/lib/overview-daily-brief"
 
@@ -29,8 +41,9 @@ function getRequestIp(req: NextRequest): string {
   return first && first.length > 0 ? first : "127.0.0.1"
 }
 
+// The brief is 24h-only; unknown body keys (e.g. a legacy `window`) are
+// stripped by zod's default non-strict parsing.
 const RequestSchema = z.object({
-  window: z.enum(["24h", "7d"]),
   force: z.boolean().optional(),
 })
 
@@ -44,14 +57,36 @@ type BriefCard = {
   secondary: string | null
   body: string
   tone: CardTone
+  details?: unknown
 }
 
 const AiCopySchema = z.object({
-  summary: z.string().min(1).max(700),
+  summary: z.string().min(1).max(900),
   cardBodies: z.object({
-    regime: z.string().min(1).max(240),
-    technicals: z.string().min(1).max(240),
-    theme: z.string().min(1).max(240),
+    regime: z.string().min(1).max(320),
+    technicals: z.string().min(1).max(320),
+    theme: z.string().min(1).max(320),
+  }),
+})
+
+const PriorFactsSchema = z.object({
+  core: z.object({
+    mood: z.enum(["risk_on", "risk_off", "mixed", "quiet"]),
+    dispersion: z.enum(["high", "medium", "low", "muted"]),
+    theme: z.string(),
+    posture: z.enum([
+      "Stretched",
+      "Washed-out",
+      "Elevated volatility",
+      "Coiled",
+      "Uptrend bias",
+      "Downtrend bias",
+      "Balanced",
+      "Unclear",
+    ]),
+    topGainerSymbol: z.string().nullable(),
+    topLoserSymbol: z.string().nullable(),
+    eventCount: z.number(),
   }),
 })
 
@@ -59,23 +94,24 @@ function normalizeText(value: string): string {
   return value.replace(/\s+/g, " ").trim()
 }
 
-function hasDigits(value: string): boolean {
-  return /[0-9]/.test(value)
+// Splits into sentences without treating decimal points ("+12.4%") as
+// sentence boundaries.
+function splitSentences(value: string): string[] {
+  const guarded = normalizeText(value).replace(/(\d)\.(\d)/g, "$1\u0000$2")
+  if (!guarded) return []
+  const parts = guarded.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [guarded]
+  return parts.map((p) => p.replaceAll("\u0000", ".").trim()).filter(Boolean)
 }
 
 function sentenceCount(value: string): number {
-  const text = normalizeText(value)
-  if (!text) return 0
-  const parts = text.split(/[.!?]+/).map((p) => p.trim()).filter(Boolean)
-  return parts.length
+  return splitSentences(value).length
 }
 
-function toOneSentence(value: string): string {
-  const text = normalizeText(value)
-  if (!text) return ""
-  const match = text.match(/^(.+?[.!?])(\s|$)/)
-  const one = match?.[1] ?? text
-  return one.endsWith(".") || one.endsWith("!") || one.endsWith("?") ? one : `${one}.`
+function clipSentences(value: string, max: number): string {
+  const parts = splitSentences(value)
+  if (parts.length === 0) return ""
+  const clipped = parts.slice(0, max).join(" ").trim()
+  return /[.!?]$/.test(clipped) ? clipped : `${clipped}.`
 }
 
 function titleCase(value: string): string {
@@ -100,6 +136,9 @@ function buildCards(args: {
   windowEventsUniqueCoins: number
   topEventKinds: string[]
   eventTone: CardTone
+  eventToneCounts: { positive: number; negative: number; neutral: number }
+  breadth: BreadthStats | null
+  technicalSampleSize: number
 }): Array<Omit<BriefCard, "body">> {
   const moodLabel =
     args.mood === "risk_on"
@@ -117,6 +156,14 @@ function buildCards(args: {
       ? `Coverage: ${Math.max(0, args.covered)}/${args.coinCount}`
       : `Coverage: ${titleCase(args.dataQuality)}`
 
+  // Prefer full-watchlist breadth over event tone — tone is sparse and
+  // mostly neutral, breadth actually describes participation.
+  const participation = args.breadth
+    ? ` • Breadth: ${args.breadth.advancers}↑/${args.breadth.decliners}↓`
+    : args.windowEventsCount > 0
+      ? ` • Tone: ${args.eventToneCounts.positive}↑/${args.eventToneCounts.negative}↓`
+      : ""
+
   const regimeTone: CardTone =
     args.mood === "risk_on" ? "positive" : args.mood === "risk_off" ? "negative" : "neutral"
 
@@ -130,14 +177,14 @@ function buildCards(args: {
       kind: "regime",
       title: "Regime",
       primary: `Regime: ${moodLabel}`,
-      secondary: `${coverageLine} • Dispersion: ${dispersionLabel}`,
+      secondary: `${coverageLine} • Dispersion: ${dispersionLabel}${participation}`,
       tone: regimeTone,
     },
     {
       kind: "technicals",
       title: "Technicals",
       primary: `Posture: ${args.technicals.posture}`,
-      secondary: `RSI: ${args.technicals.rsi} • Trend: ${args.technicals.trend} • Vol: ${args.technicals.volatility}`,
+      secondary: `RSI: ${args.technicals.rsi} • Trend: ${args.technicals.trend} • Vol: ${args.technicals.volatility}${args.technicalSampleSize > 0 ? ` • Sample: ${args.technicalSampleSize} names` : ""}`,
       tone: args.technicals.tone,
     },
     {
@@ -177,7 +224,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const window = parsed.data.window
+    const window = "24h" as const
 
     const snapshot = await convex.query(api.overview.getMyOverviewSnapshotForServer, {
       serverToken: getServerToken(),
@@ -186,23 +233,31 @@ export async function POST(req: NextRequest) {
 
     const now = Date.now()
 
-    const moversBlock = window === "7d" ? snapshot?.movers7d : snapshot?.movers24h
+    const moversBlock = snapshot?.movers24h
 
     const windowEvents = filterEventsInWindow(snapshot?.events.events ?? [], window, now)
     const topEventKinds = computeTopEventKinds(windowEvents, 2)
 
-    const windowLabel = window === "7d" ? "the last week" : "the last day"
+    const windowLabel = "the last day"
 
     const eventToneCounts = toneCountsFromEvents(windowEvents)
 
-    const mood = moodFromToneCounts({ eventsCount: windowEvents.length, toneCounts: eventToneCounts })
+    const breadth: BreadthStats | null = moversBlock?.breadth ?? null
 
-    const dispersion = dispersionFromChangePcts(
-      [
-        ...(moversBlock?.gainers ?? []).slice(0, 3),
-        ...(moversBlock?.losers ?? []).slice(0, 3),
-      ].map((row) => row?.changePct ?? 0),
-    )
+    const mood = moodFromBreadthAndTone({
+      breadth,
+      eventsCount: windowEvents.length,
+      toneCounts: eventToneCounts,
+    })
+
+    const dispersion = breadth
+      ? dispersionFromSpread(breadth.spreadPct)
+      : dispersionFromChangePcts(
+          [
+            ...(moversBlock?.gainers ?? []).slice(0, 3),
+            ...(moversBlock?.losers ?? []).slice(0, 3),
+          ].map((row) => row?.changePct ?? 0),
+        )
 
     const dataQuality = dataQualityFromCounts({
       coinCount: moversBlock?.coinCount ?? null,
@@ -211,7 +266,7 @@ export async function POST(req: NextRequest) {
 
     const themeLabel = dominantThemeLabel(topEventKinds)
 
-    const timeframe = window === "7d" ? "30" : "7"
+    const timeframe = "7"
     const loadTechnicalLabels = async (coingeckoId: string | null): Promise<TechnicalLabels | null> => {
       if (!coingeckoId) return null
       try {
@@ -229,25 +284,47 @@ export async function POST(req: NextRequest) {
           rsi: rsiSignal(rsi),
           trend: trendFromCloses(closes, 16),
           volatility: volatilityLevelFromCloses(closes, 48),
+          bollinger: bollingerSignal(computeBollingerPercentB(closes, 20, 2)),
+          squeeze: squeezeSignal(computeBbwPercentile(closes, 20, 96)),
         }
       } catch {
         return null
       }
     }
 
-    const candidateIds = Array.from(
-      new Set(
-        [
-          ...(moversBlock?.gainers ?? []).slice(0, 2).map((x) => x.coingeckoId),
-          ...(moversBlock?.losers ?? []).slice(0, 2).map((x) => x.coingeckoId),
-        ].filter(Boolean),
-      ),
-    ).slice(0, 4)
+    // Technicals sample the WATCHLIST, not just the ranked movers: every
+    // mover (they're where the action is) plus a rotating daily slice of the
+    // rest of the list, so over a week the whole watchlist gets covered.
+    const TECH_SAMPLE_TARGET = 16
+    const technicalCandidates = (() => {
+      const byId = new Map<string, { coingeckoId: string; symbol: string }>()
+      for (const row of [...(moversBlock?.gainers ?? []), ...(moversBlock?.losers ?? [])]) {
+        if (row?.coingeckoId && !byId.has(row.coingeckoId)) {
+          byId.set(row.coingeckoId, { coingeckoId: row.coingeckoId, symbol: row.symbol.toUpperCase() })
+        }
+      }
+      const rest = (snapshot?.coins ?? []).filter((c) => !byId.has(c.coingeckoId))
+      if (rest.length > 0) {
+        const dayIndex = Math.floor(now / 86_400_000)
+        const offset = dayIndex % rest.length
+        const rotated = [...rest.slice(offset), ...rest.slice(0, offset)]
+        for (const c of rotated) {
+          if (byId.size >= TECH_SAMPLE_TARGET) break
+          byId.set(c.coingeckoId, { coingeckoId: c.coingeckoId, symbol: c.symbol.toUpperCase() })
+        }
+      }
+      return Array.from(byId.values()).slice(0, TECH_SAMPLE_TARGET)
+    })()
 
-    const technicalSamples = (await Promise.all(candidateIds.map((id) => loadTechnicalLabels(id)))).filter(
-      (x): x is TechnicalLabels => Boolean(x),
-    )
-    const technicals = summarizeTechnicals(technicalSamples)
+    const technicalSamplesWithSymbol = (
+      await Promise.all(
+        technicalCandidates.map(async (c) => {
+          const labels = await loadTechnicalLabels(c.coingeckoId)
+          return labels ? { symbol: c.symbol, ...labels } : null
+        }),
+      )
+    ).filter((x): x is { symbol: string } & TechnicalLabels => Boolean(x))
+    const technicals = summarizeTechnicals(technicalSamplesWithSymbol)
 
     const windowEventsUniqueCoins = new Set(windowEvents.map((e) => e.coingeckoId)).size
     const eventTone: CardTone =
@@ -277,81 +354,211 @@ export async function POST(req: NextRequest) {
       windowEventsUniqueCoins,
       topEventKinds,
       eventTone,
+      eventToneCounts,
+      breadth,
+      technicalSampleSize: technicalSamplesWithSymbol.length,
     })
+
+    const toMoverFact = (row: { symbol: string; name: string; changePct: number }) => ({
+      symbol: row.symbol.toUpperCase(),
+      name: row.name,
+      change: signedPct(row.changePct),
+    })
+    const gainerFacts = (moversBlock?.gainers ?? []).slice(0, 3).map(toMoverFact)
+    const loserFacts = (moversBlock?.losers ?? []).slice(0, 3).map(toMoverFact)
+    const topGainerFact = gainerFacts[0] ?? null
+    const topLoserFact = loserFacts[0] ?? null
+
+    // Most recent event per coin, so headlines cover breadth instead of one
+    // noisy name.
+    const pickedHeadlines = (() => {
+      const sorted = [...windowEvents].sort((a, b) => b.occurredAtMs - a.occurredAtMs)
+      const seen = new Set<string>()
+      const picked: typeof sorted = []
+      for (const e of sorted) {
+        if (seen.has(e.coingeckoId)) continue
+        seen.add(e.coingeckoId)
+        picked.push(e)
+        if (picked.length >= 5) break
+      }
+      return picked
+    })()
+    const headlineEvents = pickedHeadlines.map((e) => ({
+      symbol: e.symbol.toUpperCase(),
+      kind: e.kind,
+      tone: e.tone,
+      title: truncateText(e.title, 120),
+    }))
+
+    const core: BriefFactsCore = {
+      mood,
+      dispersion,
+      theme: themeLabel,
+      posture: technicals.posture,
+      topGainerSymbol: topGainerFact?.symbol ?? null,
+      topLoserSymbol: topLoserFact?.symbol ?? null,
+      eventCount: windowEvents.length,
+    }
+
+    // Diff against the previous brief (if reasonably recent) so the copy can
+    // lead with what actually changed instead of re-describing the same tape.
+    let changesSinceLastBrief: string[] = []
+    try {
+      const prior = await convex.query(api.overview.getMyOverviewBriefFactsForServer, {
+        serverToken: getServerToken(),
+        clerkId,
+        window,
+      })
+      if (prior && now - prior.generatedAt <= 3 * getWindowMs(window)) {
+        const priorFacts = PriorFactsSchema.safeParse(prior.facts)
+        if (priorFacts.success) {
+          changesSinceLastBrief = describeBriefChanges(priorFacts.data.core, core)
+        }
+      }
+    } catch (error) {
+      console.warn("overview daily-brief prior-facts read failed (skipping delta):", error)
+    }
 
     const facts = {
       window,
       windowLabel,
       watchlistCoinCount: snapshot?.watchlistCoinCount ?? 0,
       limited: snapshot?.limited ?? false,
-      insights: {
+      regime: {
         mood,
         dispersion,
         dataQuality,
-        theme: themeLabel,
+        coveredCoins: covered,
+        coinCount: moversBlock?.coinCount ?? null,
+        eventToneCounts,
+        breadth: breadth
+          ? {
+              advancers: breadth.advancers,
+              decliners: breadth.decliners,
+              flat: breadth.flat,
+              medianChange: signedPct(breadth.medianChangePct),
+              movedMoreThan5Pct: breadth.bigMovers,
+            }
+          : null,
+      },
+      movers: {
+        gainers: gainerFacts,
+        losers: loserFacts,
       },
       technicals: {
-        sampleSize: technicalSamples.length,
+        sampleSize: technicalSamplesWithSymbol.length,
         posture: technicals.posture,
         rsi: technicals.rsi,
         trend: technicals.trend,
         volatility: technicals.volatility,
+        byCoin: technicalSamplesWithSymbol.map((t) => ({
+          symbol: t.symbol,
+          rsi: t.rsi,
+          trend: t.trend,
+          volatility: t.volatility,
+          bollinger: t.bollinger ?? "unknown",
+          squeeze: t.squeeze ?? "unknown",
+        })),
       },
-      events: {
-        countInWindow: windowEvents.length,
+      theme: {
+        label: themeLabel,
+        eventCount: windowEvents.length,
         uniqueCoins: windowEventsUniqueCoins,
         topKinds: topEventKinds,
-        toneCounts: eventToneCounts,
+        recentHeadlines: headlineEvents,
       },
+      changesSinceLastBrief: changesSinceLastBrief.length > 0 ? changesSinceLastBrief : null,
     }
 
+    const stretched = technicalSamplesWithSymbol
+      .filter((t) => t.rsi === "overbought" || t.bollinger === "above_band")
+      .map((t) => t.symbol)
+    const washed = technicalSamplesWithSymbol
+      .filter((t) => t.rsi === "oversold" || t.bollinger === "below_band")
+      .map((t) => t.symbol)
+    const coiled = technicalSamplesWithSymbol.filter((t) => t.squeeze === "squeeze").map((t) => t.symbol)
+    const topHeadline = headlineEvents[0] ?? null
+
+    // "News-driven tape" reads badly inside "the event tape leans …".
+    const themePhrase = themeLabel === "News-driven tape" ? "news-driven" : themeLabel.toLowerCase()
+
+    const breadthTotal = breadth ? breadth.advancers + breadth.decliners + breadth.flat : 0
+
     const defaultBodies: Record<CardKind, string> = {
-      regime:
-        mood === "quiet"
-          ? "The tape is fairly quiet in this window, with fewer signals showing up than usual."
-          : mood === "risk_on"
-            ? "The watchlist reads more risk-on than risk-off, with upside-style signals outweighing downside ones."
-            : mood === "risk_off"
-              ? "The watchlist reads more risk-off than risk-on, with downside-style signals taking the lead."
-              : "The watchlist reads mixed, with strength and weakness showing up at the same time.",
+      regime: breadth
+        ? `${breadth.advancers} of ${breadthTotal} names advanced and ${breadth.bigMovers} moved more than 5%, ${
+            mood === "risk_on"
+              ? "so participation is broader than the leaders alone suggest"
+              : mood === "risk_off"
+                ? "so the weakness runs deeper than a few laggards"
+                : "so direction is name-by-name rather than list-wide"
+          }.`
+        : windowEvents.length > 0
+          ? `Signals split ${eventToneCounts.positive} positive / ${eventToneCounts.negative} negative across ${windowEvents.length} events${topGainerFact ? `, with ${topGainerFact.symbol} (${topGainerFact.change}) doing the most lifting` : ""}.`
+          : "The tape is fairly quiet in this window, with fewer signals showing up than usual.",
       technicals:
-        technicalSamples.length > 0
-          ? "Technicals look more posture-driven than name-driven here, which can make follow-through feel uneven."
+        technicalSamplesWithSymbol.length > 0
+          ? stretched.length > 0
+            ? `${stretched.slice(0, 3).join(", ")} look${stretched.length === 1 ? "s" : ""} stretched (RSI/Bollinger), so follow-through there may be fragile.`
+            : washed.length > 0
+              ? `${washed.slice(0, 3).join(", ")} look${washed.length === 1 ? "s" : ""} washed-out (RSI/Bollinger), which can set up choppy rebounds.`
+              : coiled.length > 0
+                ? `${coiled.slice(0, 3).join(", ")} ${coiled.length === 1 ? "is" : "are"} coiling in unusually tight ranges, which often precedes a bigger move.`
+                : `Across ${technicalSamplesWithSymbol.length} names sampled from the watchlist the posture reads ${technicals.posture.toLowerCase()}, with volatility ${technicals.volatility}.`
           : "Not enough price history is available to form a clean technical posture read right now.",
-      theme:
-        windowEvents.length > 0
-          ? "Events are clustering into a small set of themes, which usually explains why the feed feels repetitive."
-          : "No single theme is dominating the watchlist event tape for this window.",
+      theme: topHeadline
+        ? `Recent items like “${truncateText(topHeadline.title, 90)}” (${topHeadline.symbol}) are setting the tone.`
+        : "No single theme is dominating the watchlist event tape for this window.",
     }
 
     const fallbackSummary = (() => {
       const sentences: string[] = []
-      sentences.push(`Here’s a quick note on your watchlist over ${windowLabel}.`)
-      if (mood === "quiet") sentences.push("The tape feels quieter than usual, with fewer signals competing for attention.")
-      if (mood === "risk_on") sentences.push("The mood leans risk-on overall, even if not every name is participating.")
-      if (mood === "risk_off") sentences.push("The mood leans risk-off overall, with more downside-style signals showing up.")
-      if (mood === "mixed") sentences.push("The mood reads mixed, with strength and weakness coexisting in the same window.")
 
-      if (dispersion === "high") sentences.push("Dispersion is high, so a handful of moves can make the whole watchlist feel louder.")
-      if (dispersion === "medium") sentences.push("Dispersion is noticeable, which can create quick leadership rotations.")
-      if (dispersion === "muted") sentences.push("Dispersion is muted, so it’s more of a grind than a sprint.")
+      if (topGainerFact && topLoserFact && topGainerFact.symbol !== topLoserFact.symbol) {
+        sentences.push(
+          `${topGainerFact.symbol} (${topGainerFact.change}) led your watchlist over ${windowLabel}, while ${topLoserFact.symbol} (${topLoserFact.change}) lagged.`,
+        )
+      } else if (topGainerFact) {
+        sentences.push(`${topGainerFact.symbol} (${topGainerFact.change}) set the pace for your watchlist over ${windowLabel}.`)
+      } else {
+        sentences.push(`Here’s a quick note on your watchlist over ${windowLabel}.`)
+      }
 
-      if (windowEvents.length > 0) sentences.push(`The event tape clusters around ${themeLabel.toLowerCase()}, which helps explain what’s driving attention.`)
-      else sentences.push("The event tape is light, so it’s mostly a price-action read.")
+      const moodDesc =
+        mood === "risk_on" ? "risk-on" : mood === "risk_off" ? "risk-off" : mood === "quiet" ? "quiet" : "mixed"
+      if (breadth) {
+        sentences.push(
+          `Underneath, the tape reads ${moodDesc} — ${breadth.advancers} of ${breadthTotal} names up, ${breadth.decliners} down, with a median move of ${signedPct(breadth.medianChangePct)}.`,
+        )
+      } else {
+        const dispersionDesc =
+          dispersion === "high"
+            ? "a handful of outsized moves driving the tone"
+            : dispersion === "medium"
+              ? "enough dispersion for quick leadership rotations"
+              : dispersion === "low"
+                ? "moves staying fairly contained"
+                : "little movement to speak of"
+        sentences.push(`The overall mood reads ${moodDesc}, with ${dispersionDesc}.`)
+      }
 
-      if (technicals.posture === "Stretched") sentences.push("Technically, the group looks a bit stretched, so follow-through may feel fragile.")
-      else if (technicals.posture === "Washed-out") sentences.push("Technically, the group looks washed-out in places, which can set up choppy rebounds.")
-      else if (technicals.posture === "Elevated volatility") sentences.push("Technically, volatility looks elevated, which can widen the range of outcomes.")
-      else if (technicals.posture === "Uptrend bias") sentences.push("Technically, the posture tilts upward, which can make dips feel shallower.")
-      else if (technicals.posture === "Downtrend bias") sentences.push("Technically, the posture tilts downward, which can make rallies feel harder to sustain.")
-      else if (technicals.posture === "Balanced") sentences.push("Technically, posture looks fairly balanced, which often leads to more selective follow-through.")
-      else sentences.push("Technicals are a bit unclear right now, so treat this as a high-level read.")
+      if (topHeadline) {
+        sentences.push(
+          `The event tape leans ${themePhrase} — most recently “${truncateText(topHeadline.title, 80)}” on ${topHeadline.symbol}.`,
+        )
+      } else {
+        sentences.push("The event tape is light, so it’s mostly a price-action read.")
+      }
 
-      if (dataQuality === "patchy") sentences.push("Data coverage is patchy, so consider regenerating once more market data lands.")
-      else if (snapshot?.limited) sentences.push("This read is based on limited coverage right now, so keep it as directional context.")
+      if (changesSinceLastBrief.length > 0) {
+        sentences.push(`Since the last brief, ${changesSinceLastBrief.slice(0, 2).join(", and ")}.`)
+      } else if (dataQuality === "patchy") {
+        sentences.push("Data coverage is patchy, so consider regenerating once more market data lands.")
+      } else if (snapshot?.limited) {
+        sentences.push("This read is based on limited coverage right now, so keep it as directional context.")
+      }
 
-      const clipped = sentences.slice(0, 3)
-      return clipped.join(" ")
+      return sentences.slice(0, 4).join(" ")
     })()
 
     let summary = normalizeText(fallbackSummary)
@@ -360,11 +567,11 @@ export async function POST(req: NextRequest) {
 
     if (isGeminiAvailable && gemini) {
       const system = `
-You write short, grounded UX copy for a crypto watchlist dashboard.
+You write short, grounded copy for a crypto watchlist dashboard brief.
 
-The goal: an "Insight Note" — a warm, narrative paragraph that feels human and non-repetitive.
+The goal: an "Insight Note" — specific and informative, different every day because it leans on that day's actual data instead of generic market language.
 
-Input is JSON with deterministic insights and counts. Do not re-state top gainers/losers; that information is shown elsewhere in the UI.
+Input is JSON with deterministic facts: regime (including breadth across the FULL watchlist — advancers/decliners, median move, how many names moved more than five percent), top movers, per-coin technicals, recent event headlines, and (optionally) what changed since the previous brief.
 
 Output must be valid JSON only with:
 {
@@ -377,15 +584,16 @@ Output must be valid JSON only with:
 }
 
 Rules:
-- Do not invent facts or numbers. Use only what's in the input JSON.
-- Do not include any digits (0-9) in your output.
-- summary: a single paragraph (3 sentences), conversational, no markdown. Do not mention token symbols or "top gainer/loser". Focus on mood, dispersion, and theme.
-- Each card body: exactly 1 sentence, no markdown. It should add color, not repeat the deterministic lines.
-- Avoid financial advice language ("buy", "sell", "should").
-
-Style examples (do not copy verbatim):
-- "This window feels mixed, with pockets of momentum but no clean direction. A recurring theme nudges the tape, making the feed feel louder than it is. Posture looks stretched, so reactions may outpace follow-through."
-- "The watchlist reads calmer than usual, with fewer signals demanding attention. Themes tend to repeat, making the day feel headline-driven. Posture looks balanced, so follow-through may be selective."
+- Ground every claim in the input JSON. Never invent numbers, symbols, or headlines. Reuse numeric values exactly as given (e.g. "+12.4%").
+- summary: one paragraph, three to four sentences, no markdown.
+  1) Lead with the most consequential specific: the standout mover(s) by symbol and change, or the dominant headline.
+  2) Add regime context in plain language, preferring breadth ("X of Y names up, median move Z") over abstract mood words — the leaders are a handful of names, breadth is what describes the whole watchlist.
+  3) If changesSinceLastBrief is non-null, work in what changed since the last brief; otherwise add theme color instead.
+- cardBodies.regime: one or two sentences on participation, citing regime.breadth (advancers vs decliners, median move, big movers) when present; fall back to eventToneCounts otherwise.
+- cardBodies.technicals: one or two sentences naming which sampled coins look stretched, washed-out, coiled (squeeze), or trending, using technicals.byCoin (rsi, bollinger band position, squeeze). The sample spans the watchlist, not just movers. If the sample is empty, say the read is limited.
+- cardBodies.theme: one or two sentences tying the theme to concrete headlines — paraphrase a title and name the coins involved.
+- Each card body must add information the summary did not already state; do not restate the deterministic labels shown next to the card.
+- Avoid financial advice language ("buy", "sell", "should"). Calm, plain analyst tone.
       `.trim()
 
       try {
@@ -397,39 +605,99 @@ Style examples (do not copy verbatim):
           output: Output.object({
             schema: AiCopySchema,
             name: "OverviewDailyBriefCopy",
-            description: "A short summary paragraph and three one-sentence card bodies.",
+            description: "A short summary paragraph and three card bodies.",
           }),
-          temperature: 0.2,
-          maxOutputTokens: 500,
+          temperature: 0.5,
+          maxOutputTokens: 600,
           maxRetries: 2,
           abortSignal: req.signal,
         })
 
+        const factsJson = JSON.stringify(facts)
         const out = result.output
         const nextSummary = normalizeText(out.summary)
-        if (nextSummary && !hasDigits(nextSummary) && sentenceCount(nextSummary) >= 2 && sentenceCount(nextSummary) <= 4) {
+        if (
+          nextSummary &&
+          numbersGroundedIn(nextSummary, factsJson) &&
+          sentenceCount(nextSummary) >= 2 &&
+          sentenceCount(nextSummary) <= 4
+        ) {
           summary = nextSummary
+        } else {
+          console.warn(
+            `overview daily-brief: AI summary rejected (grounded=${numbersGroundedIn(nextSummary, factsJson)}, sentences=${sentenceCount(nextSummary)}), using fallback`,
+          )
         }
 
         const nextBodies: Record<CardKind, string> = {
-          regime: toOneSentence(out.cardBodies.regime),
-          technicals: toOneSentence(out.cardBodies.technicals),
-          theme: toOneSentence(out.cardBodies.theme),
+          regime: clipSentences(out.cardBodies.regime, 2),
+          technicals: clipSentences(out.cardBodies.technicals, 2),
+          theme: clipSentences(out.cardBodies.theme, 2),
         }
 
         for (const kind of Object.keys(nextBodies) as CardKind[]) {
           const b = normalizeText(nextBodies[kind])
-          if (!b || hasDigits(b)) continue
+          if (!b || !numbersGroundedIn(b, factsJson)) {
+            console.warn(`overview daily-brief: AI card body "${kind}" rejected, using fallback`)
+            continue
+          }
           bodies[kind] = b
         }
-      } catch {
+      } catch (error) {
+        console.warn("overview daily-brief: gemini generation failed, using fallback:", error)
         modelName = null
       }
+    }
+
+    // Structured per-card payloads rendered as rich blocks in the UI (breadth
+    // meter, per-coin technical groups, headline mini-list). Built
+    // deterministically so they're present with or without AI copy.
+    const groupedSymbols = new Set([...stretched, ...washed, ...coiled])
+    const trendingUp = technicalSamplesWithSymbol
+      .filter((t) => !groupedSymbols.has(t.symbol) && t.trend === "up")
+      .map((t) => t.symbol)
+    const trendingDown = technicalSamplesWithSymbol
+      .filter((t) => !groupedSymbols.has(t.symbol) && t.trend === "down")
+      .map((t) => t.symbol)
+
+    const cardDetails: Record<CardKind, unknown> = {
+      regime: {
+        breadth: breadth
+          ? {
+              advancers: breadth.advancers,
+              decliners: breadth.decliners,
+              flat: breadth.flat,
+              medianChangePct: breadth.medianChangePct,
+              bigMovers: breadth.bigMovers,
+            }
+          : null,
+        toneCounts: eventToneCounts,
+        eventCount: windowEvents.length,
+      },
+      technicals: {
+        sampleSize: technicalSamplesWithSymbol.length,
+        groups: [
+          { label: "Stretched", symbols: stretched },
+          { label: "Washed-out", symbols: washed },
+          { label: "Coiled", symbols: coiled },
+          { label: "Uptrend", symbols: trendingUp },
+          { label: "Downtrend", symbols: trendingDown },
+        ].filter((g) => g.symbols.length > 0),
+      },
+      theme: {
+        headlines: pickedHeadlines.slice(0, 3).map((e) => ({
+          symbol: e.symbol.toUpperCase(),
+          title: truncateText(e.title, 110),
+          tone: e.tone,
+          occurredAtMs: e.occurredAtMs,
+        })),
+      },
     }
 
     const cards: BriefCard[] = cardsBase.map((c) => ({
       ...c,
       body: bodies[c.kind],
+      details: cardDetails[c.kind],
     }))
 
     const saved = await convex.mutation(api.overview.upsertMyOverviewBriefForServer, {
@@ -438,13 +706,14 @@ Style examples (do not copy verbatim):
       window,
       brief: {
         summary,
-        headline: window === "7d" ? "Last week" : "Last day",
+        headline: "Last day",
         bullets: [],
         risks: [],
         opportunities: [],
         cards,
         model: modelName,
       },
+      facts: { version: 1, core },
     })
 
     return NextResponse.json(saved, { status: 200 })

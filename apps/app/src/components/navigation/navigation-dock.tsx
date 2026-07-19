@@ -25,7 +25,7 @@ const NavigationDockComponent = ({
            dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.4)]
            transition-colors duration-200
            ${mode === 'selection'
-             ? 'bg-zinc-800/80'
+             ? 'bg-zinc-800'
              : 'bg-white/95 border border-gray-200/50 dark:bg-zinc-800/80 backdrop-blur-md dark:border-transparent'
            }`;
   }, [mode]);

@@ -185,7 +185,7 @@ export function ComparativeStatsPanel({
                       value={t.volatility30dAnnualizedPct}
                       min={0}
                       max={maxVol}
-                      className="h-1.5 w-14 text-zinc-400"
+                      className="h-1.5 w-14 text-amber-400"
                     />
                   ) : null}
                 </span>
@@ -336,7 +336,7 @@ export function ComparativeStatsPanel({
                             ? "text-red-400"
                             : t.rsi <= 30
                               ? "text-green-400"
-                              : "text-zinc-400",
+                              : "text-amber-400",
                         )}
                       />
                     ) : null}

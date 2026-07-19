@@ -1,5 +1,6 @@
 "use client";
 
+import { TickMeter } from "@/components/tick-meter";
 import {
   calculateBBWP,
   calculateBollingerBands,
@@ -12,7 +13,6 @@ import {
   calculateRsiDivergences,
 } from "@/hooks/market-vision/rsi-divergences";
 import { getTokenLogoURL } from "@/lib/logo-overrides";
-import { Badge } from "@v1/ui/badge";
 import { Card, CardContent, CardHeader } from "@v1/ui/card";
 import { cn } from "@v1/ui/cn";
 import React, { useMemo } from "react";
@@ -21,8 +21,6 @@ import { BollingerBandsChart } from "./bollinger-bands-chart";
 import { IndicatorExplainDialog } from "./indicator-explain-dialog";
 import { MarketVisionChart } from "./marketvision-chart";
 import { RsiDivergencesChart } from "./rsi-divergences-chart";
-
-type IndicatorChipTone = "neutral" | "positive" | "negative";
 
 export interface IndicatorOhlcvBar {
   time: number;
@@ -104,14 +102,6 @@ const SECONDS_PER_DAY = 24 * 60 * 60;
 const EXPLAIN_MAX_BARS = 180;
 const EXPLAIN_DIALOG_CHART_HEIGHT = 220;
 
-function getChipClasses(tone: IndicatorChipTone): string {
-  if (tone === "positive")
-    return "border-emerald-500/15 bg-emerald-500/10 text-emerald-200";
-  if (tone === "negative")
-    return "border-rose-500/15 bg-rose-500/10 text-rose-200";
-  return "border-white/10 bg-white/5 text-muted-foreground";
-}
-
 function lastFiniteValue(
   points: Array<{ value: number }> | undefined,
 ): number | null {
@@ -123,50 +113,82 @@ function lastFiniteValue(
   return null;
 }
 
-function labelRsi(value: number | null): {
+/**
+ * Sidebar-style stat readout (mirrors ComparativeStatsPanel rows): tiny
+ * uppercase label, mono value, and an optional TickMeter reinforcing the
+ * value's magnitude/direction against its domain. The meter inherits its
+ * color from `valueClass` via currentColor.
+ */
+function IndicatorStat({
+  label,
+  value,
+  valueClass = "text-zinc-300",
+  status,
+  meter,
+  meterClass,
+}: {
   label: string;
-  tone: IndicatorChipTone;
-} {
-  if (value == null) return { label: "RSI —", tone: "neutral" };
-  if (value >= 70)
-    return { label: `RSI ${value.toFixed(0)} Overbought`, tone: "negative" };
-  if (value <= 30)
-    return { label: `RSI ${value.toFixed(0)} Oversold`, tone: "positive" };
-  return { label: `RSI ${value.toFixed(0)} Neutral`, tone: "neutral" };
+  value: string;
+  valueClass?: string;
+  status?: string;
+  meter?: {
+    value: number;
+    min: number;
+    max: number;
+    origin?: number | "min";
+  };
+  /**
+   * Meter color override — neutral stats keep grey text but an amber fill so
+   * the bar reads against its dim track instead of grey-on-grey.
+   */
+  meterClass?: string;
+}) {
+  return (
+    <span className="flex items-center gap-2 text-[13px]">
+      <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+        {label}
+      </span>
+      <span className={cn("font-berkeley-mono tabular-nums", valueClass)}>
+        {value}
+      </span>
+      {meter ? (
+        <TickMeter
+          value={meter.value}
+          min={meter.min}
+          max={meter.max}
+          origin={meter.origin ?? "min"}
+          className={cn("h-2 w-14", meterClass ?? valueClass)}
+        />
+      ) : null}
+      {status ? (
+        <span className={cn("text-[10px]", valueClass)}>{status}</span>
+      ) : null}
+    </span>
+  );
 }
 
-function labelMoneyFlow(value: number | null): {
-  label: string;
-  tone: IndicatorChipTone;
-} {
-  if (value == null) return { label: "Money flow —", tone: "neutral" };
-  if (value > 0) return { label: "Money flow Inflow", tone: "positive" };
-  if (value < 0) return { label: "Money flow Outflow", tone: "negative" };
-  return { label: "Money flow Neutral", tone: "neutral" };
-}
-
-function labelBbwp(value: number | null): {
-  label: string;
-  tone: IndicatorChipTone;
-} {
-  if (value == null) return { label: "BBWP —", tone: "neutral" };
-  if (value <= 20)
-    return { label: `BBWP ${value.toFixed(0)} Compression`, tone: "neutral" };
-  if (value >= 80)
-    return { label: `BBWP ${value.toFixed(0)} Expansion`, tone: "negative" };
-  return { label: `BBWP ${value.toFixed(0)} Normal`, tone: "neutral" };
-}
-
-function labelRsiDivergence(type: RsiDivergenceType | null): {
-  label: string;
-  tone: IndicatorChipTone;
-} {
-  if (!type) return { label: "Divergence —", tone: "neutral" };
-  if (type === "bullish") return { label: "Divergence Bull", tone: "positive" };
-  if (type === "bearish") return { label: "Divergence Bear", tone: "negative" };
-  if (type === "h_bullish")
-    return { label: "Divergence H_Bull", tone: "positive" };
-  return { label: "Divergence H_Bear", tone: "negative" };
+function RsiStat({ value }: { value: number | null }) {
+  if (value == null) {
+    return <IndicatorStat label="RSI" value="—" valueClass="text-zinc-500" />;
+  }
+  const overbought = value >= 70;
+  const oversold = value <= 30;
+  return (
+    <IndicatorStat
+      label="RSI"
+      value={value.toFixed(0)}
+      valueClass={
+        overbought
+          ? "text-red-400"
+          : oversold
+            ? "text-green-400"
+            : "text-zinc-300"
+      }
+      status={overbought ? "Overbought" : oversold ? "Oversold" : undefined}
+      meter={{ value, min: 0, max: 100 }}
+      meterClass={overbought || oversold ? undefined : "text-amber-400"}
+    />
+  );
 }
 
 export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
@@ -183,19 +205,18 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
   const marketVisionWt1 = lastFiniteValue(marketVisionCalculations.series.wt1);
   const marketVisionWt2 = lastFiniteValue(marketVisionCalculations.series.wt2);
 
-  const marketVisionBias: { label: string; tone: IndicatorChipTone } =
-    useMemo(() => {
-      if (marketVisionWt1 == null || marketVisionWt2 == null) {
-        return { label: "WaveTrend —", tone: "neutral" };
+  // Domain for the diverging money-flow meter: symmetric around 0 so the
+  // filled segment reads as inflow/outflow strength vs the window's peak.
+  const moneyFlowMaxAbs = useMemo(() => {
+    let max = 1;
+    for (const point of marketVisionCalculations.series.rsiMfi) {
+      const v = point?.value;
+      if (typeof v === "number" && Number.isFinite(v)) {
+        max = Math.max(max, Math.abs(v));
       }
-      if (marketVisionWt1 > marketVisionWt2) {
-        return { label: "WaveTrend Bullish bias", tone: "positive" };
-      }
-      if (marketVisionWt1 < marketVisionWt2) {
-        return { label: "WaveTrend Bearish bias", tone: "negative" };
-      }
-      return { label: "WaveTrend Neutral", tone: "neutral" };
-    }, [marketVisionWt1, marketVisionWt2]);
+    }
+    return max;
+  }, [marketVisionCalculations.series.rsiMfi]);
 
   const bollingerConfig = useMemo(
     () => ({
@@ -219,17 +240,15 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
   const bbUpper = lastFiniteValue(bollingerResult?.upper);
   const bbLower = lastFiniteValue(bollingerResult?.lower);
 
-  const bollingerPosition: { label: string; tone: IndicatorChipTone } =
-    useMemo(() => {
-      if (bbIndicator == null || bbUpper == null || bbLower == null) {
-        return { label: "Band position —", tone: "neutral" };
-      }
-      if (bbIndicator > bbUpper)
-        return { label: "Band position Above upper", tone: "negative" };
-      if (bbIndicator < bbLower)
-        return { label: "Band position Below lower", tone: "positive" };
-      return { label: "Band position Inside", tone: "neutral" };
-    }, [bbIndicator, bbUpper, bbLower]);
+  // %B-style position of the RSI within its Bollinger bands (0 = lower band,
+  // 1 = upper band) — same readout the comparative sidebar uses.
+  const bbPercentB =
+    bbIndicator != null &&
+    bbUpper != null &&
+    bbLower != null &&
+    bbUpper > bbLower
+      ? (bbIndicator - bbLower) / (bbUpper - bbLower)
+      : null;
 
   const bbwpConfig = useMemo(
     () => ({
@@ -349,105 +368,154 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
   );
 
   const marketVisionExplainBadges = useMemo(() => {
-    const rsiChip = labelRsi(marketVisionRsiValue);
-    const moneyFlowChip = labelMoneyFlow(marketVisionMoneyFlowValue);
+    const wtKnown = marketVisionWt1 != null && marketVisionWt2 != null;
+    const wtBullish = wtKnown && marketVisionWt1 > marketVisionWt2;
+    const wtBearish = wtKnown && marketVisionWt1 < marketVisionWt2;
+    const mf = marketVisionMoneyFlowValue;
     return (
       <>
-        <Badge
-          variant="outline"
-          className={cn(
-            "h-5 px-2 text-[10px] font-normal",
-            getChipClasses(rsiChip.tone),
-          )}
-        >
-          {rsiChip.label}
-        </Badge>
-        <Badge
-          variant="outline"
-          className={cn(
-            "h-5 px-2 text-[10px] font-normal",
-            getChipClasses(marketVisionBias.tone),
-          )}
-        >
-          {marketVisionBias.label}
-        </Badge>
-        <Badge
-          variant="outline"
-          className={cn(
-            "h-5 px-2 text-[10px] font-normal",
-            getChipClasses(moneyFlowChip.tone),
-          )}
-        >
-          {moneyFlowChip.label}
-        </Badge>
+        <RsiStat value={marketVisionRsiValue} />
+        <IndicatorStat
+          label="WT"
+          value={
+            !wtKnown
+              ? "—"
+              : wtBullish
+                ? "↑ Bullish"
+                : wtBearish
+                  ? "↓ Bearish"
+                  : "· Neutral"
+          }
+          valueClass={
+            wtBullish
+              ? "text-green-400"
+              : wtBearish
+                ? "text-red-400"
+                : wtKnown
+                  ? "text-zinc-300"
+                  : "text-zinc-500"
+          }
+        />
+        {mf == null ? (
+          <IndicatorStat label="MF" value="—" valueClass="text-zinc-500" />
+        ) : (
+          <IndicatorStat
+            label="MF"
+            value={`${mf > 0 ? "+" : ""}${mf.toFixed(0)}`}
+            valueClass={
+              mf > 0
+                ? "text-green-400"
+                : mf < 0
+                  ? "text-red-400"
+                  : "text-zinc-300"
+            }
+            status={mf > 0 ? "Inflow" : mf < 0 ? "Outflow" : undefined}
+            meter={{
+              value: mf,
+              min: -moneyFlowMaxAbs,
+              max: moneyFlowMaxAbs,
+              origin: 0,
+            }}
+          />
+        )}
       </>
     );
-  }, [marketVisionBias, marketVisionMoneyFlowValue, marketVisionRsiValue]);
+  }, [
+    marketVisionMoneyFlowValue,
+    marketVisionRsiValue,
+    marketVisionWt1,
+    marketVisionWt2,
+    moneyFlowMaxAbs,
+  ]);
 
-  const bollingerExplainBadges = useMemo(() => {
-    const rsiChip = labelRsi(bbIndicator);
-    return (
+  const bollingerExplainBadges = useMemo(
+    () => (
       <>
-        <Badge
-          variant="outline"
-          className={cn(
-            "h-5 px-2 text-[10px] font-normal",
-            getChipClasses(rsiChip.tone),
-          )}
-        >
-          {rsiChip.label}
-        </Badge>
-        <Badge
-          variant="outline"
-          className={cn(
-            "h-5 px-2 text-[10px] font-normal",
-            getChipClasses(bollingerPosition.tone),
-          )}
-        >
-          {bollingerPosition.label}
-        </Badge>
+        <RsiStat value={bbIndicator} />
+        {bbPercentB == null ? (
+          <IndicatorStat label="%B" value="—" valueClass="text-zinc-500" />
+        ) : (
+          <IndicatorStat
+            label="%B"
+            value={bbPercentB.toFixed(2)}
+            valueClass={
+              bbPercentB > 1
+                ? "text-red-400"
+                : bbPercentB < 0
+                  ? "text-green-400"
+                  : "text-zinc-300"
+            }
+            status={
+              bbPercentB > 1
+                ? "Above upper"
+                : bbPercentB < 0
+                  ? "Below lower"
+                  : "Inside"
+            }
+            meter={{ value: bbPercentB, min: 0, max: 1 }}
+            meterClass={
+              bbPercentB > 1 || bbPercentB < 0 ? undefined : "text-amber-400"
+            }
+          />
+        )}
       </>
-    );
-  }, [bbIndicator, bollingerPosition]);
+    ),
+    [bbIndicator, bbPercentB],
+  );
 
   const bbwpExplainBadges = useMemo(() => {
-    const bbwpChip = labelBbwp(bbwpValue);
+    if (bbwpValue == null) {
+      return (
+        <IndicatorStat label="BBWP" value="—" valueClass="text-zinc-500" />
+      );
+    }
+    const squeeze = bbwpValue <= 20;
+    const expansion = bbwpValue >= 80;
     return (
-      <Badge
-        variant="outline"
-        className={cn(
-          "h-5 px-2 text-[10px] font-normal",
-          getChipClasses(bbwpChip.tone),
-        )}
-      >
-        {bbwpChip.label}
-      </Badge>
+      <IndicatorStat
+        label="BBWP"
+        value={bbwpValue.toFixed(0)}
+        valueClass={
+          squeeze
+            ? "text-amber-400"
+            : expansion
+              ? "text-rose-400"
+              : "text-zinc-300"
+        }
+        status={squeeze ? "Compression" : expansion ? "Expansion" : "Normal"}
+        meter={{ value: bbwpValue, min: 0, max: 100 }}
+        meterClass={squeeze || expansion ? undefined : "text-amber-400"}
+      />
     );
   }, [bbwpValue]);
 
   const rsiDivergencesExplainBadges = useMemo(() => {
-    const rsiChip = labelRsi(rsiDivergencesRsiValue);
-    const divergenceChip = labelRsiDivergence(rsiDivergencesLatestType);
+    const type = rsiDivergencesLatestType;
+    const bullish = type === "bullish" || type === "h_bullish";
     return (
       <>
-        <Badge
-          variant="outline"
-          className={cn(
-            "h-5 px-2 text-[10px] font-normal",
-            getChipClasses(rsiChip.tone),
-          )}
-        >
-          {rsiChip.label}
-        </Badge>
-        <Badge
-          variant="outline"
-          className={cn(
-            "h-5 px-2 text-[10px] font-normal",
-            getChipClasses(divergenceChip.tone),
-          )}
-        >
-          {divergenceChip.label}
-        </Badge>
+        <RsiStat value={rsiDivergencesRsiValue} />
+        <IndicatorStat
+          label="Div"
+          value={
+            !type
+              ? "—"
+              : type === "bullish"
+                ? "Bull"
+                : type === "bearish"
+                  ? "Bear"
+                  : type === "h_bullish"
+                    ? "H Bull"
+                    : "H Bear"
+          }
+          valueClass={
+            !type
+              ? "text-zinc-500"
+              : bullish
+                ? "text-green-400"
+                : "text-red-400"
+          }
+        />
       </>
     );
   }, [rsiDivergencesLatestType, rsiDivergencesRsiValue]);
@@ -547,7 +615,7 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                 <div className="text-xs text-muted-foreground text-pretty">
                   Tracks momentum shifts using WaveTrend + money flow.
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                   {marketVisionExplainBadges}
                 </div>
               </div>
@@ -638,7 +706,7 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                 <div className="text-xs text-muted-foreground text-pretty">
                   Shows RSI relative to its own bands (overextension vs mean).
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                   {bollingerExplainBadges}
                 </div>
               </div>
@@ -737,7 +805,7 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                   Percentile rank of bandwidth (detects compression vs
                   expansion).
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                   {bbwpExplainBadges}
                 </div>
               </div>
@@ -824,7 +892,7 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                   Compares RSI pivots against price pivots to flag bullish and
                   bearish divergence.
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                   {rsiDivergencesExplainBadges}
                 </div>
               </div>

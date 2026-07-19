@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as _lib_breadth from "../_lib/breadth.js";
 import type * as _lib_chartFreshness from "../_lib/chartFreshness.js";
 import type * as _lib_coingeckoFetch from "../_lib/coingeckoFetch.js";
 import type * as _lib_holdings from "../_lib/holdings.js";
@@ -54,6 +55,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "_lib/breadth": typeof _lib_breadth;
   "_lib/chartFreshness": typeof _lib_chartFreshness;
   "_lib/coingeckoFetch": typeof _lib_coingeckoFetch;
   "_lib/holdings": typeof _lib_holdings;

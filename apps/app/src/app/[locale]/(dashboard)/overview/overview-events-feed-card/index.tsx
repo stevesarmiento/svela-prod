@@ -22,8 +22,4 @@ export function OverviewEventsFeedCard(props: { events: EventsFeedData }) {
   return <OverviewEventsFeedCardBase events={props.events} />;
 }
 
-export type {
-  ActivityMoversProps,
-  EventsFeedData,
-  OverviewEvent,
-} from "./types";
+export type { EventsFeedData, OverviewEvent } from "./types";
