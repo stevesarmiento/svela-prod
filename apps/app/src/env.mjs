@@ -24,6 +24,7 @@ export const env = createEnv({
     BIRDEYE_API_KEY: z.string().optional(),
     API_ENCRYPTION_KEY: z.string().optional(),
     INTERNAL_CONVEX_SERVER_TOKEN: z.string().min(1),
+    ADMIN_EMAILS: z.string().optional(),
   },
   client: {
     NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
@@ -58,6 +59,7 @@ export const env = createEnv({
     'CG-API-KEY': process.env['CG-API-KEY'],
     API_ENCRYPTION_KEY: process.env.API_ENCRYPTION_KEY,
     INTERNAL_CONVEX_SERVER_TOKEN: process.env.INTERNAL_CONVEX_SERVER_TOKEN,
+    ADMIN_EMAILS: process.env.ADMIN_EMAILS,
   },
   skipValidation: !!process.env.CI || !!process.env.SKIP_ENV_VALIDATION,
 });

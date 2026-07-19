@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-import { getUserByClerkId } from "./_lib/user_lookup";
 import { mutation, query } from "./_generated/server";
 import { requireServerToken } from "./_lib/server_token";
+import { getUserByClerkId } from "./_lib/user_lookup";
 
 const isDebug = process.env.LOG_LEVEL === "debug";
 
@@ -13,6 +13,7 @@ const userValidator = v.object({
   email: v.optional(v.string()),
   fullName: v.optional(v.string()),
   avatarUrl: v.optional(v.string()),
+  walletAddress: v.optional(v.string()),
 });
 
 export const getCurrentUser = query({
@@ -35,7 +36,8 @@ export const createUser = mutation({
   returns: v.id("users"),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
-    if (isDebug) console.log("[users.createUser] called", { clerkId: args.clerkId });
+    if (isDebug)
+      console.log("[users.createUser] called", { clerkId: args.clerkId });
     const email = args.email?.trim() || undefined;
 
     // Check if user already exists
@@ -61,7 +63,8 @@ export const createUser = mutation({
       fullName: args.fullName,
       avatarUrl: args.avatarUrl,
     });
-    if (isDebug) console.log("[users.createUser] inserted", { userId: newUserId });
+    if (isDebug)
+      console.log("[users.createUser] inserted", { userId: newUserId });
     return newUserId;
   },
 });
@@ -89,11 +92,33 @@ export const updateUser = mutation({
   },
 });
 
+/**
+ * Backfill-only: set the sign-in wallet address for a user without touching
+ * other profile fields. Used by admin/backfill scripts with the server token;
+ * the normal path is `upsertCurrentUser` from the client bootstrap.
+ */
+export const setWalletAddress = mutation({
+  args: {
+    serverToken: v.string(),
+    clerkId: v.string(),
+    walletAddress: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const user = await getUserByClerkId(ctx.db, args.clerkId);
+    if (!user) return null;
+    await ctx.db.patch(user._id, { walletAddress: args.walletAddress });
+    return null;
+  },
+});
+
 export const upsertCurrentUser = mutation({
   args: {
     email: v.optional(v.string()),
     fullName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
+    walletAddress: v.optional(v.string()),
   },
   returns: v.id("users"),
   handler: async (ctx, args) => {
@@ -113,6 +138,7 @@ export const upsertCurrentUser = mutation({
           email,
           fullName: args.fullName,
           avatarUrl: args.avatarUrl,
+          ...(args.walletAddress ? { walletAddress: args.walletAddress } : {}),
         });
       }
       return existing._id;
@@ -123,8 +149,10 @@ export const upsertCurrentUser = mutation({
       email,
       fullName: args.fullName,
       avatarUrl: args.avatarUrl,
+      walletAddress: args.walletAddress,
     });
-    if (isDebug) console.log("[users.upsertCurrentUser] inserted", { userId: id });
+    if (isDebug)
+      console.log("[users.upsertCurrentUser] inserted", { userId: id });
     return id;
   },
 });

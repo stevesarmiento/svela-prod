@@ -10,6 +10,9 @@ export default defineSchema({
     email: v.optional(v.string()),
     fullName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
+    // Sign-in Solana wallet from Clerk (web3 wallet). Display fallback for
+    // wallet-only accounts that have no email/name.
+    walletAddress: v.optional(v.string()),
   })
     .index("by_clerk_id", ["clerkId"])
     .index("by_dev_clerk_id", ["devClerkId"])
@@ -593,4 +596,18 @@ export default defineSchema({
     .index("by_surface", ["surface"])
     .index("by_surface_and_created_at_ms", ["surface", "createdAtMs"])
     .index("by_created_at_ms", ["createdAtMs"]),
+
+  /**
+   * Per-user AI feature usage counters (e.g. "analyze", "screener_search").
+   * One row per (user, feature); upserted by API routes via server token.
+   * Powers the internal admin dashboard's per-user usage view.
+   */
+  aiFeatureUsage: defineTable({
+    userId: v.id("users"),
+    feature: v.string(), // "analyze" | "screener_search"
+    count: v.number(),
+    lastUsedAt: v.number(),
+  })
+    .index("by_user_feature", ["userId", "feature"])
+    .index("by_feature", ["feature"]),
 });

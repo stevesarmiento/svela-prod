@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { useAuth as useClerkAuth, useUser } from "@clerk/nextjs";
 import { ConvexReactClient, useConvexAuth, useMutation } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
+import React, { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { api } from "../../../convex/_generated/api";
 
 interface ConvexProviderProps {
@@ -18,13 +18,17 @@ const convex = new ConvexReactClient(convexUrl);
 function useAuthWithConvexTokenFallback(): ReturnType<typeof useClerkAuth> {
   const clerk = useClerkAuth();
 
-  const getToken = React.useCallback<ReturnType<typeof useClerkAuth>["getToken"]>(
+  const getToken = React.useCallback<
+    ReturnType<typeof useClerkAuth>["getToken"]
+  >(
     async (options) => {
       const skipCache = options?.skipCache;
 
       // Try the Convex JWT template first (classic setup), then fall back to the
       // default token (Convex integration setup).
-      const templated = await clerk.getToken({ template: "convex", skipCache }).catch(() => null);
+      const templated = await clerk
+        .getToken({ template: "convex", skipCache })
+        .catch(() => null);
       if (templated) return templated;
 
       return await clerk.getToken({ skipCache }).catch(() => null);
@@ -48,11 +52,16 @@ function UserBootstrap({ children }: ConvexProviderProps) {
   const bootstrapPayload = useMemo(() => {
     if (!user) return null;
     const email = user.emailAddresses[0]?.emailAddress?.trim() || undefined;
+    const walletAddress =
+      user.primaryWeb3Wallet?.web3Wallet ??
+      user.web3Wallets[0]?.web3Wallet ??
+      undefined;
     return {
       userId: user.id,
       email,
       fullName: user.fullName ?? undefined,
       avatarUrl: user.imageUrl ?? undefined,
+      walletAddress,
     } as const;
   }, [user]);
 
@@ -68,6 +77,7 @@ function UserBootstrap({ children }: ConvexProviderProps) {
       email: bootstrapPayload.email,
       fullName: bootstrapPayload.fullName,
       avatarUrl: bootstrapPayload.avatarUrl,
+      walletAddress: bootstrapPayload.walletAddress,
     });
   }, [
     isClerkLoaded,
@@ -82,7 +92,10 @@ function UserBootstrap({ children }: ConvexProviderProps) {
 
 export function ConvexProvider({ children }: ConvexProviderProps) {
   return (
-    <ConvexProviderWithClerk client={convex} useAuth={useAuthWithConvexTokenFallback}>
+    <ConvexProviderWithClerk
+      client={convex}
+      useAuth={useAuthWithConvexTokenFallback}
+    >
       <UserBootstrap>{children}</UserBootstrap>
     </ConvexProviderWithClerk>
   );
