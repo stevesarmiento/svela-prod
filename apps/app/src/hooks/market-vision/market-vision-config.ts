@@ -1,5 +1,7 @@
 'use client'
 
+import type { DivergenceType } from './divergence-engine'
+
 export interface Time {
   time: number
 }
@@ -136,6 +138,25 @@ export interface VmcMacdColorsSettings {
   macdWTColorsTF: string
 }
 
+/**
+ * Settings for the tolerance-pairing divergence engine (divergence-engine.ts)
+ * that runs alongside the Pine-parity fractal detector. Unlike VMC's fractal
+ * approach (price + oscillator pivot on the exact same bar), this pairs
+ * independently-found pivots within `tolBars` bars — catching divergences the
+ * original indicator misses. Output is additive (result.divergences); it does
+ * not change the Pine-parity dots/signals.
+ */
+export interface VmcDivergenceEngineSettings {
+  enabled: boolean
+  leftBars: number
+  rightBars: number
+  pairMode: 'TV-like' | 'Same Bar'
+  tolBars: number
+  allowEqual: boolean
+  priceEps: number
+  oscEps: number
+}
+
 export interface VmcModeSettings {
   darkMode: boolean
 }
@@ -197,6 +218,7 @@ export interface MarketVisionBConfig {
   schaff: VmcSchaffSettings
   sommi: VmcSommiSettings
   macdColors: VmcMacdColorsSettings
+  divergenceEngine: VmcDivergenceEngineSettings
   mode: VmcModeSettings
   colors: VmcColorSettings
 }
@@ -255,10 +277,60 @@ export interface MarketVisionSignalSeries {
   sommiBullDiamond: ColoredSeriesDataPoint[]
 }
 
+/** A discrete signal occurrence — mirrors the Pine script's alertcondition()s. */
+export interface MarketVisionEventPoint {
+  time: number
+  index: number
+}
+
+export interface MarketVisionEvents {
+  /** Big green circle: WT cross up while oversold ("Buy (Big green circle)"). */
+  buy: MarketVisionEventPoint[]
+  /** Big red circle: WT cross down while overbought ("Sell (Big red circle)"). */
+  sell: MarketVisionEventPoint[]
+  /** Divergence buy dot ("Buy (Big green circle + Div)"), at the confirmation bar. */
+  buyDiv: MarketVisionEventPoint[]
+  /** Divergence sell dot ("Sell (Big red circle + Div)"), at the confirmation bar. */
+  sellDiv: MarketVisionEventPoint[]
+  /** Gold circle ("GOLD Buy"), at the confirmation bar. */
+  goldBuy: MarketVisionEventPoint[]
+  /** Any WT cross up ("Buy (Small green dot)"). */
+  smallBuyDot: MarketVisionEventPoint[]
+  /** Any WT cross down ("Sell (Small red dot)"). */
+  smallSellDot: MarketVisionEventPoint[]
+  sommiBullFlag: MarketVisionEventPoint[]
+  sommiBearFlag: MarketVisionEventPoint[]
+  sommiBullDiamond: MarketVisionEventPoint[]
+  sommiBearDiamond: MarketVisionEventPoint[]
+}
+
+/** Tolerance-paired divergence with resolved times (drawable as a line segment). */
+export interface MarketVisionPairedDivergence {
+  type: DivergenceType
+  startIndex: number
+  endIndex: number
+  startTime: number
+  endTime: number
+  oscStart: number
+  oscEnd: number
+  priceStart: number
+  priceEnd: number
+}
+
+export interface MarketVisionDivergences {
+  wt: MarketVisionPairedDivergence[]
+  rsi: MarketVisionPairedDivergence[]
+  stoch: MarketVisionPairedDivergence[]
+}
+
 // Results Interface (Pine v4 series payload)
 export interface MarketVisionBResult {
   series: MarketVisionSignalSeries
   levels: MarketVisionSeriesLevels
+  /** Discrete signal events (Pine alertcondition parity). Additive — safe to ignore. */
+  events: MarketVisionEvents
+  /** Tolerance-paired divergences (upgraded engine). Additive — safe to ignore. */
+  divergences: MarketVisionDivergences
 }
 
 // Default Configuration
@@ -349,6 +421,16 @@ export const DEFAULT_MARKET_VISION_CONFIG: MarketVisionBConfig = {
   macdColors: {
     macdWTColorsShow: false,
     macdWTColorsTF: '240',
+  },
+  divergenceEngine: {
+    enabled: true,
+    leftBars: 5,
+    rightBars: 5,
+    pairMode: 'TV-like',
+    tolBars: 2,
+    allowEqual: true,
+    priceEps: 0,
+    oscEps: 0,
   },
   mode: {
     darkMode: false,

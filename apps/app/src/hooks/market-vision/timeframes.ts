@@ -128,15 +128,32 @@ export function buildBaseToResampledIndexMap(
   return baseToHtf
 }
 
+/**
+ * Map HTF values back onto base-timeframe bars, mirroring Pine's
+ * `security()` merge strategies:
+ *
+ * - `'on'`  (barmerge.lookahead_on): base bars inside HTF bucket B read
+ *   bucket B's *final* value. This leaks the future within the bucket on
+ *   historical data — only use it where the Pine original explicitly does
+ *   (VMC's `f_getTFCandle` for the Sommi diamond).
+ * - `'off'` (barmerge.lookahead_off, Pine's default): base bars inside
+ *   bucket B read the last *completed* bucket (B-1). This matches how the
+ *   Pine script renders historically and is repaint-free.
+ */
+export type SecurityLookahead = 'on' | 'off'
+
 export function alignHtfValuesToBase(
   baseToHtfIndex: Array<number | null>,
   htfValues: number[],
+  lookahead: SecurityLookahead = 'on',
 ): number[] {
   const out: number[] = new Array(baseToHtfIndex.length).fill(Number.NaN)
   for (let i = 0; i < baseToHtfIndex.length; i++) {
     const hIx = baseToHtfIndex[i]
     if (hIx == null) continue
-    out[i] = htfValues[hIx] ?? Number.NaN
+    const readIx = lookahead === 'off' ? hIx - 1 : hIx
+    if (readIx < 0) continue
+    out[i] = htfValues[readIx] ?? Number.NaN
   }
   return out
 }
