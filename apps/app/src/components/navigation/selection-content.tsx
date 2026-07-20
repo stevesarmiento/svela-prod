@@ -65,26 +65,29 @@ export const SelectionContent = React.memo(({ selectionState }: SelectionContent
       </div>
       <div className="flex items-center gap-4">
         <AnalyzeButton selectionState={selectionState} />
-        <Button
-          onClick={selectionState.onRemoveSelected}
-          disabled={selectionState.selectedCoins.size === 0 || selectionState.isRemoving}
-          variant="destructive"
-          size="sm"
-          className="rounded-[10px] text-xs h-7 px-2 !pr-3"
-        >
-          {selectionState.isRemoving ? (
-            <>
-              <Spinner size={14} className="mr-1" />
-              Removing...
-            </>
-          ) : (
-            <div className="flex items-center gap-1">
-              <IconTrash className="h-3 w-3 fill-white" />
-              Remove
-              {/* ({selectionState.selectedCoins.size}) */}
-            </div>
-          )}
-        </Button>
+        {/* Read-only tables (screener) provide no onRemoveSelected — no Remove. */}
+        {selectionState.onRemoveSelected ? (
+          <Button
+            onClick={selectionState.onRemoveSelected}
+            disabled={selectionState.selectedCoins.size === 0 || selectionState.isRemoving}
+            variant="destructive"
+            size="sm"
+            className="rounded-[10px] text-xs h-7 px-2 !pr-3"
+          >
+            {selectionState.isRemoving ? (
+              <>
+                <Spinner size={14} className="mr-1" />
+                Removing...
+              </>
+            ) : (
+              <div className="flex items-center gap-1">
+                <IconTrash className="h-3 w-3 fill-white" />
+                Remove
+                {/* ({selectionState.selectedCoins.size}) */}
+              </div>
+            )}
+          </Button>
+        ) : null}
       </div>
     </div>
   );

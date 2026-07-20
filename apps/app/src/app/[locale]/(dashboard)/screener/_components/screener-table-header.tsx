@@ -33,7 +33,6 @@ export function ScreenerTableHeader({ table }: ScreenerTableHeaderProps) {
                 canSort
                   ? "cursor-pointer select-none hover:text-foreground"
                   : "",
-                header.column.id === "actions" && "whitespace-nowrap",
               );
 
               const content = (

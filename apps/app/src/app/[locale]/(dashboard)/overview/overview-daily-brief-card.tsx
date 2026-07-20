@@ -986,22 +986,14 @@ export function OverviewDailyBriefCard(props: {
                       animate={{ opacity: 1, y: 0 }}
                       exit={shouldReduceMotion ? undefined : { opacity: 0, y: 0 }}
                       transition={{ duration: dur, ease: EASE_OUT_CUBIC }}
-                      className={SLIDE_CARD_CLASS}
+                      className={cn(
+                        "h-full overflow-y-auto rounded-2xl bg-zinc-100/80 dark:bg-white/[0.06]",
+                        // No label row — the summary IS the slide. Large type,
+                        // vertically centered.
+                        "flex items-center p-6 sm:p-7",
+                      )}
                     >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                          Brief
-                        </span>
-                        {brief.headline ? (
-                          <Badge
-                            variant="outline"
-                            className="inline-flex h-6 px-2 align-middle text-[12px] font-berkeley-mono border-zinc-200/60 text-muted-foreground dark:border-white/10"
-                          >
-                            {brief.headline}
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <div className="text-xl leading-relaxed font-medium text-zinc-900 dark:text-zinc-100 text-pretty">
+                      <div className="text-2xl sm:text-[23px] font-thin leading-snug tracking-tight text-zinc-900 dark:text-zinc-50 text-pretty">
                         {richSummary}
                       </div>
                     </MotionDiv>

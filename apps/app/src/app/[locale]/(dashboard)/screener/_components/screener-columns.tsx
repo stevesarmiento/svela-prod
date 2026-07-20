@@ -12,7 +12,6 @@ import { Skeleton } from "@v1/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import type { ReactNode } from "react";
 import { IconTriangleFill } from "symbols-react";
-import { ScreenerAnalysisActionCell } from "./screener-analysis-action-cell";
 import { ScreenerInlineTrailCell } from "./screener-inline-trail-cell";
 import type { ScreenerTableMeta } from "./screener-table-types";
 import { ScreenerTakerVolumeCell } from "./screener-taker-volume-cell";
@@ -336,43 +335,6 @@ export function createScreenerColumns(): ColumnDef<CoinMarketData>[] {
           )}
         </div>
       ),
-      enableSorting: false,
-    },
-    {
-      id: "actions",
-      meta: { interactive: true },
-      header: () => <span className="whitespace-nowrap">Actions</span>,
-      cell: ({ row }) => {
-        const isRowLoading = isLoadingQuote(row.original.quote.USD);
-        const tokenName = cleanTokenName(row.original.name);
-        const tokenLogoUrl = getTokenLogoURL(
-          row.original.symbol,
-          row.original.image,
-        );
-        const safeTokenLogoUrl =
-          tokenLogoUrl &&
-          (tokenLogoUrl.startsWith("http") || tokenLogoUrl.startsWith("/"))
-            ? tokenLogoUrl
-            : undefined;
-
-        return (
-          <div className="flex items-center justify-end gap-1.5 flex-nowrap whitespace-nowrap">
-            {isRowLoading ? (
-              <Skeleton className="h-6 w-16 rounded-lg" />
-            ) : (
-              <ScreenerAnalysisActionCell
-                coinId={String(row.original.id)}
-                tokenData={{
-                  name: tokenName,
-                  symbol: row.original.symbol,
-                  id: String(row.original.id),
-                  logoUrl: safeTokenLogoUrl,
-                }}
-              />
-            )}
-          </div>
-        );
-      },
       enableSorting: false,
     },
   ];

@@ -9,7 +9,8 @@ export interface SelectionState {
   selectedCoins: Set<string>
   totalCoins: number
   onSelectAll: (checked: boolean) => void
-  onRemoveSelected: () => void
+  /** Absent when the hosting table is read-only (e.g. the screener) — the dock hides Remove. */
+  onRemoveSelected?: () => void
   isRemoving: boolean
   /** Present when the hosting table supports multi-token analysis. */
   onAnalyzeSelected?: () => void

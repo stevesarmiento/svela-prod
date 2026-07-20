@@ -85,6 +85,7 @@ function areNavigationDockPropsEqual(
     prevProps.selectionState?.totalCoins === nextProps.selectionState?.totalCoins &&
     prevProps.selectionState?.isRemoving === nextProps.selectionState?.isRemoving &&
     prevProps.selectionState?.analyzeSelectedCount === nextProps.selectionState?.analyzeSelectedCount &&
-    Boolean(prevProps.selectionState?.onAnalyzeSelected) === Boolean(nextProps.selectionState?.onAnalyzeSelected)
+    Boolean(prevProps.selectionState?.onAnalyzeSelected) === Boolean(nextProps.selectionState?.onAnalyzeSelected) &&
+    Boolean(prevProps.selectionState?.onRemoveSelected) === Boolean(nextProps.selectionState?.onRemoveSelected)
   );
 }

@@ -7,14 +7,25 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type React from "react";
+import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides";
+import { useAnalyzeSelection } from "@/hooks/use-analyze-selection";
+import {
+  useBottomNavSelectionBridge,
+  useWatchlistSelection,
+} from "@/hooks/use-watchlist-selection";
 import { createScreenerColumns } from "./screener-columns";
 import { ScreenerTableBody } from "./screener-table-body";
 import type {
   ScreenerTableMeta,
   ScreenerTableStatus,
 } from "./screener-table-types";
+
+function isPriced(coin: CoinMarketData): boolean {
+  const price = coin.quote.USD.price;
+  return price != null && price > 0;
+}
 
 export function ScreenerTableSection({
   coins,
@@ -46,5 +57,48 @@ export function ScreenerTableSection({
     state: { sorting },
   });
 
-  return <ScreenerTableBody table={table} status={status} />;
+  // Row multi-selection for the bottom-nav dock. The screener is read-only —
+  // no removeSelected — so the dock shows Analyze without Remove.
+  const selection = useWatchlistSelection({});
+  const { selectedCoins, handleCoinSelect, hasSelectedCoins } = selection;
+
+  const selectableCoinIds = useMemo(
+    () => coins.filter(isPriced).map((coin) => String(coin.id)),
+    [coins],
+  );
+
+  const getSelectedTokens = useCallback(
+    () =>
+      coins
+        .filter(
+          (coin) => isPriced(coin) && selectedCoins.has(String(coin.id)),
+        )
+        .map((coin) => ({
+          id: String(coin.id),
+          name: cleanTokenName(coin.name),
+          symbol: coin.symbol,
+          logoUrl: getTokenLogoURL(coin.symbol, coin.image),
+        })),
+    [coins, selectedCoins],
+  );
+  const { onAnalyzeSelected, analyzeDialog } =
+    useAnalyzeSelection(getSelectedTokens);
+
+  useBottomNavSelectionBridge(selection, selectableCoinIds, {
+    onAnalyzeSelected,
+    analyzeSelectedCount: selectedCoins.size,
+  });
+
+  return (
+    <>
+      <ScreenerTableBody
+        table={table}
+        status={status}
+        selectedCoins={selectedCoins}
+        hasSelectedCoins={hasSelectedCoins}
+        onCoinSelect={handleCoinSelect}
+      />
+      {analyzeDialog}
+    </>
+  );
 }

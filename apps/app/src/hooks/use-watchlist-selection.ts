@@ -70,8 +70,12 @@ export function useSelectRevealTransition() {
 }
 
 interface UseWatchlistSelectionProps {
-  /** Perform the actual bulk removal for the selected ids; throw on failure. */
-  removeSelected: (ids: string[]) => Promise<void>;
+  /**
+   * Perform the actual bulk removal for the selected ids; throw on failure.
+   * Omit for read-only tables (e.g. the screener) — the dock then hides its
+   * Remove button.
+   */
+  removeSelected?: (ids: string[]) => Promise<void>;
 }
 
 export interface WatchlistSelection {
@@ -82,6 +86,8 @@ export interface WatchlistSelection {
   handleRemoveSelected: () => Promise<void>
   isRemoving: boolean
   hasSelectedCoins: boolean
+  /** False when the hosting table can't remove rows (no removeSelected given). */
+  canRemove: boolean
 }
 
 /**
@@ -115,6 +121,7 @@ export function useWatchlistSelection({
   }, [])
 
   const handleRemoveSelected = useCallback(async () => {
+    if (!removeSelected) return
     const idsToRemove = Array.from(selectedCoins)
     if (idsToRemove.length === 0) return
     setRemovingCoins(new Set(idsToRemove))
@@ -140,6 +147,7 @@ export function useWatchlistSelection({
     handleRemoveSelected,
     isRemoving: removingCoins.size > 0,
     hasSelectedCoins: selectedCoins.size > 0,
+    canRemove: Boolean(removeSelected),
   }
 }
 
@@ -167,8 +175,13 @@ export function useBottomNavSelectionBridge(
   selectableIds: string[],
   options?: SelectionBridgeOptions,
 ) {
-  const { selectedCoins, setSelectedCoins, isRemoving, hasSelectedCoins } =
-    selection
+  const {
+    selectedCoins,
+    setSelectedCoins,
+    isRemoving,
+    hasSelectedCoins,
+    canRemove,
+  } = selection
   // Actions are render-isolated (stable identity) and mode only flips on
   // enter/exit. Subscribing to the full BottomNavContext here would re-render
   // the consuming table on every selectionState update — i.e. a second full
@@ -218,7 +231,7 @@ export function useBottomNavSelectionBridge(
         selectedCoins,
         totalCoins: selectableIds.length,
         onSelectAll,
-        onRemoveSelected,
+        onRemoveSelected: canRemove ? onRemoveSelected : undefined,
         isRemoving,
         onAnalyzeSelected: hasAnalyze ? onAnalyzeSelected : undefined,
         analyzeSelectedCount: hasAnalyze
@@ -233,6 +246,7 @@ export function useBottomNavSelectionBridge(
     selectableIds.length,
     onSelectAll,
     onRemoveSelected,
+    canRemove,
     isRemoving,
     hasAnalyze,
     onAnalyzeSelected,

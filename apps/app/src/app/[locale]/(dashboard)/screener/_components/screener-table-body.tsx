@@ -16,9 +16,15 @@ const SCREENER_APPEND_ROW_COUNT = 24;
 export function ScreenerTableBody({
   table,
   status = null,
+  selectedCoins,
+  hasSelectedCoins,
+  onCoinSelect,
 }: {
   table: Table<CoinMarketData>;
   status?: ScreenerTableStatus | null;
+  selectedCoins: Set<string>;
+  hasSelectedCoins: boolean;
+  onCoinSelect: (coinId: string, selected: boolean) => void;
 }) {
   const scrollRootRef = useRef<HTMLDivElement | null>(null);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -73,7 +79,13 @@ export function ScreenerTableBody({
 
           <div ref={scrollRootRef} className={bodyClassName}>
             {visibleRows.map((row) => (
-              <ScreenerTableRow key={row.id} row={row} />
+              <ScreenerTableRow
+                key={row.id}
+                row={row}
+                isSelected={selectedCoins.has(String(row.original.id))}
+                hasSelectedCoins={hasSelectedCoins}
+                onCoinSelect={onCoinSelect}
+              />
             ))}
 
             {hasMore ? (
