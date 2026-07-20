@@ -34,10 +34,27 @@ export interface ExpectedFilter {
   tolerancePct?: number;
 }
 
+export interface SmartScreenerEvalExpectation {
+  filters?: ReadonlyArray<ExpectedFilter>;
+  /** When true, the parsed filter list must contain ONLY the expected filters. */
+  filtersExact?: boolean;
+  sort?: { metricId: string; order: "asc" | "desc" } | null;
+  limit?: number;
+  universe?: "all" | "current" | "watchlist";
+  takerContext?: Partial<TakerContext>;
+  minConfidence?: number;
+  maxConfidence?: number;
+}
+
 export interface SmartScreenerEvalCase {
   id: string;
   prompt: string;
   tags: ReadonlyArray<SmartScreenerEvalTag>;
+  /**
+   * Alternative expectations — the case passes when ANY variant passes.
+   * For prompts with multiple equally-correct encodings.
+   */
+  expectAnyOf?: ReadonlyArray<SmartScreenerEvalExpectation>;
   expect: {
     filters?: ReadonlyArray<ExpectedFilter>;
     /** When true, the parsed filter list must contain ONLY the expected filters. */
@@ -109,11 +126,32 @@ export const SMART_SCREENER_EVAL_CASES: ReadonlyArray<SmartScreenerEvalCase> = [
     id: "mkt-rank-top100",
     prompt: "top 100 coins by market cap",
     tags: ["market", "sort"],
+    // Two equally-correct encodings: explicit sort+limit, or a rank
+    // restriction (rank order IS market-cap order, exactly 100 coins).
     expect: {
       sort: { metricId: "market_cap_usd", order: "desc" },
       limit: 100,
       minConfidence: 0.6,
     },
+    expectAnyOf: [
+      {
+        sort: { metricId: "market_cap_usd", order: "desc" },
+        limit: 100,
+        minConfidence: 0.6,
+      },
+      {
+        filters: [
+          {
+            metricId: "market_cap_rank",
+            op: "lte",
+            opAnyOf: ["lte", "lt"],
+            value: 100,
+            tolerancePct: 1,
+          },
+        ],
+        minConfidence: 0.6,
+      },
+    ],
   },
   {
     id: "mkt-rank-filter",
@@ -335,7 +373,16 @@ export const SMART_SCREENER_EVAL_CASES: ReadonlyArray<SmartScreenerEvalCase> = [
     prompt: "mid caps above 100m, sorted by 7d return, top 25",
     tags: ["mixed", "sort"],
     expect: {
-      filters: [{ metricId: "market_cap_usd", op: "gt", value: 100_000_000 }],
+      // "above" is ambiguous between > and >= — and the model may add an
+      // upper band for "mid caps" (fine: subset matching).
+      filters: [
+        {
+          metricId: "market_cap_usd",
+          op: "gt",
+          opAnyOf: ["gt", "gte"],
+          value: 100_000_000,
+        },
+      ],
       sort: { metricId: "return_7d_pct", order: "desc" },
       limit: 25,
       minConfidence: 0.5,
@@ -355,6 +402,28 @@ export const SMART_SCREENER_EVAL_CASES: ReadonlyArray<SmartScreenerEvalCase> = [
     },
   },
 
+  {
+    id: "mixed-vol-squeeze-slang",
+    // Verbatim real user prompt (typos included): trader slang for a
+    // volatility squeeze. "top 100 by marketcap" must become a rank
+    // restriction so the sort is free for the squeeze (lowest vol first).
+    prompt:
+      "show me the top 100 coins by marketcap that have volatiltiy coiled ready to rip",
+    tags: ["mixed", "technical", "sort"],
+    expect: {
+      filters: [
+        {
+          metricId: "market_cap_rank",
+          op: "lte",
+          opAnyOf: ["lte", "lt"],
+          value: 100,
+          tolerancePct: 1,
+        },
+      ],
+      sort: { metricId: "volatility_7d_pct", order: "asc" },
+      minConfidence: 0.5,
+    },
+  },
   {
     id: "mixed-messy-real-user",
     // Verbatim real user prompt (typos included) that truncated under the old

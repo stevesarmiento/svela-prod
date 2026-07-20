@@ -7,9 +7,10 @@ import { SMART_SCREENER_METRICS } from "../metric-registry";
  * (The cache key also hashes the metric-id list, so ADDING a metric without
  * bumping this still invalidates.)
  */
-// v3: thinking disabled + higher token ceiling (interpretation behavior
-// changed, so cached v2 interpretations must not be served).
-export const SMART_SCREENER_PROMPT_VERSION = 3;
+// v4: volatility-compression idioms + top-N-by-mcap-as-rank-filter rule.
+// (v3: thinking disabled + higher token ceiling.) Bump on any behavior change
+// so cached interpretations from older prompts are never served.
+export const SMART_SCREENER_PROMPT_VERSION = 4;
 
 export function buildMetricCatalogForPrompt(): string {
   return SMART_SCREENER_METRICS.map((m) => {
@@ -73,6 +74,16 @@ Rules:
 - "moved/changed less than $X" means a BAND (absolute move): emit TWO filters,
   price_change_24h_usd gt -X AND price_change_24h_usd lt X. Same idea for
   "moved less than X%" with price_change_24h_pct.
+- Volatility-compression slang means LOW current volatility: "coiled",
+  "coiled spring", "(volatility) squeeze", "compressed", "tight range",
+  "consolidating", "ready to rip/pop/break out". With no number given, do NOT
+  invent a threshold — sort volatility_7d_pct asc instead (most coiled first),
+  and ALSO add volatility_7d_pct gt 0.1 (pegged stablecoins/treasuries sit
+  below 0.1 and are never what a squeeze query means).
+- Plain "top N coins by market cap" (nothing else asked): sort=market_cap_usd
+  desc with limit N. But "top N coins by market cap that ALSO <other concept>":
+  encode the market-cap part as market_cap_rank lte N (a universe restriction)
+  so the sort stays free for the <other concept>.
 - If you are not confident, set confidence <= 0.4 and return an empty filters list.
   `.trim();
 }

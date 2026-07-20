@@ -592,7 +592,6 @@ function OverviewHoldingsSectionInner(props: {
         </div>
 
         <div className="space-y-4 lg:col-span-7">
-          <div ref={feedPanelSentinelRef} className="h-px w-full" />
           {shouldLoadFeedPanel ? (
             <LazyOverviewActivityFeedPanel
               events={

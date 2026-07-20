@@ -106,7 +106,10 @@ function FilterChip({
           </Badge>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-auto p-3">
+      <PopoverContent
+        align="start"
+        className="w-auto rounded-xl bg-white p-3 dark:bg-zinc-900"
+      >
         <ScreenerFilterEditor
           filter={filter}
           onApply={(next) => {
@@ -147,7 +150,10 @@ function AddFilterChip({
           <span>Add filter</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-auto p-3">
+      <PopoverContent
+        align="start"
+        className="w-auto rounded-xl bg-white p-3 dark:bg-zinc-900"
+      >
         <ScreenerFilterEditor
           filter={null}
           onApply={(next) => {

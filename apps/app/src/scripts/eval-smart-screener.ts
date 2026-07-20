@@ -58,8 +58,22 @@ function scoreCase(
   c: SmartScreenerEvalCase,
   res: ScreenResponse,
 ): Array<string> {
+  // Alternative encodings: pass when ANY variant scores clean.
+  if (c.expectAnyOf && c.expectAnyOf.length > 0) {
+    const variantFailures = c.expectAnyOf.map((exp) =>
+      scoreExpectation(exp, res),
+    );
+    if (variantFailures.some((f) => f.length === 0)) return [];
+    return variantFailures.map((f, i) => `variant ${i + 1}: ${f.join("; ")}`);
+  }
+  return scoreExpectation(c.expect, res);
+}
+
+function scoreExpectation(
+  exp: SmartScreenerEvalCase["expect"],
+  res: ScreenResponse,
+): Array<string> {
   const failures: Array<string> = [];
-  const { expect: exp } = c;
 
   if (exp.maxConfidence !== undefined) {
     // Ambiguous prompts must NOT confidently apply: either a low-confidence

@@ -272,12 +272,10 @@ export async function executeScreeningDsl(args: {
   if (needsTaker && marketMatched.length > 0) {
     const takerRange = dsl.takerContext?.range ?? "24h";
     const exchange = dsl.takerContext?.exchange?.trim() || null;
-    const coins = marketMatched
-      .slice(0, TAKER_BATCH_CAP)
-      .map((r) => ({
-        coingeckoId: r.coingeckoId,
-        symbol: r.symbol.toUpperCase(),
-      }));
+    const coins = marketMatched.slice(0, TAKER_BATCH_CAP).map((r) => ({
+      coingeckoId: r.coingeckoId,
+      symbol: r.symbol.toUpperCase(),
+    }));
     takerCoinsRequested = coins.length;
 
     const batch = await withTimeout(

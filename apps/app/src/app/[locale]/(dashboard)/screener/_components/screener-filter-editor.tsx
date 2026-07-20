@@ -89,18 +89,22 @@ export function ScreenerFilterEditor({
   return (
     <div className="flex w-64 flex-col gap-2.5">
       <Select value={metricId} onValueChange={(next) => setMetricId(next)}>
-        <SelectTrigger className="h-8 text-xs" aria-label="Metric">
+        <SelectTrigger className="h-8 rounded-lg text-xs" aria-label="Metric">
           <SelectValue placeholder="Metric" />
         </SelectTrigger>
-        <SelectContent className="z-[10001]">
+        {/* Panel + row-item styling matches the top-nav profile dropdown
+            (see top-nav-profile-client.tsx): solid bg, rounded-xl. */}
+        <SelectContent className="z-[10001] rounded-xl bg-white dark:bg-zinc-900">
           {METRIC_GROUPS.map((group) => (
             <SelectGroup key={group.label}>
-              <SelectLabel>{group.label}</SelectLabel>
+              <SelectLabel className="text-xs font-medium text-muted-foreground">
+                {group.label}
+              </SelectLabel>
               {group.metrics.map((metric) => (
                 <SelectItem
                   key={metric.id}
                   value={metric.id}
-                  className="text-xs"
+                  className="rounded-xl text-xs"
                 >
                   {metric.label}
                 </SelectItem>
@@ -115,12 +119,19 @@ export function ScreenerFilterEditor({
           value={op}
           onValueChange={(next) => setOp(next as ScreenFilterOp)}
         >
-          <SelectTrigger className="h-8 w-16 text-xs" aria-label="Operator">
+          <SelectTrigger
+            className="h-8 w-16 rounded-lg text-xs"
+            aria-label="Operator"
+          >
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="z-[10001]">
+          <SelectContent className="z-[10001] rounded-xl bg-white dark:bg-zinc-900">
             {OPS.map((o) => (
-              <SelectItem key={o.value} value={o.value} className="text-xs">
+              <SelectItem
+                key={o.value}
+                value={o.value}
+                className="rounded-xl text-xs"
+              >
                 {o.label}
               </SelectItem>
             ))}
@@ -137,7 +148,7 @@ export function ScreenerFilterEditor({
             }
           }}
           placeholder={unitPlaceholder(metricId)}
-          className="h-8 flex-1 text-xs"
+          className="h-8 flex-1 rounded-lg text-xs"
           aria-label="Value"
         />
       </div>

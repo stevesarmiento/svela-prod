@@ -978,7 +978,7 @@ export function OverviewDailyBriefCard(props: {
           >
             <CarouselContent>
               <CarouselItem>
-                <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4")}>
+                <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4 pt-0")}>
                   <AnimatePresence mode="wait">
                     <MotionDiv
                       key={`summary-${selectedSlide}`}
@@ -993,7 +993,9 @@ export function OverviewDailyBriefCard(props: {
                         "flex items-center p-6 sm:p-7",
                       )}
                     >
-                      <div className="text-2xl sm:text-[23px] font-thin leading-snug tracking-tight text-zinc-900 dark:text-zinc-50 text-pretty">
+                      {/* 70% color on the prose only — pills/badges set their
+                          own text colors so they stay at full strength. */}
+                      <div className="text-2xl sm:text-[23px] font-thin leading-snug tracking-tight text-zinc-900/70 dark:text-zinc-50/50 text-pretty">
                         {richSummary}
                       </div>
                     </MotionDiv>
@@ -1003,7 +1005,7 @@ export function OverviewDailyBriefCard(props: {
 
               {orderedCards.map((card) => (
                 <CarouselItem key={card.kind}>
-                  <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4")}>
+                  <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4 pt-0")}>
                     <AnimatePresence mode="wait">
                       <MotionDiv
                         key={`card-${card.kind}-${selectedSlide}`}
@@ -1064,7 +1066,7 @@ export function OverviewDailyBriefCard(props: {
 
               {moversSlide ? (
                 <CarouselItem key="movers">
-                  <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4")}>
+                  <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4 pt-0")}>
                     <AnimatePresence mode="wait">
                       <MotionDiv
                         key={`card-movers-${selectedSlide}`}
