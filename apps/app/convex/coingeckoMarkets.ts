@@ -1,6 +1,6 @@
-import { mutation, query } from "./_generated/server"
-import { v } from "convex/values"
-import { requireServerToken } from "./_lib/server_token"
+import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
+import { requireServerToken } from "./_lib/server_token";
 
 const coingeckoMarketValidator = v.object({
   _id: v.id("coingeckoMarkets"),
@@ -29,10 +29,14 @@ const coingeckoMarketValidator = v.object({
   atl: v.optional(v.number()),
   atlChangePercentage: v.optional(v.number()),
   atlDate: v.optional(v.string()),
+  return7dPct: v.optional(v.number()),
+  return30dPct: v.optional(v.number()),
+  volatility7dPct: v.optional(v.number()),
+  technicalsUpdatedAt: v.optional(v.number()),
   lastUpdated: v.string(),
   createdAt: v.number(),
   updatedAt: v.number(),
-})
+});
 
 export const upsertMarketData = mutation({
   args: {
@@ -65,32 +69,34 @@ export const upsertMarketData = mutation({
   },
   returns: v.id("coingeckoMarkets"),
   handler: async (ctx, args) => {
-    requireServerToken(args.serverToken)
+    requireServerToken(args.serverToken);
     // Check if record already exists
     const existing = await ctx.db
       .query("coingeckoMarkets")
-      .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", args.coingeckoId))
-      .first()
+      .withIndex("by_coingecko_id", (q) =>
+        q.eq("coingeckoId", args.coingeckoId),
+      )
+      .first();
 
-    const now = Date.now()
+    const now = Date.now();
 
     if (existing) {
       // Update existing record
       await ctx.db.patch(existing._id, {
         ...args,
         updatedAt: now,
-      })
-      return existing._id
+      });
+      return existing._id;
     }
-      // Create new record
-      const id = await ctx.db.insert("coingeckoMarkets", {
-        ...args,
-        createdAt: now,
-        updatedAt: now,
-      })
-      return id
+    // Create new record
+    const id = await ctx.db.insert("coingeckoMarkets", {
+      ...args,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return id;
   },
-})
+});
 
 export const upsertMarketDataBatch = mutation({
   args: {
@@ -127,59 +133,63 @@ export const upsertMarketDataBatch = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    requireServerToken(args.serverToken)
-    const now = Date.now()
+    requireServerToken(args.serverToken);
+    const now = Date.now();
 
     for (const item of args.items) {
       const existing = await ctx.db
         .query("coingeckoMarkets")
-        .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", item.coingeckoId))
-        .first()
+        .withIndex("by_coingecko_id", (q) =>
+          q.eq("coingeckoId", item.coingeckoId),
+        )
+        .first();
 
       if (existing) {
         await ctx.db.patch(existing._id, {
           ...item,
           updatedAt: now,
-        })
-        continue
+        });
+        continue;
       }
 
       await ctx.db.insert("coingeckoMarkets", {
         ...item,
         createdAt: now,
         updatedAt: now,
-      })
+      });
     }
 
-    return null
+    return null;
   },
-})
+});
 
 export const getMarketDataByCoingeckoId = query({
   args: { serverToken: v.string(), coingeckoId: v.string() },
   returns: v.union(coingeckoMarketValidator, v.null()),
   handler: async (ctx, args) => {
-    requireServerToken(args.serverToken)
+    requireServerToken(args.serverToken);
     return await ctx.db
       .query("coingeckoMarkets")
-      .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", args.coingeckoId))
-      .first()
+      .withIndex("by_coingecko_id", (q) =>
+        q.eq("coingeckoId", args.coingeckoId),
+      )
+      .first();
   },
-})
+});
 
 export const getTopMarketDataByRank = query({
   args: { serverToken: v.string(), limit: v.optional(v.number()) },
   returns: v.array(coingeckoMarketValidator),
   handler: async (ctx, args) => {
-    requireServerToken(args.serverToken)
-    const limit = args.limit ?? 100
+    requireServerToken(args.serverToken);
+    const limit = args.limit ?? 100;
     return await ctx.db
       .query("coingeckoMarkets")
       .withIndex("by_market_cap_rank", (q) => q.gte("marketCapRank", 1))
       .order("asc")
-      .take(limit)
+      .take(limit);
   },
-})
+});
 
 export const getMarketDataPageByRank = query({
   args: {
@@ -189,16 +199,16 @@ export const getMarketDataPageByRank = query({
   },
   returns: v.array(coingeckoMarketValidator),
   handler: async (ctx, args) => {
-    requireServerToken(args.serverToken)
-    const limit = Math.min(1000, Math.max(1, args.limit ?? 500))
-    const minRank = Math.max(1, Math.floor(args.minRank))
+    requireServerToken(args.serverToken);
+    const limit = Math.min(1000, Math.max(1, args.limit ?? 500));
+    const minRank = Math.max(1, Math.floor(args.minRank));
     return await ctx.db
       .query("coingeckoMarkets")
       .withIndex("by_market_cap_rank", (q) => q.gte("marketCapRank", minRank))
       .order("asc")
-      .take(limit)
+      .take(limit);
   },
-})
+});
 
 export const getMarketDataByCoingeckoIds = query({
   args: {
@@ -207,26 +217,24 @@ export const getMarketDataByCoingeckoIds = query({
   },
   returns: v.array(coingeckoMarketValidator),
   handler: async (ctx, args) => {
-    requireServerToken(args.serverToken)
+    requireServerToken(args.serverToken);
     const ids = Array.from(
       new Set(
-        args.coingeckoIds
-          .map((id) => id.trim())
-          .filter((id) => id.length > 0),
+        args.coingeckoIds.map((id) => id.trim()).filter((id) => id.length > 0),
       ),
-    ).slice(0, 500)
+    ).slice(0, 500);
 
-    if (ids.length === 0) return []
+    if (ids.length === 0) return [];
 
     const rows = await Promise.all(
       ids.map(async (coingeckoId) => {
         return await ctx.db
           .query("coingeckoMarkets")
           .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", coingeckoId))
-          .first()
+          .first();
       }),
-    )
+    );
 
-    return rows.filter((r) => r !== null)
+    return rows.filter((r) => r !== null);
   },
-})
+});

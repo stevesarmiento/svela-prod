@@ -125,7 +125,9 @@ crons.interval(
   "coinglass_refresh_taker_exchange_list_24h",
   { hours: 4 },
   internal.coinglassJobs.refreshTrackedTakerBuySellExchangeListSnapshotBatch,
-  { range: "24h", batchSize: 10 },
+  // 50 (the action's clamp max): at 10, N tracked coins take N/10 × 4h to
+  // cycle — weeks for thousands of coins. 50 shortens the cycle 5×.
+  { range: "24h", batchSize: 50 },
 );
 
 // Sync CoinGecko's coin universe (new listings) into `coingeckoCoins`.

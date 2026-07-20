@@ -1,4 +1,4 @@
-import { Effect, Schema, Schedule } from "effect";
+import { Effect, Schedule, Schema } from "effect";
 
 export class CoinGeckoInvalidParamsError extends Schema.TaggedError<CoinGeckoInvalidParamsError>()(
   "CoinGeckoInvalidParamsError",
@@ -143,7 +143,18 @@ function requestJson<A>(args: {
           }),
       });
     }),
-    Effect.retry(Schedule.exponential("500 millis", 2)),
+    Effect.retry({
+      // Bounded (2 retries max) and transient-only: 429, network (status 0),
+      // and 5xx. Retrying 4xx/decode errors just amplifies load — the answer
+      // won't change.
+      schedule: Schedule.exponential("500 millis", 2).pipe(
+        Schedule.intersect(Schedule.recurs(2)),
+      ),
+      while: (error) =>
+        error._tag === "CoinGeckoRateLimitedError" ||
+        (error._tag === "CoinGeckoApiError" &&
+          (error.status === 0 || error.status >= 500)),
+    }),
     Effect.timeout("8 seconds"),
     Effect.catchTag("TimeoutException", () =>
       Effect.fail(

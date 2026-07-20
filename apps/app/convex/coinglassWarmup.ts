@@ -209,13 +209,14 @@ export const requestTakerBuySellExchangeListSnapshotRefresh = mutation({
   args: {
     serverToken: v.string(),
     symbol: v.string(), // base symbol, e.g. SOL
+    coingeckoId: v.optional(v.string()), // canonical join key when known
     range: v.string(), // e.g. 24h
   },
   returns: v.object({ scheduled: v.boolean(), reason: v.string() }),
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     const now = Date.now();
-    const jobKey = `warmup:coinglass:taker-exchange-list:${args.symbol}:${args.range}`;
+    const jobKey = `warmup:coinglass:taker-exchange-list:${args.coingeckoId ?? args.symbol}:${args.range}`;
 
     const existing = await ctx.db
       .query("jobState")
@@ -241,6 +242,7 @@ export const requestTakerBuySellExchangeListSnapshotRefresh = mutation({
       internal.coinglassJobs.refreshSingleTakerBuySellExchangeListSnapshot,
       {
         symbol: args.symbol,
+        coingeckoId: args.coingeckoId,
         range: args.range,
       },
     );

@@ -1,77 +1,74 @@
-'use client'
+"use client";
 
-import type { Table } from '@tanstack/react-table'
-import { useEffect, useMemo, useRef, useState } from "react"
-import { cn } from "@v1/ui/cn"
-import { TextShimmerWave } from "@v1/ui/text-shimmer"
-import type { CoinMarketData } from '@/types/coins'
-import { ScreenerTableHeader } from './screener-table-header'
-import { ScreenerTableRow } from './screener-table-row'
-import { SCREENER_TABLE_MIN_WIDTH } from "./screener-table-layout"
-import type { ScreenerTableStatus } from "./screener-table-types"
+import type { CoinMarketData } from "@/types/coins";
+import type { Table } from "@tanstack/react-table";
+import { cn } from "@v1/ui/cn";
+import { TextShimmerWave } from "@v1/ui/text-shimmer";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ScreenerTableHeader } from "./screener-table-header";
+import { SCREENER_TABLE_MIN_WIDTH } from "./screener-table-layout";
+import { ScreenerTableRow } from "./screener-table-row";
+import type { ScreenerTableStatus } from "./screener-table-types";
 
-const SCREENER_INITIAL_ROW_COUNT = 24
-const SCREENER_APPEND_ROW_COUNT = 24
+const SCREENER_INITIAL_ROW_COUNT = 24;
+const SCREENER_APPEND_ROW_COUNT = 24;
 
 export function ScreenerTableBody({
   table,
   status = null,
-  tokenHeaderCountBadge = null,
 }: {
-  table: Table<CoinMarketData>
-  status?: ScreenerTableStatus | null
-  tokenHeaderCountBadge?: { count: number } | null
+  table: Table<CoinMarketData>;
+  status?: ScreenerTableStatus | null;
 }) {
-  const scrollRootRef = useRef<HTMLDivElement | null>(null)
-  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const scrollRootRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const rows = table.getRowModel().rows
-  const rowCount = rows.length
+  const rows = table.getRowModel().rows;
+  const rowCount = rows.length;
   const [visibleCount, setVisibleCount] = useState(() =>
     Math.min(SCREENER_INITIAL_ROW_COUNT, rowCount),
-  )
+  );
 
   useEffect(() => {
-    setVisibleCount(Math.min(SCREENER_INITIAL_ROW_COUNT, rowCount))
-  }, [rowCount])
+    setVisibleCount(Math.min(SCREENER_INITIAL_ROW_COUNT, rowCount));
+  }, [rowCount]);
 
   const visibleRows = useMemo(() => {
-    return rows.slice(0, visibleCount)
-  }, [rows, visibleCount])
+    return rows.slice(0, visibleCount);
+  }, [rows, visibleCount]);
 
-  const hasMore = visibleCount < rowCount
+  const hasMore = visibleCount < rowCount;
   const bodyClassName = cn(
     "relative bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm max-h-[62dvh] overflow-y-auto",
-  )
+  );
 
   useEffect(() => {
-    if (!hasMore) return
-    const root = scrollRootRef.current
-    const target = sentinelRef.current
-    if (!root || !target) return
+    if (!hasMore) return;
+    const root = scrollRootRef.current;
+    const target = sentinelRef.current;
+    if (!root || !target) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        const entry = entries[0]
-        if (!entry?.isIntersecting) return
-        setVisibleCount((prev) => Math.min(rowCount, prev + SCREENER_APPEND_ROW_COUNT))
+        const entry = entries[0];
+        if (!entry?.isIntersecting) return;
+        setVisibleCount((prev) =>
+          Math.min(rowCount, prev + SCREENER_APPEND_ROW_COUNT),
+        );
       },
       { root, rootMargin: "240px", threshold: 0.01 },
-    )
+    );
 
-    observer.observe(target)
-    return () => observer.disconnect()
-  }, [hasMore, rowCount])
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMore, rowCount]);
 
   return (
     <div className="rounded-[10px] bg-primary/5 p-0.5">
       <div className="overflow-x-auto overscroll-x-contain">
         <div className="w-full" style={{ minWidth: SCREENER_TABLE_MIN_WIDTH }}>
           <div className="mx-px">
-            <ScreenerTableHeader
-              table={table}
-              tokenHeaderCountBadge={tokenHeaderCountBadge}
-            />
+            <ScreenerTableHeader table={table} />
           </div>
 
           <div ref={scrollRootRef} className={bodyClassName}>
@@ -80,8 +77,13 @@ export function ScreenerTableBody({
             ))}
 
             {hasMore ? (
-              <div ref={sentinelRef} className="flex items-center justify-center py-3">
-                <div className="text-xs text-muted-foreground">Loading more…</div>
+              <div
+                ref={sentinelRef}
+                className="flex items-center justify-center py-3"
+              >
+                <div className="text-xs text-muted-foreground">
+                  Loading more…
+                </div>
               </div>
             ) : null}
 
@@ -100,5 +102,5 @@ export function ScreenerTableBody({
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,10 +1,10 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useCallback, useState } from "react";
+import { IconAnalyze } from "@/components/icon-analyze";
 import { Button } from "@v1/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
-import { IconAnalyze } from "@/components/icon-analyze";
+import dynamic from "next/dynamic";
+import { useCallback, useState } from "react";
 
 function loadAnalysisDialog() {
   return import("@/components/navigation/analysis-dialog");
@@ -66,7 +66,10 @@ export function ScreenerAnalysisActionCell(props: {
           <IconAnalyze className="size-3.5 fill-zinc-400 dark:group-hover:fill-white transition-colors" />
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="left" className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs">
+      <TooltipContent
+        side="left"
+        className="flex items-center gap-2 p-1.5 px-2 rounded-md text-xs"
+      >
         <span>Deep analysis</span>
       </TooltipContent>
     </Tooltip>

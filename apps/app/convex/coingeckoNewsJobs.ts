@@ -1,10 +1,10 @@
-import { internalAction } from "./_generated/server";
-import { v } from "convex/values";
-import { internal } from "./_generated/api";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText } from "ai";
+import { v } from "convex/values";
 import { z } from "zod";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { internalAction } from "./_generated/server";
 
 function getCoinGeckoApiKey(): string {
   const key = process.env.X_CG_PRO_API_KEY;
@@ -28,7 +28,9 @@ async function fetchJson(endpoint: string, apiKey: string): Promise<unknown> {
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`CoinGecko request failed (${response.status}): ${body.slice(0, 200)}`);
+    throw new Error(
+      `CoinGecko request failed (${response.status}): ${body.slice(0, 200)}`,
+    );
   }
 
   return await response.json();
@@ -66,7 +68,8 @@ function mapNewsRows(rows: ReadonlyArray<CoinGeckoNewsRow>): Array<NewsItem> {
     .map((row) => {
       const title = typeof row.title === "string" ? row.title.trim() : "";
       const url = typeof row.url === "string" ? row.url.trim() : "";
-      const postedAtIso = typeof row.posted_at === "string" ? row.posted_at : undefined;
+      const postedAtIso =
+        typeof row.posted_at === "string" ? row.posted_at : undefined;
       const postedAtMs = toPostedAtMs(postedAtIso) ?? now;
       const type = typeof row.type === "string" ? row.type : "news";
       if (!title || !url) return null;
@@ -77,9 +80,16 @@ function mapNewsRows(rows: ReadonlyArray<CoinGeckoNewsRow>): Array<NewsItem> {
         title,
         postedAtIso,
         postedAtMs,
-        sourceName: typeof row.source_name === "string" ? row.source_name : undefined,
-        author: typeof row.author === "string" && row.author.length > 0 ? row.author : undefined,
-        image: typeof row.image === "string" && row.image.length > 0 ? row.image : undefined,
+        sourceName:
+          typeof row.source_name === "string" ? row.source_name : undefined,
+        author:
+          typeof row.author === "string" && row.author.length > 0
+            ? row.author
+            : undefined,
+        image:
+          typeof row.image === "string" && row.image.length > 0
+            ? row.image
+            : undefined,
       } satisfies NewsItem;
     })
     .filter((x) => x !== null);
@@ -106,7 +116,10 @@ async function refreshNewsForCoin(args: {
   url.searchParams.set("coin_id", args.coingeckoId);
   url.searchParams.set("type", "news");
   url.searchParams.set("page", "1");
-  url.searchParams.set("per_page", String(Math.min(20, Math.max(1, args.perPage))));
+  url.searchParams.set(
+    "per_page",
+    String(Math.min(20, Math.max(1, args.perPage))),
+  );
   url.searchParams.set("language", "en");
 
   const data = await fetchJson(url.toString(), apiKey);
@@ -121,7 +134,10 @@ export const refreshTrackedCoinNewsBatch = internalAction({
     batchSize: v.optional(v.number()),
     perPage: v.optional(v.number()),
   },
-  returns: v.object({ refreshedCoins: v.number(), nextCursor: v.union(v.string(), v.null()) }),
+  returns: v.object({
+    refreshedCoins: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+  }),
   handler: async (
     ctx,
     args,
@@ -129,12 +145,18 @@ export const refreshTrackedCoinNewsBatch = internalAction({
     const batchSize = Math.min(50, Math.max(1, args.batchSize ?? 10));
     const perPage = Math.min(20, Math.max(1, args.perPage ?? 5));
 
-    const state: { cursor?: string } | null = await ctx.runQuery(internal.coingeckoState._getJobState, {
-      jobKey: JOB_KEY_REFRESH_NEWS,
-    });
+    const state: { cursor?: string } | null = await ctx.runQuery(
+      internal.coingeckoState._getJobState,
+      {
+        jobKey: JOB_KEY_REFRESH_NEWS,
+      },
+    );
     const cursor: string | null = state?.cursor ?? null;
 
-    const page: { page: Array<{ coingeckoId: string }>; continueCursor: string | null } = await ctx.runQuery(
+    const page: {
+      page: Array<{ coingeckoId: string }>;
+      continueCursor: string | null;
+    } = await ctx.runQuery(
       internal.coingeckoState._getTrackedCoinsPageByLastSeen,
       {
         paginationOpts: { numItems: batchSize, cursor },
@@ -142,25 +164,33 @@ export const refreshTrackedCoinNewsBatch = internalAction({
     );
 
     if (page.page.length === 0) {
-      await ctx.runMutation(internal.coingeckoState._setJobCursor, { jobKey: JOB_KEY_REFRESH_NEWS, cursor: null });
+      await ctx.runMutation(internal.coingeckoState._setJobCursor, {
+        jobKey: JOB_KEY_REFRESH_NEWS,
+        cursor: null,
+      });
       return { refreshedCoins: 0, nextCursor: null };
     }
 
     // Dedupe coin IDs across reasons in this page.
-    const coinIds: Array<string> = Array.from(new Set(page.page.map((row) => row.coingeckoId))).slice(
-      0,
-      batchSize,
-    );
+    const coinIds: Array<string> = Array.from(
+      new Set(page.page.map((row) => row.coingeckoId)),
+    ).slice(0, batchSize);
 
     let refreshedCoins = 0;
     const articleIdsNeedingSentiment: Id<"coingeckoNewsArticles">[] = [];
     for (const coingeckoId of coinIds) {
       const items = await refreshNewsForCoin({ coingeckoId, perPage });
-      const upserted = await ctx.runMutation(internal.coingeckoNewsWriters._upsertNewsForCoin, {
-        coingeckoId,
-        items,
-      });
-      await ctx.runMutation(internal.coingeckoNewsWriters._pruneNewsLinksForCoin, { coingeckoId, keep: 20 });
+      const upserted = await ctx.runMutation(
+        internal.coingeckoNewsWriters._upsertNewsForCoin,
+        {
+          coingeckoId,
+          items,
+        },
+      );
+      await ctx.runMutation(
+        internal.coingeckoNewsWriters._pruneNewsLinksForCoin,
+        { coingeckoId, keep: 20 },
+      );
       articleIdsNeedingSentiment.push(...upserted.articleIdsNeedingSentiment);
       refreshedCoins++;
     }
@@ -171,9 +201,13 @@ export const refreshTrackedCoinNewsBatch = internalAction({
     );
     for (const articleIds of batches) {
       if (articleIds.length === 0) continue;
-      await ctx.scheduler.runAfter(0, internal.coingeckoNewsJobs.analyzeSentimentBatch, {
-        articleIds,
-      });
+      await ctx.scheduler.runAfter(
+        0,
+        internal.coingeckoNewsJobs.analyzeSentimentBatch,
+        {
+          articleIds,
+        },
+      );
     }
 
     await ctx.runMutation(internal.coingeckoState._setJobCursor, {
@@ -193,21 +227,34 @@ export const refreshCoinNews = internalAction({
   returns: v.null(),
   handler: async (ctx, args) => {
     const perPage = Math.min(20, Math.max(1, args.perPage ?? 5));
-    const items = await refreshNewsForCoin({ coingeckoId: args.coingeckoId, perPage });
-    const upserted = await ctx.runMutation(internal.coingeckoNewsWriters._upsertNewsForCoin, {
+    const items = await refreshNewsForCoin({
       coingeckoId: args.coingeckoId,
-      items,
+      perPage,
     });
-    await ctx.runMutation(internal.coingeckoNewsWriters._pruneNewsLinksForCoin, { coingeckoId: args.coingeckoId, keep: 20 });
+    const upserted = await ctx.runMutation(
+      internal.coingeckoNewsWriters._upsertNewsForCoin,
+      {
+        coingeckoId: args.coingeckoId,
+        items,
+      },
+    );
+    await ctx.runMutation(
+      internal.coingeckoNewsWriters._pruneNewsLinksForCoin,
+      { coingeckoId: args.coingeckoId, keep: 20 },
+    );
     const batches = chunkArticleIds(
       Array.from(new Set(upserted.articleIdsNeedingSentiment)),
       SENTIMENT_BATCH_LIMIT,
     );
     for (const articleIds of batches) {
       if (articleIds.length === 0) continue;
-      await ctx.scheduler.runAfter(0, internal.coingeckoNewsJobs.analyzeSentimentBatch, {
-        articleIds,
-      });
+      await ctx.scheduler.runAfter(
+        0,
+        internal.coingeckoNewsJobs.analyzeSentimentBatch,
+        {
+          articleIds,
+        },
+      );
     }
     return null;
   },
@@ -302,9 +349,12 @@ function heuristicSentiment(title: string): {
   const hasBearish = hasNegativePct || bearish.some((k) => t.includes(k));
   const hasBullish = hasPositivePct || bullish.some((k) => t.includes(k));
 
-  if (hasBearish && hasBullish) return { sentiment: "neutral", confidence: 0.4 };
-  if (hasBearish) return { sentiment: "bearish", confidence: hasNegativePct ? 0.65 : 0.6 };
-  if (hasBullish) return { sentiment: "bullish", confidence: hasPositivePct ? 0.65 : 0.6 };
+  if (hasBearish && hasBullish)
+    return { sentiment: "neutral", confidence: 0.4 };
+  if (hasBearish)
+    return { sentiment: "bearish", confidence: hasNegativePct ? 0.65 : 0.6 };
+  if (hasBullish)
+    return { sentiment: "bullish", confidence: hasPositivePct ? 0.65 : 0.6 };
   return { sentiment: "neutral", confidence: 0.35 };
 }
 
@@ -323,22 +373,39 @@ export const analyzeSentimentBatch = internalAction({
       sentiment?: "bullish" | "bearish" | "neutral";
     };
 
-    const docs = (await ctx.runQuery(internal.coingeckoNewsWriters._getNewsArticlesByIds, {
-      articleIds: args.articleIds,
-    })) as Array<ArticleDoc | null>;
+    const docs = (await ctx.runQuery(
+      internal.coingeckoNewsWriters._getNewsArticlesByIds,
+      {
+        articleIds: args.articleIds,
+      },
+    )) as Array<ArticleDoc | null>;
 
     const pending = docs
-      .filter((doc): doc is ArticleDoc => Boolean(doc) && doc!.sentiment === undefined)
-      .map((doc) => ({ _id: doc._id, title: doc.title, sourceName: doc.sourceName ?? null }));
+      .filter(
+        (doc): doc is ArticleDoc =>
+          Boolean(doc) && doc!.sentiment === undefined,
+      )
+      .map((doc) => ({
+        _id: doc._id,
+        title: doc.title,
+        sourceName: doc.sourceName ?? null,
+      }));
 
     if (pending.length === 0) return { analyzed: 0 };
 
     if (!gem) {
       const items = pending.map((p) => {
         const h = heuristicSentiment(p.title);
-        return { articleId: p._id, sentiment: h.sentiment, confidence: h.confidence };
+        return {
+          articleId: p._id,
+          sentiment: h.sentiment,
+          confidence: h.confidence,
+        };
       });
-      await ctx.runMutation(internal.coingeckoNewsWriters._setArticleSentimentBatch, { items });
+      await ctx.runMutation(
+        internal.coingeckoNewsWriters._setArticleSentimentBatch,
+        { items },
+      );
       return { analyzed: items.length };
     }
 
@@ -374,9 +441,16 @@ Rules:
     if (!parsed.success) {
       const items = pending.map((p) => {
         const h = heuristicSentiment(p.title);
-        return { articleId: p._id, sentiment: h.sentiment, confidence: h.confidence };
+        return {
+          articleId: p._id,
+          sentiment: h.sentiment,
+          confidence: h.confidence,
+        };
       });
-      await ctx.runMutation(internal.coingeckoNewsWriters._setArticleSentimentBatch, { items });
+      await ctx.runMutation(
+        internal.coingeckoNewsWriters._setArticleSentimentBatch,
+        { items },
+      );
       return { analyzed: items.length };
     }
 
@@ -391,7 +465,10 @@ Rules:
 
     if (items.length === 0) return { analyzed: 0 };
 
-    await ctx.runMutation(internal.coingeckoNewsWriters._setArticleSentimentBatch, { items });
+    await ctx.runMutation(
+      internal.coingeckoNewsWriters._setArticleSentimentBatch,
+      { items },
+    );
     return { analyzed: items.length };
   },
 });
@@ -419,26 +496,37 @@ export const backfillRecentMissingSentiment = internalAction({
     );
     for (const batchArticleIds of batches) {
       if (batchArticleIds.length === 0) continue;
-      await ctx.scheduler.runAfter(0, internal.coingeckoNewsJobs.analyzeSentimentBatch, {
-        articleIds: batchArticleIds,
-      });
+      await ctx.scheduler.runAfter(
+        0,
+        internal.coingeckoNewsJobs.analyzeSentimentBatch,
+        {
+          articleIds: batchArticleIds,
+        },
+      );
     }
     return { queued: articleIds.length };
   },
 });
 
-export const relabelRecentLowConfidenceNeutralSentiment: ReturnType<typeof internalAction> =
-  internalAction({
+export const relabelRecentLowConfidenceNeutralSentiment: ReturnType<
+  typeof internalAction
+> = internalAction({
   args: {
     scanLimit: v.optional(v.number()),
     analyzeLimit: v.optional(v.number()),
     maxExistingConfidence: v.optional(v.number()),
   },
   returns: v.object({ relabeled: v.number(), candidates: v.number() }),
-  handler: async (ctx, args): Promise<{ relabeled: number; candidates: number }> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ relabeled: number; candidates: number }> => {
     const scanLimit = Math.min(500, Math.max(1, args.scanLimit ?? 200));
     const analyzeLimit = Math.min(200, Math.max(1, args.analyzeLimit ?? 80));
-    const maxExistingConfidence = Math.min(1, Math.max(0, args.maxExistingConfidence ?? 0.4));
+    const maxExistingConfidence = Math.min(
+      1,
+      Math.max(0, args.maxExistingConfidence ?? 0.4),
+    );
 
     const articleIds: Id<"coingeckoNewsArticles">[] = await ctx.runQuery(
       internal.coingeckoNewsWriters._listRecentLowConfidenceNeutralArticles,
@@ -457,23 +545,35 @@ export const relabelRecentLowConfidenceNeutralSentiment: ReturnType<typeof inter
       sentiment?: "bullish" | "bearish" | "neutral";
       sentimentConfidence?: number;
     };
-    const docs = (await ctx.runQuery(internal.coingeckoNewsWriters._getNewsArticlesByIds, {
-      articleIds,
-    })) as Array<ArticleDoc | null>;
+    const docs = (await ctx.runQuery(
+      internal.coingeckoNewsWriters._getNewsArticlesByIds,
+      {
+        articleIds,
+      },
+    )) as Array<ArticleDoc | null>;
 
     const items = docs
-      .filter((doc): doc is ArticleDoc => Boolean(doc) && typeof doc!.title === "string")
+      .filter(
+        (doc): doc is ArticleDoc =>
+          Boolean(doc) && typeof doc!.title === "string",
+      )
       .map((doc) => ({ id: doc._id, h: heuristicSentiment(doc.title) }))
       .filter((x) => x.h.sentiment !== "neutral")
-      .map((x) => ({ articleId: x.id, sentiment: x.h.sentiment, confidence: x.h.confidence }));
+      .map((x) => ({
+        articleId: x.id,
+        sentiment: x.h.sentiment,
+        confidence: x.h.confidence,
+      }));
 
-    if (items.length === 0) return { relabeled: 0, candidates: articleIds.length };
+    if (items.length === 0)
+      return { relabeled: 0, candidates: articleIds.length };
 
     const res: { updated: number } = await ctx.runMutation(
-      internal.coingeckoNewsWriters._overwriteLowConfidenceNeutralSentimentBatch,
+      internal.coingeckoNewsWriters
+        ._overwriteLowConfidenceNeutralSentimentBatch,
       { items, maxExistingConfidence },
     );
 
     return { relabeled: res.updated, candidates: articleIds.length };
   },
-  });
+});

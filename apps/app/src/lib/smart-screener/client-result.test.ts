@@ -1,7 +1,7 @@
 /// <reference types="bun-types" />
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test";
 
-import { shouldApplySmartScreenerResult } from "./client-result"
+import { shouldApplySmartScreenerResult } from "./client-result";
 
 describe("shouldApplySmartScreenerResult", () => {
   test("returns false on low confidence", () => {
@@ -12,8 +12,8 @@ describe("shouldApplySmartScreenerResult", () => {
         actionsCount: 2,
         threshold: 0.6,
       }),
-    ).toBe(false)
-  })
+    ).toBe(false);
+  });
 
   test("returns false when no actions", () => {
     expect(
@@ -23,8 +23,8 @@ describe("shouldApplySmartScreenerResult", () => {
         actionsCount: 0,
         threshold: 0.6,
       }),
-    ).toBe(false)
-  })
+    ).toBe(false);
+  });
 
   test("returns true on high confidence with actions", () => {
     expect(
@@ -34,7 +34,6 @@ describe("shouldApplySmartScreenerResult", () => {
         actionsCount: 1,
         threshold: 0.6,
       }),
-    ).toBe(true)
-  })
-})
-
+    ).toBe(true);
+  });
+});

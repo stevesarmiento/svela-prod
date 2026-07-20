@@ -1,10 +1,11 @@
-import { internalAction, type ActionCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { type ActionCtx, internalAction } from "./_generated/server";
+import { fetchCoinGeckoJson, getCoinGeckoApiKey } from "./_lib/coingeckoFetch";
 import {
-  fetchCoinGeckoJson,
-  getCoinGeckoApiKey,
-} from "./_lib/coingeckoFetch";
+  computeVolatilityPctFromPrices,
+  toFiniteOrUndefined,
+} from "./_lib/technicalMetrics";
 
 function chunk<T>(items: ReadonlyArray<T>, size: number): Array<Array<T>> {
   const out: Array<Array<T>> = [];
@@ -39,6 +40,11 @@ type CoinGeckoMarketRow = {
   atl_change_percentage: number | null;
   atl_date: string | null;
   last_updated: string | null;
+  // Present only when requested via price_change_percentage=24h,7d,30d
+  // and sparkline=true (the 4h top-markets cron; NOT the tracked cron).
+  price_change_percentage_7d_in_currency?: number | null;
+  price_change_percentage_30d_in_currency?: number | null;
+  sparkline_in_7d?: { price?: ReadonlyArray<number> | null } | null;
 };
 
 // Retry-capable fetch (429/5xx/network, honors Retry-After) — _lib/coingeckoFetch.
@@ -71,41 +77,69 @@ function mapMarketRows(rows: ReadonlyArray<CoinGeckoMarketRow>): Array<{
   atl?: number;
   atlChangePercentage?: number;
   atlDate?: string;
+  return7dPct?: number;
+  return30dPct?: number;
+  volatility7dPct?: number;
+  technicalsUpdatedAt?: number;
   lastUpdated: string;
 }> {
   const fetchedAtIso = new Date().toISOString();
-  return rows.map((coin) => ({
-    coingeckoId: coin.id,
-    symbol: coin.symbol.toUpperCase(),
-    name: coin.name,
-    image: coin.image,
-    currentPrice: coin.current_price ?? undefined,
-    marketCap: coin.market_cap ?? undefined,
-    // CoinGecko sometimes returns 0/null for unranked assets; never store those as a "top rank".
-    marketCapRank:
-      coin.market_cap_rank !== null && coin.market_cap_rank > 0
-        ? coin.market_cap_rank
-        : undefined,
-    fullyDilutedValuation: coin.fully_diluted_valuation ?? undefined,
-    totalVolume: coin.total_volume ?? undefined,
-    high24h: coin.high_24h ?? undefined,
-    low24h: coin.low_24h ?? undefined,
-    priceChange24h: coin.price_change_24h ?? undefined,
-    priceChangePercentage24h: coin.price_change_percentage_24h ?? undefined,
-    marketCapChange24h: coin.market_cap_change_24h ?? undefined,
-    marketCapChangePercentage24h:
-      coin.market_cap_change_percentage_24h ?? undefined,
-    circulatingSupply: coin.circulating_supply ?? undefined,
-    totalSupply: coin.total_supply ?? undefined,
-    maxSupply: coin.max_supply ?? undefined,
-    ath: coin.ath ?? undefined,
-    athChangePercentage: coin.ath_change_percentage ?? undefined,
-    athDate: coin.ath_date ?? undefined,
-    atl: coin.atl ?? undefined,
-    atlChangePercentage: coin.atl_change_percentage ?? undefined,
-    atlDate: coin.atl_date ?? undefined,
-    lastUpdated: coin.last_updated ?? fetchedAtIso,
-  }));
+  const nowMs = Date.now();
+  return rows.map((coin) => {
+    // Technicals: only present when the caller requested 7d/30d change +
+    // sparkline (refreshTopMarkets). Absent fields stay undefined and never
+    // clobber stored values (marketItemUnchanged skips undefined).
+    const return7dPct = toFiniteOrUndefined(
+      coin.price_change_percentage_7d_in_currency,
+    );
+    const return30dPct = toFiniteOrUndefined(
+      coin.price_change_percentage_30d_in_currency,
+    );
+    const volatility7dPct = toFiniteOrUndefined(
+      computeVolatilityPctFromPrices(coin.sparkline_in_7d?.price),
+    );
+    const hasTechnicals =
+      return7dPct !== undefined ||
+      return30dPct !== undefined ||
+      volatility7dPct !== undefined;
+
+    return {
+      coingeckoId: coin.id,
+      symbol: coin.symbol.toUpperCase(),
+      name: coin.name,
+      image: coin.image,
+      currentPrice: coin.current_price ?? undefined,
+      marketCap: coin.market_cap ?? undefined,
+      // CoinGecko sometimes returns 0/null for unranked assets; never store those as a "top rank".
+      marketCapRank:
+        coin.market_cap_rank !== null && coin.market_cap_rank > 0
+          ? coin.market_cap_rank
+          : undefined,
+      fullyDilutedValuation: coin.fully_diluted_valuation ?? undefined,
+      totalVolume: coin.total_volume ?? undefined,
+      high24h: coin.high_24h ?? undefined,
+      low24h: coin.low_24h ?? undefined,
+      priceChange24h: coin.price_change_24h ?? undefined,
+      priceChangePercentage24h: coin.price_change_percentage_24h ?? undefined,
+      marketCapChange24h: coin.market_cap_change_24h ?? undefined,
+      marketCapChangePercentage24h:
+        coin.market_cap_change_percentage_24h ?? undefined,
+      circulatingSupply: coin.circulating_supply ?? undefined,
+      totalSupply: coin.total_supply ?? undefined,
+      maxSupply: coin.max_supply ?? undefined,
+      ath: coin.ath ?? undefined,
+      athChangePercentage: coin.ath_change_percentage ?? undefined,
+      athDate: coin.ath_date ?? undefined,
+      atl: coin.atl ?? undefined,
+      atlChangePercentage: coin.atl_change_percentage ?? undefined,
+      atlDate: coin.atl_date ?? undefined,
+      return7dPct,
+      return30dPct,
+      volatility7dPct,
+      technicalsUpdatedAt: hasTechnicals ? nowMs : undefined,
+      lastUpdated: coin.last_updated ?? fetchedAtIso,
+    };
+  });
 }
 
 type CoinGeckoCoinListRow = {
@@ -283,8 +317,12 @@ export const refreshTopMarkets = internalAction({
       url.searchParams.set("order", "market_cap_desc");
       url.searchParams.set("per_page", String(perPage));
       url.searchParams.set("page", String(page));
-      url.searchParams.set("sparkline", "false");
-      url.searchParams.set("price_change_percentage", "24h");
+      // sparkline + 7d/30d change feed the precomputed technicals
+      // (return7dPct/return30dPct/volatility7dPct) at zero extra API calls.
+      // Keep the tracked-coins cron (upsertMarketsByIds) on sparkline=false —
+      // its 5-min cadence would bloat payloads for no benefit.
+      url.searchParams.set("sparkline", "true");
+      url.searchParams.set("price_change_percentage", "24h,7d,30d");
 
       const data = (await fetchJson(
         url.toString(),
@@ -294,9 +332,13 @@ export const refreshTopMarkets = internalAction({
     }
 
     const items = mapMarketRows(all).slice(0, topN);
-    await ctx.runMutation(internal.coingeckoWriters._upsertMarketDataBatch, {
-      items,
-    });
+    // Chunked: a single mutation over 2500 items exceeds Convex's 4096-read
+    // limit when most rows need a patch (index lookup + patch read per row).
+    for (const itemChunk of chunk(items, 500)) {
+      await ctx.runMutation(internal.coingeckoWriters._upsertMarketDataBatch, {
+        items: itemChunk,
+      });
+    }
 
     return { count: items.length };
   },
@@ -583,8 +625,7 @@ export const refreshSingleMarketChart = internalAction({
       await ctx.runMutation(internal.chartScheduler._markSeriesError, {
         coingeckoId: args.coingeckoId,
         timeframe: args.days,
-        message:
-          error instanceof Error ? error.message : "Unknown fetch error",
+        message: error instanceof Error ? error.message : "Unknown fetch error",
       });
     }
     return null;
@@ -660,8 +701,7 @@ export const refreshSingleOhlc = internalAction({
       await ctx.runMutation(internal.chartScheduler._markSeriesError, {
         coingeckoId: args.coingeckoId,
         timeframe: `${args.days}_ohlc`,
-        message:
-          error instanceof Error ? error.message : "Unknown fetch error",
+        message: error instanceof Error ? error.message : "Unknown fetch error",
       });
     }
     return null;

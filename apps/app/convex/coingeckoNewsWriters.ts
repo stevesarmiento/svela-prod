@@ -1,8 +1,12 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { internalMutation, internalQuery } from "./_generated/server";
 
-const sentimentValidator = v.union(v.literal("bullish"), v.literal("bearish"), v.literal("neutral"));
+const sentimentValidator = v.union(
+  v.literal("bullish"),
+  v.literal("bearish"),
+  v.literal("neutral"),
+);
 
 const newsItemValidator = v.object({
   url: v.string(),
@@ -72,7 +76,8 @@ export const _upsertNewsForCoin = internalMutation({
         insertedArticles++;
       }
 
-      const articleAfterUpsert = existingArticle ?? (await ctx.db.get(articleId));
+      const articleAfterUpsert =
+        existingArticle ?? (await ctx.db.get(articleId));
       if (articleAfterUpsert?.sentiment === undefined) {
         articleIdsNeedingSentiment.add(articleId);
       }
@@ -86,7 +91,10 @@ export const _upsertNewsForCoin = internalMutation({
 
       if (existingLink) {
         if (existingLink.postedAtMs !== item.postedAtMs) {
-          await ctx.db.patch(existingLink._id, { postedAtMs: item.postedAtMs, updatedAt: now });
+          await ctx.db.patch(existingLink._id, {
+            postedAtMs: item.postedAtMs,
+            updatedAt: now,
+          });
           updatedLinks++;
         }
         continue;
@@ -123,14 +131,18 @@ export const _pruneNewsLinksForCoin = internalMutation({
 
     const keepRows = await ctx.db
       .query("coingeckoNewsCoinLinks")
-      .withIndex("by_coingecko_id_and_posted_at_ms", (q) => q.eq("coingeckoId", args.coingeckoId))
+      .withIndex("by_coingecko_id_and_posted_at_ms", (q) =>
+        q.eq("coingeckoId", args.coingeckoId),
+      )
       .order("desc")
       .take(keep);
 
     const keepIds = new Set(keepRows.map((row) => row._id));
     const allRows = await ctx.db
       .query("coingeckoNewsCoinLinks")
-      .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", args.coingeckoId))
+      .withIndex("by_coingecko_id", (q) =>
+        q.eq("coingeckoId", args.coingeckoId),
+      )
       .take(2000);
 
     let deleted = 0;
@@ -213,7 +225,11 @@ export const _listRecentLowConfidenceNeutralArticles = internalQuery({
       .take(args.scanLimit);
 
     return rows
-      .filter((row) => row.sentiment === "neutral" && (row.sentimentConfidence ?? 0) <= args.maxConfidence)
+      .filter(
+        (row) =>
+          row.sentiment === "neutral" &&
+          (row.sentimentConfidence ?? 0) <= args.maxConfidence,
+      )
       .slice(0, args.analyzeLimit)
       .map((row) => row._id);
   },
@@ -237,7 +253,11 @@ export const _setArticleSentimentBatch = internalMutation({
     for (const item of args.items) {
       const existing = await ctx.db.get(item.articleId);
       if (!existing) continue;
-      if (existing.sentiment !== undefined && existing.sentimentUpdatedAt !== undefined) continue;
+      if (
+        existing.sentiment !== undefined &&
+        existing.sentimentUpdatedAt !== undefined
+      )
+        continue;
 
       await ctx.db.patch(item.articleId, {
         sentiment: item.sentiment,

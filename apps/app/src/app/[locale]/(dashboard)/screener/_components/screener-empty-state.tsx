@@ -1,21 +1,29 @@
-'use client'
+"use client";
 
-import { Button } from "@v1/ui/button"
-import { cn } from "@v1/ui/cn"
+import { Button } from "@v1/ui/button";
+import { cn } from "@v1/ui/cn";
 
 const SHOWCASE_CARDS = [
-  { name: 'Large Caps', color: 'bg-blue-700 border-blue-600' },
-  { name: 'Momentum', color: 'bg-yellow-700 border-yellow-600' },
-  { name: 'High Volume', color: 'bg-rose-700 border-rose-600' },
-] as const
+  { name: "Large Caps", color: "bg-blue-700 border-blue-600" },
+  { name: "Momentum", color: "bg-yellow-700 border-yellow-600" },
+  { name: "High Volume", color: "bg-rose-700 border-rose-600" },
+] as const;
 
 interface ScreenerEmptyStateProps {
-  type: 'no-coins' | 'no-filtered-coins';
+  type: "no-coins" | "no-filtered-coins";
   onClearFilters?: () => void;
+  onRetry?: () => void;
+  /** Screen-mode context, e.g. "0 of 5000 scanned matched". */
+  detail?: string | null;
 }
 
-export function ScreenerEmptyState({ type, onClearFilters }: ScreenerEmptyStateProps) {
-  if (type === 'no-coins') {
+export function ScreenerEmptyState({
+  type,
+  onClearFilters,
+  onRetry,
+  detail = null,
+}: ScreenerEmptyStateProps) {
+  if (type === "no-coins") {
     return (
       <div className="py-6 border border-dashed border-border rounded-lg">
         <div className="flex flex-col items-center justify-center gap-4">
@@ -24,7 +32,7 @@ export function ScreenerEmptyState({ type, onClearFilters }: ScreenerEmptyStateP
               <div
                 key={card.name}
                 className={cn(
-                  'rounded-lg border px-3 py-2 text-[11px] font-medium text-white/80 backdrop-blur-md shadow-sm',
+                  "rounded-lg border px-3 py-2 text-[11px] font-medium text-white/80 backdrop-blur-md shadow-sm",
                   card.color,
                 )}
               >
@@ -34,7 +42,19 @@ export function ScreenerEmptyState({ type, onClearFilters }: ScreenerEmptyStateP
           </div>
           <div className="text-center">
             <h3 className="font-medium">No screener data available</h3>
-            <p className="text-sm text-muted-foreground">Try refreshing the market snapshot.</p>
+            <p className="text-sm text-muted-foreground">
+              Market data may still be loading.
+            </p>
+            {onRetry ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRetry}
+                className="mt-2"
+              >
+                Retry
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -47,7 +67,7 @@ export function ScreenerEmptyState({ type, onClearFilters }: ScreenerEmptyStateP
         <div className="text-center">
           <h3 className="font-medium">No tokens match your filters</h3>
           <p className="text-sm text-muted-foreground">
-            Try adjusting your search or filter criteria
+            {detail ?? "Try adjusting your search or filter criteria"}
           </p>
           <Button
             variant="outline"

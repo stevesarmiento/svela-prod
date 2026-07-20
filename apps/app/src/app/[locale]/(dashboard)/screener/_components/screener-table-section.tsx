@@ -1,18 +1,20 @@
-'use client'
+"use client";
 
-import { useMemo } from 'react'
+import type { CoinMarketData } from "@/types/coins";
 import {
-  useReactTable,
+  type SortingState,
   getCoreRowModel,
   getSortedRowModel,
-  getFilteredRowModel,
-  type SortingState,
-} from '@tanstack/react-table'
-import type React from 'react'
-import type { CoinMarketData } from "@/types/coins"
-import { ScreenerTableBody } from "./screener-table-body"
-import { createScreenerColumns } from "./screener-columns"
-import type { ScreenerTableStatus } from "./screener-table-types"
+  useReactTable,
+} from "@tanstack/react-table";
+import { useMemo } from "react";
+import type React from "react";
+import { createScreenerColumns } from "./screener-columns";
+import { ScreenerTableBody } from "./screener-table-body";
+import type {
+  ScreenerTableMeta,
+  ScreenerTableStatus,
+} from "./screener-table-types";
 
 export function ScreenerTableSection({
   coins,
@@ -21,30 +23,28 @@ export function ScreenerTableSection({
   status = null,
   tokenHeaderCountBadge = null,
 }: {
-  coins: Array<CoinMarketData>
-  sorting: SortingState
-  onSortingChange: React.Dispatch<React.SetStateAction<SortingState>>
-  status?: ScreenerTableStatus | null
-  tokenHeaderCountBadge?: { count: number } | null
+  coins: Array<CoinMarketData>;
+  sorting: SortingState;
+  onSortingChange: React.Dispatch<React.SetStateAction<SortingState>>;
+  status?: ScreenerTableStatus | null;
+  tokenHeaderCountBadge?: { count: number } | null;
 }) {
-  const columns = useMemo(() => createScreenerColumns(), [])
+  const columns = useMemo(() => createScreenerColumns(), []);
+  const meta = useMemo<ScreenerTableMeta>(
+    () => ({ tokenHeaderCountBadge }),
+    [tokenHeaderCountBadge],
+  );
 
   const table = useReactTable({
     data: coins,
     columns,
+    meta,
     getRowId: (row) => row.id.toString(),
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     onSortingChange,
     state: { sorting },
-  })
+  });
 
-  return (
-    <ScreenerTableBody
-      table={table}
-      status={status}
-      tokenHeaderCountBadge={tokenHeaderCountBadge}
-    />
-  )
+  return <ScreenerTableBody table={table} status={status} />;
 }

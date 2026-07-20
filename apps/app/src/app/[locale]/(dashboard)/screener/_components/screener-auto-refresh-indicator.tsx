@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { useMemo } from "react"
-import { cn } from "@v1/ui/cn"
+import { cn } from "@v1/ui/cn";
+import { useMemo } from "react";
 
 /**
  * Honest freshness indicator.
@@ -15,8 +15,8 @@ import { cn } from "@v1/ui/cn"
  * in flight right now.
  */
 export interface ScreenerAutoRefreshStatus {
-  lastUpdatedAtMs: number | null
-  isRefreshing?: boolean
+  lastUpdatedAtMs: number | null;
+  isRefreshing?: boolean;
 }
 
 const lastUpdatedFormatter = new Intl.DateTimeFormat(undefined, {
@@ -24,19 +24,19 @@ const lastUpdatedFormatter = new Intl.DateTimeFormat(undefined, {
   day: "2-digit",
   hour: "numeric",
   minute: "2-digit",
-})
+});
 
 export function ScreenerAutoRefreshIndicator({
   status,
   className,
 }: {
-  status: ScreenerAutoRefreshStatus
-  className?: string
+  status: ScreenerAutoRefreshStatus;
+  className?: string;
 }) {
   const lastUpdatedValue = useMemo(() => {
-    if (!status.lastUpdatedAtMs) return "—"
-    return lastUpdatedFormatter.format(new Date(status.lastUpdatedAtMs))
-  }, [status.lastUpdatedAtMs])
+    if (!status.lastUpdatedAtMs) return "—";
+    return lastUpdatedFormatter.format(new Date(status.lastUpdatedAtMs));
+  }, [status.lastUpdatedAtMs]);
 
   return (
     <div className={cn("flex shrink-0 items-center gap-2", className)}>
@@ -70,5 +70,5 @@ export function ScreenerAutoRefreshIndicator({
         </div>
       </div>
     </div>
-  )
+  );
 }

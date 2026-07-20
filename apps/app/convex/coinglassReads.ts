@@ -314,10 +314,18 @@ export const getLiquidationHistorySeries = query({
   },
 });
 
+/**
+ * Taker snapshots are refreshed by a 4h cron cursoring through tracked coins
+ * (plus on-demand warmups). A tight window would flag everything stale by
+ * construction; 6h means "eligible for warmup", not "unusable".
+ */
+const TAKER_SNAPSHOT_STALE_WINDOW_MS = 6 * 60 * 60 * 1000;
+
 const takerBuySellSnapshotValidator = v.object({
   _id: v.id("coinglassTakerBuySellExchangeListSnapshots"),
   _creationTime: v.number(),
   symbol: v.string(),
+  coingeckoId: v.optional(v.string()),
   range: v.string(),
   overall: v.object({
     buyRatio: v.number(),
@@ -354,7 +362,7 @@ export const getTakerBuySellExchangeListSnapshot = query({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     const now = Date.now();
-    const staleWindowMs = 2 * 60 * 1000;
+    const staleWindowMs = TAKER_SNAPSHOT_STALE_WINDOW_MS;
 
     const latest = await ctx.db
       .query("coinglassTakerBuySellExchangeListSnapshots")
@@ -391,7 +399,7 @@ export const getTakerBuySellExchangeListSnapshotsBatch = query({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     const now = Date.now();
-    const staleWindowMs = 2 * 60 * 1000;
+    const staleWindowMs = TAKER_SNAPSHOT_STALE_WINDOW_MS;
 
     const symbols = Array.from(
       new Set(
@@ -420,6 +428,101 @@ export const getTakerBuySellExchangeListSnapshotsBatch = query({
           data: latest,
           lastUpdated: latest.lastUpdated,
           stale: latest.lastUpdated <= now - staleWindowMs,
+        };
+      }),
+    );
+
+    return results;
+  },
+});
+
+/**
+ * ID-keyed batch read for the screener. Joins by coingeckoId (canonical) with
+ * a legacy fallback to the symbol index — but only for rows that no coin has
+ * claimed yet (an owned row must not leak to a ticker twin).
+ */
+export const getTakerBuySellSnapshotsByCoinsBatch = query({
+  args: {
+    serverToken: v.string(),
+    coins: v.array(
+      v.object({
+        coingeckoId: v.string(),
+        symbol: v.string(),
+      }),
+    ),
+    range: v.string(),
+  },
+  returns: v.array(
+    v.object({
+      coingeckoId: v.string(),
+      symbol: v.string(),
+      data: v.union(takerBuySellSnapshotValidator, v.null()),
+      lastUpdated: v.number(),
+      stale: v.boolean(),
+      joinedBy: v.union(v.literal("id"), v.literal("symbol"), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    requireServerToken(args.serverToken);
+    const now = Date.now();
+
+    const seen = new Set<string>();
+    const coins: Array<{ coingeckoId: string; symbol: string }> = [];
+    for (const coin of args.coins) {
+      const id = coin.coingeckoId.trim();
+      const symbol = coin.symbol.trim().toUpperCase();
+      if (!id || !symbol || seen.has(id)) continue;
+      seen.add(id);
+      coins.push({ coingeckoId: id, symbol });
+      if (coins.length >= 500) break;
+    }
+
+    const results = await Promise.all(
+      coins.map(async (coin) => {
+        const byId = await ctx.db
+          .query("coinglassTakerBuySellExchangeListSnapshots")
+          .withIndex("by_coingecko_id_and_range_and_last_updated", (q) =>
+            q.eq("coingeckoId", coin.coingeckoId).eq("range", args.range),
+          )
+          .order("desc")
+          .first();
+
+        let latest = byId;
+        let joinedBy: "id" | "symbol" | null = byId ? "id" : null;
+
+        if (!latest) {
+          const bySymbol = await ctx.db
+            .query("coinglassTakerBuySellExchangeListSnapshots")
+            .withIndex("by_symbol_and_range_and_last_updated", (q) =>
+              q.eq("symbol", coin.symbol).eq("range", args.range),
+            )
+            .order("desc")
+            .first();
+          // Unowned legacy rows only — an id-stamped row belongs to that coin.
+          if (bySymbol && bySymbol.coingeckoId === undefined) {
+            latest = bySymbol;
+            joinedBy = "symbol";
+          }
+        }
+
+        if (!latest) {
+          return {
+            coingeckoId: coin.coingeckoId,
+            symbol: coin.symbol,
+            data: null,
+            lastUpdated: 0,
+            stale: true,
+            joinedBy: null,
+          };
+        }
+
+        return {
+          coingeckoId: coin.coingeckoId,
+          symbol: coin.symbol,
+          data: latest,
+          lastUpdated: latest.lastUpdated,
+          stale: latest.lastUpdated <= now - TAKER_SNAPSHOT_STALE_WINDOW_MS,
+          joinedBy,
         };
       }),
     );
