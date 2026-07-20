@@ -2,9 +2,12 @@
 
 import { Badge } from "@v1/ui/badge";
 import { Button } from "@v1/ui/button";
+import { Kbd } from "@v1/ui/kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "@v1/ui/popover";
 import { Plus, X } from "lucide-react";
 import * as React from "react";
+
+import { isTypingContext } from "./screener-shortcuts";
 
 import { getSmartScreenerMetric } from "@/lib/smart-screener/metric-registry";
 import {
@@ -108,6 +111,9 @@ function FilterChip({
       </PopoverTrigger>
       <PopoverContent
         align="start"
+        // Cover the chip instead of dropping below it (see AddFilterChip).
+        sideOffset={-26}
+        alignOffset={-4}
         className="w-auto rounded-xl bg-white p-3 dark:bg-zinc-900"
       >
         <ScreenerFilterEditor
@@ -136,6 +142,20 @@ function AddFilterChip({
 }) {
   const [open, setOpen] = React.useState(false);
 
+  // Single-letter shortcut: F opens the add-filter dropdown. Guarded so it
+  // never fires while typing in an input, dialog, or popover.
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "f" || open || isTypingContext(event)) {
+        return;
+      }
+      event.preventDefault();
+      setOpen(true);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -143,16 +163,19 @@ function AddFilterChip({
           type="button"
           variant="ghost"
           size="sm"
-          className="h-6 gap-1 rounded-md border border-dashed border-border px-2 text-xs text-primary/50 hover:text-primary"
+          className="h-6 gap-1 rounded-md border border-dashed border-border px-2 pr-1 text-xs text-primary/50 hover:text-primary hover:ring hover:ring-2 hover:ring-white/10"
           aria-label="Add filter"
         >
           <Plus className="h-3 w-3" />
           <span>Add filter</span>
+          <Kbd className="ml-0.5 h-4 px-1 text-[10px]">F</Kbd>
         </Button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-auto rounded-xl bg-white p-3 dark:bg-zinc-900"
+        sideOffset={-40}
+        alignOffset={-0}
+        className="w-auto rounded-xl bg-white px-1.5 py-1.5 dark:bg-zinc-900"
       >
         <ScreenerFilterEditor
           filter={null}

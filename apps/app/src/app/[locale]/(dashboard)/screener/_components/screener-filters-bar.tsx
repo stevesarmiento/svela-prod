@@ -6,10 +6,11 @@ import { Kbd } from "@v1/ui/kbd";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import dynamic from "next/dynamic";
 import * as React from "react";
-import { IconCommand, IconSparkles } from "symbols-react";
+import { IconSparkles } from "symbols-react";
 
 import { useScreenerContext } from "./screener-context";
 import { ScreenerFilterChips } from "./screener-filter-chips";
+import { isTypingContext } from "./screener-shortcuts";
 
 function loadScreenerSmartPromptDialog() {
   return import("./screener-smart-prompt-dialog");
@@ -24,7 +25,7 @@ const LazyScreenerSmartPromptDialog = dynamic(
 );
 
 /**
- * Smart Screener button (⌘F) + editable filter chips + honest coverage
+ * Smart Screener button (S) + editable filter chips + honest coverage
  * caption. All state lives in ScreenerContext (URL-backed) — no prop drill.
  */
 export function ScreenerFiltersBar() {
@@ -44,7 +45,14 @@ export function ScreenerFiltersBar() {
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+      // Single-letter shortcut: S opens Smart Screener. Guarded so it never
+      // fires while typing (inputs, dialogs, popovers) or with modifiers held
+      // — ⌘F stays the browser's native find.
+      if (
+        event.key.toLowerCase() === "s" &&
+        !isPromptDialogOpen &&
+        !isTypingContext(event)
+      ) {
         event.preventDefault();
         preloadPromptDialog();
         setIsPromptDialogOpen(true);
@@ -115,11 +123,7 @@ export function ScreenerFiltersBar() {
               className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs"
             >
               <span>Open by pressing</span>
-              <Kbd>
-                <IconCommand className="h-2.5 w-2.5 fill-primary/70" />
-              </Kbd>
-              <span>+</span>
-              <Kbd>F</Kbd>
+              <Kbd>S</Kbd>
             </TooltipContent>
           </Tooltip>
 

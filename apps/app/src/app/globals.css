@@ -57,3 +57,72 @@
     -webkit-mask-image: none;
   }
 }
+
+/* Screener filter dropdown — scroll-driven edge fade, same treatment as the
+   news feed (.market-feed-news-scroll) but on BOTH edges: the top fade grows
+   in as you scroll down, the bottom fade melts away as you reach the end.
+   Registered properties make the fade lengths animatable by the scroll
+   timeline; unsupported browsers just get no fade. */
+@property --screener-fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --screener-fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@supports (animation-timeline: scroll(self)) {
+  .screener-filter-scroll {
+    animation:
+      screener-fade-top linear both,
+      screener-fade-bottom linear both;
+    animation-timeline: scroll(self), scroll(self);
+    animation-range: 0 1.5rem, calc(100% - 1.5rem) 100%;
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 var(--screener-fade-top),
+      #000 calc(100% - var(--screener-fade-bottom)),
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 var(--screener-fade-top),
+      #000 calc(100% - var(--screener-fade-bottom)),
+      transparent 100%
+    );
+  }
+}
+
+@keyframes screener-fade-top {
+  from {
+    --screener-fade-top: 0px;
+  }
+
+  to {
+    --screener-fade-top: 28px;
+  }
+}
+
+@keyframes screener-fade-bottom {
+  from {
+    --screener-fade-bottom: 28px;
+  }
+
+  to {
+    --screener-fade-bottom: 0px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screener-filter-scroll {
+    animation: none;
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+}
