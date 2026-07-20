@@ -1,20 +1,23 @@
 "use client";
 
+import { Badge } from "@v1/ui/badge";
 import { cn } from "@v1/ui/cn";
 import { formatLargeNumber } from "@v1/ui/format-numbers";
 import { Skeleton } from "@v1/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
+import { IconTriangleFill } from "symbols-react";
 
 import { TickMeter } from "@/components/tick-meter";
 import { normalizeTakerRatio } from "@/lib/smart-screener/taker-metrics";
 import { useScreenerTakerFlowContext } from "./screener-context";
 
 /**
- * 24h order-flow snapshot for a row: the SAME TickMeter bar system as the
- * analysis dialog's "Order Flow" stat (origin 50, green/red by side, numeric
- * value always beside it). Data arrives in ONE batched request for the whole
- * table (ID-keyed) — this replaced a per-row taker-history chart that cost a
- * network fetch per visible row.
+ * 24h order-flow snapshot for a row: TickMeter (analysis-dialog bar system)
+ * plus the value in a Badge matching the daily-performance column. Balanced
+ * flow (45-55% buys — most coins, most of the time) stays NEUTRAL GREY so the
+ * column is quiet by default; color only appears when flow is genuinely
+ * skewed: emerald >= 55% buys, rose <= 45% (the app's standard signal colors).
+ * Data arrives in ONE batched ID-keyed request for the whole table.
  */
 export function ScreenerTakerVolumeCell(props: { coinId: string }) {
   const { byId, isLoading } = useScreenerTakerFlowContext();
@@ -41,7 +44,8 @@ export function ScreenerTakerVolumeCell(props: { coinId: string }) {
   }
 
   const buyPct = buyRatio * 100;
-  const bullish = buyPct >= 50;
+  const skew: "buy" | "sell" | "neutral" =
+    buyPct >= 55 ? "buy" : buyPct <= 45 ? "sell" : "neutral";
 
   return (
     <Tooltip delayDuration={500}>
@@ -52,16 +56,37 @@ export function ScreenerTakerVolumeCell(props: { coinId: string }) {
             min={0}
             max={100}
             origin={50}
-            className={bullish ? "text-emerald-400" : "text-rose-400"}
+            // Meter is ALWAYS directional (fill is tiny near 50, so it stays
+            // quiet); only the badge gates color on the 45/55 skew band.
+            className={buyPct >= 50 ? "text-emerald-400" : "text-rose-400"}
           />
-          <span
+          <Badge
+            variant={
+              skew === "buy"
+                ? "success"
+                : skew === "sell"
+                  ? "destructive"
+                  : "outline"
+            }
             className={cn(
-              "font-berkeley-mono text-[11px] tabular-nums",
-              bullish ? "text-emerald-400" : "text-rose-400",
+              "h-5 px-1.5 font-berkeley-mono text-[11px] tabular-nums gap-1",
+              skew === "neutral" &&
+                "bg-zinc-700/30 border-0 text-muted-foreground",
             )}
           >
-            {buyPct.toFixed(1)}% buy
-          </span>
+            <IconTriangleFill
+              aria-hidden="true"
+              className={cn(
+                "size-[4px] shrink-0 fill-current",
+                buyPct < 50 && "rotate-180",
+              )}
+            />
+            {/* Name the DOMINANT side: "43.7% buy" on a red pill read as a
+                contradiction — buys at 43.7% means sells at 56.3%. */}
+            {buyPct >= 50
+              ? `${buyPct.toFixed(1)}%`
+              : `${(100 - buyPct).toFixed(1)}%`}
+          </Badge>
         </span>
       </TooltipTrigger>
       <TooltipContent
