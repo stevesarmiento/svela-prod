@@ -4,6 +4,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
 import {
+  type TakerFlowMetrics,
+  useScreenerTakerFlow,
+} from "@/hooks/use-screener-taker-flow";
+import {
   type SmartScreenerScreenResponse,
   SmartScreenerScreenResponseSchema,
 } from "@/lib/smart-screener/screen-api";
@@ -30,12 +34,31 @@ export interface ScreenerInterpret {
   run: (text: string) => Promise<SmartScreenerScreenResponse | null>;
 }
 
+export interface ScreenerTakerFlow {
+  byId: Record<string, TakerFlowMetrics | null>;
+  isLoading: boolean;
+}
+
 export interface ScreenerContextValue extends ScreenerUrlState {
   results: ScreenerResults;
   interpret: ScreenerInterpret;
 }
 
 const ScreenerContext = React.createContext<ScreenerContextValue | null>(null);
+
+/**
+ * Separate context: order-flow data updates independently of filter/sort
+ * state, and table cells subscribe to THIS one only — a main-context change
+ * must not re-render every visible row cell.
+ */
+const ScreenerTakerFlowContext = React.createContext<ScreenerTakerFlow>({
+  byId: {},
+  isLoading: false,
+});
+
+export function useScreenerTakerFlowContext(): ScreenerTakerFlow {
+  return React.useContext(ScreenerTakerFlowContext);
+}
 
 export function useScreenerContext(): ScreenerContextValue {
   const value = React.useContext(ScreenerContext);
@@ -56,6 +79,12 @@ export function ScreenerProvider({ children }: { children: React.ReactNode }) {
     sort: urlState.sort,
     q: urlState.q,
   });
+
+  const takerFlowCoins = React.useMemo(
+    () => results.coins.map((c) => ({ id: c.id, symbol: c.symbol })),
+    [results.coins],
+  );
+  const takerFlow = useScreenerTakerFlow({ coins: takerFlowCoins });
 
   const { applyScreen } = urlState;
   const run = React.useCallback(
@@ -111,7 +140,9 @@ export function ScreenerProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ScreenerContext.Provider value={value}>
-      {children}
+      <ScreenerTakerFlowContext.Provider value={takerFlow}>
+        {children}
+      </ScreenerTakerFlowContext.Provider>
     </ScreenerContext.Provider>
   );
 }

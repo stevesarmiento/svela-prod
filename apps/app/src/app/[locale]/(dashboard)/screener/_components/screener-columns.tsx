@@ -298,16 +298,16 @@ export function createScreenerColumns(): ColumnDef<CoinMarketData>[] {
     {
       id: "takerBuySellVolume",
       header: () => (
-        <ColumnHeaderTooltip text="Taker volume on Binance spot (USDT pair): market orders hitting the book.">
-          Taker buy/sell volume
+        <ColumnHeaderTooltip text="Share of taker (market-order) volume that is buys, aggregated across exchanges over the last 24h. Green = net buying pressure.">
+          Order flow (24h)
         </ColumnHeaderTooltip>
       ),
       cell: ({ row }) => (
         <div className="flex min-w-0 w-full items-center justify-end">
           {!isLoadingQuote(row.original.quote.USD) ? (
-            <ScreenerTakerVolumeCell baseSymbol={row.original.symbol} />
+            <ScreenerTakerVolumeCell coinId={row.original.id} />
           ) : (
-            <Skeleton className="h-8 w-full max-w-56 rounded-sm" />
+            <Skeleton className="h-4 w-28 rounded-full" />
           )}
         </div>
       ),

@@ -32,6 +32,18 @@ function finiteOrNull(value: number): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+/**
+ * CoinGlass emits buy/sell ratios on the 0–100 scale (BTC ≈ 49.8), while the
+ * DSL's ratio unit is canonical 0..1 (55% => 0.55). Normalize at the read
+ * boundary; tolerate an already-0..1 value in case upstream ever changes.
+ * (Real buy ratios cluster near 50 on the 0-100 scale and never sit below
+ * 1.5% — the cutoff is unambiguous in practice.)
+ */
+export function normalizeTakerRatio(value: number): number | null {
+  if (!Number.isFinite(value)) return null;
+  return value > 1.5 ? value / 100 : value;
+}
+
 export const SMART_SCREENER_TAKER_METRICS: ReadonlyArray<TakerMetricDefinition> =
   [
     {
@@ -48,7 +60,7 @@ export const SMART_SCREENER_TAKER_METRICS: ReadonlyArray<TakerMetricDefinition> 
       description:
         "Share of taker volume that is buys, 0..1 (0.55 means 55% buys).",
       source: "taker",
-      getValue: (s) => finiteOrNull(s.buyRatio),
+      getValue: (s) => normalizeTakerRatio(s.buyRatio),
     },
     {
       id: "taker_buy_volume_usd",

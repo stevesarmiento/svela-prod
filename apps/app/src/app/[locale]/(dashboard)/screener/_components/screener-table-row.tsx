@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  SELECT_CELL_VARIANTS,
+  SELECT_CHECKBOX_VARIANTS,
+  SELECT_CONTENT_VARIANTS,
+  useSelectRevealTransition,
+} from "@/hooks/use-watchlist-selection";
 import type { CoinMarketData } from "@/types/coins";
 import { type Row, flexRender } from "@tanstack/react-table";
 import { Checkbox } from "@v1/ui/checkbox";
@@ -7,12 +13,6 @@ import { cn } from "@v1/ui/cn";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { memo } from "react";
-import {
-  SELECT_CELL_VARIANTS,
-  SELECT_CHECKBOX_VARIANTS,
-  SELECT_CONTENT_VARIANTS,
-  useSelectRevealTransition,
-} from "@/hooks/use-watchlist-selection";
 import { SCREENER_TABLE_GRID_TEMPLATE_COLUMNS } from "./screener-table-layout";
 
 function ScreenerTableRowInner({

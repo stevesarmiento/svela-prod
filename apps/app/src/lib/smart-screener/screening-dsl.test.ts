@@ -5,6 +5,10 @@ import { describe, expect, test } from "bun:test";
 import { promptLooksLikeConstraints } from "./prompt-gating";
 import { SmartScreenerScreenResponseSchema } from "./screen-api";
 import { ScreeningDslSchema, formatDslSummary } from "./screening-dsl";
+import {
+  SMART_SCREENER_TAKER_METRICS,
+  normalizeTakerRatio,
+} from "./taker-metrics";
 import { SMART_SCREENER_EVAL_CASES } from "./screening-evals";
 
 describe("ScreeningDslSchema", () => {
@@ -106,6 +110,29 @@ describe("ScreeningDslSchema", () => {
       filters: [{ metricId: "market_cap_usd", op: "gt", value: -1 }],
     });
     expect(badMcap.success).toBe(false);
+  });
+
+  test("taker buy ratio normalizes CoinGlass 0-100 scale to canonical 0..1", () => {
+    // REGRESSION: CoinGlass stores buyRatio as 49.79 (percent scale). The DSL
+    // filter value is 0..1 — without normalization "buy ratio > 55%" (0.55)
+    // matched EVERY coin (49.79 > 0.55).
+    expect(normalizeTakerRatio(49.79)).toBeCloseTo(0.4979);
+    expect(normalizeTakerRatio(0.55)).toBeCloseTo(0.55);
+    expect(normalizeTakerRatio(100)).toBeCloseTo(1);
+    expect(normalizeTakerRatio(Number.NaN)).toBe(null);
+
+    const metric = SMART_SCREENER_TAKER_METRICS.find(
+      (m) => m.id === "taker_buy_ratio",
+    );
+    expect(metric).toBeDefined();
+    const snapshot = {
+      buyRatio: 55.5,
+      sellRatio: 44.5,
+      buyVolumeUsd: 10,
+      sellVolumeUsd: 8,
+      totalVolumeUsd: 18,
+    };
+    expect(metric?.getValue(snapshot)).toBeCloseTo(0.555);
   });
 
   test("takerContext defaults and parses", () => {

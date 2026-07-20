@@ -1,5 +1,11 @@
 "use client";
 
+import { useAnalyzeSelection } from "@/hooks/use-analyze-selection";
+import {
+  useBottomNavSelectionBridge,
+  useWatchlistSelection,
+} from "@/hooks/use-watchlist-selection";
+import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides";
 import type { CoinMarketData } from "@/types/coins";
 import {
   type SortingState,
@@ -9,12 +15,6 @@ import {
 } from "@tanstack/react-table";
 import { useCallback, useMemo } from "react";
 import type React from "react";
-import { cleanTokenName, getTokenLogoURL } from "@/lib/logo-overrides";
-import { useAnalyzeSelection } from "@/hooks/use-analyze-selection";
-import {
-  useBottomNavSelectionBridge,
-  useWatchlistSelection,
-} from "@/hooks/use-watchlist-selection";
 import { createScreenerColumns } from "./screener-columns";
 import { ScreenerTableBody } from "./screener-table-body";
 import type {
@@ -70,9 +70,7 @@ export function ScreenerTableSection({
   const getSelectedTokens = useCallback(
     () =>
       coins
-        .filter(
-          (coin) => isPriced(coin) && selectedCoins.has(String(coin.id)),
-        )
+        .filter((coin) => isPriced(coin) && selectedCoins.has(String(coin.id)))
         .map((coin) => ({
           id: String(coin.id),
           name: cleanTokenName(coin.name),
