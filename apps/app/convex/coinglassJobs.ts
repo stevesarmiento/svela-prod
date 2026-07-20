@@ -18,6 +18,18 @@ function toNumber(value: unknown): number {
   return 0;
 }
 
+// Unlike toNumber, a parse failure is null — not a legitimate-looking zero.
+// Used to detect all-garbage snapshot payloads (absence = no data; a stored
+// snapshot must mean real data).
+function toFiniteNumberOrNull(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 type CoinglassHistoryPoint = {
   time: number;
   taker_buy_volume_usd: string | number;
@@ -72,6 +84,9 @@ async function fetchSpotTakerBuySellVolumeHistory(args: {
       "CG-API-KEY": args.apiKey,
       Accept: "application/json",
     },
+    // A hung CoinGlass request must not stall a cron action; per-coin
+    // failures are swallowed by the callers, so fail fast and move on.
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
@@ -136,6 +151,9 @@ async function fetchFuturesTakerBuySellVolumeHistory(args: {
       "CG-API-KEY": args.apiKey,
       Accept: "application/json",
     },
+    // A hung CoinGlass request must not stall a cron action; per-coin
+    // failures are swallowed by the callers, so fail fast and move on.
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
@@ -202,6 +220,9 @@ async function fetchOpenInterestHistory(args: {
       "CG-API-KEY": args.apiKey,
       Accept: "application/json",
     },
+    // A hung CoinGlass request must not stall a cron action; per-coin
+    // failures are swallowed by the callers, so fail fast and move on.
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
@@ -270,6 +291,9 @@ async function fetchLiquidationHistory(args: {
       "CG-API-KEY": args.apiKey,
       Accept: "application/json",
     },
+    // A hung CoinGlass request must not stall a cron action; per-coin
+    // failures are swallowed by the callers, so fail fast and move on.
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
@@ -343,6 +367,9 @@ async function fetchTakerBuySellExchangeList(args: {
       "CG-API-KEY": args.apiKey,
       Accept: "application/json",
     },
+    // A hung CoinGlass request must not stall a cron action; per-coin
+    // failures are swallowed by the callers, so fail fast and move on.
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!response.ok) {
@@ -363,6 +390,13 @@ async function fetchTakerBuySellExchangeList(args: {
   const data = record.data;
   if (!data || typeof data !== "object") return null;
   const d = data as Record<string, unknown>;
+
+  // Skip the write when every core field is unparsable: persisting zeros
+  // would make "no data" indistinguishable from a real all-zero snapshot.
+  const coreFields = [d.buy_ratio, d.sell_ratio, d.buy_vol_usd, d.sell_vol_usd];
+  if (coreFields.every((f) => toFiniteNumberOrNull(f) === null)) {
+    return null;
+  }
 
   const buyRatio = toNumber(d.buy_ratio);
   const sellRatio = toNumber(d.sell_ratio);
@@ -539,7 +573,13 @@ async function upsertOneLiquidations(
 
 async function upsertOneTakerExchangeList(
   ctx: ActionCtx,
-  args: { symbol: string; range: string; dataSource: string; apiKey: string },
+  args: {
+    symbol: string;
+    coingeckoId?: string;
+    range: string;
+    dataSource: string;
+    apiKey: string;
+  },
 ): Promise<{ wrote: boolean }> {
   const snapshot = await fetchTakerBuySellExchangeList({
     apiKey: args.apiKey,
@@ -552,6 +592,7 @@ async function upsertOneTakerExchangeList(
     internal.coinglassWriters._upsertTakerBuySellExchangeListSnapshot,
     {
       symbol: args.symbol,
+      coingeckoId: args.coingeckoId,
       range: args.range,
       snapshot,
       dataSource: args.dataSource,
@@ -638,7 +679,9 @@ export const refreshTrackedSpotTakerBuySellVolumeHistoryBatch = internalAction({
       },
     );
 
-    const coingeckoIds = page.page.map((row: { coingeckoId: string }) => row.coingeckoId);
+    const coingeckoIds = page.page.map(
+      (row: { coingeckoId: string }) => row.coingeckoId,
+    );
     if (coingeckoIds.length === 0) {
       await ctx.runMutation(internal.coingeckoState._setJobCursor, {
         jobKey,
@@ -721,7 +764,9 @@ export const refreshTrackedFuturesTakerBuySellVolumeHistoryBatch =
         },
       );
 
-      const coingeckoIds = page.page.map((row: { coingeckoId: string }) => row.coingeckoId);
+      const coingeckoIds = page.page.map(
+        (row: { coingeckoId: string }) => row.coingeckoId,
+      );
       if (coingeckoIds.length === 0) {
         await ctx.runMutation(internal.coingeckoState._setJobCursor, {
           jobKey,
@@ -824,7 +869,9 @@ export const refreshTrackedOpenInterestHistoryBatch = internalAction({
         paginationOpts: { numItems: batchSize, cursor },
       },
     );
-    const coingeckoIds = page.page.map((row: { coingeckoId: string }) => row.coingeckoId);
+    const coingeckoIds = page.page.map(
+      (row: { coingeckoId: string }) => row.coingeckoId,
+    );
     if (coingeckoIds.length === 0) {
       await ctx.runMutation(internal.coingeckoState._setJobCursor, {
         jobKey,
@@ -925,7 +972,9 @@ export const refreshTrackedLiquidationHistoryBatch = internalAction({
         paginationOpts: { numItems: batchSize, cursor },
       },
     );
-    const coingeckoIds = page.page.map((row: { coingeckoId: string }) => row.coingeckoId);
+    const coingeckoIds = page.page.map(
+      (row: { coingeckoId: string }) => row.coingeckoId,
+    );
     if (coingeckoIds.length === 0) {
       await ctx.runMutation(internal.coingeckoState._setJobCursor, {
         jobKey,
@@ -976,6 +1025,7 @@ export const refreshTrackedLiquidationHistoryBatch = internalAction({
 export const refreshSingleTakerBuySellExchangeListSnapshot = internalAction({
   args: {
     symbol: v.string(),
+    coingeckoId: v.optional(v.string()),
     range: v.string(),
   },
   returns: v.object({ wrote: v.boolean() }),
@@ -983,6 +1033,7 @@ export const refreshSingleTakerBuySellExchangeListSnapshot = internalAction({
     const apiKey = getCoinGlassApiKey();
     const result = await upsertOneTakerExchangeList(ctx, {
       symbol: args.symbol.trim().toUpperCase(),
+      coingeckoId: args.coingeckoId,
       range: args.range.trim(),
       dataSource: "coinglass-warmup-taker-exchange-list",
       apiKey,
@@ -1015,7 +1066,9 @@ export const refreshTrackedTakerBuySellExchangeListSnapshotBatch =
           paginationOpts: { numItems: batchSize, cursor },
         },
       );
-      const coingeckoIds = page.page.map((row: { coingeckoId: string }) => row.coingeckoId);
+      const coingeckoIds = page.page.map(
+        (row: { coingeckoId: string }) => row.coingeckoId,
+      );
       if (coingeckoIds.length === 0) {
         await ctx.runMutation(internal.coingeckoState._setJobCursor, {
           jobKey,
@@ -1039,6 +1092,7 @@ export const refreshTrackedTakerBuySellExchangeListSnapshotBatch =
         try {
           const result = await upsertOneTakerExchangeList(ctx, {
             symbol: coin.symbol.trim().toUpperCase(),
+            coingeckoId: coin.coingeckoId,
             range,
             dataSource: "coinglass-cron-taker-exchange-list",
             apiKey,

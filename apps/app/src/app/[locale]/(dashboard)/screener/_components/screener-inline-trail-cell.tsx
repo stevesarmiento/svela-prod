@@ -1,9 +1,9 @@
 "use client";
 
-import dynamic from "next/dynamic";
-import { useEffect, useRef, useState } from "react";
-import { Skeleton } from "@v1/ui/skeleton";
+import { useVisibleOnce } from "@/hooks/use-visible-once";
 import type { CoinMarketData } from "@/types/coins";
+import { Skeleton } from "@v1/ui/skeleton";
+import dynamic from "next/dynamic";
 
 function loadInlineTrailChart() {
   return import("@/components/charts/inline-price-chart");
@@ -24,35 +24,11 @@ export function ScreenerInlineTrailCell(props: {
   initialData: CoinMarketData["quote"]["USD"];
   percentChange24h: number;
 }) {
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const [shouldLoad, setShouldLoad] = useState(false);
-
-  useEffect(() => {
-    if (shouldLoad) return;
-    const node = rootRef.current;
-    if (!node) return;
-
-    if (typeof IntersectionObserver !== "function") {
-      setShouldLoad(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
-        setShouldLoad(true);
-        observer.disconnect();
-      },
-      { rootMargin: "250px 0px", threshold: 0.01 },
-    );
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [shouldLoad]);
+  const { ref, visible } = useVisibleOnce<HTMLDivElement>();
 
   return (
     <div
-      ref={rootRef}
+      ref={ref}
       className="w-full max-w-56 overflow-hidden [mask-image:linear-gradient(to_right,transparent_0%,black_12%,black_100%)]"
       style={{
         WebkitMaskImage:
@@ -61,7 +37,7 @@ export function ScreenerInlineTrailCell(props: {
           "linear-gradient(to right, transparent 0%, black 12%, black 100%)",
       }}
     >
-      {shouldLoad ? (
+      {visible ? (
         <LazyInlineTrailChart
           className="w-full"
           coingeckoId={props.coinId}

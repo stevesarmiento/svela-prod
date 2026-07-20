@@ -449,8 +449,9 @@ function buildDailyBriefCacheKey(args: {
   // Bump the version when the brief format/copy pipeline changes so stale
   // cached briefs are regenerated instead of served (v2: specifics + delta,
   // v3: full-watchlist breadth, v4: holistic technicals w/ Bollinger+squeeze,
-  // v5: structured card details).
-  return `overview:dailyBrief:v5:${args.clerkId}:watchlist:${args.window}`;
+  // v5: structured card details, v6: working Gemini copy — thinking disabled,
+  // v7: de-duplicated summary/regime copy).
+  return `overview:dailyBrief:v7:${args.clerkId}:watchlist:${args.window}`;
 }
 
 function buildSnapshotCacheKey(args: { clerkId: string }): string {

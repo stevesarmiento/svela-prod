@@ -1,8 +1,12 @@
 import { v } from "convex/values";
-import { action, query, mutation } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { action, mutation, query } from "./_generated/server";
 
-const sentimentValidator = v.union(v.literal("bullish"), v.literal("bearish"), v.literal("neutral"));
+const sentimentValidator = v.union(
+  v.literal("bullish"),
+  v.literal("bearish"),
+  v.literal("neutral"),
+);
 
 export const listNewsByCoinId = query({
   args: {
@@ -28,13 +32,15 @@ export const listNewsByCoinId = query({
 
     const links = await ctx.db
       .query("coingeckoNewsCoinLinks")
-      .withIndex("by_coingecko_id_and_posted_at_ms", (q) => q.eq("coingeckoId", args.coingeckoId))
+      .withIndex("by_coingecko_id_and_posted_at_ms", (q) =>
+        q.eq("coingeckoId", args.coingeckoId),
+      )
       .order("desc")
       .take(limit);
 
     const docs = await Promise.all(links.map((l) => ctx.db.get(l.articleId)));
     const out: Array<{
-      articleId: typeof links[number]["articleId"];
+      articleId: (typeof links)[number]["articleId"];
       title: string;
       url: string;
       sourceName: string | null;
@@ -81,10 +87,14 @@ export const refreshNewsForCoin = mutation({
       lastSeen: Date.now(),
     });
 
-    await ctx.scheduler.runAfter(0, internal.coingeckoNewsJobs.refreshCoinNews, {
-      coingeckoId: args.coingeckoId,
-      perPage: 5,
-    });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.coingeckoNewsJobs.refreshCoinNews,
+      {
+        coingeckoId: args.coingeckoId,
+        perPage: 5,
+      },
+    );
 
     return null;
   },
@@ -128,11 +138,14 @@ export const requestSentimentForArticles = mutation({
     const unique = Array.from(new Set(args.articleIds)).slice(0, 20);
     if (unique.length === 0) return null;
 
-    await ctx.scheduler.runAfter(0, internal.coingeckoNewsJobs.analyzeSentimentBatch, {
-      articleIds: unique,
-    });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.coingeckoNewsJobs.analyzeSentimentBatch,
+      {
+        articleIds: unique,
+      },
+    );
 
     return null;
   },
 });
-

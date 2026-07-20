@@ -1,8 +1,8 @@
 import { v } from "convex/values";
-import { query } from "./_generated/server";
-import { requireServerToken } from "./_lib/server_token";
-import { getStaleWindowMs } from "./_lib/chartFreshness";
 import type { Doc } from "./_generated/dataModel";
+import { query } from "./_generated/server";
+import { getStaleWindowMs } from "./_lib/chartFreshness";
+import { requireServerToken } from "./_lib/server_token";
 
 const priceHistoryPointValidator = v.object({
   _id: v.id("priceHistory"),

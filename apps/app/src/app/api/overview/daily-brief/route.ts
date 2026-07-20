@@ -482,17 +482,18 @@ export async function POST(req: NextRequest) {
     // "News-driven tape" reads badly inside "the event tape leans …".
     const themePhrase = themeLabel === "News-driven tape" ? "news-driven" : themeLabel.toLowerCase()
 
-    const breadthTotal = breadth ? breadth.advancers + breadth.decliners + breadth.flat : 0
 
     const defaultBodies: Record<CardKind, string> = {
+      // Numbers live in the breadth meter/stat tiles below the body — the
+      // text interprets, it doesn't recite.
       regime: breadth
-        ? `${breadth.advancers} of ${breadthTotal} names advanced and ${breadth.bigMovers} moved more than 5%, ${
-            mood === "risk_on"
-              ? "so participation is broader than the leaders alone suggest"
-              : mood === "risk_off"
-                ? "so the weakness runs deeper than a few laggards"
-                : "so direction is name-by-name rather than list-wide"
-          }.`
+        ? mood === "risk_on"
+          ? "Participation is broad enough that the move isn't resting on a handful of leaders."
+          : mood === "risk_off"
+            ? "Weakness runs wider than the headline losers, so bounces may struggle to stick."
+            : mood === "quiet"
+              ? "Not much is moving, so small pockets of activity stand out more than they should."
+              : "Participation is split down the middle, so selectivity matters more than direction here."
         : windowEvents.length > 0
           ? `Signals split ${eventToneCounts.positive} positive / ${eventToneCounts.negative} negative across ${windowEvents.length} events${topGainerFact ? `, with ${topGainerFact.symbol} (${topGainerFact.change}) doing the most lifting` : ""}.`
           : "The tape is fairly quiet in this window, with fewer signals showing up than usual.",
@@ -524,23 +525,19 @@ export async function POST(req: NextRequest) {
         sentences.push(`Here’s a quick note on your watchlist over ${windowLabel}.`)
       }
 
+      // Breadth numbers live in the regime card's stat tiles — keep the
+      // summary's mood line qualitative so the two don't repeat each other.
       const moodDesc =
         mood === "risk_on" ? "risk-on" : mood === "risk_off" ? "risk-off" : mood === "quiet" ? "quiet" : "mixed"
-      if (breadth) {
-        sentences.push(
-          `Underneath, the tape reads ${moodDesc} — ${breadth.advancers} of ${breadthTotal} names up, ${breadth.decliners} down, with a median move of ${signedPct(breadth.medianChangePct)}.`,
-        )
-      } else {
-        const dispersionDesc =
-          dispersion === "high"
-            ? "a handful of outsized moves driving the tone"
-            : dispersion === "medium"
-              ? "enough dispersion for quick leadership rotations"
-              : dispersion === "low"
-                ? "moves staying fairly contained"
-                : "little movement to speak of"
-        sentences.push(`The overall mood reads ${moodDesc}, with ${dispersionDesc}.`)
-      }
+      const dispersionDesc =
+        dispersion === "high"
+          ? "a handful of outsized moves driving the tone"
+          : dispersion === "medium"
+            ? "enough dispersion for quick leadership rotations"
+            : dispersion === "low"
+              ? "moves staying fairly contained"
+              : "little movement to speak of"
+      sentences.push(`The overall mood reads ${moodDesc}, with ${dispersionDesc}.`)
 
       if (topHeadline) {
         sentences.push(
@@ -585,11 +582,13 @@ Output must be valid JSON only with:
 
 Rules:
 - Ground every claim in the input JSON. Never invent numbers, symbols, or headlines. Reuse numeric values exactly as given (e.g. "+12.4%").
+- Refer to coins by ticker symbol only, exactly as given (e.g. "ANSEM (+15.70%)"). Never use full coin names and never write "Name (SYMBOL)" — the UI renders symbols as rich token chips.
 - summary: one paragraph, three to four sentences, no markdown.
   1) Lead with the most consequential specific: the standout mover(s) by symbol and change, or the dominant headline.
-  2) Add regime context in plain language, preferring breadth ("X of Y names up, median move Z") over abstract mood words — the leaders are a handful of names, breadth is what describes the whole watchlist.
+  2) Add ONE short plain-language sentence on the overall tone. Do NOT recite breadth statistics (advancers/decliners/median/big-mover counts) — the regime card displays those numbers separately.
   3) If changesSinceLastBrief is non-null, work in what changed since the last brief; otherwise add theme color instead.
-- cardBodies.regime: one or two sentences on participation, citing regime.breadth (advancers vs decliners, median move, big movers) when present; fall back to eventToneCounts otherwise.
+- cardBodies.regime: one or two sentences INTERPRETING participation — the regime.breadth numbers are rendered as a meter and stat tiles directly below this text, so never restate them. Say what they imply instead: is the move broad or carried by a few leaders, does the event tone confirm or contradict the price action, is this the kind of tape where selectivity matters.
+- Each piece of copy must cover different ground: the summary owns the movers and the day's takeaway; the regime card owns participation quality; do not repeat a fact across them.
 - cardBodies.technicals: one or two sentences naming which sampled coins look stretched, washed-out, coiled (squeeze), or trending, using technicals.byCoin (rsi, bollinger band position, squeeze). The sample spans the watchlist, not just movers. If the sample is empty, say the read is limited.
 - cardBodies.theme: one or two sentences tying the theme to concrete headlines — paraphrase a title and name the coins involved.
 - Each card body must add information the summary did not already state; do not restate the deterministic labels shown next to the card.
@@ -608,9 +607,15 @@ Rules:
             description: "A short summary paragraph and three card bodies.",
           }),
           temperature: 0.5,
-          maxOutputTokens: 600,
+          maxOutputTokens: 1500,
           maxRetries: 2,
           abortSignal: req.signal,
+          providerOptions: {
+            // gemini-2.5-flash spends output tokens on internal "thinking" by
+            // default, which starves the JSON output at low token caps and
+            // yields NoOutputGeneratedError. Copywriting doesn't need it.
+            google: { thinkingConfig: { thinkingBudget: 0 } },
+          },
         })
 
         const factsJson = JSON.stringify(facts)

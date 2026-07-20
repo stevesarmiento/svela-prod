@@ -1,22 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
+import {
+  type ScreenerMarketRowLike,
+  toCoinMarketData,
+} from "@/lib/screener/coin-market-data";
 import type { CoinMarketData } from "@/types/coins";
 
-export interface ScreenerTopMarketRow {
-  coingeckoId: string;
-  symbol: string;
-  name: string;
-  image: string;
-  currentPrice?: number;
-  marketCap?: number;
-  marketCapRank?: number;
-  totalVolume?: number;
-  priceChangePercentage24h?: number;
-  updatedAt?: number;
-}
+export type ScreenerTopMarketRow = ScreenerMarketRowLike;
 
 function isScreenerTopMarketRow(value: unknown): value is ScreenerTopMarketRow {
   if (typeof value !== "object" || value === null) return false;
@@ -36,10 +29,16 @@ function normalizeTopMarketsLimit(limit: number) {
 }
 
 export function screenerTopMarketsQueryKey(limit = 500) {
-  return ["screener", "top-markets", String(normalizeTopMarketsLimit(limit))] as const;
+  return [
+    "screener",
+    "top-markets",
+    String(normalizeTopMarketsLimit(limit)),
+  ] as const;
 }
 
-export async function fetchScreenerTopMarkets(limit = 500): Promise<ScreenerTopMarketRow[]> {
+export async function fetchScreenerTopMarkets(
+  limit = 500,
+): Promise<ScreenerTopMarketRow[]> {
   const normalizedLimit = normalizeTopMarketsLimit(limit);
   const response = await fetch(
     `/api/internal/markets/top?limit=${encodeURIComponent(String(normalizedLimit))}`,
@@ -54,46 +53,13 @@ export async function fetchScreenerTopMarkets(limit = 500): Promise<ScreenerTopM
   return json;
 }
 
-function toCoinMarketData(row: ScreenerTopMarketRow): CoinMarketData {
-  const price = row.currentPrice ?? 0;
-  const marketCap = row.marketCap ?? 0;
-  const marketCapRank = row.marketCapRank ?? 0;
-  const totalVolume = row.totalVolume ?? 0;
-  const change24h = row.priceChangePercentage24h ?? 0;
-
-  return {
-    id: row.coingeckoId,
-    name: row.name,
-    symbol: row.symbol,
-    slug: row.coingeckoId,
-    image: row.image,
-    sparkline7d: undefined,
-    cmc_rank: marketCapRank,
-    circulating_supply: 0,
-    max_supply: null,
-    quote: {
-      USD: {
-        price,
-        volume_24h: totalVolume,
-        market_cap: marketCap,
-        percent_change_24h: change24h,
-        percent_change_1h: undefined,
-        percent_change_7d: undefined,
-        percent_change_30d: undefined,
-        percent_change_60d: undefined,
-        percent_change_90d: undefined,
-      },
-    },
-    fundingRate: null,
-  };
-}
-
 export function useScreenerTopMarkets(limit = 500): {
   data: CoinMarketData[];
   lastUpdatedAtMs: number | null;
   isLoading: boolean;
   isFetching: boolean;
   error: Error | null;
+  refetch: () => void;
 } {
   const query = useQuery({
     queryKey: screenerTopMarketsQueryKey(limit),
@@ -125,5 +91,6 @@ export function useScreenerTopMarkets(limit = 500): {
     isLoading: query.isLoading,
     isFetching: query.isFetching,
     error: (query.error as Error | null) ?? null,
+    refetch: () => void query.refetch(),
   };
 }

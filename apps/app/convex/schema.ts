@@ -10,6 +10,9 @@ export default defineSchema({
     email: v.optional(v.string()),
     fullName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
+    // Declared here because dev-deployment user rows already carry it (wallet
+    // work on a parallel branch); optional so it stays schema-compatible.
+    walletAddress: v.optional(v.string()),
   })
     .index("by_clerk_id", ["clerkId"])
     .index("by_dev_clerk_id", ["devClerkId"])
@@ -248,6 +251,10 @@ export default defineSchema({
 
   coinglassTakerBuySellExchangeListSnapshots: defineTable({
     symbol: v.string(), // e.g. "SOL"
+    // Canonical join key. Optional: legacy rows were keyed by symbol only and
+    // are adopted (stamped with an id) on their next write. Ticker symbols
+    // collide across coins; coingeckoId does not.
+    coingeckoId: v.optional(v.string()),
     range: v.string(), // e.g. "24h"
     overall: v.object({
       buyRatio: v.number(),
@@ -272,6 +279,11 @@ export default defineSchema({
     .index("by_symbol_and_range", ["symbol", "range"])
     .index("by_symbol_and_range_and_last_updated", [
       "symbol",
+      "range",
+      "lastUpdated",
+    ])
+    .index("by_coingecko_id_and_range_and_last_updated", [
+      "coingeckoId",
       "range",
       "lastUpdated",
     ])
@@ -550,6 +562,14 @@ export default defineSchema({
     atl: v.optional(v.number()),
     atlChangePercentage: v.optional(v.number()),
     atlDate: v.optional(v.string()),
+    // Precomputed technicals — written by the 4h top-markets cron only
+    // (sparkline + 7d/30d change params). The 5-min tracked cron omits them
+    // (undefined never clobbers stored values). Definitions must match
+    // src/lib/smart-screener/technical-metrics.ts.
+    return7dPct: v.optional(v.number()),
+    return30dPct: v.optional(v.number()),
+    volatility7dPct: v.optional(v.number()),
+    technicalsUpdatedAt: v.optional(v.number()),
     lastUpdated: v.string(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -593,4 +613,40 @@ export default defineSchema({
     .index("by_surface", ["surface"])
     .index("by_surface_and_created_at_ms", ["surface", "createdAtMs"])
     .index("by_created_at_ms", ["createdAtMs"]),
+
+  /**
+   * Smart-screener pipeline telemetry — EVERY interpret/execute path records
+   * an event (successes, cache hits, and all bail paths), unlike the legacy
+   * write-only `smartScreenerPromptFailures` table.
+   */
+  smartScreenerEvents: defineTable({
+    createdAtMs: v.number(),
+    surface: v.union(
+      v.literal("watchlist"),
+      v.literal("screener"),
+      v.literal("internal"),
+    ),
+    kind: v.union(
+      v.literal("interpret_cache_hit"),
+      v.literal("interpret_success"),
+      v.literal("interpret_invalid_output"),
+      v.literal("interpret_low_confidence"),
+      v.literal("interpret_error"),
+      v.literal("execute_success"),
+      v.literal("execute_empty"),
+      v.literal("execute_error"),
+    ),
+    prompt: v.optional(v.string()), // scrubbed, <= 500 chars
+    dslJson: v.optional(v.string()), // <= 2000 chars
+    confidence: v.number(),
+    requestId: v.string(),
+    latencyMs: v.optional(v.number()),
+    model: v.optional(v.string()),
+    promptVersion: v.optional(v.number()),
+    errorType: v.optional(v.string()),
+    scanned: v.optional(v.number()),
+    matched: v.optional(v.number()),
+  })
+    .index("by_created_at_ms", ["createdAtMs"])
+    .index("by_kind_and_created_at_ms", ["kind", "createdAtMs"]),
 });

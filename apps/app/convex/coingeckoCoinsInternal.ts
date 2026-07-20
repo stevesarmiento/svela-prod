@@ -44,4 +44,3 @@ export const _getCoinsNeedingImageUpdates = internalQuery({
       .take(limit);
   },
 });
-

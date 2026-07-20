@@ -494,6 +494,7 @@ export const _upsertLiquidationHistory = internalMutation({
 export const _upsertTakerBuySellExchangeListSnapshot = internalMutation({
   args: {
     symbol: v.string(), // e.g. SOL
+    coingeckoId: v.optional(v.string()), // canonical join key when known
     range: v.string(), // e.g. 24h
     snapshot: takerExchangeSnapshotValidator,
     dataSource: v.string(),
@@ -502,18 +503,43 @@ export const _upsertTakerBuySellExchangeListSnapshot = internalMutation({
   returns: v.object({ wrote: v.boolean() }),
   handler: async (ctx, args) => {
     const now = args.asOfMs ?? Date.now();
-    const existing = await ctx.db
-      .query("coinglassTakerBuySellExchangeListSnapshots")
-      .withIndex("by_symbol_and_range", (q) =>
-        q.eq("symbol", args.symbol).eq("range", args.range),
-      )
-      .first();
+
+    // Prefer the id-keyed row when we know the coin. Fall back to the legacy
+    // (symbol, range) row and ADOPT it by stamping the id — every write
+    // self-heals legacy rows, so no big-bang backfill is strictly required.
+    let existing = args.coingeckoId
+      ? await ctx.db
+          .query("coinglassTakerBuySellExchangeListSnapshots")
+          .withIndex("by_coingecko_id_and_range_and_last_updated", (q) =>
+            q.eq("coingeckoId", args.coingeckoId).eq("range", args.range),
+          )
+          .first()
+      : null;
+
+    if (!existing) {
+      const legacy = await ctx.db
+        .query("coinglassTakerBuySellExchangeListSnapshots")
+        .withIndex("by_symbol_and_range", (q) =>
+          q.eq("symbol", args.symbol).eq("range", args.range),
+        )
+        .first();
+      // Only adopt a row that is unowned or already owned by this coin —
+      // a row owned by a ticker twin must not be stolen.
+      if (
+        legacy &&
+        (legacy.coingeckoId === undefined ||
+          legacy.coingeckoId === args.coingeckoId)
+      ) {
+        existing = legacy;
+      }
+    }
 
     const next = {
       overall: args.snapshot.overall,
       exchanges: args.snapshot.exchanges,
       dataSource: args.dataSource,
       lastUpdated: now,
+      ...(args.coingeckoId ? { coingeckoId: args.coingeckoId } : {}),
     };
 
     if (existing) {

@@ -26,6 +26,10 @@ const marketWriteItemValidator = v.object({
   atl: v.optional(v.number()),
   atlChangePercentage: v.optional(v.number()),
   atlDate: v.optional(v.string()),
+  return7dPct: v.optional(v.number()),
+  return30dPct: v.optional(v.number()),
+  volatility7dPct: v.optional(v.number()),
+  technicalsUpdatedAt: v.optional(v.number()),
   lastUpdated: v.string(),
 });
 
@@ -56,6 +60,12 @@ const MARKET_DIFF_FIELDS = [
   "atl",
   "atlChangePercentage",
   "atlDate",
+  // Precomputed technicals (a technicals-only change must still patch).
+  // `technicalsUpdatedAt` is intentionally excluded — like `lastUpdated`,
+  // it changes on every fetch even when nothing moved.
+  "return7dPct",
+  "return30dPct",
+  "volatility7dPct",
 ] as const;
 
 function marketItemUnchanged(

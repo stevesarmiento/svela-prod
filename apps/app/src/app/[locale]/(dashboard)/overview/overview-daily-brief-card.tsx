@@ -29,7 +29,7 @@ const MotionDiv = motion.div
 // different content lengths. Cards fill the slide and scroll internally in
 // the rare case content exceeds it.
 const SLIDE_MIN_H = "h-[340px] sm:h-[280px]"
-const SLIDE_INTERVAL_MS = 8000
+const SLIDE_INTERVAL_MS = 14000
 
 
 type OverviewStatus = "missing" | "fresh" | "stale"
@@ -271,42 +271,87 @@ const PCT = "[+\\-−]?\\d+(?:\\.\\d+)?"
  * symbols as pills. Everything else stays text.
  */
 function renderRichSummary(text: string, tokens: Map<string, TokenRef>): ReactNode[] {
-  const symbols = Array.from(tokens.keys())
-    .sort((a, b) => b.length - a.length)
-    .map(escapeRegExp)
-  const symbolAlt = symbols.length > 0 ? symbols.join("|") : null
+  // Aliases: ticker symbols (uppercase) plus full coin names, all resolving
+  // to the same token — so "CashCat", "CASHCAT", and "CashCat (CASHCAT)" each
+  // render as one pill.
+  const byAlias = new Map<string, TokenRef>()
+  for (const token of tokens.values()) {
+    byAlias.set(token.symbol.toUpperCase(), token)
+    if (token.name && token.name.toUpperCase() !== token.symbol.toUpperCase()) {
+      byAlias.set(token.name.toUpperCase(), token)
+    }
+  }
+  const aliases = Array.from(byAlias.keys())
+  const aliasAlt =
+    aliases.length > 0
+      ? Array.from(
+          new Set([
+            ...aliases,
+            ...Array.from(tokens.values())
+              .map((t) => t.name)
+              .filter((n): n is string => Boolean(n)),
+          ]),
+        )
+          .sort((a, b) => b.length - a.length)
+          .map(escapeRegExp)
+          .join("|")
+      : null
 
   const parts: string[] = []
-  if (symbolAlt) parts.push(`(?<comboSym>\\b(?:${symbolAlt})\\b)\\s*\\((?<comboPct>${PCT})%\\)`)
+  if (aliasAlt) {
+    // "Name (SYMBOL)" → single pill (dedupe the doubled reference).
+    parts.push(`(?<dupA>\\b(?:${aliasAlt})\\b)\\s*\\(\\s*(?<dupB>${aliasAlt})\\s*\\)`)
+    // "SYM (+12.34%)" → pill + badge.
+    parts.push(`(?<comboSym>\\b(?:${aliasAlt})\\b)\\s*\\((?<comboPct>${PCT})%\\)`)
+    // "(SYMBOL)" → pill, parens dropped.
+    parts.push(`\\(\\s*(?<parenSym>${aliasAlt})\\s*\\)`)
+  }
   parts.push(`\\((?<parenPct>${PCT})%\\)`)
   parts.push("(?<barePct>[+\\-−]\\d+(?:\\.\\d+)?)%")
-  if (symbolAlt) parts.push(`(?<sym>\\b(?:${symbolAlt})\\b)`)
+  if (aliasAlt) parts.push(`(?<sym>\\b(?:${aliasAlt})\\b)`)
   const pattern = new RegExp(parts.join("|"), "g")
 
   const parsePct = (raw: string): number => Number.parseFloat(raw.replace("−", "-"))
+  const lookup = (raw: string): TokenRef | undefined => byAlias.get(raw.toUpperCase())
 
   const nodes: ReactNode[] = []
   let cursor = 0
   let key = 0
+  const pushToken = (raw: string) => {
+    const token = lookup(raw)
+    if (token) nodes.push(<TokenPill key={`pill-${key++}`} token={token} />)
+    else nodes.push(raw)
+  }
+
   for (const match of text.matchAll(pattern)) {
     const idx = match.index ?? 0
     if (idx > cursor) nodes.push(text.slice(cursor, idx))
 
     const g = match.groups ?? {}
-    if (g.comboSym && g.comboPct != null) {
-      const token = tokens.get(g.comboSym.toUpperCase())
-      if (token) nodes.push(<TokenPill key={`pill-${key++}`} token={token} />)
-      else nodes.push(g.comboSym)
+    if (g.dupA && g.dupB != null) {
+      const a = lookup(g.dupA)
+      const b = lookup(g.dupB)
+      if (a && b && a.coingeckoId === b.coingeckoId) {
+        // Same token referenced twice ("CashCat (CASHCAT)") → one pill.
+        pushToken(g.dupA)
+      } else {
+        pushToken(g.dupA)
+        nodes.push(" (")
+        pushToken(g.dupB)
+        nodes.push(")")
+      }
+    } else if (g.comboSym && g.comboPct != null) {
+      pushToken(g.comboSym)
       nodes.push(" ")
       nodes.push(<PercentChangeBadge key={`pct-${key++}`} pct={parsePct(g.comboPct)} />)
+    } else if (g.parenSym) {
+      pushToken(g.parenSym)
     } else if (g.parenPct != null) {
       nodes.push(<PercentChangeBadge key={`pct-${key++}`} pct={parsePct(g.parenPct)} />)
     } else if (g.barePct != null) {
       nodes.push(<PercentChangeBadge key={`pct-${key++}`} pct={parsePct(g.barePct)} />)
     } else if (g.sym) {
-      const token = tokens.get(g.sym.toUpperCase())
-      if (token) nodes.push(<TokenPill key={`pill-${key++}`} token={token} />)
-      else nodes.push(g.sym)
+      pushToken(g.sym)
     }
 
     cursor = idx + match[0].length
@@ -807,9 +852,11 @@ export function OverviewDailyBriefCard(props: {
     return fallbackCards
   }, [brief?.cards, fallbackCards])
 
+  // Technicals and theme cards are hidden from the slider for now — the data
+  // is still generated and persisted, add the kind back here to resurface.
   const orderedCards = useMemo(() => {
     const byKind = new Map(cards.map((c) => [c.kind, c]))
-    return (["regime", "technicals", "theme"] as const)
+    return (["regime"] as const)
       .map((k) => byKind.get(k))
       .filter((x) => Boolean(x)) as BriefCard[]
   }, [cards])
@@ -931,7 +978,7 @@ export function OverviewDailyBriefCard(props: {
           >
             <CarouselContent>
               <CarouselItem>
-                <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4")}>
+                <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4 pt-0")}>
                   <AnimatePresence mode="wait">
                     <MotionDiv
                       key={`summary-${selectedSlide}`}
@@ -939,22 +986,16 @@ export function OverviewDailyBriefCard(props: {
                       animate={{ opacity: 1, y: 0 }}
                       exit={shouldReduceMotion ? undefined : { opacity: 0, y: 0 }}
                       transition={{ duration: dur, ease: EASE_OUT_CUBIC }}
-                      className={SLIDE_CARD_CLASS}
+                      className={cn(
+                        "h-full overflow-y-auto rounded-2xl bg-zinc-100/80 dark:bg-white/[0.06]",
+                        // No label row — the summary IS the slide. Large type,
+                        // vertically centered.
+                        "flex items-center p-6 sm:p-7",
+                      )}
                     >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                          Brief
-                        </span>
-                        {brief.headline ? (
-                          <Badge
-                            variant="outline"
-                            className="inline-flex h-6 px-2 align-middle text-[12px] font-berkeley-mono border-zinc-200/60 text-muted-foreground dark:border-white/10"
-                          >
-                            {brief.headline}
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <div className="text-xl leading-relaxed font-medium text-zinc-900 dark:text-zinc-100 text-pretty">
+                      {/* 70% color on the prose only — pills/badges set their
+                          own text colors so they stay at full strength. */}
+                      <div className="text-2xl sm:text-[23px] font-thin leading-snug tracking-tight text-zinc-900/70 dark:text-zinc-50/50 text-pretty">
                         {richSummary}
                       </div>
                     </MotionDiv>
@@ -964,7 +1005,7 @@ export function OverviewDailyBriefCard(props: {
 
               {orderedCards.map((card) => (
                 <CarouselItem key={card.kind}>
-                  <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4")}>
+                  <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4 pt-0")}>
                     <AnimatePresence mode="wait">
                       <MotionDiv
                         key={`card-${card.kind}-${selectedSlide}`}
@@ -1025,7 +1066,7 @@ export function OverviewDailyBriefCard(props: {
 
               {moversSlide ? (
                 <CarouselItem key="movers">
-                  <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4")}>
+                  <div className={cn(SLIDE_MIN_H, "flex flex-col justify-center px-2 py-4 pt-0")}>
                     <AnimatePresence mode="wait">
                       <MotionDiv
                         key={`card-movers-${selectedSlide}`}

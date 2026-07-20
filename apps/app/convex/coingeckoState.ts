@@ -1,11 +1,13 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation } from "./_generated/server";
-import { paginationOptsValidator } from "convex/server";
-import { requireServerToken } from "./_lib/server_token";
 import { getEffectiveIntervalMs } from "./_lib/chartFreshness";
+import { requireServerToken } from "./_lib/server_token";
 import { getChartSeriesRow, hasStandingDemand } from "./chartScheduler";
 
-function normalizeCoingeckoIds(coingeckoIds: ReadonlyArray<string>): Array<string> {
+function normalizeCoingeckoIds(
+  coingeckoIds: ReadonlyArray<string>,
+): Array<string> {
   const out: Array<string> = [];
   const seen = new Set<string>();
   for (const raw of coingeckoIds) {
@@ -275,7 +277,11 @@ export const recordSeriesView = mutation({
 
     // 2) Refresh the series' demand signal and pull nextDueAt earlier when
     //    the tightened demand tier shortens the effective interval.
-    const series = await getChartSeriesRow(ctx, args.coingeckoId, args.timeframe);
+    const series = await getChartSeriesRow(
+      ctx,
+      args.coingeckoId,
+      args.timeframe,
+    );
     if (!series) {
       // No row yet — the route's warmup path creates it (with a lease) and
       // _markSeriesFetched folds demand in afterwards. Nothing to do here.
@@ -369,4 +375,3 @@ export const _listTrackedCoinIdsByReason = internalQuery({
     return Array.from(unique);
   },
 });
-
