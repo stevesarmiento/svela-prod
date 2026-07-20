@@ -10,6 +10,9 @@ export default defineSchema({
     email: v.optional(v.string()),
     fullName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
+    // Declared here because dev-deployment user rows already carry it (wallet
+    // work on a parallel branch); optional so it stays schema-compatible.
+    walletAddress: v.optional(v.string()),
   })
     .index("by_clerk_id", ["clerkId"])
     .index("by_dev_clerk_id", ["devClerkId"])
