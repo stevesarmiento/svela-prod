@@ -4,6 +4,7 @@ import {
   calculateBollingerBands,
   useMarketVisionB,
 } from "@/hooks/market-vision";
+import { reverseRsiLevels } from "@/hooks/market-vision/technical-indicators";
 import { useCoinGeckoChartData } from "@/hooks/use-coingecko-chart-data";
 import { useLiquidationHistory } from "@/hooks/use-liquidation-history";
 import { useOpenInterest } from "@/hooks/use-open-interest";
@@ -300,6 +301,15 @@ export function useAnalysisData({
           ? ("moderate" as const)
           : ("weak" as const);
 
+    // Reverse-RSI price levels: next-bar close needed for a standard 14-period
+    // close-based Wilder RSI to print each Caretaker zone level (80/62/50/38/20).
+    // NOTE: the displayed RSI value below is hlc3-based (Bollinger-on-RSI), so
+    // these close-based trigger prices are labeled via `reverseBasis`.
+    const reverseLevels = reverseRsiLevels(
+      analysisOhlcvData.map((bar: { close: number }) => bar.close),
+      14,
+    );
+
     // Calculate historical trends
     const bollingerHistory = analysisBBData.indicator
       .slice(-30)
@@ -562,6 +572,8 @@ export function useAnalysisData({
               trend: rsiTrend,
               history: rsiHistory,
               divergence: divergence as "bullish" | "bearish" | "none",
+              reverseLevels,
+              reverseBasis: "close_rsi14" as const,
             },
             waveTrend: hasWaveTrendData
               ? {

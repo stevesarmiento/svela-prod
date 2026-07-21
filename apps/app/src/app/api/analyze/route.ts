@@ -102,6 +102,7 @@ async function handleAnalyze(req: Request) {
     - **RSI vs Bollinger Bands**: Analyze RSI position relative to upper band (${validatedData.bollingerBands?.upperBand?.toFixed(1) || 'N/A'}) and lower band (${validatedData.bollingerBands?.lowerBand?.toFixed(1) || 'N/A'}). Current RSI: ${validatedData.marketVision?.rsi?.value?.toFixed(1) || 'N/A'} - determine if approaching overbought/oversold levels or in normal range
     - **Hull Suite Trend Analysis**: Current trend direction (${validatedData.hullSuite?.trendDirection || 'N/A'}) with ${validatedData.hullSuite?.strength || 'N/A'} strength - assess trend continuation vs reversal signals
     - **RSI trend direction vs price momentum** (7-day comparisons) - check for bullish/bearish divergences
+    - **Reverse RSI trigger prices** (if provided in the technical signals): cite them as the next-bar close needed for RSI to reach each zone level — these are momentum trigger prices computed from a standard 14-period close-based RSI, distinct from the displayed (hlc3-based) RSI value; do not treat them as support/resistance and do not invent levels
     - **Volume profile** supporting or contradicting price moves (weekly analysis)
     - **Historical support/resistance levels** (3-week extremes: $${validatedData.priceContext?.support?.toLocaleString() || 'N/A'} support, $${validatedData.priceContext?.resistance?.toLocaleString() || 'N/A'} resistance)
     - **Bollinger Band dynamics**: Band squeeze/expansion patterns and RSI position relative to bands over time

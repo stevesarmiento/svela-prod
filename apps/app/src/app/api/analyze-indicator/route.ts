@@ -78,6 +78,12 @@ const RsiDivergencesSnapshotSchema = z.object({
   rsiCurrent: z.number().nullable(),
   rsiHistory: z.array(z.number().nullable()).max(180),
   divergences: z.array(RsiDivergencesSnapshotDivergenceSchema).max(96),
+  // Reverse-RSI price levels: next-bar close needed for RSI to print `target`
+  // (null = unreachable). Optional so older clients keep validating.
+  reverseLevels: z
+    .array(z.object({ target: z.number(), price: z.number().nullable() }))
+    .max(12)
+    .optional(),
   settings: RsiDivergencesSnapshotSettingsSchema,
 })
 
@@ -741,6 +747,7 @@ function buildFocus(validated: IndicatorExplainRequest, focusDays: number): Reco
       rsiCurrent: validated.snapshot.rsiCurrent,
       divergencesFocusCounts: counts,
       latestDivergenceFocus: latest,
+      reverseRsiLevels: validated.snapshot.reverseLevels ?? null,
       settings: validated.snapshot.settings,
     }
   }
@@ -920,11 +927,13 @@ ${buildSharedSections(p)}
   - **Bear (regular)**: price makes a **higher high** while RSI makes a **lower high**.
   - **H_Bull (hidden)**: price makes a **higher low** while RSI makes a **lower low**.
   - **H_Bear (hidden)**: price makes a **lower high** while RSI makes a **higher high**.
+- **Reverse RSI levels** (\`reverseRsiLevels\`): the close price the **next bar** would need for RSI to print each zone level — **80 critical bull / 62 control bull / 50 mid / 38 control bear / 20 critical bear**. These are short-horizon momentum trigger prices, **not** support/resistance; a null price means the level is currently unreachable.
 
 **Instructions**
 - Output **Markdown** only. Be concise and trader-focused.
 - Start with a single **TL;DR** line that uses the **COMPARE** section:\n  \`TL;DR: <setup.label> — prev <prior.closeChangePct>% vs 24h <lastDay.closeChangePct>%\` (if values are missing, say \`TL;DR: Context unclear\`).\n  Use the exact numbers from JSON; do not invent.
-- Anchor the analysis on the last ~${p.focusDays} days window. Mention the **latest divergence(s)** in that window (type + direction) and whether RSI is near **30/70**.
+- Anchor the analysis on the last ~${p.focusDays} days window. Mention the **latest divergence(s)** in that window (type + direction) and whether RSI is near the **bull/bear zones (62–80 / 20–38)**.
+- If \`reverseRsiLevels\` is present, relate the **current price** to those trigger prices (how far a move would be needed to reach each zone). Use the exact numbers from JSON; do not invent levels.
 - If there are no divergences in the focus window, say so and describe the RSI trend vs price trend instead.
 - Use the **COMPARE** section to classify the last 24h action vs prior context (continuation / pullback / reversal attempt / acceleration / pause). If \`divergencesLastDayCounts\` is available, mention whether divergences support or contradict that.
 - Use **bold** sparingly. 2–4 short paragraphs or tight bullets.

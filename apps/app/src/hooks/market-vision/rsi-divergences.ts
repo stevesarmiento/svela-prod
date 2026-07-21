@@ -2,7 +2,9 @@
 
 import { findPairedDivergences } from './divergence-engine'
 import type { OHLCVDataPoint, SeriesDataPoint } from './market-vision-config'
-import { rsi as rsiCalc } from './technical-indicators'
+import { DEFAULT_REVERSE_RSI_TARGETS, type ReverseRsiLevel, reverseRsiLevels, rsi as rsiCalc } from './technical-indicators'
+
+export type { ReverseRsiLevel }
 
 export type RsiDivergenceType = 'bullish' | 'bearish' | 'h_bullish' | 'h_bearish'
 
@@ -30,16 +32,31 @@ export interface RsiDivergencesConfig {
   rsiEps: number
   showRegular: boolean
   showHidden: boolean
+  /** Targets for reverse-RSI price levels (default: Caretaker zones 80/62/50/38/20). */
+  reverseTargets?: readonly number[]
 }
+
+// The Caretaker's zone levels drawn on the RSI pane.
+export const RSI_ZONE_LEVELS = {
+  critBull: 80,
+  contBull: 62,
+  middle: 50,
+  contBear: 38,
+  critBear: 20,
+} as const
 
 export interface RsiDivergencesResult {
   rsiSeries: SeriesDataPoint[]
   levels: {
-    overbought: SeriesDataPoint[]
+    critBull: SeriesDataPoint[]
+    contBull: SeriesDataPoint[]
     middle: SeriesDataPoint[]
-    oversold: SeriesDataPoint[]
+    contBear: SeriesDataPoint[]
+    critBear: SeriesDataPoint[]
   }
   divergences: RsiDivergence[]
+  /** Next-bar close needed for RSI to print each target (null when unreachable). */
+  reverseLevels: ReverseRsiLevel[]
 }
 
 const DEFAULT_CONFIG: RsiDivergencesConfig = {
@@ -54,13 +71,16 @@ const DEFAULT_CONFIG: RsiDivergencesConfig = {
   rsiEps: 0,
   showRegular: true,
   showHidden: true,
+  reverseTargets: DEFAULT_REVERSE_RSI_TARGETS,
 }
 
 function buildLevels(times: number[]): RsiDivergencesResult['levels'] {
   return {
-    overbought: times.map((time) => ({ time, value: 70 })),
-    middle: times.map((time) => ({ time, value: 50 })),
-    oversold: times.map((time) => ({ time, value: 30 })),
+    critBull: times.map((time) => ({ time, value: RSI_ZONE_LEVELS.critBull })),
+    contBull: times.map((time) => ({ time, value: RSI_ZONE_LEVELS.contBull })),
+    middle: times.map((time) => ({ time, value: RSI_ZONE_LEVELS.middle })),
+    contBear: times.map((time) => ({ time, value: RSI_ZONE_LEVELS.contBear })),
+    critBear: times.map((time) => ({ time, value: RSI_ZONE_LEVELS.critBear })),
   }
 }
 
@@ -73,8 +93,9 @@ export function calculateRsiDivergences(
   if (!data.length) {
     return {
       rsiSeries: [],
-      levels: { overbought: [], middle: [], oversold: [] },
+      levels: { critBull: [], contBull: [], middle: [], contBear: [], critBear: [] },
       divergences: [],
+      reverseLevels: [],
     }
   }
 
@@ -118,5 +139,6 @@ export function calculateRsiDivergences(
     rsiSeries,
     levels: buildLevels(times),
     divergences,
+    reverseLevels: reverseRsiLevels(closes, finalConfig.rsiLength, finalConfig.reverseTargets),
   }
 }

@@ -8,14 +8,17 @@ import {
 } from "@/hooks/market-vision";
 import { marketVisionConfig } from "@/hooks/market-vision/market-vision-config";
 import {
+  type ReverseRsiLevel,
   type RsiDivergenceType,
   type RsiDivergencesConfig,
   calculateRsiDivergences,
 } from "@/hooks/market-vision/rsi-divergences";
+import { formatUsdPrice } from "@/lib/format-usd";
 import { getTokenLogoURL } from "@/lib/logo-overrides";
 import { Card, CardContent, CardHeader } from "@v1/ui/card";
 import { cn } from "@v1/ui/cn";
-import React, { useMemo } from "react";
+import type React from "react";
+import { useMemo } from "react";
 import { BBWPChart } from "./bbwp-chart";
 import { BollingerBandsChart } from "./bollinger-bands-chart";
 import { IndicatorExplainDialog } from "./indicator-explain-dialog";
@@ -164,6 +167,58 @@ function IndicatorStat({
         <span className={cn("text-[10px]", valueClass)}>{status}</span>
       ) : null}
     </span>
+  );
+}
+
+/** Stat/params strip rendered below each indicator chart. */
+function IndicatorStatsBar({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-zinc-800/60 px-2 pt-3 pb-1">
+      {children}
+    </div>
+  );
+}
+
+/** Caretaker zone names for the default reverse-RSI targets. */
+const REVERSE_RSI_ZONE_LABELS: Record<number, string> = {
+  80: "Crit Bull",
+  62: "Ctrl Bull",
+  50: "Mid",
+  38: "Ctrl Bear",
+  20: "Crit Bear",
+};
+
+/**
+ * Reverse-RSI price readout: the close the NEXT bar would need for RSI to
+ * enter each Caretaker zone (crit bull 80 / ctrl bull 62 / mid 50 / ctrl bear
+ * 38 / crit bear 20). Bull zones (>=62) red — price has to rise to get there;
+ * bear zones (<=38) green.
+ */
+function ReverseRsiStats({ levels }: { levels: ReverseRsiLevel[] }) {
+  if (levels.length === 0) return null;
+  return (
+    <>
+      {levels.map((level) => (
+        <IndicatorStat
+          key={level.target}
+          label={
+            REVERSE_RSI_ZONE_LABELS[level.target]
+              ? `${REVERSE_RSI_ZONE_LABELS[level.target]} ${level.target}`
+              : `RSI ${level.target}`
+          }
+          value={level.price != null ? `@ ${formatUsdPrice(level.price)}` : "—"}
+          valueClass={
+            level.price == null
+              ? "text-zinc-500"
+              : level.target >= 62
+                ? "text-red-400"
+                : level.target <= 38
+                  ? "text-green-400"
+                  : "text-zinc-300"
+          }
+        />
+      ))}
+    </>
   );
 }
 
@@ -489,6 +544,8 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
     );
   }, [bbwpValue]);
 
+  const rsiDivergencesReverseLevels = rsiDivergencesResult?.reverseLevels;
+
   const rsiDivergencesExplainBadges = useMemo(() => {
     const type = rsiDivergencesLatestType;
     const bullish = type === "bullish" || type === "h_bullish";
@@ -516,9 +573,14 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                 : "text-red-400"
           }
         />
+        <ReverseRsiStats levels={rsiDivergencesReverseLevels ?? []} />
       </>
     );
-  }, [rsiDivergencesLatestType, rsiDivergencesRsiValue]);
+  }, [
+    rsiDivergencesLatestType,
+    rsiDivergencesRsiValue,
+    rsiDivergencesReverseLevels,
+  ]);
 
   const marketVisionExplainChart = useMemo(
     () =>
@@ -615,9 +677,6 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                 <div className="text-xs text-muted-foreground text-pretty">
                   Tracks momentum shifts using WaveTrend + money flow.
                 </div>
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {marketVisionExplainBadges}
-                </div>
               </div>
               <IndicatorExplainDialog
                 coinId={props.coinId}
@@ -687,6 +746,7 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                   initialWindowDays={props.indicatorWindowDays}
                 />
               )}
+              <IndicatorStatsBar>{marketVisionExplainBadges}</IndicatorStatsBar>
             </CardContent>
           </Card>
         </div>
@@ -705,9 +765,6 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                 </div>
                 <div className="text-xs text-muted-foreground text-pretty">
                   Shows RSI relative to its own bands (overextension vs mean).
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {bollingerExplainBadges}
                 </div>
               </div>
               <IndicatorExplainDialog
@@ -785,6 +842,7 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                   initialWindowDays={props.indicatorWindowDays}
                 />
               )}
+              <IndicatorStatsBar>{bollingerExplainBadges}</IndicatorStatsBar>
             </CardContent>
           </Card>
         </div>
@@ -804,9 +862,6 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                 <div className="text-xs text-muted-foreground text-pretty">
                   Percentile rank of bandwidth (detects compression vs
                   expansion).
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {bbwpExplainBadges}
                 </div>
               </div>
               <IndicatorExplainDialog
@@ -872,6 +927,7 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                   initialWindowDays={props.indicatorWindowDays}
                 />
               )}
+              <IndicatorStatsBar>{bbwpExplainBadges}</IndicatorStatsBar>
             </CardContent>
           </Card>
         </div>
@@ -891,9 +947,6 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                 <div className="text-xs text-muted-foreground text-pretty">
                   Compares RSI pivots against price pivots to flag bullish and
                   bearish divergence.
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {rsiDivergencesExplainBadges}
                 </div>
               </div>
               <IndicatorExplainDialog
@@ -937,6 +990,12 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                       rsiStart: divergence.rsiStart,
                       rsiEnd: divergence.rsiEnd,
                     })),
+                  reverseLevels: (
+                    rsiDivergencesExplainResult?.reverseLevels ?? []
+                  ).map((level) => ({
+                    target: level.target,
+                    price: level.price,
+                  })),
                   settings: rsiDivergencesConfig,
                 }}
                 disabled={props.showPending || props.isLoading}
@@ -966,6 +1025,7 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                   showLabels={true}
                 />
               )}
+              <IndicatorStatsBar>{rsiDivergencesExplainBadges}</IndicatorStatsBar>
             </CardContent>
           </Card>
         </div>
