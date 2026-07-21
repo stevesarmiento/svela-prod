@@ -95,7 +95,7 @@ export function ScreenerFiltersBar() {
             <TooltipTrigger asChild>
               <Button
                 type="button"
-                aria-label="Open Smart Screener"
+                aria-label="Open Smart Search"
                 variant="ghost"
                 size="sm"
                 className={cn(
@@ -112,7 +112,7 @@ export function ScreenerFiltersBar() {
                 }}
               >
                 <IconSparkles className="size-3 fill-primary/70" />
-                <span>Smart Screener</span>
+                <span>Smart Search</span>
                 {hasActiveFilters ? (
                   <span className="absolute -top-1 -right-1 size-2 bg-blue-500 rounded-full" />
                 ) : null}
