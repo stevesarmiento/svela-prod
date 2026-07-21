@@ -36,7 +36,6 @@
     "ai": "^6.0.158",
     "convex": "^1.42.1",
     "effect": "^3.21.0",
-    "geist": "^1.7.0",
     "lightweight-charts": "^5.1.0",
     "liveline": "^0.0.7",
     "lucide-react": "^0.563.0",

@@ -7,5 +7,9 @@ Sentry.init({
   tracesSampleRate: 0.1,
   debug: false,
   enabled: process.env.NODE_ENV === "production",
-  integrations: [],
+  // browserTracing gives us pageload/navigation spans + Web Vitals
+  // (LCP/INP/CLS) at the 10% sample rate above. Router transitions are
+  // already wired via onRouterTransitionStart in instrumentation-client.
+  // Replay is deliberately omitted: it adds ~50KB gzip to every load.
+  integrations: [Sentry.browserTracingIntegration()],
 });
