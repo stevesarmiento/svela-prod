@@ -109,7 +109,7 @@ export function ScreenerSmartPromptDialog({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="Smart screener"
+        aria-label="Smart Search"
         data-state={dialogState}
         className={cn(
           "relative w-full max-w-3xl overflow-hidden rounded-[28px] border border-gray-200/50 bg-white/95 shadow-[0_3px_8px_oklch(0_0_0_/_0.1),0_2px_4px_oklch(0_0_0_/_0.06)] backdrop-blur-md dark:border-transparent dark:bg-zinc-900/80 dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.4)]",

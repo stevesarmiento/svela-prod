@@ -1,9 +1,7 @@
 import { TopNav } from "@/components/navigation/top-nav"
 import { BottomNav } from "@/components/navigation/bottom-nav"
-import {
-  FloatingMarketFeed,
-  FloatingMarketFeedProvider,
-} from "@/components/floating-market-feed/floating-market-feed"
+import { FloatingMarketFeedProvider } from "@/components/floating-market-feed/floating-market-feed-context"
+import { FloatingMarketFeedLazy } from "@/components/floating-market-feed/floating-market-feed-lazy"
 import { preloadQuery } from "convex/nextjs"
 import { getAuthToken } from "@/lib/auth"
 import { api } from "../../../../convex/_generated/api"
@@ -41,7 +39,7 @@ export default async function DashboardLayout({
             <BottomNav />
           </div>
         </div>
-        <FloatingMarketFeed />
+        <FloatingMarketFeedLazy />
       </FloatingMarketFeedProvider>
     </DashboardProviders>
   )

@@ -72,6 +72,12 @@ export const IndicatorDataSchema = z.object({
       trend: z.string().optional(),
       history: z.array(z.number()).optional(),
       divergence: z.enum(['bullish', 'bearish', 'none']).optional(),
+      // Reverse-RSI trigger prices: next-bar close needed for RSI to print
+      // each target (null = unreachable). Optional for older clients.
+      reverseLevels: z.array(z.object({ target: z.number(), price: z.number().nullable() })).optional(),
+      // Basis of the reverse levels (e.g. 'close_rsi14') — the displayed RSI
+      // value above may use a different source series (hlc3).
+      reverseBasis: z.string().optional(),
     }).optional(),
 
     mfi: z.object({
@@ -232,11 +238,18 @@ ${volumeSpike ? 'VOLUME SPIKE DETECTED' : 'Normal volume activity'}`)
   }
 
   if (data.marketVision?.rsi) {
-    const { value, signal, trend, divergence, history } = data.marketVision.rsi
+    const { value, signal, trend, divergence, history, reverseLevels } = data.marketVision.rsi
     const trendText = trend ? `, ${trend} trend` : ''
     const divergenceText = divergence && divergence !== 'none' ? `, ${divergence} divergence` : ''
     const historyText = history && history.length > 0 ? ` (${history.length} periods)` : ''
     technicalSignals.push(`RSI: ${value.toFixed(1)} (${signal})${trendText}${divergenceText}${historyText}`)
+
+    const reverseParts = (reverseLevels ?? [])
+      .filter((level): level is { target: number; price: number } => level.price != null)
+      .map((level) => `${level.target}→$${level.price.toLocaleString()}`)
+    if (reverseParts.length > 0) {
+      technicalSignals.push(`Reverse RSI trigger prices (next-bar close, standard 14p close-based RSI): ${reverseParts.join(' | ')}`)
+    }
   }
 
   if (data.marketVision?.waveTrend) {

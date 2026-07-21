@@ -3,6 +3,7 @@
 import { SEQUENTIAL_SHORTCUTS } from "@/lib/keyboard-shortcuts";
 import { DURATION_UI_S, bottomNavChromeMotionStyle } from "@/lib/motion-tokens";
 import { cn } from "@v1/ui/cn";
+import dynamicImport from "next/dynamic";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { BackButton } from "./back-button";
 import { MENU_ITEMS } from "./bottom-nav-constants";
@@ -18,9 +19,24 @@ import {
   useSequentialShortcuts,
 } from "./bottom-nav-hooks";
 import { CommandSearch } from "./command-search";
-import { NavigationDock } from "./navigation-dock";
 
 import type { CommandContext, SelectionState } from "./bottom-nav-context";
+
+// Lazy-mounted so `motion` (and the dock's animation graph) stays out of
+// every dashboard route's first-load JS. The dock is fixed-position chrome;
+// a same-size placeholder for the brief load gap avoids layout shift.
+const NavigationDock = dynamicImport(
+  () => import("./navigation-dock").then((module) => module.NavigationDock),
+  {
+    ssr: false,
+    loading: () => (
+      <div
+        aria-hidden
+        className="h-[56px] w-[56px] rounded-[20px] bg-white/95 border border-gray-200/50 dark:bg-zinc-800/80 dark:border-transparent"
+      />
+    ),
+  },
+);
 
 const actionEntranceClassName =
   "motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-[var(--motion-nav-duration)] motion-safe:ease-[var(--motion-nav-ease-out)] motion-reduce:animate-none";

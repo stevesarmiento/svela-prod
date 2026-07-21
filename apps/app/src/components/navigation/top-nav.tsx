@@ -101,7 +101,7 @@ function getStaticRouteTitle(pathname: string): string | null {
 
   const routeTitles: Record<string, string> = {
     "/comparison": "Compare",
-    "/screener": "Market Screener",
+    "/screener": "Token Screener",
   };
 
   if (routeTitles[cleanPath]) return routeTitles[cleanPath];

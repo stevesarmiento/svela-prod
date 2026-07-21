@@ -78,6 +78,12 @@ const RsiDivergencesSnapshotSchema = z.object({
   rsiCurrent: z.number().nullable(),
   rsiHistory: z.array(z.number().nullable()).max(180),
   divergences: z.array(RsiDivergencesSnapshotDivergenceSchema).max(96),
+  // Reverse-RSI price levels: next-bar close needed for RSI to print `target`
+  // (null = unreachable). Optional so older clients keep validating.
+  reverseLevels: z
+    .array(z.object({ target: z.number(), price: z.number().nullable() }))
+    .max(12)
+    .optional(),
   settings: RsiDivergencesSnapshotSettingsSchema,
 })
 
@@ -741,6 +747,7 @@ function buildFocus(validated: IndicatorExplainRequest, focusDays: number): Reco
       rsiCurrent: validated.snapshot.rsiCurrent,
       divergencesFocusCounts: counts,
       latestDivergenceFocus: latest,
+      reverseRsiLevels: validated.snapshot.reverseLevels ?? null,
       settings: validated.snapshot.settings,
     }
   }
@@ -833,8 +840,8 @@ ${p.derivedCloses || "(no usable closeHistory in payload)"}
 `.trim()
 }
 
-function buildMarketVisionPrompt(validated: IndicatorExplainRequest & { indicatorType: "marketVision" }): string {
-  const p = buildBasePromptParts(validated, computeContextVsLastDaySummary(validated))
+function buildMarketVisionPrompt(validated: IndicatorExplainRequest & { indicatorType: "marketVision" }, compare: ContextVsLastDaySummary | null): string {
+  const p = buildBasePromptParts(validated, compare)
   return `
 You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **Market Vision** indicator card.
 
@@ -857,8 +864,8 @@ ${buildSharedSections(p)}
 `.trim()
 }
 
-function buildBollingerPrompt(validated: IndicatorExplainRequest & { indicatorType: "bollinger" }): string {
-  const p = buildBasePromptParts(validated, computeContextVsLastDaySummary(validated))
+function buildBollingerPrompt(validated: IndicatorExplainRequest & { indicatorType: "bollinger" }, compare: ContextVsLastDaySummary | null): string {
+  const p = buildBasePromptParts(validated, compare)
   return `
 You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **Bollinger-on-indicator** card.
 
@@ -883,8 +890,8 @@ ${buildSharedSections(p)}
 `.trim()
 }
 
-function buildBBWPPrompt(validated: IndicatorExplainRequest & { indicatorType: "bbwp" }): string {
-  const p = buildBasePromptParts(validated, computeContextVsLastDaySummary(validated))
+function buildBBWPPrompt(validated: IndicatorExplainRequest & { indicatorType: "bbwp" }, compare: ContextVsLastDaySummary | null): string {
+  const p = buildBasePromptParts(validated, compare)
   return `
 You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **BBWP** (Bollinger BandWidth Percentile) card.
 
@@ -906,8 +913,8 @@ ${buildSharedSections(p)}
 `.trim()
 }
 
-function buildRsiDivergencesPrompt(validated: IndicatorExplainRequest & { indicatorType: "rsiDivergences" }): string {
-  const p = buildBasePromptParts(validated, computeContextVsLastDaySummary(validated))
+function buildRsiDivergencesPrompt(validated: IndicatorExplainRequest & { indicatorType: "rsiDivergences" }, compare: ContextVsLastDaySummary | null): string {
+  const p = buildBasePromptParts(validated, compare)
   return `
 You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **RSI divergences** indicator card.
 
@@ -920,11 +927,13 @@ ${buildSharedSections(p)}
   - **Bear (regular)**: price makes a **higher high** while RSI makes a **lower high**.
   - **H_Bull (hidden)**: price makes a **higher low** while RSI makes a **lower low**.
   - **H_Bear (hidden)**: price makes a **lower high** while RSI makes a **higher high**.
+- **Reverse RSI levels** (\`reverseRsiLevels\`): the close price the **next bar** would need for RSI to print each zone level — **80 critical bull / 62 control bull / 50 mid / 38 control bear / 20 critical bear**. These are short-horizon momentum trigger prices, **not** support/resistance; a null price means the level is currently unreachable.
 
 **Instructions**
 - Output **Markdown** only. Be concise and trader-focused.
 - Start with a single **TL;DR** line that uses the **COMPARE** section:\n  \`TL;DR: <setup.label> — prev <prior.closeChangePct>% vs 24h <lastDay.closeChangePct>%\` (if values are missing, say \`TL;DR: Context unclear\`).\n  Use the exact numbers from JSON; do not invent.
-- Anchor the analysis on the last ~${p.focusDays} days window. Mention the **latest divergence(s)** in that window (type + direction) and whether RSI is near **30/70**.
+- Anchor the analysis on the last ~${p.focusDays} days window. Mention the **latest divergence(s)** in that window (type + direction) and whether RSI is near the **bull/bear zones (62–80 / 20–38)**.
+- If \`reverseRsiLevels\` is present, relate the **current price** to those trigger prices (how far a move would be needed to reach each zone). Use the exact numbers from JSON; do not invent levels.
 - If there are no divergences in the focus window, say so and describe the RSI trend vs price trend instead.
 - Use the **COMPARE** section to classify the last 24h action vs prior context (continuation / pullback / reversal attempt / acceleration / pause). If \`divergencesLastDayCounts\` is available, mention whether divergences support or contradict that.
 - Use **bold** sparingly. 2–4 short paragraphs or tight bullets.
@@ -932,11 +941,11 @@ ${buildSharedSections(p)}
 `.trim()
 }
 
-function buildAnalysisPrompt(validated: IndicatorExplainRequest): string {
-  if (validated.indicatorType === "marketVision") return buildMarketVisionPrompt(validated)
-  if (validated.indicatorType === "bollinger") return buildBollingerPrompt(validated)
-  if (validated.indicatorType === "rsiDivergences") return buildRsiDivergencesPrompt(validated)
-  return buildBBWPPrompt(validated)
+function buildAnalysisPrompt(validated: IndicatorExplainRequest, compare: ContextVsLastDaySummary | null): string {
+  if (validated.indicatorType === "marketVision") return buildMarketVisionPrompt(validated, compare)
+  if (validated.indicatorType === "bollinger") return buildBollingerPrompt(validated, compare)
+  if (validated.indicatorType === "rsiDivergences") return buildRsiDivergencesPrompt(validated, compare)
+  return buildBBWPPrompt(validated, compare)
 }
 
 function encodeBase64Json(value: unknown): string {
@@ -984,7 +993,7 @@ async function handleAnalyzeIndicator(request: Request) {
     }
 
     const comparison = computeContextVsLastDaySummary(validated)
-    const prompt = buildAnalysisPrompt(validated)
+    const prompt = buildAnalysisPrompt(validated, comparison)
 
     const result = streamText({
       model: gemini("gemini-2.5-flash"),

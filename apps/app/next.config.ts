@@ -1,5 +1,5 @@
 import "./src/env.mjs";
-//import { withSentryConfig } from "@sentry/nextjs";
+import { withSentryConfig } from "@sentry/nextjs";
 /** @type {import('next').NextConfig} */
 const isProd = process.env.NODE_ENV === "production";
 
@@ -57,13 +57,18 @@ const nextConfig = {
   },
 };
 
-// export default withSentryConfig(nextConfig, {
-//   silent: !process.env.CI || process.env.SENTRY_SUPPRESS_TURBOPACK_WARNING === "1",
-//   telemetry: false,
-//   widenClientFileUpload: true,
-//   hideSourceMaps: true,
-//   disableLogger: true,
-//   tunnelRoute: "/monitoring",
-// });
-
-export default nextConfig;
+// Source-map upload is a no-op when SENTRY_AUTH_TOKEN is absent (local
+// builds); CI provides SENTRY_AUTH_TOKEN/ORG/PROJECT via turbo.json env.
+export default withSentryConfig(nextConfig, {
+  silent: !process.env.CI || process.env.SENTRY_SUPPRESS_TURBOPACK_WARNING === "1",
+  telemetry: false,
+  widenClientFileUpload: true,
+  // v10 replacement for the removed `hideSourceMaps`: upload maps, then
+  // strip them from the deployed output.
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: true,
+  },
+  disableLogger: true,
+  // First-party ingest path so ad blockers don't blind error/RUM reporting.
+  tunnelRoute: "/monitoring",
+});

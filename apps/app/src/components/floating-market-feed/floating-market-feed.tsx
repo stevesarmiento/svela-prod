@@ -30,6 +30,7 @@ import { Spinner } from '@v1/ui/spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@v1/ui/tooltip';
 import { useScreenerTopMarkets } from '@/hooks/use-screener-top-markets';
 import type { CoinMarketData } from '@/types/coins';
+import { useFloatingMarketFeedContext } from './floating-market-feed-context';
 import { api } from '../../../convex/_generated/api';
 import type { Id } from '../../../convex/_generated/dataModel';
 import {
@@ -84,67 +85,6 @@ const NEWS_SKELETON_ROW_KEYS = ['feed-sk-1', 'feed-sk-2', 'feed-sk-3', 'feed-sk-
  */
 function shouldHideFloatingMarketFeed(_pathname: string | null): boolean {
     return false;
-}
-
-interface FloatingMarketFeedPageContextValue {
-    displayName: string;
-    tokenSymbol?: string;
-    tokenLogoURI?: string;
-    tokenFeedCoinId?: string;
-    hasMobileBottomBar?: boolean;
-    suppressFeed?: boolean;
-}
-
-interface FloatingMarketFeedContextValue {
-    pageContext: FloatingMarketFeedPageContextValue | null;
-    setPageContext: React.Dispatch<React.SetStateAction<FloatingMarketFeedPageContextValue | null>>;
-    /** Whether the news panel is open. Toggled by the nav trigger. */
-    open: boolean;
-    setOpen: React.Dispatch<React.SetStateAction<boolean>>;
-    /** Loaded articles the user hasn't seen yet (drives the trigger badge). */
-    unseenCount: number;
-    setUnseenCount: React.Dispatch<React.SetStateAction<number>>;
-}
-
-const FloatingMarketFeedContext = React.createContext<FloatingMarketFeedContextValue | null>(null);
-
-export function FloatingMarketFeedProvider({ children }: { children: React.ReactNode }) {
-    const [pageContext, setPageContext] = React.useState<FloatingMarketFeedPageContextValue | null>(null);
-    const [open, setOpen] = React.useState(false);
-    const [unseenCount, setUnseenCount] = React.useState(0);
-    const value = React.useMemo(
-        () => ({ pageContext, setPageContext, open, setOpen, unseenCount, setUnseenCount }),
-        [open, pageContext, unseenCount],
-    );
-
-    return <FloatingMarketFeedContext.Provider value={value}>{children}</FloatingMarketFeedContext.Provider>;
-}
-
-function useFloatingMarketFeedContext(): FloatingMarketFeedContextValue {
-    const value = React.useContext(FloatingMarketFeedContext);
-    if (!value) {
-        throw new Error('FloatingMarketFeed must be rendered inside FloatingMarketFeedProvider');
-    }
-    return value;
-}
-
-export function FloatingMarketFeedPageContext(props: FloatingMarketFeedPageContextValue) {
-    const { setPageContext } = useFloatingMarketFeedContext();
-    const { displayName, hasMobileBottomBar, suppressFeed, tokenFeedCoinId, tokenLogoURI, tokenSymbol } = props;
-
-    React.useEffect(() => {
-        setPageContext({
-            displayName,
-            hasMobileBottomBar,
-            suppressFeed,
-            tokenFeedCoinId,
-            tokenLogoURI,
-            tokenSymbol,
-        });
-        return () => setPageContext(null);
-    }, [displayName, hasMobileBottomBar, setPageContext, suppressFeed, tokenFeedCoinId, tokenLogoURI, tokenSymbol]);
-
-    return null;
 }
 
 /** Resolved ms from article fields; prefers numeric `postedAtMs`. */

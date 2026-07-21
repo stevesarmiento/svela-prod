@@ -97,6 +97,8 @@ interface RsiDivergencesSnapshot {
   rsiCurrent: number | null;
   rsiHistory: Array<number | null>;
   divergences: Array<RsiDivergencesSnapshotDivergence>;
+  /** Next-bar close needed for RSI to print each target (null = unreachable). */
+  reverseLevels?: Array<{ target: number; price: number | null }>;
   settings: RsiDivergencesSnapshotSettings;
 }
 

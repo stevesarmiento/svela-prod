@@ -4,8 +4,6 @@ import { Providers } from "@/components/providers/providers";
 import type { Metadata } from "next";
 import { APP_DESCRIPTION, APP_NAME, getAppBaseUrl } from "@/lib/metadata";
 import { getStaticParams } from "@/locales/server";
-import { GeistMono } from "geist/font/mono";
-import { GeistSans } from "geist/font/sans";
 import dynamic from "next/dynamic";
 import localFont from "next/font/local";
 import { Suspense } from "react";
@@ -110,7 +108,7 @@ export default async function RootLayout({
       <head />
       <body
         className={cn(
-          `${GeistSans.variable} ${GeistMono.variable} ${abcDiatype.variable} ${abcDiatypeMono.variable}`,
+          `${abcDiatype.variable} ${abcDiatypeMono.variable}`,
           "antialiased bg-zinc-950 text-white",
         )}
       >

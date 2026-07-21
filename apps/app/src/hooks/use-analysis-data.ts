@@ -4,6 +4,7 @@ import {
   calculateBollingerBands,
   useMarketVisionB,
 } from "@/hooks/market-vision";
+import { reverseRsiLevels } from "@/hooks/market-vision/technical-indicators";
 import { useCoinGeckoChartData } from "@/hooks/use-coingecko-chart-data";
 import { useLiquidationHistory } from "@/hooks/use-liquidation-history";
 import { useOpenInterest } from "@/hooks/use-open-interest";
@@ -12,6 +13,41 @@ import { useCompletion } from "@ai-sdk/react";
 import { useQuery } from "@tanstack/react-query";
 import type { Time } from "lightweight-charts";
 import { useEffect, useMemo } from "react";
+
+// Single source of truth for synthetic OHLCV bars derived from line-chart
+// data. Used by both the memoized path and the on-demand analysis fallback so
+// the AI payload always matches the indicators rendered on screen.
+function buildSyntheticOhlcv(
+  chartData: { time: Time; value: number }[],
+  volumeData: { time: Time; value: number }[],
+) {
+  return chartData.map((point, index) => {
+    const price = point.value;
+    const volume = volumeData[index]?.value || 0;
+    const prevPrice = index > 0 ? chartData[index - 1]?.value || price : price;
+
+    const priceChange = price - prevPrice;
+    const volatility = Math.abs(priceChange) * 0.3 + price * 0.001;
+
+    const open = prevPrice;
+    const close = price;
+    const spread = volatility * 0.5;
+    const high = Math.max(open, close) + spread;
+    const low = Math.min(open, close) - spread;
+
+    return {
+      time:
+        typeof point.time === "string"
+          ? new Date(point.time).getTime() / 1000
+          : (point.time as number),
+      open,
+      high,
+      low,
+      close,
+      volume,
+    };
+  });
+}
 
 interface UseAnalysisDataProps {
   coinId: string;
@@ -113,35 +149,7 @@ export function useAnalysisData({
       return EMPTY_ARRAY;
     }
 
-    return chartData.map(
-      (point: { time: Time; value: number }, index: number) => {
-        const price = point.value;
-        const volume = volumeData[index]?.value || 0;
-        const prevPrice =
-          index > 0 ? chartData[index - 1]?.value || price : price;
-
-        const priceChange = price - prevPrice;
-        const volatility = Math.abs(priceChange) * 0.3 + price * 0.001;
-
-        const open = prevPrice;
-        const close = price;
-        const spread = volatility * 0.5;
-        const high = Math.max(open, close) + spread;
-        const low = Math.min(open, close) - spread;
-
-        return {
-          time:
-            typeof point.time === "string"
-              ? new Date(point.time).getTime() / 1000
-              : (point.time as number),
-          open,
-          high,
-          low,
-          close,
-          volume,
-        };
-      },
-    );
+    return buildSyntheticOhlcv(chartData, volumeData);
   }, [shouldCalculate, chartData, volumeData, EMPTY_ARRAY]);
 
   // Memoized Bollinger config
@@ -204,29 +212,7 @@ export function useAnalysisData({
       chartData.length > 0 &&
       volumeData.length > 0
     ) {
-      analysisOhlcvData = chartData.map(
-        (point: { time: Time; value: number }, index: number) => {
-          const price = point.value;
-          const volume = volumeData[index]?.value || 0;
-          const prevPrice =
-            index > 0 ? chartData[index - 1]?.value || price : price;
-
-          const priceChange = price - prevPrice;
-          const spread = Math.abs(priceChange) * 0.01;
-
-          return {
-            time:
-              typeof point.time === "string"
-                ? new Date(point.time).getTime() / 1000
-                : (point.time as number),
-            open: prevPrice,
-            high: Math.max(prevPrice, price) + spread,
-            low: Math.min(prevPrice, price) - spread,
-            close: price,
-            volume: volume,
-          };
-        },
-      );
+      analysisOhlcvData = buildSyntheticOhlcv(chartData, volumeData);
     }
 
     // Force calculate Bollinger Bands if not available
@@ -299,6 +285,15 @@ export function useAnalysisData({
         : Math.abs(latestMFValue) >= 5
           ? ("moderate" as const)
           : ("weak" as const);
+
+    // Reverse-RSI price levels: next-bar close needed for a standard 14-period
+    // close-based Wilder RSI to print each Caretaker zone level (80/62/50/38/20).
+    // NOTE: the displayed RSI value below is hlc3-based (Bollinger-on-RSI), so
+    // these close-based trigger prices are labeled via `reverseBasis`.
+    const reverseLevels = reverseRsiLevels(
+      analysisOhlcvData.map((bar: { close: number }) => bar.close),
+      14,
+    );
 
     // Calculate historical trends
     const bollingerHistory = analysisBBData.indicator
@@ -562,6 +557,8 @@ export function useAnalysisData({
               trend: rsiTrend,
               history: rsiHistory,
               divergence: divergence as "bullish" | "bearish" | "none",
+              reverseLevels,
+              reverseBasis: "close_rsi14" as const,
             },
             waveTrend: hasWaveTrendData
               ? {

@@ -18,7 +18,7 @@ import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
 import { useRealtimeQuote } from "@/hooks/use-realtime-quote"
 import { PriceChart } from "./price-chart"
 import { MarketMetrics } from "./market-metrics"
-import { FloatingMarketFeedPageContext } from '@/components/floating-market-feed/floating-market-feed'
+import { FloatingMarketFeedPageContext } from '@/components/floating-market-feed/floating-market-feed-context'
 import type { IndicatorOhlcvBar } from './token-indicators-section'
 
 const LazyTokenIndicatorsSection = dynamic(

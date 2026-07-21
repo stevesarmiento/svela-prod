@@ -75,6 +75,11 @@ const METRIC_GROUPS = [
   { label: "Derivatives", metrics: SMART_SCREENER_TAKER_METRICS },
 ] as const;
 
+/** Visible hover/selection against the white / zinc-900 popover surface.
+ *  No transitions — selection needs to snap when scrubbing with the mouse or arrows. */
+const FILTER_COMMAND_ITEM_CLASS =
+  "cursor-pointer rounded-lg text-xs hover:bg-gray-100 hover:text-gray-900 aria-selected:bg-gray-100 aria-selected:text-gray-900 dark:hover:bg-zinc-800 dark:hover:text-white dark:aria-selected:bg-zinc-800 dark:aria-selected:text-white";
+
 function unitPlaceholder(metricId: string): string {
   const metric = getSmartScreenerMetric(metricId);
   if (!metric) return "value";
@@ -210,7 +215,7 @@ export function ScreenerFilterEditor({
                     // the match value (children still render just the label).
                     value={`${m.label} ${m.synonyms.join(" ")}`}
                     onSelect={() => pickMetric(m.id)}
-                    className="rounded-lg text-xs"
+                    className={FILTER_COMMAND_ITEM_CLASS}
                   >
                     {m.label}
                   </CommandItem>
@@ -254,7 +259,7 @@ export function ScreenerFilterEditor({
                   key={o.value}
                   value={`${o.label} ${o.keywords.join(" ")}`}
                   onSelect={() => pickOp(o.value)}
-                  className="rounded-lg text-xs"
+                  className={FILTER_COMMAND_ITEM_CLASS}
                 >
                   <span className="w-5 tabular-nums text-muted-foreground">
                     {o.symbol}

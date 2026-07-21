@@ -631,16 +631,119 @@ export function crossover(series1: number[], series2: number[]): boolean[] {
 
 export function crossunder(series1: number[], series2: number[]): boolean[] {
   const result: boolean[] = []
-  
+
   for (let i = 1; i < Math.min(series1.length, series2.length); i++) {
     const curr1 = series1[i]
     const prev1 = series1[i - 1]
     const curr2 = series2[i]
     const prev2 = series2[i - 1]
-    
+
     result[i] = curr1 != null && prev1 != null && curr2 != null && prev2 != null &&
                 prev1 >= prev2 && curr1 < curr2
   }
-  
+
   return result
+}
+
+// ---------------------------------------------------------------------------
+// Reverse RSI (Siligardos "Reverse Engineering RSI"), consistent with rsi()
+// above: solves for the close the NEXT bar would need for Wilder RSI to print
+// a target level. rsi() itself is intentionally untouched.
+
+export interface WilderRsiState {
+  avgGain: number
+  avgLoss: number
+  lastClose: number
+}
+
+/**
+ * Trailing Wilder avgGain/avgLoss + last close, matching rsi()'s internals
+ * exactly (same gains/losses construction, same rma smoothing).
+ *
+ * Returns null when closes.length < period + 1: below that, the next bar's
+ * averages would come from the rma SMA seed row rather than the Wilder
+ * recurrence, so the reverse formula would not match the forward rsi().
+ */
+export function wilderRsiState(closes: number[], period: number): WilderRsiState | null {
+  if (!Number.isFinite(period) || period < 1) return null
+  if (closes.length < period + 1) return null
+
+  const lastClose = closes[closes.length - 1]
+  if (lastClose == null || !Number.isFinite(lastClose)) return null
+
+  // Same gains/losses loop as rsi() so forward and reverse can never drift.
+  const gains: number[] = []
+  const losses: number[] = []
+  for (let i = 1; i < closes.length; i++) {
+    const current = closes[i]
+    const previous = closes[i - 1]
+
+    if (current != null && previous != null) {
+      const change = current - previous
+      gains.push(change > 0 ? change : 0)
+      losses.push(change < 0 ? Math.abs(change) : 0)
+    } else {
+      gains.push(0)
+      losses.push(0)
+    }
+  }
+
+  const avgGain = rma(gains, period)[gains.length - 1]
+  const avgLoss = rma(losses, period)[losses.length - 1]
+  if (avgGain == null || !Number.isFinite(avgGain) || avgLoss == null || !Number.isFinite(avgLoss)) return null
+
+  return { avgGain, avgLoss, lastClose }
+}
+
+// The Caretaker's zone levels: critical bull / control bull / scale mid /
+// control bear / critical bear.
+export const DEFAULT_REVERSE_RSI_TARGETS = [80, 62, 50, 38, 20] as const
+
+export interface ReverseRsiLevel {
+  target: number
+  price: number | null
+}
+
+/**
+ * Close price the NEXT bar would need for rsi() to print exactly `target`.
+ *
+ * With RS = target / (100 - target) and Wilder recurrence avg' = (avg*(p-1) + move)/p:
+ * - Up bar   (gain = C - P, valid when RS*avgLoss >= avgGain): C = P + (p-1) * (RS*avgLoss - avgGain)
+ * - Down bar (loss = P - C, otherwise):                        C = P - (p-1) * (avgGain/RS - avgLoss)
+ *
+ * Returns null for unreachable targets (<= 0, >= 100), a flat state
+ * (avgGain = avgLoss = 0, where rsi() pins to 100), non-finite inputs, or a
+ * solved price <= 0.
+ */
+export function reverseRsiPrice(state: WilderRsiState, period: number, target: number): number | null {
+  if (!Number.isFinite(period) || period < 1) return null
+  if (!Number.isFinite(target) || target <= 0 || target >= 100) return null
+
+  const { avgGain, avgLoss, lastClose } = state
+  if (!Number.isFinite(avgGain) || !Number.isFinite(avgLoss) || !Number.isFinite(lastClose)) return null
+  if (avgGain <= 0 && avgLoss <= 0) return null
+
+  const rs = target / (100 - target)
+  const price =
+    rs * avgLoss >= avgGain
+      ? lastClose + (period - 1) * (rs * avgLoss - avgGain)
+      : lastClose - (period - 1) * (avgGain / rs - avgLoss)
+
+  return Number.isFinite(price) && price > 0 ? price : null
+}
+
+/**
+ * Reverse-RSI price levels for a list of targets (default: Caretaker zones).
+ * Prices are null when the state is degenerate or a target is unreachable.
+ */
+export function reverseRsiLevels(
+  closes: number[],
+  period: number,
+  targets: readonly number[] = DEFAULT_REVERSE_RSI_TARGETS,
+): ReverseRsiLevel[] {
+  const state = wilderRsiState(closes, period)
+  return targets.map((target) => ({
+    target,
+    price: state ? reverseRsiPrice(state, period, target) : null,
+  }))
 }
