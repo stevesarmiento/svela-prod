@@ -14,6 +14,41 @@ import { useQuery } from "@tanstack/react-query";
 import type { Time } from "lightweight-charts";
 import { useEffect, useMemo } from "react";
 
+// Single source of truth for synthetic OHLCV bars derived from line-chart
+// data. Used by both the memoized path and the on-demand analysis fallback so
+// the AI payload always matches the indicators rendered on screen.
+function buildSyntheticOhlcv(
+  chartData: { time: Time; value: number }[],
+  volumeData: { time: Time; value: number }[],
+) {
+  return chartData.map((point, index) => {
+    const price = point.value;
+    const volume = volumeData[index]?.value || 0;
+    const prevPrice = index > 0 ? chartData[index - 1]?.value || price : price;
+
+    const priceChange = price - prevPrice;
+    const volatility = Math.abs(priceChange) * 0.3 + price * 0.001;
+
+    const open = prevPrice;
+    const close = price;
+    const spread = volatility * 0.5;
+    const high = Math.max(open, close) + spread;
+    const low = Math.min(open, close) - spread;
+
+    return {
+      time:
+        typeof point.time === "string"
+          ? new Date(point.time).getTime() / 1000
+          : (point.time as number),
+      open,
+      high,
+      low,
+      close,
+      volume,
+    };
+  });
+}
+
 interface UseAnalysisDataProps {
   coinId: string;
   tokenData: {
@@ -114,35 +149,7 @@ export function useAnalysisData({
       return EMPTY_ARRAY;
     }
 
-    return chartData.map(
-      (point: { time: Time; value: number }, index: number) => {
-        const price = point.value;
-        const volume = volumeData[index]?.value || 0;
-        const prevPrice =
-          index > 0 ? chartData[index - 1]?.value || price : price;
-
-        const priceChange = price - prevPrice;
-        const volatility = Math.abs(priceChange) * 0.3 + price * 0.001;
-
-        const open = prevPrice;
-        const close = price;
-        const spread = volatility * 0.5;
-        const high = Math.max(open, close) + spread;
-        const low = Math.min(open, close) - spread;
-
-        return {
-          time:
-            typeof point.time === "string"
-              ? new Date(point.time).getTime() / 1000
-              : (point.time as number),
-          open,
-          high,
-          low,
-          close,
-          volume,
-        };
-      },
-    );
+    return buildSyntheticOhlcv(chartData, volumeData);
   }, [shouldCalculate, chartData, volumeData, EMPTY_ARRAY]);
 
   // Memoized Bollinger config
@@ -205,29 +212,7 @@ export function useAnalysisData({
       chartData.length > 0 &&
       volumeData.length > 0
     ) {
-      analysisOhlcvData = chartData.map(
-        (point: { time: Time; value: number }, index: number) => {
-          const price = point.value;
-          const volume = volumeData[index]?.value || 0;
-          const prevPrice =
-            index > 0 ? chartData[index - 1]?.value || price : price;
-
-          const priceChange = price - prevPrice;
-          const spread = Math.abs(priceChange) * 0.01;
-
-          return {
-            time:
-              typeof point.time === "string"
-                ? new Date(point.time).getTime() / 1000
-                : (point.time as number),
-            open: prevPrice,
-            high: Math.max(prevPrice, price) + spread,
-            low: Math.min(prevPrice, price) - spread,
-            close: price,
-            volume: volume,
-          };
-        },
-      );
+      analysisOhlcvData = buildSyntheticOhlcv(chartData, volumeData);
     }
 
     // Force calculate Bollinger Bands if not available

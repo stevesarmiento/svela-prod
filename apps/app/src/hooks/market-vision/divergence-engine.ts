@@ -111,7 +111,7 @@ export function findPairedDivergences(
   config: DivergenceEngineConfig,
 ): PairedDivergence[] {
   const divergences: PairedDivergence[] = []
-  const n = Math.min(Math.max(highs.length, lows.length), oscValues.length)
+  const n = Math.min(highs.length, lows.length, oscValues.length)
 
   // Pending pairing state (mirrors Pine variables)
   let pendRhiIx: number | null = null

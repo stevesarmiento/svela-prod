@@ -840,8 +840,8 @@ ${p.derivedCloses || "(no usable closeHistory in payload)"}
 `.trim()
 }
 
-function buildMarketVisionPrompt(validated: IndicatorExplainRequest & { indicatorType: "marketVision" }): string {
-  const p = buildBasePromptParts(validated, computeContextVsLastDaySummary(validated))
+function buildMarketVisionPrompt(validated: IndicatorExplainRequest & { indicatorType: "marketVision" }, compare: ContextVsLastDaySummary | null): string {
+  const p = buildBasePromptParts(validated, compare)
   return `
 You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **Market Vision** indicator card.
 
@@ -864,8 +864,8 @@ ${buildSharedSections(p)}
 `.trim()
 }
 
-function buildBollingerPrompt(validated: IndicatorExplainRequest & { indicatorType: "bollinger" }): string {
-  const p = buildBasePromptParts(validated, computeContextVsLastDaySummary(validated))
+function buildBollingerPrompt(validated: IndicatorExplainRequest & { indicatorType: "bollinger" }, compare: ContextVsLastDaySummary | null): string {
+  const p = buildBasePromptParts(validated, compare)
   return `
 You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **Bollinger-on-indicator** card.
 
@@ -890,8 +890,8 @@ ${buildSharedSections(p)}
 `.trim()
 }
 
-function buildBBWPPrompt(validated: IndicatorExplainRequest & { indicatorType: "bbwp" }): string {
-  const p = buildBasePromptParts(validated, computeContextVsLastDaySummary(validated))
+function buildBBWPPrompt(validated: IndicatorExplainRequest & { indicatorType: "bbwp" }, compare: ContextVsLastDaySummary | null): string {
+  const p = buildBasePromptParts(validated, compare)
   return `
 You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **BBWP** (Bollinger BandWidth Percentile) card.
 
@@ -913,8 +913,8 @@ ${buildSharedSections(p)}
 `.trim()
 }
 
-function buildRsiDivergencesPrompt(validated: IndicatorExplainRequest & { indicatorType: "rsiDivergences" }): string {
-  const p = buildBasePromptParts(validated, computeContextVsLastDaySummary(validated))
+function buildRsiDivergencesPrompt(validated: IndicatorExplainRequest & { indicatorType: "rsiDivergences" }, compare: ContextVsLastDaySummary | null): string {
+  const p = buildBasePromptParts(validated, compare)
   return `
 You are a technical analyst for cryptocurrency charts. The user opened **Explain** on the **RSI divergences** indicator card.
 
@@ -941,11 +941,11 @@ ${buildSharedSections(p)}
 `.trim()
 }
 
-function buildAnalysisPrompt(validated: IndicatorExplainRequest): string {
-  if (validated.indicatorType === "marketVision") return buildMarketVisionPrompt(validated)
-  if (validated.indicatorType === "bollinger") return buildBollingerPrompt(validated)
-  if (validated.indicatorType === "rsiDivergences") return buildRsiDivergencesPrompt(validated)
-  return buildBBWPPrompt(validated)
+function buildAnalysisPrompt(validated: IndicatorExplainRequest, compare: ContextVsLastDaySummary | null): string {
+  if (validated.indicatorType === "marketVision") return buildMarketVisionPrompt(validated, compare)
+  if (validated.indicatorType === "bollinger") return buildBollingerPrompt(validated, compare)
+  if (validated.indicatorType === "rsiDivergences") return buildRsiDivergencesPrompt(validated, compare)
+  return buildBBWPPrompt(validated, compare)
 }
 
 function encodeBase64Json(value: unknown): string {
@@ -993,7 +993,7 @@ async function handleAnalyzeIndicator(request: Request) {
     }
 
     const comparison = computeContextVsLastDaySummary(validated)
-    const prompt = buildAnalysisPrompt(validated)
+    const prompt = buildAnalysisPrompt(validated, comparison)
 
     const result = streamText({
       model: gemini("gemini-2.5-flash"),
