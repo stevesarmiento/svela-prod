@@ -141,6 +141,9 @@ export function BottomNav() {
   // Retained past exit so selection UI can fade out instead of snapping away.
   const retainedSelection = useRetainedSelection(selectionState);
 
+  // Dock hides while the command palette is open (navigation mode only).
+  const isDockHidden = isCommandOpen && mode === "navigation";
+
   // Reset context when closing
   const handleCloseCommand = useCallback(
     (open: boolean) => {
@@ -166,22 +169,36 @@ export function BottomNav() {
           <SequenceIndicator activeSequence={activeSequence} />
         ) : null}
 
-        {/* Navigation Dock — duration/ease from motion-tokens (injected CSS vars on this row) */}
+        {/* Navigation Dock — hidden while the command palette is open.
+            Two layers so each can run on its own clock (NAV_SEARCH_MOTION_MS):
+            the outer animates the occupied width away (grid 0fr trick, plus
+            -mr-2 to swallow the row gap) so the search pill expands into the
+            freed space; the inner fades/scales the dock itself. `visibility`
+            rides the inner transition so it drops out of the a11y/tab order
+            only once the fade completes. */}
         <div
           className={cn(
-            "shrink-0",
-            layerTransitionClassName,
-            isCommandOpen && mode === "navigation"
-              ? "pointer-events-none hidden opacity-0"
-              : "opacity-100",
+            "grid shrink-0 transition-[grid-template-columns,margin-right] ease-[var(--motion-nav-ease-out)] motion-reduce:transition-none",
+            isDockHidden
+              ? "pointer-events-none grid-cols-[0fr] -mr-2 duration-[var(--nav-open-dock-collapse)] delay-[var(--nav-open-dock-collapse-delay)]"
+              : "grid-cols-[1fr] mr-0 duration-[var(--nav-close-dock-expand)] delay-[var(--nav-close-dock-expand-delay)]",
           )}
-          aria-hidden={isCommandOpen && mode === "navigation"}
+          aria-hidden={isDockHidden}
         >
-          <NavigationDock
-            mode={mode}
-            selectionState={retainedSelection}
-            onOpenCommandSearch={handleOpenCommandSearch}
-          />
+          <div
+            className={cn(
+              "min-w-0 transition-[opacity,scale,visibility] ease-[var(--motion-nav-ease-out)] motion-reduce:transition-none",
+              isDockHidden
+                ? "invisible scale-95 opacity-0 duration-[var(--nav-open-dock-fade)]"
+                : "visible scale-100 opacity-100 duration-[var(--nav-close-dock-fade)] delay-[var(--nav-close-dock-fade-delay)]",
+            )}
+          >
+            <NavigationDock
+              mode={mode}
+              selectionState={retainedSelection}
+              onOpenCommandSearch={handleOpenCommandSearch}
+            />
+          </div>
         </div>
 
         {/* Action Slot — both layers share one grid cell and cross-fade on mode change */}

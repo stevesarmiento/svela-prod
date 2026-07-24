@@ -41,6 +41,13 @@ interface CommandPopoverProps {
    */
   value?: string;
   onValueChange?: (value: string) => void;
+  /**
+   * Extra classes for the popover panel. The panel ships with Radix
+   * enter/exit animations disabled (`animate-none`); to animate it, pass a
+   * class backed by unlayered CSS (e.g. `.nav-command-popover` in
+   * globals.shared.css) so it outranks the utility layer.
+   */
+  contentClassName?: string;
 }
 
 const CommandPopover = ({
@@ -51,6 +58,7 @@ const CommandPopover = ({
   shouldFilter = true,
   value,
   onValueChange,
+  contentClassName,
 }: CommandPopoverProps) => {
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -76,8 +84,11 @@ const CommandPopover = ({
             silently breaks ↑/↓/Enter (items are never found). */}
         <PopoverContentWithoutPortal
           ref={contentRef}
-          className="dark relative rounded-[20px] bg-zinc-900 border border-transparent overflow-hidden p-1 w-full sm:w-[499px] max-w-[calc(100vw-2rem)] z-[1000] data-[state=open]:animate-none data-[state=closed]:animate-none
-                     text-popover-foreground shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.4)]"
+          className={cn(
+            `dark relative rounded-[20px] bg-zinc-900 border border-transparent overflow-hidden p-1 w-full sm:w-[499px] max-w-[calc(100vw-2rem)] z-[1000] data-[state=open]:animate-none data-[state=closed]:animate-none
+             text-popover-foreground shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.4)]`,
+            contentClassName,
+          )}
           side="bottom"
           sideOffset={12}
           // Keep focus on the cmdk input (trigger) so typing + arrow selection work; don't jump into the list.

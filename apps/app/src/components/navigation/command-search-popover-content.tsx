@@ -837,6 +837,9 @@ export const CommandSearchPopoverContent = React.memo(
             shouldFilter={false}
             value={highlightedValue}
             onValueChange={setHighlightedValue}
+            // Staggered enter/exit — rules live in globals.shared.css, timings
+            // in NAV_SEARCH_MOTION_MS (motion-tokens.ts).
+            contentClassName="nav-command-popover"
             trigger={
               <div className="flex items-center">
                 <CommandSearchTrigger
@@ -844,12 +847,14 @@ export const CommandSearchPopoverContent = React.memo(
                   onIntent={warmUp}
                   buttonRef={triggerRef}
                 />
+                {/* Expands in step with the dock collapse on open; collapses
+                    while the dock returns on close (NAV_SEARCH_MOTION_MS). */}
                 <div
                   className={cn(
-                    "overflow-hidden transition-[width,opacity] duration-[var(--motion-nav-duration)] ease-[var(--motion-nav-ease-out)] motion-reduce:transition-none",
+                    "overflow-hidden transition-[width,opacity] ease-[var(--motion-nav-ease-out)] motion-reduce:transition-none",
                     isOpen
-                      ? "w-[min(445px,calc(100vw-7rem))] opacity-100"
-                      : "w-0 opacity-0",
+                      ? "w-[min(445px,calc(100vw-7rem))] opacity-100 duration-[var(--nav-open-search)] delay-[var(--nav-open-search-delay)]"
+                      : "w-0 opacity-0 duration-[var(--nav-close-search)] delay-[var(--nav-close-search-delay)]",
                   )}
                   onMouseDown={(event) => event.stopPropagation()}
                 >
