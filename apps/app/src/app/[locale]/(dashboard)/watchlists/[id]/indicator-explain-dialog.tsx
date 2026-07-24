@@ -18,7 +18,7 @@ import {
 } from "@v1/ui/dialog";
 import { MultiStepLoader } from "@v1/ui/mult-step-loader";
 import { ScrollArea } from "@v1/ui/scroll-area";
-import { motion, useReducedMotion } from "motion/react";
+import { m, useReducedMotion } from "motion/react";
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import {
@@ -228,7 +228,7 @@ function ExplainQuoteHeader(props: {
             <span>N/A</span>
           ) : (
             <>
-              <motion.span
+              <m.span
                 key={change >= 0 ? "up" : "down"}
                 initial={{ rotate: change >= 0 ? 0 : 90 }}
                 animate={{ rotate: change >= 0 ? 0 : 90 }}
@@ -246,7 +246,7 @@ function ExplainQuoteHeader(props: {
                     change >= 0 ? "fill-emerald-500" : "fill-rose-500",
                   )}
                 />
-              </motion.span>
+              </m.span>
               <span>{Math.abs(change).toFixed(2)}%</span>
               <span className="ml-1.5 font-normal text-muted-foreground">
                 24h
@@ -272,6 +272,20 @@ function buildRequestBody(args: IndicatorExplainDialogProps) {
     snapshot: args.snapshot,
   };
 }
+
+const EXPLAIN_BACK_BUTTON = (
+  <DialogClose asChild>
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className="size-6 shrink-0 rounded-lg text-white hover:bg-white/10"
+      aria-label="Back"
+    >
+      <IconArrowBackward className="size-3 fill-current" aria-hidden />
+    </Button>
+  </DialogClose>
+);
 
 export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
   const [isOpen, setIsOpen] = React.useState(false);
@@ -341,20 +355,6 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
     </Button>
   );
 
-  const explainBackButton = (
-    <DialogClose asChild>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-6 shrink-0 rounded-lg text-white hover:bg-white/10"
-        aria-label="Back"
-      >
-        <IconArrowBackward className="size-3 fill-current" aria-hidden />
-      </Button>
-    </DialogClose>
-  );
-
   return (
     <Dialog
       open={isOpen}
@@ -393,7 +393,7 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <ExplainQuoteHeader
-                  leadingAction={explainBackButton}
+                  leadingAction={EXPLAIN_BACK_BUTTON}
                   displayName={displayName}
                   safeLogoSrc={safeLogoSrc}
                   fallbackSymbol={props.tokenSymbol}
@@ -412,7 +412,7 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
           {!showQuoteHeader &&
           !(props.indicatorChart != null || props.indicatorContext != null) ? (
             <div className="flex items-center justify-between gap-2">
-              {explainBackButton}
+              {EXPLAIN_BACK_BUTTON}
               {regenerateButton}
             </div>
           ) : null}
@@ -421,7 +421,7 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
               <div className="flex items-start justify-between gap-2">
                 <div className="flex min-w-0 flex-1 items-start gap-1">
                   {!showQuoteHeader ? (
-                    <div className="pt-0.5">{explainBackButton}</div>
+                    <div className="pt-0.5">{EXPLAIN_BACK_BUTTON}</div>
                   ) : null}
                   <div className="min-w-0 text-sm font-semibold text-balance text-foreground">
                     {props.indicatorTitle}

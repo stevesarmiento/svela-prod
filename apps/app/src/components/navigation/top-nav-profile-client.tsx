@@ -1,6 +1,7 @@
 "use client";
 
-import { useClerk, useUser, SignOutButton } from "@clerk/nextjs";
+import { useUser, SignOutButton } from "@clerk/nextjs";
+import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 import { Button } from "@v1/ui/button";
 import {
@@ -21,7 +22,6 @@ interface TopNavProfileClientProps {
 
 export function TopNavProfileClient(props: TopNavProfileClientProps) {
   const { user, isLoaded } = useUser();
-  const { openUserProfile } = useClerk();
 
   const displayName = getUserDisplayName({
     fullName: user?.fullName ?? undefined,
@@ -69,17 +69,19 @@ export function TopNavProfileClient(props: TopNavProfileClientProps) {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={() => openUserProfile()}
-          className="cursor-pointer rounded-xl"
-        >
-          <Fingerprint className="mr-2 h-4 w-4 text-primary/50" />
-          Authentication
+        <DropdownMenuItem asChild className="cursor-pointer rounded-xl">
+          <Link href="/settings" className="flex items-center">
+            <Fingerprint className="mr-2 h-4 w-4 text-primary/50" />
+            Settings
+          </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem className="cursor-pointer w-full rounded-xl" asChild>
           <SignOutButton>
-            <button type="button" className="w-full text-left flex items-center">
+            <button
+              type="button"
+              className="w-full text-left flex items-center"
+            >
               <LogOut className="mr-2 h-4 w-4 text-primary/50" />
               Sign out
             </button>

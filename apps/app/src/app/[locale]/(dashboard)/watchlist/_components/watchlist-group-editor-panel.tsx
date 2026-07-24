@@ -1,14 +1,15 @@
 'use client'
 
 import { useCallback, useId, useRef, useState } from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, m, useReducedMotion } from 'motion/react'
 import { ChevronLeft } from 'lucide-react'
 import { Button } from '@v1/ui/button'
 import { Input } from '@v1/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@v1/ui/tabs'
 import { cn } from '@v1/ui/cn'
 import { COLORS } from '@/components/color-picker'
-import { AVAILABLE_ICONS, WatchlistGroupIcon } from '@/components/watchlist-group-icon'
+import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
+import { AVAILABLE_ICONS } from '@/components/watchlist-group-icon-options'
 import { DURATION_UI_S, EASE_OUT_CUBIC, motionDuration } from '@/lib/motion-tokens'
 
 type PickerView = 'details' | 'icon'
@@ -86,7 +87,7 @@ export function WatchlistGroupEditorPanel({
     >
       <AnimatePresence mode="wait" initial={false}>
         {view === 'details' ? (
-          <motion.div
+          <m.div
             key="details"
             initial={shouldReduceMotion ? false : { opacity: 0, x: -16 }}
             animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
@@ -171,9 +172,9 @@ export function WatchlistGroupEditorPanel({
                 {cancelLabel}
               </Button>
             </div>
-          </motion.div>
+          </m.div>
         ) : (
-          <motion.div
+          <m.div
             key="icon"
             initial={shouldReduceMotion ? false : { opacity: 0, x: 16 }}
             animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
@@ -263,7 +264,7 @@ export function WatchlistGroupEditorPanel({
                 </div>
               </TabsContent>
             </Tabs>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

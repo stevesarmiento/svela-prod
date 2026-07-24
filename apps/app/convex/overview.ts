@@ -716,7 +716,14 @@ async function buildRankedCoinUniverse(ctx: QueryCtx, watchlistIds: ReadonlyArra
   limited: boolean;
   coinIds: string[];
 }> {
-  const unique = Array.from(new Set(watchlistIds.map((id) => id.trim()).filter((id) => id.length > 0)));
+  const unique = Array.from(
+    new Set(
+      watchlistIds.flatMap((id) => {
+        const trimmed = id.trim();
+        return trimmed.length > 0 ? [trimmed] : [];
+      }),
+    ),
+  );
   unique.sort();
 
   const watchlistCoinCount = unique.length;
@@ -862,7 +869,12 @@ export const _scheduleWatchlistNewsWarmup = internalMutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const unique = Array.from(
-      new Set(args.coinIds.map((id) => id.trim()).filter((id) => id.length > 0)),
+      new Set(
+        args.coinIds.flatMap((id) => {
+          const trimmed = id.trim();
+          return trimmed.length > 0 ? [trimmed] : [];
+        }),
+      ),
     );
     if (unique.length === 0) {
       return { scheduled: 0, skippedCooldown: 0 };
@@ -875,40 +887,42 @@ export const _scheduleWatchlistNewsWarmup = internalMutation({
     });
 
     const target = unique.slice(0, OVERVIEW_NEWS_WARMUP_MAX_COINS);
-    let scheduled = 0;
-    let skippedCooldown = 0;
 
-    for (let i = 0; i < target.length; i++) {
-      const coingeckoId = target[i]!;
-      const jobKey = `warmup:overview-news:${coingeckoId}`;
-      const existing = await ctx.db
-        .query("jobState")
-        .withIndex("by_job_key", (q) => q.eq("jobKey", jobKey))
-        .first();
+    // Coin ids are deduped, so each jobState row is independent — fan out.
+    const outcomes = await Promise.all(
+      target.map(async (coingeckoId, i) => {
+        const jobKey = `warmup:overview-news:${coingeckoId}`;
+        const existing = await ctx.db
+          .query("jobState")
+          .withIndex("by_job_key", (q) => q.eq("jobKey", jobKey))
+          .first();
 
-      if (existing && now - existing.updatedAt < OVERVIEW_NEWS_WARMUP_DEDUP_MS) {
-        skippedCooldown += 1;
-        continue;
-      }
+        if (existing && now - existing.updatedAt < OVERVIEW_NEWS_WARMUP_DEDUP_MS) {
+          return "skippedCooldown" as const;
+        }
 
-      if (existing) {
-        await ctx.db.patch(existing._id, { updatedAt: now });
-      } else {
-        await ctx.db.insert("jobState", {
-          jobKey,
-          cursor: undefined,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
+        if (existing) {
+          await ctx.db.patch(existing._id, { updatedAt: now });
+        } else {
+          await ctx.db.insert("jobState", {
+            jobKey,
+            cursor: undefined,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
 
-      await ctx.scheduler.runAfter(
-        i * OVERVIEW_NEWS_WARMUP_STAGGER_MS,
-        internal.coingeckoNewsJobs.refreshCoinNews,
-        { coingeckoId, perPage: 5 },
-      );
-      scheduled += 1;
-    }
+        await ctx.scheduler.runAfter(
+          i * OVERVIEW_NEWS_WARMUP_STAGGER_MS,
+          internal.coingeckoNewsJobs.refreshCoinNews,
+          { coingeckoId, perPage: 5 },
+        );
+        return "scheduled" as const;
+      }),
+    );
+
+    const scheduled = outcomes.filter((o) => o === "scheduled").length;
+    const skippedCooldown = outcomes.filter((o) => o === "skippedCooldown").length;
 
     return { scheduled, skippedCooldown };
   },
@@ -1231,9 +1245,10 @@ export const getNewsSentimentOverlay = query({
   handler: async (ctx, args) => {
     const uniqueArticleIds = Array.from(
       new Set(
-        args.articleIds
-          .map((articleId) => articleId.trim())
-          .filter((articleId) => articleId.length > 0),
+        args.articleIds.flatMap((articleId) => {
+          const trimmed = articleId.trim();
+          return trimmed.length > 0 ? [trimmed] : [];
+        }),
       ),
     ).slice(0, 100);
 

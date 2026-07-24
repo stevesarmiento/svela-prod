@@ -30,7 +30,7 @@ import { useSetWatchlistItemHoldings } from "@/lib/convex-hooks"
 import { Badge } from "@v1/ui/badge"
 import { IconTriangleFill } from "symbols-react"
 import { TokenLogo } from "@/components/token-logo"
-import { motion } from "motion/react"
+import { m } from "motion/react"
 import {
   SELECT_CELL_VARIANTS,
   SELECT_CHECKBOX_VARIANTS,
@@ -110,12 +110,6 @@ export const ChartHoldingsCell = memo(function ChartHoldingsCell({
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (!editing) {
-      setDraft(holdings !== undefined ? String(holdings) : "")
-    }
-  }, [holdings, editing])
-
-  useEffect(() => {
     if (editing) inputRef.current?.focus()
   }, [editing])
 
@@ -177,6 +171,7 @@ export const ChartHoldingsCell = memo(function ChartHoldingsCell({
   const notionalUsd = notionalUsdForCell(editing, draft, holdings, priceUsd)
 
   return (
+    // react-doctor-disable-next-line react-doctor/no-static-element-interactions -- event shield: handlers only stop propagation for nested controls, not an interaction target
     <div
       className="flex min-w-0 items-center justify-end gap-1.5"
       onClick={(e) => {
@@ -219,7 +214,9 @@ export const ChartHoldingsCell = memo(function ChartHoldingsCell({
             type="button"
             disabled={!canEdit || showPending}
             onClick={() => {
-              if (canEdit) setEditing(true)
+              if (!canEdit) return
+              setDraft(holdings !== undefined ? String(holdings) : "")
+              setEditing(true)
             }}
             className={cn(
               "-mx-1 rounded px-1 py-0.5 text-right font-berkeley-mono text-xs tabular-nums",
@@ -250,6 +247,17 @@ export const ChartHoldingsCell = memo(function ChartHoldingsCell({
  * the comparison view's WatchlistTable structure: wide token column, value
  * columns, fixed trailing actions column.
  */
+const getTimeScaleLabel = (scale: string) => {
+  switch (scale) {
+    case '1d': return '1D'    // 1 Day (24h)
+    case '7d': return '1W'    // 1 Week (7d)
+    case '30d': return '1M'   // 1 Month (30d)
+    case 'max': return '1Y'   // 1 Year (longest available)
+    case '2y': return '2Y'    // 2 Years (N/A)
+    default: return scale.toUpperCase()
+  }
+}
+
 const ROW_GRID_COLS_SM =
   "sm:grid-cols-[minmax(0,1.6fr)_1fr_1.2fr_1.4fr]"
 
@@ -276,6 +284,338 @@ interface ChartTableProps {
   coins: OptimisticCoinData[]
   activeTimeScale: string
   isPending?: boolean
+}
+
+type EnrichedCoin = OptimisticCoinData & { intervalChange: number }
+
+function ChartTableHeaderRow({ activeTimeScale }: { activeTimeScale: string }) {
+  return (
+    <div className="hidden px-4 py-2 sm:block">
+      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+        <div className={cn("grid gap-4", ROW_GRID_COLS_SM)}>
+          <div className="flex items-center">
+            Token
+          </div>
+          <div className="flex items-center justify-end">
+            Price
+          </div>
+          <div className="flex items-center gap-1 justify-end">
+            {getTimeScaleLabel(activeTimeScale)} Change
+          </div>
+          <div className="flex items-center justify-end">
+            Holdings
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Interval Change: USD move left, % in a badge — same as the comparison table. */
+function IntervalChangeValue({
+  change,
+  priceUsd,
+}: {
+  change: number
+  priceUsd: number
+}) {
+  const isPositive = change > 0
+  const isNegative = change < 0
+  const isNeutral = !isPositive && !isNegative
+  const usdMove = deriveUsdMoveFromPercentChange({
+    priceUsd,
+    percentChange: change,
+  })
+  const usdSign = isPositive ? "+" : isNegative ? "-" : ""
+
+  return (
+    <div className="inline-flex items-center gap-2 sm:justify-end">
+      <span
+        className={cn(
+          "font-berkeley-mono text-[11px] tabular-nums",
+          isPositive && "text-emerald-400",
+          isNegative && "text-rose-400",
+          isNeutral && "text-muted-foreground",
+        )}
+      >
+        {usdMove === null ? "—" : `${usdSign}${formatUsdPrice(Math.abs(usdMove))}`}
+      </span>
+      <Badge
+        variant={isPositive ? "success" : isNegative ? "destructive" : "outline"}
+        className={cn(
+          isNeutral && "border-zinc-200/60 text-muted-foreground dark:border-white/10",
+          "h-5 px-1.5 font-berkeley-mono text-[11px] tabular-nums gap-1",
+        )}
+      >
+        <IconTriangleFill
+          aria-hidden="true"
+          className={cn(
+            "size-[4px] shrink-0 fill-current",
+            isNegative && "rotate-180",
+          )}
+        />
+        {Math.abs(change).toFixed(2)}%
+      </Badge>
+    </div>
+  )
+}
+
+interface OptimisticCoinRowProps {
+  coin: EnrichedCoin
+  activeTimeScale: string
+  showPending: boolean
+  holdingsGroupId: string | null
+  canEditHoldings: boolean
+}
+
+/** Non-clickable loading state for optimistic coins. */
+function OptimisticCoinRow({
+  coin,
+  activeTimeScale,
+  showPending,
+  holdingsGroupId,
+  canEditHoldings,
+}: OptimisticCoinRowProps) {
+  const tokenName = "Loading..."
+  const tokenLogoUrl = getTokenLogoURL(coin.symbol, coin.image)
+  const safeTokenLogoUrl =
+    tokenLogoUrl && (tokenLogoUrl.startsWith("http") || tokenLogoUrl.startsWith("/"))
+      ? tokenLogoUrl
+      : undefined
+
+  return (
+    <div className={cn(
+      "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 pr-2 opacity-60 sm:gap-4 sm:px-4 sm:py-2",
+      ROW_GRID_COLS_SM,
+    )}>
+      {/* Token */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
+        <div className="relative shrink-0">
+          {safeTokenLogoUrl ? (
+            <TokenLogo
+              src={safeTokenLogoUrl}
+              alt={tokenName}
+              sizePx={16}
+              fallbackText={coin.symbol}
+              className="opacity-50 rounded-full ring-1 ring-zinc-200 dark:ring-black/80"
+              quality={70}
+            />
+          ) : (
+            <Skeleton className="size-4 rounded-full" />
+          )}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Spinner size={12} />
+          </div>
+        </div>
+        <Skeleton className="h-3 w-8 rounded-full" />
+        <span className="text-primary/40 text-xs whitespace-nowrap sm:hidden">price is currently</span>
+        <Skeleton className="h-3 w-16 rounded-full sm:hidden" />
+      </div>
+
+      {/* Price (sm+ column) */}
+      <div className="hidden min-w-0 items-center justify-end sm:flex">
+        <Skeleton className="h-3 w-16 rounded-full" />
+      </div>
+
+      {/* Interval Change */}
+      <div className="col-span-2 row-start-2 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+          {getTimeScaleLabel(activeTimeScale)}
+        </span>
+        <Skeleton className="h-3 w-10 rounded-full" />
+      </div>
+
+      {/* Holdings */}
+      <div className="col-span-2 row-start-3 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-auto sm:block">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+          Holdings
+        </span>
+        <ChartHoldingsCell
+          coinId={String(coin.id)}
+          holdings={coin.holdings}
+          priceUsd={coin.quote.USD.price}
+          isOptimistic
+          showPending={showPending}
+          groupId={holdingsGroupId}
+          canEdit={canEditHoldings}
+        />
+      </div>
+
+    </div>
+  )
+}
+
+interface CoinRowProps {
+  coin: EnrichedCoin
+  activeTimeScale: string
+  watchlistGroup: string | null
+  /** Selection flags travel together — one object instead of sibling booleans. */
+  selection: { isSelected: boolean; hasSelectedCoins: boolean }
+  onCoinSelect: (coinId: string, selected: boolean) => void
+  selectRevealTransition: ReturnType<typeof useSelectRevealTransition>
+  showPending: boolean
+  holdingsGroupId: string | null
+  canEditHoldings: boolean
+}
+
+/** Clickable row for a real (non-optimistic) coin. */
+function CoinRow({
+  coin,
+  activeTimeScale,
+  watchlistGroup,
+  selection,
+  onCoinSelect,
+  selectRevealTransition,
+  showPending,
+  holdingsGroupId,
+  canEditHoldings,
+}: CoinRowProps) {
+  const { isSelected, hasSelectedCoins } = selection
+  const coinIdStr = String(coin.id)
+  const tokenName = cleanTokenName(coin.name)
+  const tokenLogoUrl = getTokenLogoURL(coin.symbol, coin.image)
+  const safeTokenLogoUrl =
+    tokenLogoUrl && (tokenLogoUrl.startsWith("http") || tokenLogoUrl.startsWith("/"))
+      ? tokenLogoUrl
+      : undefined
+
+  return (
+    <Link
+      href={watchlistGroup ? `/watchlists/${coin.id}?wg=${watchlistGroup}` : `/watchlists/${coin.id}`}
+      aria-selected={hasSelectedCoins ? isSelected : undefined}
+      onClick={
+        hasSelectedCoins
+          ? (e) => {
+              e.preventDefault()
+              onCoinSelect(coinIdStr, !isSelected)
+            }
+          : undefined
+      }
+      className={cn(
+        "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 pr-2 cursor-pointer hover:rounded-[7px] hover:bg-primary/[0.04] hover:ring-2 hover:ring-inset hover:ring-zinc-200/30 sm:gap-4 sm:px-4 sm:py-2",
+        ROW_GRID_COLS_SM,
+        "transition-opacity duration-200",
+        hasSelectedCoins && !isSelected && "opacity-40",
+      )}
+    >
+      {/* First cell — merged select + token, toggles selection on click */}
+      <div
+        className="flex min-w-0 items-center"
+        role="button"
+        tabIndex={0}
+        onClick={(e) => {
+          e.preventDefault() // Always prevent navigation for first cell (selection mode)
+          e.stopPropagation()
+
+          // Let the checkbox handle its own toggling (avoid double-toggle).
+          const target = e.target as HTMLElement
+          if (target.closest('[data-chart-row-checkbox="true"]')) return
+
+          onCoinSelect(coinIdStr, !isSelected)
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return
+          e.preventDefault()
+          e.stopPropagation()
+          onCoinSelect(coinIdStr, !isSelected)
+        }}
+      >
+      <m.div
+        className="relative flex h-full w-full min-w-0 items-center justify-start"
+        // Ensure non-hovered rows animate when selection mode flips on/off.
+        // Starting from "rest" prevents "jump-to-endstate" on remounts.
+        variants={SELECT_CELL_VARIANTS}
+        initial="rest"
+        animate={hasSelectedCoins ? "revealed" : "rest"}
+        whileHover={hasSelectedCoins ? undefined : "revealed"}
+      >
+        {/* Checkbox - stable DOM to avoid "jump" on select/deselect */}
+        <m.div
+          className="absolute left-0 z-10 px-1"
+          variants={SELECT_CHECKBOX_VARIANTS}
+          transition={selectRevealTransition}
+        >
+          <Checkbox
+            data-chart-row-checkbox="true"
+            checked={isSelected}
+            tabIndex={hasSelectedCoins ? 0 : -1}
+            onCheckedChange={(checked) =>
+              onCoinSelect(coinIdStr, checked === true)
+            }
+            aria-label={`Select ${tokenName}`}
+          />
+        </m.div>
+
+        {/* Token content slides right to make room for the checkbox */}
+        <m.div
+          className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap"
+          variants={SELECT_CONTENT_VARIANTS}
+          transition={selectRevealTransition}
+        >
+        {safeTokenLogoUrl ? (
+          <TokenLogo
+            src={safeTokenLogoUrl}
+            alt={tokenName}
+            sizePx={16}
+            fallbackText={coin.symbol}
+            className="shrink-0 rounded-full ring-1 ring-zinc-200 dark:ring-black/80"
+            quality={70}
+          />
+        ) : (
+          <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[8px] font-bold text-primary/70">
+            {coin.symbol?.charAt(0) || '?'}
+          </div>
+        )}
+        <span className="shrink-0 text-xs font-bold">{coin.symbol.toUpperCase()}</span>
+        <span className="min-w-0 truncate font-berkeley-mono text-xs text-muted-foreground">{tokenName}</span>
+        <span className="text-primary/40 text-xs whitespace-nowrap sm:hidden">price is currently</span>
+        <span className="font-berkeley-mono text-xs font-semibold tabular-nums sm:hidden">
+          {formatUsdPrice(coin.quote.USD.price)}
+        </span>
+        </m.div>
+      </m.div>
+      </div>
+
+      {/* Price (sm+ column) */}
+      <div className="hidden min-w-0 items-center justify-end font-berkeley-mono text-xs font-semibold tabular-nums sm:flex">
+        {formatUsdPrice(coin.quote.USD.price)}
+      </div>
+
+      {/* Interval Change: USD move left, % in a badge — same as the comparison table */}
+      <div className="col-span-2 row-start-2 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+          {getTimeScaleLabel(activeTimeScale)}
+        </span>
+        {Number.isNaN(coin.intervalChange) ? (
+          <span className="font-berkeley-mono text-xs text-muted-foreground">
+            N/A
+          </span>
+        ) : (
+          <IntervalChangeValue
+            change={coin.intervalChange}
+            priceUsd={coin.quote.USD.price}
+          />
+        )}
+      </div>
+
+      {/* Holdings (editable token quantity) */}
+      <div className="col-span-2 row-start-3 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-auto sm:block">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+          Holdings
+        </span>
+        <ChartHoldingsCell
+          coinId={String(coin.id)}
+          holdings={coin.holdings}
+          priceUsd={coin.quote.USD.price}
+          isOptimistic={false}
+          showPending={showPending}
+          groupId={holdingsGroupId}
+          canEdit={canEditHoldings}
+        />
+      </div>
+
+    </Link>
+  )
 }
 
 export const ChartTable = memo(function ChartTable({ 
@@ -375,9 +715,9 @@ export const ChartTable = memo(function ChartTable({
   // array), excluding optimistic placeholders.
   const selectableCoinIds = useMemo(
     () =>
-      coinsWithIntervalChange
-        .filter((coin) => !coin.isOptimistic)
-        .map((coin) => String(coin.id)),
+      coinsWithIntervalChange.flatMap((coin) =>
+        coin.isOptimistic ? [] : [String(coin.id)],
+      ),
     [coinsWithIntervalChange],
   )
 
@@ -385,16 +725,18 @@ export const ChartTable = memo(function ChartTable({
   // display info; the hook hosts the (multi-)analysis dialog here.
   const getSelectedTokens = useCallback(
     () =>
-      coinsWithIntervalChange
-        .filter(
-          (coin) => !coin.isOptimistic && selectedCoins.has(String(coin.id)),
-        )
-        .map((coin) => ({
-          id: String(coin.id),
-          name: cleanTokenName(coin.name),
-          symbol: coin.symbol,
-          logoUrl: getTokenLogoURL(coin.symbol, coin.image),
-        })),
+      coinsWithIntervalChange.flatMap((coin) =>
+        !coin.isOptimistic && selectedCoins.has(String(coin.id))
+          ? [
+              {
+                id: String(coin.id),
+                name: cleanTokenName(coin.name),
+                symbol: coin.symbol,
+                logoUrl: getTokenLogoURL(coin.symbol, coin.image),
+              },
+            ]
+          : [],
+      ),
     [coinsWithIntervalChange, selectedCoins],
   )
   const { onAnalyzeSelected, analyzeDialog } =
@@ -404,17 +746,6 @@ export const ChartTable = memo(function ChartTable({
     onAnalyzeSelected,
     analyzeSelectedCount: selectedCoins.size,
   })
-
-  const getTimeScaleLabel = (scale: string) => {
-    switch (scale) {
-      case '1d': return '1D'    // 1 Day (24h)
-      case '7d': return '1W'    // 1 Week (7d)
-      case '30d': return '1M'   // 1 Month (30d)
-      case 'max': return '1Y'   // 1 Year (longest available)
-      case '2y': return '2Y'    // 2 Years (N/A)
-      default: return scale.toUpperCase()
-    }
-  }
 
   // React 19: Show pending states
   const showPending = Boolean(isPending)
@@ -429,278 +760,38 @@ export const ChartTable = memo(function ChartTable({
       showPending && "opacity-60 transition-opacity duration-200"
     )}>
       {/* Shared table header */}
-      <div className="hidden px-4 py-2 sm:block">
-        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-          <div className={cn("grid gap-4", ROW_GRID_COLS_SM)}>
-            <div className="flex items-center">
-              Token
-            </div>
-            <div className="flex items-center justify-end">
-              Price
-            </div>
-            <div className="flex items-center gap-1 justify-end">
-              {getTimeScaleLabel(activeTimeScale)} Change
-            </div>
-            <div className="flex items-center justify-end">
-              Holdings
-            </div>
-          </div>
-        </div>
-      </div>
+      <ChartTableHeaderRow activeTimeScale={activeTimeScale} />
 
       {/* Table body: contiguous rows in a single card */}
       <div className="bg-white dark:bg-primary/5 border border-primary/5 rounded-lg shadow-sm overflow-hidden divide-y divide-primary/5">
-      {coinsWithIntervalChange.map((coin) => {
-        const coinIdStr = String(coin.id)
-        const isSelected = selectedCoins.has(coinIdStr)
-        const tokenName = coin.isOptimistic ? "Loading..." : cleanTokenName(coin.name)
-        const tokenLogoUrl = getTokenLogoURL(coin.symbol, coin.image)
-        const safeTokenLogoUrl =
-          tokenLogoUrl && (tokenLogoUrl.startsWith("http") || tokenLogoUrl.startsWith("/"))
-            ? tokenLogoUrl
-            : undefined
-
-        return (
-          <div key={coin.id}>
-            {coin.isOptimistic ? (
-              // Show non-clickable loading state for optimistic coins
-              <div className={cn(
-                "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 pr-2 opacity-60 sm:gap-4 sm:px-4 sm:py-2",
-                ROW_GRID_COLS_SM,
-              )}>
-                {/* Token */}
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
-                  <div className="relative shrink-0">
-                    {safeTokenLogoUrl ? (
-                      <TokenLogo
-                        src={safeTokenLogoUrl}
-                        alt={tokenName}
-                        sizePx={16}
-                        fallbackText={coin.symbol}
-                        className="opacity-50 rounded-full ring-1 ring-zinc-200 dark:ring-black/80"
-                        quality={70}
-                      />
-                    ) : (
-                      <Skeleton className="size-4 rounded-full" />
-                    )}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Spinner size={12} />
-                    </div>
-                  </div>
-                  <Skeleton className="h-3 w-8 rounded-full" />
-                  <span className="text-primary/40 text-xs whitespace-nowrap sm:hidden">price is currently</span>
-                  <Skeleton className="h-3 w-16 rounded-full sm:hidden" />
-                </div>
-
-                {/* Price (sm+ column) */}
-                <div className="hidden min-w-0 items-center justify-end sm:flex">
-                  <Skeleton className="h-3 w-16 rounded-full" />
-                </div>
-
-                {/* Interval Change */}
-                <div className="col-span-2 row-start-2 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
-                    {getTimeScaleLabel(activeTimeScale)}
-                  </span>
-                  <Skeleton className="h-3 w-10 rounded-full" />
-                </div>
-
-                {/* Holdings */}
-                <div className="col-span-2 row-start-3 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-auto sm:block">
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
-                    Holdings
-                  </span>
-                  <ChartHoldingsCell
-                    coinId={String(coin.id)}
-                    holdings={coin.holdings}
-                    priceUsd={coin.quote.USD.price}
-                    isOptimistic
-                    showPending={showPending}
-                    groupId={holdingsGroupId}
-                    canEdit={canEditHoldings}
-                  />
-                </div>
-
-              </div>
-            ) : (
-              // Show clickable link for real coins
-              <Link
-                href={watchlistGroup ? `/watchlists/${coin.id}?wg=${watchlistGroup}` : `/watchlists/${coin.id}`}
-                aria-selected={hasSelectedCoins ? isSelected : undefined}
-                onClick={
-                  hasSelectedCoins
-                    ? (e) => {
-                        e.preventDefault()
-                        handleCoinSelect(coinIdStr, !isSelected)
-                      }
-                    : undefined
-                }
-                className={cn(
-                  "grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 pr-2 cursor-pointer hover:rounded-[7px] hover:bg-primary/[0.04] hover:ring-2 hover:ring-inset hover:ring-zinc-200/30 sm:gap-4 sm:px-4 sm:py-2",
-                  ROW_GRID_COLS_SM,
-                  "transition-opacity duration-200",
-                  hasSelectedCoins && !isSelected && "opacity-40",
-                )}
-              >
-                {/* First cell — merged select + token, toggles selection on click */}
-                <div
-                  className="flex min-w-0 items-center"
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.preventDefault() // Always prevent navigation for first cell (selection mode)
-                    e.stopPropagation()
-
-                    // Let the checkbox handle its own toggling (avoid double-toggle).
-                    const target = e.target as HTMLElement
-                    if (target.closest('[data-chart-row-checkbox="true"]')) return
-
-                    handleCoinSelect(coinIdStr, !isSelected)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter" && e.key !== " ") return
-                    e.preventDefault()
-                    e.stopPropagation()
-                    handleCoinSelect(coinIdStr, !isSelected)
-                  }}
-                >
-                <motion.div
-                  className="relative flex h-full w-full min-w-0 items-center justify-start"
-                  // Ensure non-hovered rows animate when selection mode flips on/off.
-                  // Starting from "rest" prevents "jump-to-endstate" on remounts.
-                  variants={SELECT_CELL_VARIANTS}
-                  initial="rest"
-                  animate={hasSelectedCoins ? "revealed" : "rest"}
-                  whileHover={hasSelectedCoins ? undefined : "revealed"}
-                >
-                  {/* Checkbox - stable DOM to avoid "jump" on select/deselect */}
-                  <motion.div
-                    className="absolute left-0 z-10 px-1"
-                    variants={SELECT_CHECKBOX_VARIANTS}
-                    transition={selectRevealTransition}
-                  >
-                    <Checkbox
-                      data-chart-row-checkbox="true"
-                      checked={isSelected}
-                      tabIndex={hasSelectedCoins ? 0 : -1}
-                      onCheckedChange={(checked) =>
-                        handleCoinSelect(coinIdStr, checked === true)
-                      }
-                      aria-label={`Select ${tokenName}`}
-                    />
-                  </motion.div>
-
-                  {/* Token content slides right to make room for the checkbox */}
-                  <motion.div
-                    className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap"
-                    variants={SELECT_CONTENT_VARIANTS}
-                    transition={selectRevealTransition}
-                  >
-                  {safeTokenLogoUrl ? (
-                    <TokenLogo
-                      src={safeTokenLogoUrl}
-                      alt={tokenName}
-                      sizePx={16}
-                      fallbackText={coin.symbol}
-                      className="shrink-0 rounded-full ring-1 ring-zinc-200 dark:ring-black/80"
-                      quality={70}
-                    />
-                  ) : (
-                    <div className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[8px] font-bold text-primary/70">
-                      {coin.symbol?.charAt(0) || '?'}
-                    </div>
-                  )}
-                  <span className="shrink-0 text-xs font-bold">{coin.symbol.toUpperCase()}</span>
-                  <span className="min-w-0 truncate font-berkeley-mono text-xs text-muted-foreground">{tokenName}</span>
-                  <span className="text-primary/40 text-xs whitespace-nowrap sm:hidden">price is currently</span>
-                  <span className="font-berkeley-mono text-xs font-semibold tabular-nums sm:hidden">
-                    {formatUsdPrice(coin.quote.USD.price)}
-                  </span>
-                  </motion.div>
-                </motion.div>
-                </div>
-
-                {/* Price (sm+ column) */}
-                <div className="hidden min-w-0 items-center justify-end font-berkeley-mono text-xs font-semibold tabular-nums sm:flex">
-                  {formatUsdPrice(coin.quote.USD.price)}
-                </div>
-
-                {/* Interval Change: USD move left, % in a badge — same as the comparison table */}
-                <div className="col-span-2 row-start-2 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
-                    {getTimeScaleLabel(activeTimeScale)}
-                  </span>
-                  {Number.isNaN(coin.intervalChange) ? (
-                    <span className="font-berkeley-mono text-xs text-muted-foreground">
-                      N/A
-                    </span>
-                  ) : (
-                    (() => {
-                      const change = coin.intervalChange
-                      const isPositive = change > 0
-                      const isNegative = change < 0
-                      const isNeutral = !isPositive && !isNegative
-                      const usdMove = deriveUsdMoveFromPercentChange({
-                        priceUsd: coin.quote.USD.price,
-                        percentChange: change,
-                      })
-                      const usdSign = isPositive ? "+" : isNegative ? "-" : ""
-
-                      return (
-                        <div className="inline-flex items-center gap-2 sm:justify-end">
-                          <span
-                            className={cn(
-                              "font-berkeley-mono text-[11px] tabular-nums",
-                              isPositive && "text-emerald-400",
-                              isNegative && "text-rose-400",
-                              isNeutral && "text-muted-foreground",
-                            )}
-                          >
-                            {usdMove === null ? "—" : `${usdSign}${formatUsdPrice(Math.abs(usdMove))}`}
-                          </span>
-                          <Badge
-                            variant={isPositive ? "success" : isNegative ? "destructive" : "outline"}
-                            className={cn(
-                              isNeutral && "border-zinc-200/60 text-muted-foreground dark:border-white/10",
-                              "h-5 px-1.5 font-berkeley-mono text-[11px] tabular-nums gap-1",
-                            )}
-                          >
-                            <IconTriangleFill
-                              aria-hidden="true"
-                              className={cn(
-                                "size-[4px] shrink-0 fill-current",
-                                isNegative && "rotate-180",
-                              )}
-                            />
-                            {Math.abs(change).toFixed(2)}%
-                          </Badge>
-                        </div>
-                      )
-                    })()
-                  )}
-                </div>
-
-                {/* Holdings (editable token quantity) */}
-                <div className="col-span-2 row-start-3 flex min-w-0 flex-col gap-1 sm:col-span-1 sm:row-start-auto sm:block">
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
-                    Holdings
-                  </span>
-                  <ChartHoldingsCell
-                    coinId={String(coin.id)}
-                    holdings={coin.holdings}
-                    priceUsd={coin.quote.USD.price}
-                    isOptimistic={false}
-                    showPending={showPending}
-                    groupId={holdingsGroupId}
-                    canEdit={canEditHoldings}
-                  />
-                </div>
-
-              </Link>
-            )}
-          </div>
-        )
-      })}
+      {coinsWithIntervalChange.map((coin) => (
+        <div key={coin.id}>
+          {coin.isOptimistic ? (
+            <OptimisticCoinRow
+              coin={coin}
+              activeTimeScale={activeTimeScale}
+              showPending={showPending}
+              holdingsGroupId={holdingsGroupId}
+              canEditHoldings={canEditHoldings}
+            />
+          ) : (
+            <CoinRow
+              coin={coin}
+              activeTimeScale={activeTimeScale}
+              watchlistGroup={watchlistGroup}
+              selection={{
+                isSelected: selectedCoins.has(String(coin.id)),
+                hasSelectedCoins,
+              }}
+              onCoinSelect={handleCoinSelect}
+              selectRevealTransition={selectRevealTransition}
+              showPending={showPending}
+              holdingsGroupId={holdingsGroupId}
+              canEditHoldings={canEditHoldings}
+            />
+          )}
+        </div>
+      ))}
       </div>
       {analyzeDialog}
     </div>

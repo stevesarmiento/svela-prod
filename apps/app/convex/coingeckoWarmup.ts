@@ -102,17 +102,19 @@ export const requestMarketChartRefresh = mutation({
     );
 
     // Opportunistically compact historical duplicates (from prior writer behavior).
-    for (const delaySeconds of [1, 3, 6]) {
-      await ctx.scheduler.runAfter(
-        delaySeconds,
-        internal.cleanupInternal._compactPriceHistoryDuplicatesBatch,
-        {
-          coingeckoId: args.coingeckoId,
-          timeframe: args.days,
-          batchSize: 2000,
-        },
-      );
-    }
+    await Promise.all(
+      [1, 3, 6].map((delaySeconds) =>
+        ctx.scheduler.runAfter(
+          delaySeconds,
+          internal.cleanupInternal._compactPriceHistoryDuplicatesBatch,
+          {
+            coingeckoId: args.coingeckoId,
+            timeframe: args.days,
+            batchSize: 2000,
+          },
+        ),
+      ),
+    );
 
     return { scheduled: true, reason: "scheduled" };
   },
@@ -147,17 +149,19 @@ export const requestOhlcRefresh = mutation({
       days: args.days,
     });
 
-    for (const delaySeconds of [1, 3, 6]) {
-      await ctx.scheduler.runAfter(
-        delaySeconds,
-        internal.cleanupInternal._compactPriceHistoryDuplicatesBatch,
-        {
-          coingeckoId: args.coingeckoId,
-          timeframe: `${args.days}_ohlc`,
-          batchSize: 2000,
-        },
-      );
-    }
+    await Promise.all(
+      [1, 3, 6].map((delaySeconds) =>
+        ctx.scheduler.runAfter(
+          delaySeconds,
+          internal.cleanupInternal._compactPriceHistoryDuplicatesBatch,
+          {
+            coingeckoId: args.coingeckoId,
+            timeframe: `${args.days}_ohlc`,
+            batchSize: 2000,
+          },
+        ),
+      ),
+    );
 
     return { scheduled: true, reason: "scheduled" };
   },
@@ -177,37 +181,40 @@ export const requestMarketsRefresh = mutation({
     requireServerToken(args.serverToken);
     const now = Date.now();
 
-    const uniqueIds = Array.from(new Set(args.coingeckoIds))
-      .map((id) => id.trim())
-      .filter((id) => id.length > 0);
+    const uniqueIds = Array.from(new Set(args.coingeckoIds)).flatMap((id) => {
+      const trimmed = id.trim();
+      return trimmed.length > 0 ? [trimmed] : [];
+    });
 
     if (uniqueIds.length === 0) {
       return { scheduled: false, scheduledCount: 0, reason: "empty" };
     }
 
-    const runnable: Array<string> = [];
-    for (const id of uniqueIds) {
-      const jobKey = `warmup:markets:${id}`;
-      const existing = await ctx.db
-        .query("jobState")
-        .withIndex("by_job_key", (q) => q.eq("jobKey", jobKey))
-        .first();
+    const runnableResults = await Promise.all(
+      uniqueIds.map(async (id) => {
+        const jobKey = `warmup:markets:${id}`;
+        const existing = await ctx.db
+          .query("jobState")
+          .withIndex("by_job_key", (q) => q.eq("jobKey", jobKey))
+          .first();
 
-      if (existing && now - existing.updatedAt < WARMUP_DEDUP_MS) continue;
+        if (existing && now - existing.updatedAt < WARMUP_DEDUP_MS) return null;
 
-      if (existing) {
-        await ctx.db.patch(existing._id, { updatedAt: now });
-      } else {
-        await ctx.db.insert("jobState", {
-          jobKey,
-          cursor: undefined,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
+        if (existing) {
+          await ctx.db.patch(existing._id, { updatedAt: now });
+        } else {
+          await ctx.db.insert("jobState", {
+            jobKey,
+            cursor: undefined,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
 
-      runnable.push(id);
-    }
+        return id;
+      }),
+    );
+    const runnable = runnableResults.filter((id) => id !== null);
 
     if (runnable.length === 0) {
       return { scheduled: false, scheduledCount: 0, reason: "cooldown" };

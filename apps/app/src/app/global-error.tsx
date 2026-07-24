@@ -14,5 +14,11 @@ export default function GlobalError({
     console.error("Global error:", error);
   }, [error]);
 
-  return <NextError statusCode={0} />;
+  return (
+    <html lang="en">
+      <body>
+        <NextError statusCode={0} />
+      </body>
+    </html>
+  );
 }

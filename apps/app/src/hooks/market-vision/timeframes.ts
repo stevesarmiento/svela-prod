@@ -38,9 +38,7 @@ export function estimateBaseBarSeconds(data: OHLCVDataPoint[]): number | null {
   if (data.length < 2) return null
 
   const times = data
-    .map((d) => d.time)
-    .filter(isFiniteNumber)
-    .slice()
+    .flatMap((d) => (isFiniteNumber(d.time) ? [d.time] : []))
     .sort((a, b) => a - b)
 
   if (times.length < 2) return null

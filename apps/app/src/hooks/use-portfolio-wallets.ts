@@ -1,53 +1,7 @@
-import { useAction, useMutation, useQuery } from "convex/react"
+import { useAction, useMutation } from "convex/react"
 import { api } from "../../convex/_generated/api"
 import type { Id } from "../../convex/_generated/dataModel"
 import { useCallback, useState } from "react"
-import type { PortfolioWallet } from "@/lib/portfolio-api"
-
-export function usePortfolioWallets(): {
-  wallets: Array<PortfolioWallet>
-  isLoading: boolean
-  error: Error | null
-} {
-  const wallets = useQuery(api.portfolio.listMyPortfolioWallets, {})
-  const isLoading = wallets === undefined
-  const error: Error | null = null
-
-  return {
-    wallets: wallets ?? [],
-    isLoading,
-    error,
-  }
-}
-
-export function useAddPortfolioWallet() {
-  const upsertSelection = useMutation(api.portfolio.upsertMyPortfolioWalletSelection)
-  const [isPending, setIsPending] = useState(false)
-  const [error, setError] = useState<Error | null>(null)
-
-  const addWallet = useCallback(
-    async (input: { address: string; name?: string }) => {
-      setError(null)
-      setIsPending(true)
-      try {
-        return await upsertSelection({ address: input.address, name: input.name, selected: [] })
-      } catch (e) {
-        const err = e instanceof Error ? e : new Error(String(e))
-        setError(err)
-        throw err
-      } finally {
-        setIsPending(false)
-      }
-    },
-    [upsertSelection],
-  )
-
-  return {
-    addWallet,
-    isPending,
-    error,
-  }
-}
 
 export function usePreviewPortfolioWalletCandidates() {
   const preview = useAction(api.portfolio.previewMyPortfolioWalletCandidates)

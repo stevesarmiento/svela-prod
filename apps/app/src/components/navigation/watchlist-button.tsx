@@ -2,8 +2,8 @@
 
 import { useWatchlist } from "@/app/[locale]/(dashboard)/watchlist/_components/watchlist-context";
 import { IconShiftFill, IconStar, IconStarFill, IconStarSlashFill } from "symbols-react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
+import { useCallback, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { Button } from "@v1/ui/button";
 import { toast } from "@v1/ui/use-toast";
@@ -50,7 +50,7 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
     [isInWatchlist, showSlash],
   )
 
-  const toggleWatchlist = async () => {
+  const toggleWatchlist = useCallback(async () => {
     if (isToggling || !selectedGroup) return;
     
     setIsToggling(true);
@@ -80,7 +80,15 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
     } finally {
       setIsToggling(false);
     }
-  };
+  }, [
+    isToggling,
+    selectedGroup,
+    isInWatchlist,
+    coinIdString,
+    coinName,
+    addToSelectedGroup,
+    removeFromSelectedGroup,
+  ]);
 
   const toggleWatchlistRef = useLatest(toggleWatchlist);
   const toggleShortcutRef = useLatest(toggleShortcut);
@@ -142,7 +150,7 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
         >
           <AnimatePresence mode="wait">
             {!isInitialized ? (
-              <motion.div
+              <m.div
                 key="loading"
                 initial={shouldReduceMotion ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -150,9 +158,9 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
                 transition={shouldReduceMotion ? { duration: 0 } : undefined}
               >
                 <IconStar className="h-4 w-4 fill-gray-500 dark:fill-zinc-400" />
-              </motion.div>
+              </m.div>
             ) : showSlash ? (
-              <motion.div
+              <m.div
                 key="slash"
                 initial={shouldReduceMotion ? false : { rotate: -20, scale: 0.8 }}
                 animate={{ rotate: 0, scale: 1 }}
@@ -170,9 +178,9 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
                 }}
               >
                 <IconStarSlashFill className="h-4 w-4 fill-gray-500 dark:fill-zinc-400" />
-              </motion.div>
+              </m.div>
             ) : isInWatchlist ? (
-              <motion.div
+              <m.div
                 key="filled"
                 initial={shouldReduceMotion ? false : { scale: 1, rotate: 10 }}
                 animate={{ scale: 1, rotate: 0 }}
@@ -180,9 +188,9 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
                 transition={shouldReduceMotion ? { duration: 0 } : undefined}
               >
                 <IconStarFill className="h-4 w-4 fill-yellow-500" />
-              </motion.div>
+              </m.div>
             ) : (
-              <motion.div
+              <m.div
                 key="star"
                 initial={shouldReduceMotion ? false : { scale: 1, rotate: -10 }}
                 animate={{ scale: 1, rotate: 0 }}
@@ -190,7 +198,7 @@ export function WatchlistButton({ coinId, coinName }: WatchlistButtonProps) {
                 transition={shouldReduceMotion ? { duration: 0 } : undefined}
               >
                 <IconStarFill className="h-4 w-4 fill-gray-500 dark:fill-zinc-400" />
-              </motion.div>
+              </m.div>
             )}
           </AnimatePresence>
         </Button>

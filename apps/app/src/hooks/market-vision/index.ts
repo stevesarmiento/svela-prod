@@ -2,7 +2,6 @@
 
 import { useMemo } from 'react'
 import type { MarketVisionBConfig, MarketVisionBResult, OHLCVDataPoint } from './market-vision-config'
-import { DEFAULT_MARKET_VISION_CONFIG } from './market-vision-config'
 import { computeMarketVisionB } from './market-vision-compute'
 
 export function useMarketVisionB(
@@ -23,12 +22,10 @@ export type {
   MarketVisionEventPoint,
   MarketVisionPairedDivergence,
 } from './market-vision-config'
-export { DEFAULT_MARKET_VISION_CONFIG as defaultMarketVisionBConfig }
 
 // Tolerance-pairing divergence engine (shared by RSI/WT/Stoch divergences)
 export {
   findPairedDivergences,
-  DEFAULT_DIVERGENCE_ENGINE_CONFIG,
   type DivergenceEngineConfig,
   type DivergenceType,
   type PairedDivergence,
@@ -39,7 +36,6 @@ export {
   getRSIDivergences,
   getAllRSIDivergences,
   type DivergencePoint,
-  calculateStochasticIndicator,
   type StochasticConfig,
   type StochasticResult
 } from './stochastic'

@@ -244,11 +244,3 @@ export const SMART_SCREENER_MARKET_METRICS: ReadonlyArray<MarketsMetricDefinitio
 
 export const SMART_SCREENER_MARKET_METRIC_IDS: ReadonlyArray<string> =
   SMART_SCREENER_MARKET_METRICS.map((m) => m.id);
-
-export function getSmartScreenerMarketMetric(
-  metricId: string,
-): MarketsMetricDefinition | null {
-  const metric =
-    SMART_SCREENER_MARKET_METRICS.find((m) => m.id === metricId) ?? null;
-  return metric ?? null;
-}

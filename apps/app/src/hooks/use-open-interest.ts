@@ -36,6 +36,17 @@ interface UseOpenInterestProps {
   endTime?: number;
 }
 
+function formatCoinGlassError(error: unknown): string {
+  if (error && typeof error === "object" && "_tag" in error) {
+    const tagged = error as { _tag: string; message?: unknown; status?: unknown }
+    if (typeof tagged.message === "string") return tagged.message
+    if (typeof tagged.status === "number") return `CoinGlass request failed (${tagged.status})`
+    return `CoinGlass request failed (${tagged._tag})`
+  }
+
+  return error instanceof Error ? error.message : String(error)
+}
+
 export function useOpenInterest({
   symbol,
   interval = '4h',
@@ -44,17 +55,6 @@ export function useOpenInterest({
   startTime,
   endTime,
 }: UseOpenInterestProps) {
-  function formatCoinGlassError(error: unknown): string {
-    if (error && typeof error === "object" && "_tag" in error) {
-      const tagged = error as { _tag: string; message?: unknown; status?: unknown }
-      if (typeof tagged.message === "string") return tagged.message
-      if (typeof tagged.status === "number") return `CoinGlass request failed (${tagged.status})`
-      return `CoinGlass request failed (${tagged._tag})`
-    }
-
-    return error instanceof Error ? error.message : String(error)
-  }
-
   return useQuery({
     queryKey: ['openInterest', symbol, interval, limit, unit, startTime, endTime],
     queryFn: async (): Promise<OpenInterestResponse> => {

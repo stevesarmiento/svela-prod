@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { SvelaLogo } from "@v1/ui/svela-logo";
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { Button } from "@v1/ui/button";
 import { getUserDisplayName } from "@/lib/user-display";
@@ -151,7 +151,9 @@ export function TopNav() {
   const { user, isLoaded } = useUser();
   const [hasHydrated, setHasHydrated] = useState(false);
   const [overviewGreeting, setOverviewGreeting] = useState<string | null>(null);
-  const [shouldLoadProfile, setShouldLoadProfile] = useState(false);
+  // Ref, not state: only used as a load-once guard inside the handler, never
+  // rendered — a ref avoids a pointless re-render on first intent.
+  const shouldLoadProfileRef = useRef(false);
   const [isProfileReady, setIsProfileReady] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
@@ -182,12 +184,12 @@ export function TopNav() {
   }, [isOverviewGreetingRoute, pathname]);
 
   const preloadProfile = useCallback(() => {
-    if (shouldLoadProfile) return;
-    setShouldLoadProfile(true);
+    if (shouldLoadProfileRef.current) return;
+    shouldLoadProfileRef.current = true;
     void loadTopNavProfileClient().then(() => {
       setIsProfileReady(true);
     });
-  }, [shouldLoadProfile]);
+  }, []);
 
   const handleOpenProfile = useCallback(() => {
     preloadProfile();

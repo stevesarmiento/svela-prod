@@ -54,7 +54,12 @@ export const getLastKnownPrices = query({
     const source = args.source ?? DEFAULT_SOURCE;
     const limit = Math.min(250, Math.max(1, args.limit ?? 50));
     const ids = Array.from(
-      new Set(args.coingeckoIds.map((id) => id.trim()).filter((id) => id.length > 0)),
+      new Set(
+        args.coingeckoIds.flatMap((id) => {
+          const trimmed = id.trim();
+          return trimmed.length > 0 ? [trimmed] : [];
+        }),
+      ),
     ).slice(0, limit);
 
     if (ids.length === 0) return [];

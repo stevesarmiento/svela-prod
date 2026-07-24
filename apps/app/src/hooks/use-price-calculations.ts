@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo, useSyncExternalStore } from 'react'
 import type { CoinMarketData } from '@/types/coins'
 import type { Time } from 'lightweight-charts'
 import { getAlignedPriceFromChartPoints } from '@/lib/aligned-price'
+
+const emptySubscribe = () => () => {}
 
 interface PriceDataPoint {
   time: Time
@@ -23,11 +25,13 @@ export function usePriceCalculations(
   activeTimeScale?: string
 ) {
   const [activePrice, setActivePrice] = useState<number | null>(null)
-  const [isHydrated, setIsHydrated] = useState(false)
-
-  useEffect(() => {
-    setIsHydrated(true)
-  }, [])
+  // Server and first client render share a stable snapshot (false); flips to
+  // true during hydration without a post-paint state update.
+  const isHydrated = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  )
 
   const alignedChartPrice = useMemo(() => getAlignedPriceFromChartPoints(chartData), [chartData])
   const displayPrice =

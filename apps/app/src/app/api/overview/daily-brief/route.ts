@@ -100,7 +100,10 @@ function splitSentences(value: string): string[] {
   const guarded = normalizeText(value).replace(/(\d)\.(\d)/g, "$1\u0000$2")
   if (!guarded) return []
   const parts = guarded.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [guarded]
-  return parts.map((p) => p.replaceAll("\u0000", ".").trim()).filter(Boolean)
+  return parts.flatMap((p) => {
+    const sentence = p.replaceAll("\u0000", ".").trim()
+    return sentence ? [sentence] : []
+  })
 }
 
 function sentenceCount(value: string): number {
@@ -197,6 +200,12 @@ function buildCards(args: {
   ]
 }
 
+const toMoverFact = (row: { symbol: string; name: string; changePct: number }) => ({
+  symbol: row.symbol.toUpperCase(),
+  name: row.name,
+  change: signedPct(row.changePct),
+})
+
 export async function POST(req: NextRequest) {
   try {
     const authResult = await auth()
@@ -275,9 +284,10 @@ export async function POST(req: NextRequest) {
           coingeckoId,
           timeframe,
         })
-        const closes = (series.data ?? [])
-          .map((p) => (Number.isFinite(p.close ?? Number.NaN) ? (p.close as number) : p.price))
-          .filter((n) => typeof n === "number" && Number.isFinite(n))
+        const closes = (series.data ?? []).flatMap((p) => {
+          const n = Number.isFinite(p.close ?? Number.NaN) ? (p.close as number) : p.price
+          return typeof n === "number" && Number.isFinite(n) ? [n] : []
+        })
         if (closes.length < 20) return null
         const rsi = computeRsiLast(closes, 14)
         return {
@@ -359,11 +369,6 @@ export async function POST(req: NextRequest) {
       technicalSampleSize: technicalSamplesWithSymbol.length,
     })
 
-    const toMoverFact = (row: { symbol: string; name: string; changePct: number }) => ({
-      symbol: row.symbol.toUpperCase(),
-      name: row.name,
-      change: signedPct(row.changePct),
-    })
     const gainerFacts = (moversBlock?.gainers ?? []).slice(0, 3).map(toMoverFact)
     const loserFacts = (moversBlock?.losers ?? []).slice(0, 3).map(toMoverFact)
     const topGainerFact = gainerFacts[0] ?? null
@@ -470,13 +475,14 @@ export async function POST(req: NextRequest) {
       changesSinceLastBrief: changesSinceLastBrief.length > 0 ? changesSinceLastBrief : null,
     }
 
-    const stretched = technicalSamplesWithSymbol
-      .filter((t) => t.rsi === "overbought" || t.bollinger === "above_band")
-      .map((t) => t.symbol)
-    const washed = technicalSamplesWithSymbol
-      .filter((t) => t.rsi === "oversold" || t.bollinger === "below_band")
-      .map((t) => t.symbol)
-    const coiled = technicalSamplesWithSymbol.filter((t) => t.squeeze === "squeeze").map((t) => t.symbol)
+    const stretched: string[] = []
+    const washed: string[] = []
+    const coiled: string[] = []
+    for (const t of technicalSamplesWithSymbol) {
+      if (t.rsi === "overbought" || t.bollinger === "above_band") stretched.push(t.symbol)
+      if (t.rsi === "oversold" || t.bollinger === "below_band") washed.push(t.symbol)
+      if (t.squeeze === "squeeze") coiled.push(t.symbol)
+    }
     const topHeadline = headlineEvents[0] ?? null
 
     // "News-driven tape" reads badly inside "the event tape leans …".
@@ -658,12 +664,13 @@ Rules:
     // meter, per-coin technical groups, headline mini-list). Built
     // deterministically so they're present with or without AI copy.
     const groupedSymbols = new Set([...stretched, ...washed, ...coiled])
-    const trendingUp = technicalSamplesWithSymbol
-      .filter((t) => !groupedSymbols.has(t.symbol) && t.trend === "up")
-      .map((t) => t.symbol)
-    const trendingDown = technicalSamplesWithSymbol
-      .filter((t) => !groupedSymbols.has(t.symbol) && t.trend === "down")
-      .map((t) => t.symbol)
+    const trendingUp: string[] = []
+    const trendingDown: string[] = []
+    for (const t of technicalSamplesWithSymbol) {
+      if (groupedSymbols.has(t.symbol)) continue
+      if (t.trend === "up") trendingUp.push(t.symbol)
+      else if (t.trend === "down") trendingDown.push(t.symbol)
+    }
 
     const cardDetails: Record<CardKind, unknown> = {
       regime: {

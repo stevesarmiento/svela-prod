@@ -1,7 +1,7 @@
 'use client'
 
 import { type ComponentType, useEffect, useMemo, useState } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { m, useReducedMotion } from 'motion/react'
 import { Card, CardContent } from '@v1/ui/card'
 import { cn } from '@v1/ui/cn'
 import { Kbd } from '@v1/ui/kbd'
@@ -144,7 +144,7 @@ function IllustrationWatchlistCard({
   const sparklineLatestValue = sparklineData[sparklineData.length - 1]?.value ?? 0
 
   return (
-    <motion.div
+    <m.div
       variants={itemVariants as never}
       animate={shouldReduceMotion ? {} : (floatingAnimation(floatDelay) as never)}
       className={absoluteClassName}
@@ -246,7 +246,7 @@ function IllustrationWatchlistCard({
           </div>
         </CardContent>
       </Card>
-    </motion.div>
+    </m.div>
   )
 }
 
@@ -365,6 +365,13 @@ interface WatchlistChartsEmptyStateProps {
   groupColor?: string | null
 }
 
+function getKbdClassName(isActive: boolean) {
+  return cn(
+    'bg-white/10 text-white border-white/10 text-[10px] transition-colors',
+    isActive && 'bg-primary/30 border-primary/40 text-white',
+  )
+}
+
 export function WatchlistChartsEmptyState({ groupName, groupColor }: WatchlistChartsEmptyStateProps) {
   const shouldReduceMotion: boolean = useReducedMotion() ?? false
   const [isShiftDown, setIsShiftDown] = useState(false)
@@ -406,13 +413,6 @@ export function WatchlistChartsEmptyState({ groupName, groupColor }: WatchlistCh
     }
   }, [])
 
-  function getKbdClassName(isActive: boolean) {
-    return cn(
-      'bg-white/10 text-white border-white/10 text-[10px] transition-colors',
-      isActive && 'bg-primary/30 border-primary/40 text-white',
-    )
-  }
-
   const title = 'Add some tokens to watch'
   const subtitle = 'Once you add a few, you can compare them here.'
 
@@ -428,11 +428,11 @@ export function WatchlistChartsEmptyState({ groupName, groupColor }: WatchlistCh
 
   return (
     <div className="group flex flex-col items-center justify-center py-20 px-4 text-center">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="mb-10">
+      <m.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="mb-10">
         <CoinSearchIllustration coinLogos={coinLogos} />
-      </motion.div>
+      </m.div>
 
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
@@ -447,7 +447,7 @@ export function WatchlistChartsEmptyState({ groupName, groupColor }: WatchlistCh
             <Kbd className={getKbdClassName(isADown)}>A</Kbd> to add your first token
           </p>
         </div>
-      </motion.div>
+      </m.div>
     </div>
   )
 }

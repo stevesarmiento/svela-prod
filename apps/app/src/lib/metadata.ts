@@ -32,15 +32,21 @@ function stripSupportedLocalePrefix(pathname: string): string {
 
 function getLocalhostBaseUrl(): URL {
   const port = process.env.PORT ?? "3000";
-  return new URL(`http://localhost:${port}`);
+  const candidate = `http://localhost:${port}`;
+  return URL.canParse(candidate) ? new URL(candidate) : new URL("http://localhost:3000");
 }
 
 export function getAppBaseUrl(): URL {
   const explicit = process.env.NEXT_PUBLIC_APP_URL;
-  if (explicit) return new URL(explicit);
+  if (explicit) {
+    if (URL.canParse(explicit)) return new URL(explicit);
+  }
 
   const vercel = process.env.VERCEL_URL;
-  if (vercel) return new URL(vercel.startsWith("http") ? vercel : `https://${vercel}`);
+  if (vercel) {
+    const candidate = vercel.startsWith("http") ? vercel : `https://${vercel}`;
+    if (URL.canParse(candidate)) return new URL(candidate);
+  }
 
   return getLocalhostBaseUrl();
 }

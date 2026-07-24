@@ -155,38 +155,11 @@ export function getShortcutForRoute(route: string): string | undefined {
 }
 
 /**
- * Get all shortcuts for a specific category
- */
-export function getShortcutsByCategory(category: ShortcutCategory): KeyboardShortcut[] {
-  const allShortcuts = [...GLOBAL_SHORTCUTS, ...CHART_SHORTCUTS];
-  return allShortcuts.filter(shortcut => shortcut.category === category);
-}
-
-/**
  * Get all shortcuts for a specific component
  */
 export function getShortcutsForComponent(component: string): KeyboardShortcut[] {
   const allShortcuts = [...GLOBAL_SHORTCUTS, ...CHART_SHORTCUTS];
   return allShortcuts.filter(shortcut => shortcut.component === component);
-}
-
-/**
- * Format shortcut for display (e.g., "⌘K", "g + h")
- */
-export function formatShortcut(shortcut: KeyboardShortcut): string {
-  if (shortcut.combination) {
-    const modifiers = shortcut.combination.map(mod => {
-      switch (mod) {
-        case 'cmd': return '⌘';
-        case 'ctrl': return 'Ctrl';
-        case 'alt': return 'Alt';
-        case 'shift': return 'Shift';
-        default: return mod;
-      }
-    });
-    return `${modifiers.join(' + ')} + ${shortcut.key.toUpperCase()}`;
-  }
-  return shortcut.key;
 }
 
 /**
@@ -218,13 +191,3 @@ export function matchesShortcut(
   
   return key === shortcut.key.toLowerCase();
 }
-
-/**
- * All available shortcuts grouped by category
- */
-export const ALL_SHORTCUTS = {
-  sequential: SEQUENTIAL_SHORTCUTS,
-  navigation: NAVIGATION_SHORTCUTS,
-  global: GLOBAL_SHORTCUTS,
-  chart: CHART_SHORTCUTS,
-} as const; 

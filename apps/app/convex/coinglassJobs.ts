@@ -705,6 +705,7 @@ export const refreshTrackedSpotTakerBuySellVolumeHistoryBatch = internalAction({
       processed++;
       const pairSymbol = toSpotPairSymbol(coin.symbol);
       try {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
         const result = await upsertOne(ctx, {
           exchange,
           symbol: pairSymbol,
@@ -790,6 +791,7 @@ export const refreshTrackedFuturesTakerBuySellVolumeHistoryBatch =
         processed++;
         const pairSymbol = toSpotPairSymbol(coin.symbol);
         try {
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
           const result = await upsertOneFutures(ctx, {
             exchange,
             symbol: pairSymbol,
@@ -894,6 +896,7 @@ export const refreshTrackedOpenInterestHistoryBatch = internalAction({
     for (const coin of coins) {
       processed++;
       try {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
         const result = await upsertOneOpenInterest(ctx, {
           symbol: coin.symbol.trim().toUpperCase(),
           interval,
@@ -997,6 +1000,7 @@ export const refreshTrackedLiquidationHistoryBatch = internalAction({
     for (const coin of coins) {
       processed++;
       try {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
         const result = await upsertOneLiquidations(ctx, {
           symbol: coin.symbol.trim().toUpperCase(),
           interval,
@@ -1090,6 +1094,7 @@ export const refreshTrackedTakerBuySellExchangeListSnapshotBatch =
       for (const coin of coins) {
         processed++;
         try {
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
           const result = await upsertOneTakerExchangeList(ctx, {
             symbol: coin.symbol.trim().toUpperCase(),
             coingeckoId: coin.coingeckoId,

@@ -122,6 +122,7 @@ async function validateApiKeyWithProvider(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
+    // react-doctor-disable-next-line react-doctor/no-fetch-response-used-without-status-check -- ok checked first; error-path .text() is deliberate provider-error parsing inside try/catch
     const response = await fetch(testUrl, {
       method: 'GET',
       headers,

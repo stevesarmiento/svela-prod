@@ -78,6 +78,10 @@ const mockCoins = [
   }
 ]
 
+// The preview WatchlistCard never renders createdAt/updatedAt, so an inert
+// constant keeps server and client renders identical (no post-mount setState).
+const PREVIEW_TIMESTAMP = 0
+
 interface CreateWatchlistProps {
   onClose: () => void
   isOpen: boolean
@@ -87,7 +91,7 @@ export function CreateWatchlist({ onClose, isOpen }: CreateWatchlistProps) {
   const [newName, setNewName] = useState('')
   const [newIcon, setNewIcon] = useState<string>('sparkles')
   const [newColor, setNewColor] = useState<string>('default')
-  
+
   const createWatchlistGroup = useCreateWatchlistGroup()
 
   const handleCreateWatchlist = useCallback(async () => {
@@ -144,8 +148,8 @@ export function CreateWatchlist({ onClose, isOpen }: CreateWatchlistProps) {
               icon: newIcon,
               color: newColor,
               isDefault: false,
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
+              createdAt: PREVIEW_TIMESTAMP,
+              updatedAt: PREVIEW_TIMESTAMP,
             }}
             coins={mockCoins}
             selected={false}

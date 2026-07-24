@@ -153,6 +153,18 @@ function buildBucketTimesMs(args: {
   return bucketTimesMs
 }
 
+// Convert timeScale to days for CoinGecko API
+const getDaysFromTimeScale = (scale: string): string => {
+  switch (scale) {
+    case '1d': return '1'
+    case '7d': return '7'
+    case '30d': return '30'
+    case 'max': return '365'
+    case '2y': return 'max'
+    default: return '7'
+  }
+}
+
 /**
  * Isolated CoinGecko watchlist aggregate chart hook that:
  * 1. Fetches historical data for all coins in the watchlist  
@@ -175,18 +187,6 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
   const coinIdsKey = useMemo(() => {
     return [...coinIds].sort().join(',')
   }, [coinIds])
-
-  // Convert timeScale to days for CoinGecko API
-  const getDaysFromTimeScale = (scale: string): string => {
-    switch (scale) {
-      case '1d': return '1'
-      case '7d': return '7'
-      case '30d': return '30'
-      case 'max': return '365'
-      case '2y': return 'max'
-      default: return '7'
-    }
-  }
 
   const days = getDaysFromTimeScale(timeScale)
   const isChangeUnavailable = timeScale === '2y'

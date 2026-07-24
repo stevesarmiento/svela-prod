@@ -1,14 +1,19 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
-import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
+import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 import { calculateBollingerBands, DEFAULT_BB_COLORS, type BollingerBandsConfig } from '@/hooks/market-vision/bollinger-bands'
 import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
-import { subscribeToWindowResize } from '@/hooks/window-resize-store'
-import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store'
-import { CHART_COLOR_PARSERS } from '@/lib/oklch'
-import { timeToEpochSeconds } from '@/hooks/use-chart-instance/utils'
+import {
+  applyInitialVisibleRange,
+  attachChartResize,
+  attachChartScrubSync,
+  buildIndicatorChartOptions,
+  getInitialWindowSeconds,
+  normalizeIndicatorOhlcv,
+  normalizeSeries,
+} from './indicator-chart-setup'
 
 interface BollingerBandsChartProps {
   data: OHLCVDataPoint[]
@@ -43,89 +48,118 @@ const DEFAULT_CONFIG: BollingerBandsConfig = {
   fillOpacity: 0.1
 }
 
-function normalizeEpochSeconds(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value)) return null
-  const seconds = value > 1e10 ? Math.floor(value / 1000) : Math.floor(value)
-  return Number.isFinite(seconds) ? seconds : null
-}
+type BollingerBandsResult = ReturnType<typeof calculateBollingerBands>
 
-function normalizeIndicatorOhlcv(data: OHLCVDataPoint[]): OHLCVDataPoint[] {
-  const byEpoch = new Map<number, OHLCVDataPoint>()
-  for (const point of data) {
-    const epoch = normalizeEpochSeconds(point.time)
-    if (epoch == null) continue
-    if (!Number.isFinite(point.open) || !Number.isFinite(point.high) || !Number.isFinite(point.low) || !Number.isFinite(point.close))
-      continue
-    byEpoch.set(epoch, { ...point, time: epoch, volume: Number.isFinite(point.volume) ? point.volume : 0 })
-  }
+// Rebuilds all series on the chart from the latest Bollinger calculation.
+function applyBollingerSeries(
+  chart: IChartApi,
+  lightweightCharts: LightweightChartsModule,
+  seriesRefs: Map<string, ISeriesApi<'Line' | 'Area'>>,
+  bbResult: BollingerBandsResult,
+): void {
+  const { LineSeries, LineStyle } = lightweightCharts
 
-  return Array.from(byEpoch.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([, value]) => value)
-}
-
-function normalizeSeries(points: Array<{ time: number; value: number }>): Array<{ time: Time; value: number }> {
-  const byEpoch = new Map<number, { time: Time; value: number }>()
-  for (const point of points) {
-    const epoch = normalizeEpochSeconds(point.time)
-    if (epoch == null) continue
-    if (!Number.isFinite(point.value)) continue
-    byEpoch.set(epoch, { time: epoch as Time, value: point.value })
-  }
-
-  return Array.from(byEpoch.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([, value]) => value)
-}
-
-const SECONDS_PER_DAY = 24 * 60 * 60
-const DEFAULT_WINDOW_DAYS = 3
-const RIGHT_OFFSET_BARS = 12
-
-function getInitialWindowSeconds(initialWindowDays: number | undefined): number {
-  const days = Number.isFinite(initialWindowDays) ? Math.max(1, Math.round(initialWindowDays as number)) : DEFAULT_WINDOW_DAYS
-  return days * SECONDS_PER_DAY
-}
-
-function estimateIntervalSeconds(ohlcvData: OHLCVDataPoint[], lastEpoch: number): number {
-  const prevEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 2]?.time)
-  if (prevEpoch == null) return 0
-  const delta = lastEpoch - prevEpoch
-  return Number.isFinite(delta) && delta > 0 ? delta : 0
-}
-
-function pickDefaultWindowSeconds(spanSeconds: number, windowSeconds: number): number | null {
-  if (!Number.isFinite(spanSeconds) || spanSeconds <= 0) return null
-  if (spanSeconds > windowSeconds) return windowSeconds
-  return null
-}
-
-function applyInitialVisibleRange(chart: IChartApi, ohlcvData: OHLCVDataPoint[], windowSeconds: number): void {
-  const firstEpoch = normalizeEpochSeconds(ohlcvData[0]?.time)
-  const lastEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 1]?.time)
-  if (firstEpoch == null || lastEpoch == null) {
-    chart.timeScale().fitContent()
-    return
-  }
-
-  const spanSeconds = lastEpoch - firstEpoch
-  const requestedWindowSeconds = pickDefaultWindowSeconds(spanSeconds, windowSeconds)
-  if (requestedWindowSeconds == null || spanSeconds <= requestedWindowSeconds) {
-    chart.timeScale().fitContent()
-    return
-  }
-
-  const intervalSeconds = estimateIntervalSeconds(ohlcvData, lastEpoch)
-  const paddedTo = (lastEpoch + intervalSeconds) as Time
-
-  chart.timeScale().setVisibleRange({
-    from: (lastEpoch - requestedWindowSeconds) as Time,
-    to: paddedTo,
+  // Clear existing series
+  seriesRefs.forEach(series => {
+    try {
+      chart.removeSeries(series)
+    } catch {
+      // Series might already be removed
+    }
   })
+  seriesRefs.clear()
+
+  // Add Upper Band
+  if (bbResult.upper.length > 0) {
+    const upperSeries = chart.addSeries(LineSeries, {
+      lineWidth: 1,
+      color: BANDS_MUTED_COLOR,
+      title: '',
+      lineStyle: LineStyle.Dotted,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    upperSeries.setData(normalizeSeries(bbResult.upper))
+    seriesRefs.set('upper', upperSeries)
+  }
+
+  // Add Lower Band
+  if (bbResult.lower.length > 0) {
+    const lowerSeries = chart.addSeries(LineSeries, {
+      lineWidth: 1,
+      color: BANDS_MUTED_COLOR,
+      title: '',
+      lineStyle: LineStyle.Dotted,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    lowerSeries.setData(normalizeSeries(bbResult.lower))
+    seriesRefs.set('lower', lowerSeries)
+  }
+
+  // Add Basis (SMA)
+  if (bbResult.basis.length > 0) {
+    const basisSeries = chart.addSeries(LineSeries, {
+      lineWidth: 1,
+      color: BANDS_MID_MUTED_COLOR,
+      title: '',
+      lineStyle: LineStyle.Dashed,
+      lastValueVisible: true,
+      priceLineVisible: false,
+    })
+    basisSeries.setData(normalizeSeries(bbResult.basis))
+    seriesRefs.set('basis', basisSeries)
+  }
+
+  // Add Main Indicator (RSI or MFI)
+  if (bbResult.indicator.length > 0) {
+    const indicatorSeries = chart.addSeries(LineSeries, {
+      lineWidth: 2,
+      color: bbResult.colors.indicator,
+      title: '',
+      lastValueVisible: true,
+      priceLineVisible: false,
+    })
+    indicatorSeries.setData(normalizeSeries(bbResult.indicator))
+    seriesRefs.set('indicator', indicatorSeries)
+  }
+
+  // Add Breach Highlighting
+  // Overbought breaches (above upper band)
+  if (bbResult.overboughtBreaches.length > 0) {
+    const obSeries = chart.addSeries(LineSeries, {
+      lineWidth: 3,
+      color: EXTREME_OVERBOUGHT_COLOR,
+      title: '',
+      pointMarkersVisible: true,
+      pointMarkersRadius: 4,
+      lineVisible: false,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    obSeries.setData(normalizeSeries(bbResult.overboughtBreaches))
+    seriesRefs.set('overbought', obSeries)
+  }
+
+  // Oversold breaches (below lower band)
+  if (bbResult.oversoldBreaches.length > 0) {
+    const osSeries = chart.addSeries(LineSeries, {
+      lineWidth: 3,
+      color: EXTREME_OVERSOLD_COLOR,
+      title: '',
+      pointMarkersVisible: true,
+      pointMarkersRadius: 4,
+      lineVisible: false,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    osSeries.setData(normalizeSeries(bbResult.oversoldBreaches))
+    seriesRefs.set('oversold', osSeries)
+  }
 }
 
-export function BollingerBandsChart({ 
-  data, 
+export function BollingerBandsChart({
+  data,
   config,
   height = 250,
   showTimeAxis = true,
@@ -163,130 +197,28 @@ export function BollingerBandsChart({
       const lightweightCharts = await loadLightweightCharts()
       lightweightChartsRef.current = lightweightCharts
 
-      const { createChart, ColorType, CrosshairMode, LineStyle } = lightweightCharts
-
       if (isCancelled || !chartContainerRef.current) return
+      const container = chartContainerRef.current
 
-      const chart = createChart(chartContainerRef.current, {
-        handleScale: true,
-        handleScroll: true,
-        layout: {
-          background: { type: ColorType.Solid, color: "transparent" },
-          textColor: "oklch(1 0 0 / 0.3137)",
-          attributionLogo: false,
-          colorParsers: CHART_COLOR_PARSERS,
-        },
-        grid: {
-          vertLines: { visible: false },
-          horzLines: { visible: false, color: "oklch(0.9702 0 0 / 0.0627)", style: LineStyle.Dotted },
-        },
-        rightPriceScale: { 
-          borderVisible: false, 
-          autoScale: true,
-          scaleMargins: { top: 0.1, bottom: 0.1 }
-        },
-        crosshair: {
-          mode: CrosshairMode.Magnet,
-          vertLine: { labelVisible: true, width: 1, color: "oklch(0.8717 0.0093 258.34 / 0.251)", visible: true, style: LineStyle.Solid },
-          horzLine: { visible: false, labelVisible: false },
-        },
-        timeScale: { 
-          visible: showTimeAxis,
-          timeVisible: showTimeAxis,
-          secondsVisible: false,
-          borderVisible: false,
-          rightOffset: RIGHT_OFFSET_BARS,
-        },
-      })
+      const chart = lightweightCharts.createChart(
+        container,
+        buildIndicatorChartOptions(lightweightCharts, {
+          showTimeAxis,
+          horzLinesVisible: false,
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+        }),
+      )
 
       chartRef.current = chart
       hasAppliedInitialRangeRef.current = false
       if (!isCancelled) setChartReadyNonce((prev) => prev + 1)
 
-      // Shared cross-chart scrub line overlay.
-      chartContainerRef.current.style.position = chartContainerRef.current.style.position || 'relative'
-      const scrubLineEl = document.createElement('div')
-      scrubLineEl.setAttribute('aria-hidden', 'true')
-      scrubLineEl.style.position = 'absolute'
-      scrubLineEl.style.top = '0'
-      scrubLineEl.style.bottom = '0'
-      scrubLineEl.style.width = '1px'
-      scrubLineEl.style.transform = 'translateX(-9999px)'
-      scrubLineEl.style.opacity = '0'
-      scrubLineEl.style.pointerEvents = 'none'
-      scrubLineEl.style.background = 'oklch(1 0 0 / 0.2)'
-      scrubLineEl.style.zIndex = '5'
-      chartContainerRef.current.appendChild(scrubLineEl)
-
-      const updateScrubLine = () => {
-        const scrub = getChartScrubSnapshot()
-        if (!chartContainerRef.current || scrub.epochSeconds == null || scrub.sourceId === 'bollinger') {
-          scrubLineEl.style.opacity = '0'
-          scrubLineEl.style.transform = 'translateX(-9999px)'
-          return
-        }
-
-        const x = chart.timeScale().timeToCoordinate(scrub.epochSeconds as Time)
-        if (x == null || !Number.isFinite(x)) {
-          scrubLineEl.style.opacity = '0'
-          scrubLineEl.style.transform = 'translateX(-9999px)'
-          return
-        }
-
-        scrubLineEl.style.opacity = '1'
-        scrubLineEl.style.transform = `translateX(${Math.round(x)}px)`
-      }
-
-      const unsubscribeScrub = subscribeToChartScrub(() => updateScrubLine())
-      chart.timeScale().subscribeVisibleTimeRangeChange(updateScrubLine)
-      chart.timeScale().subscribeVisibleLogicalRangeChange(updateScrubLine)
-      updateScrubLine()
-
-      // Publish scrub time from this chart.
-      const handleCrosshairMove = (param: { point?: { x: number; y: number }; time?: Time }) => {
-        if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
-          clearChartScrub()
-          return
-        }
-        setChartScrub(timeToEpochSeconds(param.time) ?? null, 'bollinger')
-      }
-      chart.subscribeCrosshairMove(handleCrosshairMove)
-
-      const handleResize = () => {
-        if (chartContainerRef.current && chart) {
-          chart.applyOptions({
-            width: chartContainerRef.current.clientWidth,
-            height: height,
-          })
-        }
-      }
-
-      // Prefer observing the actual container size (avoids per-chart global resize listeners).
-      let resizeObserver: ResizeObserver | null = null
-      let resizeRafId: number | null = null
-      let unsubscribeWindowResize: (() => void) | null = null
-
-      if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
-        resizeObserver = new ResizeObserver(() => {
-          if (resizeRafId) cancelAnimationFrame(resizeRafId)
-          resizeRafId = requestAnimationFrame(() => handleResize())
-        })
-        resizeObserver.observe(chartContainerRef.current)
-      } else {
-        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
-      }
-
-      handleResize()
+      const detachScrubSync = attachChartScrubSync(chart, container, 'bollinger')
+      const detachResize = attachChartResize(chart, container, height)
 
       cleanup = () => {
-        if (resizeRafId) cancelAnimationFrame(resizeRafId)
-        resizeObserver?.disconnect()
-        unsubscribeWindowResize?.()
-        chart.unsubscribeCrosshairMove(handleCrosshairMove)
-        chart.timeScale().unsubscribeVisibleTimeRangeChange(updateScrubLine)
-        chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateScrubLine)
-        unsubscribeScrub()
-        if (chartContainerRef.current?.contains(scrubLineEl)) chartContainerRef.current.removeChild(scrubLineEl)
+        detachResize()
+        detachScrubSync()
         chart.remove()
         chartRef.current = null
         currentSeriesRefs.clear()
@@ -301,113 +233,13 @@ export function BollingerBandsChart({
 
   // Update series based on calculations and display settings
   useEffect(() => {
-    if (!chartRef.current || !bbResult) return
+    const chart = chartRef.current
+    if (!chart || !bbResult) return
 
     const lightweightCharts = lightweightChartsRef.current
     if (!lightweightCharts) return
-    const { LineSeries, LineStyle } = lightweightCharts
 
-    const chart = chartRef.current
-    
-    // Clear existing series
-    seriesRefs.current.forEach(series => {
-      try {
-        chart.removeSeries(series)
-      } catch {
-        // Series might already be removed
-      }
-    })
-    seriesRefs.current.clear()
-
-
-
-    // Add Upper Band
-    if (bbResult.upper.length > 0) {
-      const upperSeries = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        color: BANDS_MUTED_COLOR,
-        title: '',
-        lineStyle: LineStyle.Dotted,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      upperSeries.setData(normalizeSeries(bbResult.upper))
-      seriesRefs.current.set('upper', upperSeries)
-    }
-
-    // Add Lower Band
-    if (bbResult.lower.length > 0) {
-      const lowerSeries = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        color: BANDS_MUTED_COLOR,
-        title: '',
-        lineStyle: LineStyle.Dotted,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      lowerSeries.setData(normalizeSeries(bbResult.lower))
-      seriesRefs.current.set('lower', lowerSeries)
-    }
-
-    // Add Basis (SMA)
-    if (bbResult.basis.length > 0) {
-      const basisSeries = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        color: BANDS_MID_MUTED_COLOR,
-        title: '',
-        lineStyle: LineStyle.Dashed,
-        lastValueVisible: true,
-        priceLineVisible: false,
-      })
-      basisSeries.setData(normalizeSeries(bbResult.basis))
-      seriesRefs.current.set('basis', basisSeries)
-    }
-
-    // Add Main Indicator (RSI or MFI)
-    if (bbResult.indicator.length > 0) {
-      const indicatorSeries = chart.addSeries(LineSeries, {
-        lineWidth: 2,
-        color: bbResult.colors.indicator,
-        title: '',
-        lastValueVisible: true,
-        priceLineVisible: false,
-      })
-      indicatorSeries.setData(normalizeSeries(bbResult.indicator))
-      seriesRefs.current.set('indicator', indicatorSeries)
-    }
-
-    // Add Breach Highlighting
-    // Overbought breaches (above upper band)
-    if (bbResult.overboughtBreaches.length > 0) {
-      const obSeries = chart.addSeries(LineSeries, {
-        lineWidth: 3,
-        color: EXTREME_OVERBOUGHT_COLOR,
-        title: '',
-        pointMarkersVisible: true,
-        pointMarkersRadius: 4,
-        lineVisible: false,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      obSeries.setData(normalizeSeries(bbResult.overboughtBreaches))
-      seriesRefs.current.set('overbought', obSeries)
-    }
-
-    // Oversold breaches (below lower band)
-    if (bbResult.oversoldBreaches.length > 0) {
-      const osSeries = chart.addSeries(LineSeries, {
-        lineWidth: 3,
-        color: EXTREME_OVERSOLD_COLOR,
-        title: '',
-        pointMarkersVisible: true,
-        pointMarkersRadius: 4,
-        lineVisible: false,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      osSeries.setData(normalizeSeries(bbResult.oversoldBreaches))
-      seriesRefs.current.set('oversold', osSeries)
-    }
+    applyBollingerSeries(chart, lightweightCharts, seriesRefs.current, bbResult)
 
     if (!hasAppliedInitialRangeRef.current) {
       applyInitialVisibleRange(chart, data, initialWindowSeconds)

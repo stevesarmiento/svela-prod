@@ -38,77 +38,83 @@ export const _upsertNewsForCoin = internalMutation({
     let updatedLinks = 0;
     const articleIdsNeedingSentiment = new Set<Id<"coingeckoNewsArticles">>();
 
-    for (const item of args.items) {
-      const existingArticle = await ctx.db
-        .query("coingeckoNewsArticles")
-        .withIndex("by_url", (q) => q.eq("url", item.url))
-        .first();
+    // Dedupe by URL (last wins, matching the sequential upsert's end-state)
+    // so concurrent iterations can't double-insert the same article.
+    const itemsByUrl = new Map(args.items.map((item) => [item.url, item]));
 
-      const articleId =
-        existingArticle?._id ??
-        (await ctx.db.insert("coingeckoNewsArticles", {
-          url: item.url,
-          title: item.title,
-          type: "news",
-          sourceName: item.sourceName,
-          author: item.author,
-          postedAtIso: item.postedAtIso,
-          postedAtMs: item.postedAtMs,
-          image: item.image,
-          fetchedAt: now,
-          createdAt: now,
-          updatedAt: now,
-        }));
+    await Promise.all(
+      Array.from(itemsByUrl.values()).map(async (item) => {
+        const existingArticle = await ctx.db
+          .query("coingeckoNewsArticles")
+          .withIndex("by_url", (q) => q.eq("url", item.url))
+          .first();
 
-      if (existingArticle) {
-        await ctx.db.patch(articleId, {
-          title: item.title,
-          sourceName: item.sourceName,
-          author: item.author,
-          postedAtIso: item.postedAtIso,
-          postedAtMs: item.postedAtMs,
-          image: item.image,
-          fetchedAt: now,
-          updatedAt: now,
-        });
-        updatedArticles++;
-      } else {
-        insertedArticles++;
-      }
-
-      const articleAfterUpsert =
-        existingArticle ?? (await ctx.db.get(articleId));
-      if (articleAfterUpsert?.sentiment === undefined) {
-        articleIdsNeedingSentiment.add(articleId);
-      }
-
-      const existingLink = await ctx.db
-        .query("coingeckoNewsCoinLinks")
-        .withIndex("by_coingecko_id_and_article_id", (q) =>
-          q.eq("coingeckoId", args.coingeckoId).eq("articleId", articleId),
-        )
-        .first();
-
-      if (existingLink) {
-        if (existingLink.postedAtMs !== item.postedAtMs) {
-          await ctx.db.patch(existingLink._id, {
+        const articleId =
+          existingArticle?._id ??
+          (await ctx.db.insert("coingeckoNewsArticles", {
+            url: item.url,
+            title: item.title,
+            type: "news",
+            sourceName: item.sourceName,
+            author: item.author,
+            postedAtIso: item.postedAtIso,
             postedAtMs: item.postedAtMs,
+            image: item.image,
+            fetchedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          }));
+
+        if (existingArticle) {
+          await ctx.db.patch(articleId, {
+            title: item.title,
+            sourceName: item.sourceName,
+            author: item.author,
+            postedAtIso: item.postedAtIso,
+            postedAtMs: item.postedAtMs,
+            image: item.image,
+            fetchedAt: now,
             updatedAt: now,
           });
-          updatedLinks++;
+          updatedArticles++;
+        } else {
+          insertedArticles++;
         }
-        continue;
-      }
 
-      await ctx.db.insert("coingeckoNewsCoinLinks", {
-        coingeckoId: args.coingeckoId,
-        articleId,
-        postedAtMs: item.postedAtMs,
-        createdAt: now,
-        updatedAt: now,
-      });
-      insertedLinks++;
-    }
+        const articleAfterUpsert =
+          existingArticle ?? (await ctx.db.get(articleId));
+        if (articleAfterUpsert?.sentiment === undefined) {
+          articleIdsNeedingSentiment.add(articleId);
+        }
+
+        const existingLink = await ctx.db
+          .query("coingeckoNewsCoinLinks")
+          .withIndex("by_coingecko_id_and_article_id", (q) =>
+            q.eq("coingeckoId", args.coingeckoId).eq("articleId", articleId),
+          )
+          .first();
+
+        if (existingLink) {
+          if (existingLink.postedAtMs !== item.postedAtMs) {
+            await ctx.db.patch(existingLink._id, {
+              postedAtMs: item.postedAtMs,
+              updatedAt: now,
+            });
+            updatedLinks++;
+          }
+          return;
+        }
+
+        await ctx.db.insert("coingeckoNewsCoinLinks", {
+          coingeckoId: args.coingeckoId,
+          articleId,
+          postedAtMs: item.postedAtMs,
+          createdAt: now,
+          updatedAt: now,
+        });
+        insertedLinks++;
+      }),
+    );
 
     return {
       insertedArticles,
@@ -145,14 +151,10 @@ export const _pruneNewsLinksForCoin = internalMutation({
       )
       .take(2000);
 
-    let deleted = 0;
-    for (const row of allRows) {
-      if (keepIds.has(row._id)) continue;
-      await ctx.db.delete(row._id);
-      deleted++;
-    }
+    const toDelete = allRows.filter((row) => !keepIds.has(row._id));
+    await Promise.all(toDelete.map((row) => ctx.db.delete(row._id)));
 
-    return { deleted };
+    return { deleted: toDelete.length };
   },
 });
 
@@ -248,27 +250,37 @@ export const _setArticleSentimentBatch = internalMutation({
   returns: v.object({ updated: v.number() }),
   handler: async (ctx, args) => {
     const now = Date.now();
-    let updated = 0;
 
-    for (const item of args.items) {
-      const existing = await ctx.db.get(item.articleId);
-      if (!existing) continue;
-      if (
-        existing.sentiment !== undefined &&
-        existing.sentimentUpdatedAt !== undefined
-      )
-        continue;
+    // Dedupe by articleId (first wins, matching the sequential skip-once-set
+    // behavior) so concurrent iterations can't double-patch the same article.
+    const seenIds = new Set<string>();
+    const uniqueItems = args.items.filter((item) => {
+      if (seenIds.has(item.articleId)) return false;
+      seenIds.add(item.articleId);
+      return true;
+    });
 
-      await ctx.db.patch(item.articleId, {
-        sentiment: item.sentiment,
-        sentimentConfidence: item.confidence,
-        sentimentUpdatedAt: now,
-        updatedAt: now,
-      });
-      updated++;
-    }
+    const outcomes = await Promise.all(
+      uniqueItems.map(async (item) => {
+        const existing = await ctx.db.get(item.articleId);
+        if (!existing) return 0;
+        if (
+          existing.sentiment !== undefined &&
+          existing.sentimentUpdatedAt !== undefined
+        )
+          return 0;
 
-    return { updated };
+        await ctx.db.patch(item.articleId, {
+          sentiment: item.sentiment,
+          sentimentConfidence: item.confidence,
+          sentimentUpdatedAt: now,
+          updatedAt: now,
+        });
+        return 1;
+      }),
+    );
+
+    return { updated: outcomes.reduce<number>((sum, n) => sum + n, 0) };
   },
 });
 
@@ -280,25 +292,35 @@ export const _overwriteLowConfidenceNeutralSentimentBatch = internalMutation({
   returns: v.object({ updated: v.number() }),
   handler: async (ctx, args) => {
     const now = Date.now();
-    let updated = 0;
 
-    for (const item of args.items) {
-      const existing = await ctx.db.get(item.articleId);
-      if (!existing) continue;
-      if (existing.sentiment !== "neutral") continue;
-      const existingConf = existing.sentimentConfidence ?? 0;
-      if (existingConf > args.maxExistingConfidence) continue;
-      if (existingConf > item.confidence) continue;
+    // Dedupe by articleId (first wins, matching the sequential skip-once-set
+    // behavior) so concurrent iterations can't double-patch the same article.
+    const seenIds = new Set<string>();
+    const uniqueItems = args.items.filter((item) => {
+      if (seenIds.has(item.articleId)) return false;
+      seenIds.add(item.articleId);
+      return true;
+    });
 
-      await ctx.db.patch(item.articleId, {
-        sentiment: item.sentiment,
-        sentimentConfidence: item.confidence,
-        sentimentUpdatedAt: now,
-        updatedAt: now,
-      });
-      updated++;
-    }
+    const outcomes = await Promise.all(
+      uniqueItems.map(async (item) => {
+        const existing = await ctx.db.get(item.articleId);
+        if (!existing) return 0;
+        if (existing.sentiment !== "neutral") return 0;
+        const existingConf = existing.sentimentConfidence ?? 0;
+        if (existingConf > args.maxExistingConfidence) return 0;
+        if (existingConf > item.confidence) return 0;
 
-    return { updated };
+        await ctx.db.patch(item.articleId, {
+          sentiment: item.sentiment,
+          sentimentConfidence: item.confidence,
+          sentimentUpdatedAt: now,
+          updatedAt: now,
+        });
+        return 1;
+      }),
+    );
+
+    return { updated: outcomes.reduce<number>((sum, n) => sum + n, 0) };
   },
 });

@@ -97,12 +97,15 @@ function TokenAnalysisCollector({
   // prepareAnalysisData and onReady are fresh closures every render, so keep
   // them in refs: the effect deps track only genuine data transitions (no
   // per-render recompute) while the ref guard keeps the report-exactly-once
-  // contract.
+  // contract. Synced in an effect (declared before the reader) so render
+  // stays pure.
   const reportedRef = React.useRef(false);
   const prepareAnalysisDataRef = React.useRef(prepareAnalysisData);
-  prepareAnalysisDataRef.current = prepareAnalysisData;
   const onReadyRef = React.useRef(onReady);
-  onReadyRef.current = onReady;
+  React.useEffect(() => {
+    prepareAnalysisDataRef.current = prepareAnalysisData;
+    onReadyRef.current = onReady;
+  }, [prepareAnalysisData, onReady]);
   React.useEffect(() => {
     if (reportedRef.current || !marketData || !hasEnoughChartHistory) return;
     const data = prepareAnalysisDataRef.current();
@@ -110,6 +113,7 @@ function TokenAnalysisCollector({
     reportedRef.current = true;
     // Pass the raw timestamped series too: cross-asset stats must be aligned
     // by day, which the flattened priceHistory can't support.
+    // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent -- invisible per-token collector over react-query; reports once via reportedRef
     onReadyRef.current(token.id, data as IndicatorData, chartData);
   }, [marketData, hasEnoughChartHistory, chartData, token.id]);
 
@@ -212,32 +216,44 @@ export function MultiAnalysisDialog({
 
   // Fallback: if some token's data never becomes ready (thin markets, failed
   // CoinGlass endpoints), run with whatever subset is ready after 30s.
-  const collectedRef = React.useRef(collected);
-  collectedRef.current = collected;
-  const tokensRef = React.useRef(tokens);
-  tokensRef.current = tokens;
+  // Effect Event: reads the latest `collected`/`tokens`/`fire` without being
+  // reactive deps, so the 30s timer is armed exactly once.
+  const runFallbackAnalysis = React.useEffectEvent(() => {
+    if (startedRef.current) return;
+    const ready = tokens.flatMap((t) => {
+      const entry = collected.get(t.id);
+      return entry ? [{ id: t.id, ...entry }] : [];
+    });
+    if (ready.length >= 2) {
+      fire(ready);
+    } else {
+      setCompletion(
+        "Not enough market data loaded to run a comparison. Please try again.",
+      );
+    }
+  });
   React.useEffect(() => {
-    const timer = setTimeout(() => {
-      if (startedRef.current) return;
-      const ready = tokensRef.current.flatMap((t) => {
-        const entry = collectedRef.current.get(t.id);
-        return entry ? [{ id: t.id, ...entry }] : [];
-      });
-      if (ready.length >= 2) {
-        fire(ready);
-      } else {
-        setCompletion(
-          "Not enough market data loaded to run a comparison. Please try again.",
-        );
-      }
-    }, 30_000);
+    const timer = setTimeout(() => runFallbackAnalysis(), 30_000);
     return () => clearTimeout(timer);
-  }, [fire, setCompletion]);
+  }, []);
 
   const tokenLabels = tokens.map(
     (t) => t.symbol?.toUpperCase() ?? t.name ?? t.id,
   );
   const combinedTitle = tokenLabels.join(" / ");
+
+  // Format the date post-mount so server and browser markup can't diverge on
+  // timezone (toLocaleDateString during SSR uses the server's timezone).
+  const [analysisDateLabel, setAnalysisDateLabel] = React.useState("");
+  React.useEffect(() => {
+    setAnalysisDateLabel(
+      new Date().toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+      }),
+    );
+  }, []);
 
   // Price series for the sidebar's multi-line mini chart, as they collect.
   const chartTokens = React.useMemo(
@@ -294,11 +310,7 @@ export function MultiAnalysisDialog({
                       <span className="text-xs text-gray-500 dark:text-white/60">
                         Analysis as of{" "}
                       </span>
-                      {new Date().toLocaleDateString("en-US", {
-                        weekday: "long",
-                        month: "long",
-                        day: "numeric",
-                      })}
+                      {analysisDateLabel}
                     </p>
                   </div>
                 </div>

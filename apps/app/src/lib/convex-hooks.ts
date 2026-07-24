@@ -105,25 +105,6 @@ export function useWatchlistBySlug(slug?: string) {
   return data;
 }
 
-export function useAllWatchlistCoinIds(options?: { enabled?: boolean }) {
-  const { user, isLoaded } = useUser();
-  const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
-  const enabled = Boolean(
-    (options?.enabled ?? true) &&
-      isLoaded &&
-      user?.id &&
-      isAuthenticated &&
-      !isConvexAuthLoading,
-  );
-
-  const data = useQuery(
-    api.watchlists.getMyAllWatchlistCoinIds,
-    enabled ? {} : "skip",
-  ) as Array<string> | undefined;
-
-  return data;
-}
-
 export function useCreateWatchlistGroup() {
   const create = useMutation(api.watchlists.createMyWatchlistGroup);
   return (name: string, description?: string, icon?: string, color?: string) =>
@@ -177,14 +158,4 @@ export function useSetWatchlistItemHoldings() {
       coinId,
       holdings,
     });
-}
-
-export function useRemoveFromAllWatchlists() {
-  const removeEverywhere = useMutation(api.watchlists.removeFromAllMyWatchlists);
-  return useCallback((coinId: string) => removeEverywhere({ coinId }), [removeEverywhere]);
-}
-
-export function useRemoveBulkFromAllWatchlists() {
-  const bulk = useMutation(api.watchlists.removeBulkFromAllMyWatchlists);
-  return useCallback((coinIds: string[]) => bulk({ coinIds }), [bulk]);
 }

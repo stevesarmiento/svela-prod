@@ -14,7 +14,7 @@ import type { Preloaded } from 'convex/react'
 import { usePreloadedQuery } from 'convex/react'
 import { usePathname } from 'next/navigation'
 import { useQueryState } from 'nuqs'
-import { env } from '@/env.mjs'
+import { env } from '@/env.client.mjs'
 import type {
   WatchlistGroup as WatchlistGroupModel,
   WatchlistItem as WatchlistItemModel,

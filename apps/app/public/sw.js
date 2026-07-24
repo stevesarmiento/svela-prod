@@ -53,9 +53,9 @@ self.addEventListener("activate", (event) => {
     (async () => {
       const names = await caches.keys();
       await Promise.all(
-        names
-          .filter((name) => !ACTIVE_CACHES.includes(name))
-          .map((name) => caches.delete(name)),
+        names.flatMap((name) =>
+          ACTIVE_CACHES.includes(name) ? [] : [caches.delete(name)],
+        ),
       );
       await self.clients.claim();
     })(),
