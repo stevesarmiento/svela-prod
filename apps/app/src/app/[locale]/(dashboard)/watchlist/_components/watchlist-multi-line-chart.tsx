@@ -34,8 +34,8 @@ interface WatchlistMultiLineChartProps {
   layout?: 'horizontal' | 'vertical'
   /** Hide the in-card selector when the page renders its own (e.g. comparison header). */
   showTimeScaleSelector?: boolean
-  /** Scrub without overlay tooltip; show % labels beside each scrub dot instead. */
-  scrubDotLabels?: boolean
+  /** Scrub without overlay tooltip; the right y-axis series labels follow the scrubbed values instead. */
+  scrubYAxisLabels?: boolean
 }
 
 function getBucketMsFromTimeScale(timeScale: string): number {
@@ -193,14 +193,6 @@ function valueToPlotY(
   return CHART_PADDING.top + (1 - (value - min) / span) * plotHeight
 }
 
-interface ScrubDotLabel {
-  id: string
-  color: string
-  x: number
-  y: number
-  text: string
-}
-
 interface TooltipSeriesRow {
   id: WatchlistSeries["id"]
   name: string
@@ -314,11 +306,16 @@ interface YAxisModel {
   seriesLabels: Array<{ id: string; color: string; y: number; text: string }>
 }
 
-/** Right y-axis: % ticks plus each series' latest value at its line endpoint. */
+/**
+ * Right y-axis: % ticks plus each series' value at its line endpoint.
+ * While scrubbing (`scrubTimeSec` set), each series label follows the value
+ * under the scrubber instead of the latest value.
+ */
 function computeYAxisModel(
   livelineSeries: LivelineSeries[],
   scrubValueRange: { min: number; span: number },
   chartHeightPx: number,
+  scrubTimeSec: number | null,
 ): YAxisModel | null {
   if (livelineSeries.length === 0) return null
 
@@ -330,12 +327,18 @@ function computeYAxisModel(
   const maxY = chartHeightPx - CHART_PADDING.bottom - AXIS_LABEL_GAP / 2
 
   const seriesLabels = livelineSeries
-    .map((s) => ({
-      id: s.id,
-      color: s.color,
-      y: valueToPlotY(s.value, min, span, plotHeight),
-      text: formatPctChange(s.value),
-    }))
+    .map((s) => {
+      const value =
+        scrubTimeSec !== null
+          ? (findClosestPoint(s.data, scrubTimeSec)?.value ?? s.value)
+          : s.value
+      return {
+        id: s.id,
+        color: s.color,
+        y: valueToPlotY(value, min, span, plotHeight),
+        text: formatPctChange(value),
+      }
+    })
     .sort((a, b) => a.y - b.y)
 
   // Collision pass: nudge overlapping labels apart, keep them inside the plot.
@@ -664,30 +667,6 @@ function ChartRightAxisOverlay({ model }: { model: YAxisModel }) {
   )
 }
 
-function ScrubDotLabelsOverlay({ labels }: { labels: ScrubDotLabel[] }) {
-  return (
-    <>
-      {labels.map((label, index) => (
-        <span
-          key={label.id}
-          className="pointer-events-none absolute whitespace-nowrap font-berkeley-mono text-[10px] tabular-nums [text-shadow:0_0_4px_rgba(0,0,0,0.95),0_1px_2px_rgba(0,0,0,0.8)]"
-          style={{
-            left: label.x + (index % 2 === 0 ? 7 : -7),
-            top: label.y,
-            color: label.color,
-            transform:
-              index % 2 === 0
-                ? "translateY(-50%)"
-                : "translate(-100%, -50%)",
-          }}
-        >
-          {label.text}
-        </span>
-      ))}
-    </>
-  )
-}
-
 function useWatchlistSeriesData(
   group: WatchlistGroup,
   activeTimeScale: string,
@@ -795,13 +774,13 @@ export function WatchlistMultiLineChart({
   selectedWatchlists,
   layout = 'horizontal',
   showTimeScaleSelector = true,
-  scrubDotLabels = false,
+  scrubYAxisLabels = false,
 }: WatchlistMultiLineChartProps) {
   const isVertical = layout === 'vertical'
   const chartHeightPx = isVertical ? 300 : 400
-  const useCustomTooltip = !scrubDotLabels
+  const useCustomTooltip = !scrubYAxisLabels
   const [hoveredWatchlist, setHoveredWatchlist] = useState<WatchlistGroupId | null>(null)
-  const [scrubDotLabelRows, setScrubDotLabelRows] = useState<ScrubDotLabel[] | null>(null)
+  const [scrubTimeSec, setScrubTimeSec] = useState<number | null>(null)
   const [hiddenWatchlists, setHiddenWatchlists] = useState<Set<WatchlistGroupId>>(new Set())
   const [watchlistData, setWatchlistData] = useState<Map<WatchlistGroupId, WatchlistSeries>>(new Map())
   const { watchlistGroups: watchlistGroupsData } = useWatchlist()
@@ -894,8 +873,14 @@ export function WatchlistMultiLineChart({
   )
 
   const yAxisModel = useMemo(
-    () => computeYAxisModel(livelineSeries, scrubValueRange, chartHeightPx),
-    [livelineSeries, scrubValueRange, chartHeightPx],
+    () =>
+      computeYAxisModel(
+        livelineSeries,
+        scrubValueRange,
+        chartHeightPx,
+        scrubYAxisLabels ? scrubTimeSec : null,
+      ),
+    [livelineSeries, scrubValueRange, chartHeightPx, scrubYAxisLabels, scrubTimeSec],
   )
 
   const chartWrapperRef = useRef<HTMLDivElement | null>(null)
@@ -907,41 +892,11 @@ export function WatchlistMultiLineChart({
     isDarkMode,
   })
 
-  const handleScrubDotLabels = useCallback(
+  const handleScrubYAxis = useCallback(
     (hover: { time: number; value: number; x: number; y: number } | null) => {
-      if (!scrubDotLabels) return
-
-      if (!hover) {
-        setScrubDotLabelRows(null)
-        return
-      }
-
-      const timeSec = Math.round(hover.time)
-      const plotHeight =
-        chartHeightPx - CHART_PADDING.top - CHART_PADDING.bottom
-      const labels: ScrubDotLabel[] = []
-
-      for (const series of livelineSeries) {
-        const closest = findClosestPoint(series.data, timeSec)
-        if (!closest) continue
-
-        labels.push({
-          id: series.id,
-          color: series.color,
-          x: hover.x,
-          y: valueToPlotY(
-            closest.value,
-            scrubValueRange.min,
-            scrubValueRange.span,
-            plotHeight,
-          ),
-          text: formatPctChange(closest.value),
-        })
-      }
-
-      setScrubDotLabelRows(labels.length > 0 ? labels : null)
+      setScrubTimeSec(hover ? Math.round(hover.time) : null)
     },
-    [scrubDotLabels, livelineSeries, scrubValueRange, chartHeightPx],
+    [],
   )
 
   return (
@@ -1043,17 +998,14 @@ export function WatchlistMultiLineChart({
                       scrub
                       tooltipY={-9999}
                       tooltipOutline={false}
-                      onHover={scrubDotLabels ? handleScrubDotLabels : handleLivelineHover}
+                      onHover={scrubYAxisLabels ? handleScrubYAxis : handleLivelineHover}
                       formatTime={formatTime}
                       formatValue={formatPctChange}
                       padding={CHART_PADDING}
                       className="size-full"
                     />
-                    {/* Right y-axis: % ticks + per-series latest values. */}
+                    {/* Right y-axis: % ticks + per-series values (follows the scrubber while scrubbing). */}
                     {yAxisModel && <ChartRightAxisOverlay model={yAxisModel} />}
-                    {scrubDotLabels && scrubDotLabelRows && (
-                      <ScrubDotLabelsOverlay labels={scrubDotLabelRows} />
-                    )}
                   </div>
                 )}
               </div>
