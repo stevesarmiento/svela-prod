@@ -268,7 +268,7 @@ function IllustrationWatchlistCard({
   )
 }
 
-export function WatchlistEmptyIllustration() {
+function WatchlistEmptyIllustration() {
   const shouldReduceMotion: boolean = useReducedMotion() ?? false
 
   const gridKeys = useMemo(

@@ -14,7 +14,8 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "populate-coins": "tsx src/scripts/populate-coingecko-coins.ts",
-    "eval:smart-screener": "bun src/scripts/eval-smart-screener.ts"
+    "eval:smart-screener": "bun src/scripts/eval-smart-screener.ts",
+    "doctor": "npx react-doctor@latest"
   },
   "resolutions": {
     "import-in-the-middle": "1.11.2"

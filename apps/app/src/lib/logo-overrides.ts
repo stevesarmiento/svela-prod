@@ -225,14 +225,6 @@ export function getTokenLogoURL(symbol: string | undefined, fallbackLogoURI: str
 }
 
 /**
- * Check if a token has a local logo override
- */
-export function hasLocalLogo(symbol: string | undefined): boolean {
-    if (!symbol) return false;
-    return getXstockLogoFilename(symbol) !== null || getPopularLogoFilename(symbol) !== null;
-}
-
-/**
  * Clean token name by removing common suffixes/prefixes.
  *
  * - xStocks: "Nasdaq xStock" → "Nasdaq"

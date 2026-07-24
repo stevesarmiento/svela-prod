@@ -29,18 +29,6 @@ export function pickSourceSeries(sources: VmcSourceCandle, source: VmcSource): n
   return sources[source]
 }
 
-export function shift(values: number[], bars: number): number[] {
-  const out: number[] = new Array(values.length).fill(Number.NaN)
-  if (!Number.isFinite(bars) || bars === 0) return values.slice()
-
-  for (let i = 0; i < values.length; i++) {
-    const srcIndex = i - bars
-    if (srcIndex < 0 || srcIndex >= values.length) continue
-    out[i] = values[srcIndex] ?? Number.NaN
-  }
-  return out
-}
-
 export function cross(a: number[], b: number[]): boolean[] {
   const out: boolean[] = new Array(Math.max(a.length, b.length)).fill(false)
   for (let i = 1; i < out.length; i++) {
@@ -50,20 +38,6 @@ export function cross(a: number[], b: number[]): boolean[] {
     const b1 = b[i]
     if (!isFiniteNumber(a0) || !isFiniteNumber(a1) || !isFiniteNumber(b0) || !isFiniteNumber(b1)) continue
     out[i] = (a0 <= b0 && a1 > b1) || (a0 >= b0 && a1 < b1)
-  }
-  return out
-}
-
-export function valueWhen(condition: boolean[], source: number[]): number[] {
-  const out: number[] = new Array(Math.max(condition.length, source.length)).fill(Number.NaN)
-  let last: number = Number.NaN
-
-  for (let i = 0; i < out.length; i++) {
-    if (condition[i]) {
-      const v = source[i]
-      if (isFiniteNumber(v)) last = v
-    }
-    out[i] = last
   }
   return out
 }

@@ -8,7 +8,3 @@ export function useIsomorphicTheme() {
     mounted: true,
   } as const
 }
-
-export function useIsDarkMode(): boolean {
-  return true
-}

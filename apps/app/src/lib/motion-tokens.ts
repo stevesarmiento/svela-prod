@@ -4,9 +4,7 @@
 
 import type { CSSProperties } from "react";
 
-export const DURATION_MICRO_S = 0.12 as const;
 export const DURATION_UI_S = 0.2 as const;
-export const DURATION_MODAL_S = 0.26 as const;
 
 // Enter/exit (ease-out)
 export const EASE_OUT_CUBIC = [0.215, 0.61, 0.355, 1] as const;
