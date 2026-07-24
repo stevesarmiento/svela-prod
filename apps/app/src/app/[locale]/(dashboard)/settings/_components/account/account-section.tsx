@@ -1,7 +1,7 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { ActiveSessions } from "./active-sessions";
 import { ConnectedAccounts } from "./connected-accounts";
 import { DangerZone } from "./danger-zone";
@@ -10,6 +10,8 @@ import { Passkeys } from "./passkeys";
 import { ProfileInfo } from "./profile-info";
 import { SectionCard } from "./section-card";
 
+const emptySubscribe = () => () => {};
+
 /**
  * Custom account & authentication management, replacing Clerk's prebuilt
  * `openUserProfile()` dialog. Built entirely on Clerk client hooks and
@@ -17,12 +19,13 @@ import { SectionCard } from "./section-card";
  */
 export function AccountSection() {
   const { user, isLoaded } = useUser();
-  const [mounted, setMounted] = useState(false);
-
-  // Avoid SSR/hydration mismatch for user-dependent content
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  // Avoid SSR/hydration mismatch for user-dependent content without a
+  // post-paint state update: server snapshot is false, client is true.
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 
   if (!mounted || !isLoaded) {
     return (

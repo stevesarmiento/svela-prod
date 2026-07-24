@@ -39,16 +39,19 @@ export interface RealtimeQuoteStatus {
   source: "pyth" | "coingecko" | "none";
 }
 
+const DISABLED_STATUS: RealtimeQuoteStatus = { kind: "disabled", updatedAtMs: null, source: "none" };
+
 export function useRealtimeQuote(args: UseRealtimeQuoteArgs): RealtimeQuoteStatus {
   const enabled = (args.enabled ?? true) && args.coingeckoId.length > 0;
   const streamEnabled = enabled && (args.streamEnabled ?? true);
   const mapping = useMemo(() => getPythFeedMapping(args.coingeckoId), [args.coingeckoId]);
   const symbolUpper = (args.symbol ?? "").trim().toUpperCase();
   const [resolvedFeedId, setResolvedFeedId] = useState<string | null>(null);
-  const [status, setStatus] = useState<RealtimeQuoteStatus>(() => {
-    if (!enabled) return { kind: "disabled", updatedAtMs: null, source: "none" };
-    return mapping ? { kind: "fallback", updatedAtMs: null, source: "coingecko" } : { kind: "fallback", updatedAtMs: null, source: "coingecko" };
-  });
+  const [status, setStatus] = useState<RealtimeQuoteStatus>(() => ({
+    kind: "fallback",
+    updatedAtMs: null,
+    source: "coingecko",
+  }));
 
   const feedId = mapping?.hermesFeedId ?? resolvedFeedId;
   const source = mapping?.source ?? "pyth";
@@ -67,18 +70,13 @@ export function useRealtimeQuote(args: UseRealtimeQuoteArgs): RealtimeQuoteStatu
   const lastUiUpdateAtRef = useRef(0);
   const lastPersistAtRef = useRef(0);
 
-  if (sessionIdRef.current === null && typeof window !== "undefined") {
-    sessionIdRef.current = getOrCreateSessionId();
-  }
-
+  // Resolve the session id after mount: getOrCreateSessionId touches
+  // localStorage, so it must not run during render.
   useEffect(() => {
-    if (!enabled) {
-      setStatus({ kind: "disabled", updatedAtMs: null, source: "none" });
-      return;
+    if (sessionIdRef.current === null) {
+      sessionIdRef.current = getOrCreateSessionId();
     }
-    // Preserve realtime/last-known while configuration stays stable.
-    // Preserve realtime/last-known while mapping stays stable.
-  }, [enabled]);
+  }, []);
 
   // Dynamic feed resolution for unmapped coins (token page only).
   useEffect(() => {
@@ -210,6 +208,9 @@ export function useRealtimeQuote(args: UseRealtimeQuoteArgs): RealtimeQuoteStatu
     source,
   ]);
 
-  return status;
+  // Derived during render (no adjustment effect): while disabled report the
+  // disabled status; the internal state machine keeps the last stream status,
+  // which the warm-start/stream effects refresh on re-enable.
+  return enabled ? status : DISABLED_STATUS;
 }
 

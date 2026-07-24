@@ -57,14 +57,16 @@ async function markOverviewSnapshotStale(ctx: MutationCtx, clerkId: string) {
     `overview:dailyBrief:${canonicalClerkId}:watchlist:7d`,
   ];
 
-  for (const cacheKey of keys) {
-    const existing = await ctx.db
-      .query("apiCache")
-      .withIndex("by_key", (q) => q.eq("cacheKey", cacheKey))
-      .first();
-    if (!existing) continue;
-    await ctx.db.patch(existing._id, { expiresAt: 0 });
-  }
+  await Promise.all(
+    keys.map(async (cacheKey) => {
+      const existing = await ctx.db
+        .query("apiCache")
+        .withIndex("by_key", (q) => q.eq("cacheKey", cacheKey))
+        .first();
+      if (!existing) return;
+      await ctx.db.patch(existing._id, { expiresAt: 0 });
+    }),
+  );
 }
 
 async function listWatchlistGroupsForUser(ctx: QueryCtx, userId: Id<"users">) {
@@ -821,19 +823,22 @@ export const removeBulkFromAllWatchlists = mutation({
 
     // Remove global watchlist tracking when the coin is no longer watched by anyone.
     await Promise.all(
-      removedByCoin
-        .filter((row) => row.removed > 0)
-        .map(async ({ coinId }) => {
-          const remaining = await ctx.db
-            .query("watchlists")
-            .withIndex("by_coin", (q) => q.eq("coinId", coinId))
-            .first();
-          if (remaining) return;
-          await ctx.runMutation(internal.coingeckoState._removeTrackedCoinReason, {
-            coingeckoId: coinId,
-            reason: "watchlist",
-          });
-        }),
+      removedByCoin.flatMap(({ coinId, removed }) => {
+        if (removed <= 0) return [];
+        return [
+          (async () => {
+            const remaining = await ctx.db
+              .query("watchlists")
+              .withIndex("by_coin", (q) => q.eq("coinId", coinId))
+              .first();
+            if (remaining) return;
+            await ctx.runMutation(internal.coingeckoState._removeTrackedCoinReason, {
+              coingeckoId: coinId,
+              reason: "watchlist",
+            });
+          })(),
+        ];
+      }),
     );
 
     return { removedCount };
@@ -1320,14 +1325,17 @@ export const setMyWatchlistItemHoldings = mutation({
       .query("watchlists")
       .withIndex("by_user_coin", (q) => q.eq("userId", user._id).eq("coinId", args.coinId))
       .collect();
-    for (const userRow of userRows) {
-      if (userRow.holdings === undefined) continue;
-      await ctx.db.replace(userRow._id, {
-        userId: userRow.userId,
-        watchlistGroupId: userRow.watchlistGroupId,
-        coinId: userRow.coinId,
-      });
-    }
+    await Promise.all(
+      userRows
+        .filter((userRow) => userRow.holdings !== undefined)
+        .map((userRow) =>
+          ctx.db.replace(userRow._id, {
+            userId: userRow.userId,
+            watchlistGroupId: userRow.watchlistGroupId,
+            coinId: userRow.coinId,
+          }),
+        ),
+    );
 
     await markOverviewSnapshotStale(ctx, identity.subject);
     return null;
@@ -1452,19 +1460,22 @@ export const removeBulkFromAllMyWatchlists = mutation({
     const removedCount = removedByCoin.reduce((sum, row) => sum + row.removed, 0);
 
     await Promise.all(
-      removedByCoin
-        .filter((row) => row.removed > 0)
-        .map(async ({ coinId }) => {
-          const remaining = await ctx.db
-            .query("watchlists")
-            .withIndex("by_coin", (q) => q.eq("coinId", coinId))
-            .first();
-          if (remaining) return;
-          await ctx.runMutation(internal.coingeckoState._removeTrackedCoinReason, {
-            coingeckoId: coinId,
-            reason: "watchlist",
-          });
-        }),
+      removedByCoin.flatMap(({ coinId, removed }) => {
+        if (removed <= 0) return [];
+        return [
+          (async () => {
+            const remaining = await ctx.db
+              .query("watchlists")
+              .withIndex("by_coin", (q) => q.eq("coinId", coinId))
+              .first();
+            if (remaining) return;
+            await ctx.runMutation(internal.coingeckoState._removeTrackedCoinReason, {
+              coingeckoId: coinId,
+              reason: "watchlist",
+            });
+          })(),
+        ];
+      }),
     );
 
     await markOverviewSnapshotStale(ctx, identity.subject);
@@ -1491,16 +1502,21 @@ export const getMyWatchlistBootstrap = query({
       };
     }
 
-    const groups = await ctx.db
-      .query("watchlistGroups")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .order("desc")
-      .collect();
-
-    const defaultGroup = await ctx.db
-      .query("watchlistGroups")
-      .withIndex("by_user_default", (q) => q.eq("userId", user._id).eq("isDefault", true))
-      .first();
+    const [groups, defaultGroup, items] = await Promise.all([
+      ctx.db
+        .query("watchlistGroups")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .order("desc")
+        .collect(),
+      ctx.db
+        .query("watchlistGroups")
+        .withIndex("by_user_default", (q) => q.eq("userId", user._id).eq("isDefault", true))
+        .first(),
+      ctx.db
+        .query("watchlists")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect(),
+    ]);
 
     const defaultItems = defaultGroup
       ? await ctx.db
@@ -1508,11 +1524,6 @@ export const getMyWatchlistBootstrap = query({
           .withIndex("by_group", (q) => q.eq("watchlistGroupId", defaultGroup._id))
           .collect()
       : [];
-
-    const items = await ctx.db
-      .query("watchlists")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
 
     const allCoinIds = Array.from(new Set(items.map((item) => item.coinId))).filter((id) => id.length > 0);
     allCoinIds.sort();

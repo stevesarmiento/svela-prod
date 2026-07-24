@@ -22,6 +22,123 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { getClerkErrorMessage } from "./clerk-errors";
 
+function RemoveEmailDialog({
+  emailAddress,
+  disabled,
+  onRemove,
+}: {
+  emailAddress: string;
+  disabled: boolean;
+  onRemove: () => void;
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon"
+          aria-label={`Remove ${emailAddress}`}
+          disabled={disabled}
+          className="h-8 w-8"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent className="rounded-xl">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Remove {emailAddress}?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This email address will be unlinked from your account. You can add
+            it again later.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction asChild>
+            <Button variant="destructive" onClick={onRemove}>
+              Remove email
+            </Button>
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
+function EmailVerificationEntry({
+  emailAddress,
+  code,
+  onCodeChange,
+  isVerifying,
+  onVerify,
+  onResend,
+  onCancel,
+}: {
+  emailAddress: string;
+  code: string;
+  onCodeChange: (code: string) => void;
+  isVerifying: boolean;
+  onVerify: () => void;
+  onResend: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="text-[10px] text-primary/30">
+        Enter the 6-digit code sent to {emailAddress}
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <InputOTP
+          maxLength={6}
+          value={code}
+          onChange={onCodeChange}
+          render={({ slots }) => (
+            <InputOTPGroup>
+              {slots.map((slot, index) => (
+                // react-doctor-disable-next-line react-doctor/no-array-index-as-key -- OTP slots are fixed-length positional; the index IS the slot identity
+                <InputOTPSlot
+                  key={`otp-slot-${
+                    // biome-ignore lint/suspicious/noArrayIndexKey: slots are positional
+                    index
+                  }`}
+                  {...slot}
+                  className="h-9 w-9 text-sm"
+                />
+              ))}
+            </InputOTPGroup>
+          )}
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            className="h-9 text-xs"
+            disabled={code.length !== 6 || isVerifying}
+            onClick={onVerify}
+          >
+            {isVerifying ? "Verifying..." : "Verify"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 text-xs"
+            onClick={onResend}
+          >
+            Resend
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 text-xs"
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function EmailAddresses() {
   const { user } = useUser();
   const [newEmail, setNewEmail] = useState("");
@@ -201,102 +318,29 @@ export function EmailAddresses() {
                         </Button>
                       ) : null}
                       {!isPrimary ? (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              aria-label={`Remove ${email.emailAddress}`}
-                              disabled={isBusy}
-                              className="h-8 w-8"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent className="rounded-xl">
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>
-                                Remove {email.emailAddress}?
-                              </AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This email address will be unlinked from your
-                                account. You can add it again later.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction asChild>
-                                <Button
-                                  variant="destructive"
-                                  onClick={() => handleRemove(email.id)}
-                                >
-                                  Remove email
-                                </Button>
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                        <RemoveEmailDialog
+                          emailAddress={email.emailAddress}
+                          disabled={isBusy}
+                          onRemove={() => handleRemove(email.id)}
+                        />
                       ) : null}
                     </div>
                   </div>
 
                   {/* Inline verification code entry */}
                   {isPendingHere ? (
-                    <div className="mt-3 space-y-2">
-                      <div className="text-[10px] text-primary/30">
-                        Enter the 6-digit code sent to {email.emailAddress}
-                      </div>
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <InputOTP
-                          maxLength={6}
-                          value={code}
-                          onChange={setCode}
-                          render={({ slots }) => (
-                            <InputOTPGroup>
-                              {slots.map((slot, index) => (
-                                <InputOTPSlot
-                                  key={`otp-slot-${
-                                    // biome-ignore lint/suspicious/noArrayIndexKey: slots are positional
-                                    index
-                                  }`}
-                                  {...slot}
-                                  className="h-9 w-9 text-sm"
-                                />
-                              ))}
-                            </InputOTPGroup>
-                          )}
-                        />
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            className="h-9 text-xs"
-                            disabled={code.length !== 6 || isVerifying}
-                            onClick={handleVerify}
-                          >
-                            {isVerifying ? "Verifying..." : "Verify"}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-9 text-xs"
-                            onClick={handleResend}
-                          >
-                            Resend
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-9 text-xs"
-                            onClick={() => {
-                              setPendingEmailId(null);
-                              setCode("");
-                            }}
-                          >
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
+                    <EmailVerificationEntry
+                      emailAddress={email.emailAddress}
+                      code={code}
+                      onCodeChange={setCode}
+                      isVerifying={isVerifying}
+                      onVerify={handleVerify}
+                      onResend={handleResend}
+                      onCancel={() => {
+                        setPendingEmailId(null);
+                        setCode("");
+                      }}
+                    />
                   ) : null}
                 </div>
               );

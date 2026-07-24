@@ -16,6 +16,7 @@ export function WatchlistMultiLineTooltipContent({
     <div className="flex flex-col gap-1 overflow-hidden">
       <div className="px-4 py-3">
         <div className="mb-3 text-[11px] font-medium text-muted-foreground">
+          {/* react-doctor-disable-next-line react-doctor/no-locale-format-in-render -- rendered only into an imperative client-created root from a hover handler; never part of SSR output */}
           {new Date(timestamp).toLocaleDateString(undefined, {
             month: "long",
             day: "numeric",

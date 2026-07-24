@@ -1,7 +1,7 @@
 'use client'
 
 import type { ForwardRefExoticComponent, RefAttributes } from "react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { Spinner } from "@v1/ui/spinner"
 import { Button } from "@v1/ui/button"
@@ -102,7 +102,9 @@ export function WatchlistPageView({
   const [isCreatingWatchlist, setIsCreatingWatchlist] = useState(false)
   const [isAddWalletOpen, setIsAddWalletOpen] = useState(false)
   const [CoinSearchComponent, setCoinSearchComponent] = useState<LazyCoinSearchComponent | null>(null)
-  const [shouldOpenCoinSearch, setShouldOpenCoinSearch] = useState(false)
+  // Ref, not state: only consumed by the lazy-mount effect below, never
+  // rendered — a ref avoids an extra re-render per open request.
+  const pendingCoinSearchOpenRef = useRef(false)
   const coinSearchRef = useRef<CoinSearchRef>(null)
 
   const isCreatingWatchlistRef = useLatest(isCreatingWatchlist)
@@ -127,68 +129,72 @@ export function WatchlistPageView({
   }, [CoinSearchComponent])
 
   const openCoinSearch = useCallback(async () => {
+    // Already mounted: open directly without any re-render.
+    if (coinSearchRef.current) {
+      coinSearchRef.current.open()
+      return
+    }
+    pendingCoinSearchOpenRef.current = true
     await preloadCoinSearch()
-    setShouldOpenCoinSearch(true)
   }, [preloadCoinSearch])
 
+  // Once the lazy component mounts (ref attaches during the same commit,
+  // before this effect runs), honor a pending open request.
   useEffect(() => {
-    if (!shouldOpenCoinSearch) return
     if (!CoinSearchComponent) return
+    if (!pendingCoinSearchOpenRef.current) return
+    pendingCoinSearchOpenRef.current = false
     coinSearchRef.current?.open()
-    setShouldOpenCoinSearch(false)
-  }, [CoinSearchComponent, shouldOpenCoinSearch])
+  }, [CoinSearchComponent])
 
-  useEffect(() => {
+  // Effect Event: always sees the latest callbacks/state without being a
+  // reactive dep, so the keydown subscription is set up exactly once.
+  const handleGlobalKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
+
     const addTokenShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'focusAddToken')
     const addWalletShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'openAddWallet')
     const createWatchlistShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'openCreateWatchlist')
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
-
-      if (createWatchlistShortcut && matchesShortcut(event, createWatchlistShortcut)) {
-        if (isCreatingWatchlistRef.current) return
-        event.preventDefault()
-        preloadCreateWatchlist()
-        setIsCreatingWatchlist(true)
-        return
-      }
-
-      if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
-        event.preventDefault()
-        void openCoinSearch()
-        return
-      }
-
-      if (addWalletShortcut && matchesShortcut(event, addWalletShortcut)) {
-        event.preventDefault()
-        preloadAddWalletDialog()
-        setIsAddWalletOpen(true)
-        return
-      }
-
-      if (event.key.toLowerCase() === "w" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        event.preventDefault()
-        onGridViewModeChangeRef.current?.("grid")
-        return
-      }
-
-      if (event.key.toLowerCase() === "e" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        event.preventDefault()
-        onGridViewModeChangeRef.current?.("chart")
-        return
-      }
+    if (createWatchlistShortcut && matchesShortcut(event, createWatchlistShortcut)) {
+      if (isCreatingWatchlistRef.current) return
+      event.preventDefault()
+      preloadCreateWatchlist()
+      setIsCreatingWatchlist(true)
+      return
     }
 
+    if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
+      event.preventDefault()
+      void openCoinSearch()
+      return
+    }
+
+    if (addWalletShortcut && matchesShortcut(event, addWalletShortcut)) {
+      event.preventDefault()
+      preloadAddWalletDialog()
+      setIsAddWalletOpen(true)
+      return
+    }
+
+    if (event.key.toLowerCase() === "w" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault()
+      onGridViewModeChangeRef.current?.("grid")
+      return
+    }
+
+    if (event.key.toLowerCase() === "e" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault()
+      onGridViewModeChangeRef.current?.("chart")
+      return
+    }
+  })
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => handleGlobalKeyDown(event)
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
-  }, [
-    isCreatingWatchlistRef,
-    onGridViewModeChangeRef,
-    openCoinSearch,
-    preloadAddWalletDialog,
-    preloadCreateWatchlist,
-  ])
+  }, [])
 
   // If watchlist context isn’t ready yet, keep the existing spinner behavior.
   if (!isInitialized) {

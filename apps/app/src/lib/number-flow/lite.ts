@@ -381,12 +381,18 @@ abstract class Section {
 	}
 
 	protected pop(chars: Map<any, Char>) {
-		// Calculate offsets for removed before popping, to avoid layout thrashing:
+		// Read all offsets first, then write all styles, to avoid layout thrashing:
+		const offsets = new Map<Char, { top: number; justify: number }>()
 		chars.forEach((char) => {
-			char.el.style.top = `${char.el.offsetTop}px`
-			char.el.style[this.justify] = `${offset(char.el, this.justify)}px`
+			offsets.set(char, {
+				top: char.el.offsetTop,
+				justify: offset(char.el, this.justify)
+			})
 		})
 		chars.forEach((char) => {
+			const pos = offsets.get(char)!
+			char.el.style.top = `${pos.top}px`
+			char.el.style[this.justify] = `${pos.justify}px`
 			char.el.setAttribute('inert', '')
 			char.present = false
 		})

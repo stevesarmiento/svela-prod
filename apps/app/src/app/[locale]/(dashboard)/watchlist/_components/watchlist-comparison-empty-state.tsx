@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { motion } from 'motion/react'
+import { m } from 'motion/react'
 import { cn } from '@v1/ui/cn'
 import { Liveline, type LivelinePoint, type LivelineSeries } from 'liveline'
 import { useIsomorphicTheme } from '@/hooks/use-isomorphic-theme'
@@ -231,7 +231,7 @@ export function WatchlistComparisonEmptyState({ className }: WatchlistComparison
         <ComparisonTinyChartIllustration />
       </div>
 
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
@@ -241,7 +241,7 @@ export function WatchlistComparisonEmptyState({ className }: WatchlistComparison
         <p className="text-muted-foreground mb-10 leading-relaxed text-pretty">
           Create some watchlists to compare their performance here.
         </p>
-      </motion.div>
+      </m.div>
     </div>
   )
 }

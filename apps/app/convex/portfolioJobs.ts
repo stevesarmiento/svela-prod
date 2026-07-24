@@ -80,6 +80,7 @@ async function fetchWithRetry(args: {
 }): Promise<{ response: Response; bodyText: string }> {
   let lastBodyText = "";
   for (let attempt = 1; attempt <= args.maxAttempts; attempt++) {
+    // react-doctor-disable-next-line react-doctor/no-fetch-response-used-without-status-check -- body read feeds shouldRetry/error messages; ok is checked in the helper and by every caller
     const response = await fetch(args.url, args.init);
     const bodyText = await response.text().catch(() => "");
     lastBodyText = bodyText;
@@ -213,9 +214,10 @@ async function fetchHeliusWalletBalancesTop100(args: {
 
   const data = JSON.parse(bodyText) as HeliusBalancesResponse;
   const mints = Array.isArray(data?.balances) ? data.balances.map((b) => b.mint) : [];
-  return mints
-    .map((m) => m.trim())
-    .filter((m) => m.length > 0 && isBase58Address(m));
+  return mints.flatMap((m) => {
+    const trimmed = m.trim();
+    return trimmed.length > 0 && isBase58Address(trimmed) ? [trimmed] : [];
+  });
 }
 
 type BirdeyeTokenOverviewResponse = {
@@ -281,7 +283,14 @@ export const _getMintMappingsByMints = internalQuery({
   returns: v.record(v.string(), v.string()),
   handler: async (ctx, args) => {
     const out: Record<string, string> = {};
-    const unique = Array.from(new Set(args.mints.map((m) => m.trim()).filter((m) => m.length > 0)));
+    const unique = Array.from(
+      new Set(
+        args.mints.flatMap((m) => {
+          const trimmed = m.trim();
+          return trimmed.length > 0 ? [trimmed] : [];
+        }),
+      ),
+    );
     if (unique.length === 0) return out;
 
     const rows = await Promise.all(
@@ -317,29 +326,32 @@ export const _upsertMintMappings = internalMutation({
     const unique = new Map<string, (typeof args.items)[number]>();
     for (const item of args.items) unique.set(item.mint, item);
 
-    for (const item of unique.values()) {
-      const existing = await ctx.db
-        .query("portfolioMintMappings")
-        .withIndex("by_mint", (q) => q.eq("mint", item.mint))
-        .first();
+    // Mints are deduped above, so each upsert is independent — run concurrently.
+    await Promise.all(
+      Array.from(unique.values()).map(async (item) => {
+        const existing = await ctx.db
+          .query("portfolioMintMappings")
+          .withIndex("by_mint", (q) => q.eq("mint", item.mint))
+          .first();
 
-      if (existing) {
-        await ctx.db.patch(existing._id, {
+        if (existing) {
+          await ctx.db.patch(existing._id, {
+            coingeckoId: item.coingeckoId,
+            source: item.source,
+            updatedAt: now,
+          });
+          return;
+        }
+
+        await ctx.db.insert("portfolioMintMappings", {
+          mint: item.mint,
           coingeckoId: item.coingeckoId,
           source: item.source,
+          createdAt: now,
           updatedAt: now,
         });
-        continue;
-      }
-
-      await ctx.db.insert("portfolioMintMappings", {
-        mint: item.mint,
-        coingeckoId: item.coingeckoId,
-        source: item.source,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
+      }),
+    );
     return null;
   },
 });
@@ -389,32 +401,32 @@ export const _reconcileWalletCoins = internalMutation({
     const added: Array<string> = [];
     const removed: Array<string> = [];
 
-    // Deletes (stale rows).
-    for (const row of existing) {
-      if (nextById.has(row.coingeckoId)) continue;
-      removed.push(row.coingeckoId);
-      await ctx.db.delete(row._id);
-    }
+    // Deletes (stale rows) — each targets its own row, so run concurrently.
+    const staleRows = existing.filter((row) => !nextById.has(row.coingeckoId));
+    for (const row of staleRows) removed.push(row.coingeckoId);
+    await Promise.all(staleRows.map((row) => ctx.db.delete(row._id)));
 
-    // Inserts / mint updates.
-    for (const [coingeckoId, item] of nextById.entries()) {
-      const row = existingById.get(coingeckoId);
-      if (!row) {
-        added.push(coingeckoId);
-        await ctx.db.insert("portfolioWalletCoins", {
-          userId: args.userId,
-          walletId: args.walletId,
-          coingeckoId,
-          mint: item.mint,
-          createdAt: now,
-        });
-        continue;
-      }
+    // Inserts / mint updates — ids are deduped, so each is independent.
+    await Promise.all(
+      Array.from(nextById.entries()).map(async ([coingeckoId, item]) => {
+        const row = existingById.get(coingeckoId);
+        if (!row) {
+          added.push(coingeckoId);
+          await ctx.db.insert("portfolioWalletCoins", {
+            userId: args.userId,
+            walletId: args.walletId,
+            coingeckoId,
+            mint: item.mint,
+            createdAt: now,
+          });
+          return;
+        }
 
-      if (row.mint !== item.mint) {
-        await ctx.db.patch(row._id, { mint: item.mint });
-      }
-    }
+        if (row.mint !== item.mint) {
+          await ctx.db.patch(row._id, { mint: item.mint });
+        }
+      }),
+    );
 
     await ctx.db.patch(args.walletId, {
       lastSyncedAt: args.syncError ? wallet.lastSyncedAt : args.syncedAt,
@@ -465,6 +477,7 @@ export const _touchTrackedCoinsForPortfolio = internalMutation({
     const lastSeen = Date.now();
 
     for (const idChunk of chunk(args.coingeckoIds, 100)) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- Convex sub-mutations execute serially by design
       await ctx.runMutation(internal.coingeckoState._touchTrackedCoinsBatch, {
         coingeckoIds: idChunk,
         reason: "portfolio",
@@ -474,6 +487,7 @@ export const _touchTrackedCoinsForPortfolio = internalMutation({
 
     // Remove stale portfolio membership only when no wallet still tracks it.
     for (const coingeckoId of args.removedCoingeckoIds) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- Convex sub-mutations execute serially by design
       const remaining = await ctx.db
         .query("portfolioWalletCoins")
         .withIndex("by_coingecko", (q) => q.eq("coingeckoId", coingeckoId))
@@ -706,9 +720,11 @@ export const syncWalletsDaily = internalAction({
       paginationOpts: { numItems: batchSize, cursor },
     });
 
-    for (const walletId of page.walletIds) {
-      await ctx.scheduler.runAfter(0, internal.portfolioJobs.syncWallet, { walletId });
-    }
+    await Promise.all(
+      page.walletIds.map((walletId) =>
+        ctx.scheduler.runAfter(0, internal.portfolioJobs.syncWallet, { walletId }),
+      ),
+    );
 
     await ctx.runMutation(internal.coingeckoState._setJobCursor, {
       jobKey,

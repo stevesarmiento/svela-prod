@@ -123,6 +123,7 @@ export function MultiMiniPriceChart({ tokens }: { tokens: MultiMiniChartToken[] 
 
   const lines = useMemo(() => buildNormalizedLines(tokens), [tokens])
 
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup -- observer creation is isCancelled-guarded post-await; returned teardown disconnects it on every path
   useEffect(() => {
     if (!chartContainerRef.current || lines.length === 0) return
 
@@ -223,7 +224,10 @@ export function MultiMiniPriceChart({ tokens }: { tokens: MultiMiniChartToken[] 
 
     return () => {
       isCancelled = true
-      resizeObserver?.disconnect()
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+        resizeObserver = null
+      }
       try {
         if (chart && crosshairMoveHandler) {
           chart.unsubscribeCrosshairMove(crosshairMoveHandler)

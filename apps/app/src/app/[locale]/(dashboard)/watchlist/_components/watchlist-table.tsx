@@ -10,7 +10,7 @@ import { WatchlistGroupIcon } from '@/components/watchlist-group-icon'
 import { COLOR_THEMES } from '@/components/color-picker'
 import { AvatarCircles } from '@v1/ui/token-stacks'
 import { Checkbox } from "@v1/ui/checkbox"
-import { motion } from "motion/react"
+import { m } from "motion/react"
 import { useWatchlistByGroup, useRemoveBulkFromWatchlist } from '@/lib/convex-hooks'
 import {
   useWatchlistSelection,
@@ -445,10 +445,11 @@ const CoinRowItem = memo(function CoinRowItem({
       )}
     >
       {/* First cell — merged select + token, toggles selection on click */}
+      {/* react-doctor-disable-next-line react-doctor/prefer-tag-over-role -- wraps a Radix checkbox button inside the row Link; a real button would nest interactive elements (invalid HTML) */}
       <div
-        className="flex min-w-0 items-center"
         role="button"
         tabIndex={0}
+        className="flex min-w-0 items-center"
         onClick={(e) => {
           e.preventDefault() // Always prevent navigation for first cell (selection mode)
           e.stopPropagation()
@@ -463,10 +464,14 @@ const CoinRowItem = memo(function CoinRowItem({
           if (e.key !== "Enter" && e.key !== " ") return
           e.preventDefault()
           e.stopPropagation()
+
+          const target = e.target as HTMLElement
+          if (target.closest('[data-watchlist-row-checkbox="true"]')) return
+
           onCoinSelect(rowKey, !isSelected)
         }}
       >
-        <motion.div
+        <m.div
           className="relative flex h-full w-full min-w-0 items-center justify-start"
           // Ensure non-hovered rows animate when selection mode flips on/off.
           // Starting from "rest" prevents "jump-to-endstate" on remounts.
@@ -476,7 +481,7 @@ const CoinRowItem = memo(function CoinRowItem({
           whileHover={hasSelectedCoins ? undefined : "revealed"}
         >
           {/* Checkbox - stable DOM to avoid "jump" on select/deselect */}
-          <motion.div
+          <m.div
             className="absolute left-0 z-10 px-1"
             variants={SELECT_CHECKBOX_VARIANTS}
             transition={selectRevealTransition}
@@ -488,10 +493,10 @@ const CoinRowItem = memo(function CoinRowItem({
               onCheckedChange={(checked) => onCoinSelect(rowKey, checked === true)}
               aria-label={`Select ${coin.name}`}
             />
-          </motion.div>
+          </m.div>
 
           {/* Token content slides right to make room for the checkbox */}
-          <motion.div
+          <m.div
             className="flex min-w-0 items-center gap-2"
             variants={SELECT_CONTENT_VARIANTS}
             transition={selectRevealTransition}
@@ -505,8 +510,8 @@ const CoinRowItem = memo(function CoinRowItem({
             />
             <span className="shrink-0 text-xs font-bold">{coin.symbol.toUpperCase()}</span>
             <span className="min-w-0 truncate font-berkeley-mono text-xs text-muted-foreground">{coin.name}</span>
-          </motion.div>
-        </motion.div>
+          </m.div>
+        </m.div>
       </div>
 
       {/* Price */}
@@ -567,6 +572,121 @@ const CoinRowItem = memo(function CoinRowItem({
   )
 })
 
+/** Placeholder trigger row shown while a watchlist's data is loading. */
+function WatchlistRowSkeleton({ activeTimeScale }: { activeTimeScale: string }) {
+  return (
+    <div className={cn("grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 opacity-60 sm:gap-4 sm:px-4 sm:py-2 sm:pr-2", ROW_GRID_COLS_SM)}>
+      {/* Watchlist name pill */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
+        <Skeleton className="h-5 w-24 rounded-full" />
+      </div>
+
+      {/* Trend chart */}
+      <div className="col-start-1 row-start-2 flex min-w-0 flex-col gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+          Trend
+        </span>
+        <TrendSparkline series={[]} change={0} isLoading />
+      </div>
+
+      {/* Change */}
+      <div className="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
+          {getTimeScaleLabel(activeTimeScale)}
+        </span>
+        <Skeleton className="h-3 w-10 rounded-full" />
+      </div>
+
+      {/* Expand/collapse indicator */}
+      <div className="col-start-2 row-start-1 flex items-center justify-end sm:col-start-auto sm:row-start-auto">
+        <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground opacity-50" />
+      </div>
+    </div>
+  )
+}
+
+/** Expanded accordion panel: the coins inside one watchlist. */
+function WatchlistCoinsPanel({
+  coins,
+  coinsCount,
+  isLoading,
+  groupId,
+  groupSlug,
+  activeTimeScale,
+  selectedCoins,
+  hasSelectedCoins,
+  onCoinSelect,
+}: {
+  coins: CoinRow[]
+  coinsCount: number
+  isLoading: boolean
+  groupId: WatchlistGroupId
+  groupSlug?: string
+  activeTimeScale: string
+  selectedCoins: Set<string>
+  hasSelectedCoins: boolean
+  onCoinSelect: (rowKey: string, selected: boolean) => void
+}) {
+  return (
+    <div className="border-t border-primary/5 bg-primary/[0.02] dark:bg-black/10">
+      {/* Sub-table header */}
+      <div
+        className={cn(
+          COIN_GRID_CLASS,
+          "py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground",
+        )}
+      >
+        <div>Token</div>
+        <div className="text-right">Price</div>
+        <div className="text-right">{getTimeScaleLabel(activeTimeScale)} Returns</div>
+      </div>
+
+      <div className="divide-y divide-primary/5">
+        {coins.length === 0 ? (
+          // Loading / empty coins state
+          <div className={cn(COIN_GRID_CLASS, "py-2")}>
+            {isLoading || coinsCount > 0 ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <Skeleton className="size-4 rounded-full" />
+                  <Skeleton className="h-3 w-20 rounded-full" />
+                </div>
+                <div className="flex justify-end"><Skeleton className="h-3 w-12 rounded-full" /></div>
+                <div className="flex justify-end"><Skeleton className="h-3 w-10 rounded-full" /></div>
+              </>
+            ) : (
+              <span className="col-span-full py-1 text-xs text-muted-foreground">
+                No tokens in this watchlist yet
+              </span>
+            )}
+          </div>
+        ) : (
+          coins.map((coin) => (
+            <CoinRowItem
+              key={coin.id}
+              coin={coin}
+              groupId={groupId}
+              isSelected={selectedCoins.has(makeRowKey(groupId, coin.id))}
+              hasSelectedCoins={hasSelectedCoins}
+              onCoinSelect={onCoinSelect}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Dig deeper: full watchlist view */}
+      <div className="flex justify-end border-t border-primary/5 px-3 py-1.5 sm:px-4">
+        <Link
+          href={groupSlug ? `/watchlists?wg=${encodeURIComponent(groupSlug)}&wt=chart` : "/watchlists?wt=chart"}
+          className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Open watchlist →
+        </Link>
+      </div>
+    </div>
+  )
+}
+
 // ✅ IMPROVED: Row component that uses the custom hook for individual watchlists
 function WatchlistCard({
   group,
@@ -603,6 +723,7 @@ function WatchlistCard({
     [isExpanded, watchlistData],
   )
   useEffect(() => {
+    // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent -- headless per-card hook bridge; hooks cannot run in a loop in the parent
     onVisibleCoinsChange(group._id, visibleCoins)
   }, [group._id, visibleCoins, onVisibleCoinsChange])
   useEffect(
@@ -617,6 +738,7 @@ function WatchlistCard({
 
   useEffect(() => {
     if (watchlistData !== null) {
+      // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent, react-doctor/no-pass-live-state-to-parent, react-doctor/no-prop-callback-in-effect -- headless per-card hook bridge; hooks cannot run in a loop in the parent
       onHoldingsValueKnown(group._id, watchlistData.holdingsValueUsd)
     }
   }, [group._id, watchlistData, onHoldingsValueKnown])
@@ -653,34 +775,7 @@ function WatchlistCard({
   return (
     <div>
       {watchlist.isLoading ? (
-          // Show loading state
-          <div className={cn("grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-3 px-3 py-3 opacity-60 sm:gap-4 sm:px-4 sm:py-2 sm:pr-2", ROW_GRID_COLS_SM)}>
-            {/* Watchlist name pill */}
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-nowrap">
-              <Skeleton className="h-5 w-24 rounded-full" />
-            </div>
-
-            {/* Trend chart */}
-            <div className="col-start-1 row-start-2 flex min-w-0 flex-col gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
-                Trend
-              </span>
-              <TrendSparkline series={[]} change={0} isLoading />
-            </div>
-
-            {/* Change */}
-            <div className="col-start-2 row-start-2 flex min-w-0 flex-col items-end gap-1 sm:col-start-auto sm:row-start-auto sm:flex-row sm:items-center sm:justify-end">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:hidden">
-                {getTimeScaleLabel(activeTimeScale)}
-              </span>
-              <Skeleton className="h-3 w-10 rounded-full" />
-            </div>
-
-            {/* Expand/collapse indicator */}
-            <div className="col-start-2 row-start-1 flex items-center justify-end sm:col-start-auto sm:row-start-auto">
-              <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground opacity-50" />
-            </div>
-          </div>
+          <WatchlistRowSkeleton activeTimeScale={activeTimeScale} />
         ) : (
           // Accordion trigger row: toggles the coins panel below
           <div
@@ -814,62 +909,17 @@ function WatchlistCard({
 
       {/* Expanded panel: coins in this watchlist */}
       {isExpanded && (
-        <div className="border-t border-primary/5 bg-primary/[0.02] dark:bg-black/10">
-          {/* Sub-table header */}
-          <div
-            className={cn(
-              COIN_GRID_CLASS,
-              "py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground",
-            )}
-          >
-            <div>Token</div>
-            <div className="text-right">Price</div>
-            <div className="text-right">{getTimeScaleLabel(activeTimeScale)} Returns</div>
-          </div>
-
-          <div className="divide-y divide-primary/5">
-            {watchlist.coins.length === 0 ? (
-              // Loading / empty coins state
-              <div className={cn(COIN_GRID_CLASS, "py-2")}>
-                {watchlist.isLoading || watchlist.coinsCount > 0 ? (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <Skeleton className="size-4 rounded-full" />
-                      <Skeleton className="h-3 w-20 rounded-full" />
-                    </div>
-                    <div className="flex justify-end"><Skeleton className="h-3 w-12 rounded-full" /></div>
-                    <div className="flex justify-end"><Skeleton className="h-3 w-10 rounded-full" /></div>
-                  </>
-                ) : (
-                  <span className="col-span-full py-1 text-xs text-muted-foreground">
-                    No tokens in this watchlist yet
-                  </span>
-                )}
-              </div>
-            ) : (
-              watchlist.coins.map((coin) => (
-                <CoinRowItem
-                  key={coin.id}
-                  coin={coin}
-                  groupId={group._id}
-                  isSelected={selectedCoins.has(makeRowKey(group._id, coin.id))}
-                  hasSelectedCoins={hasSelectedCoins}
-                  onCoinSelect={onCoinSelect}
-                />
-              ))
-            )}
-          </div>
-
-          {/* Dig deeper: full watchlist view */}
-          <div className="flex justify-end border-t border-primary/5 px-3 py-1.5 sm:px-4">
-            <Link
-              href={group.slug ? `/watchlists?wg=${encodeURIComponent(group.slug)}&wt=chart` : "/watchlists?wt=chart"}
-              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Open watchlist →
-            </Link>
-          </div>
-        </div>
+        <WatchlistCoinsPanel
+          coins={watchlist.coins}
+          coinsCount={watchlist.coinsCount}
+          isLoading={Boolean(watchlist.isLoading)}
+          groupId={group._id}
+          groupSlug={group.slug}
+          activeTimeScale={activeTimeScale}
+          selectedCoins={selectedCoins}
+          hasSelectedCoins={hasSelectedCoins}
+          onCoinSelect={onCoinSelect}
+        />
       )}
     </div>
   )

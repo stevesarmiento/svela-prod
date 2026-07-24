@@ -1,14 +1,20 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
+import type { RefObject } from 'react'
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
 import { useMarketVisionB, type MarketVisionBConfig } from '@/hooks/market-vision'
 import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
-import { subscribeToWindowResize } from '@/hooks/window-resize-store'
-import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store'
-import { CHART_COLOR_PARSERS, withAlpha as oklchWithAlpha } from '@/lib/oklch'
-import { timeToEpochSeconds } from '@/hooks/use-chart-instance/utils'
+import { withAlpha as oklchWithAlpha } from '@/lib/oklch'
+import {
+  applyInitialVisibleRange,
+  attachChartResize,
+  attachChartScrubSync,
+  buildIndicatorChartOptions,
+  createOverlayLayer,
+  getInitialWindowSeconds,
+} from './indicator-chart-setup'
 
 interface MarketVisionChartProps {
   data: OHLCVDataPoint[]
@@ -20,61 +26,690 @@ interface MarketVisionChartProps {
 
 type MarketVisionSeriesApi = ISeriesApi<'Line'> | ISeriesApi<'Histogram'> | ISeriesApi<'Baseline'>
 
-const SECONDS_PER_DAY = 24 * 60 * 60
-const DEFAULT_WINDOW_DAYS = 3
-const RIGHT_OFFSET_BARS = 12
+type MarketVisionCalculations = NonNullable<ReturnType<typeof useMarketVisionB>>
+
+interface StochKdData {
+  k: Array<{ time: number; value: number }>
+  d: Array<{ time: number; value: number }>
+}
+
+type PlotcharDatum =
+  | {
+      kind: 'dot'
+      time: number
+      value: number
+      color?: string
+      diameterPx: number
+      opacity: number
+    }
+  | {
+      kind: 'text'
+      time: number
+      value: number
+      color?: string
+      text: string
+      fontSizePx: number
+      opacity: number
+    }
+
 const MFI_VISUAL_SCALE = 0.6
 
-function getInitialWindowSeconds(initialWindowDays: number | undefined): number {
-  const days = Number.isFinite(initialWindowDays) ? Math.max(1, Math.round(initialWindowDays as number)) : DEFAULT_WINDOW_DAYS
-  return days * SECONDS_PER_DAY
+function withAlpha(color: string | undefined, alpha: number): string | undefined {
+  if (!color) return undefined
+  if (!Number.isFinite(alpha)) return color
+  // All chart colors are oklch strings; delegate to the shared helper.
+  return oklchWithAlpha(color, Math.max(0, Math.min(1, alpha)))
 }
 
-function normalizeEpochSeconds(value: unknown): number | null {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return null
-  return value > 1e10 ? Math.floor(value / 1000) : Math.floor(value)
+interface KdFillOverlay {
+  svg: SVGSVGElement
+  paths: { up: SVGPathElement; down: SVGPathElement }
+  schedule: () => void
+  cancel: () => void
 }
 
-function estimateIntervalSeconds(ohlcvData: OHLCVDataPoint[], lastEpoch: number): number {
-  const prevEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 2]?.time)
-  if (prevEpoch == null) return 0
-  const delta = lastEpoch - prevEpoch
-  return Number.isFinite(delta) && delta > 0 ? delta : 0
-}
+// Stoch K/D fill (Pine-style band fill between K and D), rendered as an SVG
+// overlay because lightweight-charts has no between-series fill primitive.
+// The schedule() updater reads through refs so it always sees the live chart.
+function createKdFillOverlay(
+  container: HTMLElement,
+  refs: {
+    chartRef: RefObject<IChartApi | null>
+    chartContainerRef: RefObject<HTMLDivElement | null>
+    kdFillLayerRef: RefObject<SVGSVGElement | null>
+    kdFillPathsRef: RefObject<{ up: SVGPathElement; down: SVGPathElement } | null>
+    seriesRefs: RefObject<Map<string, MarketVisionSeriesApi>>
+    stochDataRef: RefObject<StochKdData | null>
+  },
+): KdFillOverlay {
+  const { chartRef, chartContainerRef, kdFillLayerRef, kdFillPathsRef, seriesRefs, stochDataRef } = refs
 
-function pickDefaultWindowSeconds(spanSeconds: number, windowSeconds: number): number | null {
-  if (!Number.isFinite(spanSeconds) || spanSeconds <= 0) return null
+  const kdSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  kdSvg.setAttribute('aria-hidden', 'true')
+  kdSvg.style.position = 'absolute'
+  kdSvg.style.inset = '0'
+  kdSvg.style.pointerEvents = 'none'
+  kdSvg.style.zIndex = '4'
+  kdSvg.style.opacity = '1'
+  container.appendChild(kdSvg)
 
-  if (spanSeconds > windowSeconds) return windowSeconds
-  return null
-}
+  const kdPathUp = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  const kdPathDown = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  kdPathUp.setAttribute('fill', 'oklch(0.7404 0.142 230.37 / 0.05)') // Pine: color.new(oklch(0.7404 0.142 230.37), 95)
+  kdPathDown.setAttribute('fill', 'oklch(0.4742 0.1862 294.78 / 0.1)') // Pine: color.new(oklch(0.4742 0.1862 294.78), 90)
+  kdPathUp.setAttribute('stroke', 'none')
+  kdPathDown.setAttribute('stroke', 'none')
+  kdSvg.appendChild(kdPathUp)
+  kdSvg.appendChild(kdPathDown)
 
-function applyInitialVisibleRange(chart: IChartApi, ohlcvData: OHLCVDataPoint[], windowSeconds: number): void {
-  const firstEpoch = normalizeEpochSeconds(ohlcvData[0]?.time)
-  const lastEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 1]?.time)
-  if (firstEpoch == null || lastEpoch == null) {
-    chart.timeScale().fitContent()
-    return
+  let kdRafId: number | null = null
+  const schedule = () => {
+    if (kdRafId) cancelAnimationFrame(kdRafId)
+    kdRafId = requestAnimationFrame(() => {
+      kdRafId = null
+      if (!chartContainerRef.current || !kdFillLayerRef.current || !kdFillPathsRef.current) return
+
+      const width = Math.max(1, chartContainerRef.current.clientWidth)
+      const height = Math.max(1, chartContainerRef.current.clientHeight)
+      kdFillLayerRef.current.setAttribute('width', String(width))
+      kdFillLayerRef.current.setAttribute('height', String(height))
+      kdFillLayerRef.current.setAttribute('viewBox', `0 0 ${width} ${height}`)
+
+      const anchorSeries = seriesRefs.current.get('stochK')
+      if (!chartRef.current || !anchorSeries) {
+        kdFillPathsRef.current.up.setAttribute('d', '')
+        kdFillPathsRef.current.down.setAttribute('d', '')
+        return
+      }
+
+      const stoch = stochDataRef.current
+      if (!stoch || stoch.k.length === 0 || stoch.d.length === 0) {
+        kdFillPathsRef.current.up.setAttribute('d', '')
+        kdFillPathsRef.current.down.setAttribute('d', '')
+        return
+      }
+
+      const dByTime = new Map<number, number>()
+      for (const p of stoch.d) dByTime.set(p.time, p.value)
+
+      const range = chartRef.current.timeScale().getVisibleRange()
+      const from = range ? Number(range.from) : Number.NEGATIVE_INFINITY
+      const to = range ? Number(range.to) : Number.POSITIVE_INFINITY
+
+      type Pair = { time: number; k: number; d: number }
+      const pairs: Pair[] = []
+      for (const p of stoch.k) {
+        if (p.time < from || p.time > to) continue
+        const dv = dByTime.get(p.time)
+        if (typeof dv !== 'number' || !Number.isFinite(dv)) continue
+        if (!Number.isFinite(p.value)) continue
+        pairs.push({ time: p.time, k: p.value, d: dv })
+      }
+
+      if (pairs.length < 2) {
+        kdFillPathsRef.current.up.setAttribute('d', '')
+        kdFillPathsRef.current.down.setAttribute('d', '')
+        return
+      }
+
+      let upD = ''
+      let downD = ''
+
+      function appendPoly(target: 'up' | 'down', pts: Array<{ x: number; y: number }>) {
+        if (pts.length < 3) return
+        const d = `M ${pts[0]!.x} ${pts[0]!.y} ${pts.slice(1).map((p) => `L ${p.x} ${p.y}`).join(' ')} Z `
+        if (target === 'up') upD += d
+        else downD += d
+      }
+
+      for (let i = 0; i < pairs.length - 1; i++) {
+        const a = pairs[i]!
+        const b = pairs[i + 1]!
+
+        const x0 = chartRef.current.timeScale().timeToCoordinate(a.time as Time)
+        const x1 = chartRef.current.timeScale().timeToCoordinate(b.time as Time)
+        if (x0 == null || x1 == null || !Number.isFinite(x0) || !Number.isFinite(x1)) continue
+
+        const yK0 = anchorSeries.priceToCoordinate(a.k)
+        const yD0 = anchorSeries.priceToCoordinate(a.d)
+        const yK1 = anchorSeries.priceToCoordinate(b.k)
+        const yD1 = anchorSeries.priceToCoordinate(b.d)
+        if (yK0 == null || yD0 == null || yK1 == null || yD1 == null) continue
+        if (![yK0, yD0, yK1, yD1].every((v) => Number.isFinite(v))) continue
+
+        const diff0 = a.k - a.d
+        const diff1 = b.k - b.d
+        const aUp = diff0 >= 0
+        const bUp = diff1 >= 0
+
+        if (aUp === bUp || !Number.isFinite(diff0) || !Number.isFinite(diff1) || diff0 === diff1) {
+          appendPoly(aUp ? 'up' : 'down', [
+            { x: x0, y: yK0 },
+            { x: x1, y: yK1 },
+            { x: x1, y: yD1 },
+            { x: x0, y: yD0 },
+          ])
+          continue
+        }
+
+        // Split at the crossing between K and D.
+        const t = diff0 / (diff0 - diff1)
+        if (!Number.isFinite(t) || t < 0 || t > 1) continue
+        const xI = x0 + (x1 - x0) * t
+        const kI = a.k + (b.k - a.k) * t
+        const yI = anchorSeries.priceToCoordinate(kI)
+        if (yI == null || !Number.isFinite(yI) || !Number.isFinite(xI)) continue
+
+        appendPoly(aUp ? 'up' : 'down', [
+          { x: x0, y: yK0 },
+          { x: xI, y: yI },
+          { x: xI, y: yI },
+          { x: x0, y: yD0 },
+        ])
+        appendPoly(bUp ? 'up' : 'down', [
+          { x: xI, y: yI },
+          { x: x1, y: yK1 },
+          { x: x1, y: yD1 },
+          { x: xI, y: yI },
+        ])
+      }
+
+      kdFillPathsRef.current.up.setAttribute('d', upD)
+      kdFillPathsRef.current.down.setAttribute('d', downD)
+    })
   }
 
-  const spanSeconds = lastEpoch - firstEpoch
-  const requestedWindowSeconds = pickDefaultWindowSeconds(spanSeconds, windowSeconds)
-  if (requestedWindowSeconds == null || spanSeconds <= requestedWindowSeconds) {
-    chart.timeScale().fitContent()
-    return
+  const cancel = () => {
+    if (kdRafId) cancelAnimationFrame(kdRafId)
   }
 
-  const intervalSeconds = estimateIntervalSeconds(ohlcvData, lastEpoch)
-  const paddedTo = (lastEpoch + intervalSeconds) as Time
+  return { svg: kdSvg, paths: { up: kdPathUp, down: kdPathDown }, schedule, cancel }
+}
 
-  chart.timeScale().setVisibleRange({
-    from: (lastEpoch - requestedWindowSeconds) as Time,
-    to: paddedTo,
+// Pine plotchar glyph markers (·, •, ⚑, ◆) repositioned into chart
+// coordinates on a RAF. Reads through refs so it always sees the live chart.
+function createPlotcharUpdater(refs: {
+  chartRef: RefObject<IChartApi | null>
+  chartContainerRef: RefObject<HTMLDivElement | null>
+  plotcharLayerRef: RefObject<HTMLDivElement | null>
+  seriesRefs: RefObject<Map<string, MarketVisionSeriesApi>>
+  plotcharDataRef: RefObject<PlotcharDatum[]>
+}): { schedule: () => void; cancel: () => void } {
+  const { chartRef, chartContainerRef, plotcharLayerRef, seriesRefs, plotcharDataRef } = refs
+
+  let plotcharRafId: number | null = null
+  const schedule = () => {
+    if (plotcharRafId) cancelAnimationFrame(plotcharRafId)
+    plotcharRafId = requestAnimationFrame(() => {
+      plotcharRafId = null
+      if (!chartRef.current || !plotcharLayerRef.current) return
+
+      const layer = plotcharLayerRef.current
+      layer.innerHTML = ''
+
+      const width = Math.max(1, chartContainerRef.current?.clientWidth ?? 1)
+      const heightPx = Math.max(1, chartContainerRef.current?.clientHeight ?? 1)
+
+      const anchor = seriesRefs.current.get('zero') ?? seriesRefs.current.get('wt2') ?? seriesRefs.current.get('rsi')
+
+      if (!anchor) return
+
+      const range = chartRef.current.timeScale().getVisibleRange()
+      const from = range ? Number(range.from) : Number.NEGATIVE_INFINITY
+      const to = range ? Number(range.to) : Number.POSITIVE_INFINITY
+
+      for (const p of plotcharDataRef.current) {
+        if (p.time < from || p.time > to) continue
+
+        const x = chartRef.current.timeScale().timeToCoordinate(p.time as Time)
+        const y = anchor.priceToCoordinate(p.value)
+        if (x == null || y == null || !Number.isFinite(x) || !Number.isFinite(y)) continue
+
+        if (x < -20 || x > width + 20 || y < -20 || y > heightPx + 20) continue
+
+        if (p.kind === 'dot') {
+          const el = document.createElement('div')
+          el.style.position = 'absolute'
+          el.style.left = '0'
+          el.style.top = '0'
+          el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) translate(-50%, -50%)`
+          el.style.width = `${p.diameterPx}px`
+          el.style.height = `${p.diameterPx}px`
+          el.style.borderRadius = '9999px'
+          el.style.background = p.color ?? 'oklch(1 0 0)'
+          el.style.opacity = String(p.opacity)
+          layer.appendChild(el)
+        } else {
+          const el = document.createElement('span')
+          el.textContent = p.text
+          el.style.position = 'absolute'
+          el.style.left = '0'
+          el.style.top = '0'
+          el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) translate(-50%, -50%)`
+          el.style.color = p.color ?? 'oklch(1 0 0)'
+          el.style.opacity = String(p.opacity)
+          el.style.fontSize = `${p.fontSizePx}px`
+          el.style.lineHeight = '1'
+          el.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif'
+          layer.appendChild(el)
+        }
+      }
+    })
+  }
+
+  const cancel = () => {
+    if (plotcharRafId) cancelAnimationFrame(plotcharRafId)
+  }
+
+  return { schedule, cancel }
+}
+
+// Pine plotchar glyph markers rendered via DOM overlay (data prepared here).
+function buildPlotcharData(calculations: MarketVisionCalculations): PlotcharDatum[] {
+  const plotchars = [
+    // Pine `size.small` dots with `transp=50` (alpha 0.5)
+    ...calculations.series.buyCircle.map((p) => ({ ...p, kind: 'dot' as const, diameterPx: 7, opacity: 0.5 })),
+    ...calculations.series.sellCircle.map((p) => ({ ...p, kind: 'dot' as const, diameterPx: 7, opacity: 0.5 })),
+
+    // Pine div dots: `size.small`, `transp=15` (alpha 0.85)
+    ...calculations.series.divBuyCircle.map((p) => ({ ...p, kind: 'dot' as const, diameterPx: 8, opacity: 0.85 })),
+    ...calculations.series.divSellCircle.map((p) => ({ ...p, kind: 'dot' as const, diameterPx: 8, opacity: 0.85 })),
+
+    // Pine gold dot: `size.normal`, `transp=15` (alpha 0.85)
+    ...calculations.series.goldBuyCircle.map((p) => ({ ...p, kind: 'dot' as const, diameterPx: 10, opacity: 0.85 })),
+
+    // Sommi markers: `size.tiny`
+    ...calculations.series.sommiBearFlag.map((p) => ({ ...p, kind: 'text' as const, text: '⚑', fontSizePx: 10, opacity: 1 })),
+    ...calculations.series.sommiBullFlag.map((p) => ({ ...p, kind: 'text' as const, text: '⚑', fontSizePx: 10, opacity: 1 })),
+    ...calculations.series.sommiBearDiamond.map((p) => ({ ...p, kind: 'text' as const, text: '◆', fontSizePx: 10, opacity: 1 })),
+    ...calculations.series.sommiBullDiamond.map((p) => ({ ...p, kind: 'text' as const, text: '◆', fontSizePx: 10, opacity: 1 })),
+  ].sort((a, b) => Number(a.time) - Number(b.time))
+
+  return plotchars.map((p) => {
+    if (p.kind === 'dot') {
+      return {
+        kind: 'dot' as const,
+        time: Number(p.time),
+        value: p.value,
+        color: p.color,
+        diameterPx: p.diameterPx,
+        opacity: p.opacity,
+      }
+    }
+    return {
+      kind: 'text' as const,
+      time: Number(p.time),
+      value: p.value,
+      color: p.color,
+      text: p.text,
+      fontSizePx: p.fontSizePx,
+      opacity: p.opacity,
+    }
   })
 }
 
-export function MarketVisionChart({ 
-  data, 
+// Rebuilds every series on the chart from the latest MarketVision B
+// calculations, refreshes the stoch K/D + plotchar overlay data, and pads the
+// price scale so plotchar y-levels stay in the autoscaled range.
+function applyMarketVisionSeries(args: {
+  chart: IChartApi
+  lightweightCharts: LightweightChartsModule
+  seriesRefs: Map<string, MarketVisionSeriesApi>
+  calculations: MarketVisionCalculations
+  data: OHLCVDataPoint[]
+  stochDataRef: RefObject<StochKdData | null>
+  kdFillScheduleRef: RefObject<(() => void) | null>
+  plotcharDataRef: RefObject<PlotcharDatum[]>
+  plotcharScheduleRef: RefObject<(() => void) | null>
+}): void {
+  const { chart, lightweightCharts, seriesRefs, calculations, data, stochDataRef, kdFillScheduleRef, plotcharDataRef, plotcharScheduleRef } = args
+  const { LineSeries, HistogramSeries, BaselineSeries, LineStyle, LineType } = lightweightCharts
+
+  // Clear existing series
+  seriesRefs.forEach(series => {
+    try {
+      chart.removeSeries(series)
+    } catch {
+      // Series might already be removed
+    }
+  })
+  seriesRefs.clear()
+  stochDataRef.current = null
+  kdFillScheduleRef.current?.()
+  plotcharDataRef.current = []
+  plotcharScheduleRef.current?.()
+
+  // Zero line
+  if (calculations.levels.zero.length) {
+    const zeroSeries = chart.addSeries(LineSeries, {
+      lineWidth: 1,
+      color: 'oklch(1 0 0 / 0.3765)',
+      title: '',
+      lineStyle: LineStyle.Solid,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    zeroSeries.setData(calculations.levels.zero as { time: Time; value: number }[])
+    seriesRefs.set('zero', zeroSeries)
+  }
+
+  // WT1 / WT2 waves
+  if (calculations.series.wt1.length) {
+    const wt1 = chart.addSeries(BaselineSeries, {
+      baseValue: { type: 'price', price: 0 },
+      topLineColor: withAlpha('oklch(0.66 0.1513 254.09)', 0.7),
+      bottomLineColor: withAlpha('oklch(0.66 0.1513 254.09)', 0.7),
+      topFillColor1: withAlpha('oklch(0.66 0.1513 254.09)', 0.35),
+      topFillColor2: withAlpha('oklch(0.66 0.1513 254.09)', 0.35),
+      bottomFillColor1: withAlpha('oklch(0.66 0.1513 254.09)', 0.35),
+      bottomFillColor2: withAlpha('oklch(0.66 0.1513 254.09)', 0.35),
+      lineWidth: 2,
+      title: '',
+      lastValueVisible: true,
+      priceLineVisible: false,
+    })
+    wt1.setData(calculations.series.wt1.map((p) => ({ time: p.time as Time, value: p.value })))
+    seriesRefs.set('wt1', wt1)
+  }
+
+  if (calculations.series.wt2.length) {
+    const wt2 = chart.addSeries(BaselineSeries, {
+      baseValue: { type: 'price', price: 0 },
+      // Keep WT2 fill dark, but match the line to WT1 blue for visibility.
+      topLineColor: withAlpha('oklch(0.66 0.1513 254.09)', 0.8),
+      bottomLineColor: withAlpha('oklch(0.66 0.1513 254.09)', 0.8),
+      topFillColor1: withAlpha('oklch(0.2608 0.1153 281.53)', 0.35),
+      topFillColor2: withAlpha('oklch(0.2608 0.1153 281.53)', 0.35),
+      bottomFillColor1: withAlpha('oklch(0.2608 0.1153 281.53)', 0.35),
+      bottomFillColor2: withAlpha('oklch(0.2608 0.1153 281.53)', 0.35),
+      lineWidth: 1,
+      title: '',
+      lastValueVisible: true,
+      priceLineVisible: false,
+    })
+    wt2.setData(calculations.series.wt2.map((p) => ({ time: p.time as Time, value: p.value })))
+    seriesRefs.set('wt2', wt2)
+  }
+
+  // Fast WT (VWAP) - area approximation
+  if (calculations.series.wtVwap.length) {
+    const vwap = chart.addSeries(BaselineSeries, {
+      baseValue: { type: 'price', price: 0 },
+      topLineColor: withAlpha('oklch(1 0 0)', 0.55),
+      bottomLineColor: withAlpha('oklch(1 0 0)', 0.55),
+      topFillColor1: withAlpha('oklch(1 0 0)', 0.25),
+      topFillColor2: withAlpha('oklch(1 0 0)', 0.25),
+      bottomFillColor1: withAlpha('oklch(1 0 0)', 0.25),
+      bottomFillColor2: withAlpha('oklch(1 0 0)', 0.25),
+      lineWidth: 1,
+      title: '',
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    vwap.setData(calculations.series.wtVwap.map((p) => ({ time: p.time as Time, value: p.value })))
+    seriesRefs.set('wtVwap', vwap)
+  }
+
+  // RSI+MFI area and MFI bar (between -99 and -95)
+  if (calculations.series.rsiMfi.length) {
+    const rsiMfi = chart.addSeries(BaselineSeries, {
+      baseValue: { type: 'price', price: 0 },
+      topLineColor: withAlpha('oklch(0.7978 0.2362 143.47)', 0.75),
+      bottomLineColor: withAlpha('oklch(0.6556 0.231 29.33)', 0.75),
+      topFillColor1: withAlpha('oklch(0.7978 0.2362 143.47)', 0.5),
+      topFillColor2: withAlpha('oklch(0.7978 0.2362 143.47)', 0.5),
+      bottomFillColor1: withAlpha('oklch(0.6556 0.231 29.33)', 0.5),
+      bottomFillColor2: withAlpha('oklch(0.6556 0.231 29.33)', 0.5),
+      lineWidth: 1,
+      title: '',
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    // Visual-only scaling: reduces how much the red/green MFI area dominates the pane
+    // without changing WT/RSI/Stoch scaling.
+    rsiMfi.setData(
+      calculations.series.rsiMfi.map((p) => ({
+        time: p.time as Time,
+        value: p.value * MFI_VISUAL_SCALE,
+      })),
+    )
+    seriesRefs.set('rsiMfi', rsiMfi)
+  }
+
+  if (calculations.series.mfiBarTop.length) {
+    const mfiBar = chart.addSeries(HistogramSeries, {
+      base: -99,
+      title: '',
+      lastValueVisible: false,
+      priceLineVisible: false,
+      color: 'oklch(1 0 0 / 0.251)',
+    })
+    mfiBar.setData(
+      calculations.series.mfiBarTop.map((p) => ({
+        time: p.time as Time,
+        value: p.value,
+        color: withAlpha(p.color, 0.25),
+      })),
+    )
+    seriesRefs.set('mfiBar', mfiBar)
+  }
+
+  // RSI
+  if (calculations.series.rsi.length) {
+    const rsi = chart.addSeries(LineSeries, {
+      lineWidth: 2,
+      title: '',
+      lastValueVisible: true,
+      priceLineVisible: false,
+      color: 'oklch(1 0 0 / 0.4392)',
+    })
+    rsi.setData(
+      calculations.series.rsi.map((p) => ({
+        time: p.time as Time,
+        value: p.value,
+        color: withAlpha(p.color, 0.75),
+      })),
+    )
+    seriesRefs.set('rsi', rsi)
+  }
+
+  // Stoch K/D
+  if (calculations.series.stochK.length) {
+    const stochK = chart.addSeries(LineSeries, {
+      lineWidth: 2,
+      title: '',
+      lastValueVisible: false,
+      priceLineVisible: false,
+      color: calculations.series.stochK[0]?.color ?? 'oklch(0.7404 0.142 230.37)',
+    })
+    stochK.setData(calculations.series.stochK as { time: Time; value: number; color?: string }[])
+    seriesRefs.set('stochK', stochK)
+  }
+
+  if (calculations.series.stochD.length) {
+    const stochD = chart.addSeries(LineSeries, {
+      lineWidth: 1,
+      title: '',
+      lastValueVisible: false,
+      priceLineVisible: false,
+      color: calculations.series.stochD[0]?.color ?? 'oklch(0.4742 0.1862 294.78)',
+    })
+    stochD.setData(calculations.series.stochD as { time: Time; value: number; color?: string }[])
+    seriesRefs.set('stochD', stochD)
+  }
+  stochDataRef.current = {
+    k: calculations.series.stochK.map((p) => ({ time: Number(p.time), value: p.value })),
+    d: calculations.series.stochD.map((p) => ({ time: Number(p.time), value: p.value })),
+  }
+  kdFillScheduleRef.current?.()
+
+  // Schaff Trend Cycle (two-line overlay like Pine)
+  if (calculations.series.tc.length) {
+    const tcPurple = chart.addSeries(LineSeries, {
+      lineWidth: 2,
+      title: '',
+      lastValueVisible: false,
+      priceLineVisible: false,
+      color: withAlpha('oklch(0.4742 0.1862 294.78)', 0.75),
+    })
+    tcPurple.setData(calculations.series.tc.map((p) => ({ time: p.time as Time, value: p.value })))
+    seriesRefs.set('tcPurple', tcPurple)
+
+    const tcWhite = chart.addSeries(LineSeries, {
+      lineWidth: 1,
+      title: '',
+      lastValueVisible: false,
+      priceLineVisible: false,
+      color: withAlpha('oklch(1 0 0)', 0.5),
+    })
+    tcWhite.setData(calculations.series.tc.map((p) => ({ time: p.time as Time, value: p.value })))
+    seriesRefs.set('tcWhite', tcWhite)
+  }
+
+  // Overbought / oversold guide lines (Pine: steps for ob2/os2, circles for ob3)
+  if (calculations.levels.obLevel2.length) {
+    const ob2 = chart.addSeries(LineSeries, {
+      lineWidth: 1,
+      title: '',
+      lastValueVisible: false,
+      priceLineVisible: false,
+      color: withAlpha('oklch(1 0 0)', 0.15),
+      lineType: LineType.WithSteps,
+    })
+    ob2.setData(calculations.levels.obLevel2 as { time: Time; value: number }[])
+    seriesRefs.set('ob2', ob2)
+  }
+
+  if (calculations.levels.osLevel2.length) {
+    const os2 = chart.addSeries(LineSeries, {
+      lineWidth: 1,
+      title: '',
+      lastValueVisible: false,
+      priceLineVisible: false,
+      color: withAlpha('oklch(1 0 0)', 0.15),
+      lineType: LineType.WithSteps,
+    })
+    os2.setData(calculations.levels.osLevel2 as { time: Time; value: number }[])
+    seriesRefs.set('os2', os2)
+  }
+
+  if (calculations.levels.obLevel3.length) {
+    const ob3 = chart.addSeries(LineSeries, {
+      lineWidth: 1,
+      title: '',
+      color: 'transparent',
+      lineVisible: false,
+      pointMarkersVisible: true,
+      pointMarkersRadius: 2,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    ob3.setData(calculations.levels.obLevel3.map((p) => ({ time: p.time as Time, value: p.value, color: withAlpha('oklch(1 0 0)', 0.05) })))
+    seriesRefs.set('ob3', ob3)
+  }
+
+  // Point-only overlays (divergences + circles)
+  function addPointSeries(key: string, points: Array<{ time: number; value: number; color?: string }>, radius: number): void {
+    if (!points.length) return
+    const s = chart.addSeries(LineSeries, {
+      lineWidth: 1,
+      title: '',
+      color: 'transparent',
+      lineVisible: false,
+      pointMarkersVisible: true,
+      pointMarkersRadius: radius,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    s.setData(points as { time: Time; value: number; color?: string }[])
+    seriesRefs.set(key, s)
+  }
+
+  // WT cross circles: ensure color is visible (lightweight-charts point markers can ignore per-point colors).
+  function addFixedColorPointSeries(
+    key: string,
+    points: Array<{ time: number; value: number }>,
+    radius: number,
+    color: string,
+  ): void {
+    if (!points.length) return
+    const s = chart.addSeries(LineSeries, {
+      lineWidth: 1,
+      title: '',
+      color,
+      lineVisible: false,
+      pointMarkersVisible: true,
+      pointMarkersRadius: radius,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    s.setData(points as { time: Time; value: number }[])
+    seriesRefs.set(key, s)
+  }
+
+  const crossUp: Array<{ time: number; value: number }> = []
+  const crossDown: Array<{ time: number; value: number }> = []
+  for (const p of calculations.series.wtCrossCircles) {
+    const color = String(p.color ?? '')
+    if (color.includes('0, 230, 118')) crossUp.push({ time: p.time, value: p.value })
+    if (color.includes('255, 82, 82')) crossDown.push({ time: p.time, value: p.value })
+  }
+
+  addFixedColorPointSeries('wtCrossCirclesUp', crossUp, 3, 'oklch(0.8099 0.2141 151.77 / 0.85)')
+  addFixedColorPointSeries('wtCrossCirclesDown', crossDown, 3, 'oklch(0.6786 0.2095 24.66 / 0.85)')
+
+  addPointSeries('wtBearDiv', calculations.series.wtBearDiv, 3)
+  addPointSeries('wtBullDiv', calculations.series.wtBullDiv, 3)
+  addPointSeries('wtBearDiv2', calculations.series.wtBearDiv2, 3)
+  addPointSeries('wtBullDiv2', calculations.series.wtBullDiv2, 3)
+
+  addPointSeries('rsiBearDiv', calculations.series.rsiBearDiv, 2)
+  addPointSeries('rsiBullDiv', calculations.series.rsiBullDiv, 2)
+
+  addPointSeries('stochBearDiv', calculations.series.stochBearDiv, 2)
+  addPointSeries('stochBullDiv', calculations.series.stochBullDiv, 2)
+
+  // Sommi HVWAP + markers
+  if (calculations.series.sommiHvwap.length) {
+    const hvwap = chart.addSeries(LineSeries, {
+      lineWidth: 2,
+      title: '',
+      lastValueVisible: false,
+      priceLineVisible: false,
+      color: 'oklch(0.9147 0.1908 101.03)',
+    })
+    hvwap.setData(calculations.series.sommiHvwap as { time: Time; value: number; color?: string }[])
+    seriesRefs.set('sommiHvwap', hvwap)
+  }
+
+  const plotchars = buildPlotcharData(calculations)
+  plotcharDataRef.current = plotchars
+  plotcharScheduleRef.current?.()
+
+  // Ensure plotchar y-levels are included in autoscale (Pine uses `location.absolute` values).
+  if (plotchars.length >= 1) {
+    const firstTime = Number(data[0]?.time)
+    const lastTime = Number(data[data.length - 1]?.time)
+    if (Number.isFinite(firstTime) && Number.isFinite(lastTime) && firstTime < lastTime) {
+      const scalePad = chart.addSeries(LineSeries, {
+        lineWidth: 1,
+        title: '',
+        color: 'transparent',
+        lineVisible: false,
+        lastValueVisible: false,
+        priceLineVisible: false,
+      })
+      scalePad.setData([
+        { time: firstTime as Time, value: -108 },
+        { time: lastTime as Time, value: 108 },
+      ])
+      seriesRefs.set('scalePad', scalePad)
+    }
+  }
+}
+
+export function MarketVisionChart({
+  data,
   config,
   height = 200,
   showTimeAxis = true,
@@ -86,34 +721,11 @@ export function MarketVisionChart({
   const lightweightChartsRef = useRef<LightweightChartsModule | null>(null)
   const hasAppliedInitialRangeRef = useRef(false)
   const [chartReadyNonce, setChartReadyNonce] = useState(0)
-  const stochDataRef = useRef<{
-    k: Array<{ time: number; value: number }>
-    d: Array<{ time: number; value: number }>
-  } | null>(null)
+  const stochDataRef = useRef<StochKdData | null>(null)
   const kdFillLayerRef = useRef<SVGSVGElement | null>(null)
   const kdFillPathsRef = useRef<{ up: SVGPathElement; down: SVGPathElement } | null>(null)
   const kdFillScheduleRef = useRef<(() => void) | null>(null)
-  const plotcharDataRef = useRef<
-    Array<
-      | {
-          kind: 'dot'
-          time: number
-          value: number
-          color?: string
-          diameterPx: number
-          opacity: number
-        }
-      | {
-          kind: 'text'
-          time: number
-          value: number
-          color?: string
-          text: string
-          fontSizePx: number
-          opacity: number
-        }
-    >
-  >([])
+  const plotcharDataRef = useRef<PlotcharDatum[]>([])
   const plotcharLayerRef = useRef<HTMLDivElement | null>(null)
   const plotcharScheduleRef = useRef<(() => void) | null>(null)
   const initialWindowSeconds = getInitialWindowSeconds(initialWindowDays)
@@ -142,356 +754,72 @@ export function MarketVisionChart({
       const lightweightCharts = await loadLightweightCharts()
       lightweightChartsRef.current = lightweightCharts
 
-      const { createChart, ColorType, CrosshairMode, LineStyle } = lightweightCharts
-
       if (isCancelled || !chartContainerRef.current) return
+      const container = chartContainerRef.current
 
-      const chart = createChart(chartContainerRef.current, {
-        handleScale: true,
-        handleScroll: true,
-        layout: {
-          background: { type: ColorType.Solid, color: isDarkMode ? "oklch(0 0 0)" : "transparent" },
-          textColor: "oklch(1 0 0 / 0.3137)",
-          attributionLogo: false,
-          colorParsers: CHART_COLOR_PARSERS,
-        },
-        grid: {
-          vertLines: { visible: false },
-          horzLines: { visible: true, color: "oklch(0.9702 0 0 / 0.0627)", style: LineStyle.Dotted },
-        },
-        rightPriceScale: { 
-          borderVisible: false, 
-          autoScale: true,
-          scaleMargins: { top: 0.1, bottom: 0.1 }
-        },
-        crosshair: {
-          mode: CrosshairMode.Magnet,
-          vertLine: { labelVisible: true, width: 1, color: "oklch(0.8717 0.0093 258.34 / 0.251)", visible: true, style: LineStyle.Solid },
-          horzLine: { visible: false, labelVisible: false },
-        },
-        timeScale: { 
-          visible: showTimeAxis,
-          timeVisible: showTimeAxis,
-          secondsVisible: false,
-          borderVisible: false,
-          rightOffset: RIGHT_OFFSET_BARS,
-        },
-      })
+      const chart = lightweightCharts.createChart(
+        container,
+        buildIndicatorChartOptions(lightweightCharts, {
+          showTimeAxis,
+          horzLinesVisible: true,
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+          backgroundColor: isDarkMode ? 'oklch(0 0 0)' : 'transparent',
+        }),
+      )
 
       chartRef.current = chart
       hasAppliedInitialRangeRef.current = false
       if (!isCancelled) setChartReadyNonce((prev) => prev + 1)
 
-      const handleResize = () => {
-        if (chartContainerRef.current && chart) {
-          chart.applyOptions({
-            width: chartContainerRef.current.clientWidth,
-            height: height,
-          })
-        }
+      const detachResize = attachChartResize(chart, container, height, () => {
         kdFillScheduleRef.current?.()
         plotcharScheduleRef.current?.()
-      }
-
-      // Prefer observing the actual container size (avoids per-chart global resize listeners).
-      let resizeObserver: ResizeObserver | null = null
-      let resizeRafId: number | null = null
-      let unsubscribeWindowResize: (() => void) | null = null
-
-      if (typeof ResizeObserver !== "undefined" && chartContainerRef.current) {
-        resizeObserver = new ResizeObserver(() => {
-          if (resizeRafId) cancelAnimationFrame(resizeRafId)
-          resizeRafId = requestAnimationFrame(() => handleResize())
-        })
-        resizeObserver.observe(chartContainerRef.current)
-      } else {
-        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
-      }
-
-      handleResize()
-
-      // Shared cross-chart scrub line overlay.
-      chartContainerRef.current.style.position = chartContainerRef.current.style.position || 'relative'
-      const scrubLineEl = document.createElement('div')
-      scrubLineEl.setAttribute('aria-hidden', 'true')
-      scrubLineEl.style.position = 'absolute'
-      scrubLineEl.style.top = '0'
-      scrubLineEl.style.bottom = '0'
-      scrubLineEl.style.width = '1px'
-      scrubLineEl.style.transform = 'translateX(-9999px)'
-      scrubLineEl.style.opacity = '0'
-      scrubLineEl.style.pointerEvents = 'none'
-      scrubLineEl.style.background = 'oklch(1 0 0 / 0.2)'
-      scrubLineEl.style.zIndex = '5'
-      chartContainerRef.current.appendChild(scrubLineEl)
+      })
+      const detachScrubSync = attachChartScrubSync(chart, container, 'marketvision')
 
       // Stoch K/D fill (Pine-style band fill between K and D).
-      const kdSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-      kdSvg.setAttribute('aria-hidden', 'true')
-      kdSvg.style.position = 'absolute'
-      kdSvg.style.inset = '0'
-      kdSvg.style.pointerEvents = 'none'
-      kdSvg.style.zIndex = '4'
-      kdSvg.style.opacity = '1'
-      chartContainerRef.current.appendChild(kdSvg)
-      kdFillLayerRef.current = kdSvg
-
-      const kdPathUp = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-      const kdPathDown = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-      kdPathUp.setAttribute('fill', 'oklch(0.7404 0.142 230.37 / 0.05)') // Pine: color.new(oklch(0.7404 0.142 230.37), 95)
-      kdPathDown.setAttribute('fill', 'oklch(0.4742 0.1862 294.78 / 0.1)') // Pine: color.new(oklch(0.4742 0.1862 294.78), 90)
-      kdPathUp.setAttribute('stroke', 'none')
-      kdPathDown.setAttribute('stroke', 'none')
-      kdSvg.appendChild(kdPathUp)
-      kdSvg.appendChild(kdPathDown)
-      kdFillPathsRef.current = { up: kdPathUp, down: kdPathDown }
-
-      let kdRafId: number | null = null
-      const scheduleKdFillUpdate = () => {
-        if (kdRafId) cancelAnimationFrame(kdRafId)
-        kdRafId = requestAnimationFrame(() => {
-          kdRafId = null
-          if (!chartContainerRef.current || !kdFillLayerRef.current || !kdFillPathsRef.current) return
-
-          const width = Math.max(1, chartContainerRef.current.clientWidth)
-          const height = Math.max(1, chartContainerRef.current.clientHeight)
-          kdFillLayerRef.current.setAttribute('width', String(width))
-          kdFillLayerRef.current.setAttribute('height', String(height))
-          kdFillLayerRef.current.setAttribute('viewBox', `0 0 ${width} ${height}`)
-
-          const anchorSeries = seriesRefs.current.get('stochK')
-          if (!chartRef.current || !anchorSeries) {
-            kdFillPathsRef.current.up.setAttribute('d', '')
-            kdFillPathsRef.current.down.setAttribute('d', '')
-            return
-          }
-
-          const stoch = stochDataRef.current
-          if (!stoch || stoch.k.length === 0 || stoch.d.length === 0) {
-            kdFillPathsRef.current.up.setAttribute('d', '')
-            kdFillPathsRef.current.down.setAttribute('d', '')
-            return
-          }
-
-          const dByTime = new Map<number, number>()
-          for (const p of stoch.d) dByTime.set(p.time, p.value)
-
-          const range = chartRef.current.timeScale().getVisibleRange()
-          const from = range ? Number(range.from) : Number.NEGATIVE_INFINITY
-          const to = range ? Number(range.to) : Number.POSITIVE_INFINITY
-
-          type Pair = { time: number; k: number; d: number }
-          const pairs: Pair[] = []
-          for (const p of stoch.k) {
-            if (p.time < from || p.time > to) continue
-            const dv = dByTime.get(p.time)
-            if (typeof dv !== 'number' || !Number.isFinite(dv)) continue
-            if (!Number.isFinite(p.value)) continue
-            pairs.push({ time: p.time, k: p.value, d: dv })
-          }
-
-          if (pairs.length < 2) {
-            kdFillPathsRef.current.up.setAttribute('d', '')
-            kdFillPathsRef.current.down.setAttribute('d', '')
-            return
-          }
-
-          let upD = ''
-          let downD = ''
-
-          function appendPoly(target: 'up' | 'down', pts: Array<{ x: number; y: number }>) {
-            if (pts.length < 3) return
-            const d = `M ${pts[0]!.x} ${pts[0]!.y} ${pts.slice(1).map((p) => `L ${p.x} ${p.y}`).join(' ')} Z `
-            if (target === 'up') upD += d
-            else downD += d
-          }
-
-          for (let i = 0; i < pairs.length - 1; i++) {
-            const a = pairs[i]!
-            const b = pairs[i + 1]!
-
-            const x0 = chartRef.current.timeScale().timeToCoordinate(a.time as Time)
-            const x1 = chartRef.current.timeScale().timeToCoordinate(b.time as Time)
-            if (x0 == null || x1 == null || !Number.isFinite(x0) || !Number.isFinite(x1)) continue
-
-            const yK0 = anchorSeries.priceToCoordinate(a.k)
-            const yD0 = anchorSeries.priceToCoordinate(a.d)
-            const yK1 = anchorSeries.priceToCoordinate(b.k)
-            const yD1 = anchorSeries.priceToCoordinate(b.d)
-            if (yK0 == null || yD0 == null || yK1 == null || yD1 == null) continue
-            if (![yK0, yD0, yK1, yD1].every((v) => Number.isFinite(v))) continue
-
-            const diff0 = a.k - a.d
-            const diff1 = b.k - b.d
-            const aUp = diff0 >= 0
-            const bUp = diff1 >= 0
-
-            if (aUp === bUp || !Number.isFinite(diff0) || !Number.isFinite(diff1) || diff0 === diff1) {
-              appendPoly(aUp ? 'up' : 'down', [
-                { x: x0, y: yK0 },
-                { x: x1, y: yK1 },
-                { x: x1, y: yD1 },
-                { x: x0, y: yD0 },
-              ])
-              continue
-            }
-
-            // Split at the crossing between K and D.
-            const t = diff0 / (diff0 - diff1)
-            if (!Number.isFinite(t) || t < 0 || t > 1) continue
-            const xI = x0 + (x1 - x0) * t
-            const kI = a.k + (b.k - a.k) * t
-            const yI = anchorSeries.priceToCoordinate(kI)
-            if (yI == null || !Number.isFinite(yI) || !Number.isFinite(xI)) continue
-
-            appendPoly(aUp ? 'up' : 'down', [
-              { x: x0, y: yK0 },
-              { x: xI, y: yI },
-              { x: xI, y: yI },
-              { x: x0, y: yD0 },
-            ])
-            appendPoly(bUp ? 'up' : 'down', [
-              { x: xI, y: yI },
-              { x: x1, y: yK1 },
-              { x: x1, y: yD1 },
-              { x: xI, y: yI },
-            ])
-          }
-
-          kdFillPathsRef.current.up.setAttribute('d', upD)
-          kdFillPathsRef.current.down.setAttribute('d', downD)
-        })
-      }
-
-      kdFillScheduleRef.current = scheduleKdFillUpdate
+      const kdFill = createKdFillOverlay(container, {
+        chartRef,
+        chartContainerRef,
+        kdFillLayerRef,
+        kdFillPathsRef,
+        seriesRefs,
+        stochDataRef,
+      })
+      kdFillLayerRef.current = kdFill.svg
+      kdFillPathsRef.current = kdFill.paths
+      kdFillScheduleRef.current = kdFill.schedule
 
       // Pine plotchar glyph markers (·, •, ⚑, ◆) as a DOM overlay.
-      const plotcharLayer = document.createElement('div')
-      plotcharLayer.className = 'pointer-events-none absolute inset-0'
-      plotcharLayer.style.zIndex = '6'
-      plotcharLayer.setAttribute('aria-hidden', 'true')
-      chartContainerRef.current.appendChild(plotcharLayer)
+      const plotcharLayer = createOverlayLayer(container, '6')
       plotcharLayerRef.current = plotcharLayer
+      const plotchar = createPlotcharUpdater({
+        chartRef,
+        chartContainerRef,
+        plotcharLayerRef,
+        seriesRefs,
+        plotcharDataRef,
+      })
+      plotcharScheduleRef.current = plotchar.schedule
 
-      let plotcharRafId: number | null = null
-      const schedulePlotcharUpdate = () => {
-        if (plotcharRafId) cancelAnimationFrame(plotcharRafId)
-        plotcharRafId = requestAnimationFrame(() => {
-          plotcharRafId = null
-          if (!chartRef.current || !plotcharLayerRef.current) return
-
-          const layer = plotcharLayerRef.current
-          layer.innerHTML = ''
-
-          const width = Math.max(1, chartContainerRef.current?.clientWidth ?? 1)
-          const heightPx = Math.max(1, chartContainerRef.current?.clientHeight ?? 1)
-
-          const anchor = seriesRefs.current.get('zero') ?? seriesRefs.current.get('wt2') ?? seriesRefs.current.get('rsi')
-
-          if (!anchor) return
-
-          const range = chartRef.current.timeScale().getVisibleRange()
-          const from = range ? Number(range.from) : Number.NEGATIVE_INFINITY
-          const to = range ? Number(range.to) : Number.POSITIVE_INFINITY
-
-          for (const p of plotcharDataRef.current) {
-            if (p.time < from || p.time > to) continue
-
-            const x = chartRef.current.timeScale().timeToCoordinate(p.time as Time)
-            const y = anchor.priceToCoordinate(p.value)
-            if (x == null || y == null || !Number.isFinite(x) || !Number.isFinite(y)) continue
-
-            if (x < -20 || x > width + 20 || y < -20 || y > heightPx + 20) continue
-
-            if (p.kind === 'dot') {
-              const el = document.createElement('div')
-              el.style.position = 'absolute'
-              el.style.left = '0'
-              el.style.top = '0'
-              el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) translate(-50%, -50%)`
-              el.style.width = `${p.diameterPx}px`
-              el.style.height = `${p.diameterPx}px`
-              el.style.borderRadius = '9999px'
-              el.style.background = p.color ?? 'oklch(1 0 0)'
-              el.style.opacity = String(p.opacity)
-              layer.appendChild(el)
-            } else {
-              const el = document.createElement('span')
-              el.textContent = p.text
-              el.style.position = 'absolute'
-              el.style.left = '0'
-              el.style.top = '0'
-              el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) translate(-50%, -50%)`
-              el.style.color = p.color ?? 'oklch(1 0 0)'
-              el.style.opacity = String(p.opacity)
-              el.style.fontSize = `${p.fontSizePx}px`
-              el.style.lineHeight = '1'
-              el.style.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif'
-              layer.appendChild(el)
-            }
-          }
-        })
-      }
-
-      plotcharScheduleRef.current = schedulePlotcharUpdate
-
-      const updateScrubLine = () => {
-        const scrub = getChartScrubSnapshot()
-        if (!chartContainerRef.current || scrub.epochSeconds == null || scrub.sourceId === 'marketvision') {
-          scrubLineEl.style.opacity = '0'
-          scrubLineEl.style.transform = 'translateX(-9999px)'
-          return
-        }
-
-        const x = chart.timeScale().timeToCoordinate(scrub.epochSeconds as Time)
-        if (x == null || !Number.isFinite(x)) {
-          scrubLineEl.style.opacity = '0'
-          scrubLineEl.style.transform = 'translateX(-9999px)'
-          return
-        }
-
-        scrubLineEl.style.opacity = '1'
-        scrubLineEl.style.transform = `translateX(${Math.round(x)}px)`
-      }
-
-      const unsubscribeScrub = subscribeToChartScrub(() => updateScrubLine())
-      chart.timeScale().subscribeVisibleTimeRangeChange(updateScrubLine)
-      chart.timeScale().subscribeVisibleLogicalRangeChange(updateScrubLine)
-      chart.timeScale().subscribeVisibleTimeRangeChange(scheduleKdFillUpdate)
-      chart.timeScale().subscribeVisibleLogicalRangeChange(scheduleKdFillUpdate)
-      chart.timeScale().subscribeVisibleTimeRangeChange(schedulePlotcharUpdate)
-      chart.timeScale().subscribeVisibleLogicalRangeChange(schedulePlotcharUpdate)
-      updateScrubLine()
-      scheduleKdFillUpdate()
-      schedulePlotcharUpdate()
-
-      // Publish scrub time from this chart.
-      const handleCrosshairMove = (param: { point?: { x: number; y: number }; time?: Time }) => {
-        if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
-          clearChartScrub()
-          return
-        }
-        setChartScrub(timeToEpochSeconds(param.time) ?? null, 'marketvision')
-      }
-      chart.subscribeCrosshairMove(handleCrosshairMove)
+      chart.timeScale().subscribeVisibleTimeRangeChange(kdFill.schedule)
+      chart.timeScale().subscribeVisibleLogicalRangeChange(kdFill.schedule)
+      chart.timeScale().subscribeVisibleTimeRangeChange(plotchar.schedule)
+      chart.timeScale().subscribeVisibleLogicalRangeChange(plotchar.schedule)
+      kdFill.schedule()
+      plotchar.schedule()
 
       cleanup = () => {
-        if (kdRafId) cancelAnimationFrame(kdRafId)
-        if (plotcharRafId) cancelAnimationFrame(plotcharRafId)
-        if (resizeRafId) cancelAnimationFrame(resizeRafId)
-        resizeObserver?.disconnect()
-        unsubscribeWindowResize?.()
-        chart.unsubscribeCrosshairMove(handleCrosshairMove)
-        chart.timeScale().unsubscribeVisibleTimeRangeChange(updateScrubLine)
-        chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateScrubLine)
-        chart.timeScale().unsubscribeVisibleTimeRangeChange(scheduleKdFillUpdate)
-        chart.timeScale().unsubscribeVisibleLogicalRangeChange(scheduleKdFillUpdate)
-        chart.timeScale().unsubscribeVisibleTimeRangeChange(schedulePlotcharUpdate)
-        chart.timeScale().unsubscribeVisibleLogicalRangeChange(schedulePlotcharUpdate)
-        unsubscribeScrub()
-        if (chartContainerRef.current?.contains(scrubLineEl)) chartContainerRef.current.removeChild(scrubLineEl)
-        if (chartContainerRef.current?.contains(kdSvg)) chartContainerRef.current.removeChild(kdSvg)
-        if (chartContainerRef.current?.contains(plotcharLayer)) chartContainerRef.current.removeChild(plotcharLayer)
+        kdFill.cancel()
+        plotchar.cancel()
+        detachResize()
+        detachScrubSync()
+        chart.timeScale().unsubscribeVisibleTimeRangeChange(kdFill.schedule)
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(kdFill.schedule)
+        chart.timeScale().unsubscribeVisibleTimeRangeChange(plotchar.schedule)
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(plotchar.schedule)
+        if (container.contains(kdFill.svg)) container.removeChild(kdFill.svg)
+        if (container.contains(plotcharLayer)) container.removeChild(plotcharLayer)
         kdFillLayerRef.current = null
         kdFillPathsRef.current = null
         kdFillScheduleRef.current = null
@@ -511,18 +839,11 @@ export function MarketVisionChart({
 
   // Update series based on calculations and display settings
   useEffect(() => {
-    if (!chartRef.current || !calculations) return
+    const chart = chartRef.current
+    if (!chart || !calculations) return
 
     const lightweightCharts = lightweightChartsRef.current
     if (!lightweightCharts) return
-    const { LineSeries, HistogramSeries, BaselineSeries, LineStyle, LineType } = lightweightCharts
-
-    function withAlpha(color: string | undefined, alpha: number): string | undefined {
-      if (!color) return undefined
-      if (!Number.isFinite(alpha)) return color
-      // All chart colors are oklch strings; delegate to the shared helper.
-      return oklchWithAlpha(color, Math.max(0, Math.min(1, alpha)))
-    }
 
     const hasAnyData =
       Boolean(calculations.series.wt1.length) ||
@@ -532,387 +853,17 @@ export function MarketVisionChart({
 
     if (!hasAnyData) return
 
-    const chart = chartRef.current
-
-    // Clear existing series
-    seriesRefs.current.forEach(series => {
-      try {
-        chart.removeSeries(series)
-      } catch {
-        // Series might already be removed
-      }
+    applyMarketVisionSeries({
+      chart,
+      lightweightCharts,
+      seriesRefs: seriesRefs.current,
+      calculations,
+      data,
+      stochDataRef,
+      kdFillScheduleRef,
+      plotcharDataRef,
+      plotcharScheduleRef,
     })
-    seriesRefs.current.clear()
-    stochDataRef.current = null
-    kdFillScheduleRef.current?.()
-    plotcharDataRef.current = []
-    plotcharScheduleRef.current?.()
-
-    // Zero line
-    if (calculations.levels.zero.length) {
-      const zeroSeries = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        color: 'oklch(1 0 0 / 0.3765)',
-        title: '',
-        lineStyle: LineStyle.Solid,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      zeroSeries.setData(calculations.levels.zero as { time: Time; value: number }[])
-      seriesRefs.current.set('zero', zeroSeries)
-    }
-
-    // WT1 / WT2 waves
-    if (calculations.series.wt1.length) {
-      const wt1 = chart.addSeries(BaselineSeries, {
-        baseValue: { type: 'price', price: 0 },
-        topLineColor: withAlpha('oklch(0.66 0.1513 254.09)', 0.7),
-        bottomLineColor: withAlpha('oklch(0.66 0.1513 254.09)', 0.7),
-        topFillColor1: withAlpha('oklch(0.66 0.1513 254.09)', 0.35),
-        topFillColor2: withAlpha('oklch(0.66 0.1513 254.09)', 0.35),
-        bottomFillColor1: withAlpha('oklch(0.66 0.1513 254.09)', 0.35),
-        bottomFillColor2: withAlpha('oklch(0.66 0.1513 254.09)', 0.35),
-        lineWidth: 2,
-        title: '',
-        lastValueVisible: true,
-        priceLineVisible: false,
-      })
-      wt1.setData(calculations.series.wt1.map((p) => ({ time: p.time as Time, value: p.value })))
-      seriesRefs.current.set('wt1', wt1)
-    }
-
-    if (calculations.series.wt2.length) {
-      const wt2 = chart.addSeries(BaselineSeries, {
-        baseValue: { type: 'price', price: 0 },
-        // Keep WT2 fill dark, but match the line to WT1 blue for visibility.
-        topLineColor: withAlpha('oklch(0.66 0.1513 254.09)', 0.8),
-        bottomLineColor: withAlpha('oklch(0.66 0.1513 254.09)', 0.8),
-        topFillColor1: withAlpha('oklch(0.2608 0.1153 281.53)', 0.35),
-        topFillColor2: withAlpha('oklch(0.2608 0.1153 281.53)', 0.35),
-        bottomFillColor1: withAlpha('oklch(0.2608 0.1153 281.53)', 0.35),
-        bottomFillColor2: withAlpha('oklch(0.2608 0.1153 281.53)', 0.35),
-        lineWidth: 1,
-        title: '',
-        lastValueVisible: true,
-        priceLineVisible: false,
-      })
-      wt2.setData(calculations.series.wt2.map((p) => ({ time: p.time as Time, value: p.value })))
-      seriesRefs.current.set('wt2', wt2)
-    }
-
-    // Fast WT (VWAP) - area approximation
-    if (calculations.series.wtVwap.length) {
-      const vwap = chart.addSeries(BaselineSeries, {
-        baseValue: { type: 'price', price: 0 },
-        topLineColor: withAlpha('oklch(1 0 0)', 0.55),
-        bottomLineColor: withAlpha('oklch(1 0 0)', 0.55),
-        topFillColor1: withAlpha('oklch(1 0 0)', 0.25),
-        topFillColor2: withAlpha('oklch(1 0 0)', 0.25),
-        bottomFillColor1: withAlpha('oklch(1 0 0)', 0.25),
-        bottomFillColor2: withAlpha('oklch(1 0 0)', 0.25),
-        lineWidth: 1,
-        title: '',
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      vwap.setData(calculations.series.wtVwap.map((p) => ({ time: p.time as Time, value: p.value })))
-      seriesRefs.current.set('wtVwap', vwap)
-    }
-
-    // RSI+MFI area and MFI bar (between -99 and -95)
-    if (calculations.series.rsiMfi.length) {
-      const rsiMfi = chart.addSeries(BaselineSeries, {
-        baseValue: { type: 'price', price: 0 },
-        topLineColor: withAlpha('oklch(0.7978 0.2362 143.47)', 0.75),
-        bottomLineColor: withAlpha('oklch(0.6556 0.231 29.33)', 0.75),
-        topFillColor1: withAlpha('oklch(0.7978 0.2362 143.47)', 0.5),
-        topFillColor2: withAlpha('oklch(0.7978 0.2362 143.47)', 0.5),
-        bottomFillColor1: withAlpha('oklch(0.6556 0.231 29.33)', 0.5),
-        bottomFillColor2: withAlpha('oklch(0.6556 0.231 29.33)', 0.5),
-        lineWidth: 1,
-        title: '',
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      // Visual-only scaling: reduces how much the red/green MFI area dominates the pane
-      // without changing WT/RSI/Stoch scaling.
-      rsiMfi.setData(
-        calculations.series.rsiMfi.map((p) => ({
-          time: p.time as Time,
-          value: p.value * MFI_VISUAL_SCALE,
-        })),
-      )
-      seriesRefs.current.set('rsiMfi', rsiMfi)
-    }
-
-    if (calculations.series.mfiBarTop.length) {
-      const mfiBar = chart.addSeries(HistogramSeries, {
-        base: -99,
-        title: '',
-        lastValueVisible: false,
-        priceLineVisible: false,
-        color: 'oklch(1 0 0 / 0.251)',
-      })
-      mfiBar.setData(
-        calculations.series.mfiBarTop.map((p) => ({
-          time: p.time as Time,
-          value: p.value,
-          color: withAlpha(p.color, 0.25),
-        })),
-      )
-      seriesRefs.current.set('mfiBar', mfiBar)
-    }
-
-    // RSI
-    if (calculations.series.rsi.length) {
-      const rsi = chart.addSeries(LineSeries, {
-        lineWidth: 2,
-        title: '',
-        lastValueVisible: true,
-        priceLineVisible: false,
-        color: 'oklch(1 0 0 / 0.4392)',
-      })
-      rsi.setData(
-        calculations.series.rsi.map((p) => ({
-          time: p.time as Time,
-          value: p.value,
-          color: withAlpha(p.color, 0.75),
-        })),
-      )
-      seriesRefs.current.set('rsi', rsi)
-    }
-
-    // Stoch K/D
-    if (calculations.series.stochK.length) {
-      const stochK = chart.addSeries(LineSeries, {
-        lineWidth: 2,
-        title: '',
-        lastValueVisible: false,
-        priceLineVisible: false,
-        color: calculations.series.stochK[0]?.color ?? 'oklch(0.7404 0.142 230.37)',
-      })
-      stochK.setData(calculations.series.stochK as { time: Time; value: number; color?: string }[])
-      seriesRefs.current.set('stochK', stochK)
-    }
-
-    if (calculations.series.stochD.length) {
-      const stochD = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        title: '',
-        lastValueVisible: false,
-        priceLineVisible: false,
-        color: calculations.series.stochD[0]?.color ?? 'oklch(0.4742 0.1862 294.78)',
-      })
-      stochD.setData(calculations.series.stochD as { time: Time; value: number; color?: string }[])
-      seriesRefs.current.set('stochD', stochD)
-    }
-    stochDataRef.current = {
-      k: calculations.series.stochK.map((p) => ({ time: Number(p.time), value: p.value })),
-      d: calculations.series.stochD.map((p) => ({ time: Number(p.time), value: p.value })),
-    }
-    kdFillScheduleRef.current?.()
-
-    // Schaff Trend Cycle (two-line overlay like Pine)
-    if (calculations.series.tc.length) {
-      const tcPurple = chart.addSeries(LineSeries, {
-        lineWidth: 2,
-        title: '',
-        lastValueVisible: false,
-        priceLineVisible: false,
-        color: withAlpha('oklch(0.4742 0.1862 294.78)', 0.75),
-      })
-      tcPurple.setData(calculations.series.tc.map((p) => ({ time: p.time as Time, value: p.value })))
-      seriesRefs.current.set('tcPurple', tcPurple)
-
-      const tcWhite = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        title: '',
-        lastValueVisible: false,
-        priceLineVisible: false,
-        color: withAlpha('oklch(1 0 0)', 0.5),
-      })
-      tcWhite.setData(calculations.series.tc.map((p) => ({ time: p.time as Time, value: p.value })))
-      seriesRefs.current.set('tcWhite', tcWhite)
-    }
-
-    // Overbought / oversold guide lines (Pine: steps for ob2/os2, circles for ob3)
-    if (calculations.levels.obLevel2.length) {
-      const ob2 = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        title: '',
-        lastValueVisible: false,
-        priceLineVisible: false,
-        color: withAlpha('oklch(1 0 0)', 0.15),
-        lineType: LineType.WithSteps,
-      })
-      ob2.setData(calculations.levels.obLevel2 as { time: Time; value: number }[])
-      seriesRefs.current.set('ob2', ob2)
-    }
-
-    if (calculations.levels.osLevel2.length) {
-      const os2 = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        title: '',
-        lastValueVisible: false,
-        priceLineVisible: false,
-        color: withAlpha('oklch(1 0 0)', 0.15),
-        lineType: LineType.WithSteps,
-      })
-      os2.setData(calculations.levels.osLevel2 as { time: Time; value: number }[])
-      seriesRefs.current.set('os2', os2)
-    }
-
-    if (calculations.levels.obLevel3.length) {
-      const ob3 = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        title: '',
-        color: 'transparent',
-        lineVisible: false,
-        pointMarkersVisible: true,
-        pointMarkersRadius: 2,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      ob3.setData(calculations.levels.obLevel3.map((p) => ({ time: p.time as Time, value: p.value, color: withAlpha('oklch(1 0 0)', 0.05) })))
-      seriesRefs.current.set('ob3', ob3)
-    }
-
-    // Point-only overlays (divergences + circles)
-    function addPointSeries(key: string, points: Array<{ time: number; value: number; color?: string }>, radius: number): void {
-      if (!points.length) return
-      const s = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        title: '',
-        color: 'transparent',
-        lineVisible: false,
-        pointMarkersVisible: true,
-        pointMarkersRadius: radius,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      s.setData(points as { time: Time; value: number; color?: string }[])
-      seriesRefs.current.set(key, s)
-    }
-
-    // WT cross circles: ensure color is visible (lightweight-charts point markers can ignore per-point colors).
-    function addFixedColorPointSeries(
-      key: string,
-      points: Array<{ time: number; value: number }>,
-      radius: number,
-      color: string,
-    ): void {
-      if (!points.length) return
-      const s = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        title: '',
-        color,
-        lineVisible: false,
-        pointMarkersVisible: true,
-        pointMarkersRadius: radius,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      s.setData(points as { time: Time; value: number }[])
-      seriesRefs.current.set(key, s)
-    }
-
-    const crossUp = calculations.series.wtCrossCircles
-      .filter((p) => String(p.color ?? '').includes('0, 230, 118'))
-      .map((p) => ({ time: p.time, value: p.value }))
-    const crossDown = calculations.series.wtCrossCircles
-      .filter((p) => String(p.color ?? '').includes('255, 82, 82'))
-      .map((p) => ({ time: p.time, value: p.value }))
-
-    addFixedColorPointSeries('wtCrossCirclesUp', crossUp, 3, 'oklch(0.8099 0.2141 151.77 / 0.85)')
-    addFixedColorPointSeries('wtCrossCirclesDown', crossDown, 3, 'oklch(0.6786 0.2095 24.66 / 0.85)')
-
-    addPointSeries('wtBearDiv', calculations.series.wtBearDiv, 3)
-    addPointSeries('wtBullDiv', calculations.series.wtBullDiv, 3)
-    addPointSeries('wtBearDiv2', calculations.series.wtBearDiv2, 3)
-    addPointSeries('wtBullDiv2', calculations.series.wtBullDiv2, 3)
-
-    addPointSeries('rsiBearDiv', calculations.series.rsiBearDiv, 2)
-    addPointSeries('rsiBullDiv', calculations.series.rsiBullDiv, 2)
-
-    addPointSeries('stochBearDiv', calculations.series.stochBearDiv, 2)
-    addPointSeries('stochBullDiv', calculations.series.stochBullDiv, 2)
-
-    // Sommi HVWAP + markers
-    if (calculations.series.sommiHvwap.length) {
-      const hvwap = chart.addSeries(LineSeries, {
-        lineWidth: 2,
-        title: '',
-        lastValueVisible: false,
-        priceLineVisible: false,
-        color: 'oklch(0.9147 0.1908 101.03)',
-      })
-      hvwap.setData(calculations.series.sommiHvwap as { time: Time; value: number; color?: string }[])
-      seriesRefs.current.set('sommiHvwap', hvwap)
-    }
-
-    // Pine plotchar glyph markers rendered via DOM overlay (data prepared here).
-    const plotchars = [
-      // Pine `size.small` dots with `transp=50` (alpha 0.5)
-      ...calculations.series.buyCircle.map((p) => ({ ...p, kind: 'dot' as const, diameterPx: 7, opacity: 0.5 })),
-      ...calculations.series.sellCircle.map((p) => ({ ...p, kind: 'dot' as const, diameterPx: 7, opacity: 0.5 })),
-
-      // Pine div dots: `size.small`, `transp=15` (alpha 0.85)
-      ...calculations.series.divBuyCircle.map((p) => ({ ...p, kind: 'dot' as const, diameterPx: 8, opacity: 0.85 })),
-      ...calculations.series.divSellCircle.map((p) => ({ ...p, kind: 'dot' as const, diameterPx: 8, opacity: 0.85 })),
-
-      // Pine gold dot: `size.normal`, `transp=15` (alpha 0.85)
-      ...calculations.series.goldBuyCircle.map((p) => ({ ...p, kind: 'dot' as const, diameterPx: 10, opacity: 0.85 })),
-
-      // Sommi markers: `size.tiny`
-      ...calculations.series.sommiBearFlag.map((p) => ({ ...p, kind: 'text' as const, text: '⚑', fontSizePx: 10, opacity: 1 })),
-      ...calculations.series.sommiBullFlag.map((p) => ({ ...p, kind: 'text' as const, text: '⚑', fontSizePx: 10, opacity: 1 })),
-      ...calculations.series.sommiBearDiamond.map((p) => ({ ...p, kind: 'text' as const, text: '◆', fontSizePx: 10, opacity: 1 })),
-      ...calculations.series.sommiBullDiamond.map((p) => ({ ...p, kind: 'text' as const, text: '◆', fontSizePx: 10, opacity: 1 })),
-    ].sort((a, b) => Number(a.time) - Number(b.time))
-
-    plotcharDataRef.current = plotchars.map((p) => {
-      if (p.kind === 'dot') {
-        return {
-          kind: 'dot' as const,
-          time: Number(p.time),
-          value: p.value,
-          color: p.color,
-          diameterPx: p.diameterPx,
-          opacity: p.opacity,
-        }
-      }
-      return {
-        kind: 'text' as const,
-        time: Number(p.time),
-        value: p.value,
-        color: p.color,
-        text: p.text,
-        fontSizePx: p.fontSizePx,
-        opacity: p.opacity,
-      }
-    })
-    plotcharScheduleRef.current?.()
-
-    // Ensure plotchar y-levels are included in autoscale (Pine uses `location.absolute` values).
-    if (plotchars.length >= 1) {
-      const firstTime = Number(data[0]?.time)
-      const lastTime = Number(data[data.length - 1]?.time)
-      if (Number.isFinite(firstTime) && Number.isFinite(lastTime) && firstTime < lastTime) {
-        const scalePad = chart.addSeries(LineSeries, {
-          lineWidth: 1,
-          title: '',
-          color: 'transparent',
-          lineVisible: false,
-          lastValueVisible: false,
-          priceLineVisible: false,
-        })
-        scalePad.setData([
-          { time: firstTime as Time, value: -108 },
-          { time: lastTime as Time, value: 108 },
-        ])
-        seriesRefs.current.set('scalePad', scalePad)
-      }
-    }
 
     if (!hasAppliedInitialRangeRef.current) {
       applyInitialVisibleRange(chart, data, initialWindowSeconds)

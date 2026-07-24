@@ -92,41 +92,51 @@ export const _upsertMarketDataBatch = internalMutation({
   }),
   handler: async (ctx, args) => {
     const now = Date.now();
+
+    // Dedupe by coingeckoId (last wins, same end-state as the sequential
+    // upsert) so concurrent iterations can't double-insert the same coin.
+    const itemsById = new Map(args.items.map((item) => [item.coingeckoId, item]));
+
+    const outcomes = await Promise.all(
+      Array.from(itemsById.values()).map(async (item) => {
+        const existing = await ctx.db
+          .query("coingeckoMarkets")
+          .withIndex("by_coingecko_id", (q) =>
+            q.eq("coingeckoId", item.coingeckoId),
+          )
+          .first();
+
+        if (existing) {
+          // Diff before patching: this runs for ~500 coins every 5 minutes.
+          // A blind patch creates a new document version (write bandwidth +
+          // reactive-query invalidation) even when CoinGecko returned
+          // identical numbers.
+          if (marketItemUnchanged(existing, item)) {
+            return "unchanged" as const;
+          }
+          await ctx.db.patch(existing._id, {
+            ...item,
+            updatedAt: now,
+          });
+          return "updated" as const;
+        }
+
+        await ctx.db.insert("coingeckoMarkets", {
+          ...item,
+          createdAt: now,
+          updatedAt: now,
+        });
+        return "inserted" as const;
+      }),
+    );
+
     let inserted = 0;
     let updated = 0;
     let unchanged = 0;
-
-    for (const item of args.items) {
-      const existing = await ctx.db
-        .query("coingeckoMarkets")
-        .withIndex("by_coingecko_id", (q) =>
-          q.eq("coingeckoId", item.coingeckoId),
-        )
-        .first();
-
-      if (existing) {
-        // Diff before patching: this runs for ~500 coins every 5 minutes.
-        // A blind patch creates a new document version (write bandwidth +
-        // reactive-query invalidation) even when CoinGecko returned
-        // identical numbers.
-        if (marketItemUnchanged(existing, item)) {
-          unchanged++;
-          continue;
-        }
-        await ctx.db.patch(existing._id, {
-          ...item,
-          updatedAt: now,
-        });
-        updated++;
-        continue;
-      }
-
-      await ctx.db.insert("coingeckoMarkets", {
-        ...item,
-        createdAt: now,
-        updatedAt: now,
-      });
-      inserted++;
+    for (const outcome of outcomes) {
+      if (outcome === "inserted") inserted++;
+      else if (outcome === "updated") updated++;
+      else unchanged++;
     }
 
     return { inserted, updated, unchanged };
@@ -243,24 +253,43 @@ export const _upsertCoinGeckoHistoricalData = internalMutation({
     const byTimestamp = new Map<number, (typeof existingWindow)[number]>();
     for (const row of existingWindow) byTimestamp.set(row.timestamp, row);
 
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
+    const outcomes = await Promise.all(
+      args.dataPoints.map(async (point) => {
+        // Avoid inserting duplicates for older timestamps on refreshes.
+        // We only upsert the overlap window unless we detected missing historical coverage.
+        if (point.timestamp < cutoff) return "skipped" as const;
 
-    for (const point of args.dataPoints) {
-      // Avoid inserting duplicates for older timestamps on refreshes.
-      // We only upsert the overlap window unless we detected missing historical coverage.
-      if (point.timestamp < cutoff) {
-        skippedCount++;
-        continue;
-      }
+        const existing = byTimestamp.get(point.timestamp);
+        if (!existing) {
+          await ctx.db.insert("priceHistory", {
+            coingeckoId: args.coingeckoId,
+            timeframe: args.timeframe,
+            timestamp: point.timestamp,
+            price: point.price,
+            volume: point.volume,
+            marketCap: point.marketCap,
+            open: point.open,
+            high: point.high,
+            low: point.low,
+            close: point.close,
+            dataSource: args.dataSource,
+            lastUpdated: now,
+          });
+          return "inserted" as const;
+        }
 
-      const existing = byTimestamp.get(point.timestamp);
-      if (!existing) {
-        await ctx.db.insert("priceHistory", {
-          coingeckoId: args.coingeckoId,
-          timeframe: args.timeframe,
-          timestamp: point.timestamp,
+        const hasDiff =
+          existing.price !== point.price ||
+          existing.volume !== point.volume ||
+          (existing.marketCap ?? null) !== (point.marketCap ?? null) ||
+          (existing.open ?? null) !== (point.open ?? null) ||
+          (existing.high ?? null) !== (point.high ?? null) ||
+          (existing.low ?? null) !== (point.low ?? null) ||
+          (existing.close ?? null) !== (point.close ?? null);
+
+        if (!hasDiff) return "skipped" as const;
+
+        await ctx.db.patch(existing._id, {
           price: point.price,
           volume: point.volume,
           marketCap: point.marketCap,
@@ -271,36 +300,17 @@ export const _upsertCoinGeckoHistoricalData = internalMutation({
           dataSource: args.dataSource,
           lastUpdated: now,
         });
-        insertedCount++;
-        continue;
-      }
+        return "updated" as const;
+      }),
+    );
 
-      const hasDiff =
-        existing.price !== point.price ||
-        existing.volume !== point.volume ||
-        (existing.marketCap ?? null) !== (point.marketCap ?? null) ||
-        (existing.open ?? null) !== (point.open ?? null) ||
-        (existing.high ?? null) !== (point.high ?? null) ||
-        (existing.low ?? null) !== (point.low ?? null) ||
-        (existing.close ?? null) !== (point.close ?? null);
-
-      if (!hasDiff) {
-        skippedCount++;
-        continue;
-      }
-
-      await ctx.db.patch(existing._id, {
-        price: point.price,
-        volume: point.volume,
-        marketCap: point.marketCap,
-        open: point.open,
-        high: point.high,
-        low: point.low,
-        close: point.close,
-        dataSource: args.dataSource,
-        lastUpdated: now,
-      });
-      updatedCount++;
+    let insertedCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
+    for (const outcome of outcomes) {
+      if (outcome === "inserted") insertedCount++;
+      else if (outcome === "updated") updatedCount++;
+      else skippedCount++;
     }
 
     const latestTimestamp = args.dataPoints.reduce(
@@ -380,41 +390,44 @@ export const _upsertGlobalMarketHistory = internalMutation({
       if (!byTimestamp.has(row.timestamp)) byTimestamp.set(row.timestamp, row);
     }
 
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
+    const outcomes = await Promise.all(
+      dedupedPoints.map(async (point) => {
+        const existing = byTimestamp.get(point.timestamp);
+        if (!existing) {
+          await ctx.db.insert("globalMarketHistory", {
+            timeframe: args.timeframe,
+            timestamp: point.timestamp,
+            marketCapUsd: point.marketCapUsd,
+            volumeUsd: point.volumeUsd,
+            dataSource: args.dataSource,
+            lastUpdated: now,
+          });
+          return "inserted" as const;
+        }
 
-    for (const point of dedupedPoints) {
-      const existing = byTimestamp.get(point.timestamp);
-      if (!existing) {
-        await ctx.db.insert("globalMarketHistory", {
-          timeframe: args.timeframe,
-          timestamp: point.timestamp,
+        const hasDiff =
+          existing.marketCapUsd !== point.marketCapUsd ||
+          existing.volumeUsd !== point.volumeUsd;
+
+        if (!hasDiff) return "skipped" as const;
+
+        await ctx.db.patch(existing._id, {
           marketCapUsd: point.marketCapUsd,
           volumeUsd: point.volumeUsd,
           dataSource: args.dataSource,
           lastUpdated: now,
         });
-        insertedCount++;
-        continue;
-      }
+        return "updated" as const;
+      }),
+    );
 
-      const hasDiff =
-        existing.marketCapUsd !== point.marketCapUsd ||
-        existing.volumeUsd !== point.volumeUsd;
-
-      if (!hasDiff) {
-        skippedCount++;
-        continue;
-      }
-
-      await ctx.db.patch(existing._id, {
-        marketCapUsd: point.marketCapUsd,
-        volumeUsd: point.volumeUsd,
-        dataSource: args.dataSource,
-        lastUpdated: now,
-      });
-      updatedCount++;
+    let insertedCount = 0;
+    let updatedCount = 0;
+    let skippedCount = 0;
+    for (const outcome of outcomes) {
+      if (outcome === "inserted") insertedCount++;
+      else if (outcome === "updated") updatedCount++;
+      else skippedCount++;
     }
 
     return {
@@ -452,43 +465,48 @@ export const _bulkUpsertCoinGeckoCoins = internalMutation({
     const uniqueById = new Map<string, (typeof args.coins)[number]>();
     for (const coin of args.coins) uniqueById.set(coin.coingeckoId, coin);
 
-    let inserted = 0;
-    let updated = 0;
+    const outcomes = await Promise.all(
+      Array.from(uniqueById.values()).map(async (coin) => {
+        const existing = await ctx.db
+          .query("coingeckoCoins")
+          .withIndex("by_coingecko_id", (q) =>
+            q.eq("coingeckoId", coin.coingeckoId),
+          )
+          .first();
 
-    for (const coin of uniqueById.values()) {
-      const existing = await ctx.db
-        .query("coingeckoCoins")
-        .withIndex("by_coingecko_id", (q) =>
-          q.eq("coingeckoId", coin.coingeckoId),
-        )
-        .first();
+        if (existing) {
+          // Skip the patch when nothing material changed — a blind patch
+          // creates a new document version on every sync pass.
+          const unchanged =
+            existing.name === coin.name &&
+            existing.symbol === coin.symbol &&
+            existing.logoUrl === coin.logoUrl &&
+            existing.isActive === coin.isActive &&
+            (coin.imageUpdated === undefined ||
+              existing.imageUpdated === coin.imageUpdated) &&
+            areStringRecordsEqual(existing.platforms, coin.platforms);
+          if (unchanged) return "unchanged" as const;
 
-      if (existing) {
-        // Skip the patch when nothing material changed — a blind patch
-        // creates a new document version on every sync pass.
-        const unchanged =
-          existing.name === coin.name &&
-          existing.symbol === coin.symbol &&
-          existing.logoUrl === coin.logoUrl &&
-          existing.isActive === coin.isActive &&
-          (coin.imageUpdated === undefined ||
-            existing.imageUpdated === coin.imageUpdated) &&
-          areStringRecordsEqual(existing.platforms, coin.platforms);
-        if (unchanged) continue;
+          await ctx.db.patch(existing._id, {
+            ...coin,
+            lastUpdated: now,
+          });
+          return "updated" as const;
+        }
 
-        await ctx.db.patch(existing._id, {
+        await ctx.db.insert("coingeckoCoins", {
           ...coin,
           lastUpdated: now,
         });
-        updated++;
-        continue;
-      }
+        return "inserted" as const;
+      }),
+    );
 
-      await ctx.db.insert("coingeckoCoins", {
-        ...coin,
-        lastUpdated: now,
-      });
-      inserted++;
+    let inserted = 0;
+    let updated = 0;
+    for (const outcome of outcomes) {
+      if (outcome === "inserted") inserted++;
+      else if (outcome === "updated") updated++;
     }
 
     return { inserted, updated };
@@ -534,57 +552,68 @@ export const _syncCoinGeckoCoinsListBatch = internalMutation({
     const uniqueById = new Map<string, (typeof args.coins)[number]>();
     for (const coin of args.coins) uniqueById.set(coin.coingeckoId, coin);
 
+    const outcomes = await Promise.all(
+      Array.from(uniqueById.values()).map(async (coin) => {
+        const existing = await ctx.db
+          .query("coingeckoCoins")
+          .withIndex("by_coingecko_id", (q) =>
+            q.eq("coingeckoId", coin.coingeckoId),
+          )
+          .first();
+
+        const nextSymbol = coin.symbol.toUpperCase();
+        const nextPlatforms = coin.platforms ?? {};
+
+        if (existing) {
+          const shouldNormalizeImageUpdated =
+            existing.imageUpdated === undefined;
+
+          const needsUpdate =
+            existing.name !== coin.name ||
+            existing.symbol !== nextSymbol ||
+            (existing.isActive !== true && existing.isActive !== undefined) ||
+            !areStringRecordsEqual(existing.platforms ?? {}, nextPlatforms) ||
+            shouldNormalizeImageUpdated;
+
+          if (!needsUpdate) return "unchanged" as const;
+
+          await ctx.db.patch(existing._id, {
+            name: coin.name,
+            symbol: nextSymbol,
+            platforms: nextPlatforms,
+            isActive: true,
+            lastUpdated: now,
+            ...(shouldNormalizeImageUpdated ? { imageUpdated: false } : {}),
+          });
+          return shouldNormalizeImageUpdated
+            ? ("normalized" as const)
+            : ("updated" as const);
+        }
+
+        await ctx.db.insert("coingeckoCoins", {
+          coingeckoId: coin.coingeckoId,
+          name: coin.name,
+          symbol: nextSymbol,
+          logoUrl: "",
+          isActive: true,
+          lastUpdated: now,
+          platforms: nextPlatforms,
+          imageUpdated: false,
+        });
+        return "inserted" as const;
+      }),
+    );
+
     let inserted = 0;
     let updated = 0;
     let normalized = 0;
-
-    for (const coin of uniqueById.values()) {
-      const existing = await ctx.db
-        .query("coingeckoCoins")
-        .withIndex("by_coingecko_id", (q) =>
-          q.eq("coingeckoId", coin.coingeckoId),
-        )
-        .first();
-
-      const nextSymbol = coin.symbol.toUpperCase();
-      const nextPlatforms = coin.platforms ?? {};
-
-      if (existing) {
-        const shouldNormalizeImageUpdated = existing.imageUpdated === undefined;
-
-        const needsUpdate =
-          existing.name !== coin.name ||
-          existing.symbol !== nextSymbol ||
-          (existing.isActive !== true && existing.isActive !== undefined) ||
-          !areStringRecordsEqual(existing.platforms ?? {}, nextPlatforms) ||
-          shouldNormalizeImageUpdated;
-
-        if (!needsUpdate) continue;
-
-        await ctx.db.patch(existing._id, {
-          name: coin.name,
-          symbol: nextSymbol,
-          platforms: nextPlatforms,
-          isActive: true,
-          lastUpdated: now,
-          ...(shouldNormalizeImageUpdated ? { imageUpdated: false } : {}),
-        });
+    for (const outcome of outcomes) {
+      if (outcome === "inserted") inserted++;
+      else if (outcome === "updated") updated++;
+      else if (outcome === "normalized") {
         updated++;
-        if (shouldNormalizeImageUpdated) normalized++;
-        continue;
+        normalized++;
       }
-
-      await ctx.db.insert("coingeckoCoins", {
-        coingeckoId: coin.coingeckoId,
-        name: coin.name,
-        symbol: nextSymbol,
-        logoUrl: "",
-        isActive: true,
-        lastUpdated: now,
-        platforms: nextPlatforms,
-        imageUpdated: false,
-      });
-      inserted++;
     }
 
     return { inserted, updated, normalized };

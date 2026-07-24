@@ -749,13 +749,11 @@ export function createChartController({
         // Volume data
         let dataLastVolume: number | null = null;
         const volumeData: VolumeDataPoint[] = volumeSeries
-            ? safeOhlcvData
-                  .filter(d => d.volume !== undefined && Number.isFinite(d.volume))
-                  .map(d => ({
-                      time: d.time,
-                      value: d.volume ?? 0,
-                      color: VOLUME_BAR_COLOR,
-                  }))
+            ? safeOhlcvData.flatMap(d =>
+                  d.volume !== undefined && Number.isFinite(d.volume)
+                      ? [{ time: d.time, value: d.volume, color: VOLUME_BAR_COLOR }]
+                      : [],
+              )
             : [];
 
         if (volumeSeries) {

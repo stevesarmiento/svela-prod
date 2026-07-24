@@ -51,14 +51,16 @@ function toSafeDate(
   return null;
 }
 
+const issuedDateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "2-digit",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
 function formatIssuedDate(value: Date | null): string | null {
   if (!value) return null;
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(value);
+  return issuedDateFormatter.format(value);
 }
 
 function getInitials(fullName?: string, email?: string): string {

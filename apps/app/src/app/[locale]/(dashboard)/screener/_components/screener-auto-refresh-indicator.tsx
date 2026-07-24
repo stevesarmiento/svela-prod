@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@v1/ui/cn";
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Honest freshness indicator.
@@ -33,9 +33,15 @@ export function ScreenerAutoRefreshIndicator({
   status: ScreenerAutoRefreshStatus;
   className?: string;
 }) {
-  const lastUpdatedValue = useMemo(() => {
-    if (!status.lastUpdatedAtMs) return "—";
-    return lastUpdatedFormatter.format(new Date(status.lastUpdatedAtMs));
+  // Formatted post-mount: the formatter uses the browser's locale/timezone,
+  // which can differ from the server's and would cause a hydration mismatch.
+  const [lastUpdatedValue, setLastUpdatedValue] = useState("—");
+  useEffect(() => {
+    setLastUpdatedValue(
+      status.lastUpdatedAtMs
+        ? lastUpdatedFormatter.format(new Date(status.lastUpdatedAtMs))
+        : "—",
+    );
   }, [status.lastUpdatedAtMs]);
 
   return (

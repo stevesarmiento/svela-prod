@@ -66,6 +66,12 @@ export async function executeScreeningDslRequest(
     body: JSON.stringify({ dsl, surface: "screener" }),
   });
 
+  // The screen API returns structured `ok: false` payloads with 200 only;
+  // a non-2xx status is a transport/infra failure (rate limit, 500, …).
+  if (!response.ok) {
+    throw new Error(`Screen request failed (${response.status})`);
+  }
+
   const json: unknown = await response.json().catch(() => null);
   const parsed = SmartScreenerScreenResponseSchema.safeParse(json);
   if (!parsed.success) {

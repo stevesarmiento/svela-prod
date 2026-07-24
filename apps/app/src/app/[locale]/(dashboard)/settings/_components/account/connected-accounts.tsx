@@ -20,6 +20,9 @@ import { toast } from "sonner";
 import { formatWalletAddress } from "@/lib/user-display";
 import { getClerkErrorMessage } from "./clerk-errors";
 
+const providerLabel = (provider: string) =>
+  provider.charAt(0).toUpperCase() + provider.slice(1);
+
 export function ConnectedAccounts() {
   const { user } = useUser();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -97,9 +100,6 @@ export function ConnectedAccounts() {
       setBusyId(null);
     }
   };
-
-  const providerLabel = (provider: string) =>
-    provider.charAt(0).toUpperCase() + provider.slice(1);
 
   const rows = [
     ...externalAccounts.map((account) => ({

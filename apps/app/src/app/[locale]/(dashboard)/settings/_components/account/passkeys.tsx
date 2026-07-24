@@ -15,9 +15,36 @@ import {
 import { Button } from "@v1/ui/button";
 import { Input } from "@v1/ui/input";
 import { Check, Fingerprint, Pencil, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getClerkErrorMessage } from "./clerk-errors";
+
+/**
+ * Formats the passkey's date post-mount: toLocaleDateString() uses the
+ * browser's locale/timezone, which can differ from the server's and would
+ * cause a hydration mismatch if formatted during render.
+ */
+function PasskeyDateLabel({
+  lastUsedAt,
+  createdAt,
+}: {
+  lastUsedAt: Date | null | undefined;
+  createdAt: Date | null | undefined;
+}) {
+  const [label, setLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLabel(
+      lastUsedAt
+        ? `Last used ${new Date(lastUsedAt).toLocaleDateString()}`
+        : createdAt
+          ? `Created ${new Date(createdAt).toLocaleDateString()}`
+          : null,
+    );
+  }, [lastUsedAt, createdAt]);
+
+  return <div className="text-[10px] text-primary/30">{label}</div>;
+}
 
 export function Passkeys() {
   const { user } = useUser();
@@ -154,11 +181,10 @@ export function Passkeys() {
                           </Button>
                         </div>
                       )}
-                      <div className="text-[10px] text-primary/30">
-                        {passkey.lastUsedAt
-                          ? `Last used ${new Date(passkey.lastUsedAt).toLocaleDateString()}`
-                          : `Created ${new Date(passkey.createdAt).toLocaleDateString()}`}
-                      </div>
+                      <PasskeyDateLabel
+                        lastUsedAt={passkey.lastUsedAt}
+                        createdAt={passkey.createdAt}
+                      />
                     </div>
                   </div>
 

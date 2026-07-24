@@ -63,20 +63,24 @@ export function ScreenerTableSection({
   const { selectedCoins, handleCoinSelect, hasSelectedCoins } = selection;
 
   const selectableCoinIds = useMemo(
-    () => coins.filter(isPriced).map((coin) => String(coin.id)),
+    () => coins.flatMap((coin) => (isPriced(coin) ? [String(coin.id)] : [])),
     [coins],
   );
 
   const getSelectedTokens = useCallback(
     () =>
-      coins
-        .filter((coin) => isPriced(coin) && selectedCoins.has(String(coin.id)))
-        .map((coin) => ({
-          id: String(coin.id),
-          name: cleanTokenName(coin.name),
-          symbol: coin.symbol,
-          logoUrl: getTokenLogoURL(coin.symbol, coin.image),
-        })),
+      coins.flatMap((coin) =>
+        isPriced(coin) && selectedCoins.has(String(coin.id))
+          ? [
+              {
+                id: String(coin.id),
+                name: cleanTokenName(coin.name),
+                symbol: coin.symbol,
+                logoUrl: getTokenLogoURL(coin.symbol, coin.image),
+              },
+            ]
+          : [],
+      ),
     [coins, selectedCoins],
   );
   const { onAnalyzeSelected, analyzeDialog } =

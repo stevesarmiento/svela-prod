@@ -43,6 +43,7 @@ export function DangerZone() {
       await clerk.signOut({ redirectUrl: "/login" });
     } catch (error) {
       toast.error(getClerkErrorMessage(error, "Failed to delete account"));
+      // react-doctor-disable-next-line react-doctor/no-loading-flag-reset-outside-finally -- reset mirrored in catch; success path intentionally stays disabled through the sign-out redirect
       setIsDeleting(false);
     }
   };

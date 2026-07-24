@@ -134,27 +134,27 @@ export const bulkUpsertCoins = mutation({
       .query("coins")
       .collect();
     
-    const existingCoinIds = new Set(existingCoins.map(coin => coin.coinId));
-    
-    // Process each coin
-    for (const coin of args.coins) {
-      if (existingCoinIds.has(coin.coinId)) {
-        // Find and update existing coin
-        const existing = existingCoins.find(c => c.coinId === coin.coinId);
+    const existingCoinsById = new Map(existingCoins.map(coin => [coin.coinId, coin]));
+
+    // Process each coin concurrently — each touches its own row.
+    await Promise.all(
+      args.coins.map(async (coin) => {
+        const existing = existingCoinsById.get(coin.coinId);
         if (existing) {
+          // Update existing coin
           await ctx.db.patch(existing._id, {
             ...coin,
             lastUpdated: Date.now(),
           });
+          return;
         }
-      } else {
         // Insert new coin
         await ctx.db.insert("coins", {
           ...coin,
           lastUpdated: Date.now(),
         });
-      }
-    }
+      }),
+    );
     return null;
   },
 });
@@ -180,25 +180,28 @@ export const bulkUpsertCoinGeckoCoins = mutation({
     for (const coin of args.coins) uniqueById.set(coin.coingeckoId, coin);
 
     // Upsert using the `by_coingecko_id` index (works at any table size).
-    for (const coin of uniqueById.values()) {
-      const existing = await ctx.db
-        .query("coingeckoCoins")
-        .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", coin.coingeckoId))
-        .first();
+    // Ids are deduped above, so each upsert is independent — run concurrently.
+    await Promise.all(
+      Array.from(uniqueById.values()).map(async (coin) => {
+        const existing = await ctx.db
+          .query("coingeckoCoins")
+          .withIndex("by_coingecko_id", (q) => q.eq("coingeckoId", coin.coingeckoId))
+          .first();
 
-      if (existing) {
-        await ctx.db.patch(existing._id, {
+        if (existing) {
+          await ctx.db.patch(existing._id, {
+            ...coin,
+            lastUpdated: now,
+          });
+          return;
+        }
+
+        await ctx.db.insert("coingeckoCoins", {
           ...coin,
           lastUpdated: now,
         });
-        continue;
-      }
-
-      await ctx.db.insert("coingeckoCoins", {
-        ...coin,
-        lastUpdated: now,
-      });
-    }
+      }),
+    );
     return null;
   },
 });
@@ -225,19 +228,22 @@ export const bulkInsertNewCoins = mutation({
     }
 
     // Idempotent insert using the `by_coin_id` index (safe under retries).
-    for (const coin of uniqueByCoinId.values()) {
-      const existing = await ctx.db
-        .query("coins")
-        .withIndex("by_coin_id", (q) => q.eq("coinId", coin.coinId))
-        .first();
+    // Ids are deduped above, so each insert is independent — run concurrently.
+    await Promise.all(
+      Array.from(uniqueByCoinId.values()).map(async (coin) => {
+        const existing = await ctx.db
+          .query("coins")
+          .withIndex("by_coin_id", (q) => q.eq("coinId", coin.coinId))
+          .first();
 
-      if (existing) continue;
+        if (existing) return;
 
-      await ctx.db.insert("coins", {
-        ...coin,
-        lastUpdated: now,
-      });
-    }
+        await ctx.db.insert("coins", {
+          ...coin,
+          lastUpdated: now,
+        });
+      }),
+    );
     return null;
   },
 });
@@ -386,36 +392,38 @@ export const bulkUpsertCoinglassSupportedCoins = mutation({
   handler: async (ctx, args) => {
     requireServerToken(args.serverToken);
     const existingSupportedCoins = await ctx.db.query("coinglassSupportedCoins").collect();
-    const existingSymbols = new Set(existingSupportedCoins.map(coin => coin.symbol));
+    const existingBySymbol = new Map(existingSupportedCoins.map(coin => [coin.symbol, coin]));
     
     // Mark all existing coins as inactive first
-    for (const existing of existingSupportedCoins) {
-      await ctx.db.patch(existing._id, {
-        isActive: false,
-        lastUpdated: Date.now(),
-      });
-    }
-    
+    await Promise.all(
+      existingSupportedCoins.map((existing) =>
+        ctx.db.patch(existing._id, {
+          isActive: false,
+          lastUpdated: Date.now(),
+        }),
+      ),
+    );
+
     // Process new/updated symbols
-    for (const symbol of args.symbols) {
-      if (existingSymbols.has(symbol)) {
-        // Reactivate existing symbol
-        const existing = existingSupportedCoins.find(c => c.symbol === symbol);
+    await Promise.all(
+      args.symbols.map(async (symbol) => {
+        const existing = existingBySymbol.get(symbol);
         if (existing) {
+          // Reactivate existing symbol
           await ctx.db.patch(existing._id, {
             isActive: true,
             lastUpdated: Date.now(),
           });
+          return;
         }
-      } else {
         // Insert new supported coin
         await ctx.db.insert("coinglassSupportedCoins", {
           symbol,
           isActive: true,
           lastUpdated: Date.now(),
         });
-      }
-    }
+      }),
+    );
     return null;
   },
 });

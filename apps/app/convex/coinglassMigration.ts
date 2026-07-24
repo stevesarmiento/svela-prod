@@ -34,37 +34,33 @@ export const backfillTakerSnapshotCoingeckoIds = internalMutation({
       .query("coinglassTakerBuySellExchangeListSnapshots")
       .paginate({ cursor: args.cursor ?? null, numItems: batchSize });
 
-    let stamped = 0;
-    let unresolved = 0;
+    const outcomes = await Promise.all(
+      page.page.map(async (row) => {
+        if (row.coingeckoId !== undefined) return "skipped" as const;
 
-    for (const row of page.page) {
-      if (row.coingeckoId !== undefined) continue;
+        const symbolUpper = row.symbol.trim().toUpperCase();
+        if (!symbolUpper) return "unresolved" as const;
 
-      const symbolUpper = row.symbol.trim().toUpperCase();
-      if (!symbolUpper) {
-        unresolved += 1;
-        continue;
-      }
+        const candidates = await ctx.db
+          .query("coingeckoMarkets")
+          .withIndex("by_symbol", (q) => q.eq("symbol", symbolUpper))
+          .take(20);
 
-      const candidates = await ctx.db
-        .query("coingeckoMarkets")
-        .withIndex("by_symbol", (q) => q.eq("symbol", symbolUpper))
-        .take(20);
+        if (candidates.length === 0) return "unresolved" as const;
 
-      if (candidates.length === 0) {
-        unresolved += 1;
-        continue;
-      }
+        const best = candidates.reduce((a, b) => {
+          const aRank = a.marketCapRank ?? Number.POSITIVE_INFINITY;
+          const bRank = b.marketCapRank ?? Number.POSITIVE_INFINITY;
+          return bRank < aRank ? b : a;
+        });
 
-      const best = candidates.reduce((a, b) => {
-        const aRank = a.marketCapRank ?? Number.POSITIVE_INFINITY;
-        const bRank = b.marketCapRank ?? Number.POSITIVE_INFINITY;
-        return bRank < aRank ? b : a;
-      });
+        await ctx.db.patch(row._id, { coingeckoId: best.coingeckoId });
+        return "stamped" as const;
+      }),
+    );
 
-      await ctx.db.patch(row._id, { coingeckoId: best.coingeckoId });
-      stamped += 1;
-    }
+    const stamped = outcomes.filter((o) => o === "stamped").length;
+    const unresolved = outcomes.filter((o) => o === "unresolved").length;
 
     if (!page.isDone) {
       await ctx.scheduler.runAfter(

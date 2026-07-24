@@ -104,6 +104,58 @@ function getSpotStatusLabel(
   }
 }
 
+// Spot price feed indicator (LIVE/WARM/CACHED) with a source tooltip.
+function SpotStatusIndicator({ statusLabel }: { statusLabel: ReturnType<typeof getSpotStatusLabel> }) {
+  return (
+    <div className="hidden absolute right-4 top-[57px] z-20 pointer-events-auto flex flex-col items-end gap-2">
+      {statusLabel ? (
+        <Tooltip delayDuration={250}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="Price feed source"
+              className={cn(
+                "inline-flex gap-1.5 items-center rounded-md border px-1.5 py-0.5 text-[9px] font-semibold font-berkeley-mono tracking-wider tabular-nums cursor-help focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-950",
+                statusLabel.className,
+              )}
+            >
+              <div className="relative h-1.5 w-1.5">
+                <span
+                  aria-hidden="true"
+                  className="absolute top-0 left-0 inline-block h-1.5 w-1.5 rounded-full bg-current"
+                />
+                <span
+                  aria-hidden="true"
+                  className="absolute top-0 left-0 inline-block h-1.5 w-1.5 rounded-full bg-current animate-ping"
+                />
+              </div>
+              {statusLabel.label}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent
+            side="left"
+            align="center"
+            sideOffset={8}
+            className="flex items-center gap-2 rounded-md border bg-white/95 p-2 py-1 text-xs text-zinc-900 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+          >
+            <span>{statusLabel.title}</span>
+            {statusLabel.href ? (
+              <a
+                href={statusLabel.href}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="ml-1 inline-flex items-center rounded-sm text-xs font-medium text-primary underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-950"
+              >
+                {statusLabel.hrefLabel ?? "Learn more"}
+              </a>
+            ) : null}
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
+    </div>
+  )
+}
+
 interface IndicatorSettings {
   showWaveTrend: boolean
   showFastMoneyFlow: boolean
@@ -275,20 +327,109 @@ function getUtcQuarterRange(epochSeconds: number): { fromEpochSeconds: number; t
   }
 }
 
-// React 19: Memoized time scale selector
-const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, setActiveTimeScale }: { 
-  activeTimeScale: string
-  setActiveTimeScale: (scale: string) => void 
-}) {
-  const scales = [
-    { value: "30d", label: "1M" },   // 30 days focus with 90 days context
-    { value: "max", label: "1Y" },    // 1 year of data
-    { value: "2y", label: "2Y" },    // Maximum data possible
-  ]
+// Joins nearest-in-time volume onto each OHLC bar (tolerance scales with the
+// series' average bar interval).
+function mergeVolumeIntoOhlcv<T extends { time: Time }>(
+  ohlcData: T[],
+  volumeData: Array<{ time: Time; value: number }>,
+): Array<T & { volume?: number }> {
+  if (!ohlcData.length) return []
 
+  const volumePoints: Array<VolumePointByEpoch> = volumeData
+    .map((point) => {
+      const epochSeconds = timeToEpochSeconds(point.time)
+      return epochSeconds == null || !Number.isFinite(point.value)
+        ? null
+        : { epochSeconds, value: point.value }
+    })
+    .filter((point): point is VolumePointByEpoch => point !== null)
+    .sort((a, b) => a.epochSeconds - b.epochSeconds)
+
+  const ohlcEpochSeconds = ohlcData
+    .map((point) => timeToEpochSeconds(point.time))
+    .filter((t): t is number => t != null)
+  const averageIntervalSeconds = estimateAverageIntervalSeconds(ohlcEpochSeconds)
+  const maxDiffSeconds = Math.max(2 * 60 * 60, Math.floor((averageIntervalSeconds ?? 0) / 2) || 12 * 60 * 60)
+
+  return ohlcData.map((point) => {
+    const epochSeconds = timeToEpochSeconds(point.time)
+    if (epochSeconds == null || volumePoints.length === 0) return { ...point }
+
+    const nearest = findNearestVolumeValue(epochSeconds, volumePoints)
+    const volume =
+      nearest && nearest.diffSeconds <= maxDiffSeconds && Number.isFinite(nearest.value) ? nearest.value : undefined
+
+    return { ...point, volume }
+  })
+}
+
+// Trust-checked live price selection: prefer the realtime spot feed (guarded
+// against wrong Pyth feed selection), then the chart tail, then static
+// fallbacks.
+function resolveLivePricing(args: {
+  liveQuotePrice: number | null | undefined
+  liveQuoteChange24h: number | null | undefined
+  fallbackPercentageChange: number | null | undefined
+  chartLastPrice: number | null
+  liveSpotPriceUsd: number | null
+  initialPrice: number | null | undefined
+  displayPrice: number | null | undefined
+}): { liveChange24h: number; isLiveSpotTrusted: boolean; livePrice: number } {
+  const { liveQuotePrice, liveQuoteChange24h, fallbackPercentageChange, chartLastPrice, liveSpotPriceUsd, initialPrice, displayPrice } = args
+
+  const liveChange24h = liveQuoteChange24h ?? fallbackPercentageChange ?? 0
+
+  const referencePrice =
+    (typeof liveQuotePrice === "number" && Number.isFinite(liveQuotePrice) && liveQuotePrice > 0
+      ? liveQuotePrice
+      : null) ??
+    (typeof chartLastPrice === "number" && Number.isFinite(chartLastPrice) && chartLastPrice > 0
+      ? chartLastPrice
+      : null) ??
+    (typeof initialPrice === "number" && Number.isFinite(initialPrice) && initialPrice > 0
+      ? initialPrice
+      : null)
+
+  const isLiveSpotTrusted = (() => {
+    const spot = liveSpotPriceUsd
+    if (typeof spot !== "number" || !Number.isFinite(spot) || spot <= 0) return false
+    if (referencePrice == null) return true
+    const ratio = spot / referencePrice
+    // Guard against wrong Pyth feed selection (e.g. META equity feed, KPEPE 1000x unit feed).
+    if (!Number.isFinite(ratio) || ratio <= 0) return false
+    return ratio < 20 && ratio > 0.05
+  })()
+
+  const trustedSpotPriceUsd = isLiveSpotTrusted ? liveSpotPriceUsd : null
+  const livePrice =
+    (typeof trustedSpotPriceUsd === "number" && Number.isFinite(trustedSpotPriceUsd) && trustedSpotPriceUsd > 0
+      ? trustedSpotPriceUsd
+      : null) ??
+    (typeof chartLastPrice === "number" && Number.isFinite(chartLastPrice) && chartLastPrice > 0
+      ? chartLastPrice
+      : null) ??
+    initialPrice ??
+    displayPrice ??
+    liveQuotePrice ??
+    0
+
+  return { liveChange24h, isLiveSpotTrusted, livePrice }
+}
+
+const SCALES = [
+  { value: "30d", label: "1M" },   // 30 days focus with 90 days context
+  { value: "max", label: "1Y" },    // 1 year of data
+  { value: "2y", label: "2Y" },    // Maximum data possible
+]
+
+// React 19: Memoized time scale selector
+const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, setActiveTimeScale }: {
+  activeTimeScale: string
+  setActiveTimeScale: (scale: string) => void
+}) {
   return (
     <div className="flex gap-1 bg-white/95 dark:bg-black border border-gray-200/50 dark:border-zinc-800/80 rounded-[14px] p-1">
-      {scales.map((scale) => (
+      {SCALES.map((scale) => (
         <button
           type="button"
           key={scale.value}
@@ -306,6 +447,44 @@ const TimeScaleSelector = memo(function TimeScaleSelector({ activeTimeScale, set
     </div>
   )
 })
+
+// Floating action bar: time scale selector + per-series visibility toggles.
+function ChartToolbar(props: {
+  activeTimeScale: string
+  onTimeScaleChange: (scale: string) => void
+  showPrice: boolean
+  onTogglePrice: () => void
+  hasMarketCap: boolean
+  showMarketCap: boolean
+  onToggleMarketCap: () => void
+  marketCapColor: string
+}) {
+  return (
+    <div className="absolute right-0 top-0 z-20 pointer-events-auto flex flex-col items-end gap-2">
+      <TimeScaleSelector
+        activeTimeScale={props.activeTimeScale}
+        setActiveTimeScale={props.onTimeScaleChange}
+      />
+      <div className="flex items-center gap-0.5 pr-0.5">
+        <SeriesLegendToggle
+          label="PRICE"
+          pressed={props.showPrice}
+          onPressedChange={props.onTogglePrice}
+          swatch="price"
+        />
+        {props.hasMarketCap ? (
+          <SeriesLegendToggle
+            label="MKT CAP"
+            pressed={props.showMarketCap}
+            onPressedChange={props.onToggleMarketCap}
+            swatch="market-cap"
+            marketCapColor={props.marketCapColor}
+          />
+        ) : null}
+      </div>
+    </div>
+  )
+}
 
 // Crosshair position lives in a tiny external store instead of React state:
 // lightweight-charts fires crosshair callbacks at mousemove frequency, and a
@@ -337,6 +516,64 @@ function createCrosshairStore() {
 }
 
 type CrosshairStore = ReturnType<typeof createCrosshairStore>
+
+// Highlight the period under the crosshair and dim the rest:
+// - 1Q + 1Y: highlight month
+// - Max: highlight quarter
+// Derived from the crosshair store via subscription: the range only
+// changes when the cursor crosses a month/quarter boundary, so the
+// identity-preserving setState below makes pointer moves render-free
+// for the consuming component.
+interface HighlightRange {
+  from: Time
+  to: Time
+  dimOpacity: number
+  boundaryColor: string
+}
+
+function useCrosshairHighlightRange(
+  crosshairStore: CrosshairStore,
+  timeScale: string,
+  isDarkMode: boolean,
+): HighlightRange | null {
+  const [highlightRange, setHighlightRange] = useState<HighlightRange | null>(null)
+
+  useEffect(() => {
+    const compute = () => {
+      const { timeEpochSec } = crosshairStore.get()
+      if (timeEpochSec == null) {
+        setHighlightRange((prev) => (prev == null ? prev : null))
+        return
+      }
+
+      const isQuarterly = timeScale === '2y' || timeScale === 'max'
+      const range = isQuarterly
+        ? getUtcQuarterRange(timeEpochSec)
+        : getUtcMonthRange(timeEpochSec)
+
+      const boundaryColor = isDarkMode ? 'oklch(1 0 0 / 0.25)' : 'oklch(0 0 0 / 0.25)'
+
+      setHighlightRange((prev) =>
+        prev != null &&
+        prev.from === (range.fromEpochSeconds as Time) &&
+        prev.to === (range.toEpochSeconds as Time) &&
+        prev.boundaryColor === boundaryColor
+          ? prev
+          : {
+              from: range.fromEpochSeconds as Time,
+              to: range.toEpochSeconds as Time,
+              dimOpacity: 0.18,
+              boundaryColor,
+            },
+      )
+    }
+
+    compute()
+    return crosshairStore.subscribe(compute)
+  }, [crosshairStore, timeScale, isDarkMode])
+
+  return highlightRange
+}
 
 // The only part of the header that changes while scrubbing. Subscribes to the
 // crosshair store so pointer moves re-render just this fragment.
@@ -414,7 +651,7 @@ export const PriceChart = memo(function PriceChart({
   const [showMarketCap, setShowMarketCap] = useState(true)
 
   const crosshairStoreRef = useRef<CrosshairStore | null>(null)
-  if (!crosshairStoreRef.current) crosshairStoreRef.current = createCrosshairStore()
+  if (crosshairStoreRef.current === null) crosshairStoreRef.current = createCrosshairStore()
   const crosshairStore = crosshairStoreRef.current
 
   // React 19: Defer expensive computations
@@ -523,88 +760,17 @@ export const PriceChart = memo(function PriceChart({
     }
   }, [projectionData, isDarkMode])
 
-  const ohlcvDataForChart = useMemo(() => {
-    if (!ohlcData.length) return []
-
-    const volumePoints: Array<VolumePointByEpoch> = volumeData
-      .map((point) => {
-        const epochSeconds = timeToEpochSeconds(point.time)
-        return epochSeconds == null || !Number.isFinite(point.value)
-          ? null
-          : { epochSeconds, value: point.value }
-      })
-      .filter((point): point is VolumePointByEpoch => point !== null)
-      .sort((a, b) => a.epochSeconds - b.epochSeconds)
-
-    const ohlcEpochSeconds = ohlcData
-      .map((point) => timeToEpochSeconds(point.time))
-      .filter((t): t is number => t != null)
-    const averageIntervalSeconds = estimateAverageIntervalSeconds(ohlcEpochSeconds)
-    const maxDiffSeconds = Math.max(2 * 60 * 60, Math.floor((averageIntervalSeconds ?? 0) / 2) || 12 * 60 * 60)
-
-    const base = ohlcData.map((point) => {
-      const epochSeconds = timeToEpochSeconds(point.time)
-      if (epochSeconds == null || volumePoints.length === 0) return { ...point }
-
-      const nearest = findNearestVolumeValue(epochSeconds, volumePoints)
-      const volume =
-        nearest && nearest.diffSeconds <= maxDiffSeconds && Number.isFinite(nearest.value) ? nearest.value : undefined
-
-      return { ...point, volume }
-    })
-
-    // NOTE: the realtime spot price is intentionally NOT merged here — it
-    // flows to the chart as an O(1) last-bar update via the livePriceUsd
-    // option. Including it in this memo re-mapped/re-sorted the entire
-    // series (and re-fed setData) on every ~1s tick.
-    return base
-  }, [ohlcData, volumeData])
+  // NOTE: the realtime spot price is intentionally NOT merged here — it
+  // flows to the chart as an O(1) last-bar update via the livePriceUsd
+  // option. Including it in this memo re-mapped/re-sorted the entire
+  // series (and re-fed setData) on every ~1s tick.
+  const ohlcvDataForChart = useMemo(() => mergeVolumeIntoOhlcv(ohlcData, volumeData), [ohlcData, volumeData])
 
   const isSeriesReady = ohlcvDataForChart.length >= 2
 
-  // Highlight the period under the crosshair and dim the rest:
-  // - 1Q + 1Y: highlight month
-  // - Max: highlight quarter
-  // Derived from the crosshair store via subscription: the range only
-  // changes when the cursor crosses a month/quarter boundary, so the
-  // identity-preserving setState below makes pointer moves render-free
-  // for this component.
-  type HighlightRange = { from: Time; to: Time; dimOpacity: number; boundaryColor: string }
-  const [highlightRange, setHighlightRange] = useState<HighlightRange | null>(null)
-
-  useEffect(() => {
-    const compute = () => {
-      const { timeEpochSec } = crosshairStore.get()
-      if (timeEpochSec == null) {
-        setHighlightRange((prev) => (prev == null ? prev : null))
-        return
-      }
-
-      const isQuarterly = deferredTimeScale === '2y' || deferredTimeScale === 'max'
-      const range = isQuarterly
-        ? getUtcQuarterRange(timeEpochSec)
-        : getUtcMonthRange(timeEpochSec)
-
-      const boundaryColor = isDarkMode ? 'oklch(1 0 0 / 0.25)' : 'oklch(0 0 0 / 0.25)'
-
-      setHighlightRange((prev) =>
-        prev != null &&
-        prev.from === (range.fromEpochSeconds as Time) &&
-        prev.to === (range.toEpochSeconds as Time) &&
-        prev.boundaryColor === boundaryColor
-          ? prev
-          : {
-              from: range.fromEpochSeconds as Time,
-              to: range.toEpochSeconds as Time,
-              dimOpacity: 0.18,
-              boundaryColor,
-            },
-      )
-    }
-
-    compute()
-    return crosshairStore.subscribe(compute)
-  }, [crosshairStore, deferredTimeScale, isDarkMode])
+  // Month/quarter highlight band under the crosshair (render-free on pointer
+  // moves; see useCrosshairHighlightRange).
+  const highlightRange = useCrosshairHighlightRange(crosshairStore, deferredTimeScale, isDarkMode)
 
   const chartContainerRef = useChartInstance(isSeriesReady ? ohlcvDataForChart : [], {
     chartType: 'line',
@@ -635,43 +801,18 @@ export const PriceChart = memo(function PriceChart({
   // React 19: Show pending states and optimize price display
   const basePrice = ohlcvDataForChart[0]?.open || ohlcvDataForChart[0]?.close || null
 
-  const liveChange24h = liveQuote?.price_change_percentage_24h ?? calculatePercentageChange ?? 0
   const chartLastPrice =
     chartData.length > 0 ? chartData[chartData.length - 1]?.value ?? null : null
 
-  const referencePrice =
-    (typeof liveQuote?.current_price === "number" && Number.isFinite(liveQuote.current_price) && liveQuote.current_price > 0
-      ? liveQuote.current_price
-      : null) ??
-    (typeof chartLastPrice === "number" && Number.isFinite(chartLastPrice) && chartLastPrice > 0
-      ? chartLastPrice
-      : null) ??
-    (typeof deferredInitialData?.price === "number" && Number.isFinite(deferredInitialData.price) && deferredInitialData.price > 0
-      ? deferredInitialData.price
-      : null)
-
-  const isLiveSpotTrusted = (() => {
-    const spot = liveSpotPriceUsd
-    if (typeof spot !== "number" || !Number.isFinite(spot) || spot <= 0) return false
-    if (referencePrice == null) return true
-    const ratio = spot / referencePrice
-    // Guard against wrong Pyth feed selection (e.g. META equity feed, KPEPE 1000x unit feed).
-    if (!Number.isFinite(ratio) || ratio <= 0) return false
-    return ratio < 20 && ratio > 0.05
-  })()
-
-  const trustedSpotPriceUsd = isLiveSpotTrusted ? liveSpotPriceUsd : null
-  const livePrice =
-    (typeof trustedSpotPriceUsd === "number" && Number.isFinite(trustedSpotPriceUsd) && trustedSpotPriceUsd > 0
-      ? trustedSpotPriceUsd
-      : null) ??
-    (typeof chartLastPrice === "number" && Number.isFinite(chartLastPrice) && chartLastPrice > 0
-      ? chartLastPrice
-      : null) ??
-    deferredInitialData?.price ??
-    displayPrice ??
-    liveQuote?.current_price ??
-    0
+  const { liveChange24h, isLiveSpotTrusted, livePrice } = resolveLivePricing({
+    liveQuotePrice: liveQuote?.current_price,
+    liveQuoteChange24h: liveQuote?.price_change_percentage_24h,
+    fallbackPercentageChange: calculatePercentageChange,
+    chartLastPrice,
+    liveSpotPriceUsd,
+    initialPrice: deferredInitialData?.price,
+    displayPrice,
+  })
 
   // Only treat loading as "blocking" when we can’t render a proper series yet.
   // Warmup (stale DB refresh) can run in the background without pulsing the whole chart.
@@ -733,75 +874,17 @@ export const PriceChart = memo(function PriceChart({
                   />
                 </div>
               </div>
-               <div className="absolute right-0 top-0 z-20 pointer-events-auto flex flex-col items-end gap-2">
-                  <TimeScaleSelector
-                    activeTimeScale={deferredTimeScale}
-                    setActiveTimeScale={handleTimeScaleChange}
-                  />
-                  <div className="flex items-center gap-0.5 pr-0.5">
-                    <SeriesLegendToggle
-                      label="PRICE"
-                      pressed={showPrice}
-                      onPressedChange={() => setShowPrice((visible) => !visible)}
-                      swatch="price"
-                    />
-                    {marketCapOverlay ? (
-                      <SeriesLegendToggle
-                        label="MKT CAP"
-                        pressed={showMarketCap}
-                        onPressedChange={() => setShowMarketCap((visible) => !visible)}
-                        swatch="market-cap"
-                        marketCapColor={marketCapColor}
-                      />
-                    ) : null}
-                  </div>
-                </div>
-                <div className="hidden absolute right-4 top-[57px] z-20 pointer-events-auto flex flex-col items-end gap-2">
-                  {spotStatusLabel ? (
-                    <Tooltip delayDuration={250}>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          aria-label="Price feed source"
-                          className={cn(
-                            "inline-flex gap-1.5 items-center rounded-md border px-1.5 py-0.5 text-[9px] font-semibold font-berkeley-mono tracking-wider tabular-nums cursor-help focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-950",
-                            spotStatusLabel.className,
-                          )}
-                        >
-                          <div className="relative h-1.5 w-1.5">
-                            <span
-                              aria-hidden="true"
-                              className="absolute top-0 left-0 inline-block h-1.5 w-1.5 rounded-full bg-current"
-                            />
-                            <span
-                              aria-hidden="true"
-                              className="absolute top-0 left-0 inline-block h-1.5 w-1.5 rounded-full bg-current animate-ping"
-                            />
-                          </div>
-                          {spotStatusLabel.label}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side="left"
-                        align="center"
-                        sideOffset={8}
-                        className="flex items-center gap-2 rounded-md border bg-white/95 p-2 py-1 text-xs text-zinc-900 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
-                      >
-                        <span>{spotStatusLabel.title}</span>
-                        {spotStatusLabel.href ? (
-                          <a
-                            href={spotStatusLabel.href}
-                            target="_blank"
-                            rel="noreferrer noopener"
-                            className="ml-1 inline-flex items-center rounded-sm text-xs font-medium text-primary underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-950"
-                          >
-                            {spotStatusLabel.hrefLabel ?? "Learn more"}
-                          </a>
-                        ) : null}
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : null}
-                </div>
+               <ChartToolbar
+                  activeTimeScale={deferredTimeScale}
+                  onTimeScaleChange={handleTimeScaleChange}
+                  showPrice={showPrice}
+                  onTogglePrice={() => setShowPrice((visible) => !visible)}
+                  hasMarketCap={Boolean(marketCapOverlay)}
+                  showMarketCap={showMarketCap}
+                  onToggleMarketCap={() => setShowMarketCap((visible) => !visible)}
+                  marketCapColor={marketCapColor}
+                />
+                <SpotStatusIndicator statusLabel={spotStatusLabel} />
             </CardHeader>
             <CardContent className="">
               <div className={cn(

@@ -12,14 +12,16 @@ export function signedPct(value: number): string {
   return `${sign}${Math.abs(value).toFixed(2)}%`
 }
 
+const usdCompactFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  notation: "compact",
+  maximumFractionDigits: 2,
+})
+
 export function formatUsdCompactUsd(value: number): string {
   if (!Number.isFinite(value)) return "—"
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    notation: "compact",
-    maximumFractionDigits: 2,
-  }).format(value)
+  return usdCompactFormatter.format(value)
 }
 
 export type OverviewEventLite = { kind: string; occurredAtMs: number }

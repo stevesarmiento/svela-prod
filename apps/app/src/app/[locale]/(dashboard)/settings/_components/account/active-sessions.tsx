@@ -13,6 +13,20 @@ type SessionWithActivities = Awaited<
   ReturnType<UserResource["getSessions"]>
 >[number];
 
+const describeSession = (session: SessionWithActivities) => {
+  const activity = session.latestActivity;
+  const browser = [activity?.browserName, activity?.browserVersion]
+    .filter(Boolean)
+    .join(" ");
+  const device = activity?.isMobile
+    ? "Mobile device"
+    : activity?.deviceType || "Desktop device";
+  const location = [activity?.city, activity?.country]
+    .filter(Boolean)
+    .join(", ");
+  return { browser: browser || "Unknown browser", device, location };
+};
+
 export function ActiveSessions() {
   const { user } = useUser();
   const { session: currentSession } = useSession();
@@ -49,20 +63,6 @@ export function ActiveSessions() {
     } finally {
       setBusyId(null);
     }
-  };
-
-  const describeSession = (session: SessionWithActivities) => {
-    const activity = session.latestActivity;
-    const browser = [activity?.browserName, activity?.browserVersion]
-      .filter(Boolean)
-      .join(" ");
-    const device = activity?.isMobile
-      ? "Mobile device"
-      : activity?.deviceType || "Desktop device";
-    const location = [activity?.city, activity?.country]
-      .filter(Boolean)
-      .join(", ");
-    return { browser: browser || "Unknown browser", device, location };
   };
 
   return (
@@ -109,6 +109,7 @@ export function ActiveSessions() {
                         {[
                           location,
                           session.lastActiveAt
+                            // react-doctor-disable-next-line react-doctor/no-locale-format-in-render -- sessions load client-side in an effect; this branch is unreachable during SSR/hydration
                             ? `Active ${new Date(session.lastActiveAt).toLocaleString()}`
                             : null,
                         ]

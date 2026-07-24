@@ -37,7 +37,12 @@ export interface CoinGeckoSearchParams {
 function makeStableKeyPart(values: ReadonlyArray<string> | undefined): string {
   if (!values?.length) return ""
   const unique = Array.from(
-    new Set(values.map((value) => value.trim()).filter((value) => value.length > 0)),
+    new Set(
+      values.flatMap((value) => {
+        const trimmed = value.trim()
+        return trimmed.length > 0 ? [trimmed] : []
+      }),
+    ),
   )
   unique.sort()
   return unique.join(",")

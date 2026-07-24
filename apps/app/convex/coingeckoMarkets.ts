@@ -136,28 +136,33 @@ export const upsertMarketDataBatch = mutation({
     requireServerToken(args.serverToken);
     const now = Date.now();
 
-    for (const item of args.items) {
-      const existing = await ctx.db
-        .query("coingeckoMarkets")
-        .withIndex("by_coingecko_id", (q) =>
-          q.eq("coingeckoId", item.coingeckoId),
-        )
-        .first();
+    // Dedupe by coingeckoId (last wins, same end-state as the sequential
+    // upsert) so concurrent iterations can't double-insert the same coin.
+    const itemsById = new Map(args.items.map((item) => [item.coingeckoId, item]));
+    await Promise.all(
+      Array.from(itemsById.values()).map(async (item) => {
+        const existing = await ctx.db
+          .query("coingeckoMarkets")
+          .withIndex("by_coingecko_id", (q) =>
+            q.eq("coingeckoId", item.coingeckoId),
+          )
+          .first();
 
-      if (existing) {
-        await ctx.db.patch(existing._id, {
+        if (existing) {
+          await ctx.db.patch(existing._id, {
+            ...item,
+            updatedAt: now,
+          });
+          return;
+        }
+
+        await ctx.db.insert("coingeckoMarkets", {
           ...item,
+          createdAt: now,
           updatedAt: now,
         });
-        continue;
-      }
-
-      await ctx.db.insert("coingeckoMarkets", {
-        ...item,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
+      }),
+    );
 
     return null;
   },
@@ -220,7 +225,10 @@ export const getMarketDataByCoingeckoIds = query({
     requireServerToken(args.serverToken);
     const ids = Array.from(
       new Set(
-        args.coingeckoIds.map((id) => id.trim()).filter((id) => id.length > 0),
+        args.coingeckoIds.flatMap((id) => {
+          const trimmed = id.trim();
+          return trimmed.length > 0 ? [trimmed] : [];
+        }),
       ),
     ).slice(0, 500);
 

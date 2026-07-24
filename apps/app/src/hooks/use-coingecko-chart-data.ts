@@ -406,11 +406,13 @@ function combineOHLCWithVolume(
 
     // Parse real market cap data (same source as volumes)
     const marketCapChart = (marketData.data.market_caps ?? [])
-      .map((point: MarketChartPoint) => ({
-        time: Math.floor(Number(point.time)) as Time,
-        value: Number(point.value ?? 0),
-      }))
-      .filter((point) => Number.isFinite(Number(point.time)) && Number.isFinite(point.value) && point.value > 0)
+      .flatMap((point: MarketChartPoint) => {
+        const time = Math.floor(Number(point.time))
+        const value = Number(point.value ?? 0)
+        return Number.isFinite(time) && Number.isFinite(value) && value > 0
+          ? [{ time: time as Time, value }]
+          : []
+      })
       .sort((a, b) => Number(a.time) - Number(b.time))
 
     return {

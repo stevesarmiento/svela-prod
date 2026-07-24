@@ -5,6 +5,10 @@ import { Liveline } from "liveline";
 import type { LivelinePoint, LivelineSeries } from "liveline";
 import { useIsomorphicTheme } from "@/hooks/use-isomorphic-theme";
 
+// Hoisted default so the reference is stable across renders (keeps useMemo /
+// useCallback deps referentially equal when the prop is omitted).
+const EMPTY_POINTS: LivelinePoint[] = [];
+
 interface OverviewPerformanceChartProps {
   portfolioPoints: LivelinePoint[];
   marketPoints?: LivelinePoint[];
@@ -48,7 +52,7 @@ function formatIndexValue(value: number): string {
 
 export function OverviewPerformanceChart({
   portfolioPoints,
-  marketPoints = [],
+  marketPoints = EMPTY_POINTS,
   height = 320,
   onHover,
   note,
@@ -105,14 +109,16 @@ export function OverviewPerformanceChart({
       typeof first === "number" && typeof last === "number" ? last - first : 0;
     const includeYear = spanSec > 180 * 24 * 60 * 60;
 
-    return (epochSeconds: number) => {
-      const dt = new Date(epochSeconds * 1000);
-      return new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "numeric",
-        ...(includeYear ? { year: "numeric" as const } : {}),
-      }).format(dt);
-    };
+    // Built once per memo pass — Intl constructors are expensive, so don't
+    // rebuild the formatter on every axis tick.
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      ...(includeYear ? { year: "numeric" as const } : {}),
+    });
+
+    return (epochSeconds: number) =>
+      formatter.format(new Date(epochSeconds * 1000));
   }, [allPoints]);
 
   const handleHover = useCallback(

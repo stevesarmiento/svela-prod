@@ -1,11 +1,11 @@
 import type * as React from "react";
 
-export function AuthCardDashes(): React.JSX.Element {
-  const svgStyle: React.CSSProperties = {
-    width: "200vw",
-    height: "200vh",
-  };
+const SVG_STYLE: React.CSSProperties = {
+  width: "200vw",
+  height: "200vh",
+};
 
+export function AuthCardDashes(): React.JSX.Element {
   return (
     <>
       <svg
@@ -15,7 +15,7 @@ export function AuthCardDashes(): React.JSX.Element {
           left: "0%",
           top: "0%",
           transform: "translate(-50%, -50%)",
-          ...svgStyle,
+          ...SVG_STYLE,
         }}
       >
         <line
@@ -45,7 +45,7 @@ export function AuthCardDashes(): React.JSX.Element {
           left: "100%",
           top: "100%",
           transform: "translate(-50%, -50%)",
-          ...svgStyle,
+          ...SVG_STYLE,
         }}
       >
         <line
