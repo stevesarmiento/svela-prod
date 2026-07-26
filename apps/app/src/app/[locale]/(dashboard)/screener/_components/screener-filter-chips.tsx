@@ -20,6 +20,20 @@ import { ScreenerFilterEditor } from "./screener-filter-editor";
 
 type ScreenFilter = ScreeningDsl["filters"][number];
 
+// Filters have no id field, so cache a stable key per filter object. Object
+// identity survives removals/edits of *other* filters (the array is rebuilt
+// but untouched items are reused), keeping React state on the right chip.
+const filterKeys = new WeakMap<ScreenFilter, string>();
+let filterKeySeq = 0;
+function getFilterKey(filter: ScreenFilter): string {
+  let key = filterKeys.get(filter);
+  if (!key) {
+    key = `filter-${filterKeySeq++}`;
+    filterKeys.set(filter, key);
+  }
+  return key;
+}
+
 function ChipShell({
   label,
   value,
@@ -74,41 +88,35 @@ function FilterChip({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="flex-shrink-0"
-          aria-label={`Edit ${metric?.label ?? filter.metricId} filter`}
-        >
-          <Badge
-            variant="secondary"
-            className="group h-6 gap-1 pr-1 py-0 bg-primary/5 text-primary/50 hover:text-primary cursor-pointer border-border border-dashed flex-shrink-0"
+      {/* The Badge wrapper is non-interactive; the edit trigger and remove
+          control are sibling <button>s so neither nests inside the other. */}
+      <Badge
+        variant="secondary"
+        className="group h-6 gap-1 pr-1 py-0 bg-primary/5 text-primary/50 hover:text-primary cursor-pointer border-border border-dashed flex-shrink-0"
+      >
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="flex min-w-0 items-center"
+            aria-label={`Edit ${metric?.label ?? filter.metricId} filter`}
           >
             <span className="text-xs tabular-nums">
               {formatDslFilter(filter)}
             </span>
-            {/* NOT a <button>: the whole chip is the popover trigger button,
-                and button-in-button is invalid HTML (hydration error). */}
-            <span
-              role="button"
-              aria-label="Remove filter"
-              className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-md p-0 group-hover:bg-blue-500"
-              onClick={(event) => {
-                event.stopPropagation();
-                removeFilter();
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return;
-                event.preventDefault();
-                event.stopPropagation();
-                removeFilter();
-              }}
-            >
-              <X className="h-3 w-3" />
-            </span>
-          </Badge>
+          </button>
+        </PopoverTrigger>
+        <button
+          type="button"
+          aria-label="Remove filter"
+          className="ml-1 inline-flex h-4 w-4 items-center justify-center rounded-md p-0 group-hover:bg-blue-500"
+          onClick={(event) => {
+            event.stopPropagation();
+            removeFilter();
+          }}
+        >
+          <X className="h-3 w-3" />
         </button>
-      </PopoverTrigger>
+      </Badge>
       <PopoverContent
         align="start"
         // Cover the chip instead of dropping below it (see AddFilterChip).
@@ -218,7 +226,7 @@ export function ScreenerFilterChips() {
     dsl.filters.forEach((filter, index) => {
       chips.push(
         <FilterChip
-          key={`f-${index}-${filter.metricId}`}
+          key={getFilterKey(filter)}
           filter={filter}
           index={index}
           dsl={dsl}

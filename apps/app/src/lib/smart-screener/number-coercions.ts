@@ -53,25 +53,6 @@ export const PercentPointsSchema = z.preprocess((value) => {
   return value;
 }, z.number());
 
-/**
- * Ratio inputs like \"55%\" or 55 are normalized to 0..1.
- */
-export const RatioSchema = z.preprocess((value) => {
-  if (typeof value === "string") {
-    const cleaned = value.trim().replace(/%$/g, "");
-    const parsed = Number.parseFloat(cleaned);
-    if (!Number.isFinite(parsed)) return value;
-    if (parsed > 1) return parsed / 100;
-    return parsed;
-  }
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) return 0;
-    if (value > 1) return value / 100;
-    return value;
-  }
-  return value;
-}, z.number().min(0).max(1));
-
 export const IntegerSchema = z.preprocess((value) => {
   if (typeof value === "string" && value.trim().length > 0) {
     const parsed = Number(value);

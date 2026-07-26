@@ -38,6 +38,17 @@ interface UseLiquidationHistoryParams {
   endTime?: number
 }
 
+function formatCoinGlassError(error: unknown): string {
+  if (error && typeof error === "object" && "_tag" in error) {
+    const tagged = error as { _tag: string; message?: unknown; status?: unknown }
+    if (typeof tagged.message === "string") return tagged.message
+    if (typeof tagged.status === "number") return `CoinGlass request failed (${tagged.status})`
+    return `CoinGlass request failed (${tagged._tag})`
+  }
+
+  return error instanceof Error ? error.message : String(error)
+}
+
 export function useLiquidationHistory(params: UseLiquidationHistoryParams = {}) {
   const {
     symbol = 'BTC',
@@ -47,17 +58,6 @@ export function useLiquidationHistory(params: UseLiquidationHistoryParams = {}) 
     startTime,
     endTime
   } = params
-
-  function formatCoinGlassError(error: unknown): string {
-    if (error && typeof error === "object" && "_tag" in error) {
-      const tagged = error as { _tag: string; message?: unknown; status?: unknown }
-      if (typeof tagged.message === "string") return tagged.message
-      if (typeof tagged.status === "number") return `CoinGlass request failed (${tagged.status})`
-      return `CoinGlass request failed (${tagged._tag})`
-    }
-
-    return error instanceof Error ? error.message : String(error)
-  }
 
   return useQuery({
     queryKey: ['liquidation-history', symbol, interval, exchangeList, limit, startTime, endTime],

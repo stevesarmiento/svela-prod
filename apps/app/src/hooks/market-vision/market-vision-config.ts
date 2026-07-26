@@ -479,5 +479,3 @@ export const DEFAULT_MARKET_VISION_CONFIG: MarketVisionBConfig = {
 
 // Export as both the default and as marketVisionConfig for backward compatibility
 export const marketVisionConfig = DEFAULT_MARKET_VISION_CONFIG
-
-export const DEFAULT_MARKET_VISION_COLORS = DEFAULT_MARKET_VISION_CONFIG.colors

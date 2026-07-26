@@ -1,14 +1,20 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { RefObject } from 'react'
 import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
 import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import { calculateRsiDivergences, type RsiDivergence, RSI_ZONE_LEVELS } from '@/hooks/market-vision/rsi-divergences'
 import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
-import { subscribeToWindowResize } from '@/hooks/window-resize-store'
-import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store'
-import { CHART_COLOR_PARSERS } from '@/lib/oklch'
-import { timeToEpochSeconds } from '@/hooks/use-chart-instance/utils'
+import {
+  applyInitialVisibleRange,
+  attachChartResize,
+  attachChartScrubSync,
+  buildIndicatorChartOptions,
+  createOverlayLayer,
+  getInitialWindowSeconds,
+  normalizeIndicatorOhlcv,
+} from './indicator-chart-setup'
 
 interface RsiDivergencesChartProps {
   data: OHLCVDataPoint[]
@@ -18,9 +24,6 @@ interface RsiDivergencesChartProps {
   showLabels?: boolean
 }
 
-const SECONDS_PER_DAY = 24 * 60 * 60
-const DEFAULT_WINDOW_DAYS = 3
-const RIGHT_OFFSET_BARS = 12
 const MAX_DIVERGENCE_LINES = 200
 
 const COLORS = {
@@ -36,69 +39,6 @@ const COLORS = {
   zoneBullFill: 'oklch(0.7038 0.123 182.5 / 0.1)', // teal-500, ~90% transparent
   zoneBearFill: 'oklch(0.6268 0.2325 303.9 / 0.1)', // purple-500, ~90% transparent
 } as const
-
-function normalizeEpochSeconds(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value)) return null
-  const seconds = value > 1e10 ? Math.floor(value / 1000) : Math.floor(value)
-  return Number.isFinite(seconds) ? seconds : null
-}
-
-function normalizeIndicatorOhlcv(data: OHLCVDataPoint[]): OHLCVDataPoint[] {
-  const byEpoch = new Map<number, OHLCVDataPoint>()
-  for (const point of data) {
-    const epoch = normalizeEpochSeconds(point.time)
-    if (epoch == null) continue
-    if (!Number.isFinite(point.open) || !Number.isFinite(point.high) || !Number.isFinite(point.low) || !Number.isFinite(point.close))
-      continue
-    byEpoch.set(epoch, { ...point, time: epoch, volume: Number.isFinite(point.volume) ? point.volume : 0 })
-  }
-
-  return Array.from(byEpoch.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([, value]) => value)
-}
-
-function getInitialWindowSeconds(initialWindowDays: number | undefined): number {
-  const days = Number.isFinite(initialWindowDays) ? Math.max(1, Math.round(initialWindowDays as number)) : DEFAULT_WINDOW_DAYS
-  return days * SECONDS_PER_DAY
-}
-
-function estimateIntervalSeconds(ohlcvData: OHLCVDataPoint[], lastEpoch: number): number {
-  const prevEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 2]?.time)
-  if (prevEpoch == null) return 0
-  const delta = lastEpoch - prevEpoch
-  return Number.isFinite(delta) && delta > 0 ? delta : 0
-}
-
-function pickDefaultWindowSeconds(spanSeconds: number, windowSeconds: number): number | null {
-  if (!Number.isFinite(spanSeconds) || spanSeconds <= 0) return null
-  if (spanSeconds > windowSeconds) return windowSeconds
-  return null
-}
-
-function applyInitialVisibleRange(chart: IChartApi, ohlcvData: OHLCVDataPoint[], windowSeconds: number): void {
-  const firstEpoch = normalizeEpochSeconds(ohlcvData[0]?.time)
-  const lastEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 1]?.time)
-  if (firstEpoch == null || lastEpoch == null) {
-    chart.timeScale().fitContent()
-    return
-  }
-
-  const spanSeconds = lastEpoch - firstEpoch
-  const requestedWindowSeconds = pickDefaultWindowSeconds(spanSeconds, windowSeconds)
-  if (requestedWindowSeconds == null || spanSeconds <= requestedWindowSeconds) {
-    chart.timeScale().fitContent()
-    return
-  }
-
-  const intervalSeconds = estimateIntervalSeconds(ohlcvData, lastEpoch)
-  const paddedTo = (lastEpoch + intervalSeconds) as Time
-
-  chart.timeScale().setVisibleRange({
-    from: (lastEpoch - requestedWindowSeconds) as Time,
-    to: paddedTo,
-  })
-}
 
 function divergenceLabel(div: RsiDivergence): string {
   if (div.type === 'bullish') return 'Bull'
@@ -138,6 +78,187 @@ function positionZoneEl(
   el.style.top = `${Math.round(top)}px`
   el.style.height = `${Math.round(bottom - top)}px`
   el.style.opacity = '1'
+}
+
+type RsiDivergencesCalc = ReturnType<typeof calculateRsiDivergences>
+
+// Rebuilds all series on the chart: zone levels, the RSI line, and one
+// 2-point line series per divergence segment.
+function applyRsiDivergenceSeries(
+  chart: IChartApi,
+  lightweightCharts: LightweightChartsModule,
+  seriesRefs: Map<string, ISeriesApi<'Line'>>,
+  calc: RsiDivergencesCalc,
+  cappedDivergences: RsiDivergence[],
+): void {
+  const { LineSeries, LineStyle } = lightweightCharts
+
+  // Clear existing series.
+  seriesRefs.forEach((series) => {
+    try {
+      chart.removeSeries(series)
+    } catch {
+      // ignore
+    }
+  })
+  seriesRefs.clear()
+
+  // Caretaker zone levels (80 crit bull / 62 ctrl bull / 50 mid / 38 ctrl bear / 20 crit bear)
+  const zoneLineDefs = [
+    { key: 'level_crit_bull', data: calc.levels.critBull, color: COLORS.zoneBullLine, lineStyle: LineStyle.Dashed },
+    { key: 'level_cont_bull', data: calc.levels.contBull, color: COLORS.zoneBullLine, lineStyle: LineStyle.Dotted },
+    { key: 'level_mid', data: calc.levels.middle, color: 'oklch(0.7118 0.0129 286.07 / 0.22)', lineStyle: LineStyle.Solid },
+    { key: 'level_cont_bear', data: calc.levels.contBear, color: COLORS.zoneBearLine, lineStyle: LineStyle.Dotted },
+    { key: 'level_crit_bear', data: calc.levels.critBear, color: COLORS.zoneBearLine, lineStyle: LineStyle.Dashed },
+  ] as const
+  for (const def of zoneLineDefs) {
+    const levelSeries = chart.addSeries(LineSeries, {
+      lineWidth: 1,
+      color: def.color,
+      title: '',
+      lineStyle: def.lineStyle,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    levelSeries.setData(def.data as { time: Time; value: number }[])
+    seriesRefs.set(def.key, levelSeries)
+  }
+
+  const rsiSeries = chart.addSeries(LineSeries, {
+    lineWidth: 2,
+    color: COLORS.rsi,
+    title: '',
+    lastValueVisible: true,
+    priceLineVisible: false,
+  })
+  rsiSeries.setData(calc.rsiSeries as { time: Time; value: number }[])
+  seriesRefs.set('rsi', rsiSeries)
+
+  // Divergence segments (each as a 2-point line series)
+  for (const div of cappedDivergences) {
+    const isHidden = div.type === 'h_bullish' || div.type === 'h_bearish'
+    const series = chart.addSeries(LineSeries, {
+      lineWidth: 2,
+      color: divergenceColor(div),
+      title: '',
+      lineStyle: isHidden ? LineStyle.Dashed : LineStyle.Solid,
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    series.setData([
+      { time: div.startTime as Time, value: div.rsiStart },
+      { time: div.endTime as Time, value: div.rsiEnd },
+    ])
+    seriesRefs.set(`div_${div.startIndex}_${div.endIndex}_${div.type}`, series)
+  }
+}
+
+interface ZoneFillEls {
+  bull: HTMLDivElement
+  bear: HTMLDivElement
+}
+
+// Bull/bear zone fills (DOM overlay, lightweight-charts has no hline fills).
+function buildZoneFillEls(zoneLayer: HTMLDivElement | null): ZoneFillEls | null {
+  if (!zoneLayer) return null
+  zoneLayer.innerHTML = ''
+  const makeZoneEl = (background: string) => {
+    const el = document.createElement('div')
+    el.style.position = 'absolute'
+    el.style.left = '0'
+    el.style.right = '0'
+    el.style.top = '0'
+    el.style.height = '0'
+    el.style.opacity = '0'
+    el.style.background = background
+    zoneLayer.appendChild(el)
+    return el
+  }
+  return { bull: makeZoneEl(COLORS.zoneBullFill), bear: makeZoneEl(COLORS.zoneBearFill) }
+}
+
+interface DivergenceLabelEl {
+  el: HTMLDivElement
+  divergence: RsiDivergence
+}
+
+// Labels at divergence endpoints (DOM overlay).
+function buildDivergenceLabelEls(
+  labelLayer: HTMLDivElement | null,
+  cappedDivergences: RsiDivergence[],
+  showLabels: boolean,
+): DivergenceLabelEl[] {
+  const labelEls: DivergenceLabelEl[] = []
+  if (!labelLayer) return labelEls
+
+  labelLayer.innerHTML = ''
+  if (showLabels) {
+    for (const div of cappedDivergences) {
+      const el = document.createElement('div')
+      el.className =
+        'absolute select-none text-[10px] font-berkeley-mono font-semibold px-1.5 py-0.5 rounded-md shadow-sm shadow-black/20'
+      el.style.color = 'oklch(1 0 0 / 0.96)'
+      el.style.background = divergenceColor(div)
+      el.style.transform = 'translate3d(-9999px, -9999px, 0)'
+      el.style.opacity = '0'
+      el.textContent = divergenceLabel(div)
+      labelLayer.appendChild(el)
+      labelEls.push({ el, divergence: div })
+    }
+  }
+  return labelEls
+}
+
+// RAF-batched updater that repositions zone fills + divergence labels to the
+// current chart coordinates. Reads through refs so it always sees the live
+// chart/series for this component instance.
+function createOverlayPositionUpdater(args: {
+  chartRef: RefObject<IChartApi | null>
+  chartContainerRef: RefObject<HTMLDivElement | null>
+  seriesRefs: RefObject<Map<string, ISeriesApi<'Line'>>>
+  labelUpdateRafRef: RefObject<number | null>
+  zoneEls: ZoneFillEls | null
+  labelEls: DivergenceLabelEl[]
+}): () => void {
+  const { chartRef, chartContainerRef, seriesRefs, labelUpdateRafRef, zoneEls, labelEls } = args
+
+  return () => {
+    if (labelUpdateRafRef.current) cancelAnimationFrame(labelUpdateRafRef.current)
+    labelUpdateRafRef.current = requestAnimationFrame(() => {
+      labelUpdateRafRef.current = null
+      if (!chartRef.current) return
+      const c = chartRef.current
+      const s = seriesRefs.current.get('rsi') as ISeriesApi<'Line'> | undefined
+      if (!s) return
+
+      const width = Math.max(1, chartContainerRef.current?.clientWidth ?? 1)
+      const heightPx = Math.max(1, chartContainerRef.current?.clientHeight ?? 1)
+
+      if (zoneEls) {
+        positionZoneEl(zoneEls.bull, s, RSI_ZONE_LEVELS.critBull, RSI_ZONE_LEVELS.contBull, heightPx)
+        positionZoneEl(zoneEls.bear, s, RSI_ZONE_LEVELS.contBear, RSI_ZONE_LEVELS.critBear, heightPx)
+      }
+
+      for (const { el, divergence } of labelEls) {
+        const x = c.timeScale().timeToCoordinate(divergence.endTime as Time)
+        const y = s.priceToCoordinate(divergence.rsiEnd)
+        if (x == null || y == null || !Number.isFinite(x) || !Number.isFinite(y)) {
+          el.style.opacity = '0'
+          el.style.transform = 'translate3d(-9999px, -9999px, 0)'
+          continue
+        }
+
+        if (x < -20 || x > width + 20 || y < -20 || y > heightPx + 20) {
+          el.style.opacity = '0'
+          el.style.transform = 'translate3d(-9999px, -9999px, 0)'
+          continue
+        }
+
+        el.style.opacity = '1'
+        el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) translate(-50%, -120%)`
+      }
+    })
+  }
 }
 
 export function RsiDivergencesChart({
@@ -187,151 +308,42 @@ export function RsiDivergencesChart({
       const lightweightCharts = await loadLightweightCharts()
       lightweightChartsRef.current = lightweightCharts
 
-      const { createChart, ColorType, CrosshairMode, LineStyle } = lightweightCharts
-
       if (isCancelled || !chartContainerRef.current) return
+      const container = chartContainerRef.current
 
-      const chart = createChart(chartContainerRef.current, {
-        handleScale: true,
-        handleScroll: true,
-        layout: {
-          background: { type: ColorType.Solid, color: 'transparent' },
-          textColor: 'oklch(1 0 0 / 0.3137)',
-          attributionLogo: false,
-          colorParsers: CHART_COLOR_PARSERS,
-        },
-        grid: {
-          vertLines: { visible: false },
-          horzLines: { visible: true, color: 'oklch(0.9702 0 0 / 0.0627)', style: LineStyle.Dotted },
-        },
-        rightPriceScale: {
-          borderVisible: false,
-          autoScale: true,
+      const chart = lightweightCharts.createChart(
+        container,
+        buildIndicatorChartOptions(lightweightCharts, {
+          showTimeAxis,
+          horzLinesVisible: true,
           scaleMargins: { top: 0.12, bottom: 0.12 },
-        },
-        crosshair: {
-          mode: CrosshairMode.Magnet,
-          vertLine: { labelVisible: true, width: 1, color: 'oklch(0.8717 0.0093 258.34 / 0.251)', visible: true, style: LineStyle.Solid },
-          horzLine: { visible: false, labelVisible: false },
-        },
-        timeScale: {
-          visible: showTimeAxis,
-          timeVisible: showTimeAxis,
-          secondsVisible: false,
-          borderVisible: false,
-          rightOffset: RIGHT_OFFSET_BARS,
-        },
-      })
+        }),
+      )
 
       chartRef.current = chart
       hasAppliedInitialRangeRef.current = false
       if (!isCancelled) setChartReadyNonce((prev) => prev + 1)
 
-      const handleResize = () => {
-        if (chartContainerRef.current && chart) {
-          chart.applyOptions({
-            width: chartContainerRef.current.clientWidth,
-            height,
-          })
-        }
-        labelUpdateFnRef.current?.()
-      }
-
-      let resizeObserver: ResizeObserver | null = null
-      let resizeRafId: number | null = null
-      let unsubscribeWindowResize: (() => void) | null = null
-
-      if (typeof ResizeObserver !== 'undefined' && chartContainerRef.current) {
-        resizeObserver = new ResizeObserver(() => {
-          if (resizeRafId) cancelAnimationFrame(resizeRafId)
-          resizeRafId = requestAnimationFrame(() => handleResize())
-        })
-        resizeObserver.observe(chartContainerRef.current)
-      } else {
-        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
-      }
-
-      handleResize()
-
-      // Shared cross-chart scrub line overlay.
-      chartContainerRef.current.style.position = chartContainerRef.current.style.position || 'relative'
-      const scrubLineEl = document.createElement('div')
-      scrubLineEl.setAttribute('aria-hidden', 'true')
-      scrubLineEl.style.position = 'absolute'
-      scrubLineEl.style.top = '0'
-      scrubLineEl.style.bottom = '0'
-      scrubLineEl.style.width = '1px'
-      scrubLineEl.style.transform = 'translateX(-9999px)'
-      scrubLineEl.style.opacity = '0'
-      scrubLineEl.style.pointerEvents = 'none'
-      scrubLineEl.style.background = 'oklch(1 0 0 / 0.2)'
-      scrubLineEl.style.zIndex = '5'
-      chartContainerRef.current.appendChild(scrubLineEl)
-
-      const updateScrubLine = () => {
-        const scrub = getChartScrubSnapshot()
-        if (!chartContainerRef.current || scrub.epochSeconds == null || scrub.sourceId === 'rsi-divergences') {
-          scrubLineEl.style.opacity = '0'
-          scrubLineEl.style.transform = 'translateX(-9999px)'
-          return
-        }
-
-        const x = chart.timeScale().timeToCoordinate(scrub.epochSeconds as Time)
-        if (x == null || !Number.isFinite(x)) {
-          scrubLineEl.style.opacity = '0'
-          scrubLineEl.style.transform = 'translateX(-9999px)'
-          return
-        }
-
-        scrubLineEl.style.opacity = '1'
-        scrubLineEl.style.transform = `translateX(${Math.round(x)}px)`
-      }
-
-      const unsubscribeScrub = subscribeToChartScrub(() => updateScrubLine())
-      chart.timeScale().subscribeVisibleTimeRangeChange(updateScrubLine)
-      chart.timeScale().subscribeVisibleLogicalRangeChange(updateScrubLine)
-      updateScrubLine()
-
-      const handleCrosshairMove = (param: { point?: { x: number; y: number }; time?: Time }) => {
-        if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
-          clearChartScrub()
-          return
-        }
-        setChartScrub(timeToEpochSeconds(param.time) ?? null, 'rsi-divergences')
-      }
-      chart.subscribeCrosshairMove(handleCrosshairMove)
+      const detachResize = attachChartResize(chart, container, height, () => labelUpdateFnRef.current?.())
+      const detachScrubSync = attachChartScrubSync(chart, container, 'rsi-divergences')
 
       // Zone fill layer (DOM overlay, behind scrub line and labels).
-      const zoneLayer = document.createElement('div')
-      zoneLayer.className = 'pointer-events-none absolute inset-0 overflow-hidden'
-      zoneLayer.style.zIndex = '1'
-      zoneLayer.setAttribute('aria-hidden', 'true')
-      chartContainerRef.current.appendChild(zoneLayer)
+      const zoneLayer = createOverlayLayer(container, '1', true)
       zoneLayerRef.current = zoneLayer
 
       // Label layer (DOM overlay).
-      const labelLayer = document.createElement('div')
-      labelLayer.className = 'pointer-events-none absolute inset-0'
-      labelLayer.style.zIndex = '6'
-      labelLayer.setAttribute('aria-hidden', 'true')
-      chartContainerRef.current.appendChild(labelLayer)
+      const labelLayer = createOverlayLayer(container, '6')
       labelLayerRef.current = labelLayer
 
       cleanup = () => {
-        if (resizeRafId) cancelAnimationFrame(resizeRafId)
-        resizeObserver?.disconnect()
-        unsubscribeWindowResize?.()
-        chart.unsubscribeCrosshairMove(handleCrosshairMove)
-        chart.timeScale().unsubscribeVisibleTimeRangeChange(updateScrubLine)
-        chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateScrubLine)
-        unsubscribeScrub()
-        if (chartContainerRef.current?.contains(scrubLineEl)) chartContainerRef.current.removeChild(scrubLineEl)
+        detachResize()
+        detachScrubSync()
         if (labelUpdateRafRef.current) cancelAnimationFrame(labelUpdateRafRef.current)
         labelCleanupRef.current?.()
         labelUpdateFnRef.current = null
-        if (chartContainerRef.current?.contains(labelLayer)) chartContainerRef.current.removeChild(labelLayer)
+        if (container.contains(labelLayer)) container.removeChild(labelLayer)
         labelLayerRef.current = null
-        if (chartContainerRef.current?.contains(zoneLayer)) chartContainerRef.current.removeChild(zoneLayer)
+        if (container.contains(zoneLayer)) container.removeChild(zoneLayer)
         zoneLayerRef.current = null
         chart.remove()
         chartRef.current = null
@@ -346,154 +358,28 @@ export function RsiDivergencesChart({
   }, [height, showTimeAxis])
 
   useEffect(() => {
-    if (!chartRef.current) return
+    const chart = chartRef.current
+    if (!chart) return
     const lightweightCharts = lightweightChartsRef.current
     if (!lightweightCharts) return
-
-    const { LineSeries, LineStyle } = lightweightCharts
-    const chart = chartRef.current
 
     // Clear any previous label subscriptions for this chart instance.
     labelCleanupRef.current?.()
     labelCleanupRef.current = null
 
-    // Clear existing series.
-    seriesRefs.current.forEach((series) => {
-      try {
-        chart.removeSeries(series)
-      } catch {
-        // ignore
-      }
+    applyRsiDivergenceSeries(chart, lightweightCharts, seriesRefs.current, calc, cappedDivergences)
+
+    const zoneEls = buildZoneFillEls(zoneLayerRef.current)
+    const labelEls = buildDivergenceLabelEls(labelLayerRef.current, cappedDivergences, showLabels)
+
+    const scheduleLabelUpdate = createOverlayPositionUpdater({
+      chartRef,
+      chartContainerRef,
+      seriesRefs,
+      labelUpdateRafRef,
+      zoneEls,
+      labelEls,
     })
-    seriesRefs.current.clear()
-
-    // Caretaker zone levels (80 crit bull / 62 ctrl bull / 50 mid / 38 ctrl bear / 20 crit bear)
-    const zoneLineDefs = [
-      { key: 'level_crit_bull', data: calc.levels.critBull, color: COLORS.zoneBullLine, lineStyle: LineStyle.Dashed },
-      { key: 'level_cont_bull', data: calc.levels.contBull, color: COLORS.zoneBullLine, lineStyle: LineStyle.Dotted },
-      { key: 'level_mid', data: calc.levels.middle, color: 'oklch(0.7118 0.0129 286.07 / 0.22)', lineStyle: LineStyle.Solid },
-      { key: 'level_cont_bear', data: calc.levels.contBear, color: COLORS.zoneBearLine, lineStyle: LineStyle.Dotted },
-      { key: 'level_crit_bear', data: calc.levels.critBear, color: COLORS.zoneBearLine, lineStyle: LineStyle.Dashed },
-    ] as const
-    for (const def of zoneLineDefs) {
-      const levelSeries = chart.addSeries(LineSeries, {
-        lineWidth: 1,
-        color: def.color,
-        title: '',
-        lineStyle: def.lineStyle,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      levelSeries.setData(def.data as { time: Time; value: number }[])
-      seriesRefs.current.set(def.key, levelSeries)
-    }
-
-    const rsiSeries = chart.addSeries(LineSeries, {
-      lineWidth: 2,
-      color: COLORS.rsi,
-      title: '',
-      lastValueVisible: true,
-      priceLineVisible: false,
-    })
-    rsiSeries.setData(calc.rsiSeries as { time: Time; value: number }[])
-    seriesRefs.current.set('rsi', rsiSeries)
-
-    // Divergence segments (each as a 2-point line series)
-    for (const div of cappedDivergences) {
-      const isHidden = div.type === 'h_bullish' || div.type === 'h_bearish'
-      const series = chart.addSeries(LineSeries, {
-        lineWidth: 2,
-        color: divergenceColor(div),
-        title: '',
-        lineStyle: isHidden ? LineStyle.Dashed : LineStyle.Solid,
-        lastValueVisible: false,
-        priceLineVisible: false,
-      })
-      series.setData([
-        { time: div.startTime as Time, value: div.rsiStart },
-        { time: div.endTime as Time, value: div.rsiEnd },
-      ])
-      seriesRefs.current.set(`div_${div.startIndex}_${div.endIndex}_${div.type}`, series)
-    }
-
-    // Bull/bear zone fills (DOM overlay, lightweight-charts has no hline fills).
-    const zoneLayer = zoneLayerRef.current
-    let zoneEls: { bull: HTMLDivElement; bear: HTMLDivElement } | null = null
-    if (zoneLayer) {
-      zoneLayer.innerHTML = ''
-      const makeZoneEl = (background: string) => {
-        const el = document.createElement('div')
-        el.style.position = 'absolute'
-        el.style.left = '0'
-        el.style.right = '0'
-        el.style.top = '0'
-        el.style.height = '0'
-        el.style.opacity = '0'
-        el.style.background = background
-        zoneLayer.appendChild(el)
-        return el
-      }
-      zoneEls = { bull: makeZoneEl(COLORS.zoneBullFill), bear: makeZoneEl(COLORS.zoneBearFill) }
-    }
-
-    // Labels at divergence endpoints (DOM overlay).
-    const labelLayer = labelLayerRef.current
-    const labelEls: Array<{ el: HTMLDivElement; divergence: RsiDivergence }> = []
-    if (labelLayer) {
-      labelLayer.innerHTML = ''
-      if (showLabels) {
-        for (const div of cappedDivergences) {
-          const el = document.createElement('div')
-          el.className =
-            'absolute select-none text-[10px] font-berkeley-mono font-semibold px-1.5 py-0.5 rounded-md shadow-sm shadow-black/20'
-          el.style.color = 'oklch(1 0 0 / 0.96)'
-          el.style.background = divergenceColor(div)
-          el.style.transform = 'translate3d(-9999px, -9999px, 0)'
-          el.style.opacity = '0'
-          el.textContent = divergenceLabel(div)
-          labelLayer.appendChild(el)
-          labelEls.push({ el, divergence: div })
-        }
-      }
-    }
-
-    const scheduleLabelUpdate = () => {
-      if (labelUpdateRafRef.current) cancelAnimationFrame(labelUpdateRafRef.current)
-      labelUpdateRafRef.current = requestAnimationFrame(() => {
-        labelUpdateRafRef.current = null
-        if (!chartRef.current) return
-        const c = chartRef.current
-        const s = seriesRefs.current.get('rsi') as ISeriesApi<'Line'> | undefined
-        if (!s) return
-
-        const width = Math.max(1, chartContainerRef.current?.clientWidth ?? 1)
-        const heightPx = Math.max(1, chartContainerRef.current?.clientHeight ?? 1)
-
-        if (zoneEls) {
-          positionZoneEl(zoneEls.bull, s, RSI_ZONE_LEVELS.critBull, RSI_ZONE_LEVELS.contBull, heightPx)
-          positionZoneEl(zoneEls.bear, s, RSI_ZONE_LEVELS.contBear, RSI_ZONE_LEVELS.critBear, heightPx)
-        }
-
-        for (const { el, divergence } of labelEls) {
-          const x = c.timeScale().timeToCoordinate(divergence.endTime as Time)
-          const y = s.priceToCoordinate(divergence.rsiEnd)
-          if (x == null || y == null || !Number.isFinite(x) || !Number.isFinite(y)) {
-            el.style.opacity = '0'
-            el.style.transform = 'translate3d(-9999px, -9999px, 0)'
-            continue
-          }
-
-          if (x < -20 || x > width + 20 || y < -20 || y > heightPx + 20) {
-            el.style.opacity = '0'
-            el.style.transform = 'translate3d(-9999px, -9999px, 0)'
-            continue
-          }
-
-          el.style.opacity = '1'
-          el.style.transform = `translate3d(${Math.round(x)}px, ${Math.round(y)}px, 0) translate(-50%, -120%)`
-        }
-      })
-    }
 
     // Keep labels in sync with zoom/scroll.
     chart.timeScale().subscribeVisibleTimeRangeChange(scheduleLabelUpdate)
@@ -510,7 +396,7 @@ export function RsiDivergencesChart({
       applyInitialVisibleRange(chart, normalizedData, initialWindowSeconds)
       hasAppliedInitialRangeRef.current = true
     }
-  }, [calc.levels, calc.rsiSeries, cappedDivergences, chartReadyNonce, initialWindowSeconds, normalizedData, showLabels])
+  }, [calc, cappedDivergences, chartReadyNonce, initialWindowSeconds, normalizedData, showLabels])
 
   if (!normalizedData.length) return null
 
@@ -522,4 +408,3 @@ export function RsiDivergencesChart({
     </div>
   )
 }
-

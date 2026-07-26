@@ -63,7 +63,12 @@ export interface HermesStreamOptions {
 export function subscribeHermesPriceStream(options: HermesStreamOptions): () => void {
   const baseUrl = options.endpointBaseUrl ?? "https://hermes.pyth.network";
   const feedIds = Array.from(
-    new Set(options.feedIds.map((id) => normalizeFeedId(id.trim())).filter((id) => id.length > 0)),
+    new Set(
+      options.feedIds.flatMap((id) => {
+        const normalized = normalizeFeedId(id.trim());
+        return normalized.length > 0 ? [normalized] : [];
+      }),
+    ),
   );
 
   if (feedIds.length === 0) return () => {};

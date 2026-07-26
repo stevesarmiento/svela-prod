@@ -160,9 +160,11 @@ export function buildRebasedComparison(args: {
     };
   }
 
-  const commonTimes = portfolio
-    .map((point) => point.time)
-    .filter((time) => time >= baselineTime && marketByTime.has(time));
+  const commonTimes = portfolio.flatMap((point) =>
+    point.time >= baselineTime && marketByTime.has(point.time)
+      ? [point.time]
+      : [],
+  );
 
   const portfolioPoints = commonTimes.map((time) => ({
     time,

@@ -246,190 +246,142 @@ function RsiStat({ value }: { value: number | null }) {
   );
 }
 
-export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
-  const marketVisionCalculations = useMarketVisionB(
-    props.indicatorData,
-    marketVisionConfig,
+/** Market context passed to every indicator explain dialog. */
+interface IndicatorMarketContext {
+  priceUsd: number | null;
+  change24hPct: number | null;
+  volume24hUsd: number | null;
+  marketCapUsd: number | null;
+  closeHistory: number[];
+  closeTimesUtc: number[];
+}
+
+/**
+ * Props shared by every indicator card: token identity/context for the
+ * explain dialog plus the full and bucketized (explain) OHLCV series.
+ */
+interface IndicatorCardSharedProps {
+  coinId: string;
+  tokenName: string;
+  tokenSymbol: string;
+  tokenLogoUrl: ReturnType<typeof getTokenLogoURL>;
+  timeframe: string;
+  showPending: boolean;
+  isLoading: boolean;
+  indicatorData: IndicatorOhlcvBar[];
+  indicatorWindowDays: number;
+  explainOhlcv: OhlcvBar[];
+  marketContext: IndicatorMarketContext;
+}
+
+/**
+ * Card shell shared by all four indicator sections: header with title,
+ * description and explain-dialog trigger, loading placeholder or chart body,
+ * and the stats bar underneath.
+ */
+function IndicatorCardFrame({
+  title,
+  description,
+  showPending,
+  isLoading,
+  explain,
+  badges,
+  children,
+}: {
+  title: string;
+  description: string;
+  showPending: boolean;
+  isLoading: boolean;
+  explain: React.ReactNode;
+  badges: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="col-span-12 md:col-span-6">
+      <Card
+        className={cn(
+          "border-zinc-800/70 bg-black rounded-2xl overflow-hidden",
+          showPending && "opacity-90",
+        )}
+      >
+        <CardHeader className="flex flex-row items-start justify-between gap-4 p-4 pb-2">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-white">{title}</div>
+            <div className="text-xs text-muted-foreground text-pretty">
+              {description}
+            </div>
+          </div>
+          {explain}
+        </CardHeader>
+        <CardContent className="p-2 pt-0">
+          {isLoading ? (
+            <div
+              className={cn(
+                "h-[250px] flex items-center justify-center",
+                showPending && "opacity-60",
+              )}
+            >
+              <div className="text-center">
+                <div className="animate-spin motion-reduce:animate-none rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">
+                  Loading indicator data…
+                </p>
+              </div>
+            </div>
+          ) : (
+            children
+          )}
+          <IndicatorStatsBar>{badges}</IndicatorStatsBar>
+        </CardContent>
+      </Card>
+    </div>
   );
-  const marketVisionRsiValue = lastFiniteValue(
-    marketVisionCalculations.series.rsi,
-  );
-  const marketVisionMoneyFlowValue = lastFiniteValue(
-    marketVisionCalculations.series.rsiMfi,
-  );
-  const marketVisionWt1 = lastFiniteValue(marketVisionCalculations.series.wt1);
-  const marketVisionWt2 = lastFiniteValue(marketVisionCalculations.series.wt2);
+}
+
+/** WaveTrend + money-flow indicator card ("Momentum & Money Flow"). */
+function MomentumMoneyFlowCard({
+  shared,
+}: {
+  shared: IndicatorCardSharedProps;
+}) {
+  const calculations = useMarketVisionB(shared.indicatorData, marketVisionConfig);
+  const rsiValue = lastFiniteValue(calculations.series.rsi);
+  const moneyFlowValue = lastFiniteValue(calculations.series.rsiMfi);
+  const wt1 = lastFiniteValue(calculations.series.wt1);
+  const wt2 = lastFiniteValue(calculations.series.wt2);
 
   // Domain for the diverging money-flow meter: symmetric around 0 so the
   // filled segment reads as inflow/outflow strength vs the window's peak.
   const moneyFlowMaxAbs = useMemo(() => {
     let max = 1;
-    for (const point of marketVisionCalculations.series.rsiMfi) {
+    for (const point of calculations.series.rsiMfi) {
       const v = point?.value;
       if (typeof v === "number" && Number.isFinite(v)) {
         max = Math.max(max, Math.abs(v));
       }
     }
     return max;
-  }, [marketVisionCalculations.series.rsiMfi]);
+  }, [calculations.series.rsiMfi]);
 
-  const bollingerConfig = useMemo(
-    () => ({
-      drawRSI: true,
-      drawMFI: false,
-      highlightBreaches: true,
-      length: 14,
-      source: "hlc3" as const,
-      bbLength: 20,
-      multiplier: 2.0,
-      lineWidth: 2,
-      fillOpacity: 0.1,
-    }),
-    [],
-  );
-  const bollingerResult = useMemo(() => {
-    if (props.indicatorData.length === 0) return null;
-    return calculateBollingerBands(props.indicatorData, bollingerConfig);
-  }, [props.indicatorData, bollingerConfig]);
-  const bbIndicator = lastFiniteValue(bollingerResult?.indicator);
-  const bbUpper = lastFiniteValue(bollingerResult?.upper);
-  const bbLower = lastFiniteValue(bollingerResult?.lower);
-
-  // %B-style position of the RSI within its Bollinger bands (0 = lower band,
-  // 1 = upper band) — same readout the comparative sidebar uses.
-  const bbPercentB =
-    bbIndicator != null &&
-    bbUpper != null &&
-    bbLower != null &&
-    bbUpper > bbLower
-      ? (bbIndicator - bbLower) / (bbUpper - bbLower)
-      : null;
-
-  const bbwpConfig = useMemo(
-    () => ({
-      priceSource: "close" as const,
-      basisType: "SMA" as const,
-      basisLength: 7,
-      lookback: 100,
-      maType: "SMA" as const,
-      maLength: 5,
-      extremeHigh: 98,
-      extremeLow: 2,
-    }),
-    [],
-  );
-  const bbwpResult = useMemo(() => {
-    if (props.indicatorData.length === 0) return null;
-    return calculateBBWP(props.indicatorData, bbwpConfig);
-  }, [props.indicatorData, bbwpConfig]);
-  const bbwpValue = lastFiniteValue(bbwpResult?.bbwp);
-
-  const rsiDivergencesConfig = useMemo<RsiDivergencesConfig>(
-    () => ({
-      rsiLength: 14,
-      leftBars: 5,
-      rightBars: 5,
-      pairMode: "TV-like",
-      tolBars: 2,
-      priceMode: "High/Low",
-      allowEqual: true,
-      priceEps: 0,
-      rsiEps: 0,
-      showRegular: true,
-      showHidden: true,
-    }),
-    [],
-  );
-  const rsiDivergencesResult = useMemo(() => {
-    if (props.indicatorData.length === 0) return null;
-    return calculateRsiDivergences(props.indicatorData, rsiDivergencesConfig);
-  }, [props.indicatorData, rsiDivergencesConfig]);
-  const rsiDivergencesRsiValue = lastFiniteValue(
-    rsiDivergencesResult?.rsiSeries,
-  );
-  const rsiDivergencesLatestType: RsiDivergenceType | null =
-    rsiDivergencesResult?.divergences.length
-      ? rsiDivergencesResult.divergences[
-          rsiDivergencesResult.divergences.length - 1
-        ]?.type ?? null
-      : null;
-
-  const explainSpec = useMemo(() => {
-    if (props.timeframe === "30d")
-      return { bucketSeconds: SECONDS_PER_HOUR, targetBars: 7 * 24 };
-    if (props.timeframe === "max")
-      return { bucketSeconds: SECONDS_PER_DAY, targetBars: 30 };
-    if (props.timeframe === "2y")
-      return { bucketSeconds: SECONDS_PER_DAY, targetBars: 90 };
-    return { bucketSeconds: SECONDS_PER_DAY, targetBars: 30 };
-  }, [props.timeframe]);
-
-  const explainOhlcv = useMemo(() => {
-    const bucketed = bucketizeOhlcv(
-      props.indicatorData,
-      explainSpec.bucketSeconds,
-    );
-    const bars = Math.min(EXPLAIN_MAX_BARS, explainSpec.targetBars);
-    return bucketed.slice(-bars);
-  }, [props.indicatorData, explainSpec.bucketSeconds, explainSpec.targetBars]);
-
-  const indicatorExplainCloseHistory = useMemo(
-    () => explainOhlcv.map((bar) => bar.close),
-    [explainOhlcv],
-  );
-  const indicatorExplainCloseTimesUtc = useMemo(
-    () => explainOhlcv.map((bar) => bar.time),
-    [explainOhlcv],
-  );
-
-  const marketVisionExplainCalculations = useMarketVisionB(
-    explainOhlcv,
+  const explainCalculations = useMarketVisionB(
+    shared.explainOhlcv,
     marketVisionConfig,
   );
-  const marketVisionExplainRsiValue = lastFiniteValue(
-    marketVisionExplainCalculations.series.rsi,
+  const explainRsiValue = lastFiniteValue(explainCalculations.series.rsi);
+  const explainMoneyFlowValue = lastFiniteValue(
+    explainCalculations.series.rsiMfi,
   );
-  const marketVisionExplainMoneyFlowValue = lastFiniteValue(
-    marketVisionExplainCalculations.series.rsiMfi,
-  );
-  const marketVisionExplainWt1 = lastFiniteValue(
-    marketVisionExplainCalculations.series.wt1,
-  );
-  const marketVisionExplainWt2 = lastFiniteValue(
-    marketVisionExplainCalculations.series.wt2,
-  );
+  const explainWt1 = lastFiniteValue(explainCalculations.series.wt1);
+  const explainWt2 = lastFiniteValue(explainCalculations.series.wt2);
 
-  const bollingerExplainResult = useMemo(() => {
-    if (explainOhlcv.length === 0) return null;
-    return calculateBollingerBands(explainOhlcv, bollingerConfig);
-  }, [explainOhlcv, bollingerConfig]);
-  const bbExplainIndicator = lastFiniteValue(bollingerExplainResult?.indicator);
-  const bbExplainUpper = lastFiniteValue(bollingerExplainResult?.upper);
-  const bbExplainLower = lastFiniteValue(bollingerExplainResult?.lower);
-  const bbExplainBasis = lastFiniteValue(bollingerExplainResult?.basis);
-
-  const bbwpExplainResult = useMemo(() => {
-    if (explainOhlcv.length === 0) return null;
-    return calculateBBWP(explainOhlcv, bbwpConfig);
-  }, [explainOhlcv, bbwpConfig]);
-  const bbwpExplainValue = lastFiniteValue(bbwpExplainResult?.bbwp);
-
-  const rsiDivergencesExplainResult = useMemo(() => {
-    if (explainOhlcv.length === 0) return null;
-    return calculateRsiDivergences(explainOhlcv, rsiDivergencesConfig);
-  }, [explainOhlcv, rsiDivergencesConfig]);
-  const rsiDivergencesExplainRsiValue = lastFiniteValue(
-    rsiDivergencesExplainResult?.rsiSeries,
-  );
-
-  const marketVisionExplainBadges = useMemo(() => {
-    const wtKnown = marketVisionWt1 != null && marketVisionWt2 != null;
-    const wtBullish = wtKnown && marketVisionWt1 > marketVisionWt2;
-    const wtBearish = wtKnown && marketVisionWt1 < marketVisionWt2;
-    const mf = marketVisionMoneyFlowValue;
+  const badges = useMemo(() => {
+    const wtKnown = wt1 != null && wt2 != null;
+    const wtBullish = wtKnown && wt1 > wt2;
+    const wtBearish = wtKnown && wt1 < wt2;
+    const mf = moneyFlowValue;
     return (
       <>
-        <RsiStat value={marketVisionRsiValue} />
+        <RsiStat value={rsiValue} />
         <IndicatorStat
           label="WT"
           value={
@@ -475,15 +427,121 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
         )}
       </>
     );
-  }, [
-    marketVisionMoneyFlowValue,
-    marketVisionRsiValue,
-    marketVisionWt1,
-    marketVisionWt2,
-    moneyFlowMaxAbs,
-  ]);
+  }, [moneyFlowValue, rsiValue, wt1, wt2, moneyFlowMaxAbs]);
 
-  const bollingerExplainBadges = useMemo(
+  const explainChart = useMemo(
+    () =>
+      shared.indicatorData.length === 0 ? null : (
+        <MarketVisionChart
+          data={shared.indicatorData}
+          config={marketVisionConfig}
+          height={EXPLAIN_DIALOG_CHART_HEIGHT}
+          showTimeAxis={true}
+          initialWindowDays={shared.indicatorWindowDays}
+        />
+      ),
+    [shared.indicatorData, shared.indicatorWindowDays],
+  );
+
+  return (
+    <IndicatorCardFrame
+      title="Momentum & Money Flow"
+      description="Tracks momentum shifts using WaveTrend + money flow."
+      showPending={shared.showPending}
+      isLoading={shared.isLoading}
+      badges={badges}
+      explain={
+        <IndicatorExplainDialog
+          coinId={shared.coinId}
+          tokenName={shared.tokenName}
+          tokenSymbol={shared.tokenSymbol}
+          tokenLogoUrl={shared.tokenLogoUrl}
+          isPricePending={shared.showPending}
+          timeframe={shared.timeframe}
+          indicatorTitle="Momentum & Money Flow"
+          indicatorChart={explainChart}
+          indicatorContext={badges}
+          indicatorType="marketVision"
+          marketContext={shared.marketContext}
+          snapshot={{
+            rsiCurrent: explainRsiValue,
+            rsiHistory: explainCalculations.series.rsi.map((point) =>
+              typeof point.value === "number" && Number.isFinite(point.value)
+                ? point.value
+                : null,
+            ),
+            wt1Current: explainWt1,
+            wt2Current: explainWt2,
+            moneyFlowCurrent: explainMoneyFlowValue,
+            moneyFlowHistory: explainCalculations.series.rsiMfi.map((point) =>
+              typeof point.value === "number" && Number.isFinite(point.value)
+                ? point.value
+                : null,
+            ),
+          }}
+          disabled={shared.showPending || shared.isLoading}
+        />
+      }
+    >
+      <MarketVisionChart
+        data={shared.indicatorData}
+        config={marketVisionConfig}
+        height={250}
+        showTimeAxis={true}
+        initialWindowDays={shared.indicatorWindowDays}
+      />
+    </IndicatorCardFrame>
+  );
+}
+
+/** RSI-in-Bollinger-bands indicator card ("Bolinger Bands"). */
+function BollingerBandsCard({
+  shared,
+}: {
+  shared: IndicatorCardSharedProps;
+}) {
+  const bollingerConfig = useMemo(
+    () => ({
+      drawRSI: true,
+      drawMFI: false,
+      highlightBreaches: true,
+      length: 14,
+      source: "hlc3" as const,
+      bbLength: 20,
+      multiplier: 2.0,
+      lineWidth: 2,
+      fillOpacity: 0.1,
+    }),
+    [],
+  );
+  const bollingerResult = useMemo(() => {
+    if (shared.indicatorData.length === 0) return null;
+    return calculateBollingerBands(shared.indicatorData, bollingerConfig);
+  }, [shared.indicatorData, bollingerConfig]);
+  const bbIndicator = lastFiniteValue(bollingerResult?.indicator);
+  const bbUpper = lastFiniteValue(bollingerResult?.upper);
+  const bbLower = lastFiniteValue(bollingerResult?.lower);
+
+  // %B-style position of the RSI within its Bollinger bands (0 = lower band,
+  // 1 = upper band) — same readout the comparative sidebar uses.
+  const bbPercentB =
+    bbIndicator != null &&
+    bbUpper != null &&
+    bbLower != null &&
+    bbUpper > bbLower
+      ? (bbIndicator - bbLower) / (bbUpper - bbLower)
+      : null;
+
+  const explainResult = useMemo(() => {
+    if (shared.explainOhlcv.length === 0) return null;
+    return calculateBollingerBands(shared.explainOhlcv, bollingerConfig);
+  }, [shared.explainOhlcv, bollingerConfig]);
+  const bbExplainIndicator = lastFiniteValue(explainResult?.indicator);
+  const bbExplainUpper = lastFiniteValue(explainResult?.upper);
+  const bbExplainLower = lastFiniteValue(explainResult?.lower);
+  const bbExplainBasis = lastFiniteValue(explainResult?.basis);
+
+  const badges = useMemo(
     () => (
       <>
         <RsiStat value={bbIndicator} />
@@ -518,7 +576,104 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
     [bbIndicator, bbPercentB],
   );
 
-  const bbwpExplainBadges = useMemo(() => {
+  const explainChart = useMemo(
+    () =>
+      shared.indicatorData.length === 0 ? null : (
+        <BollingerBandsChart
+          data={shared.indicatorData}
+          config={bollingerConfig}
+          height={EXPLAIN_DIALOG_CHART_HEIGHT}
+          showTimeAxis={true}
+          initialWindowDays={shared.indicatorWindowDays}
+        />
+      ),
+    [bollingerConfig, shared.indicatorData, shared.indicatorWindowDays],
+  );
+
+  return (
+    <IndicatorCardFrame
+      title="Bolinger Bands"
+      description="Shows RSI relative to its own bands (overextension vs mean)."
+      showPending={shared.showPending}
+      isLoading={shared.isLoading}
+      badges={badges}
+      explain={
+        <IndicatorExplainDialog
+          coinId={shared.coinId}
+          tokenName={shared.tokenName}
+          tokenSymbol={shared.tokenSymbol}
+          tokenLogoUrl={shared.tokenLogoUrl}
+          isPricePending={shared.showPending}
+          timeframe={shared.timeframe}
+          indicatorTitle="Bolinger Bands"
+          indicatorChart={explainChart}
+          indicatorContext={badges}
+          indicatorType="bollinger"
+          marketContext={shared.marketContext}
+          snapshot={{
+            indicatorCurrent: bbExplainIndicator,
+            upperCurrent: bbExplainUpper,
+            lowerCurrent: bbExplainLower,
+            basisCurrent: bbExplainBasis,
+            indicatorHistory: (explainResult?.indicator ?? []).map((point) =>
+              typeof point.value === "number" && Number.isFinite(point.value)
+                ? point.value
+                : null,
+            ),
+            upperHistory: (explainResult?.upper ?? []).map((point) =>
+              typeof point.value === "number" && Number.isFinite(point.value)
+                ? point.value
+                : null,
+            ),
+            lowerHistory: (explainResult?.lower ?? []).map((point) =>
+              typeof point.value === "number" && Number.isFinite(point.value)
+                ? point.value
+                : null,
+            ),
+          }}
+          disabled={shared.showPending || shared.isLoading}
+        />
+      }
+    >
+      <BollingerBandsChart
+        data={shared.indicatorData}
+        config={bollingerConfig}
+        height={250}
+        showTimeAxis={true}
+        initialWindowDays={shared.indicatorWindowDays}
+      />
+    </IndicatorCardFrame>
+  );
+}
+
+/** BBWP percentile-rank indicator card ("Volatility"). */
+function VolatilityCard({ shared }: { shared: IndicatorCardSharedProps }) {
+  const bbwpConfig = useMemo(
+    () => ({
+      priceSource: "close" as const,
+      basisType: "SMA" as const,
+      basisLength: 7,
+      lookback: 100,
+      maType: "SMA" as const,
+      maLength: 5,
+      extremeHigh: 98,
+      extremeLow: 2,
+    }),
+    [],
+  );
+  const bbwpResult = useMemo(() => {
+    if (shared.indicatorData.length === 0) return null;
+    return calculateBBWP(shared.indicatorData, bbwpConfig);
+  }, [shared.indicatorData, bbwpConfig]);
+  const bbwpValue = lastFiniteValue(bbwpResult?.bbwp);
+
+  const explainResult = useMemo(() => {
+    if (shared.explainOhlcv.length === 0) return null;
+    return calculateBBWP(shared.explainOhlcv, bbwpConfig);
+  }, [shared.explainOhlcv, bbwpConfig]);
+  const bbwpExplainValue = lastFiniteValue(explainResult?.bbwp);
+
+  const badges = useMemo(() => {
     if (bbwpValue == null) {
       return (
         <IndicatorStat label="BBWP" value="—" valueClass="text-zinc-500" />
@@ -544,14 +699,116 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
     );
   }, [bbwpValue]);
 
-  const rsiDivergencesReverseLevels = rsiDivergencesResult?.reverseLevels;
+  const explainChart = useMemo(
+    () =>
+      shared.indicatorData.length === 0 ? null : (
+        <BBWPChart
+          data={shared.indicatorData}
+          config={{
+            ...bbwpConfig,
+            colorType: "Spectrum",
+            spectrumPreset: "5point",
+            lineWidth: 2,
+            maWidth: 2,
+          }}
+          height={EXPLAIN_DIALOG_CHART_HEIGHT}
+          showTimeAxis={true}
+          initialWindowDays={shared.indicatorWindowDays}
+        />
+      ),
+    [bbwpConfig, shared.indicatorData, shared.indicatorWindowDays],
+  );
 
-  const rsiDivergencesExplainBadges = useMemo(() => {
-    const type = rsiDivergencesLatestType;
+  return (
+    <IndicatorCardFrame
+      title="Volatility"
+      description="Percentile rank of bandwidth (detects compression vs expansion)."
+      showPending={shared.showPending}
+      isLoading={shared.isLoading}
+      badges={badges}
+      explain={
+        <IndicatorExplainDialog
+          coinId={shared.coinId}
+          tokenName={shared.tokenName}
+          tokenSymbol={shared.tokenSymbol}
+          tokenLogoUrl={shared.tokenLogoUrl}
+          isPricePending={shared.showPending}
+          timeframe={shared.timeframe}
+          indicatorTitle="Volatility"
+          indicatorChart={explainChart}
+          indicatorContext={badges}
+          indicatorType="bbwp"
+          marketContext={shared.marketContext}
+          snapshot={{
+            bbwpCurrent: bbwpExplainValue,
+            bbwpHistory: (explainResult?.bbwp ?? []).map((point) =>
+              typeof point.value === "number" && Number.isFinite(point.value)
+                ? point.value
+                : null,
+            ),
+            lookback: bbwpConfig.lookback,
+          }}
+          disabled={shared.showPending || shared.isLoading}
+        />
+      }
+    >
+      <BBWPChart
+        data={shared.indicatorData}
+        config={{
+          ...bbwpConfig,
+          colorType: "Spectrum",
+          spectrumPreset: "5point",
+          lineWidth: 2,
+          maWidth: 2,
+        }}
+        height={250}
+        showTimeAxis={true}
+        initialWindowDays={shared.indicatorWindowDays}
+      />
+    </IndicatorCardFrame>
+  );
+}
+
+/** RSI divergence detection card ("Divergences"). */
+function DivergencesCard({ shared }: { shared: IndicatorCardSharedProps }) {
+  const rsiDivergencesConfig = useMemo<RsiDivergencesConfig>(
+    () => ({
+      rsiLength: 14,
+      leftBars: 5,
+      rightBars: 5,
+      pairMode: "TV-like",
+      tolBars: 2,
+      priceMode: "High/Low",
+      allowEqual: true,
+      priceEps: 0,
+      rsiEps: 0,
+      showRegular: true,
+      showHidden: true,
+    }),
+    [],
+  );
+  const result = useMemo(() => {
+    if (shared.indicatorData.length === 0) return null;
+    return calculateRsiDivergences(shared.indicatorData, rsiDivergencesConfig);
+  }, [shared.indicatorData, rsiDivergencesConfig]);
+  const rsiValue = lastFiniteValue(result?.rsiSeries);
+  const latestType: RsiDivergenceType | null = result?.divergences.length
+    ? result.divergences[result.divergences.length - 1]?.type ?? null
+    : null;
+  const reverseLevels = result?.reverseLevels;
+
+  const explainResult = useMemo(() => {
+    if (shared.explainOhlcv.length === 0) return null;
+    return calculateRsiDivergences(shared.explainOhlcv, rsiDivergencesConfig);
+  }, [shared.explainOhlcv, rsiDivergencesConfig]);
+  const explainRsiValue = lastFiniteValue(explainResult?.rsiSeries);
+
+  const badges = useMemo(() => {
+    const type = latestType;
     const bullish = type === "bullish" || type === "h_bullish";
     return (
       <>
-        <RsiStat value={rsiDivergencesRsiValue} />
+        <RsiStat value={rsiValue} />
         <IndicatorStat
           label="Div"
           value={
@@ -573,85 +830,143 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
                 : "text-red-400"
           }
         />
-        <ReverseRsiStats levels={rsiDivergencesReverseLevels ?? []} />
+        <ReverseRsiStats levels={reverseLevels ?? []} />
       </>
     );
-  }, [
-    rsiDivergencesLatestType,
-    rsiDivergencesRsiValue,
-    rsiDivergencesReverseLevels,
-  ]);
+  }, [latestType, rsiValue, reverseLevels]);
 
-  const marketVisionExplainChart = useMemo(
+  const explainChart = useMemo(
     () =>
-      props.indicatorData.length === 0 ? null : (
-        <MarketVisionChart
-          data={props.indicatorData}
-          config={marketVisionConfig}
-          height={EXPLAIN_DIALOG_CHART_HEIGHT}
-          showTimeAxis={true}
-          initialWindowDays={props.indicatorWindowDays}
-        />
-      ),
-    [props.indicatorData, props.indicatorWindowDays],
-  );
-
-  const bollingerExplainChart = useMemo(
-    () =>
-      props.indicatorData.length === 0 ? null : (
-        <BollingerBandsChart
-          data={props.indicatorData}
-          config={bollingerConfig}
-          height={EXPLAIN_DIALOG_CHART_HEIGHT}
-          showTimeAxis={true}
-          initialWindowDays={props.indicatorWindowDays}
-        />
-      ),
-    [bollingerConfig, props.indicatorData, props.indicatorWindowDays],
-  );
-
-  const bbwpExplainChart = useMemo(
-    () =>
-      props.indicatorData.length === 0 ? null : (
-        <BBWPChart
-          data={props.indicatorData}
-          config={{
-            ...bbwpConfig,
-            colorType: "Spectrum",
-            spectrumPreset: "5point",
-            lineWidth: 2,
-            maWidth: 2,
-          }}
-          height={EXPLAIN_DIALOG_CHART_HEIGHT}
-          showTimeAxis={true}
-          initialWindowDays={props.indicatorWindowDays}
-        />
-      ),
-    [bbwpConfig, props.indicatorData, props.indicatorWindowDays],
-  );
-
-  const rsiDivergencesExplainChart = useMemo(
-    () =>
-      props.indicatorData.length === 0 ? null : (
+      shared.indicatorData.length === 0 ? null : (
         <RsiDivergencesChart
-          data={props.indicatorData}
+          data={shared.indicatorData}
           height={EXPLAIN_DIALOG_CHART_HEIGHT}
           showTimeAxis={true}
-          initialWindowDays={props.indicatorWindowDays}
+          initialWindowDays={shared.indicatorWindowDays}
           showLabels={true}
         />
       ),
-    [props.indicatorData, props.indicatorWindowDays],
+    [shared.indicatorData, shared.indicatorWindowDays],
   );
 
-  const explainTokenLogoUrl = useMemo(
-    () =>
-      getTokenLogoURL(
-        props.metricsData?.symbol ?? props.tokenSymbol,
-        props.tokenImage,
-      ),
-    [props.metricsData?.symbol, props.tokenImage, props.tokenSymbol],
+  return (
+    <IndicatorCardFrame
+      title="Divergences"
+      description="Compares RSI pivots against price pivots to flag bullish and bearish divergence."
+      showPending={shared.showPending}
+      isLoading={shared.isLoading}
+      badges={badges}
+      explain={
+        <IndicatorExplainDialog
+          coinId={shared.coinId}
+          tokenName={shared.tokenName}
+          tokenSymbol={shared.tokenSymbol}
+          tokenLogoUrl={shared.tokenLogoUrl}
+          isPricePending={shared.showPending}
+          timeframe={shared.timeframe}
+          indicatorTitle="RSI Divergences"
+          indicatorChart={explainChart}
+          indicatorContext={badges}
+          indicatorType="rsiDivergences"
+          marketContext={shared.marketContext}
+          snapshot={{
+            rsiCurrent: explainRsiValue,
+            rsiHistory: (explainResult?.rsiSeries ?? []).map((point) =>
+              typeof point.value === "number" && Number.isFinite(point.value)
+                ? point.value
+                : null,
+            ),
+            divergences: (explainResult?.divergences ?? [])
+              .slice(-96)
+              .map((divergence) => ({
+                type: divergence.type,
+                startTime: divergence.startTime,
+                endTime: divergence.endTime,
+                priceStart: divergence.priceStart,
+                priceEnd: divergence.priceEnd,
+                rsiStart: divergence.rsiStart,
+                rsiEnd: divergence.rsiEnd,
+              })),
+            reverseLevels: (explainResult?.reverseLevels ?? []).map(
+              (level) => ({
+                target: level.target,
+                price: level.price,
+              }),
+            ),
+            settings: rsiDivergencesConfig,
+          }}
+          disabled={shared.showPending || shared.isLoading}
+        />
+      }
+    >
+      <RsiDivergencesChart
+        data={shared.indicatorData}
+        height={250}
+        showTimeAxis={true}
+        initialWindowDays={shared.indicatorWindowDays}
+        showLabels={true}
+      />
+    </IndicatorCardFrame>
   );
+}
+
+export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
+  const explainSpec = useMemo(() => {
+    if (props.timeframe === "30d")
+      return { bucketSeconds: SECONDS_PER_HOUR, targetBars: 7 * 24 };
+    if (props.timeframe === "max")
+      return { bucketSeconds: SECONDS_PER_DAY, targetBars: 30 };
+    if (props.timeframe === "2y")
+      return { bucketSeconds: SECONDS_PER_DAY, targetBars: 90 };
+    return { bucketSeconds: SECONDS_PER_DAY, targetBars: 30 };
+  }, [props.timeframe]);
+
+  const explainOhlcv = useMemo(() => {
+    const bucketed = bucketizeOhlcv(
+      props.indicatorData,
+      explainSpec.bucketSeconds,
+    );
+    const bars = Math.min(EXPLAIN_MAX_BARS, explainSpec.targetBars);
+    return bucketed.slice(-bars);
+  }, [props.indicatorData, explainSpec.bucketSeconds, explainSpec.targetBars]);
+
+  const indicatorExplainCloseHistory = useMemo(
+    () => explainOhlcv.map((bar) => bar.close),
+    [explainOhlcv],
+  );
+  const indicatorExplainCloseTimesUtc = useMemo(
+    () => explainOhlcv.map((bar) => bar.time),
+    [explainOhlcv],
+  );
+
+  const displaySymbol = props.metricsData?.symbol ?? props.tokenSymbol;
+  const explainTokenLogoUrl = useMemo(
+    () => getTokenLogoURL(displaySymbol, props.tokenImage),
+    [displaySymbol, props.tokenImage],
+  );
+
+  const marketContext: IndicatorMarketContext = {
+    priceUsd: props.metricsData?.current_price ?? null,
+    change24hPct: props.metricsData?.price_change_percentage_24h ?? null,
+    volume24hUsd: props.metricsData?.total_volume ?? null,
+    marketCapUsd: props.metricsData?.market_cap ?? null,
+    closeHistory: indicatorExplainCloseHistory,
+    closeTimesUtc: indicatorExplainCloseTimesUtc,
+  };
+
+  const shared: IndicatorCardSharedProps = {
+    coinId: props.coinId,
+    tokenName: props.tokenName,
+    tokenSymbol: displaySymbol,
+    tokenLogoUrl: explainTokenLogoUrl,
+    timeframe: props.timeframe,
+    showPending: props.showPending,
+    isLoading: props.isLoading,
+    indicatorData: props.indicatorData,
+    indicatorWindowDays: props.indicatorWindowDays,
+    explainOhlcv,
+    marketContext,
+  };
 
   return (
     <>
@@ -662,373 +977,10 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
       </div>
 
       <div className="grid grid-cols-1 gap-6 col-span-12 md:grid-cols-12">
-        <div className="col-span-12 md:col-span-6">
-          <Card
-            className={cn(
-              "border-zinc-800/70 bg-black rounded-2xl overflow-hidden",
-              props.showPending && "opacity-90",
-            )}
-          >
-            <CardHeader className="flex flex-row items-start justify-between gap-4 p-4 pb-2">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-white">
-                  Momentum &amp; Money Flow
-                </div>
-                <div className="text-xs text-muted-foreground text-pretty">
-                  Tracks momentum shifts using WaveTrend + money flow.
-                </div>
-              </div>
-              <IndicatorExplainDialog
-                coinId={props.coinId}
-                tokenName={props.tokenName}
-                tokenSymbol={props.metricsData?.symbol ?? props.tokenSymbol}
-                tokenLogoUrl={explainTokenLogoUrl}
-                isPricePending={props.showPending}
-                timeframe={props.timeframe}
-                indicatorTitle="Momentum & Money Flow"
-                indicatorChart={marketVisionExplainChart}
-                indicatorContext={marketVisionExplainBadges}
-                indicatorType="marketVision"
-                marketContext={{
-                  priceUsd: props.metricsData?.current_price ?? null,
-                  change24hPct:
-                    props.metricsData?.price_change_percentage_24h ?? null,
-                  volume24hUsd: props.metricsData?.total_volume ?? null,
-                  marketCapUsd: props.metricsData?.market_cap ?? null,
-                  closeHistory: indicatorExplainCloseHistory,
-                  closeTimesUtc: indicatorExplainCloseTimesUtc,
-                }}
-                snapshot={{
-                  rsiCurrent: marketVisionExplainRsiValue,
-                  rsiHistory: marketVisionExplainCalculations.series.rsi.map(
-                    (point) =>
-                      typeof point.value === "number" &&
-                      Number.isFinite(point.value)
-                        ? point.value
-                        : null,
-                  ),
-                  wt1Current: marketVisionExplainWt1,
-                  wt2Current: marketVisionExplainWt2,
-                  moneyFlowCurrent: marketVisionExplainMoneyFlowValue,
-                  moneyFlowHistory:
-                    marketVisionExplainCalculations.series.rsiMfi.map(
-                      (point) =>
-                        typeof point.value === "number" &&
-                        Number.isFinite(point.value)
-                          ? point.value
-                          : null,
-                    ),
-                }}
-                disabled={props.showPending || props.isLoading}
-              />
-            </CardHeader>
-            <CardContent className="p-2 pt-0">
-              {props.isLoading ? (
-                <div
-                  className={cn(
-                    "h-[250px] flex items-center justify-center",
-                    props.showPending && "opacity-60",
-                  )}
-                >
-                  <div className="text-center">
-                    <div className="animate-spin motion-reduce:animate-none rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2" />
-                    <p className="text-xs text-muted-foreground">
-                      Loading indicator data…
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <MarketVisionChart
-                  data={props.indicatorData}
-                  config={marketVisionConfig}
-                  height={250}
-                  showTimeAxis={true}
-                  initialWindowDays={props.indicatorWindowDays}
-                />
-              )}
-              <IndicatorStatsBar>{marketVisionExplainBadges}</IndicatorStatsBar>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="col-span-12 md:col-span-6">
-          <Card
-            className={cn(
-              "border-zinc-800/70 bg-black rounded-2xl overflow-hidden",
-              props.showPending && "opacity-90",
-            )}
-          >
-            <CardHeader className="flex flex-row items-start justify-between gap-4 p-4 pb-2">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-white">
-                  Bolinger Bands
-                </div>
-                <div className="text-xs text-muted-foreground text-pretty">
-                  Shows RSI relative to its own bands (overextension vs mean).
-                </div>
-              </div>
-              <IndicatorExplainDialog
-                coinId={props.coinId}
-                tokenName={props.tokenName}
-                tokenSymbol={props.metricsData?.symbol ?? props.tokenSymbol}
-                tokenLogoUrl={explainTokenLogoUrl}
-                isPricePending={props.showPending}
-                timeframe={props.timeframe}
-                indicatorTitle="Bolinger Bands"
-                indicatorChart={bollingerExplainChart}
-                indicatorContext={bollingerExplainBadges}
-                indicatorType="bollinger"
-                marketContext={{
-                  priceUsd: props.metricsData?.current_price ?? null,
-                  change24hPct:
-                    props.metricsData?.price_change_percentage_24h ?? null,
-                  volume24hUsd: props.metricsData?.total_volume ?? null,
-                  marketCapUsd: props.metricsData?.market_cap ?? null,
-                  closeHistory: indicatorExplainCloseHistory,
-                  closeTimesUtc: indicatorExplainCloseTimesUtc,
-                }}
-                snapshot={{
-                  indicatorCurrent: bbExplainIndicator,
-                  upperCurrent: bbExplainUpper,
-                  lowerCurrent: bbExplainLower,
-                  basisCurrent: bbExplainBasis,
-                  indicatorHistory: (
-                    bollingerExplainResult?.indicator ?? []
-                  ).map((point) =>
-                    typeof point.value === "number" &&
-                    Number.isFinite(point.value)
-                      ? point.value
-                      : null,
-                  ),
-                  upperHistory: (bollingerExplainResult?.upper ?? []).map(
-                    (point) =>
-                      typeof point.value === "number" &&
-                      Number.isFinite(point.value)
-                        ? point.value
-                        : null,
-                  ),
-                  lowerHistory: (bollingerExplainResult?.lower ?? []).map(
-                    (point) =>
-                      typeof point.value === "number" &&
-                      Number.isFinite(point.value)
-                        ? point.value
-                        : null,
-                  ),
-                }}
-                disabled={props.showPending || props.isLoading}
-              />
-            </CardHeader>
-            <CardContent className="p-2 pt-0">
-              {props.isLoading ? (
-                <div
-                  className={cn(
-                    "h-[250px] flex items-center justify-center",
-                    props.showPending && "opacity-60",
-                  )}
-                >
-                  <div className="text-center">
-                    <div className="animate-spin motion-reduce:animate-none rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2" />
-                    <p className="text-xs text-muted-foreground">
-                      Loading indicator data…
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <BollingerBandsChart
-                  data={props.indicatorData}
-                  config={bollingerConfig}
-                  height={250}
-                  showTimeAxis={true}
-                  initialWindowDays={props.indicatorWindowDays}
-                />
-              )}
-              <IndicatorStatsBar>{bollingerExplainBadges}</IndicatorStatsBar>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="col-span-12 md:col-span-6">
-          <Card
-            className={cn(
-              "border-zinc-800/70 bg-black rounded-2xl overflow-hidden",
-              props.showPending && "opacity-90",
-            )}
-          >
-            <CardHeader className="flex flex-row items-start justify-between gap-4 p-4 pb-2">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-white">
-                  Volatility
-                </div>
-                <div className="text-xs text-muted-foreground text-pretty">
-                  Percentile rank of bandwidth (detects compression vs
-                  expansion).
-                </div>
-              </div>
-              <IndicatorExplainDialog
-                coinId={props.coinId}
-                tokenName={props.tokenName}
-                tokenSymbol={props.metricsData?.symbol ?? props.tokenSymbol}
-                tokenLogoUrl={explainTokenLogoUrl}
-                isPricePending={props.showPending}
-                timeframe={props.timeframe}
-                indicatorTitle="Volatility"
-                indicatorChart={bbwpExplainChart}
-                indicatorContext={bbwpExplainBadges}
-                indicatorType="bbwp"
-                marketContext={{
-                  priceUsd: props.metricsData?.current_price ?? null,
-                  change24hPct:
-                    props.metricsData?.price_change_percentage_24h ?? null,
-                  volume24hUsd: props.metricsData?.total_volume ?? null,
-                  marketCapUsd: props.metricsData?.market_cap ?? null,
-                  closeHistory: indicatorExplainCloseHistory,
-                  closeTimesUtc: indicatorExplainCloseTimesUtc,
-                }}
-                snapshot={{
-                  bbwpCurrent: bbwpExplainValue,
-                  bbwpHistory: (bbwpExplainResult?.bbwp ?? []).map((point) =>
-                    typeof point.value === "number" &&
-                    Number.isFinite(point.value)
-                      ? point.value
-                      : null,
-                  ),
-                  lookback: bbwpConfig.lookback,
-                }}
-                disabled={props.showPending || props.isLoading}
-              />
-            </CardHeader>
-            <CardContent className="p-2 pt-0">
-              {props.isLoading ? (
-                <div
-                  className={cn(
-                    "h-[250px] flex items-center justify-center",
-                    props.showPending && "opacity-60",
-                  )}
-                >
-                  <div className="text-center">
-                    <div className="animate-spin motion-reduce:animate-none rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2" />
-                    <p className="text-xs text-muted-foreground">
-                      Loading indicator data…
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <BBWPChart
-                  data={props.indicatorData}
-                  config={{
-                    ...bbwpConfig,
-                    colorType: "Spectrum",
-                    spectrumPreset: "5point",
-                    lineWidth: 2,
-                    maWidth: 2,
-                  }}
-                  height={250}
-                  showTimeAxis={true}
-                  initialWindowDays={props.indicatorWindowDays}
-                />
-              )}
-              <IndicatorStatsBar>{bbwpExplainBadges}</IndicatorStatsBar>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="col-span-12 md:col-span-6">
-          <Card
-            className={cn(
-              "border-zinc-800/70 bg-black rounded-2xl overflow-hidden",
-              props.showPending && "opacity-90",
-            )}
-          >
-            <CardHeader className="flex flex-row items-start justify-between gap-4 p-4 pb-2">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-white">
-                  Divergences
-                </div>
-                <div className="text-xs text-muted-foreground text-pretty">
-                  Compares RSI pivots against price pivots to flag bullish and
-                  bearish divergence.
-                </div>
-              </div>
-              <IndicatorExplainDialog
-                coinId={props.coinId}
-                tokenName={props.tokenName}
-                tokenSymbol={props.metricsData?.symbol ?? props.tokenSymbol}
-                tokenLogoUrl={explainTokenLogoUrl}
-                isPricePending={props.showPending}
-                timeframe={props.timeframe}
-                indicatorTitle="RSI Divergences"
-                indicatorChart={rsiDivergencesExplainChart}
-                indicatorContext={rsiDivergencesExplainBadges}
-                indicatorType="rsiDivergences"
-                marketContext={{
-                  priceUsd: props.metricsData?.current_price ?? null,
-                  change24hPct:
-                    props.metricsData?.price_change_percentage_24h ?? null,
-                  volume24hUsd: props.metricsData?.total_volume ?? null,
-                  marketCapUsd: props.metricsData?.market_cap ?? null,
-                  closeHistory: indicatorExplainCloseHistory,
-                  closeTimesUtc: indicatorExplainCloseTimesUtc,
-                }}
-                snapshot={{
-                  rsiCurrent: rsiDivergencesExplainRsiValue,
-                  rsiHistory: (
-                    rsiDivergencesExplainResult?.rsiSeries ?? []
-                  ).map((point) =>
-                    typeof point.value === "number" &&
-                    Number.isFinite(point.value)
-                      ? point.value
-                      : null,
-                  ),
-                  divergences: (rsiDivergencesExplainResult?.divergences ?? [])
-                    .slice(-96)
-                    .map((divergence) => ({
-                      type: divergence.type,
-                      startTime: divergence.startTime,
-                      endTime: divergence.endTime,
-                      priceStart: divergence.priceStart,
-                      priceEnd: divergence.priceEnd,
-                      rsiStart: divergence.rsiStart,
-                      rsiEnd: divergence.rsiEnd,
-                    })),
-                  reverseLevels: (
-                    rsiDivergencesExplainResult?.reverseLevels ?? []
-                  ).map((level) => ({
-                    target: level.target,
-                    price: level.price,
-                  })),
-                  settings: rsiDivergencesConfig,
-                }}
-                disabled={props.showPending || props.isLoading}
-              />
-            </CardHeader>
-            <CardContent className="p-2 pt-0">
-              {props.isLoading ? (
-                <div
-                  className={cn(
-                    "h-[250px] flex items-center justify-center",
-                    props.showPending && "opacity-60",
-                  )}
-                >
-                  <div className="text-center">
-                    <div className="animate-spin motion-reduce:animate-none rounded-full h-6 w-6 border-b-2 border-white mx-auto mb-2" />
-                    <p className="text-xs text-muted-foreground">
-                      Loading indicator data…
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <RsiDivergencesChart
-                  data={props.indicatorData}
-                  height={250}
-                  showTimeAxis={true}
-                  initialWindowDays={props.indicatorWindowDays}
-                  showLabels={true}
-                />
-              )}
-              <IndicatorStatsBar>{rsiDivergencesExplainBadges}</IndicatorStatsBar>
-            </CardContent>
-          </Card>
-        </div>
+        <MomentumMoneyFlowCard shared={shared} />
+        <BollingerBandsCard shared={shared} />
+        <VolatilityCard shared={shared} />
+        <DivergencesCard shared={shared} />
       </div>
     </>
   );

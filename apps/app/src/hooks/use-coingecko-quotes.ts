@@ -37,7 +37,12 @@ export interface CoinGeckoSearchParams {
 function makeStableKeyPart(values: ReadonlyArray<string> | undefined): string {
   if (!values?.length) return ""
   const unique = Array.from(
-    new Set(values.map((value) => value.trim()).filter((value) => value.length > 0)),
+    new Set(
+      values.flatMap((value) => {
+        const trimmed = value.trim()
+        return trimmed.length > 0 ? [trimmed] : []
+      }),
+    ),
   )
   unique.sort()
   return unique.join(",")
@@ -359,75 +364,3 @@ export function useCoinGeckoQuotesBulk(
   return query
 }
 
-// Original hook for backward compatibility - searches by CoinGecko IDs
-export function useCoinGeckoQuotes(coingeckoIds: string[]) {
-  return useCoinGeckoSearch({ ids: coingeckoIds });
-}
-
-// Enhanced hook that supports multiple search methods
-export function useCoinGeckoSearch(searchParams: CoinGeckoSearchParams) {
-  const { ids, symbols, names, category, limit = 100 } = searchParams;
-
-  return useQuery<CoinGeckoQuoteData[], Error>({
-    queryKey: coingeckoQuoteQueryKeys.search({ ids, symbols, names, category, limit }),
-    queryFn: async (): Promise<CoinGeckoQuoteData[]> => {
-      // Validate that at least one search parameter is provided OR it's a top coins request
-      if (!ids?.length && !symbols?.length && !names?.length && !category && !limit) {
-        return [];
-      }
-
-      try {
-        const result = await runPromise(
-          CoinGeckoApi.getQuotes({
-            ids,
-            symbols,
-            names,
-            category,
-            limit,
-          }),
-        )
-
-        if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
-          throw new Error(result.status.error_message || "API error")
-        }
-
-        return Object.values(result.data).map((coin: CoinGeckoQuoteMarketData): CoinGeckoQuoteData => ({
-          id: coin.id,
-          name: coin.name,
-          symbol: coin.symbol,
-          image: coin.image,
-          cmc_rank: coin.market_cap_rank ?? 0,
-          quote: {
-            USD: {
-              price: coin.current_price ?? 0,
-              percent_change_24h: coin.price_change_percentage_24h ?? 0,
-              percent_change_1h: coin.price_change_percentage_1h_in_currency ?? undefined,
-              percent_change_7d: coin.price_change_percentage_7d_in_currency ?? undefined,
-              percent_change_30d: coin.price_change_percentage_30d_in_currency ?? undefined,
-              market_cap: coin.market_cap ?? 0,
-              volume_24h: coin.total_volume ?? 0,
-            },
-          },
-        }))
-      } catch (error) {
-        throw new Error(formatCoinGeckoError(error))
-      }
-    },
-    enabled: true, // Always enabled - API handles the logic for top coins vs search
-    retry: 1,
-    ...COINGECKO_QUOTES_QUERY_OPTIONS,
-  });
-}
-
-// Convenience hooks for specific search types
-export function useCoinGeckoSymbolSearch(symbols: string[], limit?: number) {
-  return useCoinGeckoSearch({ symbols, limit });
-}
-
-export function useCoinGeckoNameSearch(names: string[], limit?: number) {
-  return useCoinGeckoSearch({ names, limit });
-}
-
-export function useCoinGeckoCategorySearch(category: string, limit?: number) {
-  return useCoinGeckoSearch({ category, limit });
-} ;

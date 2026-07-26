@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useTransition, useDeferredValue, useCallback, memo, useEffect, useRef, useState } from 'react'
+import { useMemo, useTransition, useDeferredValue, useCallback, memo, useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { createRoot } from "react-dom/client"
 import { useIsomorphicTheme } from '@/hooks/use-isomorphic-theme'
 import { Card, CardContent, CardHeader } from "@v1/ui/card"
@@ -77,6 +77,17 @@ function toUnixSeconds(time: LightweightTime): number | null {
 
 // Matches the watchlist comparison view's chart framing.
 const CHART_PADDING_Y = { top: 12, bottom: 20 } as const
+
+// Hoisted: Intl constructors are expensive, so build them once at module scope.
+const TIME_AXIS_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+})
+const TIME_AXIS_DATE_FORMAT_WITH_YEAR = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+})
 /** Minimum vertical distance between right-axis labels before they nudge apart. */
 const AXIS_LABEL_GAP = 14
 
@@ -150,310 +161,197 @@ function findClosestPoint(
   return leftDiff <= rightDiff ? left : right
 }
 
-export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweight({
-  coins,
-  activeTimeScale,
-  setActiveTimeScale,
-  isPending,
-  layout = 'horizontal',
-}: MultiPriceChartLightweightProps) {
-  const isVertical = layout === 'vertical'
-  const { removeFromSelectedGroup, removeFromWatchlist, selectedGroup } = useWatchlist()
-  const [hoveredCoin, setHoveredCoin] = useState<string | null>(null)
-  const [hoveredRemoveId, setHoveredRemoveId] = useState<string | null>(null)
+interface TooltipSeriesRow {
+  id: string
+  name: string
+  symbol: string
+  color: string
+  data: LivelinePoint[]
+}
 
-  // React 19: Add concurrent features
-  const [isChartPending, startChartTransition] = useTransition()
+function buildLivelineSeries(
+  coinSeriesWithColors: CoinSeries[],
+  hoveredCoin: string | null,
+): LivelineSeries[] {
+  const isHovering = Boolean(hoveredCoin)
 
-  // React 19: Defer expensive computations
-  const deferredCoins = useDeferredValue(coins)
-  const deferredTimeScale = useDeferredValue(activeTimeScale)
+  return coinSeriesWithColors
+    .map((row): LivelineSeries | null => {
+      const data: LivelinePoint[] = []
+      for (const point of row.data) {
+        const time = toUnixSeconds(point.time)
+        if (time === null) continue
+        if (!Number.isFinite(point.value)) continue
+        data.push({ time, value: point.value })
+      }
 
-  // Use isomorphic theme hook - eliminates hydration mismatch
-  const { isDarkMode } = useIsomorphicTheme()
-  const isCompactLayout = useMediaQuery("(max-width: 767px)")
-  const isMediumLayout = useMediaQuery("(max-width: 1023px)")
+      const latestValue = data[data.length - 1]?.value
+      if (typeof latestValue !== "number") return null
 
-  // Vertical (comparison-style) column uses the comparison chart's 300px height.
-  const chartHeight = isVertical ? 300 : isCompactLayout ? 280 : isMediumLayout ? 340 : 400
-  
-  // Actions-only subscription: this heavy chart never re-renders on nav state changes
-  const { openContextualCommandSearch } = useBottomNavActions()
+      const isDimmed = isHovering && hoveredCoin !== row.id
+      const color = isDimmed ? addOpacityToColor(row.color, 0.25) : row.color
 
-  // 🚀 OPTIMIZED: Use CoinGecko BULK multi-chart data hook with intelligent caching
-  const { 
-    series: coinSeriesData, 
-    isLoading: isChartLoading, 
-  } = useCoinGeckoBulkChartData(deferredCoins, deferredTimeScale)
-
-  // React 19: Memoize expensive color generation with deferred data
-  const coinSeriesWithColors = useMemo((): CoinSeries[] => {
-    if (!coinSeriesData.length) return []
-    
-    const colors = generatePastelColors(coinSeriesData.length)
-    
-    return coinSeriesData.map((series, index) => {
-      const baseColor = colors[index] || `oklch(0.8 0.06 ${Math.round(Math.random() * 360)})`
-      // For light mode, make colors darker and more saturated
-      // (was hsl s+20 / l-40; equivalent perceptual shift in OKLCH).
-      const themeAwareColor = isDarkMode
-        ? baseColor
-        : adjustOklch(baseColor, { dl: -0.4, dc: 0.05 })
-      
       return {
-        ...series,
-        color: themeAwareColor,
+        id: row.id,
+        data,
+        value: latestValue,
+        color,
+        // No `label`: latest values render on the right y-axis overlay instead.
       }
     })
-  }, [coinSeriesData, isDarkMode])
+    .filter((row): row is LivelineSeries => row !== null)
+}
 
-  const latestValues = useMemo(() => {
-    return coinSeriesWithColors.map(series => ({
-      ...series,
-      latestValue: series.data[series.data.length - 1]?.value || 0
-    }))
-  }, [coinSeriesWithColors])
-
-  const latestValuesById = useMemo(() => {
-    const map = new Map<string, (CoinSeries & { latestValue: number })>()
-    for (const series of latestValues) {
-      map.set(series.id, series)
+function buildTooltipSeries(coinSeriesWithColors: CoinSeries[]): TooltipSeriesRow[] {
+  const rows: TooltipSeriesRow[] = []
+  for (const row of coinSeriesWithColors) {
+    const data: LivelinePoint[] = []
+    for (const point of row.data) {
+      const time = toUnixSeconds(point.time)
+      if (time === null) continue
+      if (!Number.isFinite(point.value)) continue
+      data.push({ time, value: point.value })
     }
-    return map
-  }, [latestValues])
 
-  // React 19: Use callback for hover handlers
-  const handleCoinHover = useCallback((coinId: string | null) => {
-    startChartTransition(() => {
-      setHoveredCoin(coinId)
+    if (data.length === 0) continue
+    rows.push({
+      id: row.id,
+      name: row.name,
+      symbol: row.symbol,
+      color: row.color,
+      data,
     })
-  }, [])
+  }
+  return rows
+}
 
-  const handleRemoveHover = useCallback((coinId: string | null) => {
-    setHoveredRemoveId(coinId)
-  }, [])
+function computeWindowSecs(livelineSeries: LivelineSeries[]): number {
+  let min: number | null = null
+  let max: number | null = null
 
-  const handleRemoveCoin = useCallback(
-    async (coin: OptimisticCoinMarketData) => {
-      try {
-        if (selectedGroup) {
-          await removeFromSelectedGroup(coin.id.toString())
-        } else {
-          await removeFromWatchlist(coin.id.toString())
-        }
+  for (const s of livelineSeries) {
+    const first = s.data[0]?.time
+    const last = s.data[s.data.length - 1]?.time
+    if (typeof first !== "number" || typeof last !== "number") continue
+    if (min === null || first < min) min = first
+    if (max === null || last > max) max = last
+  }
 
-        const targetName = selectedGroup ? selectedGroup.name : "watchlist"
-        toast({
-          title: "Removed",
-          description: `${coin.name} removed from ${targetName}`,
-        })
-      } catch {
-        toast({
-          title: "Error",
-          description: "Failed to remove from watchlist",
-          variant: "destructive",
-        })
+  if (min === null || max === null) return 30
+  return Math.max(30, max - min)
+}
+
+/** Matches the watchlist comparison view's time-axis formatting. */
+function makeTimeFormatter(
+  livelineSeries: LivelineSeries[],
+): (epochSeconds: number) => string {
+  let first: number | null = null
+  let last: number | null = null
+
+  for (const s of livelineSeries) {
+    const f = s.data[0]?.time
+    const l = s.data[s.data.length - 1]?.time
+    if (typeof f === "number" && (first === null || f < first)) first = f
+    if (typeof l === "number" && (last === null || l > last)) last = l
+  }
+
+  const spanSec = first !== null && last !== null ? last - first : 0
+  const includeYear = spanSec > 180 * 24 * 60 * 60
+
+  const formatter = includeYear ? TIME_AXIS_DATE_FORMAT_WITH_YEAR : TIME_AXIS_DATE_FORMAT
+
+  return (epochSeconds: number) => formatter.format(new Date(epochSeconds * 1000))
+}
+
+interface YAxisModel {
+  ticks: Array<{ key: number; y: number; text: string }>
+  seriesLabels: Array<{ id: string; color: string; y: number; text: string }>
+}
+
+/** Right y-axis: % ticks plus each series' latest value at its line endpoint. */
+function buildYAxisModel(args: {
+  livelineSeries: LivelineSeries[]
+  coinSeriesWithColors: CoinSeries[]
+  chartHeight: number
+  isCompactLayout: boolean
+}): YAxisModel | null {
+  const { livelineSeries, coinSeriesWithColors, chartHeight, isCompactLayout } = args
+  if (livelineSeries.length === 0) return null
+
+  let min = Number.POSITIVE_INFINITY
+  let max = Number.NEGATIVE_INFINITY
+  for (const s of livelineSeries) {
+    const range = computeLivelineSeriesRange(s.data, s.value)
+    if (!range) continue
+    if (range.min < min) min = range.min
+    if (range.max > max) max = range.max
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return null
+
+  const span = max - min
+  const plotHeight = chartHeight - CHART_PADDING_Y.top - CHART_PADDING_Y.bottom
+  const toY = (v: number) => CHART_PADDING_Y.top + (1 - (v - min) / span) * plotHeight
+  const minY = CHART_PADDING_Y.top + AXIS_LABEL_GAP / 2
+  const maxY = chartHeight - CHART_PADDING_Y.bottom - AXIS_LABEL_GAP / 2
+
+  const symbolById = new Map(
+    coinSeriesWithColors.map((row) => [row.id, row.symbol.toUpperCase()]),
+  )
+
+  const seriesLabels = livelineSeries
+    .map((s) => {
+      const symbol = symbolById.get(s.id) ?? ""
+      return {
+        id: s.id,
+        color: s.color,
+        y: toY(s.value),
+        text: isCompactLayout ? symbol : `${symbol} ${formatPctChange(s.value)}`.trim(),
       }
-    },
-    [removeFromSelectedGroup, removeFromWatchlist, selectedGroup],
-  )
+    })
+    .sort((a, b) => a.y - b.y)
 
-  // Create avatar data for coin logos (filter out optimistic coins) - using deferred coins
-  const avatarData = useMemo(() => {
-    return deferredCoins
-      .filter((coin) => !coin.isOptimistic)
-      .map((coin) => {
-        const logoUrl = getTokenLogoURL(coin.symbol, coin.image)
-        if (!logoUrl) return null
-        return {
-          imageUrl: logoUrl,
-          profileUrl: `/watchlists/${coin.id}`,
-        }
-      })
-      .filter((item): item is { imageUrl: string; profileUrl: string } => item !== null)
-  }, [deferredCoins])
+  // Collision pass: nudge overlapping labels apart, keep them inside the plot.
+  for (let i = 0; i < seriesLabels.length; i++) {
+    const label = seriesLabels[i]
+    const prev = seriesLabels[i - 1]
+    if (!label) continue
+    label.y = Math.max(label.y, minY, prev ? prev.y + AXIS_LABEL_GAP : Number.NEGATIVE_INFINITY)
+  }
+  for (let i = seriesLabels.length - 1; i >= 0; i--) {
+    const label = seriesLabels[i]
+    const next = seriesLabels[i + 1]
+    if (!label) continue
+    label.y = Math.min(label.y, maxY, next ? next.y - AXIS_LABEL_GAP : Number.POSITIVE_INFINITY)
+  }
 
-  const livelineSeries = useMemo((): LivelineSeries[] => {
-    const isHovering = Boolean(hoveredCoin)
+  const step = niceTickStep(span, 5)
+  const decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2
+  const ticks: Array<{ key: number; y: number; text: string }> = []
+  for (let i = Math.ceil(min / step); i * step <= max + step * 1e-6; i++) {
+    const raw = i * step
+    const value = Math.abs(raw) < step * 1e-6 ? 0 : raw
+    const y = toY(value)
+    if (y < minY || y > maxY) continue
+    // Series labels win over ticks when they'd overlap.
+    if (seriesLabels.some((label) => Math.abs(label.y - y) < AXIS_LABEL_GAP)) continue
+    ticks.push({
+      key: i,
+      y,
+      text: `${value > 0 ? "+" : ""}${value.toFixed(decimals)}%`,
+    })
+  }
 
-    return coinSeriesWithColors
-      .map((row): LivelineSeries | null => {
-        const data: LivelinePoint[] = []
-        for (const point of row.data) {
-          const time = toUnixSeconds(point.time)
-          if (time === null) continue
-          if (!Number.isFinite(point.value)) continue
-          data.push({ time, value: point.value })
-        }
+  return { ticks, seriesLabels }
+}
 
-        const latestValue = data[data.length - 1]?.value
-        if (typeof latestValue !== "number") return null
-
-        const isDimmed = isHovering && hoveredCoin !== row.id
-        const color = isDimmed ? addOpacityToColor(row.color, 0.25) : row.color
-
-        return {
-          id: row.id,
-          data,
-          value: latestValue,
-          color,
-          // No `label`: latest values render on the right y-axis overlay instead.
-        }
-      })
-      .filter((row): row is LivelineSeries => row !== null)
-  }, [coinSeriesWithColors, hoveredCoin])
-
-  const tooltipSeries = useMemo(() => {
-    return coinSeriesWithColors
-      .map((row) => {
-        const data: LivelinePoint[] = []
-        for (const point of row.data) {
-          const time = toUnixSeconds(point.time)
-          if (time === null) continue
-          if (!Number.isFinite(point.value)) continue
-          data.push({ time, value: point.value })
-        }
-
-        return {
-          id: row.id,
-          name: row.name,
-          symbol: row.symbol,
-          color: row.color,
-          data,
-        }
-      })
-      .filter((row) => row.data.length > 0)
-  }, [coinSeriesWithColors])
-
-  const windowSecs = useMemo(() => {
-    let min: number | null = null
-    let max: number | null = null
-
-    for (const s of livelineSeries) {
-      const first = s.data[0]?.time
-      const last = s.data[s.data.length - 1]?.time
-      if (typeof first !== "number" || typeof last !== "number") continue
-      if (min === null || first < min) min = first
-      if (max === null || last > max) max = last
-    }
-
-    if (min === null || max === null) return 30
-    return Math.max(30, max - min)
-  }, [livelineSeries])
-
-  // Matches the watchlist comparison view's time-axis formatting.
-  const formatTime = useMemo(() => {
-    let first: number | null = null
-    let last: number | null = null
-
-    for (const s of livelineSeries) {
-      const f = s.data[0]?.time
-      const l = s.data[s.data.length - 1]?.time
-      if (typeof f === "number" && (first === null || f < first)) first = f
-      if (typeof l === "number" && (last === null || l > last)) last = l
-    }
-
-    const spanSec = first !== null && last !== null ? last - first : 0
-    const includeYear = spanSec > 180 * 24 * 60 * 60
-
-    return (epochSeconds: number) => {
-      const dt = new Date(epochSeconds * 1000)
-      return new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "numeric",
-        ...(includeYear ? { year: "numeric" as const } : {}),
-      }).format(dt)
-    }
-  }, [livelineSeries])
-
-  // Right gutter reserved for the y-axis labels.
-  const axisGutter = isCompactLayout ? 48 : 88
-
-  const chartPadding = useMemo(
-    () => ({ ...CHART_PADDING_Y, right: axisGutter, left: 12 }),
-    [axisGutter],
-  )
-
-  // Right y-axis: % ticks plus each series' latest value at its line endpoint.
-  const yAxisModel = useMemo(() => {
-    if (livelineSeries.length === 0) return null
-
-    let min = Number.POSITIVE_INFINITY
-    let max = Number.NEGATIVE_INFINITY
-    for (const s of livelineSeries) {
-      const range = computeLivelineSeriesRange(s.data, s.value)
-      if (!range) continue
-      if (range.min < min) min = range.min
-      if (range.max > max) max = range.max
-    }
-    if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return null
-
-    const span = max - min
-    const plotHeight = chartHeight - CHART_PADDING_Y.top - CHART_PADDING_Y.bottom
-    const toY = (v: number) => CHART_PADDING_Y.top + (1 - (v - min) / span) * plotHeight
-    const minY = CHART_PADDING_Y.top + AXIS_LABEL_GAP / 2
-    const maxY = chartHeight - CHART_PADDING_Y.bottom - AXIS_LABEL_GAP / 2
-
-    const symbolById = new Map(
-      coinSeriesWithColors.map((row) => [row.id, row.symbol.toUpperCase()]),
-    )
-
-    const seriesLabels = livelineSeries
-      .map((s) => {
-        const symbol = symbolById.get(s.id) ?? ""
-        return {
-          id: s.id,
-          color: s.color,
-          y: toY(s.value),
-          text: isCompactLayout ? symbol : `${symbol} ${formatPctChange(s.value)}`.trim(),
-        }
-      })
-      .sort((a, b) => a.y - b.y)
-
-    // Collision pass: nudge overlapping labels apart, keep them inside the plot.
-    for (let i = 0; i < seriesLabels.length; i++) {
-      const label = seriesLabels[i]
-      const prev = seriesLabels[i - 1]
-      if (!label) continue
-      label.y = Math.max(label.y, minY, prev ? prev.y + AXIS_LABEL_GAP : Number.NEGATIVE_INFINITY)
-    }
-    for (let i = seriesLabels.length - 1; i >= 0; i--) {
-      const label = seriesLabels[i]
-      const next = seriesLabels[i + 1]
-      if (!label) continue
-      label.y = Math.min(label.y, maxY, next ? next.y - AXIS_LABEL_GAP : Number.POSITIVE_INFINITY)
-    }
-
-    const step = niceTickStep(span, 5)
-    const decimals = step >= 1 ? 0 : step >= 0.1 ? 1 : 2
-    const ticks: Array<{ key: number; y: number; text: string }> = []
-    for (let i = Math.ceil(min / step); i * step <= max + step * 1e-6; i++) {
-      const raw = i * step
-      const value = Math.abs(raw) < step * 1e-6 ? 0 : raw
-      const y = toY(value)
-      if (y < minY || y > maxY) continue
-      // Series labels win over ticks when they'd overlap.
-      if (seriesLabels.some((label) => Math.abs(label.y - y) < AXIS_LABEL_GAP)) continue
-      ticks.push({
-        key: i,
-        y,
-        text: `${value > 0 ? "+" : ""}${value.toFixed(decimals)}%`,
-      })
-    }
-
-    return { ticks, seriesLabels }
-  }, [livelineSeries, coinSeriesWithColors, chartHeight, isCompactLayout])
-
-  const tooltipClassName = useMemo(
-    () =>
-      `fixed overflow-hidden text-[11px] rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-[opacity,transform] duration-100 ease-out motion-reduce:transition-opacity ${
-        isDarkMode
-          ? "text-white bg-zinc-900/95 border border-zinc-700/50"
-          : "text-gray-900 bg-white/95 border border-gray-200/50"
-      }`,
-    [isDarkMode],
-  )
-
+/**
+ * Detached DOM tooltip that follows the Liveline scrub line. Owns the portal
+ * element lifecycle and returns the chart wrapper ref + hover handler.
+ */
+function useDetachedChartTooltip(
+  tooltipClassName: string,
+  tooltipSeries: TooltipSeriesRow[],
+) {
   const chartWrapperRef = useRef<HTMLDivElement | null>(null)
   const tooltipElRef = useRef<HTMLDivElement | null>(null)
   const tooltipRootRef = useRef<ReturnType<typeof createRoot> | null>(null)
@@ -466,7 +364,8 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
     tooltipElRef.current = tooltipEl
     tooltipRootRef.current = tooltipRoot
 
-    tooltipEl.className = tooltipClassName
+    // className is applied by the sync effect below (runs on mount too), so this
+    // mount-only effect has no reactive captures.
     tooltipEl.style.left = "0px"
     tooltipEl.style.top = "0px"
     tooltipEl.style.opacity = "0"
@@ -584,6 +483,569 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
     [tooltipSeries],
   )
 
+  return { chartWrapperRef, handleLivelineHover }
+}
+
+interface LegendPanelProps {
+  coins: OptimisticCoinMarketData[]
+  latestValuesById: Map<string, CoinSeries & { latestValue: number }>
+  isVertical: boolean
+  hoveredCoin: string | null
+  hoveredRemoveId: string | null
+  onCoinHover: (coinId: string | null) => void
+  onRemoveHover: (coinId: string | null) => void
+  onRemoveCoin: (coin: OptimisticCoinMarketData) => Promise<void>
+  onAddToComparison: () => void
+}
+
+/** Legend sidebar: add/manage controls plus the per-coin legend list. */
+function LegendPanel({
+  coins,
+  latestValuesById,
+  isVertical,
+  hoveredCoin,
+  hoveredRemoveId,
+  onCoinHover,
+  onRemoveHover,
+  onRemoveCoin,
+  onAddToComparison,
+}: LegendPanelProps) {
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 flex-col space-y-2",
+        isVertical ? "order-2" : "col-span-1 lg:col-span-3",
+      )}
+    >
+      <div className={cn("flex items-center gap-2", isVertical ? "hidden" : "lg:hidden")}>
+        <Button
+          variant="outline"
+          onClick={onAddToComparison}
+          className="group flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border-zinc-800/50 bg-transparent p-3 hover:bg-transparent dark:hover:border-zinc-800"
+        >
+          <span className="truncate text-sm font-normal text-muted-foreground group-hover:text-primary">Add to comparison</span>
+          <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-[transform,fill] duration-[var(--duration-ui)] size-3 fill-muted-foreground" />
+        </Button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="outline"
+              aria-label="Manage comparison tokens"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border-zinc-800/50 bg-transparent px-3 text-sm font-normal text-muted-foreground hover:bg-transparent hover:text-primary dark:hover:border-zinc-800"
+            >
+              Tokens
+              <ChevronDown className="size-3.5" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="max-h-[min(70dvh,24rem)] w-72 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-xl border-zinc-800/10 p-1.5 dark:border-zinc-800/60"
+          >
+            <DropdownMenuLabel className="px-2 py-1 text-xs font-medium text-muted-foreground">
+              Remove from chart
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {coins.map((coin) => {
+              const realCoin = latestValuesById.get(coin.id.toString())
+              const color = realCoin?.color ?? "currentColor"
+
+              return (
+                <DropdownMenuItem
+                  key={coin.id}
+                  disabled={coin.isOptimistic}
+                  onSelect={() => {
+                    void onRemoveCoin(coin)
+                  }}
+                  className="flex items-center gap-2 rounded-lg px-2 py-2"
+                >
+                  <span
+                    className="h-6 w-1.5 shrink-0 rounded-full border border-black/40"
+                    style={{ backgroundColor: color }}
+                    aria-hidden="true"
+                  />
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="shrink-0 text-xs font-medium">
+                      {coin.symbol.toUpperCase()}
+                    </span>
+                    <span className="truncate text-xs font-berkeley-mono text-muted-foreground">
+                      {coin.isOptimistic ? "Loading..." : coin.name}
+                    </span>
+                  </span>
+                  <IconXmarkCircleFill className="size-4 shrink-0 fill-muted-foreground" />
+                </DropdownMenuItem>
+              )
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div
+        className={cn(
+          "flex-row items-center justify-between gap-2",
+          isVertical ? "flex" : "mb-3 hidden lg:flex",
+        )}
+      >
+        <Button
+          variant="outline"
+          onClick={onAddToComparison}
+          className="group flex w-full items-center justify-between gap-2 rounded-lg border-zinc-800/50 bg-transparent p-3 hover:bg-transparent dark:hover:border-zinc-800"
+        >
+          <span className="truncate text-sm font-normal text-muted-foreground group-hover:text-primary">Add to comparison</span>
+          <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-[transform,fill] duration-[var(--duration-ui)] size-3 fill-muted-foreground" />
+        </Button>
+      </div>
+
+      <div
+        className={cn(
+          isVertical
+            ? "grid grid-cols-2 gap-1.5 sm:grid-cols-3"
+            : "hidden flex-col gap-2 p-3 space-y-3 lg:flex",
+        )}
+      >
+        {/* Show loading coins in legend */}
+        {coins.map((coin) => {
+          const realCoin = latestValuesById.get(coin.id.toString())
+
+          return (
+            <div key={coin.id}>
+              {coin.isOptimistic ? (
+                // Loading state in legend
+                <div className={cn("flex items-center gap-2 opacity-50 rounded-lg", !isVertical && "p-0 -m-2")}>
+                  <div className="w-1 h-9 rounded-full bg-muted animate-pulse motion-reduce:animate-none" />
+                  <div className="flex flex-row items-center gap-2 flex-1 ml-2">
+                    <span className="text-xs font-medium">...</span>
+                    <span className="text-xs font-berkeley-mono text-muted-foreground">Loading...</span>
+                  </div>
+                </div>
+              ) : realCoin ? (
+                // Real coin in legend
+                <div
+                  className={cn(
+                    "relative flex items-center gap-2 overflow-hidden rounded-lg group hover:bg-white/10",
+                    !isVertical && "p-0 -m-2",
+                    hoveredCoin && hoveredCoin !== coin.id.toString() ? "opacity-40" : "opacity-100",
+                    hoveredCoin === coin.id.toString() ? "bg-white/5" : "",
+                  )}
+                  style={{ backgroundColor: addOpacityToColor(realCoin.color, 0.1) }}
+                  onMouseEnter={() => onCoinHover(coin.id.toString())}
+                  onMouseLeave={() => onCoinHover(null)}
+                >
+                  <Link
+                    href={`/watchlists/${coin.id}`}
+                    className="flex h-8 flex-1 items-center gap-2 overflow-hidden border border-zinc-200 dark:border-zinc-800/70 rounded-lg"
+                  >
+                    <div className="absolute left-1.5 h-3 w-1.5 rounded-full border border-black" style={{ backgroundColor: realCoin.color }} />
+                    <div className="flex flex-1 flex-row items-center gap-2 overflow-hidden">
+                      <span className="ml-4.5 text-xs font-medium">{realCoin.symbol.toUpperCase()}</span>
+                      <span className="truncate text-xs font-berkeley-mono text-muted-foreground">
+                        {realCoin.name}
+                      </span>
+                    </div>
+                  </Link>
+
+                  <button
+                    type="button"
+                    aria-label={`Remove ${realCoin.name} from watchlist`}
+                    className={cn(
+                      "absolute right-2 rounded-full p-1 opacity-0 transition-[opacity,background-color] duration-[var(--duration-ui)] hover:bg-red-500/20 group-hover:opacity-100 group-focus-within:opacity-100",
+                      hoveredRemoveId === coin.id.toString() ? "bg-red-500/30" : "",
+                    )}
+                    onMouseEnter={() => {
+                      onRemoveHover(coin.id.toString())
+                    }}
+                    onMouseLeave={() => {
+                      onRemoveHover(null)
+                    }}
+                    onFocus={() => {
+                      onRemoveHover(coin.id.toString())
+                    }}
+                    onBlur={() => {
+                      onRemoveHover(null)
+                    }}
+                    onClick={async () => {
+                      await onRemoveCoin(coin)
+                    }}
+                  >
+                    <IconXmarkCircleFill
+                      className={cn(
+                        "size-4 transition-colors duration-200",
+                        hoveredRemoveId === coin.id.toString()
+                          ? "fill-red-400"
+                          : "fill-muted-foreground hover:fill-red-400",
+                      )}
+                    />
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  )
+}
+
+/** Right y-axis overlay: % ticks + per-series latest values. */
+function YAxisOverlay({
+  model,
+  axisGutter,
+  isDarkMode,
+}: {
+  model: YAxisModel
+  axisGutter: number
+  isDarkMode: boolean
+}) {
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-y-0 right-0 z-20"
+      style={{ width: axisGutter }}
+    >
+      {model.ticks.map((tick) => (
+        <span
+          key={tick.key}
+          className="absolute left-1.5 -translate-y-1/2 whitespace-nowrap font-berkeley-mono text-[10px] tabular-nums text-muted-foreground/60"
+          style={{ top: tick.y }}
+        >
+          {tick.text}
+        </span>
+      ))}
+      {model.seriesLabels.map((label) => (
+        <span
+          key={label.id}
+          className="absolute left-1.5 -translate-y-1/2 whitespace-nowrap font-berkeley-mono text-[10px] font-medium tabular-nums"
+          style={{
+            top: label.y,
+            color: label.color,
+            textShadow: isDarkMode
+              ? "0 0 4px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.8)"
+              : "0 0 4px rgba(255,255,255,0.95), 0 1px 2px rgba(255,255,255,0.8)",
+          }}
+        >
+          {label.text}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+interface ChartPanelProps {
+  isVertical: boolean
+  avatarData: Array<{ imageUrl: string; profileUrl: string }>
+  activeTimeScale: string
+  setActiveTimeScale: (scale: string) => void
+  coinsCount: number
+  seriesCount: number
+  chartHeight: number
+  chartWrapperRef: MutableRefObject<HTMLDivElement | null>
+  livelineSeries: LivelineSeries[]
+  isDarkMode: boolean
+  windowSecs: number
+  formatTime: (epochSeconds: number) => string
+  chartPadding: { top: number; bottom: number; right: number; left: number }
+  yAxisModel: YAxisModel | null
+  axisGutter: number
+  onLivelineHover: (
+    hover: { time: number; value: number; x: number; y: number } | null,
+  ) => void
+}
+
+/** Chart card: avatar stacks + time-scale header, and the Liveline canvas. */
+function ChartPanel({
+  isVertical,
+  avatarData,
+  activeTimeScale,
+  setActiveTimeScale,
+  coinsCount,
+  seriesCount,
+  chartHeight,
+  chartWrapperRef,
+  livelineSeries,
+  isDarkMode,
+  windowSecs,
+  formatTime,
+  chartPadding,
+  yAxisModel,
+  axisGutter,
+  onLivelineHover,
+}: ChartPanelProps) {
+  return (
+    <div
+      className={cn(
+        "min-w-0",
+        isVertical
+          ? "order-1"
+          : "col-span-1 lg:col-span-9",
+      )}
+    >
+      {/* Chart Content */}
+      <div className="p-0 relative">
+        <div
+          className="pointer-events-none absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
+          style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
+              backgroundRepeat: "repeat",
+              maskImage:
+                "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
+              WebkitMaskImage:
+                "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
+          }}
+        />
+        <Card className="border-none bg-transparent">
+          <CardHeader
+            className={cn(
+              "flex flex-row items-center justify-between gap-2 space-y-0",
+            )}
+          >
+            {/* Coin Avatar Stacks */}
+            <div className="min-w-0 flex-1 overflow-hidden">
+              {avatarData.length > 0 && (
+                <AvatarCircles
+                  avatarUrls={avatarData}
+                  className="origin-left scale-75"
+                />
+              )}
+            </div>
+
+            {/* Time Scale Selector */}
+            <TimeScaleSelector
+              activeTimeScale={activeTimeScale}
+              setActiveTimeScale={setActiveTimeScale}
+            />
+          </CardHeader>
+          <CardContent>
+            <div className="p-0 relative">
+              {coinsCount > 0 && seriesCount === 0 ? (
+                <div className="relative" style={{ height: chartHeight }}>
+                  <ChartLoadingSkeleton
+                    height={chartHeight}
+                    lines={Math.max(1, coinsCount)}
+                    className="opacity-80"
+                  />
+                </div>
+              ) : seriesCount === 0 ? (
+                <div className="flex items-center justify-center" style={{ height: chartHeight }}>
+                  <div className="text-center">
+                    <p className="text-sm text-muted-foreground">No coins to display</p>
+                  </div>
+                </div>
+              ) : (
+                <div ref={chartWrapperRef} className="relative w-full" style={{ height: chartHeight }}>
+                  <Liveline
+                    data={[]}
+                    value={0}
+                    series={livelineSeries}
+                    theme={isDarkMode ? "dark" : "light"}
+                    color={isDarkMode ? "oklch(0.9276 0.0058 264.53)" : "oklch(0.2077 0.0398 265.75)"}
+                    lineWidth={1}
+                    window={windowSecs}
+                    grid={false}
+                    fill={false}
+                    pulse={false}
+                    badge={false}
+                    momentum={false}
+                    scrub
+                    tooltipY={-9999}
+                    tooltipOutline={false}
+                    onHover={onLivelineHover}
+                    formatTime={formatTime}
+                    formatValue={formatPctChange}
+                    padding={chartPadding}
+                    className="size-full"
+                  />
+                  {/* Right y-axis: % ticks + per-series latest values. */}
+                  {yAxisModel && (
+                    <YAxisOverlay
+                      model={yAxisModel}
+                      axisGutter={axisGutter}
+                      isDarkMode={isDarkMode}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweight({
+  coins,
+  activeTimeScale,
+  setActiveTimeScale,
+  isPending,
+  layout = 'horizontal',
+}: MultiPriceChartLightweightProps) {
+  const isVertical = layout === 'vertical'
+  const { removeFromSelectedGroup, removeFromWatchlist, selectedGroup } = useWatchlist()
+  const [hoveredCoin, setHoveredCoin] = useState<string | null>(null)
+  const [hoveredRemoveId, setHoveredRemoveId] = useState<string | null>(null)
+
+  // React 19: Add concurrent features
+  const [isChartPending, startChartTransition] = useTransition()
+
+  // React 19: Defer expensive computations
+  const deferredCoins = useDeferredValue(coins)
+  const deferredTimeScale = useDeferredValue(activeTimeScale)
+
+  // Use isomorphic theme hook - eliminates hydration mismatch
+  const { isDarkMode } = useIsomorphicTheme()
+  const isCompactLayout = useMediaQuery("(max-width: 767px)")
+  const isMediumLayout = useMediaQuery("(max-width: 1023px)")
+
+  // Vertical (comparison-style) column uses the comparison chart's 300px height.
+  const chartHeight = isVertical ? 300 : isCompactLayout ? 280 : isMediumLayout ? 340 : 400
+  
+  // Actions-only subscription: this heavy chart never re-renders on nav state changes
+  const { openContextualCommandSearch } = useBottomNavActions()
+
+  // 🚀 OPTIMIZED: Use CoinGecko BULK multi-chart data hook with intelligent caching
+  const { 
+    series: coinSeriesData, 
+    isLoading: isChartLoading, 
+  } = useCoinGeckoBulkChartData(deferredCoins, deferredTimeScale)
+
+  // React 19: Memoize expensive color generation with deferred data
+  const coinSeriesWithColors = useMemo((): CoinSeries[] => {
+    if (!coinSeriesData.length) return []
+    
+    const colors = generatePastelColors(coinSeriesData.length)
+    
+    return coinSeriesData.map((series, index) => {
+      const baseColor = colors[index] || `oklch(0.8 0.06 ${Math.round(Math.random() * 360)})`
+      // For light mode, make colors darker and more saturated
+      // (was hsl s+20 / l-40; equivalent perceptual shift in OKLCH).
+      const themeAwareColor = isDarkMode
+        ? baseColor
+        : adjustOklch(baseColor, { dl: -0.4, dc: 0.05 })
+      
+      return {
+        ...series,
+        color: themeAwareColor,
+      }
+    })
+  }, [coinSeriesData, isDarkMode])
+
+  const latestValues = useMemo(() => {
+    return coinSeriesWithColors.map(series => ({
+      ...series,
+      latestValue: series.data[series.data.length - 1]?.value || 0
+    }))
+  }, [coinSeriesWithColors])
+
+  const latestValuesById = useMemo(() => {
+    const map = new Map<string, (CoinSeries & { latestValue: number })>()
+    for (const series of latestValues) {
+      map.set(series.id, series)
+    }
+    return map
+  }, [latestValues])
+
+  // React 19: Use callback for hover handlers
+  const handleCoinHover = useCallback((coinId: string | null) => {
+    startChartTransition(() => {
+      setHoveredCoin(coinId)
+    })
+  }, [])
+
+  const handleRemoveHover = useCallback((coinId: string | null) => {
+    setHoveredRemoveId(coinId)
+  }, [])
+
+  const handleRemoveCoin = useCallback(
+    async (coin: OptimisticCoinMarketData) => {
+      try {
+        if (selectedGroup) {
+          await removeFromSelectedGroup(coin.id.toString())
+        } else {
+          await removeFromWatchlist(coin.id.toString())
+        }
+
+        const targetName = selectedGroup ? selectedGroup.name : "watchlist"
+        toast({
+          title: "Removed",
+          description: `${coin.name} removed from ${targetName}`,
+        })
+      } catch {
+        toast({
+          title: "Error",
+          description: "Failed to remove from watchlist",
+          variant: "destructive",
+        })
+      }
+    },
+    [removeFromSelectedGroup, removeFromWatchlist, selectedGroup],
+  )
+
+  // Create avatar data for coin logos (filter out optimistic coins) - using deferred coins
+  const avatarData = useMemo(() => {
+    const items: Array<{ imageUrl: string; profileUrl: string }> = []
+    for (const coin of deferredCoins) {
+      if (coin.isOptimistic) continue
+      const logoUrl = getTokenLogoURL(coin.symbol, coin.image)
+      if (!logoUrl) continue
+      items.push({
+        imageUrl: logoUrl,
+        profileUrl: `/watchlists/${coin.id}`,
+      })
+    }
+    return items
+  }, [deferredCoins])
+
+  const livelineSeries = useMemo(
+    () => buildLivelineSeries(coinSeriesWithColors, hoveredCoin),
+    [coinSeriesWithColors, hoveredCoin],
+  )
+
+  const tooltipSeries = useMemo(
+    () => buildTooltipSeries(coinSeriesWithColors),
+    [coinSeriesWithColors],
+  )
+
+  const windowSecs = useMemo(() => computeWindowSecs(livelineSeries), [livelineSeries])
+
+  // Matches the watchlist comparison view's time-axis formatting.
+  const formatTime = useMemo(() => makeTimeFormatter(livelineSeries), [livelineSeries])
+
+  // Right gutter reserved for the y-axis labels.
+  const axisGutter = isCompactLayout ? 48 : 88
+
+  const chartPadding = useMemo(
+    () => ({ ...CHART_PADDING_Y, right: axisGutter, left: 12 }),
+    [axisGutter],
+  )
+
+  // Right y-axis: % ticks plus each series' latest value at its line endpoint.
+  const yAxisModel = useMemo(
+    () =>
+      buildYAxisModel({
+        livelineSeries,
+        coinSeriesWithColors,
+        chartHeight,
+        isCompactLayout,
+      }),
+    [livelineSeries, coinSeriesWithColors, chartHeight, isCompactLayout],
+  )
+
+  const tooltipClassName = useMemo(
+    () =>
+      `fixed overflow-hidden text-[11px] rounded-xl w-[200px] shadow-2xl pointer-events-none z-30 backdrop-blur-xl transition-[opacity,transform] duration-100 ease-out motion-reduce:transition-opacity ${
+        isDarkMode
+          ? "text-white bg-zinc-900/95 border border-zinc-700/50"
+          : "text-gray-900 bg-white/95 border border-gray-200/50"
+      }`,
+    [isDarkMode],
+  )
+
+  const { chartWrapperRef, handleLivelineHover } = useDetachedChartTooltip(
+    tooltipClassName,
+    tooltipSeries,
+  )
+
   // React 19: Show pending states
   const showPending = isPending || isChartPending || isChartLoading
 
@@ -596,303 +1058,37 @@ export const MultiPriceChartLightweight = memo(function MultiPriceChartLightweig
       showPending && "opacity-60 transition-opacity duration-200"
     )}>
       {/* Legend */}
-      <div
-        className={cn(
-          "flex min-w-0 flex-col space-y-2",
-          isVertical ? "order-2" : "col-span-1 lg:col-span-3",
-        )}
-      >
-        <div className={cn("flex items-center gap-2", isVertical ? "hidden" : "lg:hidden")}>
-          <Button
-            variant="outline"
-            onClick={() => openContextualCommandSearch('charts')}
-            className="group flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg border-zinc-800/50 bg-transparent p-3 hover:bg-transparent dark:hover:border-zinc-800"
-          >
-            <span className="truncate text-sm font-normal text-muted-foreground group-hover:text-primary">Add to comparison</span>
-            <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-[transform,fill] duration-[var(--duration-ui)] size-3 fill-muted-foreground" />
-          </Button>
+      <LegendPanel
+        coins={coins}
+        latestValuesById={latestValuesById}
+        isVertical={isVertical}
+        hoveredCoin={hoveredCoin}
+        hoveredRemoveId={hoveredRemoveId}
+        onCoinHover={handleCoinHover}
+        onRemoveHover={handleRemoveHover}
+        onRemoveCoin={handleRemoveCoin}
+        onAddToComparison={() => openContextualCommandSearch('charts')}
+      />
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                aria-label="Manage comparison tokens"
-                className="flex shrink-0 items-center gap-1.5 rounded-lg border-zinc-800/50 bg-transparent px-3 text-sm font-normal text-muted-foreground hover:bg-transparent hover:text-primary dark:hover:border-zinc-800"
-              >
-                Tokens
-                <ChevronDown className="size-3.5" aria-hidden="true" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="max-h-[min(70dvh,24rem)] w-72 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-xl border-zinc-800/10 p-1.5 dark:border-zinc-800/60"
-            >
-              <DropdownMenuLabel className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                Remove from chart
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {coins.map((coin) => {
-                const realCoin = latestValuesById.get(coin.id.toString())
-                const color = realCoin?.color ?? "currentColor"
-
-                return (
-                  <DropdownMenuItem
-                    key={coin.id}
-                    disabled={coin.isOptimistic}
-                    onSelect={() => {
-                      void handleRemoveCoin(coin)
-                    }}
-                    className="flex items-center gap-2 rounded-lg px-2 py-2"
-                  >
-                    <span
-                      className="h-6 w-1.5 shrink-0 rounded-full border border-black/40"
-                      style={{ backgroundColor: color }}
-                      aria-hidden="true"
-                    />
-                    <span className="flex min-w-0 flex-1 items-center gap-2">
-                      <span className="shrink-0 text-xs font-medium">
-                        {coin.symbol.toUpperCase()}
-                      </span>
-                      <span className="truncate text-xs font-berkeley-mono text-muted-foreground">
-                        {coin.isOptimistic ? "Loading..." : coin.name}
-                      </span>
-                    </span>
-                    <IconXmarkCircleFill className="size-4 shrink-0 fill-muted-foreground" />
-                  </DropdownMenuItem>
-                )
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <div
-          className={cn(
-            "flex-row items-center justify-between gap-2",
-            isVertical ? "flex" : "mb-3 hidden lg:flex",
-          )}
-        >
-          <Button
-            variant="outline"
-            onClick={() => openContextualCommandSearch('charts')}
-            className="group flex w-full items-center justify-between gap-2 rounded-lg border-zinc-800/50 bg-transparent p-3 hover:bg-transparent dark:hover:border-zinc-800"
-          >
-            <span className="truncate text-sm font-normal text-muted-foreground group-hover:text-primary">Add to comparison</span>
-            <IconPlus className="group-hover:fill-primary group-hover:rotate-90 transition-[transform,fill] duration-[var(--duration-ui)] size-3 fill-muted-foreground" />
-          </Button>
-        </div>
-
-        <div
-          className={cn(
-            isVertical
-              ? "grid grid-cols-2 gap-1.5 sm:grid-cols-3"
-              : "hidden flex-col gap-2 p-3 space-y-3 lg:flex",
-          )}
-        >
-          {/* Show loading coins in legend */}
-          {coins.map((coin) => {
-            const realCoin = latestValuesById.get(coin.id.toString())
-
-            return (
-              <div key={coin.id}>
-                {coin.isOptimistic ? (
-                  // Loading state in legend
-                  <div className={cn("flex items-center gap-2 opacity-50 rounded-lg", !isVertical && "p-0 -m-2")}>
-                    <div className="w-1 h-9 rounded-full bg-muted animate-pulse motion-reduce:animate-none" />
-                    <div className="flex flex-row items-center gap-2 flex-1 ml-2">
-                      <span className="text-xs font-medium">...</span>
-                      <span className="text-xs font-berkeley-mono text-muted-foreground">Loading...</span>
-                    </div>
-                  </div>
-                ) : realCoin ? (
-                  // Real coin in legend
-                  <div
-                    className={cn(
-                      "relative flex items-center gap-2 overflow-hidden rounded-lg group hover:bg-white/10",
-                      !isVertical && "p-0 -m-2",
-                      hoveredCoin && hoveredCoin !== coin.id.toString() ? "opacity-40" : "opacity-100",
-                      hoveredCoin === coin.id.toString() ? "bg-white/5" : "",
-                    )}
-                    style={{ backgroundColor: addOpacityToColor(realCoin.color, 0.1) }}
-                    onMouseEnter={() => handleCoinHover(coin.id.toString())}
-                    onMouseLeave={() => handleCoinHover(null)}
-                  >
-                    <Link
-                      href={`/watchlists/${coin.id}`}
-                      className="flex h-8 flex-1 items-center gap-2 overflow-hidden border border-zinc-200 dark:border-zinc-800/70 rounded-lg"
-                    >
-                      <div className="absolute left-1.5 h-3 w-1.5 rounded-full border border-black" style={{ backgroundColor: realCoin.color }} />
-                      <div className="flex flex-1 flex-row items-center gap-2 overflow-hidden">
-                        <span className="ml-4.5 text-xs font-medium">{realCoin.symbol.toUpperCase()}</span>
-                        <span className="truncate text-xs font-berkeley-mono text-muted-foreground">
-                          {realCoin.name}
-                        </span>
-                      </div>
-                    </Link>
-
-                    <button
-                      type="button"
-                      aria-label={`Remove ${realCoin.name} from watchlist`}
-                      className={cn(
-                        "absolute right-2 rounded-full p-1 opacity-0 transition-[opacity,background-color] duration-[var(--duration-ui)] hover:bg-red-500/20 group-hover:opacity-100 group-focus-within:opacity-100",
-                        hoveredRemoveId === coin.id.toString() ? "bg-red-500/30" : "",
-                      )}
-                      onMouseEnter={() => {
-                        handleRemoveHover(coin.id.toString())
-                      }}
-                      onMouseLeave={() => {
-                        handleRemoveHover(null)
-                      }}
-                      onFocus={() => {
-                        handleRemoveHover(coin.id.toString())
-                      }}
-                      onBlur={() => {
-                        handleRemoveHover(null)
-                      }}
-                      onClick={async () => {
-                        await handleRemoveCoin(coin)
-                      }}
-                    >
-                      <IconXmarkCircleFill
-                        className={cn(
-                          "size-4 transition-colors duration-200",
-                          hoveredRemoveId === coin.id.toString()
-                            ? "fill-red-400"
-                            : "fill-muted-foreground hover:fill-red-400",
-                        )}
-                      />
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      
-      <div
-        className={cn(
-          "min-w-0",
-          isVertical
-            ? "order-1"
-            : "col-span-1 lg:col-span-9",
-        )}
-      >
-        {/* Chart Content */}
-        <div className="p-0 relative">
-          <div
-            className="pointer-events-none absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
-            style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
-                backgroundRepeat: "repeat",
-                maskImage:
-                  "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
-                WebkitMaskImage:
-                  "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
-            }}
-          />
-          <Card className="border-none bg-transparent">
-            <CardHeader
-              className={cn(
-                "flex flex-row items-center justify-between gap-2 space-y-0",
-              )}
-            >
-              {/* Coin Avatar Stacks */}
-              <div className="min-w-0 flex-1 overflow-hidden">
-                {avatarData.length > 0 && (
-                  <AvatarCircles
-                    avatarUrls={avatarData}
-                    className="origin-left scale-75"
-                  />
-                )}
-              </div>
-              
-              {/* Time Scale Selector */}
-              <TimeScaleSelector
-                activeTimeScale={activeTimeScale}
-                setActiveTimeScale={setActiveTimeScale}
-              />
-            </CardHeader>
-            <CardContent>
-              <div className="p-0 relative">
-                {coins.length > 0 && coinSeriesWithColors.length === 0 ? (
-                  <div className="relative" style={{ height: chartHeight }}>
-                    <ChartLoadingSkeleton
-                      height={chartHeight}
-                      lines={Math.max(1, coins.length)}
-                      className="opacity-80"
-                    />
-                  </div>
-                ) : coinSeriesWithColors.length === 0 ? (
-                  <div className="flex items-center justify-center" style={{ height: chartHeight }}>
-                    <div className="text-center">
-                      <p className="text-sm text-muted-foreground">No coins to display</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div ref={chartWrapperRef} className="relative w-full" style={{ height: chartHeight }}>
-                    <Liveline
-                      data={[]}
-                      value={0}
-                      series={livelineSeries}
-                      theme={isDarkMode ? "dark" : "light"}
-                      color={isDarkMode ? "oklch(0.9276 0.0058 264.53)" : "oklch(0.2077 0.0398 265.75)"}
-                      lineWidth={1}
-                      window={windowSecs}
-                      grid={false}
-                      fill={false}
-                      pulse={false}
-                      badge={false}
-                      momentum={false}
-                      scrub
-                      tooltipY={-9999}
-                      tooltipOutline={false}
-                      onHover={handleLivelineHover}
-                      formatTime={formatTime}
-                      formatValue={formatPctChange}
-                      padding={chartPadding}
-                      className="size-full"
-                    />
-                    {/* Right y-axis: % ticks + per-series latest values. */}
-                    {yAxisModel && (
-                      <div
-                        aria-hidden="true"
-                        className="pointer-events-none absolute inset-y-0 right-0 z-20"
-                        style={{ width: axisGutter }}
-                      >
-                        {yAxisModel.ticks.map((tick) => (
-                          <span
-                            key={tick.key}
-                            className="absolute left-1.5 -translate-y-1/2 whitespace-nowrap font-berkeley-mono text-[10px] tabular-nums text-muted-foreground/60"
-                            style={{ top: tick.y }}
-                          >
-                            {tick.text}
-                          </span>
-                        ))}
-                        {yAxisModel.seriesLabels.map((label) => (
-                          <span
-                            key={label.id}
-                            className="absolute left-1.5 -translate-y-1/2 whitespace-nowrap font-berkeley-mono text-[10px] font-medium tabular-nums"
-                            style={{
-                              top: label.y,
-                              color: label.color,
-                              textShadow: isDarkMode
-                                ? "0 0 4px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.8)"
-                                : "0 0 4px rgba(255,255,255,0.95), 0 1px 2px rgba(255,255,255,0.8)",
-                            }}
-                          >
-                            {label.text}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      {/* Chart */}
+      <ChartPanel
+        isVertical={isVertical}
+        avatarData={avatarData}
+        activeTimeScale={activeTimeScale}
+        setActiveTimeScale={setActiveTimeScale}
+        coinsCount={coins.length}
+        seriesCount={coinSeriesWithColors.length}
+        chartHeight={chartHeight}
+        chartWrapperRef={chartWrapperRef}
+        livelineSeries={livelineSeries}
+        isDarkMode={isDarkMode}
+        windowSecs={windowSecs}
+        formatTime={formatTime}
+        chartPadding={chartPadding}
+        yAxisModel={yAxisModel}
+        axisGutter={axisGutter}
+        onLivelineHover={handleLivelineHover}
+      />
     </div>
   )
 })

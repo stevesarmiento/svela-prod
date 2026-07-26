@@ -105,6 +105,10 @@ export function ScreenerProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({ text: trimmed, surface: "screener" }),
         });
 
+        // The screen API returns structured `ok: false` payloads with 200 only;
+        // a non-2xx status is a transport/infra failure (rate limit, 500, …).
+        if (!response.ok) return null;
+
         const json: unknown = await response.json().catch(() => null);
         const parsed = SmartScreenerScreenResponseSchema.safeParse(json);
         if (!parsed.success) return null;

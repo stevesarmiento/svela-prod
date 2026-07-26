@@ -403,9 +403,10 @@ export const getTakerBuySellExchangeListSnapshotsBatch = query({
 
     const symbols = Array.from(
       new Set(
-        args.symbols
-          .map((s) => s.trim().toUpperCase())
-          .filter((s) => s.length > 0),
+        args.symbols.flatMap((s) => {
+          const normalized = s.trim().toUpperCase();
+          return normalized.length > 0 ? [normalized] : [];
+        }),
       ),
     ).slice(0, 300);
 

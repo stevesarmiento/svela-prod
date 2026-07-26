@@ -6,13 +6,6 @@ import { HomeIcon } from "./home-icon";
 import { isAlphaFeaturesEnabled } from "@/lib/feature-flags";
 import { getShortcutForRoute } from "@/lib/keyboard-shortcuts";
 
-// Base routes (will be enhanced with watchlist params by components)
-export const BASE_ROUTES = {
-  overview: "/overview",
-  watchlist: "/watchlists",
-  screener: "/screener",
-} as const;
-  
 export const MENU_ITEMS = [
   {
     title: "Overview",
@@ -45,7 +38,7 @@ const watchlistCommandItem = {
 } as const;
 
 const comparisonCommandItem = {
-  title: "Sector comparison",
+  title: "Watchlist comparison",
   subtitle: "Aggregate view across all your watchlists",
   href: "/comparison",
   icon: ComparisonIcon,

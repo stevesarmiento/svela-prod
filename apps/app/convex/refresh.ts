@@ -60,15 +60,16 @@ export const refreshMyDataNow = mutation({
       });
     }
 
-    const watchlistRows = await ctx.db
-      .query("watchlists")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
-
-    const portfolioRows = await ctx.db
-      .query("portfolioWalletCoins")
-      .withIndex("by_user_wallet", (q) => q.eq("userId", user._id))
-      .collect();
+    const [watchlistRows, portfolioRows] = await Promise.all([
+      ctx.db
+        .query("watchlists")
+        .withIndex("by_user", (q) => q.eq("userId", user._id))
+        .collect(),
+      ctx.db
+        .query("portfolioWalletCoins")
+        .withIndex("by_user_wallet", (q) => q.eq("userId", user._id))
+        .collect(),
+    ]);
 
     const coinIds = uniqStrings([
       ...watchlistRows.map((row) => row.coinId),
@@ -80,9 +81,9 @@ export const refreshMyDataNow = mutation({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
 
-    const activeWalletIds = wallets
-      .filter((w) => w.isActive)
-      .map((w) => w._id as Id<"portfolioWallets">);
+    const activeWalletIds = wallets.flatMap((w) =>
+      w.isActive ? [w._id as Id<"portfolioWallets">] : [],
+    );
 
     // Refresh markets first so the UI has updated quotes even before wallet sync finishes.
     if (coinIds.length > 0) {
@@ -92,12 +93,14 @@ export const refreshMyDataNow = mutation({
     }
 
     const isForce = args.force === true;
-    for (const walletId of activeWalletIds) {
-      await ctx.scheduler.runAfter(0, internal.portfolioJobs.syncWallet, {
-        walletId,
-        force: isForce,
-      });
-    }
+    await Promise.all(
+      activeWalletIds.map((walletId) =>
+        ctx.scheduler.runAfter(0, internal.portfolioJobs.syncWallet, {
+          walletId,
+          force: isForce,
+        }),
+      ),
+    );
 
     return {
       scheduled: true,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence, useReducedMotion } from "motion/react";
+import { m, AnimatePresence, useReducedMotion } from "motion/react";
 import { NavigationItems } from './navigation-items';
 import { SelectionContent } from './selection-content';
 import type { CommandContext, SelectionState } from './bottom-nav-context';
@@ -32,14 +32,14 @@ const NavigationDockComponent = ({
 
   return (
     <AnimatePresence mode="popLayout">
-      <motion.div
+      <m.div
         className={dockClassName}
         layout={!shouldReduceMotion}
         transition={uiLayoutTransition(shouldReduceMotion)}
       >
         <div className="relative z-10 flex items-center gap-1 p-1 w-auto">
           {mode === 'navigation' && (
-            <motion.div
+            <m.div
               key="navigation"
               layoutId={shouldReduceMotion ? undefined : "navigation"}
               initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
@@ -49,11 +49,11 @@ const NavigationDockComponent = ({
               transition={uiEnterExitTransition(shouldReduceMotion)}
             >
               <NavigationItems onOpenCommandSearch={onOpenCommandSearch || (() => {})} />
-            </motion.div>
+            </m.div>
           )}
 
           {mode === 'selection' && selectionState && (
-            <motion.div
+            <m.div
               key="selection"
               layoutId={shouldReduceMotion ? undefined : "navigation"}
               initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
@@ -63,10 +63,10 @@ const NavigationDockComponent = ({
               className="w-[400px] flex items-center justify-center"
             >
               <SelectionContent selectionState={selectionState} />
-            </motion.div>
+            </m.div>
           )}
         </div>
-      </motion.div>
+      </m.div>
     </AnimatePresence>
   );
 };

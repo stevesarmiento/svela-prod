@@ -42,7 +42,7 @@ export function TokenLogo({
   quality = 70,
 }: TokenLogoProps) {
   const safeSrc = typeof src === "string" && isSafeImageSrc(src) ? src : null
-  const envUnoptimized = process.env.NEXT_PUBLIC_UNOPTIMIZED_REMOTE_TOKEN_LOGOS === "1"
+  const envUnoptimized = process.env.NEXT_PUBLIC_UNOPTIMIZED_REMOTE_COIN_LOGOS === "1"
   const devUnoptimized = process.env.NODE_ENV !== "production" && sizePx <= 32
   const preferUnoptimized = unoptimizedRemote ?? (envUnoptimized || devUnoptimized)
   const shouldUnoptimize = Boolean(preferUnoptimized && safeSrc && isRemoteSrc(safeSrc))

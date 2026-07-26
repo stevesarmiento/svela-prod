@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { m, useReducedMotion } from 'motion/react'
 import { cn } from '@v1/ui/cn'
 import { Kbd } from '@v1/ui/kbd'
 import { Liveline, type LivelinePoint, type LivelineSeries } from 'liveline'
@@ -336,6 +336,13 @@ function OverviewDashboardIllustration() {
   )
 }
 
+function getKbdClassName(isActive: boolean) {
+  return cn(
+    'bg-white/10 text-white border-white/10 text-[10px] transition-colors',
+    isActive && 'bg-primary/30 border-primary/40 text-white',
+  )
+}
+
 export function OverviewEmptyState() {
   const shouldReduceMotion: boolean = useReducedMotion() ?? false
   const [isGDown, setIsGDown] = useState(false)
@@ -375,25 +382,18 @@ export function OverviewEmptyState() {
     }
   }, [])
 
-  function getKbdClassName(isActive: boolean) {
-    return cn(
-      'bg-white/10 text-white border-white/10 text-[10px] transition-colors',
-      isActive && 'bg-primary/30 border-primary/40 text-white',
-    )
-  }
-
   return (
     <div className="group flex w-full flex-col items-center justify-center py-20 px-4 text-center">
-      <motion.div
+      <m.div
         initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
         className="mb-10"
       >
         <OverviewDashboardIllustration />
-      </motion.div>
+      </m.div>
 
-      <motion.div
+      <m.div
         initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
@@ -410,7 +410,7 @@ export function OverviewEmptyState() {
             <Kbd className={getKbdClassName(isWDown)}>W</Kbd> to go to watchlist
           </p>
         </div>
-      </motion.div>
+      </m.div>
     </div>
   )
 }

@@ -162,9 +162,10 @@ async function upsertMarketsByIds(
   ctx: ActionCtx,
   args: { apiKey: string; coingeckoIds: ReadonlyArray<string> },
 ): Promise<{ requested: number; refreshed: number }> {
-  const uniqueIds = Array.from(new Set(args.coingeckoIds))
-    .map((id) => id.trim())
-    .filter((id) => id.length > 0);
+  const uniqueIds = Array.from(new Set(args.coingeckoIds)).flatMap((id) => {
+    const trimmed = id.trim();
+    return trimmed.length > 0 ? [trimmed] : [];
+  });
 
   if (uniqueIds.length === 0) return { requested: 0, refreshed: 0 };
 
@@ -179,6 +180,7 @@ async function upsertMarketsByIds(
     url.searchParams.set("sparkline", "false");
     url.searchParams.set("price_change_percentage", "24h");
 
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
     const data = (await fetchJson(
       url.toString(),
       args.apiKey,
@@ -324,6 +326,7 @@ export const refreshTopMarkets = internalAction({
       url.searchParams.set("sparkline", "true");
       url.searchParams.set("price_change_percentage", "24h,7d,30d");
 
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
       const data = (await fetchJson(
         url.toString(),
         apiKey,
@@ -334,11 +337,13 @@ export const refreshTopMarkets = internalAction({
     const items = mapMarketRows(all).slice(0, topN);
     // Chunked: a single mutation over 2500 items exceeds Convex's 4096-read
     // limit when most rows need a patch (index lookup + patch read per row).
-    for (const itemChunk of chunk(items, 500)) {
-      await ctx.runMutation(internal.coingeckoWriters._upsertMarketDataBatch, {
-        items: itemChunk,
-      });
-    }
+    await Promise.all(
+      chunk(items, 500).map((itemChunk) =>
+        ctx.runMutation(internal.coingeckoWriters._upsertMarketDataBatch, {
+          items: itemChunk,
+        }),
+      ),
+    );
 
     return { count: items.length };
   },
@@ -583,6 +588,7 @@ export const refreshAllGlobalMarketCapHistoryWindows = internalAction({
     }> = [];
 
     for (const days of windows) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
       const result = await upsertGlobalMarketHistory(ctx, {
         days,
         apiKey,
@@ -742,6 +748,7 @@ export const refreshCoinImagesBatch = internalAction({
       url.searchParams.set("page", "1");
       url.searchParams.set("sparkline", "false");
 
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
       const data = (await fetchJson(
         url.toString(),
         apiKey,

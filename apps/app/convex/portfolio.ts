@@ -56,14 +56,16 @@ async function markOverviewSnapshotStale(ctx: MutationCtx, clerkId: string) {
     `overview:dailyBrief:${canonicalClerkId}:watchlist:7d`,
   ];
 
-  for (const cacheKey of keys) {
-    const existing = await ctx.db
-      .query("apiCache")
-      .withIndex("by_key", (q) => q.eq("cacheKey", cacheKey))
-      .first();
-    if (!existing) continue;
-    await ctx.db.patch(existing._id, { expiresAt: 0 });
-  }
+  await Promise.all(
+    keys.map(async (cacheKey) => {
+      const existing = await ctx.db
+        .query("apiCache")
+        .withIndex("by_key", (q) => q.eq("cacheKey", cacheKey))
+        .first();
+      if (!existing) return;
+      await ctx.db.patch(existing._id, { expiresAt: 0 });
+    }),
+  );
 }
 
 async function markMyOverviewSnapshotStale(ctx: MutationCtx) {
@@ -339,7 +341,12 @@ export const upsertPortfolioWalletSelection = mutation({
 
     // Reconcile watchlist items for this wallet-backed group to match the selected CoinGecko IDs.
     const nextIds = Array.from(
-      new Set(args.selected.map((row) => row.coingeckoId.trim()).filter((id) => id.length > 0)),
+      new Set(
+        args.selected.flatMap((row) => {
+          const id = row.coingeckoId.trim();
+          return id.length > 0 ? [id] : [];
+        }),
+      ),
     );
     nextIds.sort();
 
@@ -353,29 +360,34 @@ export const upsertPortfolioWalletSelection = mutation({
       existingByCoinId.set(item.coinId, item._id);
     }
 
-    // Insert missing items (idempotent via index check).
-    for (const coinId of nextIds) {
-      if (existingByCoinId.has(coinId)) continue;
-      const already = await ctx.db
-        .query("watchlists")
-        .withIndex("by_group_coin", (q) => q.eq("watchlistGroupId", groupId).eq("coinId", coinId))
-        .first();
-      if (already) continue;
-      await ctx.db.insert("watchlists", {
-        userId,
-        watchlistGroupId: groupId,
-        coinId,
-      });
-    }
+    // Insert missing items (idempotent via index check; ids are deduped, so
+    // each coin's check+insert is independent).
+    await Promise.all(
+      nextIds.map(async (coinId) => {
+        if (existingByCoinId.has(coinId)) return;
+        const already = await ctx.db
+          .query("watchlists")
+          .withIndex("by_group_coin", (q) => q.eq("watchlistGroupId", groupId).eq("coinId", coinId))
+          .first();
+        if (already) return;
+        await ctx.db.insert("watchlists", {
+          userId,
+          watchlistGroupId: groupId,
+          coinId,
+        });
+      }),
+    );
 
     // Delete removed items and drop canonical holdings for coins that no
-    // longer appear on any of the user's watchlists.
+    // longer appear on any of the user's watchlists. Prune runs after all
+    // deletes so it observes the final membership state.
     const nextSet = new Set(nextIds);
-    for (const item of existingItems) {
-      if (nextSet.has(item.coinId)) continue;
-      await ctx.db.delete(item._id);
-      await pruneCanonicalHoldingsIfUnlisted(ctx.db, userId, item.coinId);
-    }
+    const removedItems = existingItems.filter((item) => !nextSet.has(item.coinId));
+    await Promise.all(removedItems.map((item) => ctx.db.delete(item._id)));
+    const removedCoinIds = Array.from(new Set(removedItems.map((item) => item.coinId)));
+    await Promise.all(
+      removedCoinIds.map((coinId) => pruneCanonicalHoldingsIfUnlisted(ctx.db, userId, coinId)),
+    );
 
     await markOverviewSnapshotStale(ctx, args.clerkId);
     return walletId;
@@ -640,7 +652,12 @@ export const upsertMyPortfolioWalletSelection = mutation({
     }
 
     const nextIds = Array.from(
-      new Set(args.selected.map((row) => row.coingeckoId.trim()).filter((id) => id.length > 0)),
+      new Set(
+        args.selected.flatMap((row) => {
+          const id = row.coingeckoId.trim();
+          return id.length > 0 ? [id] : [];
+        }),
+      ),
     );
     nextIds.sort();
 
@@ -652,26 +669,32 @@ export const upsertMyPortfolioWalletSelection = mutation({
     const existingByCoinId = new Map<string, Id<"watchlists">>();
     for (const item of existingItems) existingByCoinId.set(item.coinId, item._id);
 
-    for (const coinId of nextIds) {
-      if (existingByCoinId.has(coinId)) continue;
-      const already = await ctx.db
-        .query("watchlists")
-        .withIndex("by_group_coin", (q) => q.eq("watchlistGroupId", groupId).eq("coinId", coinId))
-        .first();
-      if (already) continue;
-      await ctx.db.insert("watchlists", {
-        userId,
-        watchlistGroupId: groupId,
-        coinId,
-      });
-    }
+    // Idempotent via index check; ids are deduped, so each coin's
+    // check+insert is independent.
+    await Promise.all(
+      nextIds.map(async (coinId) => {
+        if (existingByCoinId.has(coinId)) return;
+        const already = await ctx.db
+          .query("watchlists")
+          .withIndex("by_group_coin", (q) => q.eq("watchlistGroupId", groupId).eq("coinId", coinId))
+          .first();
+        if (already) return;
+        await ctx.db.insert("watchlists", {
+          userId,
+          watchlistGroupId: groupId,
+          coinId,
+        });
+      }),
+    );
 
+    // Prune runs after all deletes so it observes the final membership state.
     const nextSet = new Set(nextIds);
-    for (const item of existingItems) {
-      if (nextSet.has(item.coinId)) continue;
-      await ctx.db.delete(item._id);
-      await pruneCanonicalHoldingsIfUnlisted(ctx.db, userId, item.coinId);
-    }
+    const removedItems = existingItems.filter((item) => !nextSet.has(item.coinId));
+    await Promise.all(removedItems.map((item) => ctx.db.delete(item._id)));
+    const removedCoinIds = Array.from(new Set(removedItems.map((item) => item.coinId)));
+    await Promise.all(
+      removedCoinIds.map((coinId) => pruneCanonicalHoldingsIfUnlisted(ctx.db, userId, coinId)),
+    );
 
     await markMyOverviewSnapshotStale(ctx);
     return walletId;

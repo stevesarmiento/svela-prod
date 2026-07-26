@@ -179,6 +179,7 @@ export const refreshTrackedCoinNewsBatch = internalAction({
     let refreshedCoins = 0;
     const articleIdsNeedingSentiment: Id<"coingeckoNewsArticles">[] = [];
     for (const coingeckoId of coinIds) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
       const items = await refreshNewsForCoin({ coingeckoId, perPage });
       const upserted = await ctx.runMutation(
         internal.coingeckoNewsWriters._upsertNewsForCoin,
@@ -199,16 +200,21 @@ export const refreshTrackedCoinNewsBatch = internalAction({
       Array.from(new Set(articleIdsNeedingSentiment)),
       SENTIMENT_BATCH_LIMIT,
     );
-    for (const articleIds of batches) {
-      if (articleIds.length === 0) continue;
-      await ctx.scheduler.runAfter(
-        0,
-        internal.coingeckoNewsJobs.analyzeSentimentBatch,
-        {
-          articleIds,
-        },
-      );
-    }
+    await Promise.all(
+      batches.flatMap((articleIds) =>
+        articleIds.length === 0
+          ? []
+          : [
+              ctx.scheduler.runAfter(
+                0,
+                internal.coingeckoNewsJobs.analyzeSentimentBatch,
+                {
+                  articleIds,
+                },
+              ),
+            ],
+      ),
+    );
 
     await ctx.runMutation(internal.coingeckoState._setJobCursor, {
       jobKey: JOB_KEY_REFRESH_NEWS,
@@ -246,16 +252,21 @@ export const refreshCoinNews = internalAction({
       Array.from(new Set(upserted.articleIdsNeedingSentiment)),
       SENTIMENT_BATCH_LIMIT,
     );
-    for (const articleIds of batches) {
-      if (articleIds.length === 0) continue;
-      await ctx.scheduler.runAfter(
-        0,
-        internal.coingeckoNewsJobs.analyzeSentimentBatch,
-        {
-          articleIds,
-        },
-      );
-    }
+    await Promise.all(
+      batches.flatMap((articleIds) =>
+        articleIds.length === 0
+          ? []
+          : [
+              ctx.scheduler.runAfter(
+                0,
+                internal.coingeckoNewsJobs.analyzeSentimentBatch,
+                {
+                  articleIds,
+                },
+              ),
+            ],
+      ),
+    );
     return null;
   },
 });
@@ -494,16 +505,21 @@ export const backfillRecentMissingSentiment = internalAction({
       Array.from(new Set(articleIds)),
       SENTIMENT_BATCH_LIMIT,
     );
-    for (const batchArticleIds of batches) {
-      if (batchArticleIds.length === 0) continue;
-      await ctx.scheduler.runAfter(
-        0,
-        internal.coingeckoNewsJobs.analyzeSentimentBatch,
-        {
-          articleIds: batchArticleIds,
-        },
-      );
-    }
+    await Promise.all(
+      batches.flatMap((batchArticleIds) =>
+        batchArticleIds.length === 0
+          ? []
+          : [
+              ctx.scheduler.runAfter(
+                0,
+                internal.coingeckoNewsJobs.analyzeSentimentBatch,
+                {
+                  articleIds: batchArticleIds,
+                },
+              ),
+            ],
+      ),
+    );
     return { queued: articleIds.length };
   },
 });
@@ -552,18 +568,18 @@ export const relabelRecentLowConfidenceNeutralSentiment: ReturnType<
       },
     )) as Array<ArticleDoc | null>;
 
-    const items = docs
-      .filter(
-        (doc): doc is ArticleDoc =>
-          Boolean(doc) && typeof doc!.title === "string",
-      )
-      .map((doc) => ({ id: doc._id, h: heuristicSentiment(doc.title) }))
-      .filter((x) => x.h.sentiment !== "neutral")
-      .map((x) => ({
-        articleId: x.id,
-        sentiment: x.h.sentiment,
-        confidence: x.h.confidence,
-      }));
+    const items = docs.flatMap((doc) => {
+      if (!doc || typeof doc.title !== "string") return [];
+      const h = heuristicSentiment(doc.title);
+      if (h.sentiment === "neutral") return [];
+      return [
+        {
+          articleId: doc._id,
+          sentiment: h.sentiment,
+          confidence: h.confidence,
+        },
+      ];
+    });
 
     if (items.length === 0)
       return { relabeled: 0, candidates: articleIds.length };

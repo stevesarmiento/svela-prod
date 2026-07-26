@@ -10,7 +10,7 @@ import {
 } from "@/lib/motion-tokens";
 import { Badge } from "@v1/ui/badge";
 import { cn } from "@v1/ui/cn";
-import { motion } from "motion/react";
+import { m } from "motion/react";
 import Link from "next/link";
 import {
   IconArrowDownLeftAndArrowUpRight,
@@ -28,7 +28,7 @@ import {
 } from "./feed-helpers";
 import type { OverviewEvent } from "./types";
 
-const MotionDiv = motion.div;
+const MotionDiv = m.div;
 
 function PercentChangeBadge(props: { pct: number }) {
   const clamped = clampPercentChange(props.pct);

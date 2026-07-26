@@ -2,6 +2,7 @@
 
 import { ClerkProvider, useUser } from "@clerk/nextjs";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { LazyMotion, domMax } from "motion/react";
 import dynamic from "next/dynamic";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import type React from "react";
@@ -69,8 +70,11 @@ export function Providers({ children }: ProvidersProps) {
       <ScopedQueryProvider>
         <NuqsAdapter>
           <ConvexProvider>
-            {children}
-            <LazyNotifToaster />
+            {/* domMax (not domAnimation): navigation-dock uses layoutId layout projection. */}
+            <LazyMotion features={domMax}>
+              {children}
+              <LazyNotifToaster />
+            </LazyMotion>
             {ReactQueryDevtools ? <ReactQueryDevtools initialIsOpen={false} /> : null}
           </ConvexProvider>
         </NuqsAdapter>

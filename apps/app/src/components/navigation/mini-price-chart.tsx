@@ -59,6 +59,7 @@ function timeToEpochSeconds(time: Time): number | null {
   return Math.floor(Date.UTC(time.year, time.month - 1, time.day) / 1000)
 }
 
+// react-doctor-disable-next-line react-doctor/no-giant-component -- single irreducible chart-lifecycle effect; no cohesive JSX regions to extract (validated)
 export function MiniPriceChart({ coinId, currentPrice }: MiniPriceChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -136,6 +137,7 @@ export function MiniPriceChart({ coinId, currentPrice }: MiniPriceChartProps) {
     [hullSuite.MHULL],
   )
 
+  // react-doctor-disable-next-line react-doctor/effect-needs-cleanup -- observer creation is isCancelled-guarded post-await; returned teardown disconnects it on every path
   useEffect(() => {
     if (!chartContainerRef.current) return
     if (normalizedChartData.length === 0) return
@@ -350,7 +352,10 @@ export function MiniPriceChart({ coinId, currentPrice }: MiniPriceChartProps) {
       }
 
       if (resizeRafId) cancelAnimationFrame(resizeRafId)
-      resizeObserver?.disconnect()
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+        resizeObserver = null
+      }
       if (windowResizeHandler) window.removeEventListener("resize", windowResizeHandler)
       if (scrubEl && chartContainerRef.current?.contains(scrubEl)) {
         chartContainerRef.current.removeChild(scrubEl)

@@ -55,17 +55,12 @@ export function useSequentialShortcuts(
     setActiveSequence(null);
   }, []);
 
-  const resetSequenceRef = useLatest(resetSequence);
-
   useEffect(() => {
     const startSequence = (key: string) => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       sequenceRef.current = key;
       setActiveSequence(key);
-      timeoutRef.current = setTimeout(
-        () => resetSequenceRef.current(),
-        SEQUENCE_TIMEOUT_MS,
-      );
+      timeoutRef.current = setTimeout(resetSequence, SEQUENCE_TIMEOUT_MS);
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -90,7 +85,7 @@ export function useSequentialShortcuts(
       if (continuations && key in continuations) {
         event.preventDefault();
         const route = continuations[key as keyof typeof continuations];
-        resetSequenceRef.current();
+        resetSequence();
         // Already on the target route: trigger its secondary action (same as
         // re-clicking the active tab) instead of a no-op navigation.
         if (cleanPathRef.current === route) {
@@ -103,7 +98,7 @@ export function useSequentialShortcuts(
 
       // Not a valid continuation: reset. If the key starts a new sequence,
       // restart; otherwise let it pass through to other handlers untouched.
-      resetSequenceRef.current();
+      resetSequence();
       if (key in SEQUENTIAL_SHORTCUTS) {
         event.preventDefault();
         startSequence(key);
@@ -113,9 +108,10 @@ export function useSequentialShortcuts(
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      resetSequenceRef.current();
+      resetSequence();
     };
-  }, [cleanPathRef, onReactivateRouteRef, resetSequenceRef, routerRef]);
+    // `resetSequence` is a stable useCallback([]) — the effect subscribes once.
+  }, [cleanPathRef, onReactivateRouteRef, resetSequence, routerRef]);
 
   return { activeSequence, resetSequence };
 }

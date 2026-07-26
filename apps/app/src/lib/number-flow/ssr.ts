@@ -33,8 +33,17 @@ const styles = css`
 	}
 `
 
+// Escape interpolated values (digits, symbols, prefix/suffix) so
+// caller-supplied strings can't inject markup into the rendered HTML:
+const escapeHtml = (value: string | number) =>
+	String(value)
+		.replaceAll('&', '&amp;')
+		.replaceAll('<', '&lt;')
+		.replaceAll('>', '&gt;')
+		.replaceAll('"', '&quot;')
+
 const renderPart = (part: KeyedNumberPart) =>
-	`<span class="${part.type === 'integer' || part.type === 'fraction' ? 'digit' : 'symbol'}" part="${part.type === 'integer' || part.type === 'fraction' ? `digit ${part.type}-digit` : `symbol ${part.type}`}">${part.value}</span>`
+	`<span class="${part.type === 'integer' || part.type === 'fraction' ? 'digit' : 'symbol'}" part="${part.type === 'integer' || part.type === 'fraction' ? `digit ${part.type}-digit` : `symbol ${part.type}`}">${escapeHtml(part.value)}</span>`
 
 const renderSection = (section: KeyedNumberPart[], part: string) =>
 	`<span part="${part}">${section.reduce((str, p) => str + renderPart(p), '')}</span>`
@@ -44,7 +53,7 @@ export const renderInnerHTML = (data: Data) =>
 	html`<template shadowroot="open" shadowrootmode="open"
 			><style>
 				${styles}</style
-			><span role="img" aria-label="${data.valueAsString}"
+			><span role="img" aria-label="${escapeHtml(data.valueAsString)}"
 				>${renderSection(data.pre, 'left')}<span part="number" class="number"
 					>${renderSection(data.integer, 'integer')}${renderSection(
 						data.fraction,
@@ -54,5 +63,5 @@ export const renderInnerHTML = (data: Data) =>
 			></template
 		><span
 			style="font-kerning: none; display: inline-block; line-height: ${charHeight} !important; padding: ${maskHeight} 0;"
-			>${data.valueAsString}</span
+			>${escapeHtml(data.valueAsString)}</span
 		>` // ^ fallback for browsers that don't support DSD

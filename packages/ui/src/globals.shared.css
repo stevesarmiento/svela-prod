@@ -163,6 +163,38 @@
   }
 }
 
+/* Bottom-nav command palette popover: staggered enter (rises + fades in once
+   the search pill finishes expanding) and a quick drop-out exit. Timing vars
+   are injected on the nav row by `bottomNavChromeMotionStyle()`
+   (apps/app/src/lib/motion-tokens.ts) and cascade here because the popover
+   renders without a portal. Unlayered on purpose so it outranks the
+   `animate-none` utilities on the panel. */
+.nav-command-popover[data-state='open'] {
+  animation: nav-popover-in var(--nav-open-popover, var(--duration-ui))
+    var(--ease-out-cubic) var(--nav-open-popover-delay, 0ms) both;
+}
+
+.nav-command-popover[data-state='closed'] {
+  animation: nav-popover-out var(--nav-close-popover, var(--duration-micro))
+    var(--ease-out-cubic) both;
+}
+
+@keyframes nav-popover-in {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+    scale: 0.98;
+  }
+}
+
+@keyframes nav-popover-out {
+  to {
+    opacity: 0;
+    translate: 0 8px;
+    scale: 0.99;
+  }
+}
+
 /* Reduced motion: disable all animations and transitions */
 @media (prefers-reduced-motion: reduce) {
   :root {
@@ -183,6 +215,8 @@
   }
 
   /* Explicit animations declared in this file */
+  .nav-command-popover[data-state='open'],
+  .nav-command-popover[data-state='closed'],
   .scale-in,
   .scale-out,
   .ck-qr-shine,

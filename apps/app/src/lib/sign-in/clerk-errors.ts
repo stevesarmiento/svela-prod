@@ -49,10 +49,11 @@ function getErrorEntries(error: unknown): Array<{ code?: string; message?: strin
 }
 
 function getNormalizedMessages(error: unknown): string[] {
-  return getErrorEntries(error)
-    .flatMap((entry) => [entry.longMessage, entry.message])
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    .map((value) => value.toLowerCase());
+  return getErrorEntries(error).flatMap((entry) =>
+    [entry.longMessage, entry.message].flatMap((value) =>
+      typeof value === "string" && value.trim().length > 0 ? [value.toLowerCase()] : [],
+    ),
+  );
 }
 
 function hasMatchingCode(error: unknown, codes: Set<string>): boolean {

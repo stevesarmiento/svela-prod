@@ -25,7 +25,7 @@ import {
   useQuery,
 } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { IconTriangleFill } from "symbols-react";
 import { api } from "../../../../../convex/_generated/api";
 import { TimeScaleSelector } from "../charts/_components/multi-line-lightweight-time-scale-selector";
@@ -42,6 +42,8 @@ interface HoldingsGroupRow {
   totalHoldings: number;
   coinsWithHoldings: number;
 }
+
+const EMPTY_GROUPS_BREAKDOWN: HoldingsGroupRow[] = [];
 
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -99,6 +101,366 @@ function ChartRangePerformanceLabel(props: {
 type OverviewBootstrap = FunctionReturnType<
   typeof api.overview.getMyOverviewBootstrap
 >;
+
+type QuotesBulkData = ReturnType<typeof useCoinGeckoQuotesBulk>["data"];
+
+/** Per-group breakdown rows (value, % of total, token segments, avatars). */
+function buildGroupRows(args: {
+  groupsBreakdown: HoldingsGroupRow[];
+  quotes: QuotesBulkData;
+  totalValueUsd: number;
+}) {
+  const quotes = args.quotes ?? {};
+  const total = args.totalValueUsd;
+
+  const rows = args.groupsBreakdown.map((row) => {
+    let valueUsd = 0;
+    for (const position of row.positions) {
+      const price = quotes[position.coinId]?.current_price ?? 0;
+      valueUsd += position.holdings * price;
+    }
+
+    const percent = total > 0 ? clampPercent(valueUsd / total) : 0;
+
+    const tokensByValue: Array<{ coinId: string; valueUsd: number }> = [];
+    for (const position of row.positions) {
+      const price = quotes[position.coinId]?.current_price ?? 0;
+      const tokenValueUsd = position.holdings * price;
+      if (!Number.isFinite(tokenValueUsd) || tokenValueUsd <= 0) continue;
+      tokensByValue.push({ coinId: position.coinId, valueUsd: tokenValueUsd });
+    }
+    tokensByValue.sort((a, b) => b.valueUsd - a.valueUsd);
+
+    const tokenColors = generatePastelColors(tokensByValue.length);
+    const tokenSegments = tokensByValue.map((token, index) => {
+      const segmentPercent =
+        valueUsd > 0 ? clampPercent(token.valueUsd / valueUsd) : 0;
+      return {
+        coinId: token.coinId,
+        percent: segmentPercent,
+        color: tokenColors[index] ?? "oklch(0.8047 0 0)",
+      };
+    });
+
+    const tokenAvatarUrls = tokensByValue
+      .slice(0, 4)
+      .map((token) => {
+        const quote = quotes[token.coinId];
+        if (!quote) return null;
+        const imageUrl = getTokenLogoURL(quote.symbol, quote.image);
+        if (!imageUrl) return null;
+        return { imageUrl, profileUrl: `/watchlists/${token.coinId}` };
+      })
+      .filter(
+        (avatar): avatar is { imageUrl: string; profileUrl: string } =>
+          avatar !== null,
+      );
+
+    const tokenExtraCount = Math.max(
+      0,
+      tokensByValue.length - tokenAvatarUrls.length,
+    );
+
+    const themeKey = (row.group.color ??
+      "default") as keyof typeof COLOR_THEMES;
+    const theme = COLOR_THEMES[themeKey] ?? COLOR_THEMES.default;
+
+    return {
+      id: row.group._id,
+      name: row.group.name,
+      color: row.group.color ?? "default",
+      valueUsd,
+      percent,
+      barClassName: theme.bg,
+      tokenSegments,
+      tokenAvatarUrls,
+      tokenExtraCount,
+    };
+  });
+
+  rows.sort((a, b) => b.valueUsd - a.valueUsd);
+  return rows;
+}
+
+type GroupRowView = ReturnType<typeof buildGroupRows>[number];
+
+/**
+ * Defer loading the heavy activity feed panel: idle callback plus an
+ * IntersectionObserver on the sentinel, whichever fires first.
+ */
+function useDeferredFeedPanel() {
+  const [shouldLoadFeedPanel, setShouldLoadFeedPanel] = useState(false);
+  const feedPanelSentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (shouldLoadFeedPanel) return;
+
+    const loadPanel = () => {
+      setShouldLoadFeedPanel(true);
+      void loadOverviewActivityFeedPanel();
+    };
+
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    let idleCallbackId: number | null = null;
+
+    if ("requestIdleCallback" in window) {
+      idleCallbackId = window.requestIdleCallback(loadPanel, { timeout: 2_000 });
+    } else {
+      idleTimer = setTimeout(loadPanel, 1_000);
+    }
+
+    const node = feedPanelSentinelRef.current;
+    if (!node || typeof IntersectionObserver !== "function") {
+      return () => {
+        if (idleCallbackId !== null) window.cancelIdleCallback(idleCallbackId);
+        if (idleTimer !== null) clearTimeout(idleTimer);
+      };
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        loadPanel();
+        observer.disconnect();
+      },
+      { rootMargin: "400px 0px" },
+    );
+
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      if (idleCallbackId !== null) window.cancelIdleCallback(idleCallbackId);
+      if (idleTimer !== null) clearTimeout(idleTimer);
+    };
+  }, [shouldLoadFeedPanel]);
+
+  return { shouldLoadFeedPanel, feedPanelSentinelRef };
+}
+
+/** Stacked per-group bar under the performance chart. */
+function HoldingsBreakdownBar(props: { rows: GroupRowView[] }) {
+  return (
+    <div className="mt-4">
+      <div className="text-xs font-medium text-zinc-600 dark:text-white/60 mb-2">
+        Holdings Breakdown
+      </div>
+      <div className="h-3 w-full overflow-hidden rounded-[4px]">
+        <div className="flex h-full w-full gap-0.5">
+          {props.rows.map((row) => (
+            <div
+              key={row.id}
+              className={cn(
+                "h-full rounded-[4px] opacity-90",
+                row.barClassName,
+              )}
+              style={{
+                width: `${Math.max(10, row.percent * 100)}%`,
+              }}
+              aria-hidden
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Per-group rows: name, token segment bar, % of total, avatar stack. */
+function HoldingsGroupList(props: { rows: GroupRowView[] }) {
+  return (
+    <div className="mt-2">
+      <div className="space-y-2">
+        {props.rows.map((row) => (
+          <div key={row.id} className="py-2">
+            {/* Single row: stacks | name | token bar | % */}
+            <div className="flex flex-row justify-between items-center gap-3">
+              <div className="flex flex-col">
+                <div className="flex flex-col items-start text-left gap-1">
+                  <div className="min-w-0 truncate text-xs font-medium text-zinc-950 dark:text-white">
+                    {row.name}
+                  </div>
+                  <div className="min-w-0 h-2 w-full overflow-hidden rounded-[2px]">
+                    <div className="flex h-full w-full gap-0.5">
+                      {row.tokenSegments.map((segment) => (
+                        <div
+                          key={segment.coinId}
+                          className="h-full rounded-[2px]"
+                          style={{
+                            width: `${Math.max(10, segment.percent * 100)}%`,
+                            backgroundColor: segment.color,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-[11px] font-medium tabular-nums text-zinc-600 dark:text-white/60">
+                  {(row.percent * 100).toFixed(0)}%
+                </div>
+              </div>
+              <AvatarCircles
+                avatarUrls={row.tokenAvatarUrls}
+                numPeople={row.tokenExtraCount}
+                className="scale-[0.9] origin-left"
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface PortfolioValueCardProps {
+  displayValueUsd: number;
+  hasHoldings: boolean;
+  rangeChange: { deltaUsd: number; deltaPct: number; isAvailable: boolean };
+  chartNote: string | null;
+  activeTimeScale: string;
+  setActiveTimeScale: (scale: string) => void;
+  portfolioChartPoints: ComponentProps<
+    typeof OverviewPerformanceChart
+  >["portfolioPoints"];
+  marketPoints: ComponentProps<typeof OverviewPerformanceChart>["marketPoints"];
+  onScrub: (time: number | null) => void;
+  groupRows: GroupRowView[];
+}
+
+/** Left column card: portfolio value, performance chart, group breakdown. */
+function PortfolioValueCard({
+  displayValueUsd,
+  hasHoldings,
+  rangeChange,
+  chartNote,
+  activeTimeScale,
+  setActiveTimeScale,
+  portfolioChartPoints,
+  marketPoints,
+  onScrub,
+  groupRows,
+}: PortfolioValueCardProps) {
+  return (
+    <Card
+      className={cn(
+        "bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)] will-change-auto",
+      )}
+    >
+      <CardHeader className="p-0">
+        <CardTitle className="sr-only mb-0 text-pretty text-balance text-sm font-medium text-zinc-600 dark:text-white/60">
+          Portfolio value
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 pt-0 relative">
+        <div className="absolute top-0 left-6 flex flex-col items-start text-left">
+          <div className="text-pretty text-balance text-3xl tabular-nums text-zinc-950 dark:text-white">
+            {formatUsdPrice(displayValueUsd)}
+          </div>
+          {hasHoldings && rangeChange.isAvailable ? (
+            <ChartRangePerformanceLabel
+              deltaUsd={rangeChange.deltaUsd}
+              deltaPct={rangeChange.deltaPct}
+            />
+          ) : null}
+          {hasHoldings && chartNote ? (
+            <div className="mt-3 text-[11px] text-zinc-600 dark:text-white/60">
+              {chartNote}
+            </div>
+          ) : null}
+        </div>
+
+        {/* Performance chart */}
+        <div className="relative mt-4 -mx-5">
+          <div
+            className="pointer-events-none absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
+              backgroundRepeat: "repeat",
+              maskImage:
+                "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
+              WebkitMaskImage:
+                "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
+            }}
+          />
+          <div className="flex items-center justify-end px-5 pb-2">
+            <TimeScaleSelector
+              activeTimeScale={activeTimeScale}
+              setActiveTimeScale={setActiveTimeScale}
+            />
+          </div>
+          <div className="">
+            {!hasHoldings ? (
+              <div className="flex h-[240px] items-center justify-center text-sm text-zinc-600 dark:text-white/60">
+                No holdings to chart yet.
+              </div>
+            ) : (
+              <OverviewPerformanceChart
+                portfolioPoints={portfolioChartPoints}
+                marketPoints={marketPoints}
+                height={240}
+                onHover={onScrub}
+                note={chartNote}
+              />
+            )}
+          </div>
+        </div>
+        <div className="w-full scale-x-110 h-[2px] bg-black border-b border-white/15 mt-4" />
+        {hasHoldings && groupRows.length > 0 ? (
+          <HoldingsBreakdownBar rows={groupRows} />
+        ) : null}
+        <div className="w-full scale-x-110 h-[2px] bg-black border-b border-white/15 mt-4" />
+
+        {!hasHoldings ? (
+          <p className="mt-4 text-pretty text-xs text-zinc-600 dark:text-white/60">
+            Add a quantity to any watchlist coin to see your holdings
+            value here.
+          </p>
+        ) : null}
+
+        {hasHoldings && groupRows.length > 0 ? (
+          <HoldingsGroupList rows={groupRows} />
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Right column: lazily loaded activity feed panel (skeleton until then). */
+function ActivityFeedColumn(props: {
+  shouldLoad: boolean;
+  overviewBootstrap: OverviewBootstrap | undefined;
+  onGenerate: ComponentProps<
+    typeof LazyOverviewActivityFeedPanel
+  >["dailyBrief"]["onGenerate"];
+}) {
+  const { shouldLoad, overviewBootstrap, onGenerate } = props;
+  if (!shouldLoad) return <OverviewActivityFeedPanelSkeleton />;
+  return (
+    <LazyOverviewActivityFeedPanel
+      events={
+        overviewBootstrap?.events ?? {
+          generatedAt: 0,
+          coinCount: 0,
+          limited: false,
+          events: [],
+        }
+      }
+      dailyBrief={{
+        status: overviewBootstrap?.status ?? "missing",
+        movers24h: overviewBootstrap?.movers24h ?? null,
+        events: overviewBootstrap?.events ?? null,
+        brief24h:
+          overviewBootstrap?.brief24h ?? {
+            status: "missing",
+            stale: true,
+            expiresAt: null,
+            generatedAt: null,
+            brief: null,
+          },
+        onGenerate,
+      }}
+    />
+  );
+}
 
 function loadOverviewActivityFeedPanel() {
   return import("./overview-activity-feed-panel");
@@ -162,7 +524,7 @@ function OverviewHoldingsSectionInner(props: {
 }) {
   const [activeTimeScale, setActiveTimeScale] = useState<string>("1d");
   const [scrubTime, setScrubTime] = useState<number | null>(null);
-  const [shouldLoadFeedPanel, setShouldLoadFeedPanel] = useState(false);
+  const { shouldLoadFeedPanel } = useDeferredFeedPanel();
 
   const overviewBootstrap = props.overviewBootstrap;
 
@@ -188,7 +550,6 @@ function OverviewHoldingsSectionInner(props: {
   );
 
   const snapshotRequestKeyRef = useRef<string>("");
-  const feedPanelSentinelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (!overviewBootstrap) return;
     if (overviewBootstrap.status === "fresh") return;
@@ -198,54 +559,16 @@ function OverviewHoldingsSectionInner(props: {
     refreshOverviewSnapshot({ force: false }).catch(() => {});
   }, [overviewBootstrap, refreshOverviewSnapshot]);
 
-  useEffect(() => {
-    if (shouldLoadFeedPanel) return;
-
-    const loadPanel = () => {
-      setShouldLoadFeedPanel(true);
-      void loadOverviewActivityFeedPanel();
-    };
-
-    let idleTimer: ReturnType<typeof setTimeout> | null = null;
-    let idleCallbackId: number | null = null;
-
-    if ("requestIdleCallback" in window) {
-      idleCallbackId = window.requestIdleCallback(loadPanel, { timeout: 2_000 });
-    } else {
-      idleTimer = setTimeout(loadPanel, 1_000);
-    }
-
-    const node = feedPanelSentinelRef.current;
-    if (!node || typeof IntersectionObserver !== "function") {
-      return () => {
-        if (idleCallbackId !== null) window.cancelIdleCallback(idleCallbackId);
-        if (idleTimer !== null) clearTimeout(idleTimer);
-      };
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
-        loadPanel();
-        observer.disconnect();
-      },
-      { rootMargin: "400px 0px" },
-    );
-
-    observer.observe(node);
-    return () => {
-      observer.disconnect();
-      if (idleCallbackId !== null) window.cancelIdleCallback(idleCallbackId);
-      if (idleTimer !== null) clearTimeout(idleTimer);
-    };
-  }, [shouldLoadFeedPanel]);
-
   const liveGroupsBreakdown = useQuery(
     api.watchlists.getMyHoldingsBreakdownByWatchlistGroup,
     {},
   ) as HoldingsGroupRow[] | undefined;
+  // Stable fallback so `groupsBreakdown` keeps referential identity across
+  // renders and downstream useMemo hooks don't recompute every time.
   const groupsBreakdown =
-    liveGroupsBreakdown ?? overviewBootstrap?.holdingsBreakdown ?? [];
+    liveGroupsBreakdown ??
+    overviewBootstrap?.holdingsBreakdown ??
+    EMPTY_GROUPS_BREAKDOWN;
 
   const positions = useMemo(() => {
     const byCoinId = new Map<string, number>();
@@ -283,82 +606,15 @@ function OverviewHoldingsSectionInner(props: {
     return sum;
   }, [positions, quotesQuery.data]);
 
-  const groupRows = useMemo(() => {
-    const quotes = quotesQuery.data ?? {};
-    const total = totalValueUsd;
-
-    const rows = groupsBreakdown.map((row) => {
-      let valueUsd = 0;
-      for (const position of row.positions) {
-        const price = quotes[position.coinId]?.current_price ?? 0;
-        valueUsd += position.holdings * price;
-      }
-
-      const percent = total > 0 ? clampPercent(valueUsd / total) : 0;
-
-      const tokensByValue = row.positions
-        .map((position) => {
-          const price = quotes[position.coinId]?.current_price ?? 0;
-          return {
-            coinId: position.coinId,
-            valueUsd: position.holdings * price,
-          };
-        })
-        .filter(
-          (token) => Number.isFinite(token.valueUsd) && token.valueUsd > 0,
-        )
-        .sort((a, b) => b.valueUsd - a.valueUsd);
-
-      const tokenColors = generatePastelColors(tokensByValue.length);
-      const tokenSegments = tokensByValue.map((token, index) => {
-        const segmentPercent =
-          valueUsd > 0 ? clampPercent(token.valueUsd / valueUsd) : 0;
-        return {
-          coinId: token.coinId,
-          percent: segmentPercent,
-          color: tokenColors[index] ?? "oklch(0.8047 0 0)",
-        };
-      });
-
-      const tokenAvatarUrls = tokensByValue
-        .slice(0, 4)
-        .map((token) => {
-          const quote = quotes[token.coinId];
-          if (!quote) return null;
-          const imageUrl = getTokenLogoURL(quote.symbol, quote.image);
-          if (!imageUrl) return null;
-          return { imageUrl, profileUrl: `/watchlists/${token.coinId}` };
-        })
-        .filter(
-          (avatar): avatar is { imageUrl: string; profileUrl: string } =>
-            avatar !== null,
-        );
-
-      const tokenExtraCount = Math.max(
-        0,
-        tokensByValue.length - tokenAvatarUrls.length,
-      );
-
-      const themeKey = (row.group.color ??
-        "default") as keyof typeof COLOR_THEMES;
-      const theme = COLOR_THEMES[themeKey] ?? COLOR_THEMES.default;
-
-      return {
-        id: row.group._id,
-        name: row.group.name,
-        color: row.group.color ?? "default",
-        valueUsd,
-        percent,
-        barClassName: theme.bg,
-        tokenSegments,
-        tokenAvatarUrls,
-        tokenExtraCount,
-      };
-    });
-
-    rows.sort((a, b) => b.valueUsd - a.valueUsd);
-    return rows;
-  }, [groupsBreakdown, quotesQuery.data, totalValueUsd]);
+  const groupRows = useMemo(
+    () =>
+      buildGroupRows({
+        groupsBreakdown,
+        quotes: quotesQuery.data,
+        totalValueUsd,
+      }),
+    [groupsBreakdown, quotesQuery.data, totalValueUsd],
+  );
 
   const valueSeries = useHoldingsValueOverTime({
     positions,
@@ -447,179 +703,26 @@ function OverviewHoldingsSectionInner(props: {
     <div className="w-full px-4 sm:px-6 py-6">
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-start">
         <div className="space-y-4 lg:col-span-5 lg:sticky lg:top-6 lg:self-start">
-          <Card
-            className={cn(
-              "bg-white dark:bg-zinc-950/50 backdrop-blur-xl border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] overflow-hidden shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)] will-change-auto",
-            )}
-          >
-            <CardHeader className="p-0">
-              <CardTitle className="sr-only mb-0 text-pretty text-balance text-sm font-medium text-zinc-600 dark:text-white/60">
-                Portfolio value
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 pt-0 relative">
-              <div className="absolute top-0 left-6 flex flex-col items-start text-left">
-                <div className="text-pretty text-balance text-3xl tabular-nums text-zinc-950 dark:text-white">
-                  {formatUsdPrice(displayValueUsd)}
-                </div>
-                {hasHoldings && rangeChange.isAvailable ? (
-                  <ChartRangePerformanceLabel
-                    deltaUsd={rangeChange.deltaUsd}
-                    deltaPct={rangeChange.deltaPct}
-                  />
-                ) : null}
-                {hasHoldings && chartNote ? (
-                  <div className="mt-3 text-[11px] text-zinc-600 dark:text-white/60">
-                    {chartNote}
-                  </div>
-                ) : null}
-              </div>
-
-              {/* Performance chart */}
-              <div className="relative mt-4 -mx-5">
-                <div
-                  className="pointer-events-none absolute inset-0 z-[-1] size-full opacity-40 dark:opacity-30"
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='10' viewBox='0 0 10 10' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='4' cy='4' r='1' fill='rgba(255,255,255,0.2)'/%3E%3C/svg%3E")`,
-                    backgroundRepeat: "repeat",
-                    maskImage:
-                      "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
-                    WebkitMaskImage:
-                      "radial-gradient(ellipse 62% 48% at 50% 48%, oklch(0 0 0) 28%, oklch(0 0 0) 42%, transparent 78%)",
-                  }}
-                />
-                <div className="flex items-center justify-end px-5 pb-2">
-                  <TimeScaleSelector
-                    activeTimeScale={activeTimeScale}
-                    setActiveTimeScale={setActiveTimeScale}
-                  />
-                </div>
-                <div className="">
-                  {!hasHoldings ? (
-                    <div className="flex h-[240px] items-center justify-center text-sm text-zinc-600 dark:text-white/60">
-                      No holdings to chart yet.
-                    </div>
-                  ) : (
-                    <OverviewPerformanceChart
-                      portfolioPoints={portfolioChartPoints}
-                      marketPoints={rebasedComparison.marketPoints}
-                      height={240}
-                      onHover={setScrubTime}
-                      note={chartNote}
-                    />
-                  )}
-                </div>
-              </div>
-              <div className="w-full scale-x-110 h-[2px] bg-black border-b border-white/15 mt-4" />
-              {hasHoldings && groupRows.length > 0 ? (
-                <div className="mt-4">
-                  <div className="text-xs font-medium text-zinc-600 dark:text-white/60 mb-2">
-                    Holdings Breakdown
-                  </div>
-                  <div className="h-3 w-full overflow-hidden rounded-[4px]">
-                    <div className="flex h-full w-full gap-0.5">
-                      {groupRows.map((row) => (
-                        <div
-                          key={row.id}
-                          className={cn(
-                            "h-full rounded-[4px] opacity-90",
-                            row.barClassName,
-                          )}
-                          style={{
-                            width: `${Math.max(10, row.percent * 100)}%`,
-                          }}
-                          aria-hidden
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-              <div className="w-full scale-x-110 h-[2px] bg-black border-b border-white/15 mt-4" />
-
-              {!hasHoldings ? (
-                <p className="mt-4 text-pretty text-xs text-zinc-600 dark:text-white/60">
-                  Add a quantity to any watchlist coin to see your holdings
-                  value here.
-                </p>
-              ) : null}
-
-              {hasHoldings && groupRows.length > 0 ? (
-                <div className="mt-2">
-                  <div className="space-y-2">
-                    {groupRows.map((row) => (
-                      <div key={row.id} className="py-2">
-                        {/* Single row: stacks | name | token bar | % */}
-                        <div className="flex flex-row justify-between items-center gap-3">
-                          <div className="flex flex-col">
-                            <div className="flex flex-col items-start text-left gap-1">
-                              <div className="min-w-0 truncate text-xs font-medium text-zinc-950 dark:text-white">
-                                {row.name}
-                              </div>
-                              <div className="min-w-0 h-2 w-full overflow-hidden rounded-[2px]">
-                                <div className="flex h-full w-full gap-0.5">
-                                  {row.tokenSegments.map((segment) => (
-                                    <div
-                                      key={segment.coinId}
-                                      className="h-full rounded-[2px]"
-                                      style={{
-                                        width: `${Math.max(10, segment.percent * 100)}%`,
-                                        backgroundColor: segment.color,
-                                      }}
-                                    />
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="text-[11px] font-medium tabular-nums text-zinc-600 dark:text-white/60">
-                              {(row.percent * 100).toFixed(0)}%
-                            </div>
-                          </div>
-                          <AvatarCircles
-                            avatarUrls={row.tokenAvatarUrls}
-                            numPeople={row.tokenExtraCount}
-                            className="scale-[0.9] origin-left"
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-
+          <PortfolioValueCard
+            displayValueUsd={displayValueUsd}
+            hasHoldings={hasHoldings}
+            rangeChange={rangeChange}
+            chartNote={chartNote}
+            activeTimeScale={activeTimeScale}
+            setActiveTimeScale={setActiveTimeScale}
+            portfolioChartPoints={portfolioChartPoints}
+            marketPoints={rebasedComparison.marketPoints}
+            onScrub={setScrubTime}
+            groupRows={groupRows}
+          />
         </div>
 
         <div className="space-y-4 lg:col-span-7">
-          {shouldLoadFeedPanel ? (
-            <LazyOverviewActivityFeedPanel
-              events={
-                overviewBootstrap?.events ?? {
-                  generatedAt: 0,
-                  coinCount: 0,
-                  limited: false,
-                  events: [],
-                }
-              }
-              dailyBrief={{
-                status: overviewBootstrap?.status ?? "missing",
-                movers24h: overviewBootstrap?.movers24h ?? null,
-                events: overviewBootstrap?.events ?? null,
-                brief24h:
-                  overviewBootstrap?.brief24h ?? {
-                    status: "missing",
-                    stale: true,
-                    expiresAt: null,
-                    generatedAt: null,
-                    brief: null,
-                  },
-                onGenerate: generateOverviewBrief,
-              }}
-            />
-          ) : (
-            <OverviewActivityFeedPanelSkeleton />
-          )}
+          <ActivityFeedColumn
+            shouldLoad={shouldLoadFeedPanel}
+            overviewBootstrap={overviewBootstrap}
+            onGenerate={generateOverviewBrief}
+          />
         </div>
       </div>
     </div>

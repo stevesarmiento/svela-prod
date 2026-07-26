@@ -293,7 +293,10 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
                     {marketData?.price_change_percentage_24h?.toFixed(2)}%
                   </span>
                 </div>
-                <p className="text-xs text-gray-900 dark:text-white">
+                <p
+                  className="text-xs text-gray-900 dark:text-white"
+                  suppressHydrationWarning
+                >
                   <span className="text-xs text-gray-500 dark:text-white/60">
                     Today is{" "}
                   </span>

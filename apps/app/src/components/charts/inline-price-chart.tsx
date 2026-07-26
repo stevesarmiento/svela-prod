@@ -34,6 +34,10 @@ const INLINE_TIME_SCALE_DAYS: Record<InlineChartTimeScale, string> = {
 
 const DAY_SECONDS = 24 * 60 * 60
 
+// Stable fallback so downstream useMemo hooks keep referential identity
+// while the query has no data yet.
+const EMPTY_CHART_POINTS: Array<{ time: number; value: number }> = []
+
 function clampEvenDownsample<T>(items: Array<T>, maxItems: number): Array<T> {
   if (items.length <= maxItems) return items
   if (maxItems <= 1) return [items[items.length - 1] as T]
@@ -210,7 +214,7 @@ export function InlinePriceChart({
     enabled,
   })
 
-  const rawChartData = marketChartQuery.data?.points ?? []
+  const rawChartData = marketChartQuery.data?.points ?? EMPTY_CHART_POINTS
   const rawChartDataWithLatest = useMemo(
     () => upsertLatestValue(rawChartData, basePrice),
     [rawChartData, basePrice],

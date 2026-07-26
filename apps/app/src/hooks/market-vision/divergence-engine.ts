@@ -34,18 +34,6 @@ export interface DivergenceEngineConfig {
   showHidden: boolean
 }
 
-export const DEFAULT_DIVERGENCE_ENGINE_CONFIG: DivergenceEngineConfig = {
-  leftBars: 5,
-  rightBars: 5,
-  pairMode: 'TV-like',
-  tolBars: 2,
-  allowEqual: true,
-  priceEps: 0,
-  oscEps: 0,
-  showRegular: true,
-  showHidden: true,
-}
-
 function greater(a: number, b: number, eps: number, allowEqual: boolean): boolean {
   return allowEqual ? a >= b - eps : a > b + eps
 }

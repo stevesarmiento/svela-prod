@@ -10,7 +10,7 @@ import type { CoinMarketData } from "@/types/coins";
 import { type Row, flexRender } from "@tanstack/react-table";
 import { Checkbox } from "@v1/ui/checkbox";
 import { cn } from "@v1/ui/cn";
-import { motion } from "motion/react";
+import { m } from "motion/react";
 import Link from "next/link";
 import { memo } from "react";
 import { SCREENER_TABLE_GRID_TEMPLATE_COLUMNS } from "./screener-table-layout";
@@ -46,33 +46,31 @@ function ScreenerTableRowInner({
       meta?.interactive && "min-w-[72px] flex-nowrap whitespace-nowrap",
     );
 
-    // First cell — merged select + token: hover reveals the checkbox, click
-    // toggles selection (same implementation as the watchlist/chart tables).
+    // First cell — merged select + token: hover reveals the checkbox, but
+    // only the checkbox itself toggles selection. Clicks anywhere else in the
+    // cell fall through to the row Link (navigate to the token page). Same
+    // implementation as the watchlist/chart tables.
     if (cellIndex === 0 && !isLoadingRow) {
       return (
+        // react-doctor-disable-next-line react-doctor/prefer-tag-over-role -- wraps a Radix checkbox button inside a row Link; a real button would nest interactive elements (invalid HTML)
         <div
           key={cell.id}
           className={cellClassName}
           role="button"
           tabIndex={0}
-          onClick={(event) => {
-            event.preventDefault(); // Always prevent navigation for first cell (selection mode)
-            event.stopPropagation();
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
 
             // Let the checkbox handle its own toggling (avoid double-toggle).
             const target = event.target as HTMLElement;
             if (target.closest('[data-screener-row-checkbox="true"]')) return;
 
-            onCoinSelect(coinId, !isSelected);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
             event.preventDefault();
             event.stopPropagation();
             onCoinSelect(coinId, !isSelected);
           }}
         >
-          <motion.div
+          <m.div
             className="relative flex h-full w-full min-w-0 items-center justify-start"
             variants={SELECT_CELL_VARIANTS}
             initial="rest"
@@ -80,10 +78,16 @@ function ScreenerTableRowInner({
             whileHover={hasSelectedCoins ? undefined : "revealed"}
           >
             {/* Checkbox - stable DOM to avoid "jump" on select/deselect */}
-            <motion.div
+            <m.div
               className="absolute left-0 z-10 px-1"
               variants={SELECT_CHECKBOX_VARIANTS}
               transition={selectRevealTransition}
+              onClick={(event) => {
+                // Checkbox toggles via onCheckedChange; just keep the click
+                // from reaching the row Link (would navigate / double-toggle).
+                event.preventDefault();
+                event.stopPropagation();
+              }}
             >
               <Checkbox
                 data-screener-row-checkbox="true"
@@ -94,17 +98,17 @@ function ScreenerTableRowInner({
                 }
                 aria-label={`Select ${row.original.name}`}
               />
-            </motion.div>
+            </m.div>
 
             {/* Token content slides right to make room for the checkbox */}
-            <motion.div
+            <m.div
               className="flex min-w-0 items-center"
               variants={SELECT_CONTENT_VARIANTS}
               transition={selectRevealTransition}
             >
               {flexRender(cell.column.columnDef.cell, cell.getContext())}
-            </motion.div>
-          </motion.div>
+            </m.div>
+          </m.div>
         </div>
       );
     }
@@ -113,6 +117,7 @@ function ScreenerTableRowInner({
     // the row link (previously hardcoded to "the last cell").
     if (meta?.interactive) {
       return (
+        // react-doctor-disable-next-line react-doctor/no-static-element-interactions -- event shield: handlers only stop propagation for nested controls
         <div
           key={cell.id}
           className={cellClassName}

@@ -302,16 +302,17 @@ export function computeMarketVisionB(
 
   const buySignalDiv: boolean[] = new Array(times.length).fill(false)
   const sellSignalDiv: boolean[] = new Array(times.length).fill(false)
+  const { wtShowDiv, wtDivOBLevel_addshow } = finalConfig.waveTrend
   for (let i = 0; i < times.length; i++) {
     buySignalDiv[i] =
-      (finalConfig.waveTrend.wtShowDiv && Boolean(wtDivs.bullDiv[i])) ||
-      (finalConfig.waveTrend.wtShowDiv && finalConfig.waveTrend.wtDivOBLevel_addshow && Boolean(wtDivs2.bullDiv[i])) ||
+      (wtShowDiv && Boolean(wtDivs.bullDiv[i])) ||
+      (wtShowDiv && wtDivOBLevel_addshow && Boolean(wtDivs2.bullDiv[i])) ||
       (finalConfig.stoch.stochShowDiv && Boolean(stochDivs.bullDiv[i])) ||
       (finalConfig.rsi.rsiShowDiv && Boolean(rsiDivs.bullDiv[i]))
 
     sellSignalDiv[i] =
-      (finalConfig.waveTrend.wtShowDiv && Boolean(wtDivs.bearDiv[i])) ||
-      (finalConfig.waveTrend.wtShowDiv && finalConfig.waveTrend.wtDivOBLevel_addshow && Boolean(wtDivs2.bearDiv[i])) ||
+      (wtShowDiv && Boolean(wtDivs.bearDiv[i])) ||
+      (wtShowDiv && wtDivOBLevel_addshow && Boolean(wtDivs2.bearDiv[i])) ||
       (finalConfig.stoch.stochShowDiv && Boolean(stochDivs.bearDiv[i])) ||
       (finalConfig.rsi.rsiShowDiv && Boolean(rsiDivs.bearDiv[i]))
   }

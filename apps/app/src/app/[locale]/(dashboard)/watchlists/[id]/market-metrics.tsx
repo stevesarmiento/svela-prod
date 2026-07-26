@@ -163,6 +163,10 @@ function computeAtrPct14d(dailyOhlcv: ReadonlyArray<DailyOhlcvBar>): number | nu
   return Number.isFinite(pct) ? pct : null
 }
 
+// Hoisted default so the reference is stable across renders (keeps memo /
+// hook dependency checks referentially equal when the prop is omitted).
+const EMPTY_OHLCV: ReadonlyArray<DailyOhlcvBar> = []
+
 interface MarketMetricsProps {
   data: {
     // CoinGecko format
@@ -179,7 +183,7 @@ interface MarketMetricsProps {
   isPending?: boolean
 }
 
-export const MarketMetrics = memo(function MarketMetrics({ data, dailyOhlcv = [], isPending }: MarketMetricsProps) {
+export const MarketMetrics = memo(function MarketMetrics({ data, dailyOhlcv = EMPTY_OHLCV, isPending }: MarketMetricsProps) {
   // React 19: Defer expensive data processing
   const deferredData = useDeferredValue(data)
   // React 19: Memoized debug logging (only in development)

@@ -295,6 +295,10 @@ export function createAxisOverlay({
     }
 
     function updatePriceExtremaMarkers() {
+        // Read layout once up front so style writes in the loop below never
+        // interleave with layout reads (avoids forced synchronous layout).
+        const containerWidth = containerEl.clientWidth;
+        const containerHeight = containerEl.clientHeight;
         priceExtremaMarkers.forEach((marker, index) => {
             const markerEl = ensureExtremaMarkerEl(index);
             const x = chart.timeScale().timeToCoordinate(marker.time);
@@ -305,9 +309,9 @@ export function createAxisOverlay({
                 y != null &&
                 Number.isFinite(y) &&
                 x >= 0 &&
-                x <= containerEl.clientWidth &&
+                x <= containerWidth &&
                 y >= 0 &&
-                y <= containerEl.clientHeight;
+                y <= containerHeight;
             const color = marker.color ?? 'oklch(1 0 0 / 0.18)';
 
             markerEl.tagWrap.style.display = isVisible ? 'block' : 'none';
@@ -318,7 +322,7 @@ export function createAxisOverlay({
             markerEl.line.style.backgroundImage =
                 `repeating-linear-gradient(to right, ${color} 0px, ${color} 4px, transparent 4px, transparent 8px)`;
             if (isVisible) {
-                const width = Math.max(1, containerEl.clientWidth);
+                const width = Math.max(1, containerWidth);
                 const length = Math.max(0, width - 2 - x);
                 markerEl.lineWrap.style.display = 'block';
                 markerEl.lineWrap.style.transform = `translate3d(${x}px, ${y}px, 0) translateY(-50%)`;

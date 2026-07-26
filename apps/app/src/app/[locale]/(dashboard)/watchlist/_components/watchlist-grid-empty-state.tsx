@@ -1,7 +1,7 @@
 'use client'
 
 import { type ComponentType, useEffect, useMemo, useState } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { m, useReducedMotion } from 'motion/react'
 import { LayoutGrid, Plus, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@v1/ui/card'
 import { cn } from '@v1/ui/cn'
@@ -176,7 +176,7 @@ function IllustrationWatchlistCard({
   const sparklineLatestValue = sparklineData[sparklineData.length - 1]?.value ?? 0
 
   return (
-    <motion.div
+    <m.div
       variants={itemVariants as never}
       animate={shouldReduceMotion ? {} : (floatingAnimation(floatDelay) as never)}
       className={absoluteClassName}
@@ -264,11 +264,46 @@ function IllustrationWatchlistCard({
           </div>
         </CardContent>
       </Card>
-    </motion.div>
+    </m.div>
   )
 }
 
-export function WatchlistEmptyIllustration() {
+const CONTAINER_VARIANTS = {
+  initial: { opacity: 0 },
+  animate: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.2,
+    },
+  },
+}
+
+const ITEM_VARIANTS = {
+  initial: { scale: 0.8, opacity: 0, y: 10 },
+  animate: {
+    scale: 1,
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: 'spring',
+      stiffness: 100,
+      damping: 15,
+    },
+  },
+}
+
+const floatingAnimation = (delay = 0) => ({
+  y: [0, -12, 0],
+  transition: {
+    duration: 1.5,
+    repeat: Number.POSITIVE_INFINITY,
+    ease: 'easeInOut',
+    delay,
+  },
+})
+
+function WatchlistEmptyIllustration() {
   const shouldReduceMotion: boolean = useReducedMotion() ?? false
 
   const gridKeys = useMemo(
@@ -276,44 +311,9 @@ export function WatchlistEmptyIllustration() {
     [],
   )
 
-  const containerVariants = {
-    initial: { opacity: 0 },
-    animate: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-        delayChildren: 0.2,
-      },
-    },
-  }
-
-  const itemVariants = {
-    initial: { scale: 0.8, opacity: 0, y: 10 },
-    animate: {
-      scale: 1,
-      opacity: 1,
-      y: 0,
-      transition: {
-        type: 'spring',
-        stiffness: 100,
-        damping: 15,
-      },
-    },
-  }
-
-  const floatingAnimation = (delay = 0) => ({
-    y: [0, -12, 0],
-    transition: {
-      duration: 1.5,
-      repeat: Number.POSITIVE_INFINITY,
-      ease: 'easeInOut',
-      delay,
-    },
-  })
-
   return (
-    <motion.div
-      variants={containerVariants}
+    <m.div
+      variants={CONTAINER_VARIANTS}
       initial="initial"
       animate="animate"
       className="relative w-80 h-80 mb-10 flex items-center justify-center"
@@ -338,7 +338,7 @@ export function WatchlistEmptyIllustration() {
           tokenLogos={CARD_TOKEN_LOGOS[0]}
           footerPillWidthClassName="w-10"
           sparklineSeed={11}
-          itemVariants={itemVariants}
+          itemVariants={ITEM_VARIANTS}
           shouldReduceMotion={shouldReduceMotion}
           floatingAnimation={floatingAnimation}
           floatDelay={0}
@@ -358,7 +358,7 @@ export function WatchlistEmptyIllustration() {
           tokenLogos={CARD_TOKEN_LOGOS[1]}
           footerPillWidthClassName="w-14"
           sparklineSeed={37}
-          itemVariants={itemVariants}
+          itemVariants={ITEM_VARIANTS}
           shouldReduceMotion={shouldReduceMotion}
           floatingAnimation={floatingAnimation}
           floatDelay={1.2}
@@ -378,13 +378,20 @@ export function WatchlistEmptyIllustration() {
           tokenLogos={CARD_TOKEN_LOGOS[2]}
           footerPillWidthClassName="w-12"
           sparklineSeed={23}
-          itemVariants={itemVariants}
+          itemVariants={ITEM_VARIANTS}
           shouldReduceMotion={shouldReduceMotion}
           floatingAnimation={floatingAnimation}
           floatDelay={0.6}
         />
       </div>
-    </motion.div>
+    </m.div>
+  )
+}
+
+function getKbdClassName(isActive: boolean) {
+  return cn(
+    'bg-white/10 text-white border-white/10 text-[10px] transition-colors',
+    isActive && 'bg-primary/30 border-primary/40 text-white',
   )
 }
 
@@ -428,18 +435,11 @@ export function WatchlistGridEmptyState() {
     }
   }, [])
 
-  function getKbdClassName(isActive: boolean) {
-    return cn(
-      'bg-white/10 text-white border-white/10 text-[10px] transition-colors',
-      isActive && 'bg-primary/30 border-primary/40 text-white',
-    )
-  }
-
   return (
     <div className="group flex flex-col items-center justify-center py-20 px-4 text-center">
       <WatchlistEmptyIllustration />
 
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.5 }}
@@ -456,7 +456,7 @@ export function WatchlistGridEmptyState() {
             <Kbd className={getKbdClassName(isNDown)}>N</Kbd> to create your first watchlist
           </p>
         </div>
-      </motion.div>
+      </m.div>
     </div>
   )
 }

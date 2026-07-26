@@ -136,8 +136,10 @@ export const _markSeriesFetched = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const now = Date.now();
-    const row = await getChartSeriesRow(ctx, args.coingeckoId, args.timeframe);
-    const hasStanding = await hasStandingDemand(ctx, args.coingeckoId);
+    const [row, hasStanding] = await Promise.all([
+      getChartSeriesRow(ctx, args.coingeckoId, args.timeframe),
+      hasStandingDemand(ctx, args.coingeckoId),
+    ]);
     const nextDueAt = computeNextDueAt({
       timeframe: args.timeframe,
       fetchedAt: args.fetchedAt,
@@ -249,19 +251,23 @@ export const tick = internalMutation({
         .order("asc")
         .take(quota);
 
-      let taken = 0;
-      for (const row of rows) {
-        // Skip rows a warmup currently holds (its lease clears on completion).
-        if (row.leaseUntil && row.leaseUntil > now) continue;
+      // Skip rows a warmup currently holds (its lease clears on completion).
+      const eligible = rows.filter(
+        (row) => !(row.leaseUntil && row.leaseUntil > now),
+      );
+      for (const row of eligible) {
         picked.push({ coingeckoId: row.coingeckoId, timeframe });
-        await ctx.db.patch(row._id, {
-          leaseUntil: now + PICK_LEASE_MS,
-          nextDueAt: now + PICK_LEASE_MS, // crash-retry: re-picked next tick after lease
-          updatedAt: now,
-        });
-        taken += 1;
       }
-      return taken;
+      await Promise.all(
+        eligible.map((row) =>
+          ctx.db.patch(row._id, {
+            leaseUntil: now + PICK_LEASE_MS,
+            nextDueAt: now + PICK_LEASE_MS, // crash-retry: re-picked next tick after lease
+            updatedAt: now,
+          }),
+        ),
+      );
+      return eligible.length;
     };
 
     // Pass 1: class shares, unused share rolls forward (long tail funded last
@@ -395,41 +401,43 @@ export const _reconcileChartSeriesBatch = internalMutation({
       if (seen.has(row.coingeckoId)) continue;
       seen.add(row.coingeckoId);
 
-      for (const timeframe of CORE_TIMEFRAMES) {
-        const interval = getEffectiveIntervalMs({
-          timeframe,
-          now,
-          lastRequestedAt: undefined,
-          hasStanding: true,
-        });
-        if (interval === null) continue; // unreachable with hasStanding
+      await Promise.all(
+        CORE_TIMEFRAMES.map(async (timeframe) => {
+          const interval = getEffectiveIntervalMs({
+            timeframe,
+            now,
+            lastRequestedAt: undefined,
+            hasStanding: true,
+          });
+          if (interval === null) return; // unreachable with hasStanding
 
-        const existing = await getChartSeriesRow(
-          ctx,
-          row.coingeckoId,
-          timeframe,
-        );
-        if (existing) {
-          // Standing floor maintenance: revive rows parked at the T2 sentinel.
-          if (existing.nextDueAt >= FAR_FUTURE_MS) {
-            await ctx.db.patch(existing._id, {
-              nextDueAt: now + Math.floor(Math.random() * interval),
-              updatedAt: now,
-            });
+          const existing = await getChartSeriesRow(
+            ctx,
+            row.coingeckoId,
+            timeframe,
+          );
+          if (existing) {
+            // Standing floor maintenance: revive rows parked at the T2 sentinel.
+            if (existing.nextDueAt >= FAR_FUTURE_MS) {
+              await ctx.db.patch(existing._id, {
+                nextDueAt: now + Math.floor(Math.random() * interval),
+                updatedAt: now,
+              });
+            }
+            return;
           }
-          continue;
-        }
 
-        // Stagger initial due times so seeding doesn't thundering-herd a tick.
-        await ctx.db.insert("chartSeries", {
-          coingeckoId: row.coingeckoId,
-          timeframe,
-          nextDueAt: now + Math.floor(Math.random() * interval),
-          consecutiveErrors: 0,
-          createdAt: now,
-          updatedAt: now,
-        });
-      }
+          // Stagger initial due times so seeding doesn't thundering-herd a tick.
+          await ctx.db.insert("chartSeries", {
+            coingeckoId: row.coingeckoId,
+            timeframe,
+            nextDueAt: now + Math.floor(Math.random() * interval),
+            consecutiveErrors: 0,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }),
+      );
     }
 
     if (!page.isDone && args.remainingRounds > 0) {
@@ -512,28 +520,30 @@ export const _relabelViewedTrackedCoins = internalMutation({
       .withIndex("by_reason", (q) => q.eq("reason", "watchlist"))
       .paginate({ numItems: 100, cursor: args.cursor });
 
-    let relabeled = 0;
-    for (const row of page.page) {
-      const watched = await ctx.db
-        .query("watchlists")
-        .withIndex("by_coin", (q) => q.eq("coinId", row.coingeckoId))
-        .first();
-      if (watched) continue;
+    const outcomes = await Promise.all(
+      page.page.map(async (row) => {
+        const watched = await ctx.db
+          .query("watchlists")
+          .withIndex("by_coin", (q) => q.eq("coinId", row.coingeckoId))
+          .first();
+        if (watched) return 0;
 
-      const existingViewed = await ctx.db
-        .query("trackedCoins")
-        .withIndex("by_coingecko_id_and_reason", (q) =>
-          q.eq("coingeckoId", row.coingeckoId).eq("reason", "viewed"),
-        )
-        .first();
+        const existingViewed = await ctx.db
+          .query("trackedCoins")
+          .withIndex("by_coingecko_id_and_reason", (q) =>
+            q.eq("coingeckoId", row.coingeckoId).eq("reason", "viewed"),
+          )
+          .first();
 
-      if (existingViewed) {
-        await ctx.db.delete(row._id);
-      } else {
-        await ctx.db.patch(row._id, { reason: "viewed", updatedAt: now });
-      }
-      relabeled += 1;
-    }
+        if (existingViewed) {
+          await ctx.db.delete(row._id);
+        } else {
+          await ctx.db.patch(row._id, { reason: "viewed", updatedAt: now });
+        }
+        return 1;
+      }),
+    );
+    const relabeled = outcomes.reduce<number>((sum, n) => sum + n, 0);
 
     if (!page.isDone && remainingRounds > 0) {
       await ctx.scheduler.runAfter(

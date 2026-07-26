@@ -41,6 +41,7 @@ export const migrateRowHoldingsToCanonical = internalMutation({
       if (legacy === undefined) continue;
 
       if (typeof legacy === "number" && Number.isFinite(legacy) && legacy > 0) {
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- iterations are order-dependent (loop-carried state)
         const existing = await ctx.db
           .query("coinHoldings")
           .withIndex("by_user_coin", (q) =>

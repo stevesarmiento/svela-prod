@@ -120,30 +120,34 @@ async function mergeDuplicateTargetUser(
   );
   const deletedWalletIds = new Set<Id<"portfolioWallets">>();
 
-  for (const wallet of targetWallets) {
-    const coins = await ctx.db
-      .query("portfolioWalletCoins")
-      .withIndex("by_wallet", (q) => q.eq("walletId", wallet._id))
-      .collect();
+  await Promise.all(
+    targetWallets.map(async (wallet) => {
+      const coins = await ctx.db
+        .query("portfolioWalletCoins")
+        .withIndex("by_wallet", (q) => q.eq("walletId", wallet._id))
+        .collect();
 
-    if (sourceAddresses.has(wallet.address.toLowerCase())) {
-      // Source already tracks this wallet address; drop the duplicate.
-      deletedWalletIds.add(wallet._id);
-      result.rowsDeleted += 1 + coins.length;
-      if (apply) {
-        for (const coin of coins) await ctx.db.delete(coin._id);
-        await ctx.db.delete(wallet._id);
-      }
-    } else {
-      result.rowsReassigned += 1 + coins.length;
-      if (apply) {
-        await ctx.db.patch(wallet._id, { userId: source._id, updatedAt: now });
-        for (const coin of coins) {
-          await ctx.db.patch(coin._id, { userId: source._id });
+      if (sourceAddresses.has(wallet.address.toLowerCase())) {
+        // Source already tracks this wallet address; drop the duplicate.
+        deletedWalletIds.add(wallet._id);
+        result.rowsDeleted += 1 + coins.length;
+        if (apply) {
+          await Promise.all(coins.map((coin) => ctx.db.delete(coin._id)));
+          await ctx.db.delete(wallet._id);
+        }
+      } else {
+        result.rowsReassigned += 1 + coins.length;
+        if (apply) {
+          await Promise.all([
+            ctx.db.patch(wallet._id, { userId: source._id, updatedAt: now }),
+            ...coins.map((coin) =>
+              ctx.db.patch(coin._id, { userId: source._id }),
+            ),
+          ]);
         }
       }
-    }
-  }
+    }),
+  );
 
   // --- watchlistGroups ---
   const [targetGroups, sourceGroups] = await Promise.all([
@@ -160,7 +164,7 @@ async function mergeDuplicateTargetUser(
   const sourceSlugs = new Set(sourceGroups.map((g) => g.slug));
   const sourceHasDefault = sourceGroups.some((g) => g.isDefault);
 
-  for (const group of targetGroups) {
+  const groupPatches = targetGroups.map((group) => {
     const patch: Partial<Doc<"watchlistGroups">> = {
       userId: source._id,
       updatedAt: now,
@@ -177,7 +181,12 @@ async function mergeDuplicateTargetUser(
     }
 
     result.rowsReassigned++;
-    if (apply) await ctx.db.patch(group._id, patch);
+    return { groupId: group._id, patch };
+  });
+  if (apply) {
+    await Promise.all(
+      groupPatches.map(({ groupId, patch }) => ctx.db.patch(groupId, patch)),
+    );
   }
 
   // --- watchlists ---
@@ -186,9 +195,13 @@ async function mergeDuplicateTargetUser(
     .withIndex("by_user", (q) => q.eq("userId", target._id))
     .collect();
 
-  for (const row of targetWatchlists) {
-    result.rowsReassigned++;
-    if (apply) await ctx.db.patch(row._id, { userId: source._id });
+  result.rowsReassigned += targetWatchlists.length;
+  if (apply) {
+    await Promise.all(
+      targetWatchlists.map((row) =>
+        ctx.db.patch(row._id, { userId: source._id }),
+      ),
+    );
   }
 
   // --- coinHoldings (canonical per userId+coinId; keep source's value on conflict) ---
@@ -204,15 +217,17 @@ async function mergeDuplicateTargetUser(
   ]);
 
   const sourceHoldingCoinIds = new Set(sourceHoldings.map((row) => row.coinId));
-  for (const row of targetHoldings) {
-    if (sourceHoldingCoinIds.has(row.coinId)) {
-      result.rowsDeleted++;
-      if (apply) await ctx.db.delete(row._id);
-    } else {
-      result.rowsReassigned++;
-      if (apply) await ctx.db.patch(row._id, { userId: source._id });
-    }
-  }
+  await Promise.all(
+    targetHoldings.map(async (row) => {
+      if (sourceHoldingCoinIds.has(row.coinId)) {
+        result.rowsDeleted++;
+        if (apply) await ctx.db.delete(row._id);
+      } else {
+        result.rowsReassigned++;
+        if (apply) await ctx.db.patch(row._id, { userId: source._id });
+      }
+    }),
+  );
 
   // --- userSettings (conservative: keep source settings if present) ---
   const [targetSettings, sourceSettings] = await Promise.all([
@@ -226,18 +241,25 @@ async function mergeDuplicateTargetUser(
       .collect(),
   ]);
 
+  // Decide keep/delete synchronously first (order-sensitive), then fan out.
   let sourceHasSettings = sourceSettings.length > 0;
-  for (const settings of targetSettings) {
+  const settingsActions = targetSettings.map((settings) => {
     if (sourceHasSettings) {
       result.rowsDeleted++;
-      if (apply) await ctx.db.delete(settings._id);
-    } else {
-      sourceHasSettings = true;
-      result.rowsReassigned++;
-      if (apply) {
-        await ctx.db.patch(settings._id, { userId: source._id, updatedAt: now });
-      }
+      return { settings, keep: false };
     }
+    sourceHasSettings = true;
+    result.rowsReassigned++;
+    return { settings, keep: true };
+  });
+  if (apply) {
+    await Promise.all(
+      settingsActions.map(({ settings, keep }) =>
+        keep
+          ? ctx.db.patch(settings._id, { userId: source._id, updatedAt: now })
+          : ctx.db.delete(settings._id),
+      ),
+    );
   }
 
   // --- userApiKeys (reassign non-conflicting providers, drop conflicts) ---
@@ -252,18 +274,25 @@ async function mergeDuplicateTargetUser(
       .collect(),
   ]);
 
+  // Decide keep/delete synchronously first (order-sensitive), then fan out.
   const sourceProviders = new Set(sourceKeys.map((k) => k.provider));
-  for (const key of targetKeys) {
+  const keyActions = targetKeys.map((key) => {
     if (sourceProviders.has(key.provider)) {
       result.rowsDeleted++;
-      if (apply) await ctx.db.delete(key._id);
-    } else {
-      sourceProviders.add(key.provider);
-      result.rowsReassigned++;
-      if (apply) {
-        await ctx.db.patch(key._id, { userId: source._id, updatedAt: now });
-      }
+      return { key, keep: false };
     }
+    sourceProviders.add(key.provider);
+    result.rowsReassigned++;
+    return { key, keep: true };
+  });
+  if (apply) {
+    await Promise.all(
+      keyActions.map(({ key, keep }) =>
+        keep
+          ? ctx.db.patch(key._id, { userId: source._id, updatedAt: now })
+          : ctx.db.delete(key._id),
+      ),
+    );
   }
 }
 
@@ -281,25 +310,22 @@ export const updateAvatarUrls = mutation({
   handler: async (ctx, args) => {
     requireMigrationSecret(args.secret);
 
-    let patched = 0;
-    let missing = 0;
+    const outcomes = await Promise.all(
+      args.updates.map(async (update) => {
+        const user = await ctx.db
+          .query("users")
+          .withIndex("by_clerk_id", (q) => q.eq("clerkId", update.clerkId))
+          .first();
 
-    for (const update of args.updates) {
-      const user = await ctx.db
-        .query("users")
-        .withIndex("by_clerk_id", (q) => q.eq("clerkId", update.clerkId))
-        .first();
+        if (!user) return "missing" as const;
 
-      if (!user) {
-        missing++;
-        continue;
-      }
+        await ctx.db.patch(user._id, { avatarUrl: update.avatarUrl });
+        return "patched" as const;
+      }),
+    );
 
-      await ctx.db.patch(user._id, { avatarUrl: update.avatarUrl });
-      patched++;
-    }
-
-    return { patched, missing };
+    const patched = outcomes.filter((o) => o === "patched").length;
+    return { patched, missing: outcomes.length - patched };
   },
 });
 
@@ -347,6 +373,7 @@ export const linkDevClerkIds = mutation({
     };
 
     for (const link of args.links) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- iterations are order-dependent (loop-carried state)
       const mainUser = await ctx.db
         .query("users")
         .withIndex("by_clerk_id", (q) => q.eq("clerkId", link.prodClerkId))
@@ -427,6 +454,7 @@ export const migrateClerkUserIds = mutation({
     };
 
     for (const [from, to] of mapping) {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- iterations are order-dependent (loop-carried state)
       const sourceUser = await ctx.db
         .query("users")
         .withIndex("by_clerk_id", (q) => q.eq("clerkId", from))

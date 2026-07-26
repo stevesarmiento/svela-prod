@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, m, useReducedMotion } from "motion/react";
 import { useSearchParams } from "next/navigation";
 import { useClerk, useSignIn, useSignUp } from "@clerk/nextjs";
 import { Button } from "@v1/ui/button";
@@ -161,7 +161,7 @@ export function LoginMethods() {
     <div className="space-y-3">
       <AnimatePresence mode="wait" initial={false}>
         {view === "providers" ? (
-          <motion.div
+          <m.div
             key="providers"
             initial={shouldReduceMotion ? false : { opacity: 0, x: -16 }}
             animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
@@ -204,9 +204,9 @@ export function LoginMethods() {
                 {error}
               </div>
             ) : null}
-          </motion.div>
+          </m.div>
         ) : (
-          <motion.div
+          <m.div
             key="solana_wallets"
             initial={shouldReduceMotion ? false : { opacity: 0, x: 16 }}
             animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, x: 0 }}
@@ -228,7 +228,7 @@ export function LoginMethods() {
               onBack={handleBackToProviders}
               onPickWallet={(walletName) => void startSolana(walletName)}
             />
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
 

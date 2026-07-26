@@ -1,0 +1,4 @@
+{
+  "entry": ["convex/**/*.ts"],
+  "ignore": ["convex/_generated/**"]
+}

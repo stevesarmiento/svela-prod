@@ -146,33 +146,38 @@ export const _touchTrackedCoinsBatch = internalMutation({
     const lastSeen = args.lastSeen ?? now;
     const coingeckoIds = normalizeCoingeckoIds(args.coingeckoIds);
 
-    for (const coingeckoId of coingeckoIds) {
-      const existing = await ctx.db
-        .query("trackedCoins")
-        .withIndex("by_coingecko_id_and_reason", (q) =>
-          q.eq("coingeckoId", coingeckoId).eq("reason", args.reason),
-        )
-        .first();
+    await Promise.all(
+      coingeckoIds.map(async (coingeckoId) => {
+        const existing = await ctx.db
+          .query("trackedCoins")
+          .withIndex("by_coingecko_id_and_reason", (q) =>
+            q.eq("coingeckoId", coingeckoId).eq("reason", args.reason),
+          )
+          .first();
 
-      if (existing) {
-        if (lastSeen - existing.lastSeen < TRACKED_COIN_TOUCH_MIN_INTERVAL_MS) {
-          continue;
+        if (existing) {
+          if (
+            lastSeen - existing.lastSeen <
+            TRACKED_COIN_TOUCH_MIN_INTERVAL_MS
+          ) {
+            return;
+          }
+          await ctx.db.patch(existing._id, {
+            lastSeen,
+            updatedAt: now,
+          });
+          return;
         }
-        await ctx.db.patch(existing._id, {
+
+        await ctx.db.insert("trackedCoins", {
+          coingeckoId,
+          reason: args.reason,
           lastSeen,
+          createdAt: now,
           updatedAt: now,
         });
-        continue;
-      }
-
-      await ctx.db.insert("trackedCoins", {
-        coingeckoId,
-        reason: args.reason,
-        lastSeen,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
+      }),
+    );
 
     return null;
   },
@@ -187,16 +192,18 @@ export const _removeTrackedCoinsReasonBatch = internalMutation({
   handler: async (ctx, args) => {
     const coingeckoIds = normalizeCoingeckoIds(args.coingeckoIds);
 
-    for (const coingeckoId of coingeckoIds) {
-      const existing = await ctx.db
-        .query("trackedCoins")
-        .withIndex("by_coingecko_id_and_reason", (q) =>
-          q.eq("coingeckoId", coingeckoId).eq("reason", args.reason),
-        )
-        .first();
-      if (!existing) continue;
-      await ctx.db.delete(existing._id);
-    }
+    await Promise.all(
+      coingeckoIds.map(async (coingeckoId) => {
+        const existing = await ctx.db
+          .query("trackedCoins")
+          .withIndex("by_coingecko_id_and_reason", (q) =>
+            q.eq("coingeckoId", coingeckoId).eq("reason", args.reason),
+          )
+          .first();
+        if (!existing) return;
+        await ctx.db.delete(existing._id);
+      }),
+    );
 
     return null;
   },

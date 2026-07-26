@@ -26,7 +26,9 @@ const isReact19 = REACT_MAJOR >= 19
 const OBSERVED_ATTRIBUTES = ['data', 'digits'] as const
 type ObservedAttribute = (typeof OBSERVED_ATTRIBUTES)[number]
 
-export class NumberFlowElement extends NumberFlowLite {
+// Not exported as a value so this file only exports components (Fast Refresh);
+// the type is re-exported below for ref typing.
+class NumberFlowElement extends NumberFlowLite {
 	static observedAttributes = isReact19 ? [] : OBSERVED_ATTRIBUTES
 	attributeChangedCallback(attr: ObservedAttribute, _oldValue: string, newValue: string) {
 		;(this as unknown as Record<string, unknown>)[attr] = JSON.parse(newValue)
@@ -115,6 +117,7 @@ class NumberFlowImpl extends React.Component<
 		if (prevProps?.onAnimationsStart)
 			this.el.removeEventListener('animationsstart', prevProps.onAnimationsStart as EventListener)
 		if (this.props.onAnimationsStart)
+			// react-doctor-disable-next-line react-doctor/class-component-missing-component-will-unmount-teardown -- vendored number-flow; componentWillUnmount removes both listeners, detector misses the updateProperties registration path
 			this.el.addEventListener('animationsstart', this.props.onAnimationsStart as EventListener)
 
 		if (prevProps?.onAnimationsFinish)
@@ -155,6 +158,17 @@ class NumberFlowImpl extends React.Component<
 		didUpdate?.()
 	}
 
+	override componentWillUnmount() {
+		if (!this.el) return
+		if (this.props.onAnimationsStart)
+			this.el.removeEventListener('animationsstart', this.props.onAnimationsStart as EventListener)
+		if (this.props.onAnimationsFinish)
+			this.el.removeEventListener(
+				'animationsfinish',
+				this.props.onAnimationsFinish as EventListener
+			)
+	}
+
 	private el?: NumberFlowElement
 
 	handleRef(el: NumberFlowElement) {
@@ -187,6 +201,7 @@ class NumberFlowImpl extends React.Component<
 				// Have to rename this:
 				class={className}
 				{...rest}
+				// react-doctor-disable-next-line react-doctor/dangerous-html-sink -- vendored SSR path; all interpolations HTML-escaped in renderInnerHTML
 				dangerouslySetInnerHTML={{ __html: BROWSER ? '' : renderInnerHTML(data) }}
 				suppressHydrationWarning
 				digits={serialize(digits)}
@@ -222,6 +237,7 @@ const NumberFlow = React.forwardRef<NumberFlowElement, NumberFlowProps>(function
 			format
 		))
 		return formatToData(value, formatter, prefix, suffix)
+		// react-doctor-disable-next-line react-doctor/exhaustive-deps -- locales/format participate via their JSON serializations which are in the deps; raw objects are deliberately excluded to keep inline-object callers stable
 	}, [value, localesString, formatString, prefix, suffix])
 
 	return <NumberFlowImpl {...props} group={group} data={data} innerRef={ref} />
@@ -239,71 +255,10 @@ type GroupContext = {
 
 const NumberFlowGroupContext = React.createContext<GroupContext | undefined>(undefined)
 
-export function NumberFlowGroup({ children }: { children: React.ReactNode }) {
-	const flows = React.useRef(new Set<React.MutableRefObject<NumberFlowElement | null>>())
-	const updating = React.useRef(false)
-	const pending = React.useRef(new WeakMap<NumberFlowElement, boolean>())
-	const value = React.useMemo<GroupContext>(
-		() => ({
-			useRegister(ref) {
-				React.useEffect(() => {
-					flows.current.add(ref)
-					return () => {
-						flows.current.delete(ref)
-					}
-				}, [])
-			},
-			willUpdate() {
-				if (updating.current) return
-				updating.current = true
-				flows.current.forEach((ref) => {
-					const f = ref.current
-					if (!f || !f.created) return
-					f.willUpdate()
-					pending.current.set(f, true)
-				})
-			},
-			didUpdate() {
-				flows.current.forEach((ref) => {
-					const f = ref.current
-					if (!f || !pending.current.get(f)) return
-					f.didUpdate()
-					pending.current.delete(f)
-				})
-				updating.current = false
-			}
-		}),
-		[]
-	)
-
-	return <NumberFlowGroupContext.Provider value={value}>{children}</NumberFlowGroupContext.Provider>
-}
-
 // Hooks (copied from @number-flow/react)
 
+export type { NumberFlowElement }
 export type { Value, Format, Trend, NumberPartType } from '@/lib/number-flow/lite'
-export * from '@/lib/number-flow/plugins'
+export type { Plugin } from '@/lib/number-flow/plugins'
 
-export const useIsSupported = () =>
-	React.useSyncExternalStore(
-		() => () => {}, // this value doesn't change, but it's useful to specify a different SSR value:
-		() => _canAnimate,
-		() => false
-	)
-export const usePrefersReducedMotion = () =>
-	React.useSyncExternalStore(
-		(cb) => {
-			_prefersReducedMotion?.addEventListener('change', cb)
-			return () => _prefersReducedMotion?.removeEventListener('change', cb)
-		},
-		() => _prefersReducedMotion!.matches,
-		() => false
-	)
-
-export function useCanAnimate({ respectMotionPreference = true } = {}) {
-	const isSupported = useIsSupported()
-	const reducedMotion = usePrefersReducedMotion()
-
-	return isSupported && (!respectMotionPreference || !reducedMotion)
-}
 

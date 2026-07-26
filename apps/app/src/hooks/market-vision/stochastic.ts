@@ -1,7 +1,6 @@
 'use client'
 
 import type { OHLCVDataPoint, SeriesDataPoint } from './market-vision-config'
-import { sma, highest, lowest, rsi } from './technical-indicators'
 
 // RSI Divergence Detection
 const ANGLE_LIMIT = 45.0 // Limit for angle of divergence lines
@@ -475,107 +474,6 @@ function getAllRSIDivergences(data: OHLCVDataPoint[], rsiValues: number[]): Dive
   return allDivergences
 }
 
-// On Balance Volume calculation
-export function onBalanceVolume(data: OHLCVDataPoint[], useStandardCandles = false): number[] {
-  const result: number[] = []
-  let cumulative = 0
-  
-  for (let i = 1; i < data.length; i++) {
-    const current = data[i]
-    const previous = data[i - 1]
-    
-    if (!current || !previous) continue
-    
-    const currentClose = useStandardCandles ? current.close : current.close
-    const previousClose = useStandardCandles ? previous.close : previous.close
-    
-    if (currentClose > previousClose) {
-      cumulative += current.volume
-    } else if (currentClose < previousClose) {
-      cumulative -= current.volume
-    }
-    // Volume stays the same if close is unchanged
-    
-    result[i] = cumulative
-  }
-  
-  return result
-}
-
-// Standard Stochastic calculation
-export function calculateStochastic(
-  source: number[],
-  highSource: number[],
-  lowSource: number[],
-  kPeriod: number,
-  dPeriod: number,
-  smoothing: number
-): { k: number[], d: number[] } {
-  const highest_high = highest(highSource, kPeriod)
-  const lowest_low = lowest(lowSource, kPeriod)
-  
-  const rawK: number[] = []
-  
-  for (let i = 0; i < source.length; i++) {
-    const high = highest_high[i]
-    const low = lowest_low[i]
-    const current = source[i]
-    
-    if (high != null && low != null && current != null && high !== low) {
-      rawK[i] = ((current - low) / (high - low)) * 100
-    } else {
-      rawK[i] = 50 // Default middle value
-    }
-  }
-  
-  const k = sma(rawK, smoothing)
-  const d = sma(k, dPeriod)
-  
-  return { k, d }
-}
-
-// RSI Stochastic calculation
-export function calculateRSIStochastic(
-  source: number[],
-  rsiLength: number,
-  stochLength: number,
-  kSmoothing: number,
-  dSmoothing: number
-): { k: number[], d: number[] } {
-  const rsiValues = rsi(source, rsiLength)
-  
-  // Use RSI values as source, high, and low for stochastic calculation
-  const stochRSI = calculateStochastic(rsiValues, rsiValues, rsiValues, stochLength, dSmoothing, kSmoothing)
-  
-  return stochRSI
-}
-
-// Double Stochastic calculations
-export function calculateDoubleStochastic(
-  data: OHLCVDataPoint[],
-  kPeriod = 21,
-  dPeriod = 4,
-  smoothing = 10
-): { k: number[], d: number[] } {
-  const highs = data.map(d => d.high)
-  const lows = data.map(d => d.low)
-  const closes = data.map(d => d.close)
-  
-  return calculateStochastic(closes, highs, lows, kPeriod, dPeriod, smoothing)
-}
-
-// Double RSI Stochastic (long term)
-export function calculateDoubleRSIStochastic(
-  data: OHLCVDataPoint[],
-  rsiLength = 14,
-  stochLength = 14,
-  kSmoothing = 3,
-  dSmoothing = 3
-): { k: number[], d: number[] } {
-  const closes = data.map(d => d.close)
-  return calculateRSIStochastic(closes, rsiLength, stochLength, kSmoothing, dSmoothing)
-}
-
 export interface StochasticConfig {
   show: boolean
   type: 'Stochastic - Standard' | 'RSI Stochastic'
@@ -614,90 +512,6 @@ export interface StochasticResult {
   doubleStochD?: SeriesDataPoint[]
   doubleRSIStochK?: SeriesDataPoint[]
   doubleRSIStochD?: SeriesDataPoint[]
-}
-
-export function calculateStochasticIndicator(
-  data: OHLCVDataPoint[],
-  config: StochasticConfig
-): StochasticResult {
-  if (!data.length) {
-    return {
-      stochK: [],
-      stochD: []
-    }
-  }
-
-  const times = data.map(d => d.time)
-  
-  // Calculate OBV if needed - exact Pine Script logic
-  let sourceData: number[]
-  let highSource: number[]
-  let lowSource: number[]
-  
-  if (config.source === 'Price') {
-    sourceData = data.map(d => d.close)
-    highSource = data.map(d => d.high)
-    lowSource = data.map(d => d.low)
-  } else {
-    // Pine Script: OBVSource = StochSourceIn == "Volume - On Balance Volume - Locked to Standard Candles" ? Close : close
-    const useStandardCandles = config.source === 'Volume - On Balance Volume - Locked to Standard Candles'
-    const obvData = onBalanceVolume(data, useStandardCandles)
-    sourceData = obvData
-    highSource = obvData  // Pine Script: StochHHSource = StochSourceIn == "Price" ? high : OBV
-    lowSource = obvData   // Pine Script: StochLLSource = StochSourceIn == "Price" ? low : OBV
-  }
-  
-  // Calculate main stochastic - exact Pine Script logic
-  let stochResult: { k: number[], d: number[] }
-  
-  if (config.type === 'Stochastic - Standard') {
-    stochResult = calculateStochastic(sourceData, highSource, lowSource, config.kPeriod, config.dPeriod, config.smoothing)
-  } else {
-    stochResult = calculateRSIStochastic(sourceData, config.rsiLength, config.stochLength, config.kSmoothing, config.dSmoothing)
-  }
-  
-  // Convert to series data
-  const createSeriesData = (values: number[]): SeriesDataPoint[] => {
-    const result: SeriesDataPoint[] = []
-    for (let i = 0; i < times.length; i++) {
-      const value = values[i]
-      const time = times[i]
-      if (value != null && time != null && !Number.isNaN(value) && Number.isFinite(value)) {
-        result.push({ time, value })
-      }
-    }
-    return result
-  }
-  
-  const stochK = createSeriesData(stochResult.k)
-  const stochD = createSeriesData(stochResult.d)
-  
-  // Calculate additional stochastics for double display - exact Pine Script logic
-  let doubleStochK: SeriesDataPoint[] | undefined
-  let doubleStochD: SeriesDataPoint[] | undefined
-  let doubleRSIStochK: SeriesDataPoint[] | undefined
-  let doubleRSIStochD: SeriesDataPoint[] | undefined
-  
-  // Pine Script: "Double Stochastic - K and D + Long Term RSI Stochastic K - Set Value: 14, 14, 3, 3"
-  // Pine Script: "Double Stochastic - K and D + Long Term Stochastic D - Set Value: 21, 4, 10"
-  if (config.showType === 'Double Stochastic - K and D + Long Term RSI Stochastic K - Set Value: 14, 14, 3, 3') {
-    // Show main K&D + DoubleRSIStochK (using fixed Pine Script values)
-    const doubleRSIResult = calculateDoubleRSIStochastic(data, config.doubleRSIStochRSI, config.doubleRSIStochLength, config.doubleRSIStochKSmoothing, config.doubleRSIStochDSmoothing)
-    doubleRSIStochK = createSeriesData(doubleRSIResult.k)
-  } else if (config.showType === 'Double Stochastic - K and D + Long Term Stochastic D - Set Value: 21, 4, 10') {
-    // Show main K&D + DoubleStochD (using fixed Pine Script values)
-    const doubleStochResult = calculateDoubleStochastic(data, config.doubleStochK, config.doubleStochD, config.doubleStochSmoothing)
-    doubleStochD = createSeriesData(doubleStochResult.d)
-  }
-  
-  return {
-    stochK,
-    stochD,
-    doubleStochK,
-    doubleStochD,
-    doubleRSIStochK,
-    doubleRSIStochD
-  }
 }
 
 // Export divergence functions for use in other components

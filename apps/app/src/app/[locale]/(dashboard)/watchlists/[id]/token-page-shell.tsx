@@ -90,6 +90,30 @@ const BlurredBackground = memo(function BlurredBackground({
   )
 })
 
+// Hoisted to module scope: static style objects passed to the memoized
+// BlurredBackground must be referentially stable or memo() can never skip.
+const BLURRED_BG_LEFT_STYLE: React.CSSProperties = {
+  width: '700px',
+  height: '700px',
+  filter: 'blur(240px)',
+  opacity: 1,
+  left: '-10vw',
+  top: '-350px',
+  mixBlendMode: 'soft-light',
+  contain: 'layout style paint',
+}
+
+const BLURRED_BG_RIGHT_STYLE: React.CSSProperties = {
+  width: '479px',
+  height: '479px',
+  filter: 'blur(240px)',
+  opacity: 1,
+  right: '-5vw',
+  top: '236px',
+  mixBlendMode: 'soft-light',
+  contain: 'layout style paint',
+}
+
 const TokenPageContent = memo(function TokenPageContent({
   id,
   initialTokenName,
@@ -117,32 +141,14 @@ const TokenPageContent = memo(function TokenPageContent({
         id={deferredId}
         tokenName={tokenData.name}
         className="absolute z-0 pointer-events-none transform-gpu"
-        style={{
-          width: '700px',
-          height: '700px',
-          filter: 'blur(240px)',
-          opacity: 1,
-          left: '-10vw',
-          top: '-350px',
-          mixBlendMode: 'soft-light',
-          contain: 'layout style paint',
-        }}
+        style={BLURRED_BG_LEFT_STYLE}
       />
 
       <BlurredBackground
         id={deferredId}
         tokenName={tokenData.name}
         className="absolute z-0 pointer-events-none saturate-200 transform-gpu"
-        style={{
-          width: '479px',
-          height: '479px',
-          filter: 'blur(240px)',
-          opacity: 1,
-          right: '-5vw',
-          top: '236px',
-          mixBlendMode: 'soft-light',
-          contain: 'layout style paint',
-        }}
+        style={BLURRED_BG_RIGHT_STYLE}
       />
 
       <TokenPageClient

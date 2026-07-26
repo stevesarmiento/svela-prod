@@ -6,11 +6,11 @@ import { WatchlistGroupEditorPanel } from './watchlist-group-editor-panel'
 import { Button } from '@v1/ui/button'
 import { cn } from '@v1/ui/cn'
 import { useMediaQuery } from '@v1/ui/hooks'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, m, useReducedMotion } from 'motion/react'
 import { EASE_OUT_CUBIC, motionDuration } from '@/lib/motion-tokens'
 import { Grid3X3 } from 'lucide-react'
 import { toast } from '@v1/ui/use-toast'
-import { env } from '@/env.mjs'
+import { env } from '@/env.client.mjs'
 import { useCoinGeckoWatchlistCoins } from '@/hooks/use-coingecko-watchlist-coins'
 import { useWatchlist, type WatchlistGroup } from './watchlist-context'
 import { Dialog, DialogContent } from '@v1/ui/dialog'
@@ -39,55 +39,15 @@ const pageVariants = {
   exit: (direction: number) => ({ opacity: 0, y: direction * -24 }),
 }
 
-interface WatchlistsGridProps {
-  onSelectWatchlist?: (group: WatchlistGroup) => void
-  viewMode?: 'grid' | 'chart'
-  activeTimeScale?: string
-  onTimeScaleChange?: (scale: string) => void
-  onViewModeChange?: (mode: 'grid' | 'chart') => void
-  /** Layout for the comparison chart in 'chart' view mode. */
-  chartLayout?: 'horizontal' | 'vertical'
-  /** Hide the chart card's built-in selector when the page renders its own. */
-  showChartTimeScaleSelector?: boolean
-}
-
-export function WatchlistsGrid({
-  onSelectWatchlist,
-  viewMode = 'grid',
-  activeTimeScale = '7d',
-  onTimeScaleChange,
-  onViewModeChange,
-  chartLayout = 'horizontal',
-  showChartTimeScaleSelector = true
-}: WatchlistsGridProps) {
-  const [editingGroup, setEditingGroup] = useState<WatchlistGroup | null>(null)
-  
-  // Current editing values for real-time preview
-  const [editingName, setEditingName] = useState('')
-  const [editingIcon, setEditingIcon] = useState('')
-  const [editingColor, setEditingColor] = useState('')
-  const pageBootstrap = useWatchlistsPageBootstrap()
-  const { overviewByGroupId, isLoading: isOverviewLoading } = useWatchlistsOverviewData()
-
-  // Hooks
-  const updateGroup = useUpdateWatchlistGroup()
-  const deleteGroup = useDeleteWatchlistGroup()
-  const deleteWallet = useDeletePortfolioWallet()
-  const { selectedGroup, watchlistGroups } = useWatchlist()
-
-  const gridGroups = useMemo(() => {
-    // Keep the existing "newest first" behavior, but render all groups in one grid.
-    return watchlistGroups.slice().reverse()
-  }, [watchlistGroups])
-
-  // Paged carousel (desktop only, when there are more than PAGE_SIZE watchlists).
-  // 12 divides evenly into the md (2), lg (3), and xl (4) column counts, so every
-  // full page renders as complete rows at any desktop breakpoint.
-  // useMediaQuery returns false pre-mount, so defaulting to the plain grid avoids
-  // a carousel flash on mobile's first paint.
-  const isDesktop = useMediaQuery('(min-width: 768px)')
-  const usePagedCarousel = isDesktop && gridGroups.length > WATCHLISTS_PAGE_SIZE
-  const shouldReduceMotion = useReducedMotion()
+/**
+ * Paged-carousel state: current page + slide direction, pages chunked to
+ * WATCHLISTS_PAGE_SIZE, and a viewport height locked to a full page so a
+ * shorter last page doesn't shift the layout.
+ */
+function useWatchlistCarouselPaging(
+  gridGroups: WatchlistGroup[],
+  usePagedCarousel: boolean,
+) {
   const [pageState, setPageState] = useState<{ index: number; direction: 1 | -1 }>({
     index: 0,
     direction: 1,
@@ -138,6 +98,163 @@ export function WatchlistsGrid({
     observer.observe(node)
     return () => observer.disconnect()
   }, [usePagedCarousel, gridPages, pageState.index])
+
+  return { pageState, gridPages, goToPage, pageAreaRef, fullPageHeight }
+}
+
+/** Vertical page indicator — floats in the left gutter; click advances a page. */
+function CarouselPageRail({
+  gridPages,
+  pageIndex,
+  onGoToPage,
+}: {
+  gridPages: WatchlistGroup[][]
+  pageIndex: number
+  onGoToPage: (index: number) => void
+}) {
+  return (
+    <button
+      type="button"
+      className="absolute -left-12 top-1/2 -translate-y-1/2 flex cursor-pointer flex-col items-center gap-2 rounded-full border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/5 px-1.5 py-2 hover:bg-zinc-50 dark:hover:bg-white/10 transition-colors"
+      aria-label={`Watchlist pages — page ${pageIndex + 1} of ${gridPages.length}, click to go to next page`}
+      onClick={() => onGoToPage((pageIndex + 1) % gridPages.length)}
+    >
+      {gridPages.map((page, idx) => {
+        const isActive = idx === pageIndex
+        return (
+          <span
+            key={page[0]?._id ?? idx}
+            className={cn(
+              "w-2 rounded-full transition-[height] duration-[var(--duration-micro)]",
+              isActive
+                ? "h-6 bg-zinc-900 dark:bg-white"
+                : "h-2 bg-zinc-400 dark:bg-white/10",
+            )}
+          />
+        )
+      })}
+    </button>
+  )
+}
+
+/** Centered edit modal: live preview card on top, editor panel below. */
+function EditWatchlistDialog({
+  editingGroup,
+  editingCoins,
+  name,
+  icon,
+  color,
+  onNameChange,
+  onIconChange,
+  onColorChange,
+  onSave,
+  onCancel,
+}: {
+  editingGroup: WatchlistGroup | null
+  editingCoins: Parameters<typeof WatchlistCard>[0]["coins"]
+  name: string
+  icon: string
+  color: string
+  onNameChange: (name: string) => void
+  onIconChange: (icon: string) => void
+  onColorChange: (color: string) => void
+  onSave: () => void
+  onCancel: () => void
+}) {
+  return (
+    <Dialog
+      open={Boolean(editingGroup)}
+      onOpenChange={(open) => {
+        if (!open) onCancel()
+      }}
+    >
+      <DialogContent className="p-0 border-none bg-transparent shadow-none max-w-[320px] h-[600px]">
+      {/* Preview Card */}
+        <div className="relative">
+          {editingGroup ? (
+            <WatchlistCard
+              group={editingGroup}
+              coins={editingCoins}
+              selected={false}
+              nameOverride={name}
+              iconOverride={icon}
+              colorOverride={color}
+            />
+          ) : null}
+        </div>
+
+        {/* Edit Panel */}
+        {editingGroup ? (
+          <WatchlistGroupEditorPanel
+            name={name}
+            icon={icon}
+            color={color}
+            onNameChange={onNameChange}
+            onIconChange={onIconChange}
+            onColorChange={onColorChange}
+            submitLabel="Save Changes"
+            onSubmit={onSave}
+            onCancel={onCancel}
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+interface WatchlistsGridProps {
+  onSelectWatchlist?: (group: WatchlistGroup) => void
+  viewMode?: 'grid' | 'chart'
+  activeTimeScale?: string
+  onTimeScaleChange?: (scale: string) => void
+  onViewModeChange?: (mode: 'grid' | 'chart') => void
+  /** Layout for the comparison chart in 'chart' view mode. */
+  chartLayout?: 'horizontal' | 'vertical'
+  /** Hide the chart card's built-in selector when the page renders its own. */
+  showChartTimeScaleSelector?: boolean
+}
+
+export function WatchlistsGrid({
+  onSelectWatchlist,
+  viewMode = 'grid',
+  activeTimeScale = '7d',
+  onTimeScaleChange,
+  onViewModeChange,
+  chartLayout = 'horizontal',
+  showChartTimeScaleSelector = true
+}: WatchlistsGridProps) {
+  const [editingGroup, setEditingGroup] = useState<WatchlistGroup | null>(null)
+  
+  // Current editing values for real-time preview
+  const [editingName, setEditingName] = useState('')
+  const [editingIcon, setEditingIcon] = useState('')
+  const [editingColor, setEditingColor] = useState('')
+  const pageBootstrap = useWatchlistsPageBootstrap()
+  const { overviewByGroupId, isLoading: isOverviewLoading } = useWatchlistsOverviewData()
+
+  // Hooks
+  const updateGroup = useUpdateWatchlistGroup()
+  const deleteGroup = useDeleteWatchlistGroup()
+  // Destructure the stable callback so hooks can depend on it directly
+  // (the hook's return object gets a new identity every render).
+  const { deleteWallet } = useDeletePortfolioWallet()
+  const { selectedGroup, watchlistGroups } = useWatchlist()
+
+  const gridGroups = useMemo(() => {
+    // Keep the existing "newest first" behavior, but render all groups in one grid.
+    return watchlistGroups.slice().reverse()
+  }, [watchlistGroups])
+
+  // Paged carousel (desktop only, when there are more than PAGE_SIZE watchlists).
+  // 12 divides evenly into the md (2), lg (3), and xl (4) column counts, so every
+  // full page renders as complete rows at any desktop breakpoint.
+  // useMediaQuery returns false pre-mount, so defaulting to the plain grid avoids
+  // a carousel flash on mobile's first paint.
+  const isDesktop = useMediaQuery('(min-width: 768px)')
+  const usePagedCarousel = isDesktop && gridGroups.length > WATCHLISTS_PAGE_SIZE
+  const shouldReduceMotion = useReducedMotion()
+  const { pageState, gridPages, goToPage, pageAreaRef, fullPageHeight } =
+    useWatchlistCarouselPaging(gridGroups, usePagedCarousel)
 
   const editingCoinIds = useMemo(() => {
     if (!editingGroup) return []
@@ -198,7 +315,7 @@ export function WatchlistsGrid({
 
     if (group.portfolioWalletId) {
       try {
-        await deleteWallet.deleteWallet(group.portfolioWalletId)
+        await deleteWallet(group.portfolioWalletId)
 
         toast({
           title: "Success",
@@ -228,7 +345,7 @@ export function WatchlistsGrid({
       })
       if (isDebug) console.error("Failed to delete watchlist:", error)
     }
-  }, [deleteGroup])
+  }, [deleteGroup, deleteWallet])
 
   const openEditDialog = useCallback((group: WatchlistGroup) => {
     setEditingGroup(group)
@@ -285,29 +402,11 @@ export function WatchlistsGrid({
                 <div className="relative overflow-visible">
                   {/* Vertical page indicator — floats in the left gutter so the
                       grid keeps its original alignment with the page header. */}
-                  <button
-                    type="button"
-                    className="absolute -left-12 top-1/2 -translate-y-1/2 flex cursor-pointer flex-col items-center gap-2 rounded-full border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/5 px-1.5 py-2 hover:bg-zinc-50 dark:hover:bg-white/10 transition-colors"
-                    aria-label={`Watchlist pages — page ${pageState.index + 1} of ${gridPages.length}, click to go to next page`}
-                    onClick={() =>
-                      goToPage((pageState.index + 1) % gridPages.length)
-                    }
-                  >
-                    {gridPages.map((page, idx) => {
-                      const isActive = idx === pageState.index
-                      return (
-                        <span
-                          key={page[0]?._id ?? idx}
-                          className={cn(
-                            "w-2 rounded-full transition-[height] duration-[var(--duration-micro)]",
-                            isActive
-                              ? "h-6 bg-zinc-900 dark:bg-white"
-                              : "h-2 bg-zinc-400 dark:bg-white/10",
-                          )}
-                        />
-                      )
-                    })}
-                  </button>
+                  <CarouselPageRail
+                    gridPages={gridPages}
+                    pageIndex={pageState.index}
+                    onGoToPage={goToPage}
+                  />
 
                   {/* Active page (vertical slide between pages) */}
                   <div
@@ -315,8 +414,9 @@ export function WatchlistsGrid({
                     style={{ minHeight: fullPageHeight }}
                   >
                     <div ref={pageAreaRef}>
+                      {/* react-doctor-disable-next-line react-doctor/motion-animate-presence-must-outlive-child -- boundary exists for keyed page swaps which it outlives; the flagged condition is a structural layout swap with no exit animation intended */}
                       <AnimatePresence mode="popLayout" initial={false} custom={pageState.direction}>
-                        <motion.div
+                        <m.div
                           key={pageState.index}
                           custom={pageState.direction}
                           variants={pageVariants}
@@ -330,7 +430,7 @@ export function WatchlistsGrid({
                           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
                         >
                           {(gridPages[pageState.index] ?? []).map(renderWatchlistCard)}
-                        </motion.div>
+                        </m.div>
                       </AnimatePresence>
                     </div>
                   </div>
@@ -342,43 +442,18 @@ export function WatchlistsGrid({
               )}
 
               {/* Edit Watchlist Modal (centered) */}
-              <Dialog
-                open={Boolean(editingGroup)}
-                onOpenChange={(open) => {
-                  if (!open) handleEditCancel()
-                }}
-              >
-                <DialogContent className="p-0 border-none bg-transparent shadow-none max-w-[320px] h-[600px]">
-                {/* Preview Card */}
-                  <div className="relative">
-                    {editingGroup ? (
-                      <WatchlistCard
-                        group={editingGroup}
-                        coins={editingCoins}
-                        selected={false}
-                        nameOverride={editingName}
-                        iconOverride={editingIcon}
-                        colorOverride={editingColor}
-                      />
-                    ) : null}
-                  </div>
-
-                  {/* Edit Panel */}
-                  {editingGroup ? (
-                    <WatchlistGroupEditorPanel
-                      name={editingName}
-                      icon={editingIcon}
-                      color={editingColor}
-                      onNameChange={setEditingName}
-                      onIconChange={setEditingIcon}
-                      onColorChange={setEditingColor}
-                      submitLabel="Save Changes"
-                      onSubmit={() => handleEditSave(editingName, editingIcon, editingColor)}
-                      onCancel={handleEditCancel}
-                    />
-                  ) : null}
-                </DialogContent>
-              </Dialog>
+              <EditWatchlistDialog
+                editingGroup={editingGroup}
+                editingCoins={editingCoins}
+                name={editingName}
+                icon={editingIcon}
+                color={editingColor}
+                onNameChange={setEditingName}
+                onIconChange={setEditingIcon}
+                onColorChange={setEditingColor}
+                onSave={() => handleEditSave(editingName, editingIcon, editingColor)}
+                onCancel={handleEditCancel}
+              />
             </>
           )}
         </TabsContent>
@@ -392,7 +467,7 @@ export function WatchlistsGrid({
                 setActiveTimeScale={onTimeScaleChange || (() => {})}
                 selectedWatchlists={allWatchlistIds}
                 layout={chartLayout}
-                scrubDotLabels={chartLayout === 'vertical'}
+                scrubYAxisLabels={chartLayout === 'vertical'}
                 showTimeScaleSelector={showChartTimeScaleSelector}
                 onSelectWatchlist={(watchlistId) => {
                   const group = watchlistGroups.find(g => g._id === watchlistId)

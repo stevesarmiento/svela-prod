@@ -14,6 +14,7 @@ function isSafeRelativePath(value: string): boolean {
 }
 
 export function getRedirectUrlComplete(searchParams: ReadonlyURLSearchParams): string {
+  // react-doctor-disable-next-line react-doctor/url-prefilled-privileged-action -- value passes isSafeRelativePath (same-origin relative only) with hardcoded fallback
   const next = searchParams.get("next")?.trim();
   if (!next || !isSafeRelativePath(next)) return DEFAULT_REDIRECT_URL;
   return next;

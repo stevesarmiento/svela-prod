@@ -8,6 +8,12 @@ import { IconArrowTurnDownRight } from "symbols-react";
 
 import { useScreenerContext } from "./screener-context";
 
+const EXAMPLES = [
+  "market cap over $1b with buy ratio above 55%",
+  "fdv under 200m, volume over $5m",
+  "7d return above 25%, sorted by volume",
+];
+
 /**
  * NL input for the unified smart-screener endpoint. All queries go to ONE
  * backend (no regex routing between three); the one local shortcut is a
@@ -29,6 +35,7 @@ export function ScreenerSmartPromptDialog({
   /** Keeps the tree mounted briefly after `open` becomes false so exit CSS can run. */
   const [isVisible, setIsVisible] = React.useState(open);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const dialogRef = React.useRef<HTMLDialogElement>(null);
 
   const isInterpreting = interpret.status === "interpreting";
 
@@ -49,6 +56,13 @@ export function ScreenerSmartPromptDialog({
     const timeoutId = window.setTimeout(() => inputRef.current?.focus(), 60);
     return () => window.clearTimeout(timeoutId);
   }, [open]);
+
+  // The tree only mounts while visible, so open the native modal (focus trap,
+  // scroll lock, Escape) as soon as the <dialog> exists.
+  React.useEffect(() => {
+    const dialog = dialogRef.current;
+    if (isVisible && dialog && !dialog.open) dialog.showModal();
+  }, [isVisible]);
 
   const submit = React.useCallback(
     async (raw: string) => {
@@ -78,21 +92,22 @@ export function ScreenerSmartPromptDialog({
     [interpret, onOpenChange, setQ],
   );
 
-  const examples = React.useMemo(
-    () => [
-      "market cap over $1b with buy ratio above 55%",
-      "fdv under 200m, volume over $5m",
-      "7d return above 25%, sorted by volume",
-    ],
-    [],
-  );
-
   if (!isVisible) return null;
 
   const dialogState = open ? "open" : "closed";
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-start justify-center px-4 pt-40">
+    <dialog
+      ref={dialogRef}
+      aria-label="Smart Search"
+      className="fixed inset-0 z-[10000] m-0 h-full max-h-none w-full max-w-none items-start justify-center border-0 bg-transparent p-0 px-4 pt-40 text-foreground open:flex backdrop:bg-transparent"
+      onCancel={(event) => {
+        // Keep the exit animation: run our controlled close instead of the
+        // native instant close (the tree unmounts CLOSE_ANIMATION_MS later).
+        event.preventDefault();
+        onOpenChange(false);
+      }}
+    >
       <button
         type="button"
         aria-label="Close smart screener"
@@ -107,9 +122,6 @@ export function ScreenerSmartPromptDialog({
       />
 
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Smart Search"
         data-state={dialogState}
         className={cn(
           "relative w-full max-w-3xl overflow-hidden rounded-[28px] border border-gray-200/50 bg-white/95 shadow-[0_3px_8px_oklch(0_0_0_/_0.1),0_2px_4px_oklch(0_0_0_/_0.06)] backdrop-blur-md dark:border-transparent dark:bg-zinc-900/80 dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.4)]",
@@ -129,7 +141,11 @@ export function ScreenerSmartPromptDialog({
           }}
         >
           <div className="flex min-h-12 items-center gap-3 border-b border-black/60 pb-6 p-6">
+            <label htmlFor="smart-screener-prompt-input" className="sr-only">
+              Describe what you&apos;re looking for
+            </label>
             <input
+              id="smart-screener-prompt-input"
               ref={inputRef}
               value={draft}
               onChange={(event) => {
@@ -137,9 +153,6 @@ export function ScreenerSmartPromptDialog({
                 if (inlineError) setInlineError(null);
               }}
               placeholder="Describe what you're looking for..."
-              onKeyDown={(event) => {
-                if (event.key === "Escape") onOpenChange(false);
-              }}
               className="min-w-0 flex-1 border-0 bg-transparent text-base text-foreground shadow-none outline-none placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             <button
@@ -159,7 +172,7 @@ export function ScreenerSmartPromptDialog({
           ) : null}
 
           <div className="flex flex-wrap gap-2 p-5 border-t border-white/5 pt-3">
-            {examples.map((example) => (
+            {EXAMPLES.map((example) => (
               <button
                 key={example}
                 type="button"
@@ -196,6 +209,6 @@ export function ScreenerSmartPromptDialog({
           </span>
         </Button>
       </div>
-    </div>
+    </dialog>
   );
 }

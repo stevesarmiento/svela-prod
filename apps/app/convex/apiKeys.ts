@@ -405,6 +405,7 @@ export const getMyApiKeyStats = query({
     };
 
     for (const provider of Object.keys(API_PROVIDERS)) {
+      // react-doctor-disable-next-line react-doctor/js-index-maps -- both arrays are bounded by the 4 API providers; linear scan beats Map allocation
       const providerKey = apiKeys.find((key) => key.provider === provider);
       stats.providerStats[provider] = {
         hasKey: !!providerKey,

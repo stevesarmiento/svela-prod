@@ -166,8 +166,8 @@ export function useHybridCoinSearch(
     return dbSearchResults
       .map(dbCoin => {
         const pricing = quotesQuery.data?.[dbCoin.coingeckoId];
-        
-        return {
+
+        const coin = {
           id: dbCoin.coingeckoId,
           name: dbCoin.name, // From database (static)
           symbol: dbCoin.symbol, // From database (static)
@@ -185,16 +185,17 @@ export function useHybridCoinSearch(
             }
           }
         };
+
+        return {
+          coin,
+          // Blend popularity (log10 mcap: BTC ≈ 12, dead coins = 0) with lexical
+          // relevance so exact matches win among peers but a $10k squatter can't
+          // outrank a real project.
+          score:
+            Math.log10(Math.max(coin.quote.USD.market_cap, 1)) +
+            exactnessBoost(coin, normalizedQuery, tickerLike),
+        };
       })
-      .map((coin) => ({
-        coin,
-        // Blend popularity (log10 mcap: BTC ≈ 12, dead coins = 0) with lexical
-        // relevance so exact matches win among peers but a $10k squatter can't
-        // outrank a real project.
-        score:
-          Math.log10(Math.max(coin.quote.USD.market_cap, 1)) +
-          exactnessBoost(coin, normalizedQuery, tickerLike),
-      }))
       .sort((a, b) => b.score - a.score)
       .slice(0, limit)
       .map(({ coin }) => coin);
@@ -261,25 +262,30 @@ export function useHybridTopCoins(limit = 25, options: { enabled?: boolean } = {
     if (!pricingData) return [];
 
     return Object.values(pricingData)
-      .map(pricing => ({
-        id: pricing.id,
-        name: pricing.name,
-        symbol: pricing.symbol,
-        image: pricing.image, // Use API image for top coins (ensures real-time accuracy)
-        cmc_rank: pricing.market_cap_rank,
-        quote: {
-          USD: {
-            price: pricing.current_price ?? 0,
-            percent_change_24h: pricing.price_change_percentage_24h,
-            percent_change_1h: pricing.price_change_percentage_1h_in_currency,
-            percent_change_7d: pricing.price_change_percentage_7d_in_currency,
-            percent_change_30d: pricing.price_change_percentage_30d_in_currency,
-            market_cap: pricing.market_cap,
-            volume_24h: pricing.total_volume,
-          }
-        }
-      }))
-      .filter((coin) => coin.quote.USD.price > 0 && Number.isFinite(coin.cmc_rank) && coin.cmc_rank > 0)
+      .flatMap(pricing =>
+        (pricing.current_price ?? 0) > 0 &&
+        Number.isFinite(pricing.market_cap_rank) &&
+        pricing.market_cap_rank > 0
+          ? [{
+              id: pricing.id,
+              name: pricing.name,
+              symbol: pricing.symbol,
+              image: pricing.image, // Use API image for top coins (ensures real-time accuracy)
+              cmc_rank: pricing.market_cap_rank,
+              quote: {
+                USD: {
+                  price: pricing.current_price ?? 0,
+                  percent_change_24h: pricing.price_change_percentage_24h,
+                  percent_change_1h: pricing.price_change_percentage_1h_in_currency,
+                  percent_change_7d: pricing.price_change_percentage_7d_in_currency,
+                  percent_change_30d: pricing.price_change_percentage_30d_in_currency,
+                  market_cap: pricing.market_cap,
+                  volume_24h: pricing.total_volume,
+                }
+              }
+            }]
+          : [],
+      )
       .sort((a, b) => a.cmc_rank - b.cmc_rank) // Sort by market cap rank
       .slice(0, limit);
   }, [pricingData, limit]);

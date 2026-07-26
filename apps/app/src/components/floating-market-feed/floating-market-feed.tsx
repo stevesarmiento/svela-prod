@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAction, useConvexAuth, useMutation, useQuery as useConvexQuery } from 'convex/react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import { Info, Settings2 } from 'lucide-react';
 import {
     IconArrowTriangleheadClockwise,
@@ -203,7 +203,7 @@ function NewsFlameIcon({ className }: { className?: string }) {
     return (
         <svg viewBox="0 0 19 23" fill="none" xmlns="http://www.w3.org/2000/svg" className={className} aria-hidden>
             <path
-                d="M15.5426 5.41676C15.4708 5.34319 15.3794 5.29308 15.2799 5.27279C15.1803 5.25249 15.0772 5.26291 14.9835 5.30273C14.8897 5.34256 14.8096 5.40999 14.7532 5.49651C14.6968 5.58303 14.6667 5.68476 14.6667 5.78882C14.6667 8.0048 13.608 9.528 12.8037 10.1756C13.5067 5.9317 12.3207 1.09884 9.1851 0.0267794C9.1079 0.000539394 9.0258 -0.00655056 8.9454 0.00609944C8.8651 0.0187394 8.7888 0.0507595 8.7229 0.0995295C8.657 0.148289 8.6032 0.212399 8.5662 0.286599C8.5291 0.360799 8.5097 0.442959 8.5096 0.526329C8.5096 3.80508 6.5104 5.5935 4.3939 7.4868C2.67924 9.0203 0.905979 10.6073 0.315719 13.0289C-0.645821 16.9737 0.583809 19.9317 4.0752 22.0717C4.1682 22.1289 4.2764 22.1544 4.3843 22.1446C4.4923 22.1348 4.5945 22.0901 4.6761 22.0171C4.7578 21.944 4.8148 21.8462 4.8389 21.7378C4.863 21.6295 4.853 21.516 4.8103 21.4139C3.5013 18.1939 4.2473 14.398 6.7385 12.1624C7.0377 11.8939 7.4905 12.1262 7.5541 12.5232C7.8929 14.6366 9.3425 15.0411 9.5184 17.4051C9.5385 17.6751 9.7526 17.9028 10.0211 17.8683C10.5126 17.8051 10.9853 17.6257 11.4011 17.3415C11.7992 17.0693 12.1308 16.7106 12.3741 16.2935C12.5246 16.0354 12.8521 15.9047 13.0845 16.0925C14.6504 17.3581 14.469 20.1637 12.2923 21.9915C12.2798 22.0008 12.1991 22.0635 12.1875 22.0738C12.1079 22.1437 12.0509 22.2369 12.0245 22.341C11.9981 22.4451 12.0033 22.555 12.0396 22.6559C12.0759 22.7568 12.1415 22.8439 12.2275 22.9054C12.3136 22.9669 12.4159 22.9999 12.5208 23C12.5558 23.0003 12.5908 22.9965 12.625 22.9887C15.4124 22.3956 17.6266 20.1508 18.5481 16.9862C19.7219 12.9548 18.5705 8.5218 15.5426 5.41676Z"
+                d="M15.54 5.42C15.47 5.34 15.38 5.29 15.28 5.27C15.18 5.25 15.08 5.26 14.98 5.3C14.89 5.34 14.81 5.41 14.75 5.5C14.7 5.58 14.67 5.68 14.67 5.79C14.67 8 13.61 9.53 12.8 10.18C13.51 5.93 12.32 1.1 9.19 0.03C9.11 0 9.03 -0.01 8.95 0.01C8.87 0.02 8.79 0.05 8.72 0.1C8.66 0.15 8.6 0.21 8.57 0.29C8.53 0.36 8.51 0.44 8.51 0.53C8.51 3.81 6.51 5.59 4.39 7.49C2.68 9.02 0.91 10.61 0.32 13.03C-0.65 16.97 0.58 19.93 4.08 22.07C4.17 22.13 4.28 22.15 4.38 22.14C4.49 22.13 4.59 22.09 4.68 22.02C4.76 21.94 4.81 21.85 4.84 21.74C4.86 21.63 4.85 21.52 4.81 21.41C3.5 18.19 4.25 14.4 6.74 12.16C7.04 11.89 7.49 12.13 7.55 12.52C7.89 14.64 9.34 15.04 9.52 17.41C9.54 17.68 9.75 17.9 10.02 17.87C10.51 17.81 10.99 17.63 11.4 17.34C11.8 17.07 12.13 16.71 12.37 16.29C12.52 16.04 12.85 15.9 13.08 16.09C14.65 17.36 14.47 20.16 12.29 21.99C12.28 22 12.2 22.06 12.19 22.07C12.11 22.14 12.05 22.24 12.02 22.34C12 22.45 12 22.55 12.04 22.66C12.08 22.76 12.14 22.84 12.23 22.91C12.31 22.97 12.42 23 12.52 23C12.56 23 12.59 23 12.63 22.99C15.41 22.4 17.63 20.15 18.55 16.99C19.72 12.95 18.57 8.52 15.54 5.42Z"
                 fill="currentColor"
             />
         </svg>
@@ -431,7 +431,15 @@ export function FloatingMarketFeed() {
                 })),
         [topMarketsData],
     );
-    const tickerRail = React.useMemo(() => [...tickerTokens, ...tickerTokens], [tickerTokens]);
+    // The rail renders two copies of the list for a seamless marquee loop, so
+    // tag each entry with a copy-qualified stable key (ids repeat across copies).
+    const tickerRail = React.useMemo(
+        () => [
+            ...tickerTokens.map(token => ({ ...token, railKey: `${token.id}-a` })),
+            ...tickerTokens.map(token => ({ ...token, railKey: `${token.id}-b` })),
+        ],
+        [tickerTokens],
+    );
 
     React.useEffect(() => {
         if (!open || hideFeed) return;
@@ -470,7 +478,7 @@ export function FloatingMarketFeed() {
         >
             <AnimatePresence initial={false}>
                 {open ? (
-                    <motion.aside
+                    <m.aside
                         key="market-feed"
                         aria-label={`${displayName} market feed`}
                         initial={shouldReduceMotion ? false : { opacity: 0, y: -8, scale: 0.98 }}
@@ -496,7 +504,7 @@ export function FloatingMarketFeed() {
                             settingsMenuOpen={settingsMenuOpen}
                             onSettingsMenuOpenChange={setSettingsMenuOpen}
                         />
-                    </motion.aside>
+                    </m.aside>
                 ) : null}
             </AnimatePresence>
         </div>
@@ -507,7 +515,7 @@ function FloatingMarketTickerBanner({
     tokens,
     isLoading,
 }: {
-    tokens: Array<{ id: string; symbol: string; priceChange24hPercent: number }>;
+    tokens: Array<{ id: string; symbol: string; priceChange24hPercent: number; railKey: string }>;
     isLoading?: boolean;
 }) {
     return (
@@ -607,27 +615,27 @@ function ActivityFeedIcon() {
         <span className="flex size-[18px] shrink-0 items-center justify-center text-white/40" aria-hidden>
             <svg className="size-[18px]" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
-                    d="M13.5 11.5H25.5C26.8807 11.5 28 10.3807 28 9C28 7.61929 26.8807 6.5 25.5 6.5H13.5C12.1193 6.5 11 7.61929 11 9C11 10.3807 12.1193 11.5 13.5 11.5Z"
+                    d="M13.5 11.5H25.5C26.88 11.5 28 10.38 28 9C28 7.62 26.88 6.5 25.5 6.5H13.5C12.12 6.5 11 7.62 11 9C11 10.38 12.12 11.5 13.5 11.5Z"
                     fill="currentColor"
                 />
                 <path
-                    d="M6.5 6.5C5.11929 6.5 4 7.61929 4 9C4 10.3807 5.11929 11.5 6.5 11.5C7.88071 11.5 9 10.3807 9 9C9 7.61929 7.88071 6.5 6.5 6.5Z"
+                    d="M6.5 6.5C5.12 6.5 4 7.62 4 9C4 10.38 5.12 11.5 6.5 11.5C7.88 11.5 9 10.38 9 9C9 7.62 7.88 6.5 6.5 6.5Z"
                     fill="currentColor"
                 />
                 <path
-                    d="M6.5 13.5C5.11929 13.5 4 14.6193 4 16C4 17.3807 5.11929 18.5 6.5 18.5C7.88071 18.5 9 17.3807 9 16C9 14.6193 7.88071 13.5 6.5 13.5Z"
+                    d="M6.5 13.5C5.12 13.5 4 14.62 4 16C4 17.38 5.12 18.5 6.5 18.5C7.88 18.5 9 17.38 9 16C9 14.62 7.88 13.5 6.5 13.5Z"
                     fill="currentColor"
                 />
                 <path
-                    d="M6.5 20.5C5.11929 20.5 4 21.6193 4 23C4 24.3807 5.11929 25.5 6.5 25.5C7.88071 25.5 9 24.3807 9 23C9 21.6193 7.88071 20.5 6.5 20.5Z"
+                    d="M6.5 20.5C5.12 20.5 4 21.62 4 23C4 24.38 5.12 25.5 6.5 25.5C7.88 25.5 9 24.38 9 23C9 21.62 7.88 20.5 6.5 20.5Z"
                     fill="currentColor"
                 />
                 <path
-                    d="M13.5 18.5H25.5C26.8807 18.5 28 17.3807 28 16C28 14.6193 26.8807 13.5 25.5 13.5H13.5C12.1193 13.5 11 14.6193 11 16C11 17.3807 12.1193 18.5 13.5 18.5Z"
+                    d="M13.5 18.5H25.5C26.88 18.5 28 17.38 28 16C28 14.62 26.88 13.5 25.5 13.5H13.5C12.12 13.5 11 14.62 11 16C11 17.38 12.12 18.5 13.5 18.5Z"
                     fill="currentColor"
                 />
                 <path
-                    d="M13.5 25.5H25.5C26.8807 25.5 28 24.3807 28 23C28 21.6193 26.8807 20.5 25.5 20.5H13.5C12.1193 20.5 11 21.6193 11 23C11 24.3807 12.1193 25.5 13.5 25.5Z"
+                    d="M13.5 25.5H25.5C26.88 25.5 28 24.38 28 23C28 21.62 26.88 20.5 25.5 20.5H13.5C12.12 20.5 11 21.62 11 23C11 24.38 12.12 25.5 13.5 25.5Z"
                     fill="currentColor"
                 />
             </svg>
@@ -734,7 +742,7 @@ function TickerRail({
     tokens,
     isLoading,
 }: {
-    tokens: Array<{ id: string; symbol: string; priceChange24hPercent: number }>;
+    tokens: Array<{ id: string; symbol: string; priceChange24hPercent: number; railKey: string }>;
     isLoading?: boolean;
 }) {
     return (
@@ -751,8 +759,8 @@ function TickerRail({
                 </div>
             ) : (
                 <div className="market-feed-ticker flex w-max items-center gap-2 px-2">
-                    {tokens.map((token, index) => (
-                        <TickerPill key={`${token.id}-${index}`} token={token} />
+                    {tokens.map(token => (
+                        <TickerPill key={token.railKey} token={token} />
                     ))}
                 </div>
             )}

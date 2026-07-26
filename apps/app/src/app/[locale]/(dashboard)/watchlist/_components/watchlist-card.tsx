@@ -89,6 +89,10 @@ interface CoinGeckoWatchlistCoin {
   };
 }
 
+// Hoisted default so the reference is stable across renders (keeps useMemo
+// deps referentially equal when the prop is omitted).
+const EMPTY_COINS: CoinGeckoWatchlistCoin[] = []
+
 interface WatchlistCardProps {
   group: WatchlistCardGroup
   coins: CoinGeckoWatchlistCoin[]
@@ -103,9 +107,141 @@ interface WatchlistCardProps {
   colorOverride?: string
 }
 
-export function WatchlistCard({ 
+function WatchlistCardActionsMenu({
+  group,
+  onEdit,
+  onDelete,
+}: {
+  group: WatchlistGroup
+  onEdit?: (group: WatchlistGroup) => void
+  onDelete?: (group: WatchlistGroup) => void
+}) {
+  return (
+    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Watchlist actions"
+            onClick={(event) => event.stopPropagation()}
+            className="h-7 w-7 p-0 rounded-lg bg-transparent hover:bg-white/5"
+          >
+            <IconEllipsis className="h-4 w-4 fill-white" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          sideOffset={-15}
+          className="w-[130px] p-2 rounded-xl bg-zinc-900 border-zinc-800"
+        >
+          {onEdit ? (
+            <DropdownMenuItem
+              onClick={(event) => {
+                event.stopPropagation()
+                onEdit(group)
+              }}
+              className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-zinc-800 focus:bg-zinc-800"
+            >
+              <IconPencilTipCropCircle className="h-3.5 w-3.5 fill-muted-foreground group-hover:fill-foreground" />
+              <span>Edit</span>
+            </DropdownMenuItem>
+          ) : null}
+          {onEdit && onDelete ? <DropdownMenuSeparator className="my-2 bg-zinc-800" /> : null}
+          {onDelete ? (
+            <DropdownMenuItem
+              onClick={(event) => {
+                event.stopPropagation()
+                onDelete(group)
+              }}
+              className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-red-500/10 focus:bg-red-500/10"
+            >
+              <IconTrashFill className="h-3.5 w-3.5 fill-red-400 group-hover:fill-red-400" />
+              <span className="text-red-400 hover:text-red-400">Delete</span>
+            </DropdownMenuItem>
+          ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+}
+
+function WatchlistCardPerformanceRow({
+  avatarData,
+  coinsCount,
+  displayColor,
+  latestAggregateChange,
+  isAggregatePositive,
+}: {
+  avatarData: { imageUrl: string; profileUrl: string }[]
+  coinsCount: number
+  displayColor?: string
+  latestAggregateChange: number | null
+  isAggregatePositive: boolean
+}) {
+  return (
+    <div className="flex items-end justify-between text-xs mt-4">
+      {/* Avatar circles */}
+      {avatarData.length > 0 && (
+        <div className="flex items-center gap-2">
+          <AvatarCircles
+            avatarUrls={avatarData}
+            numPeople={coinsCount > 4 ? coinsCount - 4 : 0}
+            sizePx={26}
+            className="-space-x-2"
+          />
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 mr-2">
+        <div className={cn(
+          "flex items-center gap-1 text-sm font-bold font-berkeley-mono",
+          // Use darker version of the theme color
+          displayColor === 'blue' ? "text-blue-300" :
+          displayColor === 'sky' ? "text-sky-300" :
+          displayColor === 'cyan' ? "text-cyan-300" :
+          displayColor === 'teal' ? "text-teal-300" :
+          displayColor === 'indigo' ? "text-indigo-300" :
+          displayColor === 'purple' ? "text-purple-300" :
+          displayColor === 'violet' ? "text-violet-300" :
+          displayColor === 'pink' ? "text-pink-300" :
+          displayColor === 'rose' ? "text-rose-300" :
+          displayColor === 'red' ? "text-red-300" :
+          displayColor === 'emerald' ? "text-emerald-300" :
+          displayColor === 'green' ? "text-green-300" :
+          displayColor === 'lime' ? "text-lime-300" :
+          displayColor === 'yellow' ? "text-yellow-300" :
+          displayColor === 'amber' ? "text-amber-300" :
+          displayColor === 'orange' ? "text-orange-300" :
+          displayColor === 'slate' ? "text-slate-300" :
+          "text-zinc-300", // default
+          isAggregatePositive ? "opacity-100" : "opacity-100"
+        )}>
+          {latestAggregateChange === null ? (
+            <span>—</span>
+          ) : (
+            <>
+              <span>{isAggregatePositive ? "+" : "-"}</span>
+              <NumberFlow
+                value={Math.abs(latestAggregateChange)}
+                format={{
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2
+                }}
+                suffix="%"
+                transformTiming={{ duration: 400, easing: 'ease-out' }}
+              />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function WatchlistCard({
   group, 
-  coins = [],
+  coins = EMPTY_COINS,
   isLoading = false,
   itemCount,
   onEdit,
@@ -278,52 +414,11 @@ export function WatchlistCard({
 
             {/* Actions menu */}
             {isPersistedWatchlistGroup(group) && (onEdit || onDelete) ? (
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Watchlist actions"
-                      onClick={(event) => event.stopPropagation()}
-                      className="h-7 w-7 p-0 rounded-lg bg-transparent hover:bg-white/5"
-                    >
-                      <IconEllipsis className="h-4 w-4 fill-white" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    sideOffset={-15}
-                    className="w-[130px] p-2 rounded-xl bg-zinc-900 border-zinc-800"
-                  >
-                    {onEdit ? (
-                      <DropdownMenuItem
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onEdit(group)
-                        }}
-                        className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-zinc-800 focus:bg-zinc-800"
-                      >
-                        <IconPencilTipCropCircle className="h-3.5 w-3.5 fill-muted-foreground group-hover:fill-foreground" />
-                        <span>Edit</span>
-                      </DropdownMenuItem>
-                    ) : null}
-                    {onEdit && onDelete ? <DropdownMenuSeparator className="my-2 bg-zinc-800" /> : null}
-                    {onDelete ? (
-                      <DropdownMenuItem
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          onDelete(group)
-                        }}
-                        className="flex items-center gap-2 h-8 px-2 text-sm rounded-lg hover:bg-red-500/10 focus:bg-red-500/10"
-                      >
-                        <IconTrashFill className="h-3.5 w-3.5 fill-red-400 group-hover:fill-red-400" />
-                        <span className="text-red-400 hover:text-red-400">Delete</span>
-                      </DropdownMenuItem>
-                    ) : null}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+              <WatchlistCardActionsMenu
+                group={group}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
             ) : null}
           </div>
 
@@ -368,62 +463,13 @@ export function WatchlistCard({
           
           {/* Performance indicators - Only show if there are coins */}
           {coinsCount > 0 && (
-            <div className="flex items-end justify-between text-xs mt-4">            
-              {/* Avatar circles */}
-              {avatarData.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <AvatarCircles
-                    avatarUrls={avatarData}
-                    numPeople={coinsCount > 4 ? coinsCount - 4 : 0}
-                    sizePx={26}
-                    className="-space-x-2"
-                  />
-                </div>
-              )}
-              
-              <div className="flex items-center gap-2 mr-2">
-                <div className={cn(
-                  "flex items-center gap-1 text-sm font-bold font-berkeley-mono",
-                  // Use darker version of the theme color
-                  displayColor === 'blue' ? "text-blue-300" :
-                  displayColor === 'sky' ? "text-sky-300" :
-                  displayColor === 'cyan' ? "text-cyan-300" :
-                  displayColor === 'teal' ? "text-teal-300" :
-                  displayColor === 'indigo' ? "text-indigo-300" :
-                  displayColor === 'purple' ? "text-purple-300" :
-                  displayColor === 'violet' ? "text-violet-300" :
-                  displayColor === 'pink' ? "text-pink-300" :
-                  displayColor === 'rose' ? "text-rose-300" :
-                  displayColor === 'red' ? "text-red-300" :
-                  displayColor === 'emerald' ? "text-emerald-300" :
-                  displayColor === 'green' ? "text-green-300" :
-                  displayColor === 'lime' ? "text-lime-300" :
-                  displayColor === 'yellow' ? "text-yellow-300" :
-                  displayColor === 'amber' ? "text-amber-300" :
-                  displayColor === 'orange' ? "text-orange-300" :
-                  displayColor === 'slate' ? "text-slate-300" :
-                  "text-zinc-300", // default
-                  isAggregatePositive ? "opacity-100" : "opacity-100"
-                )}>
-                  {latestAggregateChange === null ? (
-                    <span>—</span>
-                  ) : (
-                    <>
-                      <span>{isAggregatePositive ? "+" : "-"}</span>
-                      <NumberFlow
-                        value={Math.abs(latestAggregateChange)}
-                        format={{ 
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2
-                        }}
-                        suffix="%"
-                        transformTiming={{ duration: 400, easing: 'ease-out' }}
-                      />
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
+            <WatchlistCardPerformanceRow
+              avatarData={avatarData}
+              coinsCount={coinsCount}
+              displayColor={displayColor}
+              latestAggregateChange={latestAggregateChange}
+              isAggregatePositive={isAggregatePositive}
+            />
           )}
         </div>
       </CardContent>

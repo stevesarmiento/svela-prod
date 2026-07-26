@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AnalyzeToken } from "@/components/navigation/multi-analysis-dialog";
 import { MAX_ANALYZE_TOKENS } from "@/lib/analyze-constants";
@@ -43,7 +43,9 @@ export function useAnalyzeSelection(getSelectedTokens: () => AnalyzeToken[]) {
   // The resolver's identity may be unstable — route it through a ref so
   // onAnalyzeSelected stays stable for the bridge.
   const getTokensRef = useRef(getSelectedTokens);
-  getTokensRef.current = getSelectedTokens;
+  useEffect(() => {
+    getTokensRef.current = getSelectedTokens;
+  }, [getSelectedTokens]);
 
   const onAnalyzeSelected = useCallback(() => {
     const seen = new Set<string>();

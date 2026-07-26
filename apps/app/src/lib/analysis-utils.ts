@@ -6,35 +6,6 @@ export function formatNumber(num: number): string {
   return num.toFixed(2)
 }
 
-// Calculate trend direction from percentage change
-export function getTrendDirection(percentChange: number): 'uptrend' | 'downtrend' | 'sideways' {
-  if (percentChange > 2) return 'uptrend'
-  if (percentChange < -2) return 'downtrend'
-  return 'sideways'
-}
-
-// Calculate volatility level from percentage change
-export function getVolatilityLevel(percentChange: number): 'high' | 'moderate' | 'low' {
-  const absChange = Math.abs(percentChange)
-  if (absChange > 5) return 'high'
-  if (absChange > 2) return 'moderate'
-  return 'low'
-}
-
-// Calculate volume trend from historical data
-export function calculateVolumeTrend(recentVolume: number, previousVolume: number): 'increasing' | 'decreasing' | 'stable' {
-  if (recentVolume > previousVolume * 1.2) return 'increasing'
-  if (recentVolume < previousVolume * 0.8) return 'decreasing'
-  return 'stable'
-}
-
-// Get RSI signal based on value
-export function getRSISignal(rsiValue: number): 'overbought' | 'oversold' | 'neutral' {
-  if (rsiValue > 70) return 'overbought'
-  if (rsiValue < 30) return 'oversold'
-  return 'neutral'
-}
-
 // Calculate divergence between price and RSI
 export function calculateDivergence(
   currentPrice: number,
@@ -66,11 +37,6 @@ export function calculateSupportResistance(priceHistory: number[], currentPrice:
   }
 }
 
-// Get trend strength indicator
-export function getTrendStrength(percentChange: number): 'strong' | 'moderate' {
-  return Math.abs(percentChange) > 3 ? 'strong' : 'moderate'
-}
-
 // Calculate buy/sell pressure levels
 export function getBuySellPressure(ratio: number): 'high' | 'moderate' | 'low' {
   if (ratio > 52) return 'high'
@@ -89,21 +55,3 @@ export function getTrendBadgeVariant(trend: 'bullish' | 'bearish' | 'neutral'): 
       return 'secondary'
   }
 }
-
-// Calculate momentum from price arrays
-export function calculateMomentum(recentPrices: number[], previousPrices: number[]): 'bullish' | 'bearish' {
-  const recentAvg = recentPrices.length > 0 
-    ? recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length 
-    : 0
-  const previousAvg = previousPrices.length > 0 
-    ? previousPrices.reduce((a, b) => a + b, 0) / previousPrices.length 
-    : 0
-    
-  return recentAvg > previousAvg ? 'bullish' : 'bearish'
-}
-
-// Calculate average from array
-export function calculateAverage(values: number[]): number {
-  if (values.length === 0) return 0
-  return values.reduce((a, b) => a + b, 0) / values.length
-} 

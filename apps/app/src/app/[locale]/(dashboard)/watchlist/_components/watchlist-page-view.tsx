@@ -1,14 +1,12 @@
 'use client'
 
-import type { ForwardRefExoticComponent, RefAttributes } from "react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useEffectEvent, useState } from "react"
 import dynamic from "next/dynamic"
 import { Spinner } from "@v1/ui/spinner"
 import { Button } from "@v1/ui/button"
 import { Tabs, TabsContent } from "@v1/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { Kbd } from "@v1/ui/kbd"
-import { Separator } from "@v1/ui/separator"
 import {
   Popover,
   PopoverContent,
@@ -23,18 +21,13 @@ import {
   BreadcrumbSeparator,
 } from "@v1/ui/breadcrumb"
 
-import {
-  IconEllipsis,
-  IconWidgetSmallBadgePlus,
-  IconBookmark,
-  IconWalletBifold,
-  IconBookmarkFill,
-} from "symbols-react"
+import { IconEllipsis } from "symbols-react"
 
 import { useWatchlist } from "./watchlist-context"
 import { WatchlistsGrid } from "./watchlists-grid"
-import type { CoinSearchRef } from "./coin-search"
+import { useBottomNavActions } from "@/components/navigation/bottom-nav-context"
 import { WatchlistGroupIcon } from "@/components/watchlist-group-icon"
+import { AddTokenIcon, CreateWatchlistIcon, WatchlistsIcon } from "@/components/watchlist-icons"
 import { matchesShortcut, GLOBAL_SHORTCUTS } from "@/lib/keyboard-shortcuts"
 import { useLatest } from "@/hooks/use-latest"
 
@@ -44,10 +37,6 @@ function loadChartsModule() {
 
 function loadCreateWatchlist() {
   return import("./create-watchlist")
-}
-
-function loadCoinSearch() {
-  return import("./coin-search")
 }
 
 function loadAddWalletDialog() {
@@ -76,10 +65,6 @@ const LazyAddWalletDialog = dynamic(
   { ssr: false },
 )
 
-type LazyCoinSearchComponent = ForwardRefExoticComponent<
-  RefAttributes<CoinSearchRef>
->
-
 export interface WatchlistPageViewProps {
   activeTimeScale: string
   onTimeScaleChange: (scale: string) => void
@@ -101,9 +86,8 @@ export function WatchlistPageView({
 
   const [isCreatingWatchlist, setIsCreatingWatchlist] = useState(false)
   const [isAddWalletOpen, setIsAddWalletOpen] = useState(false)
-  const [CoinSearchComponent, setCoinSearchComponent] = useState<LazyCoinSearchComponent | null>(null)
-  const [shouldOpenCoinSearch, setShouldOpenCoinSearch] = useState(false)
-  const coinSearchRef = useRef<CoinSearchRef>(null)
+
+  const { openContextualCommandSearch } = useBottomNavActions()
 
   const isCreatingWatchlistRef = useLatest(isCreatingWatchlist)
   const onGridViewModeChangeRef = useLatest(onGridViewModeChange)
@@ -114,81 +98,69 @@ export function WatchlistPageView({
 
   const preloadCreateWatchlist = useCallback(() => {
     void loadCreateWatchlist()
+    // The create dialog's first step offers "Import from Wallet" — preload
+    // that flow too so choosing it is instant.
+    void loadAddWalletDialog()
   }, [])
 
   const preloadAddWalletDialog = useCallback(() => {
     void loadAddWalletDialog()
   }, [])
 
-  const preloadCoinSearch = useCallback(async () => {
-    if (CoinSearchComponent) return
-    const module = await loadCoinSearch()
-    setCoinSearchComponent(() => module.CoinSearch as LazyCoinSearchComponent)
-  }, [CoinSearchComponent])
+  // "Add Token" routes to the bottom-nav command search (watchlist context) —
+  // that's where token inputs live; the old coin-search side sheet is retired.
+  const openAddToken = useCallback(() => {
+    openContextualCommandSearch('watchlist')
+  }, [openContextualCommandSearch])
 
-  const openCoinSearch = useCallback(async () => {
-    await preloadCoinSearch()
-    setShouldOpenCoinSearch(true)
-  }, [preloadCoinSearch])
+  // Effect Event: always sees the latest callbacks/state without being a
+  // reactive dep, so the keydown subscription is set up exactly once.
+  const handleGlobalKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
 
-  useEffect(() => {
-    if (!shouldOpenCoinSearch) return
-    if (!CoinSearchComponent) return
-    coinSearchRef.current?.open()
-    setShouldOpenCoinSearch(false)
-  }, [CoinSearchComponent, shouldOpenCoinSearch])
-
-  useEffect(() => {
     const addTokenShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'focusAddToken')
     const addWalletShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'openAddWallet')
     const createWatchlistShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'openCreateWatchlist')
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
-
-      if (createWatchlistShortcut && matchesShortcut(event, createWatchlistShortcut)) {
-        if (isCreatingWatchlistRef.current) return
-        event.preventDefault()
-        preloadCreateWatchlist()
-        setIsCreatingWatchlist(true)
-        return
-      }
-
-      if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
-        event.preventDefault()
-        void openCoinSearch()
-        return
-      }
-
-      if (addWalletShortcut && matchesShortcut(event, addWalletShortcut)) {
-        event.preventDefault()
-        preloadAddWalletDialog()
-        setIsAddWalletOpen(true)
-        return
-      }
-
-      if (event.key.toLowerCase() === "w" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        event.preventDefault()
-        onGridViewModeChangeRef.current?.("grid")
-        return
-      }
-
-      if (event.key.toLowerCase() === "e" && !event.metaKey && !event.ctrlKey && !event.altKey) {
-        event.preventDefault()
-        onGridViewModeChangeRef.current?.("chart")
-        return
-      }
+    if (createWatchlistShortcut && matchesShortcut(event, createWatchlistShortcut)) {
+      if (isCreatingWatchlistRef.current) return
+      event.preventDefault()
+      preloadCreateWatchlist()
+      setIsCreatingWatchlist(true)
+      return
     }
 
+    if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
+      event.preventDefault()
+      openAddToken()
+      return
+    }
+
+    if (addWalletShortcut && matchesShortcut(event, addWalletShortcut)) {
+      event.preventDefault()
+      preloadAddWalletDialog()
+      setIsAddWalletOpen(true)
+      return
+    }
+
+    if (event.key.toLowerCase() === "w" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault()
+      onGridViewModeChangeRef.current?.("grid")
+      return
+    }
+
+    if (event.key.toLowerCase() === "e" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      event.preventDefault()
+      onGridViewModeChangeRef.current?.("chart")
+      return
+    }
+  })
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => handleGlobalKeyDown(event)
     document.addEventListener("keydown", handleKeyDown)
     return () => document.removeEventListener("keydown", handleKeyDown)
-  }, [
-    isCreatingWatchlistRef,
-    onGridViewModeChangeRef,
-    openCoinSearch,
-    preloadAddWalletDialog,
-    preloadCreateWatchlist,
-  ])
+  }, [])
 
   // If watchlist context isn’t ready yet, keep the existing spinner behavior.
   if (!isInitialized) {
@@ -214,13 +186,13 @@ export function WatchlistPageView({
                         onClick={() => onGridViewModeChange("grid")}
                         className="inline-flex items-center gap-2 rounded-md transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
-                        <IconBookmarkFill className="size-4 fill-muted-foreground" />
+                        <WatchlistsIcon className="size-5 text-muted-foreground" />
                         <span>Watchlists</span>
                       </button>
                     </BreadcrumbLink>
                   ) : (
                     <BreadcrumbPage className="inline-flex items-center gap-2">
-                      <IconBookmarkFill className="size-4 fill-muted-foreground" />
+                      <WatchlistsIcon className="size-5 text-muted-foreground" />
                       <span>Watchlists</span>
                     </BreadcrumbPage>
                   )}
@@ -261,12 +233,60 @@ export function WatchlistPageView({
         {headerLeft}
 
         <div className="flex items-center gap-2">
+          {/* Desktop: the three actions inline as icon triggers */}
+          <div className="hidden items-center gap-2 sm:flex">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    preloadCreateWatchlist()
+                    setIsCreatingWatchlist(true)
+                  }}
+                  onMouseEnter={preloadCreateWatchlist}
+                  onFocus={preloadCreateWatchlist}
+                  aria-label="Create Watchlist"
+                  className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
+                >
+                  <CreateWatchlistIcon className="size-4.5 text-muted-foreground group-hover:text-primary" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
+                <span>Create Watchlist</span>
+                <Kbd className="text-[10px]">Shift</Kbd>
+                <Kbd className="text-[10px] font-diatype-bold">N</Kbd>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={openAddToken}
+                  aria-label="Add Token"
+                  className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
+                >
+                  <AddTokenIcon className="size-4.5 text-muted-foreground group-hover:text-primary" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
+                <span>Add Token</span>
+                <Kbd className="text-[10px]">Shift</Kbd>
+                <Kbd className="text-[10px] font-diatype-bold">A</Kbd>
+              </TooltipContent>
+            </Tooltip>
+
+          </div>
+
+          {/* Mobile: same actions behind the ellipsis trigger */}
           <Popover>
             <PopoverTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
-                className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
+                className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10 sm:hidden"
               >
                 <IconEllipsis className="size-3.5 fill-muted-foreground group-hover:fill-primary rotate-90" />
               </Button>
@@ -284,7 +304,7 @@ export function WatchlistPageView({
                   onFocus={preloadCreateWatchlist}
                   className="w-full justify-start gap-2 rounded-md"
                 >
-                  <IconWidgetSmallBadgePlus className="h-3.5 w-3.5 fill-muted-foreground" />
+                  <CreateWatchlistIcon className="h-3.5 w-3.5 text-muted-foreground" />
                   <span>Create Watchlist</span>
                   <div className="ml-auto flex items-center gap-1">
                     <Kbd className="text-[10px]">Shift</Kbd>
@@ -295,43 +315,14 @@ export function WatchlistPageView({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => {
-                    void openCoinSearch()
-                  }}
-                  onMouseEnter={() => {
-                    void preloadCoinSearch()
-                  }}
-                  onFocus={() => {
-                    void preloadCoinSearch()
-                  }}
+                  onClick={openAddToken}
                   className="w-full justify-start gap-2 rounded-md"
                 >
-                  <IconBookmark className="h-3.5 w-3.5 fill-muted-foreground" />
+                  <AddTokenIcon className="h-3.5 w-3.5 text-muted-foreground" />
                   <span>Add Token</span>
                   <div className="ml-auto flex items-center gap-1">
                     <Kbd className="text-[10px]">Shift</Kbd>
                     <Kbd className="text-[10px] font-diatype-bold">A</Kbd>
-                  </div>
-                </Button>
-
-                <Separator className="my-1 scale-x-110" />
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    preloadAddWalletDialog()
-                    setIsAddWalletOpen(true)
-                  }}
-                  onMouseEnter={preloadAddWalletDialog}
-                  onFocus={preloadAddWalletDialog}
-                  className="w-full justify-start gap-2 rounded-md"
-                >
-                  <IconWalletBifold className="h-3.5 w-3.5 fill-muted-foreground" />
-                  <span>Import from Wallet</span>
-                  <div className="ml-auto flex items-center gap-1">
-                    <Kbd className="text-[10px]">Shift</Kbd>
-                    <Kbd className="text-[10px] font-diatype-bold">M</Kbd>
                   </div>
                 </Button>
               </div>
@@ -363,15 +354,14 @@ export function WatchlistPageView({
       <LazyCreateWatchlist
         isOpen={isCreatingWatchlist}
         onClose={() => setIsCreatingWatchlist(false)}
+        onImportWallet={() => {
+          setIsCreatingWatchlist(false)
+          preloadAddWalletDialog()
+          setIsAddWalletOpen(true)
+        }}
       />
 
       <LazyAddWalletDialog open={isAddWalletOpen} onOpenChange={setIsAddWalletOpen} />
-
-      {CoinSearchComponent ? (
-        <div className="sr-only">
-          <CoinSearchComponent ref={coinSearchRef} />
-        </div>
-      ) : null}
     </div>
   )
 }

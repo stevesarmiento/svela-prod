@@ -5,10 +5,16 @@ import type { IChartApi, ISeriesApi, LineData, Time } from 'lightweight-charts'
 import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import { calculateBBWP, type BBWPConfig, DEFAULT_BBWP_CONFIG } from '@/hooks/market-vision/bbwp'
 import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
-import { subscribeToWindowResize } from '@/hooks/window-resize-store'
-import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store'
-import { CHART_COLOR_PARSERS, mixOklch, withAlpha as oklchWithAlpha } from '@/lib/oklch'
-import { timeToEpochSeconds } from '@/hooks/use-chart-instance/utils'
+import { mixOklch, withAlpha as oklchWithAlpha } from '@/lib/oklch'
+import {
+  applyInitialVisibleRange,
+  attachChartResize,
+  attachChartScrubSync,
+  buildIndicatorChartOptions,
+  getInitialWindowSeconds,
+  normalizeIndicatorOhlcv,
+  normalizeSeries,
+} from './indicator-chart-setup'
 
 type SpectrumPreset = '2point' | '3point' | '5point'
 type ColorType = 'Spectrum' | 'Solid'
@@ -73,87 +79,6 @@ const DEFAULT_COLORS: Required<BBWPSpectrumColors> & {
   extremeLow: 'oklch(0.452 0.3132 264.05)',
 }
 
-function normalizeEpochSeconds(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value)) return null
-  const seconds = value > 1e10 ? Math.floor(value / 1000) : Math.floor(value)
-  return Number.isFinite(seconds) ? seconds : null
-}
-
-function normalizeIndicatorOhlcv(data: OHLCVDataPoint[]): OHLCVDataPoint[] {
-  const byEpoch = new Map<number, OHLCVDataPoint>()
-  for (const point of data) {
-    const epoch = normalizeEpochSeconds(point.time)
-    if (epoch == null) continue
-    if (!Number.isFinite(point.open) || !Number.isFinite(point.high) || !Number.isFinite(point.low) || !Number.isFinite(point.close))
-      continue
-    byEpoch.set(epoch, { ...point, time: epoch, volume: Number.isFinite(point.volume) ? point.volume : 0 })
-  }
-
-  return Array.from(byEpoch.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([, value]) => value)
-}
-
-function normalizeSeries(points: Array<{ time: number; value: number }>): Array<{ time: Time; value: number }> {
-  const byEpoch = new Map<number, { time: Time; value: number }>()
-  for (const point of points) {
-    const epoch = normalizeEpochSeconds(point.time)
-    if (epoch == null) continue
-    if (!Number.isFinite(point.value)) continue
-    byEpoch.set(epoch, { time: epoch as Time, value: point.value })
-  }
-
-  return Array.from(byEpoch.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([, value]) => value)
-}
-
-const SECONDS_PER_DAY = 24 * 60 * 60
-const DEFAULT_WINDOW_DAYS = 3
-const RIGHT_OFFSET_BARS = 12
-
-function getInitialWindowSeconds(initialWindowDays: number | undefined): number {
-  const days = Number.isFinite(initialWindowDays) ? Math.max(1, Math.round(initialWindowDays as number)) : DEFAULT_WINDOW_DAYS
-  return days * SECONDS_PER_DAY
-}
-
-function estimateIntervalSeconds(ohlcvData: OHLCVDataPoint[], lastEpoch: number): number {
-  const prevEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 2]?.time)
-  if (prevEpoch == null) return 0
-  const delta = lastEpoch - prevEpoch
-  return Number.isFinite(delta) && delta > 0 ? delta : 0
-}
-
-function pickDefaultWindowSeconds(spanSeconds: number, windowSeconds: number): number | null {
-  if (!Number.isFinite(spanSeconds) || spanSeconds <= 0) return null
-  if (spanSeconds > windowSeconds) return windowSeconds
-  return null
-}
-
-function applyInitialVisibleRange(chart: IChartApi, ohlcvData: OHLCVDataPoint[], windowSeconds: number): void {
-  const firstEpoch = normalizeEpochSeconds(ohlcvData[0]?.time)
-  const lastEpoch = normalizeEpochSeconds(ohlcvData[ohlcvData.length - 1]?.time)
-  if (firstEpoch == null || lastEpoch == null) {
-    chart.timeScale().fitContent()
-    return
-  }
-
-  const spanSeconds = lastEpoch - firstEpoch
-  const requestedWindowSeconds = pickDefaultWindowSeconds(spanSeconds, windowSeconds)
-  if (requestedWindowSeconds == null || spanSeconds <= requestedWindowSeconds) {
-    chart.timeScale().fitContent()
-    return
-  }
-
-  const intervalSeconds = estimateIntervalSeconds(ohlcvData, lastEpoch)
-  const paddedTo = (lastEpoch + intervalSeconds) as Time
-
-  chart.timeScale().setVisibleRange({
-    from: (lastEpoch - requestedWindowSeconds) as Time,
-    to: paddedTo,
-  })
-}
-
 function clampInt(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min
   return Math.min(max, Math.max(min, Math.round(value)))
@@ -212,6 +137,163 @@ function buildColorMap(preset: SpectrumPreset, colors: Required<BBWPSpectrumColo
   return map
 }
 
+function resolveBbwpConfig(config: BBWPChartConfig | undefined) {
+  const merged = { ...DEFAULT_BBWP_CONFIG, ...(config ?? {}) }
+  return {
+    ...merged,
+    lineWidth: clampLineWidth(config?.lineWidth, 2),
+    maColor: config?.maColor ?? DEFAULT_COLORS.ma,
+    maWidth: clampLineWidth(config?.maWidth, 2),
+    colorType: config?.colorType ?? 'Spectrum',
+    solidColor: config?.solidColor ?? DEFAULT_COLORS.solid,
+    spectrumPreset: config?.spectrumPreset ?? '5point',
+    spectrumColors: {
+      high: config?.spectrumColors?.high ?? DEFAULT_COLORS.high,
+      midHigh: config?.spectrumColors?.midHigh ?? DEFAULT_COLORS.midHigh,
+      mid: config?.spectrumColors?.mid ?? DEFAULT_COLORS.mid,
+      midLow: config?.spectrumColors?.midLow ?? DEFAULT_COLORS.midLow,
+      low: config?.spectrumColors?.low ?? DEFAULT_COLORS.low,
+    } satisfies Required<BBWPSpectrumColors>,
+    scaleHighColor: config?.scaleHighColor ?? DEFAULT_COLORS.scaleHigh,
+    scaleMidColor: config?.scaleMidColor ?? DEFAULT_COLORS.scaleMid,
+    scaleLowColor: config?.scaleLowColor ?? DEFAULT_COLORS.scaleLow,
+    scaleWidth: clampLineWidth(config?.scaleWidth, 1),
+    extremeHighColor: config?.extremeHighColor ?? DEFAULT_COLORS.extremeHigh,
+    extremeLowColor: config?.extremeLowColor ?? DEFAULT_COLORS.extremeLow,
+    extremeWidth: clampLineWidth(config?.extremeWidth, 1),
+  }
+}
+
+type ResolvedBbwpConfig = ReturnType<typeof resolveBbwpConfig>
+type BbwpResult = ReturnType<typeof calculateBBWP>
+
+// Rebuilds all series on the chart from the latest BBWP calculation.
+function applyBbwpSeries(
+  chart: IChartApi,
+  lightweightCharts: LightweightChartsModule,
+  seriesRefs: Map<string, ISeriesApi<'Line'>>,
+  finalConfig: ResolvedBbwpConfig,
+  bbwpResult: BbwpResult,
+  colorMap: string[] | null,
+): void {
+  const { LineSeries, LineStyle } = lightweightCharts
+
+  // Clear existing series
+  seriesRefs.forEach((series) => {
+    try {
+      chart.removeSeries(series)
+    } catch {
+      // ignore
+    }
+  })
+  seriesRefs.clear()
+
+  const scaleEdgeColor = withAlpha(finalConfig.scaleHighColor, 0.16)
+  const scaleMidColor = withAlpha(finalConfig.scaleMidColor, 0.22)
+  const scaleLowColor = withAlpha(finalConfig.scaleLowColor, 0.16)
+  const extremeHighColor = withAlpha(finalConfig.extremeHighColor, 0.18)
+  const extremeLowColor = withAlpha(finalConfig.extremeLowColor, 0.18)
+  const maColor = withAlpha(finalConfig.maColor, 0.55)
+
+  // Scale lines (0/50/100)
+  const highSeries = chart.addSeries(LineSeries, {
+    lineWidth: finalConfig.scaleWidth,
+    color: scaleEdgeColor,
+    title: '',
+    lineStyle: LineStyle.Solid,
+    lastValueVisible: false,
+    priceLineVisible: false,
+  })
+  highSeries.setData(normalizeSeries(bbwpResult.levels.high) as { time: Time; value: number }[])
+  seriesRefs.set('scaleHigh', highSeries)
+
+  const midSeries = chart.addSeries(LineSeries, {
+    lineWidth: finalConfig.scaleWidth,
+    color: scaleMidColor,
+    title: '',
+    lineStyle: LineStyle.Dashed,
+    lastValueVisible: false,
+    priceLineVisible: false,
+  })
+  midSeries.setData(normalizeSeries(bbwpResult.levels.mid) as { time: Time; value: number }[])
+  seriesRefs.set('scaleMid', midSeries)
+
+  const lowSeries = chart.addSeries(LineSeries, {
+    lineWidth: finalConfig.scaleWidth,
+    color: scaleLowColor,
+    title: '',
+    lineStyle: LineStyle.Solid,
+    lastValueVisible: false,
+    priceLineVisible: false,
+  })
+  lowSeries.setData(normalizeSeries(bbwpResult.levels.low) as { time: Time; value: number }[])
+  seriesRefs.set('scaleLow', lowSeries)
+
+  // Extremes
+  const high = chart.addSeries(LineSeries, {
+    lineWidth: finalConfig.extremeWidth,
+    color: extremeHighColor,
+    title: '',
+    lineStyle: LineStyle.Dotted,
+    lastValueVisible: false,
+    priceLineVisible: false,
+  })
+  high.setData(normalizeSeries(bbwpResult.levels.extremeHigh) as { time: Time; value: number }[])
+  seriesRefs.set('extremeHigh', high)
+
+  const low = chart.addSeries(LineSeries, {
+    lineWidth: finalConfig.extremeWidth,
+    color: extremeLowColor,
+    title: '',
+    lineStyle: LineStyle.Dotted,
+    lastValueVisible: false,
+    priceLineVisible: false,
+  })
+  low.setData(normalizeSeries(bbwpResult.levels.extremeLow) as { time: Time; value: number }[])
+  seriesRefs.set('extremeLow', low)
+
+  // BBWP series
+  if (bbwpResult.bbwp.length > 0) {
+    const bbwpSeries = chart.addSeries(LineSeries, {
+      lineWidth: finalConfig.lineWidth,
+      color:
+        finalConfig.colorType === 'Solid'
+          ? finalConfig.solidColor
+          : DEFAULT_COLORS.midHigh,
+      title: '',
+      lastValueVisible: true,
+      priceLineVisible: false,
+    })
+
+    if (finalConfig.colorType === 'Spectrum' && colorMap) {
+      const colored: LineData[] = normalizeSeries(bbwpResult.bbwp).map((p) => ({
+        time: p.time,
+        value: p.value,
+        color: colorMap[clampInt(p.value, 0, 100)] ?? DEFAULT_COLORS.midHigh,
+      }))
+      bbwpSeries.setData(colored)
+    } else {
+      bbwpSeries.setData(normalizeSeries(bbwpResult.bbwp) as { time: Time; value: number }[])
+    }
+
+    seriesRefs.set('bbwp', bbwpSeries)
+  }
+
+  // MA overlay
+  if (bbwpResult.ma.length > 0) {
+    const maSeries = chart.addSeries(LineSeries, {
+      lineWidth: finalConfig.maWidth,
+      color: maColor,
+      title: '',
+      lineStyle: LineStyle.Dashed,
+      lastValueVisible: true,
+      priceLineVisible: false,
+    })
+    maSeries.setData(normalizeSeries(bbwpResult.ma) as { time: Time; value: number }[])
+    seriesRefs.set('ma', maSeries)
+  }
+}
+
 export function BBWPChart({ data, config, height = 200, showTimeAxis = true, initialWindowDays }: BBWPChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -226,32 +308,7 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = true, ini
     hasAppliedInitialRangeRef.current = false
   }, [dataSignature, initialWindowSeconds])
 
-  const finalConfig = useMemo(() => {
-    const merged = { ...DEFAULT_BBWP_CONFIG, ...(config ?? {}) }
-    return {
-      ...merged,
-      lineWidth: clampLineWidth(config?.lineWidth, 2),
-      maColor: config?.maColor ?? DEFAULT_COLORS.ma,
-      maWidth: clampLineWidth(config?.maWidth, 2),
-      colorType: config?.colorType ?? 'Spectrum',
-      solidColor: config?.solidColor ?? DEFAULT_COLORS.solid,
-      spectrumPreset: config?.spectrumPreset ?? '5point',
-      spectrumColors: {
-        high: config?.spectrumColors?.high ?? DEFAULT_COLORS.high,
-        midHigh: config?.spectrumColors?.midHigh ?? DEFAULT_COLORS.midHigh,
-        mid: config?.spectrumColors?.mid ?? DEFAULT_COLORS.mid,
-        midLow: config?.spectrumColors?.midLow ?? DEFAULT_COLORS.midLow,
-        low: config?.spectrumColors?.low ?? DEFAULT_COLORS.low,
-      } satisfies Required<BBWPSpectrumColors>,
-      scaleHighColor: config?.scaleHighColor ?? DEFAULT_COLORS.scaleHigh,
-      scaleMidColor: config?.scaleMidColor ?? DEFAULT_COLORS.scaleMid,
-      scaleLowColor: config?.scaleLowColor ?? DEFAULT_COLORS.scaleLow,
-      scaleWidth: clampLineWidth(config?.scaleWidth, 1),
-      extremeHighColor: config?.extremeHighColor ?? DEFAULT_COLORS.extremeHigh,
-      extremeLowColor: config?.extremeLowColor ?? DEFAULT_COLORS.extremeLow,
-      extremeWidth: clampLineWidth(config?.extremeWidth, 1),
-    }
-  }, [config])
+  const finalConfig = useMemo(() => resolveBbwpConfig(config), [config])
 
   const normalizedData = useMemo(() => normalizeIndicatorOhlcv(data), [data])
   const bbwpResult = useMemo(() => calculateBBWP(normalizedData, finalConfig), [normalizedData, finalConfig])
@@ -272,128 +329,28 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = true, ini
       const lightweightCharts = await loadLightweightCharts()
       lightweightChartsRef.current = lightweightCharts
 
-      const { createChart, ColorType: LwcColorType, CrosshairMode, LineStyle } = lightweightCharts
       if (isCancelled || !chartContainerRef.current) return
+      const container = chartContainerRef.current
 
-      const chart = createChart(chartContainerRef.current, {
-        handleScale: true,
-        handleScroll: true,
-        layout: {
-          background: { type: LwcColorType.Solid, color: 'transparent' },
-          textColor: 'oklch(1 0 0 / 0.3137)',
-          attributionLogo: false,
-          colorParsers: CHART_COLOR_PARSERS,
-        },
-        grid: {
-          vertLines: { visible: false },
-          horzLines: { visible: true, color: 'oklch(0.9702 0 0 / 0.0627)', style: LineStyle.Dotted },
-        },
-        rightPriceScale: {
-          borderVisible: false,
-          autoScale: true,
+      const chart = lightweightCharts.createChart(
+        container,
+        buildIndicatorChartOptions(lightweightCharts, {
+          showTimeAxis,
+          horzLinesVisible: true,
           scaleMargins: { top: 0.15, bottom: 0.15 },
-        },
-        crosshair: {
-          mode: CrosshairMode.Magnet,
-          vertLine: { labelVisible: true, width: 1, color: 'oklch(0.8717 0.0093 258.34 / 0.251)', visible: true, style: LineStyle.Solid },
-          horzLine: { visible: false, labelVisible: false },
-        },
-        timeScale: {
-          visible: showTimeAxis,
-          timeVisible: showTimeAxis,
-          secondsVisible: false,
-          borderVisible: false,
-          rightOffset: RIGHT_OFFSET_BARS,
-        },
-      })
+        }),
+      )
 
       chartRef.current = chart
       hasAppliedInitialRangeRef.current = false
       if (!isCancelled) setChartReadyNonce((prev) => prev + 1)
 
-      // Shared cross-chart scrub line overlay.
-      chartContainerRef.current.style.position = chartContainerRef.current.style.position || 'relative'
-      const scrubLineEl = document.createElement('div')
-      scrubLineEl.setAttribute('aria-hidden', 'true')
-      scrubLineEl.style.position = 'absolute'
-      scrubLineEl.style.top = '0'
-      scrubLineEl.style.bottom = '0'
-      scrubLineEl.style.width = '1px'
-      scrubLineEl.style.transform = 'translateX(-9999px)'
-      scrubLineEl.style.opacity = '0'
-      scrubLineEl.style.pointerEvents = 'none'
-      scrubLineEl.style.background = 'oklch(1 0 0 / 0.2)'
-      scrubLineEl.style.zIndex = '5'
-      chartContainerRef.current.appendChild(scrubLineEl)
-
-      const updateScrubLine = () => {
-        const scrub = getChartScrubSnapshot()
-        if (!chartContainerRef.current || scrub.epochSeconds == null || scrub.sourceId === 'bbwp') {
-          scrubLineEl.style.opacity = '0'
-          scrubLineEl.style.transform = 'translateX(-9999px)'
-          return
-        }
-
-        const x = chart.timeScale().timeToCoordinate(scrub.epochSeconds as Time)
-        if (x == null || !Number.isFinite(x)) {
-          scrubLineEl.style.opacity = '0'
-          scrubLineEl.style.transform = 'translateX(-9999px)'
-          return
-        }
-
-        scrubLineEl.style.opacity = '1'
-        scrubLineEl.style.transform = `translateX(${Math.round(x)}px)`
-      }
-
-      const unsubscribeScrub = subscribeToChartScrub(() => updateScrubLine())
-      chart.timeScale().subscribeVisibleTimeRangeChange(updateScrubLine)
-      chart.timeScale().subscribeVisibleLogicalRangeChange(updateScrubLine)
-      updateScrubLine()
-
-      // Publish scrub time from this chart.
-      const handleCrosshairMove = (param: { point?: { x: number; y: number }; time?: Time }) => {
-        if (!param.point || !param.time || param.point.x < 0 || param.point.y < 0) {
-          clearChartScrub()
-          return
-        }
-        setChartScrub(timeToEpochSeconds(param.time) ?? null, 'bbwp')
-      }
-      chart.subscribeCrosshairMove(handleCrosshairMove)
-
-      const handleResize = () => {
-        if (chartContainerRef.current && chart) {
-          chart.applyOptions({
-            width: chartContainerRef.current.clientWidth,
-            height: height,
-          })
-        }
-      }
-
-      let resizeObserver: ResizeObserver | null = null
-      let resizeRafId: number | null = null
-      let unsubscribeWindowResize: (() => void) | null = null
-
-      if (typeof ResizeObserver !== 'undefined' && chartContainerRef.current) {
-        resizeObserver = new ResizeObserver(() => {
-          if (resizeRafId) cancelAnimationFrame(resizeRafId)
-          resizeRafId = requestAnimationFrame(() => handleResize())
-        })
-        resizeObserver.observe(chartContainerRef.current)
-      } else {
-        unsubscribeWindowResize = subscribeToWindowResize(handleResize)
-      }
-
-      handleResize()
+      const detachScrubSync = attachChartScrubSync(chart, container, 'bbwp')
+      const detachResize = attachChartResize(chart, container, height)
 
       cleanup = () => {
-        if (resizeRafId) cancelAnimationFrame(resizeRafId)
-        resizeObserver?.disconnect()
-        unsubscribeWindowResize?.()
-        chart.unsubscribeCrosshairMove(handleCrosshairMove)
-        chart.timeScale().unsubscribeVisibleTimeRangeChange(updateScrubLine)
-        chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateScrubLine)
-        unsubscribeScrub()
-        if (chartContainerRef.current?.contains(scrubLineEl)) chartContainerRef.current.removeChild(scrubLineEl)
+        detachResize()
+        detachScrubSync()
         chart.remove()
         chartRef.current = null
         currentSeriesRefs.clear()
@@ -407,127 +364,12 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = true, ini
   }, [height, showTimeAxis])
 
   useEffect(() => {
-    if (!chartRef.current) return
+    const chart = chartRef.current
+    if (!chart) return
     const lightweightCharts = lightweightChartsRef.current
     if (!lightweightCharts) return
 
-    const { LineSeries, LineStyle } = lightweightCharts
-    const chart = chartRef.current
-
-    // Clear existing series
-    seriesRefs.current.forEach((series) => {
-      try {
-        chart.removeSeries(series)
-      } catch {
-        // ignore
-      }
-    })
-    seriesRefs.current.clear()
-
-    const scaleEdgeColor = withAlpha(finalConfig.scaleHighColor, 0.16)
-    const scaleMidColor = withAlpha(finalConfig.scaleMidColor, 0.22)
-    const scaleLowColor = withAlpha(finalConfig.scaleLowColor, 0.16)
-    const extremeHighColor = withAlpha(finalConfig.extremeHighColor, 0.18)
-    const extremeLowColor = withAlpha(finalConfig.extremeLowColor, 0.18)
-    const maColor = withAlpha(finalConfig.maColor, 0.55)
-
-    // Scale lines (0/50/100)
-    const highSeries = chart.addSeries(LineSeries, {
-      lineWidth: finalConfig.scaleWidth,
-      color: scaleEdgeColor,
-      title: '',
-      lineStyle: LineStyle.Solid,
-      lastValueVisible: false,
-      priceLineVisible: false,
-    })
-    highSeries.setData(normalizeSeries(bbwpResult.levels.high) as { time: Time; value: number }[])
-    seriesRefs.current.set('scaleHigh', highSeries)
-
-    const midSeries = chart.addSeries(LineSeries, {
-      lineWidth: finalConfig.scaleWidth,
-      color: scaleMidColor,
-      title: '',
-      lineStyle: LineStyle.Dashed,
-      lastValueVisible: false,
-      priceLineVisible: false,
-    })
-    midSeries.setData(normalizeSeries(bbwpResult.levels.mid) as { time: Time; value: number }[])
-    seriesRefs.current.set('scaleMid', midSeries)
-
-    const lowSeries = chart.addSeries(LineSeries, {
-      lineWidth: finalConfig.scaleWidth,
-      color: scaleLowColor,
-      title: '',
-      lineStyle: LineStyle.Solid,
-      lastValueVisible: false,
-      priceLineVisible: false,
-    })
-    lowSeries.setData(normalizeSeries(bbwpResult.levels.low) as { time: Time; value: number }[])
-    seriesRefs.current.set('scaleLow', lowSeries)
-
-    // Extremes
-    const high = chart.addSeries(LineSeries, {
-      lineWidth: finalConfig.extremeWidth,
-      color: extremeHighColor,
-      title: '',
-      lineStyle: LineStyle.Dotted,
-      lastValueVisible: false,
-      priceLineVisible: false,
-    })
-    high.setData(normalizeSeries(bbwpResult.levels.extremeHigh) as { time: Time; value: number }[])
-    seriesRefs.current.set('extremeHigh', high)
-
-    const low = chart.addSeries(LineSeries, {
-      lineWidth: finalConfig.extremeWidth,
-      color: extremeLowColor,
-      title: '',
-      lineStyle: LineStyle.Dotted,
-      lastValueVisible: false,
-      priceLineVisible: false,
-    })
-    low.setData(normalizeSeries(bbwpResult.levels.extremeLow) as { time: Time; value: number }[])
-    seriesRefs.current.set('extremeLow', low)
-
-    // BBWP series
-    if (bbwpResult.bbwp.length > 0) {
-      const bbwpSeries = chart.addSeries(LineSeries, {
-        lineWidth: finalConfig.lineWidth,
-        color:
-          finalConfig.colorType === 'Solid'
-            ? finalConfig.solidColor
-            : DEFAULT_COLORS.midHigh,
-        title: '',
-        lastValueVisible: true,
-        priceLineVisible: false,
-      })
-
-      if (finalConfig.colorType === 'Spectrum' && colorMap) {
-        const colored: LineData[] = normalizeSeries(bbwpResult.bbwp).map((p) => ({
-          time: p.time,
-          value: p.value,
-          color: colorMap[clampInt(p.value, 0, 100)] ?? DEFAULT_COLORS.midHigh,
-        }))
-        bbwpSeries.setData(colored)
-      } else {
-        bbwpSeries.setData(normalizeSeries(bbwpResult.bbwp) as { time: Time; value: number }[])
-      }
-
-      seriesRefs.current.set('bbwp', bbwpSeries)
-    }
-
-    // MA overlay
-    if (bbwpResult.ma.length > 0) {
-      const maSeries = chart.addSeries(LineSeries, {
-        lineWidth: finalConfig.maWidth,
-        color: maColor,
-        title: '',
-        lineStyle: LineStyle.Dashed,
-        lastValueVisible: true,
-        priceLineVisible: false,
-      })
-      maSeries.setData(normalizeSeries(bbwpResult.ma) as { time: Time; value: number }[])
-      seriesRefs.current.set('ma', maSeries)
-    }
+    applyBbwpSeries(chart, lightweightCharts, seriesRefs.current, finalConfig, bbwpResult, colorMap)
 
     if (!hasAppliedInitialRangeRef.current) {
       applyInitialVisibleRange(chart, data, initialWindowSeconds)
@@ -545,4 +387,3 @@ export function BBWPChart({ data, config, height = 200, showTimeAxis = true, ini
     </div>
   )
 }
-

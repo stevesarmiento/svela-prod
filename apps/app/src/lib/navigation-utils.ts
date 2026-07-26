@@ -23,13 +23,3 @@ export function useWatchlistPreservingNavigation() {
     buildUrl
   }
 }
-
-/**
- * Simple function to build URLs with watchlist preservation (for use outside of components)
- */
-export function buildWatchlistUrl(basePath: string, currentSlug?: string) {
-  if (!currentSlug) return basePath
-  
-  const separator = basePath.includes('?') ? '&' : '?'
-  return `${basePath}${separator}wg=${currentSlug}`
-} 

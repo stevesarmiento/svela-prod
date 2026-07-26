@@ -197,11 +197,15 @@ export function useBottomNavSelectionBridge(
   // The bridge effect below feeds these into the nav context. Route them
   // through refs so the effect deps are state values only — an unstable
   // callback identity from a caller must not re-fire setSelectionMode every
-  // render (nav context update -> caller re-render -> infinite loop).
+  // render (nav context update -> caller re-render -> infinite loop). Synced
+  // in an effect so render stays pure; the refs are only read from the dock's
+  // event handlers, which fire after commit.
   const selectionRef = useRef(selection)
-  selectionRef.current = selection
   const selectableIdsRef = useRef(selectableIds)
-  selectableIdsRef.current = selectableIds
+  useEffect(() => {
+    selectionRef.current = selection
+    selectableIdsRef.current = selectableIds
+  }, [selection, selectableIds])
 
   // Adapt to SelectionState.onSelectAll(checked) — the bottom nav doesn't know
   // the row ids.
@@ -216,7 +220,10 @@ export function useBottomNavSelectionBridge(
   // Same ref treatment for the optional analyze callback: only the boolean
   // presence and the count (primitives) enter the effect deps below.
   const onAnalyzeSelectedRef = useRef(options?.onAnalyzeSelected)
-  onAnalyzeSelectedRef.current = options?.onAnalyzeSelected
+  const analyzeCallback = options?.onAnalyzeSelected
+  useEffect(() => {
+    onAnalyzeSelectedRef.current = analyzeCallback
+  }, [analyzeCallback])
   const hasAnalyze = Boolean(options?.onAnalyzeSelected)
   const analyzeSelectedCount = options?.analyzeSelectedCount
 
@@ -257,7 +264,9 @@ export function useBottomNavSelectionBridge(
 
   // Release the nav if the table unmounts mid-selection (navigating away).
   const hasSelectedRef = useRef(false)
-  hasSelectedRef.current = hasSelectedCoins
+  useEffect(() => {
+    hasSelectedRef.current = hasSelectedCoins
+  }, [hasSelectedCoins])
   useEffect(
     () => () => {
       if (hasSelectedRef.current) setNavigationMode()
@@ -271,6 +280,7 @@ export function useBottomNavSelectionBridge(
   // transiently [] and pruning then would wipe a live selection.
   useEffect(() => {
     if (selectableIdSet.size === 0) return
+    // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent -- guarded functional reconcile of caller-owned selection; deriving in render would wipe live selection during transient empty refetch
     setSelectedCoins((prev) => {
       if (prev.size === 0) return prev
       const next = new Set([...prev].filter((id) => selectableIdSet.has(id)))
@@ -286,6 +296,7 @@ export function useBottomNavSelectionBridge(
     const prevMode = prevModeRef.current
     prevModeRef.current = mode
     if (prevMode === 'selection' && mode === 'navigation') {
+      // react-doctor-disable-next-line react-doctor/no-pass-data-to-parent -- mirrors external nav-context exit event into caller-owned state; hook owns the subscription so tables do not re-render per nav update
       setSelectedCoins((prev) => (prev.size > 0 ? new Set<string>() : prev))
     }
   }, [mode, setSelectedCoins])

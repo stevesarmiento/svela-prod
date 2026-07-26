@@ -99,13 +99,13 @@ export function useContextualCommands(searchQuery: string, context: CommandConte
     
     const lowerQuery = searchQuery.toLowerCase();
     
-    return contextualCommands.map(group => ({
-      ...group,
-      items: group.items.filter(item => 
+    return contextualCommands.flatMap(group => {
+      const items = group.items.filter(item =>
         item.title.toLowerCase().includes(lowerQuery) ||
         item.subtitle?.toLowerCase().includes(lowerQuery)
-      )
-    })).filter(group => group.items.length > 0);
+      );
+      return items.length > 0 ? [{ ...group, items }] : [];
+    });
   }, [contextualCommands, searchQuery]);
 
   // Also get global commands (filtered)
@@ -116,13 +116,13 @@ export function useContextualCommands(searchQuery: string, context: CommandConte
     
     const lowerQuery = searchQuery.toLowerCase();
     
-    return COMMAND_ITEMS.map(group => ({
-      ...group,
-      items: group.items.filter(item => 
+    return COMMAND_ITEMS.flatMap(group => {
+      const items = group.items.filter(item =>
         item.title.toLowerCase().includes(lowerQuery) ||
         item.subtitle?.toLowerCase().includes(lowerQuery)
-      )
-    })).filter(group => group.items.length > 0);
+      );
+      return items.length > 0 ? [{ ...group, items }] : [];
+    });
   }, [searchQuery]);
 
   return {

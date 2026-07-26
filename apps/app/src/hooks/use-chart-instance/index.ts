@@ -71,9 +71,12 @@ export function useChartInstance(ohlcvData: OHLCVDataPoint[], options: UseChartI
     }, [containerEl, chartType, showVolume, showPriceExtrema, isDarkMode]);
 
     // Track the latest realtime price so it can be re-applied after setData
-    // (a fresh series feed resets the last bar to the server value).
+    // (a fresh series feed resets the last bar to the server value). Synced in
+    // an effect declared before the data effect so it stays fresh for setData.
     const livePriceRef = useRef<number | null>(livePriceUsd);
-    livePriceRef.current = livePriceUsd;
+    useEffect(() => {
+        livePriceRef.current = livePriceUsd;
+    }, [livePriceUsd]);
 
     // Data updates should not recreate the chart.
     useEffect(() => {

@@ -52,9 +52,11 @@ export function useHoldingsValueOverTime(args: {
   positions: ReadonlyArray<HoldingsPosition>;
   timeScale: string;
 }): HoldingsValueSeriesResult {
-  const positions = args.positions
-    .filter((row) => Number.isFinite(row.holdings) && row.holdings > 0)
-    .map((row) => ({ coinId: row.coinId, holdings: row.holdings }));
+  const positions = args.positions.flatMap((row) =>
+    Number.isFinite(row.holdings) && row.holdings > 0
+      ? [{ coinId: row.coinId, holdings: row.holdings }]
+      : [],
+  );
 
   const stablePositionsKey = positions
     .map((row) => {

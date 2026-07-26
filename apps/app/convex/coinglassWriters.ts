@@ -112,44 +112,42 @@ export const _upsertSpotTakerBuySellVolumeHistory = internalMutation({
     const byTimestamp = new Map<number, (typeof existingWindow)[number]>();
     for (const row of existingWindow) byTimestamp.set(row.timestamp, row);
 
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
+    const outcomes = await Promise.all(
+      args.dataPoints.map(async (point) => {
+        const existing = byTimestamp.get(point.timestamp);
+        if (!existing) {
+          await ctx.db.insert("coinglassSpotTakerBuySellVolumeHistory", {
+            exchange: args.exchange,
+            symbol: args.symbol,
+            interval: args.interval,
+            timestamp: point.timestamp,
+            takerBuyVolumeUsd: point.takerBuyVolumeUsd,
+            takerSellVolumeUsd: point.takerSellVolumeUsd,
+            dataSource: args.dataSource,
+            lastUpdated: now,
+          });
+          return "inserted" as const;
+        }
 
-    for (const point of args.dataPoints) {
-      const existing = byTimestamp.get(point.timestamp);
-      if (!existing) {
-        await ctx.db.insert("coinglassSpotTakerBuySellVolumeHistory", {
-          exchange: args.exchange,
-          symbol: args.symbol,
-          interval: args.interval,
-          timestamp: point.timestamp,
+        const hasDiff =
+          existing.takerBuyVolumeUsd !== point.takerBuyVolumeUsd ||
+          existing.takerSellVolumeUsd !== point.takerSellVolumeUsd;
+
+        if (!hasDiff) return "skipped" as const;
+
+        await ctx.db.patch(existing._id, {
           takerBuyVolumeUsd: point.takerBuyVolumeUsd,
           takerSellVolumeUsd: point.takerSellVolumeUsd,
           dataSource: args.dataSource,
           lastUpdated: now,
         });
-        insertedCount++;
-        continue;
-      }
+        return "updated" as const;
+      }),
+    );
 
-      const hasDiff =
-        existing.takerBuyVolumeUsd !== point.takerBuyVolumeUsd ||
-        existing.takerSellVolumeUsd !== point.takerSellVolumeUsd;
-
-      if (!hasDiff) {
-        skippedCount++;
-        continue;
-      }
-
-      await ctx.db.patch(existing._id, {
-        takerBuyVolumeUsd: point.takerBuyVolumeUsd,
-        takerSellVolumeUsd: point.takerSellVolumeUsd,
-        dataSource: args.dataSource,
-        lastUpdated: now,
-      });
-      updatedCount++;
-    }
+    const insertedCount = outcomes.filter((o) => o === "inserted").length;
+    const updatedCount = outcomes.filter((o) => o === "updated").length;
+    const skippedCount = outcomes.filter((o) => o === "skipped").length;
 
     const latestTimestamp = args.dataPoints.reduce(
       (max, p) => (p.timestamp > max ? p.timestamp : max),
@@ -218,44 +216,42 @@ export const _upsertFuturesTakerBuySellVolumeHistory = internalMutation({
     const byTimestamp = new Map<number, (typeof existingWindow)[number]>();
     for (const row of existingWindow) byTimestamp.set(row.timestamp, row);
 
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
+    const outcomes = await Promise.all(
+      args.dataPoints.map(async (point) => {
+        const existing = byTimestamp.get(point.timestamp);
+        if (!existing) {
+          await ctx.db.insert("coinglassFuturesTakerBuySellVolumeHistory", {
+            exchange: args.exchange,
+            symbol: args.symbol,
+            interval: args.interval,
+            timestamp: point.timestamp,
+            takerBuyVolumeUsd: point.takerBuyVolumeUsd,
+            takerSellVolumeUsd: point.takerSellVolumeUsd,
+            dataSource: args.dataSource,
+            lastUpdated: now,
+          });
+          return "inserted" as const;
+        }
 
-    for (const point of args.dataPoints) {
-      const existing = byTimestamp.get(point.timestamp);
-      if (!existing) {
-        await ctx.db.insert("coinglassFuturesTakerBuySellVolumeHistory", {
-          exchange: args.exchange,
-          symbol: args.symbol,
-          interval: args.interval,
-          timestamp: point.timestamp,
+        const hasDiff =
+          existing.takerBuyVolumeUsd !== point.takerBuyVolumeUsd ||
+          existing.takerSellVolumeUsd !== point.takerSellVolumeUsd;
+
+        if (!hasDiff) return "skipped" as const;
+
+        await ctx.db.patch(existing._id, {
           takerBuyVolumeUsd: point.takerBuyVolumeUsd,
           takerSellVolumeUsd: point.takerSellVolumeUsd,
           dataSource: args.dataSource,
           lastUpdated: now,
         });
-        insertedCount++;
-        continue;
-      }
+        return "updated" as const;
+      }),
+    );
 
-      const hasDiff =
-        existing.takerBuyVolumeUsd !== point.takerBuyVolumeUsd ||
-        existing.takerSellVolumeUsd !== point.takerSellVolumeUsd;
-
-      if (!hasDiff) {
-        skippedCount++;
-        continue;
-      }
-
-      await ctx.db.patch(existing._id, {
-        takerBuyVolumeUsd: point.takerBuyVolumeUsd,
-        takerSellVolumeUsd: point.takerSellVolumeUsd,
-        dataSource: args.dataSource,
-        lastUpdated: now,
-      });
-      updatedCount++;
-    }
+    const insertedCount = outcomes.filter((o) => o === "inserted").length;
+    const updatedCount = outcomes.filter((o) => o === "updated").length;
+    const skippedCount = outcomes.filter((o) => o === "skipped").length;
 
     const latestTimestamp = args.dataPoints.reduce(
       (max, p) => (p.timestamp > max ? p.timestamp : max),
@@ -324,18 +320,34 @@ export const _upsertOpenInterestHistory = internalMutation({
     const byTimestamp = new Map<number, (typeof existingWindow)[number]>();
     for (const row of existingWindow) byTimestamp.set(row.timestamp, row);
 
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
+    const outcomes = await Promise.all(
+      args.dataPoints.map(async (point) => {
+        const existing = byTimestamp.get(point.timestamp);
+        if (!existing) {
+          await ctx.db.insert("coinglassOpenInterestHistory", {
+            symbol: args.symbol,
+            interval: args.interval,
+            unit: args.unit,
+            timestamp: point.timestamp,
+            open: point.open,
+            high: point.high,
+            low: point.low,
+            close: point.close,
+            dataSource: args.dataSource,
+            lastUpdated: now,
+          });
+          return "inserted" as const;
+        }
 
-    for (const point of args.dataPoints) {
-      const existing = byTimestamp.get(point.timestamp);
-      if (!existing) {
-        await ctx.db.insert("coinglassOpenInterestHistory", {
-          symbol: args.symbol,
-          interval: args.interval,
-          unit: args.unit,
-          timestamp: point.timestamp,
+        const hasDiff =
+          existing.open !== point.open ||
+          existing.high !== point.high ||
+          existing.low !== point.low ||
+          existing.close !== point.close;
+
+        if (!hasDiff) return "skipped" as const;
+
+        await ctx.db.patch(existing._id, {
           open: point.open,
           high: point.high,
           low: point.low,
@@ -343,31 +355,13 @@ export const _upsertOpenInterestHistory = internalMutation({
           dataSource: args.dataSource,
           lastUpdated: now,
         });
-        insertedCount++;
-        continue;
-      }
+        return "updated" as const;
+      }),
+    );
 
-      const hasDiff =
-        existing.open !== point.open ||
-        existing.high !== point.high ||
-        existing.low !== point.low ||
-        existing.close !== point.close;
-
-      if (!hasDiff) {
-        skippedCount++;
-        continue;
-      }
-
-      await ctx.db.patch(existing._id, {
-        open: point.open,
-        high: point.high,
-        low: point.low,
-        close: point.close,
-        dataSource: args.dataSource,
-        lastUpdated: now,
-      });
-      updatedCount++;
-    }
+    const insertedCount = outcomes.filter((o) => o === "inserted").length;
+    const updatedCount = outcomes.filter((o) => o === "updated").length;
+    const skippedCount = outcomes.filter((o) => o === "skipped").length;
 
     const latestTimestamp = args.dataPoints.reduce(
       (max, p) => (p.timestamp > max ? p.timestamp : max),
@@ -440,47 +434,45 @@ export const _upsertLiquidationHistory = internalMutation({
     const byTimestamp = new Map<number, (typeof existingWindow)[number]>();
     for (const row of existingWindow) byTimestamp.set(row.timestamp, row);
 
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let skippedCount = 0;
+    const outcomes = await Promise.all(
+      args.dataPoints.map(async (point) => {
+        const existing = byTimestamp.get(point.timestamp);
+        if (!existing) {
+          await ctx.db.insert("coinglassLiquidationHistory", {
+            symbol: args.symbol,
+            interval: args.interval,
+            exchangeList: args.exchangeList,
+            timestamp: point.timestamp,
+            longLiquidations: point.longLiquidations,
+            shortLiquidations: point.shortLiquidations,
+            totalLiquidations: point.totalLiquidations,
+            dataSource: args.dataSource,
+            lastUpdated: now,
+          });
+          return "inserted" as const;
+        }
 
-    for (const point of args.dataPoints) {
-      const existing = byTimestamp.get(point.timestamp);
-      if (!existing) {
-        await ctx.db.insert("coinglassLiquidationHistory", {
-          symbol: args.symbol,
-          interval: args.interval,
-          exchangeList: args.exchangeList,
-          timestamp: point.timestamp,
+        const hasDiff =
+          existing.longLiquidations !== point.longLiquidations ||
+          existing.shortLiquidations !== point.shortLiquidations ||
+          existing.totalLiquidations !== point.totalLiquidations;
+
+        if (!hasDiff) return "skipped" as const;
+
+        await ctx.db.patch(existing._id, {
           longLiquidations: point.longLiquidations,
           shortLiquidations: point.shortLiquidations,
           totalLiquidations: point.totalLiquidations,
           dataSource: args.dataSource,
           lastUpdated: now,
         });
-        insertedCount++;
-        continue;
-      }
+        return "updated" as const;
+      }),
+    );
 
-      const hasDiff =
-        existing.longLiquidations !== point.longLiquidations ||
-        existing.shortLiquidations !== point.shortLiquidations ||
-        existing.totalLiquidations !== point.totalLiquidations;
-
-      if (!hasDiff) {
-        skippedCount++;
-        continue;
-      }
-
-      await ctx.db.patch(existing._id, {
-        longLiquidations: point.longLiquidations,
-        shortLiquidations: point.shortLiquidations,
-        totalLiquidations: point.totalLiquidations,
-        dataSource: args.dataSource,
-        lastUpdated: now,
-      });
-      updatedCount++;
-    }
+    const insertedCount = outcomes.filter((o) => o === "inserted").length;
+    const updatedCount = outcomes.filter((o) => o === "updated").length;
+    const skippedCount = outcomes.filter((o) => o === "skipped").length;
 
     const latestTimestamp = args.dataPoints.reduce(
       (max, p) => (p.timestamp > max ? p.timestamp : max),

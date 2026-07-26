@@ -53,6 +53,7 @@ export async function fetchCoinGeckoJson(
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     let response: Response;
     try {
+      // react-doctor-disable-next-line react-doctor/no-fetch-response-used-without-status-check -- response.ok is checked before the success-path read; the non-ok .text() is deliberate error-payload capture
       response = await fetch(endpoint, {
         headers: {
           "x-cg-pro-api-key": apiKey,

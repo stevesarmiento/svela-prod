@@ -170,17 +170,19 @@ export const _pruneOrphanedNewsArticlesBatch = internalMutation({
       .withIndex("by_posted_at_ms", (q) => q.lt("postedAtMs", args.cutoffMs))
       .take(batchSize);
 
-    let deleted = 0;
-    for (const article of articles) {
-      const link = await ctx.db
-        .query("coingeckoNewsCoinLinks")
-        .withIndex("by_article_id", (q) => q.eq("articleId", article._id))
-        .first();
-      if (!link) {
+    // Each article's link check + delete is independent — run concurrently.
+    const deletions = await Promise.all(
+      articles.map(async (article) => {
+        const link = await ctx.db
+          .query("coingeckoNewsCoinLinks")
+          .withIndex("by_article_id", (q) => q.eq("articleId", article._id))
+          .first();
+        if (link) return false;
         await ctx.db.delete(article._id);
-        deleted += 1;
-      }
-    }
+        return true;
+      }),
+    );
+    const deleted = deletions.filter(Boolean).length;
 
     // Note: `hasMore` uses the scanned count; still-linked old articles are
     // re-scanned next run, which is fine at this batch size.
@@ -247,28 +249,28 @@ export const _pruneOrphanChartSeriesBatch = internalMutation({
       )
       .take(batchSize);
 
-    let deleted = 0;
-    for (const row of rows) {
-      // Never-viewed rows created by the reconciler for standing coins have
-      // lastRequestedAt undefined; keep anything with standing.
-      let hasStanding = false;
-      for (const reason of ["watchlist", "portfolio"]) {
-        const tracked = await ctx.db
-          .query("trackedCoins")
-          .withIndex("by_coingecko_id_and_reason", (q) =>
-            q.eq("coingeckoId", row.coingeckoId).eq("reason", reason),
-          )
-          .first();
-        if (tracked) {
-          hasStanding = true;
-          break;
-        }
-      }
-      if (hasStanding) continue;
+    // Each row's standing check + delete is independent — run concurrently.
+    const deletions = await Promise.all(
+      rows.map(async (row) => {
+        // Never-viewed rows created by the reconciler for standing coins have
+        // lastRequestedAt undefined; keep anything with standing.
+        const standing = await Promise.all(
+          ["watchlist", "portfolio"].map((reason) =>
+            ctx.db
+              .query("trackedCoins")
+              .withIndex("by_coingecko_id_and_reason", (q) =>
+                q.eq("coingeckoId", row.coingeckoId).eq("reason", reason),
+              )
+              .first(),
+          ),
+        );
+        if (standing.some((tracked) => tracked !== null)) return false;
 
-      await ctx.db.delete(row._id);
-      deleted += 1;
-    }
+        await ctx.db.delete(row._id);
+        return true;
+      }),
+    );
+    const deleted = deletions.filter(Boolean).length;
 
     // `hasMore` uses the scanned count; still-standing rows are re-scanned
     // next run, which is fine at this batch size (same caveat as the news
@@ -292,41 +294,43 @@ export const _runRetention = internalMutation({
   handler: async (ctx) => {
     const now = Date.now();
 
-    for (const policy of PRICE_HISTORY_POLICIES) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.retention._prunePriceHistoryBatch,
-        {
+    await Promise.all(
+      PRICE_HISTORY_POLICIES.map((policy) =>
+        ctx.scheduler.runAfter(0, internal.retention._prunePriceHistoryBatch, {
           timeframe: policy.timeframe,
           cutoffMs: now - policy.keepDays * DAY_MS,
           remainingRounds: MAX_ROUNDS_PER_RUN,
-        },
-      );
-    }
+        }),
+      ),
+    );
 
-    for (const policy of GLOBAL_MARKET_HISTORY_POLICIES) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.retention._pruneGlobalMarketHistoryBatch,
-        {
-          timeframe: policy.timeframe,
-          cutoffMs: now - policy.keepDays * DAY_MS,
-          remainingRounds: MAX_ROUNDS_PER_RUN,
-        },
-      );
-    }
+    await Promise.all(
+      GLOBAL_MARKET_HISTORY_POLICIES.map((policy) =>
+        ctx.scheduler.runAfter(
+          0,
+          internal.retention._pruneGlobalMarketHistoryBatch,
+          {
+            timeframe: policy.timeframe,
+            cutoffMs: now - policy.keepDays * DAY_MS,
+            remainingRounds: MAX_ROUNDS_PER_RUN,
+          },
+        ),
+      ),
+    );
 
-    for (const table of COINGLASS_TABLES) {
-      await ctx.scheduler.runAfter(
-        0,
-        internal.retention._pruneCoinglassHistoryBatch,
-        {
-          table,
-          cutoffMs: now - COINGLASS_KEEP_DAYS * DAY_MS,
-          remainingRounds: MAX_ROUNDS_PER_RUN,
-        },
-      );
-    }
+    await Promise.all(
+      COINGLASS_TABLES.map((table) =>
+        ctx.scheduler.runAfter(
+          0,
+          internal.retention._pruneCoinglassHistoryBatch,
+          {
+            table,
+            cutoffMs: now - COINGLASS_KEEP_DAYS * DAY_MS,
+            remainingRounds: MAX_ROUNDS_PER_RUN,
+          },
+        ),
+      ),
+    );
 
     await ctx.scheduler.runAfter(
       0,
