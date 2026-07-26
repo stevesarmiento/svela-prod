@@ -17,10 +17,11 @@ import { Button } from "@v1/ui/button";
 import { Input } from "@v1/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@v1/ui/input-otp";
 import { Separator } from "@v1/ui/separator";
-import { Mail, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { getClerkErrorMessage } from "./clerk-errors";
+import { EmailIcon } from "./icons";
 
 function RemoveEmailDialog({
   emailAddress,
@@ -265,7 +266,7 @@ export function EmailAddresses() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-4 min-w-0">
                       <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1 shrink-0">
-                        <Mail className="h-4 w-4 text-primary/50" />
+                        <EmailIcon className="h-4 w-4 text-primary/50" />
                       </div>
                       <div className="min-w-0 space-y-0.5">
                         <div className="flex items-center gap-2 min-w-0">

@@ -498,23 +498,20 @@ function CoinRow({
         hasSelectedCoins && !isSelected && "opacity-40",
       )}
     >
-      {/* First cell — merged select + token, toggles selection on click */}
+      {/* First cell — merged select + token: hover reveals the checkbox, but
+          only the checkbox itself toggles selection; other clicks fall
+          through to the row Link (navigate to the token page). */}
       <div
         className="flex min-w-0 items-center"
         role="button"
         tabIndex={0}
-        onClick={(e) => {
-          e.preventDefault() // Always prevent navigation for first cell (selection mode)
-          e.stopPropagation()
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" && e.key !== " ") return
 
           // Let the checkbox handle its own toggling (avoid double-toggle).
           const target = e.target as HTMLElement
           if (target.closest('[data-chart-row-checkbox="true"]')) return
 
-          onCoinSelect(coinIdStr, !isSelected)
-        }}
-        onKeyDown={(e) => {
-          if (e.key !== "Enter" && e.key !== " ") return
           e.preventDefault()
           e.stopPropagation()
           onCoinSelect(coinIdStr, !isSelected)
@@ -534,6 +531,12 @@ function CoinRow({
           className="absolute left-0 z-10 px-1"
           variants={SELECT_CHECKBOX_VARIANTS}
           transition={selectRevealTransition}
+          onClick={(e) => {
+            // Checkbox toggles via onCheckedChange; just keep the click
+            // from reaching the row Link (would navigate / double-toggle).
+            e.preventDefault()
+            e.stopPropagation()
+          }}
         >
           <Checkbox
             data-chart-row-checkbox="true"

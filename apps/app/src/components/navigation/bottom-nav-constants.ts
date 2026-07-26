@@ -38,7 +38,7 @@ const watchlistCommandItem = {
 } as const;
 
 const comparisonCommandItem = {
-  title: "Sector comparison",
+  title: "Watchlist comparison",
   subtitle: "Aggregate view across all your watchlists",
   href: "/comparison",
   icon: ComparisonIcon,

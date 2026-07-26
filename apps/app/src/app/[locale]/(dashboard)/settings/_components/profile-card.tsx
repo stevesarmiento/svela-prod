@@ -1,32 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import type { CSSProperties } from "react";
-import { Card } from "@v1/ui/card";
-import { Skeleton } from "@v1/ui/skeleton";
 import { useAuth } from "@/lib/convex-hooks";
+import { formatWalletAddress, getUserDisplayName } from "@/lib/user-display";
+import { Card } from "@v1/ui/card";
 import { cn } from "@v1/ui/cn";
+import { Skeleton } from "@v1/ui/skeleton";
 import { SvelaLogo } from "@v1/ui/svela-logo";
 import {
   IconBinoculars,
   IconDistributeHorizontalCenter,
   IconSparkleMagnifyingglass,
 } from "symbols-react";
-import { formatWalletAddress, getUserDisplayName } from "@/lib/user-display";
 
 type PatternId = "grid" | "waves" | "hatch" | "topo";
 
-interface PatternOption {
-  id: PatternId;
-  label: string;
-}
-
-const PATTERN_OPTIONS: Array<PatternOption> = [
-  { id: "grid", label: "Grid" },
-  { id: "waves", label: "Waves" },
-  { id: "hatch", label: "Hatch" },
-  { id: "topo", label: "Topo" },
-];
+const PATTERN_IDS: Array<PatternId> = ["grid", "waves", "hatch", "topo"];
 
 function fnv1a32(input: string): number {
   let hash = 0x811c9dc5;
@@ -83,8 +71,8 @@ function getMemberId(seed: string): string {
 }
 
 function getPatternForUser(userId: string): PatternId {
-  const idx = fnv1a32(userId) % PATTERN_OPTIONS.length;
-  return PATTERN_OPTIONS[idx]?.id ?? "grid";
+  const idx = fnv1a32(userId) % PATTERN_IDS.length;
+  return PATTERN_IDS[idx] ?? "grid";
 }
 
 function svgDataUri(svg: string): string {
@@ -208,88 +196,6 @@ function PatternOverlay({ patternId }: { patternId: PatternId }) {
   );
 }
 
-function getPatternPreviewStyle(patternId: PatternId): CSSProperties {
-  const common: CSSProperties = {
-    backgroundColor: "#0b0b0f",
-  };
-
-  if (patternId === "waves") {
-    const waves = svgDataUri(`
-      <svg xmlns="http://www.w3.org/2000/svg" width="120" height="60" viewBox="0 0 120 60" fill="none">
-        <path d="M0 30 Q 10 15 20 30 T 40 30 T 60 30 T 80 30 T 100 30 T 120 30" stroke="rgba(255,255,255,0.25)" stroke-width="2"/>
-        <path d="M0 44 Q 10 29 20 44 T 40 44 T 60 44 T 80 44 T 100 44 T 120 44" stroke="rgba(255,255,255,0.10)" stroke-width="2"/>
-      </svg>
-    `);
-
-    return {
-      ...common,
-      backgroundImage: waves,
-      backgroundRepeat: "repeat",
-      backgroundSize: "120px 60px",
-    };
-  }
-
-  if (patternId === "hatch") {
-    return {
-      ...common,
-      backgroundImage:
-        "repeating-linear-gradient(-45deg, rgba(255,255,255,0.16) 0 1px, transparent 1px 9px)",
-    };
-  }
-
-  if (patternId === "topo") {
-    return {
-      ...common,
-      backgroundImage:
-        "repeating-radial-gradient(circle at 20% 30%, rgba(255,255,255,0.20) 0 1px, transparent 1px 18px)",
-    };
-  }
-
-  return {
-    ...common,
-    backgroundImage:
-      "linear-gradient(to right, rgba(255,255,255,0.22) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.22) 1px, transparent 1px)",
-    backgroundSize: "16px 16px",
-  };
-}
-
-function PatternSelector({
-  patternId,
-  onSelect,
-}: {
-  patternId: PatternId;
-  onSelect: (id: PatternId) => void;
-}) {
-  return (
-    <div className="mt-2 w-fit">
-      <div className="text-[9px] font-semibold text-white/35 uppercase tracking-[0.2em]">
-        Cover pattern
-      </div>
-      <div className="mt-2 flex items-center gap-4">
-        {PATTERN_OPTIONS.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            aria-label={option.label}
-            onClick={() => onSelect(option.id)}
-            className={cn(
-              "relative size-7 rounded-md overflow-hidden border shadow-sm",
-              "transition-[transform,opacity,box-shadow] duration-200 ring-offset-background",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2",
-              option.id === patternId
-                ? "border-white/30 ring-2 ring-primary/20 ring-offset-2 opacity-100"
-                : "border-white/20 opacity-75 hover:opacity-90 hover:ring-2 hover:ring-primary/10 hover:ring-offset-2",
-            )}
-            style={getPatternPreviewStyle(option.id)}
-          >
-            <span className="sr-only">{option.label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function ProfileCardSkeleton() {
   return (
     <div className="sticky top-6">
@@ -321,10 +227,6 @@ function ProfileCardSkeleton() {
 
 export function ProfileCard() {
   const { user, isLoading } = useAuth();
-  const [patternSelection, setPatternSelection] = useState<{
-    userId: string;
-    patternId: PatternId;
-  } | null>(null);
 
   if (isLoading) return <ProfileCardSkeleton />;
 
@@ -359,11 +261,7 @@ export function ProfileCard() {
   const memberId = getMemberId(user.id);
   const issuedAt = toSafeDate(user.createdAt ?? null);
   const issuedLabel = formatIssuedDate(issuedAt);
-  const defaultPatternId = getPatternForUser(user.id);
-  const patternId =
-    patternSelection?.userId === user.id
-      ? patternSelection.patternId
-      : defaultPatternId;
+  const patternId = getPatternForUser(user.id);
 
   return (
     <div className="relative sticky top-6">
@@ -515,13 +413,6 @@ export function ProfileCard() {
         {/* Subtle bottom shadow to enhance skeuomorphism */}
         <div className="absolute -bottom-2 inset-x-10 h-8 bg-black/20 blur-sm rounded-full -z-10" />
       </div>
-
-      <PatternSelector
-        patternId={patternId}
-        onSelect={(nextId) =>
-          setPatternSelection({ userId: user.id, patternId: nextId })
-        }
-      />
     </div>
   );
 }

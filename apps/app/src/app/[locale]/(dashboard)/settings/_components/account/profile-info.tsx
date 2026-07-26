@@ -1,5 +1,6 @@
 "use client";
 
+import { getUserDisplayName } from "@/lib/user-display";
 import { useUser } from "@clerk/nextjs";
 import { Avatar, AvatarFallback, AvatarImage } from "@v1/ui/avatar";
 import { Button } from "@v1/ui/button";
@@ -7,7 +8,6 @@ import { Input } from "@v1/ui/input";
 import { Camera } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { getUserDisplayName } from "@/lib/user-display";
 import { getClerkErrorMessage } from "./clerk-errors";
 
 export function ProfileInfo() {

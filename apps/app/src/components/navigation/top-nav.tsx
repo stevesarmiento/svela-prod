@@ -96,12 +96,13 @@ function getStaticRouteTitle(pathname: string): string | null {
     cleanPath === "/watchlist" ||
     cleanPath.startsWith("/watchlist/")
   ) {
-    return "Watchlists";
+    return "Watch";
   }
 
   const routeTitles: Record<string, string> = {
     "/comparison": "Compare",
     "/screener": "Token Screener",
+    "/settings": "Settings",
   };
 
   if (routeTitles[cleanPath]) return routeTitles[cleanPath];

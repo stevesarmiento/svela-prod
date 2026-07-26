@@ -13,10 +13,10 @@ import {
 } from "@v1/ui/alert-dialog";
 import { Button } from "@v1/ui/button";
 import { Input } from "@v1/ui/input";
-import { TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { getClerkErrorMessage } from "./clerk-errors";
+import { DeleteAccountIcon } from "./icons";
 
 const CONFIRM_TEXT = "DELETE";
 
@@ -52,7 +52,7 @@ export function DangerZone() {
     <div className="flex items-start justify-between gap-4">
       <div className="flex items-start gap-4">
         <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1 shrink-0">
-          <TriangleAlert className="h-4 w-4 text-rose-400" />
+          <DeleteAccountIcon className="size-5 text-rose-400" />
         </div>
         <div className="space-y-0.5">
           <div className="font-bold text-xs">Delete account</div>

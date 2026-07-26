@@ -709,15 +709,25 @@ export const CommandSearchPopoverContent = React.memo(
       wait: 150,
     });
 
+    const coinSelectMode: CoinSelectMode =
+      context === "charts" || context === "watchlist"
+        ? "watchlist-add"
+        : "navigate";
+
+    // Add mode mirrors the retired coin-search sheet: top 25 by market cap
+    // to browse plus deeper search results. Navigation stays a compact 5.
+    const topCoinsLimit = coinSelectMode === "watchlist-add" ? 25 : 5;
+    const searchLimit = coinSelectMode === "watchlist-add" ? 50 : 5;
+
     const { data: searchResults, isLoading: isSearchLoading } =
       useHybridCoinSearch(debouncedSearchQuery, {
-        limit: 5,
+        limit: searchLimit,
       });
 
     const { isWarm, warmUp } = useDeferredWarmup(isOpen);
 
     const { data: topCoins, isLoading: isTopCoinsLoading } = useHybridTopCoins(
-      5,
+      topCoinsLimit,
       { enabled: isWarm },
     );
 
@@ -731,11 +741,6 @@ export const CommandSearchPopoverContent = React.memo(
     }, [hasSearch, searchResults, topCoins]);
 
     const coinResultsLoading = hasSearch ? isSearchLoading : isTopCoinsLoading;
-
-    const coinSelectMode: CoinSelectMode =
-      context === "charts" || context === "watchlist"
-        ? "watchlist-add"
-        : "navigate";
 
     const clearSearch = useCallback(() => {
       // react-doctor-disable-next-line react-doctor/no-adjust-state-on-prop-change -- reset-on-close; isCommandOpen is context state toggled externally, event-based reset needs a state lift (follow-up)

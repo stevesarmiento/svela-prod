@@ -3,10 +3,10 @@
 import { useSession, useUser } from "@clerk/nextjs";
 import { Badge } from "@v1/ui/badge";
 import { Button } from "@v1/ui/button";
-import { MonitorSmartphone } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getClerkErrorMessage } from "./clerk-errors";
+import { ConnectedDeviceIcon } from "./icons";
 
 type UserResource = NonNullable<ReturnType<typeof useUser>["user"]>;
 type SessionWithActivities = Awaited<
@@ -92,7 +92,7 @@ export function ActiveSessions() {
                 >
                   <div className="flex items-start gap-4 min-w-0">
                     <div className="bg-white/5 h-8 w-8 flex items-center justify-center rounded-lg p-1 shrink-0">
-                      <MonitorSmartphone className="h-4 w-4 text-primary/50" />
+                      <ConnectedDeviceIcon className="h-4 w-4 text-primary/50" />
                     </div>
                     <div className="min-w-0 space-y-0.5">
                       <div className="flex items-center gap-2 min-w-0">
@@ -109,8 +109,8 @@ export function ActiveSessions() {
                         {[
                           location,
                           session.lastActiveAt
-                            // react-doctor-disable-next-line react-doctor/no-locale-format-in-render -- sessions load client-side in an effect; this branch is unreachable during SSR/hydration
-                            ? `Active ${new Date(session.lastActiveAt).toLocaleString()}`
+                            ? // react-doctor-disable-next-line react-doctor/no-locale-format-in-render -- sessions load client-side in an effect; this branch is unreachable during SSR/hydration
+                              `Active ${new Date(session.lastActiveAt).toLocaleString()}`
                             : null,
                         ]
                           .filter(Boolean)

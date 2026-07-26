@@ -41,32 +41,32 @@ export const NAV_CHROME_CSS = {
  */
 export const NAV_MOTION_SLOWDOWN = 1;
 
-// Whole open sequence lands at ≤200ms (close at ~140ms).
+// Whole open sequence lands at ~300ms (close at ~215ms).
 export const NAV_SEARCH_MOTION_MS = {
   open: {
     /** Dock fades + scales out first. */
-    dockFade: 60,
+    dockFade: 95,
     /** Dock width collapses (starts while the fade finishes). */
-    dockCollapse: 110,
-    dockCollapseDelay: 30,
-    /** Search pill expands in step with the dock collapse (ends at ~150). */
-    searchExpand: 120,
-    searchExpandDelay: 30,
-    /** Popover rises in just as the search expand lands (ends at 200). */
-    popoverEnter: 90,
-    popoverEnterDelay: 110,
+    dockCollapse: 170,
+    dockCollapseDelay: 50,
+    /** Search pill expands in step with the dock collapse (ends at ~230). */
+    searchExpand: 180,
+    searchExpandDelay: 50,
+    /** Popover rises in just as the search expand lands (ends at ~300). */
+    popoverEnter: 130,
+    popoverEnterDelay: 170,
   },
   close: {
     /** Popover drops out immediately. */
-    popoverExit: 60,
+    popoverExit: 95,
     /** Search collapses while the dock width returns. */
-    searchCollapse: 100,
-    searchCollapseDelay: 20,
-    dockExpand: 100,
-    dockExpandDelay: 20,
+    searchCollapse: 150,
+    searchCollapseDelay: 35,
+    dockExpand: 150,
+    dockExpandDelay: 35,
     /** Dock fades back in once its slot is mostly restored. */
-    dockFade: 80,
-    dockFadeDelay: 60,
+    dockFade: 115,
+    dockFadeDelay: 100,
   },
 } as const;
 

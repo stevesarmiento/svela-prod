@@ -46,8 +46,10 @@ function ScreenerTableRowInner({
       meta?.interactive && "min-w-[72px] flex-nowrap whitespace-nowrap",
     );
 
-    // First cell — merged select + token: hover reveals the checkbox, click
-    // toggles selection (same implementation as the watchlist/chart tables).
+    // First cell — merged select + token: hover reveals the checkbox, but
+    // only the checkbox itself toggles selection. Clicks anywhere else in the
+    // cell fall through to the row Link (navigate to the token page). Same
+    // implementation as the watchlist/chart tables.
     if (cellIndex === 0 && !isLoadingRow) {
       return (
         // react-doctor-disable-next-line react-doctor/prefer-tag-over-role -- wraps a Radix checkbox button inside a row Link; a real button would nest interactive elements (invalid HTML)
@@ -56,18 +58,13 @@ function ScreenerTableRowInner({
           className={cellClassName}
           role="button"
           tabIndex={0}
-          onClick={(event) => {
-            event.preventDefault(); // Always prevent navigation for first cell (selection mode)
-            event.stopPropagation();
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
 
             // Let the checkbox handle its own toggling (avoid double-toggle).
             const target = event.target as HTMLElement;
             if (target.closest('[data-screener-row-checkbox="true"]')) return;
 
-            onCoinSelect(coinId, !isSelected);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
             event.preventDefault();
             event.stopPropagation();
             onCoinSelect(coinId, !isSelected);
@@ -85,6 +82,12 @@ function ScreenerTableRowInner({
               className="absolute left-0 z-10 px-1"
               variants={SELECT_CHECKBOX_VARIANTS}
               transition={selectRevealTransition}
+              onClick={(event) => {
+                // Checkbox toggles via onCheckedChange; just keep the click
+                // from reaching the row Link (would navigate / double-toggle).
+                event.preventDefault();
+                event.stopPropagation();
+              }}
             >
               <Checkbox
                 data-screener-row-checkbox="true"

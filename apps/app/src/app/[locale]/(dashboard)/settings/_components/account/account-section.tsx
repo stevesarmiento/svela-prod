@@ -1,12 +1,12 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
+import { Separator } from "@v1/ui/separator";
 import { useSyncExternalStore } from "react";
 import { ActiveSessions } from "./active-sessions";
 import { ConnectedAccounts } from "./connected-accounts";
 import { DangerZone } from "./danger-zone";
 import { EmailAddresses } from "./email-addresses";
-import { Passkeys } from "./passkeys";
 import { ProfileInfo } from "./profile-info";
 import { SectionCard } from "./section-card";
 
@@ -53,19 +53,14 @@ export function AccountSection() {
 
   return (
     <div className="space-y-4">
-      <SectionCard title="Profile">
+      <SectionCard title="Profile & Email">
         <ProfileInfo />
-      </SectionCard>
-      <SectionCard title="Email Addresses">
+        <Separator className="bg-primary/5 scale-125" />
         <EmailAddresses />
       </SectionCard>
-      <SectionCard title="Connected Accounts">
+      <SectionCard title="Connected Accounts & Devices">
         <ConnectedAccounts />
-      </SectionCard>
-      <SectionCard title="Passkeys">
-        <Passkeys />
-      </SectionCard>
-      <SectionCard title="Active Devices">
+        <Separator className="bg-primary/5 scale-125" />
         <ActiveSessions />
       </SectionCard>
       <SectionCard title="Danger Zone">

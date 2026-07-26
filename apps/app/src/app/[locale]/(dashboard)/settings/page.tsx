@@ -22,7 +22,7 @@ export default function SettingsPage() {
                 {/* Header */}
                 <div className="mb-8">
                   <h1 className="text-2xl font-bold dark:text-white text-zinc-950 mb-2">
-                    Settings & Preferences
+                    Account Preferences
                   </h1>
                   <p className="text-zinc-700 dark:text-zinc-400 text-sm">
                     Manage your account and authentication methods.

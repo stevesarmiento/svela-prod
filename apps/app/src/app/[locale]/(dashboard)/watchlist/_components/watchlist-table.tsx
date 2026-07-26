@@ -444,22 +444,14 @@ const CoinRowItem = memo(function CoinRowItem({
         hasSelectedCoins && !isSelected && "opacity-40",
       )}
     >
-      {/* First cell — merged select + token, toggles selection on click */}
+      {/* First cell — merged select + token: hover reveals the checkbox, but
+          only the checkbox itself toggles selection; other clicks fall
+          through to the row Link (navigate to the token page). */}
       {/* react-doctor-disable-next-line react-doctor/prefer-tag-over-role -- wraps a Radix checkbox button inside the row Link; a real button would nest interactive elements (invalid HTML) */}
       <div
         role="button"
         tabIndex={0}
         className="flex min-w-0 items-center"
-        onClick={(e) => {
-          e.preventDefault() // Always prevent navigation for first cell (selection mode)
-          e.stopPropagation()
-
-          // Let the checkbox handle its own toggling (avoid double-toggle).
-          const target = e.target as HTMLElement
-          if (target.closest('[data-watchlist-row-checkbox="true"]')) return
-
-          onCoinSelect(rowKey, !isSelected)
-        }}
         onKeyDown={(e) => {
           if (e.key !== "Enter" && e.key !== " ") return
           e.preventDefault()
@@ -485,6 +477,12 @@ const CoinRowItem = memo(function CoinRowItem({
             className="absolute left-0 z-10 px-1"
             variants={SELECT_CHECKBOX_VARIANTS}
             transition={selectRevealTransition}
+            onClick={(e) => {
+              // Checkbox toggles via onCheckedChange; just keep the click
+              // from reaching the row Link (would navigate / double-toggle).
+              e.preventDefault()
+              e.stopPropagation()
+            }}
           >
             <Checkbox
               data-watchlist-row-checkbox="true"

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { WatchlistCard } from './watchlist-card'
 import { Button } from '@v1/ui/button'
 import { toast } from '@v1/ui/use-toast'
@@ -8,6 +8,7 @@ import { useCreateWatchlistGroup } from '@/lib/convex-hooks'
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip"
 import { Kbd } from "@v1/ui/kbd"
 import { IconWidgetSmallBadgePlus } from 'symbols-react'
+import { WalletIcon, WatchlistsIcon } from '@/components/watchlist-icons'
 import { Dialog, DialogContent } from '@v1/ui/dialog'
 import { WatchlistGroupEditorPanel } from './watchlist-group-editor-panel'
 
@@ -85,9 +86,26 @@ const PREVIEW_TIMESTAMP = 0
 interface CreateWatchlistProps {
   onClose: () => void
   isOpen: boolean
+  /**
+   * When provided, the dialog opens on a choice step (create manually vs.
+   * import from a wallet); choosing import closes this dialog and hands off
+   * to the wallet flow via this callback.
+   */
+  onImportWallet?: () => void
 }
 
-export function CreateWatchlist({ onClose, isOpen }: CreateWatchlistProps) {
+export function CreateWatchlist({ onClose, isOpen, onImportWallet }: CreateWatchlistProps) {
+  const initialMode = onImportWallet ? 'choose' : 'create'
+  const [mode, setMode] = useState<'choose' | 'create'>(initialMode)
+
+  // Reset to the choice step on (re)open — during render, not in a close
+  // handler, so the content doesn't visibly swap mid close-animation.
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen)
+    if (isOpen) setMode(initialMode)
+  }
+
   const [newName, setNewName] = useState('')
   const [newIcon, setNewIcon] = useState<string>('sparkles')
   const [newColor, setNewColor] = useState<string>('default')
@@ -133,11 +151,103 @@ export function CreateWatchlist({ onClose, isOpen }: CreateWatchlistProps) {
     onClose()
   }, [onClose])
 
+  const handleImportWallet = useCallback(() => {
+    onImportWallet?.()
+  }, [onImportWallet])
+
+  // Choice-step keyboard support: C / W jump straight to an option,
+  // Up/Down arrows move focus between the two floating buttons.
+  const createOptionRef = useRef<HTMLButtonElement>(null)
+  const importOptionRef = useRef<HTMLButtonElement>(null)
+
+  const handleChoiceKeyDown = useCallback((event: React.KeyboardEvent) => {
+    const key = event.key.toLowerCase()
+    if (key === 'c') {
+      event.preventDefault()
+      setMode('create')
+      return
+    }
+    if (key === 'w') {
+      event.preventDefault()
+      handleImportWallet()
+      return
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (document.activeElement === createOptionRef.current) {
+        importOptionRef.current?.focus()
+      } else {
+        createOptionRef.current?.focus()
+      }
+    }
+  }, [handleImportWallet])
+
+  if (mode === 'choose') {
+    return (
+      <Dialog open={isOpen} onOpenChange={(open) => {
+        if (!open) handleClose()
+      }}>
+        <DialogContent
+          hideClose
+          className="p-0 border-none bg-transparent shadow-none max-w-[320px]"
+          onKeyDown={handleChoiceKeyDown}
+        >
+          <div className="space-y-6">
+            <div className="space-y-1 text-center">
+              <div className="text-sm font-semibold text-white/90">New Watchlist</div>
+              <div className="text-xs text-white/50 text-pretty">
+                Start from scratch, or build one from a wallet’s tokens.
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Button
+                ref={createOptionRef}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setMode('create')}
+                className="w-full h-12 justify-start gap-3 px-4 rounded-full border-transparent bg-white/5 hover:bg-white/10 text-white/90"
+              >
+                <WatchlistsIcon className="size-4 text-white/80 shrink-0" />
+                <span className="text-sm font-medium">Create Watchlist</span>
+                <Kbd className="ml-auto text-[10px]">C</Kbd>
+              </Button>
+
+              <Button
+                ref={importOptionRef}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleImportWallet}
+                className="w-full h-12 justify-start gap-3 px-4 rounded-full border-transparent bg-white/5 hover:bg-white/10 text-white/90"
+              >
+                <WalletIcon className="size-4 text-white/80 shrink-0" />
+                <span className="text-sm font-medium">Import from Wallet</span>
+                <Kbd className="ml-auto text-[10px]">W</Kbd>
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleClose}
+                className="w-full h-10 rounded-full border-transparent bg-white/5 hover:bg-white/10 text-white/90"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
       if (!open) handleClose()
     }}>
-                <DialogContent className="p-0 border-none bg-transparent shadow-none max-w-[320px] h-[600px]">
+                <DialogContent hideClose className="p-0 border-none bg-transparent shadow-none max-w-[320px] h-[600px]">
                 {/* Preview Card */}
         <div className="relative">
           <WatchlistCard

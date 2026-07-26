@@ -18,7 +18,7 @@ export function WatchlistMultiLineTimeScaleSelector({
   setActiveTimeScale,
 }: WatchlistMultiLineTimeScaleSelectorProps) {
   return (
-    <div className="flex gap-1 rounded-[14px] border border-zinc-800/10 bg-zinc-950/5 p-1 backdrop-blur-xl dark:border-zinc-800/30 dark:bg-zinc-950/10">
+    <div className="flex gap-1 rounded-[14px] border border-zinc-800/10 bg-zinc-950/5 p-1 backdrop-blur-xl dark:border-zinc-800/50 dark:bg-zinc-950/10">
       {SCALES.map((scale) => (
         <button
           key={scale.value}
@@ -26,7 +26,7 @@ export function WatchlistMultiLineTimeScaleSelector({
           className={cn(
             "rounded-lg px-2 py-1 text-xs",
             activeTimeScale === scale.value
-              ? "border border-zinc-800/20 bg-zinc-950/50 text-white shadow-md shadow-zinc-950/10 dark:border-zinc-800/50 dark:bg-zinc-800/50 dark:shadow-zinc-950/50"
+              ? "bg-zinc-900/50 text-white shadow-md shadow-zinc-950/10 dark:bg-zinc-800 dark:shadow-zinc-950/50"
               : "bg-transparent text-muted-foreground hover:bg-muted/80",
           )}
           type="button"

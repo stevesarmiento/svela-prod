@@ -1,5 +1,6 @@
 "use client";
 
+import { formatWalletAddress } from "@/lib/user-display";
 import { useUser } from "@clerk/nextjs";
 import {
   AlertDialog,
@@ -17,7 +18,6 @@ import { Button } from "@v1/ui/button";
 import { Globe, Trash2, Wallet } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { formatWalletAddress } from "@/lib/user-display";
 import { getClerkErrorMessage } from "./clerk-errors";
 
 const providerLabel = (provider: string) =>

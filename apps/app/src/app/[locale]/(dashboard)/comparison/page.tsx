@@ -9,7 +9,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale } = await params
   return createMetadata({
-    title: "Sector comparison",
+    title: "Watchlist comparison",
     pathname: "/comparison",
     locale,
   })
