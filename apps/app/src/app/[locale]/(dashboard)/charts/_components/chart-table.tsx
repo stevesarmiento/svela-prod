@@ -192,7 +192,8 @@ export const ChartHoldingsCell = memo(function ChartHoldingsCell({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => {
-              void commit()
+              // Clicking outside reverts; only Enter commits.
+              cancel()
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
@@ -207,7 +208,7 @@ export const ChartHoldingsCell = memo(function ChartHoldingsCell({
             inputMode="decimal"
             disabled={showPending}
             aria-label="Token holdings quantity"
-            className="h-7 w-[5.5rem] px-2 py-0 text-right font-berkeley-mono text-xs tabular-nums"
+            className="-my-0.5 h-6 w-[5.5rem] rounded px-2 py-0 text-right font-berkeley-mono text-xs tabular-nums"
           />
         ) : (
           <button
@@ -223,9 +224,13 @@ export const ChartHoldingsCell = memo(function ChartHoldingsCell({
               displayStr ? "text-foreground" : "text-muted-foreground",
               canEdit && !showPending && "cursor-text hover:bg-primary/10",
               (!canEdit || showPending) && "cursor-default",
+              !displayStr &&
+                canEdit &&
+                !showPending &&
+                "whitespace-nowrap px-2.5 text-[10px] text-primary/40 hover:text-primary/70",
             )}
           >
-            {displayStr ?? "—"}
+            {displayStr ?? (canEdit && !showPending ? "+ Add holdings" : "—")}
           </button>
         )}
         {notionalUsd !== null ? (
