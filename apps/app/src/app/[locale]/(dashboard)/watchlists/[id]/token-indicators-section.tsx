@@ -44,6 +44,8 @@ interface TokenIndicatorsSectionProps {
   indicatorWindowDays: number;
   showPending: boolean;
   isLoading: boolean;
+  /** Rendered opposite the "Technical Indicators" heading (e.g. mini price chart). */
+  headerAccessory?: React.ReactNode;
   metricsData: {
     current_price: number | null;
     total_volume: number | null;
@@ -970,10 +972,11 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
 
   return (
     <>
-      <div className="col-span-12 mt-16 mb-4">
+      <div className="col-span-12 mt-16 mb-4 flex flex-wrap items-end justify-between gap-4">
         <span className="text-2xl font-semibold text-white">
           Technical Indicators
         </span>
+        {props.headerAccessory}
       </div>
 
       <div className="grid grid-cols-1 gap-6 col-span-12 md:grid-cols-12">

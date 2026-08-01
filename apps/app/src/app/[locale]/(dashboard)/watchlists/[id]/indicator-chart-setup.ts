@@ -10,6 +10,7 @@ import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import type { LightweightChartsModule } from '@/lib/load-lightweight-charts'
 import { subscribeToWindowResize } from '@/hooks/window-resize-store'
 import { clearChartScrub, getChartScrubSnapshot, setChartScrub, subscribeToChartScrub } from '@/hooks/chart-scrub-store'
+import { setChartRange } from '@/hooks/chart-range-store'
 import { CHART_COLOR_PARSERS } from '@/lib/oklch'
 import { timeToEpochSeconds } from '@/hooks/use-chart-instance/utils'
 
@@ -143,7 +144,12 @@ export function buildIndicatorChartOptions(
 // Shared cross-chart scrub line overlay: renders the other charts' crosshair
 // position as a vertical line, and publishes this chart's crosshair time.
 // Returns a cleanup that unsubscribes and removes the overlay element.
-export function attachChartScrubSync(chart: IChartApi, container: HTMLElement, sourceId: string): () => void {
+export function attachChartScrubSync(
+  chart: IChartApi,
+  container: HTMLElement,
+  sourceId: string,
+  { publishVisibleRange = true }: { publishVisibleRange?: boolean } = {},
+): () => void {
   container.style.position = container.style.position || 'relative'
   const scrubLineEl = document.createElement('div')
   scrubLineEl.setAttribute('aria-hidden', 'true')
@@ -177,7 +183,19 @@ export function attachChartScrubSync(chart: IChartApi, container: HTMLElement, s
     scrubLineEl.style.transform = `translateX(${Math.round(x)}px)`
   }
 
+  // Publish this chart's visible window (initial range + user pan/zoom) so
+  // followers (the mini price chart) can mirror the zoomed-in time period.
+  const publishRange = (range: { from: Time; to: Time } | null) => {
+    if (!publishVisibleRange || !range) return
+    const from = timeToEpochSeconds(range.from)
+    const to = timeToEpochSeconds(range.to)
+    if (from == null || to == null) return
+    setChartRange(from, to, sourceId)
+  }
+
   const unsubscribeScrub = subscribeToChartScrub(() => updateScrubLine())
+  chart.timeScale().subscribeVisibleTimeRangeChange(publishRange)
+  publishRange(chart.timeScale().getVisibleRange())
   chart.timeScale().subscribeVisibleTimeRangeChange(updateScrubLine)
   chart.timeScale().subscribeVisibleLogicalRangeChange(updateScrubLine)
   updateScrubLine()
@@ -194,6 +212,7 @@ export function attachChartScrubSync(chart: IChartApi, container: HTMLElement, s
 
   return () => {
     chart.unsubscribeCrosshairMove(handleCrosshairMove)
+    chart.timeScale().unsubscribeVisibleTimeRangeChange(publishRange)
     chart.timeScale().unsubscribeVisibleTimeRangeChange(updateScrubLine)
     chart.timeScale().unsubscribeVisibleLogicalRangeChange(updateScrubLine)
     unsubscribeScrub()

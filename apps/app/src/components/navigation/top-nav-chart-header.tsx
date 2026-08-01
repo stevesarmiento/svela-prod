@@ -54,13 +54,13 @@ export function TopNavChartHeader() {
   }, [tokenData?.logoUrl]);
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="relative flex items-center">
       <Button
         type="button"
         variant="ghost"
         size="icon"
         onClick={handleBack}
-        className="cursor-pointer rounded-xl size-8"
+        className="absolute right-full mr-2 cursor-pointer rounded-xl size-8"
         aria-label="Go back"
       >
         <IconChevronBackward className="h-3 w-3 fill-current" />
