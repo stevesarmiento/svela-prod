@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import type { IChartApi, ISeriesApi, Time } from 'lightweight-charts'
+import type { IChartApi, ISeriesApi, ISeriesMarkersPluginApi, SeriesMarker, Time } from 'lightweight-charts'
 import type { OHLCVDataPoint } from '@/hooks/market-vision/market-vision-config'
 import { calculateRsiDivergences, type RsiDivergence, RSI_ZONE_LEVELS } from '@/hooks/market-vision/rsi-divergences'
 import { loadLightweightCharts, type LightweightChartsModule } from '@/lib/load-lightweight-charts'
@@ -25,19 +25,30 @@ interface RsiDivergencesChartProps {
 }
 
 const MAX_DIVERGENCE_LINES = 200
+const MAX_PIVOT_MARKERS = 200
+const RSI_SCALE_HIGH = 100
+const RSI_SCALE_LOW = 0
 
+// Caretaker palette: cyan RSI + white signal, cyan bull / fuchsia bear zones,
+// yellow alerts, green/red regular divergences, blue/orange hidden.
 const COLORS = {
-  rsi: 'oklch(0.6231 0.188 259.81 / 0.7)', // blue-500
+  rsi: 'oklch(0.7891 0.1546 211.53 / 0.95)', // cyan-400
+  signal: 'oklch(1 0 0 / 0.9)', // white
   levels: 'oklch(0.7118 0.0129 286.07 / 0.35)', // zinc-400
-  bull: 'oklch(0.6959 0.1491 162.48 / 0.95)', // emerald-500
-  bear: 'oklch(0.645 0.2154 16.44 / 0.95)', // rose-500
-  hiddenBull: 'oklch(0.7038 0.123 182.5 / 0.95)', // teal-500
+  midLine: 'oklch(0.7118 0.0129 286.07 / 0.22)', // zinc-400, midline
+  bull: 'oklch(0.7227 0.192 149.58 / 0.95)', // green-500
+  bear: 'oklch(0.6368 0.2078 25.33 / 0.95)', // red-500
+  hiddenBull: 'oklch(0.7137 0.1434 254.62 / 0.95)', // blue-400
   hiddenBear: 'oklch(0.7049 0.1867 47.6 / 0.95)', // orange-500
-  // Caretaker zone levels/fills (bull teal, bear purple)
-  zoneBullLine: 'oklch(0.7038 0.123 182.5 / 0.45)', // teal-500
-  zoneBearLine: 'oklch(0.6268 0.2325 303.9 / 0.45)', // purple-500
-  zoneBullFill: 'oklch(0.7038 0.123 182.5 / 0.1)', // teal-500, ~90% transparent
-  zoneBearFill: 'oklch(0.6268 0.2325 303.9 / 0.1)', // purple-500, ~90% transparent
+  zoneBullLine: 'oklch(0.7891 0.1546 211.53 / 0.45)', // cyan-400
+  zoneBearLine: 'oklch(0.6669 0.2591 322.15 / 0.45)', // fuchsia-500
+  zoneBullFill: 'oklch(0.7891 0.1546 211.53 / 0.08)', // cyan-400 control fill
+  zoneBearFill: 'oklch(0.6669 0.2591 322.15 / 0.08)', // fuchsia-500 control fill
+  critBullFill: 'oklch(0.7891 0.1546 211.53 / 0.14)', // cyan-400 critical fill
+  critBearFill: 'oklch(0.6669 0.2591 322.15 / 0.14)', // fuchsia-500 critical fill
+  alertLine: 'oklch(0.8601 0.1731 91.84 / 0.55)', // yellow-400
+  alertFill: 'oklch(0.8601 0.1731 91.84 / 0.07)', // yellow-400 highlight
+  pivotMarker: 'oklch(1 0 0 / 0.85)', // white
 } as const
 
 function divergenceLabel(div: RsiDivergence): string {
@@ -82,16 +93,28 @@ function positionZoneEl(
 
 type RsiDivergencesCalc = ReturnType<typeof calculateRsiDivergences>
 
-// Rebuilds all series on the chart: zone levels, the RSI line, and one
-// 2-point line series per divergence segment.
+// Rebuilds all series on the chart: zone levels, the RSI line + signal line,
+// one 2-point line series per divergence segment, and pivot arrow markers.
+// Ordering is load-bearing: the markers plugin must be cleared before any
+// removeSeries call and re-attached only after ALL setData calls, or
+// lightweight-charts can throw "Value is null" in _recalculateMarkers.
 function applyRsiDivergenceSeries(
   chart: IChartApi,
   lightweightCharts: LightweightChartsModule,
   seriesRefs: Map<string, ISeriesApi<'Line'>>,
+  markersRef: RefObject<ISeriesMarkersPluginApi<Time> | null>,
   calc: RsiDivergencesCalc,
   cappedDivergences: RsiDivergence[],
 ): void {
-  const { LineSeries, LineStyle } = lightweightCharts
+  const { LineSeries, LineStyle, createSeriesMarkers } = lightweightCharts
+
+  // Clear the markers plugin before tearing down the series it is attached to.
+  try {
+    markersRef.current?.setMarkers([])
+  } catch {
+    // ignore — plugin may belong to an already-removed series
+  }
+  markersRef.current = null
 
   // Clear existing series.
   seriesRefs.forEach((series) => {
@@ -103,13 +126,15 @@ function applyRsiDivergenceSeries(
   })
   seriesRefs.clear()
 
-  // Caretaker zone levels (80 crit bull / 62 ctrl bull / 50 mid / 38 ctrl bear / 20 crit bear)
+  // Caretaker levels (85 alert / 80 crit bull / 62 ctrl bull / 50 mid / 38 ctrl bear / 20 crit bear / 15 alert)
   const zoneLineDefs = [
+    { key: 'level_alert_high', data: calc.levels.alertHigh, color: COLORS.alertLine, lineStyle: LineStyle.Dotted },
     { key: 'level_crit_bull', data: calc.levels.critBull, color: COLORS.zoneBullLine, lineStyle: LineStyle.Dashed },
     { key: 'level_cont_bull', data: calc.levels.contBull, color: COLORS.zoneBullLine, lineStyle: LineStyle.Dotted },
-    { key: 'level_mid', data: calc.levels.middle, color: 'oklch(0.7118 0.0129 286.07 / 0.22)', lineStyle: LineStyle.Solid },
+    { key: 'level_mid', data: calc.levels.middle, color: COLORS.midLine, lineStyle: LineStyle.Solid },
     { key: 'level_cont_bear', data: calc.levels.contBear, color: COLORS.zoneBearLine, lineStyle: LineStyle.Dotted },
     { key: 'level_crit_bear', data: calc.levels.critBear, color: COLORS.zoneBearLine, lineStyle: LineStyle.Dashed },
+    { key: 'level_alert_low', data: calc.levels.alertLow, color: COLORS.alertLine, lineStyle: LineStyle.Dotted },
   ] as const
   for (const def of zoneLineDefs) {
     const levelSeries = chart.addSeries(LineSeries, {
@@ -134,6 +159,16 @@ function applyRsiDivergenceSeries(
   rsiSeries.setData(calc.rsiSeries as { time: Time; value: number }[])
   seriesRefs.set('rsi', rsiSeries)
 
+  const signalSeries = chart.addSeries(LineSeries, {
+    lineWidth: 2,
+    color: COLORS.signal,
+    title: '',
+    lastValueVisible: false,
+    priceLineVisible: false,
+  })
+  signalSeries.setData(calc.signalSeries as { time: Time; value: number }[])
+  seriesRefs.set('signal', signalSeries)
+
   // Divergence segments (each as a 2-point line series)
   for (const div of cappedDivergences) {
     const isHidden = div.type === 'h_bullish' || div.type === 'h_bearish'
@@ -151,16 +186,32 @@ function applyRsiDivergenceSeries(
     ])
     seriesRefs.set(`div_${div.startIndex}_${div.endIndex}_${div.type}`, series)
   }
+
+  // Pivot arrow markers, attached last (after all setData calls).
+  const pivotMarkers: SeriesMarker<Time>[] = calc.pivots
+    .slice(-MAX_PIVOT_MARKERS)
+    .map((pivot) => ({
+      time: pivot.time as Time,
+      position: pivot.kind === 'high' ? ('aboveBar' as const) : ('belowBar' as const),
+      shape: pivot.kind === 'high' ? ('arrowDown' as const) : ('arrowUp' as const),
+      color: COLORS.pivotMarker,
+      size: 0.6,
+    }))
+    .sort((a, b) => (a.time as number) - (b.time as number))
+  markersRef.current = createSeriesMarkers(rsiSeries, pivotMarkers)
 }
 
-interface ZoneFillEls {
-  bull: HTMLDivElement
-  bear: HTMLDivElement
+interface ZoneFillSpec {
+  el: HTMLDivElement
+  upper: number
+  lower: number
+  enabled: boolean
 }
 
-// Bull/bear zone fills (DOM overlay, lightweight-charts has no hline fills).
-function buildZoneFillEls(zoneLayer: HTMLDivElement | null): ZoneFillEls | null {
-  if (!zoneLayer) return null
+// Zone fills (DOM overlay, lightweight-charts has no hline fills): control and
+// critical bands always on, alert highlights only while RSI is beyond them.
+function buildZoneFillEls(zoneLayer: HTMLDivElement | null, calc: RsiDivergencesCalc): ZoneFillSpec[] {
+  if (!zoneLayer) return []
   zoneLayer.innerHTML = ''
   const makeZoneEl = (background: string) => {
     const el = document.createElement('div')
@@ -174,7 +225,14 @@ function buildZoneFillEls(zoneLayer: HTMLDivElement | null): ZoneFillEls | null 
     zoneLayer.appendChild(el)
     return el
   }
-  return { bull: makeZoneEl(COLORS.zoneBullFill), bear: makeZoneEl(COLORS.zoneBearFill) }
+  return [
+    { el: makeZoneEl(COLORS.critBullFill), upper: RSI_SCALE_HIGH, lower: RSI_ZONE_LEVELS.critBull, enabled: true },
+    { el: makeZoneEl(COLORS.zoneBullFill), upper: RSI_ZONE_LEVELS.critBull, lower: RSI_ZONE_LEVELS.contBull, enabled: true },
+    { el: makeZoneEl(COLORS.zoneBearFill), upper: RSI_ZONE_LEVELS.contBear, lower: RSI_ZONE_LEVELS.critBear, enabled: true },
+    { el: makeZoneEl(COLORS.critBearFill), upper: RSI_ZONE_LEVELS.critBear, lower: RSI_SCALE_LOW, enabled: true },
+    { el: makeZoneEl(COLORS.alertFill), upper: RSI_SCALE_HIGH, lower: calc.alerts.high, enabled: calc.alerts.highOn },
+    { el: makeZoneEl(COLORS.alertFill), upper: calc.alerts.low, lower: RSI_SCALE_LOW, enabled: calc.alerts.lowOn },
+  ]
 }
 
 interface DivergenceLabelEl {
@@ -217,7 +275,7 @@ function createOverlayPositionUpdater(args: {
   chartContainerRef: RefObject<HTMLDivElement | null>
   seriesRefs: RefObject<Map<string, ISeriesApi<'Line'>>>
   labelUpdateRafRef: RefObject<number | null>
-  zoneEls: ZoneFillEls | null
+  zoneEls: ZoneFillSpec[]
   labelEls: DivergenceLabelEl[]
 }): () => void {
   const { chartRef, chartContainerRef, seriesRefs, labelUpdateRafRef, zoneEls, labelEls } = args
@@ -234,9 +292,12 @@ function createOverlayPositionUpdater(args: {
       const width = Math.max(1, chartContainerRef.current?.clientWidth ?? 1)
       const heightPx = Math.max(1, chartContainerRef.current?.clientHeight ?? 1)
 
-      if (zoneEls) {
-        positionZoneEl(zoneEls.bull, s, RSI_ZONE_LEVELS.critBull, RSI_ZONE_LEVELS.contBull, heightPx)
-        positionZoneEl(zoneEls.bear, s, RSI_ZONE_LEVELS.contBear, RSI_ZONE_LEVELS.critBear, heightPx)
+      for (const zone of zoneEls) {
+        if (!zone.enabled) {
+          zone.el.style.opacity = '0'
+          continue
+        }
+        positionZoneEl(zone.el, s, zone.upper, zone.lower, heightPx)
       }
 
       for (const { el, divergence } of labelEls) {
@@ -271,6 +332,7 @@ export function RsiDivergencesChart({
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const seriesRefs = useRef<Map<string, ISeriesApi<'Line'>>>(new Map())
+  const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const lightweightChartsRef = useRef<LightweightChartsModule | null>(null)
   const hasAppliedInitialRangeRef = useRef(false)
   const [chartReadyNonce, setChartReadyNonce] = useState(0)
@@ -345,6 +407,7 @@ export function RsiDivergencesChart({
         labelLayerRef.current = null
         if (container.contains(zoneLayer)) container.removeChild(zoneLayer)
         zoneLayerRef.current = null
+        markersRef.current = null
         chart.remove()
         chartRef.current = null
         currentSeriesRefs.clear()
@@ -367,9 +430,9 @@ export function RsiDivergencesChart({
     labelCleanupRef.current?.()
     labelCleanupRef.current = null
 
-    applyRsiDivergenceSeries(chart, lightweightCharts, seriesRefs.current, calc, cappedDivergences)
+    applyRsiDivergenceSeries(chart, lightweightCharts, seriesRefs.current, markersRef, calc, cappedDivergences)
 
-    const zoneEls = buildZoneFillEls(zoneLayerRef.current)
+    const zoneEls = buildZoneFillEls(zoneLayerRef.current, calc)
     const labelEls = buildDivergenceLabelEls(labelLayerRef.current, cappedDivergences, showLabels)
 
     const scheduleLabelUpdate = createOverlayPositionUpdater({

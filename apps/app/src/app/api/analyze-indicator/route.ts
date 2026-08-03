@@ -62,6 +62,10 @@ const RsiDivergencesSnapshotSettingsSchema = z.object({
   rsiEps: z.number(),
   showRegular: z.boolean(),
   showHidden: z.boolean(),
+  signalPeriod: z.number().optional(),
+  signalType: z.enum(["EMA", "SMA"]).optional(),
+  alertHigh: z.number().optional(),
+  alertLow: z.number().optional(),
 })
 
 const RsiDivergencesSnapshotDivergenceSchema = z.object({
@@ -84,6 +88,10 @@ const RsiDivergencesSnapshotSchema = z.object({
     .array(z.object({ target: z.number(), price: z.number().nullable() }))
     .max(12)
     .optional(),
+  // Signal line (MA of RSI): latest value + the next-bar close at which RSI
+  // would cross it. Optional so older clients keep validating.
+  signalCurrent: z.number().nullable().optional(),
+  reverseSignalCross: z.number().nullable().optional(),
   settings: RsiDivergencesSnapshotSettingsSchema,
 })
 
@@ -748,6 +756,8 @@ function buildFocus(validated: IndicatorExplainRequest, focusDays: number): Reco
       divergencesFocusCounts: counts,
       latestDivergenceFocus: latest,
       reverseRsiLevels: validated.snapshot.reverseLevels ?? null,
+      signalCurrent: validated.snapshot.signalCurrent ?? null,
+      reverseSignalCross: validated.snapshot.reverseSignalCross ?? null,
       settings: validated.snapshot.settings,
     }
   }
@@ -928,6 +938,7 @@ ${buildSharedSections(p)}
   - **H_Bull (hidden)**: price makes a **higher low** while RSI makes a **lower low**.
   - **H_Bear (hidden)**: price makes a **lower high** while RSI makes a **higher high**.
 - **Reverse RSI levels** (\`reverseRsiLevels\`): the close price the **next bar** would need for RSI to print each zone level — **80 critical bull / 62 control bull / 50 mid / 38 control bear / 20 critical bear**. These are short-horizon momentum trigger prices, **not** support/resistance; a null price means the level is currently unreachable.
+- **Signal line**: a moving average (default EMA-12) of RSI. \`signalCurrent\` is its latest value; \`reverseSignalCross\` is the next-bar close at which RSI would cross its signal line — a short-horizon momentum-flip trigger price (null = unavailable). RSI above its signal = strengthening momentum; below = weakening.
 
 **Instructions**
 - Output **Markdown** only. Be concise and trader-focused.

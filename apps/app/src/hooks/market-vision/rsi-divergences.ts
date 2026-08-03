@@ -1,8 +1,17 @@
 'use client'
 
-import { findPairedDivergences } from './divergence-engine'
+import { findPairedDivergences, pivotHighAt, pivotLowAt } from './divergence-engine'
 import type { OHLCVDataPoint, SeriesDataPoint } from './market-vision-config'
-import { DEFAULT_REVERSE_RSI_TARGETS, type ReverseRsiLevel, reverseRsiLevels, rsi as rsiCalc } from './technical-indicators'
+import {
+  DEFAULT_REVERSE_RSI_TARGETS,
+  type ReverseRsiLevel,
+  ema,
+  reverseRsiLevels,
+  reverseRsiPrice,
+  rsi as rsiCalc,
+  sma,
+  wilderRsiState,
+} from './technical-indicators'
 
 export type { ReverseRsiLevel }
 
@@ -32,8 +41,23 @@ export interface RsiDivergencesConfig {
   rsiEps: number
   showRegular: boolean
   showHidden: boolean
+  /** Signal line period (moving average of RSI). */
+  signalPeriod: number
+  /** Signal line smoothing type. */
+  signalType: 'EMA' | 'SMA'
+  /** Alert level above the critical bull zone. */
+  alertHigh: number
+  /** Alert level below the critical bear zone. */
+  alertLow: number
   /** Targets for reverse-RSI price levels (default: Caretaker zones 80/62/50/38/20). */
   reverseTargets?: readonly number[]
+}
+
+export interface RsiPivotPoint {
+  index: number
+  time: number
+  value: number
+  kind: 'high' | 'low'
 }
 
 // The Caretaker's zone levels drawn on the RSI pane.
@@ -47,13 +71,23 @@ export const RSI_ZONE_LEVELS = {
 
 export interface RsiDivergencesResult {
   rsiSeries: SeriesDataPoint[]
+  /** Moving average of RSI, masked past the RSI warm-up region. */
+  signalSeries: SeriesDataPoint[]
+  signalCurrent: number | null
+  /** Next-bar close at which RSI crosses its signal line (null when unavailable). */
+  reverseSignalCross: number | null
+  /** Every confirmed RSI pivot high/low (same fractal as divergence pairing). */
+  pivots: RsiPivotPoint[]
   levels: {
     critBull: SeriesDataPoint[]
     contBull: SeriesDataPoint[]
     middle: SeriesDataPoint[]
     contBear: SeriesDataPoint[]
     critBear: SeriesDataPoint[]
+    alertHigh: SeriesDataPoint[]
+    alertLow: SeriesDataPoint[]
   }
+  alerts: { high: number; low: number; highOn: boolean; lowOn: boolean }
   divergences: RsiDivergence[]
   /** Next-bar close needed for RSI to print each target (null when unreachable). */
   reverseLevels: ReverseRsiLevel[]
@@ -71,17 +105,93 @@ const DEFAULT_CONFIG: RsiDivergencesConfig = {
   rsiEps: 0,
   showRegular: true,
   showHidden: true,
+  signalPeriod: 12,
+  signalType: 'EMA',
+  alertHigh: 85,
+  alertLow: 15,
   reverseTargets: DEFAULT_REVERSE_RSI_TARGETS,
 }
 
-function buildLevels(times: number[]): RsiDivergencesResult['levels'] {
+function buildLevels(times: number[], alertHigh: number, alertLow: number): RsiDivergencesResult['levels'] {
   return {
     critBull: times.map((time) => ({ time, value: RSI_ZONE_LEVELS.critBull })),
     contBull: times.map((time) => ({ time, value: RSI_ZONE_LEVELS.contBull })),
     middle: times.map((time) => ({ time, value: RSI_ZONE_LEVELS.middle })),
     contBear: times.map((time) => ({ time, value: RSI_ZONE_LEVELS.contBear })),
     critBear: times.map((time) => ({ time, value: RSI_ZONE_LEVELS.critBear })),
+    alertHigh: times.map((time) => ({ time, value: alertHigh })),
+    alertLow: times.map((time) => ({ time, value: alertLow })),
   }
+}
+
+/**
+ * Signal line over the RSI. The RSI warm-up region (index 0 prints 0, indices
+ * 1..rsiLength-1 print 100) must be sliced off before smoothing — ema() seeds
+ * from the first value and would otherwise be poisoned for dozens of bars.
+ */
+function buildSignal(
+  rsiValues: number[],
+  times: number[],
+  rsiLength: number,
+  signalPeriod: number,
+  signalType: 'EMA' | 'SMA',
+): SeriesDataPoint[] {
+  if (rsiValues.length <= rsiLength) return []
+
+  const validRsi = rsiValues.slice(rsiLength)
+  const smoothed = signalType === 'SMA' ? sma(validRsi, signalPeriod) : ema(validRsi, signalPeriod)
+  // sma() zero-fills its first period-1 outputs; ema() is valid from index 0.
+  const offset = signalType === 'SMA' ? signalPeriod - 1 : 0
+
+  const points: SeriesDataPoint[] = []
+  for (let i = offset; i < smoothed.length; i++) {
+    const value = smoothed[i]
+    const time = times[rsiLength + i]
+    if (value == null || !Number.isFinite(value) || time == null) continue
+    points.push({ time, value })
+  }
+  return points
+}
+
+/**
+ * RSI value at which the next bar's RSI equals the next bar's signal.
+ * EMA: nextSig = k*nextRsi + (1-k)*sigPrev, so nextRsi = nextSig ⇒ nextRsi = sigPrev.
+ * SMA: nextSig = (sum of last period-1 RSI + nextRsi) / period ⇒ nextRsi = sum / (period-1).
+ */
+function signalCrossTarget(
+  rsiValues: number[],
+  rsiLength: number,
+  signalPeriod: number,
+  signalType: 'EMA' | 'SMA',
+  signalCurrent: number | null,
+): number | null {
+  if (signalType === 'EMA') return signalCurrent
+
+  if (signalPeriod < 2) return null
+  const validRsi = rsiValues.slice(rsiLength)
+  if (validRsi.length < signalPeriod - 1) return null
+  const window = validRsi.slice(-(signalPeriod - 1))
+  return window.reduce((sum, value) => sum + value, 0) / window.length
+}
+
+function findRsiPivots(
+  rsiValues: number[],
+  times: number[],
+  leftBars: number,
+  rightBars: number,
+): RsiPivotPoint[] {
+  const pivots: RsiPivotPoint[] = []
+  for (let i = 0; i < rsiValues.length; i++) {
+    const high = pivotHighAt(rsiValues, leftBars, rightBars, i)
+    if (high != null) {
+      pivots.push({ index: i - rightBars, time: times[i - rightBars] ?? 0, value: high, kind: 'high' })
+    }
+    const low = pivotLowAt(rsiValues, leftBars, rightBars, i)
+    if (low != null) {
+      pivots.push({ index: i - rightBars, time: times[i - rightBars] ?? 0, value: low, kind: 'low' })
+    }
+  }
+  return pivots
 }
 
 export function calculateRsiDivergences(
@@ -93,7 +203,12 @@ export function calculateRsiDivergences(
   if (!data.length) {
     return {
       rsiSeries: [],
-      levels: { critBull: [], contBull: [], middle: [], contBear: [], critBear: [] },
+      signalSeries: [],
+      signalCurrent: null,
+      reverseSignalCross: null,
+      pivots: [],
+      levels: { critBull: [], contBull: [], middle: [], contBear: [], critBear: [], alertHigh: [], alertLow: [] },
+      alerts: { high: finalConfig.alertHigh, low: finalConfig.alertLow, highOn: false, lowOn: false },
       divergences: [],
       reverseLevels: [],
     }
@@ -135,9 +250,37 @@ export function calculateRsiDivergences(
     priceEnd: d.priceEnd,
   }))
 
+  const signalSeries = buildSignal(rsiValues, times, finalConfig.rsiLength, finalConfig.signalPeriod, finalConfig.signalType)
+  const signalCurrent = signalSeries[signalSeries.length - 1]?.value ?? null
+
+  const crossTarget = signalCrossTarget(
+    rsiValues,
+    finalConfig.rsiLength,
+    finalConfig.signalPeriod,
+    finalConfig.signalType,
+    signalCurrent,
+  )
+  const crossState = crossTarget == null ? null : wilderRsiState(closes, finalConfig.rsiLength)
+  const reverseSignalCross =
+    crossState && crossTarget != null ? reverseRsiPrice(crossState, finalConfig.rsiLength, crossTarget) : null
+
+  // Warm-up RSI prints 100 — never let it trip the overbought alert on short inputs.
+  const lastRsi = closes.length > finalConfig.rsiLength ? (rsiValues[rsiValues.length - 1] ?? null) : null
+  const alerts = {
+    high: finalConfig.alertHigh,
+    low: finalConfig.alertLow,
+    highOn: lastRsi != null && lastRsi >= finalConfig.alertHigh,
+    lowOn: lastRsi != null && lastRsi <= finalConfig.alertLow,
+  }
+
   return {
     rsiSeries,
-    levels: buildLevels(times),
+    signalSeries,
+    signalCurrent,
+    reverseSignalCross,
+    pivots: findRsiPivots(rsiValues, times, finalConfig.leftBars, finalConfig.rightBars),
+    levels: buildLevels(times, finalConfig.alertHigh, finalConfig.alertLow),
+    alerts,
     divergences,
     reverseLevels: reverseRsiLevels(closes, finalConfig.rsiLength, finalConfig.reverseTargets),
   }
