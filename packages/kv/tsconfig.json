@@ -1,5 +1,9 @@
 {
   "extends": "@v1/typescript/base.json",
+  "compilerOptions": {
+    // TS 7 no longer auto-includes node_modules/@types packages.
+    "types": ["node"]
+  },
   "include": ["src"],
   "exclude": ["node_modules"]
 }
