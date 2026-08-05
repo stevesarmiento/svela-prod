@@ -8,6 +8,17 @@ const sentimentValidator = v.union(
   v.literal("neutral"),
 );
 
+const newsCategoryValidator = v.union(
+  v.literal("regulation"),
+  v.literal("security"),
+  v.literal("etf"),
+  v.literal("partnership"),
+  v.literal("market"),
+  v.literal("tech"),
+  v.literal("macro"),
+  v.literal("other"),
+);
+
 export const listNewsByCoinId = query({
   args: {
     coingeckoId: v.string(),
@@ -24,6 +35,8 @@ export const listNewsByCoinId = query({
       sentiment: v.union(sentimentValidator, v.null()),
       sentimentConfidence: v.union(v.number(), v.null()),
       sentimentUpdatedAt: v.union(v.number(), v.null()),
+      aiSummary: v.union(v.string(), v.null()),
+      aiCategory: v.union(newsCategoryValidator, v.null()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -49,6 +62,17 @@ export const listNewsByCoinId = query({
       sentiment: "bullish" | "bearish" | "neutral" | null;
       sentimentConfidence: number | null;
       sentimentUpdatedAt: number | null;
+      aiSummary: string | null;
+      aiCategory:
+        | "regulation"
+        | "security"
+        | "etf"
+        | "partnership"
+        | "market"
+        | "tech"
+        | "macro"
+        | "other"
+        | null;
     }> = [];
 
     for (let i = 0; i < links.length; i++) {
@@ -65,6 +89,8 @@ export const listNewsByCoinId = query({
         sentiment: doc.sentiment ?? null,
         sentimentConfidence: doc.sentimentConfidence ?? null,
         sentimentUpdatedAt: doc.sentimentUpdatedAt ?? null,
+        aiSummary: doc.aiSummary ?? null,
+        aiCategory: doc.aiCategory ?? null,
       });
     }
 

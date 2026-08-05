@@ -26,6 +26,16 @@ export type EventKind =
 export type EventTone = "positive" | "negative" | "neutral";
 export type NewsSentiment = "bullish" | "bearish" | "neutral" | null;
 
+export type NewsCategory =
+  | "regulation"
+  | "security"
+  | "etf"
+  | "partnership"
+  | "market"
+  | "tech"
+  | "macro"
+  | "other";
+
 export interface OverviewEvent {
   id: string;
   articleId: string | null;
@@ -39,6 +49,9 @@ export interface OverviewEvent {
   logoUrl: string | null;
   title: string;
   summary: string | null;
+  /** AI 1-2 sentence article summary; absent on legacy cached snapshots. */
+  aiSummary?: string | null;
+  aiCategory?: NewsCategory | null;
   tokenHref: string;
   externalHref: string | null;
   valueUsd: number | null;
@@ -51,4 +64,3 @@ export interface EventsFeedData {
   limited: boolean;
   events: OverviewEvent[];
 }
-
