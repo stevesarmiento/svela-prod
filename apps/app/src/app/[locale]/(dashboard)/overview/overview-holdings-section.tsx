@@ -477,18 +477,51 @@ const LazyOverviewActivityFeedPanel = dynamic(
   },
 );
 
+/** Stable keys for static skeleton rows (not derived from map index). */
+const FEED_SKELETON_CARD_KEYS = [
+  "feed-card-sk-1",
+  "feed-card-sk-2",
+  "feed-card-sk-3",
+  "feed-card-sk-4",
+] as const;
+
+/** Mirrors EventCard: badge row (token pill, % badge, sentiment) + time + text. */
+function OverviewEventCardSkeleton() {
+  return (
+    <div className="rounded-2xl bg-zinc-100/80 dark:bg-zinc-900 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-1.5">
+          <div className="h-6 w-20 rounded-full bg-zinc-950/10 dark:bg-white/10" />
+          <div className="h-6 w-14 rounded-md bg-zinc-950/10 dark:bg-white/10" />
+          <div className="h-6 w-16 rounded-md bg-zinc-950/10 dark:bg-white/10" />
+        </div>
+        <div className="mt-1 h-3 w-12 rounded bg-zinc-950/10 dark:bg-white/10" />
+      </div>
+      <div className="mt-4 space-y-2">
+        <div className="h-4 w-full rounded bg-zinc-950/10 dark:bg-white/10" />
+        <div className="h-4 w-3/4 rounded bg-zinc-950/10 dark:bg-white/10" />
+      </div>
+    </div>
+  );
+}
+
+/** Mirrors the feed's layout: "Today" date header, then a stack of event cards. */
 function OverviewActivityFeedPanelSkeleton() {
   return (
-    <Card className="border border-zinc-800/20 dark:border-zinc-800/30 rounded-[20px] bg-white dark:bg-zinc-950/50 min-h-[520px] shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.1),inset_0_-4px_30px_oklch(0_0_0_/_0.1),0_4px_8px_oklch(0_0_0_/_0.05)] dark:shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_1990px_oklch(0.2978_0.0083_317.72_/_0.3),0_4px_16px_oklch(0_0_0_/_0.6)]">
-      <CardContent className="p-5 space-y-4">
-        <div className="h-8 w-44 rounded-md bg-zinc-950/10 dark:bg-white/10" />
-        <div className="space-y-3">
-          <div className="h-20 rounded-xl bg-zinc-950/10 dark:bg-white/10" />
-          <div className="h-20 rounded-xl bg-zinc-950/10 dark:bg-white/10" />
-          <div className="h-20 rounded-xl bg-zinc-950/10 dark:bg-white/10" />
-        </div>
-      </CardContent>
-    </Card>
+    <div
+      className="animate-pulse px-5"
+      aria-busy="true"
+      aria-label="Loading activity feed"
+    >
+      <div className="py-2">
+        <div className="h-7 w-16 rounded bg-zinc-950/10 dark:bg-white/10" />
+      </div>
+      <div className="space-y-2 pt-2">
+        {FEED_SKELETON_CARD_KEYS.map((cardKey) => (
+          <OverviewEventCardSkeleton key={cardKey} />
+        ))}
+      </div>
+    </div>
   );
 }
 
