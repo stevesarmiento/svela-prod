@@ -258,6 +258,17 @@ const eventToneValidator = v.union(
   v.literal("neutral"),
 );
 
+const newsCategoryValidator = v.union(
+  v.literal("regulation"),
+  v.literal("security"),
+  v.literal("etf"),
+  v.literal("partnership"),
+  v.literal("market"),
+  v.literal("tech"),
+  v.literal("macro"),
+  v.literal("other"),
+);
+
 const overviewEventValidator = v.object({
   id: v.string(),
   articleId: v.union(v.string(), v.null()),
@@ -274,6 +285,9 @@ const overviewEventValidator = v.object({
   logoUrl: v.union(v.string(), v.null()),
   title: v.string(),
   summary: v.union(v.string(), v.null()),
+  // Optional: absent on snapshots cached before AI news analysis shipped.
+  aiSummary: v.optional(v.union(v.string(), v.null())),
+  aiCategory: v.optional(v.union(newsCategoryValidator, v.null())),
   tokenHref: v.string(),
   externalHref: v.union(v.string(), v.null()),
   valueUsd: v.union(v.number(), v.null()),
@@ -314,6 +328,20 @@ const OverviewEventSchema = z.object({
   logoUrl: z.string().nullable(),
   title: z.string(),
   summary: z.string().nullable(),
+  aiSummary: z.string().nullable().optional(),
+  aiCategory: z
+    .enum([
+      "regulation",
+      "security",
+      "etf",
+      "partnership",
+      "market",
+      "tech",
+      "macro",
+      "other",
+    ])
+    .nullable()
+    .optional(),
   tokenHref: z.string(),
   externalHref: z.string().nullable(),
   valueUsd: z.number().nullable(),
@@ -335,6 +363,8 @@ const newsSentimentOverlayRowValidator = v.object({
   ),
   sentimentConfidence: v.union(v.number(), v.null()),
   sentimentUpdatedAt: v.union(v.number(), v.null()),
+  aiSummary: v.union(v.string(), v.null()),
+  aiCategory: v.union(newsCategoryValidator, v.null()),
 });
 
 
@@ -1066,6 +1096,17 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
       logoUrl: string | null;
       title: string;
       summary: string | null;
+      aiSummary: string | null;
+      aiCategory:
+        | "regulation"
+        | "security"
+        | "etf"
+        | "partnership"
+        | "market"
+        | "tech"
+        | "macro"
+        | "other"
+        | null;
       tokenHref: string;
       externalHref: string | null;
       valueUsd: number | null;
@@ -1120,6 +1161,8 @@ export const _computeMyOverviewSnapshotPayload = internalQuery({
         logoUrl: meta.logoUrl,
         title: article.title,
         summary: article.sourceName ?? null,
+        aiSummary: article.aiSummary ?? null,
+        aiCategory: article.aiCategory ?? null,
         tokenHref: `/charts/${row.coingeckoId}`,
         externalHref: article.url,
         valueUsd: null,
@@ -1261,6 +1304,8 @@ export const getNewsSentimentOverlay = query({
           sentiment: doc.sentiment ?? null,
           sentimentConfidence: doc.sentimentConfidence ?? null,
           sentimentUpdatedAt: doc.sentimentUpdatedAt ?? null,
+          aiSummary: doc.aiSummary ?? null,
+          aiCategory: doc.aiCategory ?? null,
         };
       }),
     );

@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAction, useConvexAuth, useMutation, useQuery as useConvexQuery } from 'convex/react';
 import { AnimatePresence, m, useReducedMotion } from 'motion/react';
@@ -14,7 +13,6 @@ import {
     IconThermometerLow,
     IconThermometerSnowflake,
     IconThermometerSun,
-    IconTriangleFill,
 } from 'symbols-react';
 
 import { cn } from '@v1/ui/cn';
@@ -25,11 +23,8 @@ import {
     DropdownMenuContent,
     DropdownMenuTrigger,
 } from '@v1/ui/dropdown-menu';
-import { Skeleton } from '@v1/ui/skeleton';
 import { Spinner } from '@v1/ui/spinner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@v1/ui/tooltip';
-import { useScreenerTopMarkets } from '@/hooks/use-screener-top-markets';
-import type { CoinMarketData } from '@/types/coins';
 import { useFloatingMarketFeedContext } from './floating-market-feed-context';
 import { api } from '../../../convex/_generated/api';
 import type { Id } from '../../../convex/_generated/dataModel';
@@ -48,6 +43,16 @@ import {
 
 type FeedSentiment = 'bullish' | 'bearish' | 'neutral';
 
+type FeedCategory =
+    | 'regulation'
+    | 'security'
+    | 'etf'
+    | 'partnership'
+    | 'market'
+    | 'tech'
+    | 'macro'
+    | 'other';
+
 /** Article stored in Convex for a specific coin (carries AI sentiment). */
 interface ConvexNewsArticle {
     articleId: Id<'coingeckoNewsArticles'>;
@@ -59,6 +64,8 @@ interface ConvexNewsArticle {
     sentiment: FeedSentiment | null;
     sentimentConfidence: number | null;
     sentimentUpdatedAt: number | null;
+    aiSummary: string | null;
+    aiCategory: FeedCategory | null;
 }
 
 /** Normalized row rendered by the feed. */
@@ -127,16 +134,8 @@ function sentimentLabel(s: FeedSentiment): string {
     return 'Neutral';
 }
 
-function sentimentBadgeVariant(s: FeedSentiment): 'success' | 'destructive' | 'warning' {
-    if (s === 'bullish') return 'success';
-    if (s === 'bearish') return 'destructive';
-    return 'warning';
-}
-
-function formatPercent(value: number | null | undefined): string {
-    if (value == null || Number.isNaN(value)) return '--';
-    const prefix = value > 0 ? '+' : value < 0 ? '-' : '';
-    return `${prefix}${Math.abs(value).toFixed(2)}%`;
+function sentimentBadgeVariant(s: 'bullish' | 'bearish'): 'success' | 'destructive' {
+    return s === 'bullish' ? 'success' : 'destructive';
 }
 
 function readFloatingMarketFeedSettings(): FloatingMarketFeedSettings {
@@ -418,29 +417,6 @@ export function FloatingMarketFeed() {
         persistLastSeenMs(coinId, latestPostedMs);
     }, [coinId, hideFeed, lastSeenMs, latestPostedMs, open]);
 
-    // useScreenerTopMarkets gates on limit > 0, so a hidden feed skips the fetch.
-    const { data: topMarketsData, isLoading: trendingTokensLoading } = useScreenerTopMarkets(hideFeed ? 0 : 8);
-    const tickerTokens = React.useMemo(
-        () =>
-            (topMarketsData ?? [])
-                .slice(0, 8)
-                .map((coin: CoinMarketData) => ({
-                    id: coin.id,
-                    symbol: (coin.symbol || '').toUpperCase(),
-                    priceChange24hPercent: coin.quote.USD.percent_change_24h ?? 0,
-                })),
-        [topMarketsData],
-    );
-    // The rail renders two copies of the list for a seamless marquee loop, so
-    // tag each entry with a copy-qualified stable key (ids repeat across copies).
-    const tickerRail = React.useMemo(
-        () => [
-            ...tickerTokens.map(token => ({ ...token, railKey: `${token.id}-a` })),
-            ...tickerTokens.map(token => ({ ...token, railKey: `${token.id}-b` })),
-        ],
-        [tickerTokens],
-    );
-
     React.useEffect(() => {
         if (!open || hideFeed) return;
 
@@ -488,7 +464,6 @@ export function FloatingMarketFeed() {
                         style={{ transformOrigin: 'top right' }}
                         className="flex w-[min(calc(100vw-2rem),24rem)] flex-col gap-3 overflow-visible"
                     >
-                        <FloatingMarketTickerBanner tokens={tickerRail} isLoading={trendingTokensLoading} />
                         <FloatingMarketNewsPanel
                             items={items}
                             isLoading={isFeedLoading}
@@ -508,23 +483,6 @@ export function FloatingMarketFeed() {
                 ) : null}
             </AnimatePresence>
         </div>
-    );
-}
-
-function FloatingMarketTickerBanner({
-    tokens,
-    isLoading,
-}: {
-    tokens: Array<{ id: string; symbol: string; priceChange24hPercent: number; railKey: string }>;
-    isLoading?: boolean;
-}) {
-    return (
-        <section
-            aria-label="Trending market tickers"
-            className="overflow-hidden rounded-[19px] border border-zinc-800/70 bg-zinc-900/60 shadow-[0_14px_36px_rgba(0,0,0,0.45)] backdrop-blur-xl"
-        >
-            <TickerRail tokens={tokens} isLoading={isLoading} />
-        </section>
     );
 }
 
@@ -738,59 +696,6 @@ function FloatingMarketFeedPullCycle({
     );
 }
 
-function TickerRail({
-    tokens,
-    isLoading,
-}: {
-    tokens: Array<{ id: string; symbol: string; priceChange24hPercent: number; railKey: string }>;
-    isLoading?: boolean;
-}) {
-    return (
-        <div className="market-feed-ticker-viewport relative overflow-hidden py-1.5">
-            {tokens.length === 0 || isLoading ? (
-                <div className="flex h-7 items-center gap-2 px-2">
-                    {[72, 88, 76, 92, 80].map(width => (
-                        <Skeleton
-                            key={width}
-                            className="h-7 shrink-0 rounded-full bg-white/10"
-                            style={{ width }}
-                        />
-                    ))}
-                </div>
-            ) : (
-                <div className="market-feed-ticker flex w-max items-center gap-2 px-2">
-                    {tokens.map(token => (
-                        <TickerPill key={token.railKey} token={token} />
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
-
-function TickerPill({ token }: { token: { id: string; symbol: string; priceChange24hPercent: number } }) {
-    const isPositive = token.priceChange24hPercent >= 0;
-    const href = `/watchlists/${encodeURIComponent(token.id)}`;
-
-    return (
-        <Link
-            href={href}
-            className="flex h-7 shrink-0 items-center gap-2 rounded-full bg-black px-3 text-xs font-medium text-white/60 ring-1 ring-white/10 transition-colors hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
-        >
-            <span className="max-w-16 truncate text-white">{token.symbol || '???'}</span>
-            <span
-                className={cn(
-                    'inline-flex items-center gap-1 tabular-nums',
-                    isPositive ? 'text-emerald-400' : 'text-red-400',
-                )}
-            >
-                <IconTriangleFill className={cn('size-2 fill-current', !isPositive && 'rotate-180')} aria-hidden />
-                {formatPercent(token.priceChange24hPercent)}
-            </span>
-        </Link>
-    );
-}
-
 function NewsFeed({
     items,
     isLoading,
@@ -834,7 +739,6 @@ function NewsFeed({
         <ul className="divide-y divide-white/10">
             {items.map(item => {
                 const dateLabel = item.postedAtMs !== null ? formatPostedRelative(item.postedAtMs, nowMs) : null;
-                const sentiment = item.sentiment ?? 'neutral';
 
                 return (
                     <li key={item.key} className="min-w-0">
@@ -866,32 +770,33 @@ function NewsFeed({
                                     </div>
                                 ) : null}
 
-                                {item.sentiment ? (
-                                    <Badge variant={sentimentBadgeVariant(sentiment)} className="gap-1">
-                                        {sentiment === 'bullish' ? (
+                                {item.sentiment === 'bullish' || item.sentiment === 'bearish' ? (
+                                    <Badge variant={sentimentBadgeVariant(item.sentiment)} className="gap-1">
+                                        {item.sentiment === 'bullish' ? (
                                             <IconThermometerSun className="size-3 shrink-0 fill-emerald-400" aria-hidden />
-                                        ) : sentiment === 'bearish' ? (
-                                            <IconThermometerSnowflake className="size-3 shrink-0 fill-rose-400" aria-hidden />
                                         ) : (
-                                            <IconThermometerLow className="size-3 shrink-0 fill-amber-400" aria-hidden />
+                                            <IconThermometerSnowflake className="size-3 shrink-0 fill-rose-400" aria-hidden />
                                         )}
                                         <span
                                             className={cn(
                                                 'text-xs',
-                                                sentiment === 'bullish'
-                                                    ? 'text-emerald-400'
-                                                    : sentiment === 'bearish'
-                                                      ? 'text-rose-400'
-                                                      : 'text-amber-400',
+                                                item.sentiment === 'bullish' ? 'text-emerald-400' : 'text-rose-400',
                                             )}
                                         >
-                                            {sentimentLabel(sentiment)}
+                                            {sentimentLabel(item.sentiment)}
                                         </span>
+                                    </Badge>
+                                ) : item.sentiment === 'neutral' ? (
+                                    // Neutral stays quiet: most neutrals are low-conviction
+                                    // informational items, not a signal worth amber.
+                                    <Badge className="gap-1 border-white/10 bg-white/5">
+                                        <IconThermometerLow className="size-3 shrink-0 fill-primary/40" aria-hidden />
+                                        <span className="text-xs text-primary/50">Neutral</span>
                                     </Badge>
                                 ) : item.sentimentPending ? (
                                     <Badge className="border-white/10 bg-white/5 text-muted-foreground">
                                         <Spinner className="size-3 shrink-0 fill-primary/50" aria-hidden />
-                                        Sentiment pending
+                                        Analyzing
                                     </Badge>
                                 ) : null}
 
