@@ -6,6 +6,7 @@ const isProd = process.env.NODE_ENV === "production";
 const nextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  reactCompiler: true,
   transpilePackages: ["@solana/design-system"],
   async redirects() {
     return [
@@ -32,6 +33,8 @@ const nextConfig = {
       bodySizeLimit: "2mb",
     },
     optimisticClientCache: isProd,
+    // Rust port runs inside Turbopack — no babel-plugin-react-compiler needed.
+    turbopackRustReactCompiler: true,
   },
   compiler: {
     removeConsole: isProd,

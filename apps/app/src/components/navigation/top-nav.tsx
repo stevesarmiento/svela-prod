@@ -37,8 +37,8 @@ const LazyTopNavChartHeader = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex items-center gap-4">
-        <div className="h-8 w-8 rounded-xl bg-zinc-950/10 dark:bg-white/10" />
+      <div className="relative flex items-center">
+        <div className="absolute right-full mr-2 h-8 w-8 rounded-xl bg-zinc-950/10 dark:bg-white/10" />
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-full bg-zinc-950/10 dark:bg-white/10" />
           <div className="space-y-2">

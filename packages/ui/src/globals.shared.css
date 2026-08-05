@@ -172,26 +172,30 @@
 .nav-command-popover[data-state='open'] {
   animation: nav-popover-in var(--nav-open-popover, var(--duration-ui))
     var(--ease-out-cubic) var(--nav-open-popover-delay, 0ms) both;
+  will-change: transform, filter, opacity;
 }
 
 .nav-command-popover[data-state='closed'] {
   animation: nav-popover-out var(--nav-close-popover, var(--duration-micro))
     var(--ease-out-cubic) both;
+  will-change: transform, filter, opacity;
 }
 
 @keyframes nav-popover-in {
   from {
     opacity: 0;
-    translate: 0 10px;
-    scale: 0.98;
+    translate: 0 20px;
+    scale: 0.90;
+    filter: blur(6px);
   }
 }
 
 @keyframes nav-popover-out {
   to {
     opacity: 0;
-    translate: 0 8px;
-    scale: 0.99;
+    translate: 0 20px;
+    scale: 0.90;
+    filter: blur(6px);
   }
 }
 
@@ -223,6 +227,11 @@
   .loading-bar,
   .loading-ellipsis:after {
     animation: none;
+  }
+
+  .nav-command-popover[data-state='open'],
+  .nav-command-popover[data-state='closed'] {
+    will-change: auto;
   }
 
   .loading-wrapper[data-visible='false'] {

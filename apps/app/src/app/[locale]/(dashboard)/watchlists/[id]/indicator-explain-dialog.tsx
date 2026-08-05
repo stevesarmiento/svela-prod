@@ -81,6 +81,10 @@ interface RsiDivergencesSnapshotSettings {
   rsiEps: number;
   showRegular: boolean;
   showHidden: boolean;
+  signalPeriod?: number;
+  signalType?: "EMA" | "SMA";
+  alertHigh?: number;
+  alertLow?: number;
 }
 
 interface RsiDivergencesSnapshotDivergence {
@@ -99,6 +103,10 @@ interface RsiDivergencesSnapshot {
   divergences: Array<RsiDivergencesSnapshotDivergence>;
   /** Next-bar close needed for RSI to print each target (null = unreachable). */
   reverseLevels?: Array<{ target: number; price: number | null }>;
+  /** Latest signal line (MA of RSI) value. */
+  signalCurrent?: number | null;
+  /** Next-bar close at which RSI crosses its signal line. */
+  reverseSignalCross?: number | null;
   settings: RsiDivergencesSnapshotSettings;
 }
 

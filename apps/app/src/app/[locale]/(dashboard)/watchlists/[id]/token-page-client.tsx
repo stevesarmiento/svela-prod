@@ -18,6 +18,7 @@ import { useCoinGeckoQuote } from '@/hooks/use-coingecko-quotes'
 import { useRealtimeQuote } from "@/hooks/use-realtime-quote"
 import { PriceChart } from "./price-chart"
 import { MarketMetrics } from "./market-metrics"
+import { FloatingMiniPriceChart } from "./floating-mini-price-chart"
 import { FloatingMarketFeedPageContext } from '@/components/floating-market-feed/floating-market-feed-context'
 import type { IndicatorOhlcvBar } from './token-indicators-section'
 
@@ -126,6 +127,7 @@ export const TokenPageClient = memo(function TokenPageClient({
   const deferredTokenData = useDeferredValue(tokenData)
   const deferredTimeScale = useDeferredValue(activeTimeScale)
   const indicatorsSentinelRef = useRef<HTMLDivElement | null>(null)
+  const priceChartAnchorRef = useRef<HTMLDivElement | null>(null)
 
   const indicatorWindowDays = React.useMemo(() => {
     if (deferredTimeScale === '2y') return 60
@@ -249,7 +251,7 @@ export const TokenPageClient = memo(function TokenPageClient({
         tokenFeedCoinId={deferredId}
       />
       <div className="grid grid-cols-1 md:grid-cols-12">
-        <div className="col-span-12 min-w-0 sm:space-y-0">
+        <div ref={priceChartAnchorRef} className="col-span-12 min-w-0 sm:space-y-0">
           <PriceChart
             coinId={deferredId}
             initialData={deferredTokenData.quote.USD}
@@ -295,6 +297,15 @@ export const TokenPageClient = memo(function TokenPageClient({
             showPending={showPending}
             isLoading={isLoading}
             metricsData={metricsData}
+            headerAccessory={
+              /* Mini price chart opposite the heading; docks bottom-right once
+                 scrolled past so the indicator scrub lines stay meaningful. */
+              <FloatingMiniPriceChart
+                chartData={chartData}
+                symbol={deferredTokenData.symbol}
+                anchorRef={priceChartAnchorRef}
+              />
+            }
           />
         ) : (
           <TechnicalIndicatorsSkeleton />

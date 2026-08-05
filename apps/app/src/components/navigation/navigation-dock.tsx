@@ -5,6 +5,18 @@ import { SelectionContent } from './selection-content';
 import type { CommandContext, SelectionState } from './bottom-nav-context';
 import { uiEnterExitTransition, uiLayoutTransition } from '@/lib/motion-tokens';
 
+const dockContentRestState = {
+  opacity: 1,
+  scale: 1,
+  filter: "blur(0px)",
+};
+
+const dockContentTransitionState = {
+  opacity: 0,
+  scale: 0.96,
+  filter: "blur(4px)",
+};
+
 interface NavigationDockProps {
   mode: 'navigation' | 'selection';
   selectionState: SelectionState | null;
@@ -31,22 +43,27 @@ const NavigationDockComponent = ({
   }, [mode]);
 
   return (
-    <AnimatePresence mode="popLayout">
-      <m.div
-        className={dockClassName}
-        layout={!shouldReduceMotion}
-        transition={uiLayoutTransition(shouldReduceMotion)}
-      >
-        <div className="relative z-10 flex items-center gap-1 p-1 w-auto">
+    <m.div
+      className={dockClassName}
+      layout={!shouldReduceMotion}
+      transition={uiLayoutTransition(shouldReduceMotion)}
+    >
+      <div className="relative z-10 flex items-center gap-1 p-1 w-auto">
+        <AnimatePresence initial={false} mode="popLayout">
           {mode === 'navigation' && (
             <m.div
               key="navigation"
               layoutId={shouldReduceMotion ? undefined : "navigation"}
-              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
+              initial={shouldReduceMotion ? false : dockContentTransitionState}
+              animate={dockContentRestState}
+              exit={shouldReduceMotion ? undefined : dockContentTransitionState}
               className="w-auto"
               transition={uiEnterExitTransition(shouldReduceMotion)}
+              style={{
+                willChange: shouldReduceMotion
+                  ? undefined
+                  : "transform, filter, opacity",
+              }}
             >
               <NavigationItems onOpenCommandSearch={onOpenCommandSearch || (() => {})} />
             </m.div>
@@ -56,18 +73,23 @@ const NavigationDockComponent = ({
             <m.div
               key="selection"
               layoutId={shouldReduceMotion ? undefined : "navigation"}
-              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.9 }}
+              initial={shouldReduceMotion ? false : dockContentTransitionState}
+              animate={dockContentRestState}
+              exit={shouldReduceMotion ? undefined : dockContentTransitionState}
               transition={uiEnterExitTransition(shouldReduceMotion)}
               className="w-[400px] flex items-center justify-center"
+              style={{
+                willChange: shouldReduceMotion
+                  ? undefined
+                  : "transform, filter, opacity",
+              }}
             >
               <SelectionContent selectionState={selectionState} />
             </m.div>
           )}
-        </div>
-      </m.div>
-    </AnimatePresence>
+        </AnimatePresence>
+      </div>
+    </m.div>
   );
 };
 

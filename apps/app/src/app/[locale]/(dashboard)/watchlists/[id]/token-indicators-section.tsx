@@ -44,6 +44,8 @@ interface TokenIndicatorsSectionProps {
   indicatorWindowDays: number;
   showPending: boolean;
   isLoading: boolean;
+  /** Rendered opposite the "Technical Indicators" heading (e.g. mini price chart). */
+  headerAccessory?: React.ReactNode;
   metricsData: {
     current_price: number | null;
     total_volume: number | null;
@@ -784,6 +786,10 @@ function DivergencesCard({ shared }: { shared: IndicatorCardSharedProps }) {
       rsiEps: 0,
       showRegular: true,
       showHidden: true,
+      signalPeriod: 12,
+      signalType: "EMA",
+      alertHigh: 85,
+      alertLow: 15,
     }),
     [],
   );
@@ -796,6 +802,8 @@ function DivergencesCard({ shared }: { shared: IndicatorCardSharedProps }) {
     ? result.divergences[result.divergences.length - 1]?.type ?? null
     : null;
   const reverseLevels = result?.reverseLevels;
+  const signalValue = result?.signalCurrent ?? null;
+  const signalCross = result?.reverseSignalCross ?? null;
 
   const explainResult = useMemo(() => {
     if (shared.explainOhlcv.length === 0) return null;
@@ -809,6 +817,11 @@ function DivergencesCard({ shared }: { shared: IndicatorCardSharedProps }) {
     return (
       <>
         <RsiStat value={rsiValue} />
+        <IndicatorStat
+          label="Sig"
+          value={signalValue != null ? signalValue.toFixed(0) : "—"}
+          valueClass={signalValue != null ? "text-zinc-300" : "text-zinc-500"}
+        />
         <IndicatorStat
           label="Div"
           value={
@@ -830,10 +843,15 @@ function DivergencesCard({ shared }: { shared: IndicatorCardSharedProps }) {
                 : "text-red-400"
           }
         />
+        <IndicatorStat
+          label="Sig Cross"
+          value={signalCross != null ? `@ ${formatUsdPrice(signalCross)}` : "—"}
+          valueClass={signalCross != null ? "text-amber-400" : "text-zinc-500"}
+        />
         <ReverseRsiStats levels={reverseLevels ?? []} />
       </>
     );
-  }, [latestType, rsiValue, reverseLevels]);
+  }, [latestType, rsiValue, reverseLevels, signalValue, signalCross]);
 
   const explainChart = useMemo(
     () =>
@@ -893,6 +911,8 @@ function DivergencesCard({ shared }: { shared: IndicatorCardSharedProps }) {
                 price: level.price,
               }),
             ),
+            signalCurrent: explainResult?.signalCurrent ?? null,
+            reverseSignalCross: explainResult?.reverseSignalCross ?? null,
             settings: rsiDivergencesConfig,
           }}
           disabled={shared.showPending || shared.isLoading}
@@ -970,10 +990,11 @@ export function TokenIndicatorsSection(props: TokenIndicatorsSectionProps) {
 
   return (
     <>
-      <div className="col-span-12 mt-16 mb-4">
+      <div className="col-span-12 mt-16 mb-4 flex flex-wrap items-end justify-between gap-4">
         <span className="text-2xl font-semibold text-white">
           Technical Indicators
         </span>
+        {props.headerAccessory}
       </div>
 
       <div className="grid grid-cols-1 gap-6 col-span-12 md:grid-cols-12">

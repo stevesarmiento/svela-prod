@@ -90,6 +90,8 @@ describe('calculateRsiDivergences (characterization)', () => {
     expect(res.levels.middle[0]?.value).toBe(50)
     expect(res.levels.contBear[0]?.value).toBe(38)
     expect(res.levels.critBear[0]?.value).toBe(20)
+    expect(res.levels.alertHigh[0]?.value).toBe(85)
+    expect(res.levels.alertLow[0]?.value).toBe(15)
   })
 
   test('divergence start/end times match bar times', () => {
@@ -104,7 +106,12 @@ describe('calculateRsiDivergences (characterization)', () => {
   test('empty input', () => {
     expect(calculateRsiDivergences([])).toEqual({
       rsiSeries: [],
-      levels: { critBull: [], contBull: [], middle: [], contBear: [], critBear: [] },
+      signalSeries: [],
+      signalCurrent: null,
+      reverseSignalCross: null,
+      pivots: [],
+      levels: { critBull: [], contBull: [], middle: [], contBear: [], critBear: [], alertHigh: [], alertLow: [] },
+      alerts: { high: 85, low: 15, highOn: false, lowOn: false },
       divergences: [],
       reverseLevels: [],
     })
