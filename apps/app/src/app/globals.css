@@ -1,26 +1,7 @@
 @import "@v1/ui/globals.app.css";
 @import "@solana/design-system/styles";
 
-/* Floating market feed (bottom-right widget) — ticker rail + news list animations. */
-@keyframes market-feed-ticker {
-  from {
-    transform: translateX(0);
-  }
-
-  to {
-    transform: translateX(calc(-50% - 0.25rem));
-  }
-}
-
-.market-feed-ticker {
-  animation: market-feed-ticker 22s linear infinite;
-}
-
-.market-feed-ticker-viewport:hover .market-feed-ticker,
-.market-feed-ticker-viewport:focus-within .market-feed-ticker {
-  animation-play-state: paused;
-}
-
+/* Floating market feed (bottom-right widget) — news list scroll mask. */
 @supports (animation-timeline: scroll(self)) {
   .market-feed-news-scroll {
     animation: market-feed-mask-up linear both;
@@ -47,10 +28,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .market-feed-ticker {
-    animation: none;
-  }
-
   .market-feed-news-scroll {
     animation: none;
     mask-image: none;

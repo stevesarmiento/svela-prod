@@ -1,4 +1,4 @@
-import type { NewsSentiment, OverviewEvent } from "./types";
+import type { NewsCategory, NewsSentiment, OverviewEvent } from "./types";
 
 export function clampPercentChange(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -64,7 +64,9 @@ export function formatRelativeTime(ms: number, nowMs: number): string {
   });
 }
 
-export function sentimentLabel(sentiment: Exclude<NewsSentiment, null>): string {
+export function sentimentLabel(
+  sentiment: Exclude<NewsSentiment, null>,
+): string {
   if (sentiment === "bullish") return "Bullish";
   if (sentiment === "bearish") return "Bearish";
   return "Neutral";
@@ -76,6 +78,28 @@ export function sentimentVariant(
   if (sentiment === "bullish") return "success";
   if (sentiment === "bearish") return "destructive";
   return "warning";
+}
+
+/** Display label for a news category chip; null hides the chip. */
+export function categoryLabel(category: NewsCategory): string | null {
+  switch (category) {
+    case "regulation":
+      return "Regulation";
+    case "security":
+      return "Security";
+    case "etf":
+      return "ETF";
+    case "partnership":
+      return "Partnership";
+    case "market":
+      return "Market";
+    case "tech":
+      return "Tech";
+    case "macro":
+      return "Macro";
+    case "other":
+      return null;
+  }
 }
 
 export function parseBreakoutTimeframeDays(title: string): string | null {

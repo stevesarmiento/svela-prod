@@ -339,6 +339,19 @@ export default defineSchema({
     ),
     sentimentConfidence: v.optional(v.number()),
     sentimentUpdatedAt: v.optional(v.number()),
+    aiSummary: v.optional(v.string()),
+    aiCategory: v.optional(
+      v.union(
+        v.literal("regulation"),
+        v.literal("security"),
+        v.literal("etf"),
+        v.literal("partnership"),
+        v.literal("market"),
+        v.literal("tech"),
+        v.literal("macro"),
+        v.literal("other"),
+      ),
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

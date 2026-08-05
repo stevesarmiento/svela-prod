@@ -5,6 +5,7 @@ import { z } from "zod";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
+import { fetchArticleText } from "./newsArticleText";
 
 function getCoinGeckoApiKey(): string {
   const key = process.env.X_CG_PRO_API_KEY;
@@ -271,15 +272,34 @@ export const refreshCoinNews = internalAction({
   },
 });
 
-const SentimentResultSchema = z.object({
-  articleId: z.string().min(1),
+const NEWS_CATEGORIES = [
+  "regulation",
+  "security",
+  "etf",
+  "partnership",
+  "market",
+  "tech",
+  "macro",
+  "other",
+] as const;
+
+// Lenient on purpose: out-of-range confidence and unknown categories are
+// normalized in code rather than failing the whole article.
+const ArticleAnalysisSchema = z.object({
+  summary: z.string().min(1),
   sentiment: z.enum(["bullish", "bearish", "neutral"]),
-  confidence: z.number().min(0).max(1),
+  confidence: z.number(),
+  category: z.string().optional(),
 });
 
-const SentimentResponseSchema = z.object({
-  results: z.array(SentimentResultSchema).max(100),
-});
+function normalizeCategory(
+  raw: string | undefined,
+): (typeof NEWS_CATEGORIES)[number] {
+  const c = raw?.trim().toLowerCase();
+  return (NEWS_CATEGORIES as readonly string[]).includes(c ?? "")
+    ? (c as (typeof NEWS_CATEGORIES)[number])
+    : "other";
+}
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -379,9 +399,11 @@ export const analyzeSentimentBatch = internalAction({
 
     type ArticleDoc = {
       _id: Id<"coingeckoNewsArticles">;
+      url: string;
       title: string;
       sourceName?: string;
       sentiment?: "bullish" | "bearish" | "neutral";
+      aiSummary?: string;
     };
 
     const docs = (await ctx.runQuery(
@@ -391,28 +413,40 @@ export const analyzeSentimentBatch = internalAction({
       },
     )) as Array<ArticleDoc | null>;
 
-    const pending = docs
-      .filter(
-        (doc): doc is ArticleDoc =>
-          Boolean(doc) && doc!.sentiment === undefined,
-      )
-      .map((doc) => ({
-        _id: doc._id,
-        title: doc.title,
-        sourceName: doc.sourceName ?? null,
-      }));
+    // Analyze articles missing a label OR missing a summary (older
+    // title-only labels get upgraded by full-article analysis).
+    const pending = docs.filter(
+      (doc): doc is ArticleDoc =>
+        Boolean(doc) &&
+        (doc!.sentiment === undefined || doc!.aiSummary === undefined),
+    );
 
     if (pending.length === 0) return { analyzed: 0 };
 
+    type WriteItem = {
+      articleId: Id<"coingeckoNewsArticles">;
+      sentiment: "bullish" | "bearish" | "neutral";
+      confidence: number;
+      aiSummary?: string;
+      aiCategory?: (typeof NEWS_CATEGORIES)[number];
+    };
+
+    const heuristicItems = (arts: ReadonlyArray<ArticleDoc>): WriteItem[] =>
+      // The heuristic only labels; it never overwrites an existing label.
+      arts
+        .filter((a) => a.sentiment === undefined)
+        .map((a) => {
+          const h = heuristicSentiment(a.title);
+          return {
+            articleId: a._id,
+            sentiment: h.sentiment,
+            confidence: h.confidence,
+          };
+        });
+
     if (!gem) {
-      const items = pending.map((p) => {
-        const h = heuristicSentiment(p.title);
-        return {
-          articleId: p._id,
-          sentiment: h.sentiment,
-          confidence: h.confidence,
-        };
-      });
+      const items = heuristicItems(pending);
+      if (items.length === 0) return { analyzed: 0 };
       await ctx.runMutation(
         internal.coingeckoNewsWriters._setArticleSentimentBatch,
         { items },
@@ -420,59 +454,130 @@ export const analyzeSentimentBatch = internalAction({
       return { analyzed: items.length };
     }
 
-    const system = `
-You label market sentiment implied by crypto news HEADLINES.
+    const coinLinks: Array<{
+      articleId: Id<"coingeckoNewsArticles">;
+      coingeckoIds: string[];
+    }> = await ctx.runQuery(
+      internal.coingeckoNewsWriters._getCoinIdsForArticles,
+      { articleIds: pending.map((p) => p._id) },
+    );
+    // Cap coins per article to keep prompts bounded (multi-coin articles are rare).
+    const coinsByArticleId = new Map(
+      coinLinks.map((row) => [String(row.articleId), row.coingeckoIds.slice(0, 3)]),
+    );
 
-Output MUST be valid JSON only:
+    type CoinTechnicalContext = {
+      coingeckoId: string;
+      priceUsd: number | null;
+      change24hPct: number | null;
+      change7dPct: number | null;
+      change30dPct: number | null;
+      pctFromAth: number | null;
+      rsi14: number | null;
+      trend: "up" | "down" | "flat" | "unknown";
+    };
+    const allCoinIds = Array.from(
+      new Set(Array.from(coinsByArticleId.values()).flat()),
+    );
+    const technicalContexts: CoinTechnicalContext[] =
+      allCoinIds.length > 0
+        ? await ctx.runQuery(
+            internal.coingeckoNewsWriters._getTechnicalContextForCoins,
+            { coingeckoIds: allCoinIds },
+          )
+        : [];
+    const techByCoinId = new Map(
+      technicalContexts.map((t) => [t.coingeckoId, t]),
+    );
+
+    const system = `
+You analyze a crypto news article and label its market sentiment for the specific coin(s) it is linked to.
+
+You will receive JSON with:
+- title: the headline
+- source_name: the publisher
+- coins: coingecko ids of the coin(s) this article is linked to in our app
+- article_text: extracted article body (may be partial, noisy, or null)
+- technical_context: current technical state of the linked coin(s) at analysis time (trend from daily closes, RSI-14, 24h/7d/30d change %, distance from ATH). May be empty or contain nulls.
+
+Output MUST be valid JSON only with this exact shape:
 {
-  "results": [
-    { "articleId": "<id>", "sentiment": "bullish"|"bearish"|"neutral", "confidence": 0-1 }
-  ]
+  "summary": string, // 1-2 plain-English sentences: what happened and why it matters for the linked coin(s); no hype; do NOT copy the headline verbatim
+  "sentiment": "bullish"|"bearish"|"neutral", // implied direction FOR THE LINKED COIN(S), not the market at large
+  "confidence": number, // 0-1, conservative
+  "category": "regulation"|"security"|"etf"|"partnership"|"market"|"tech"|"macro"|"other"
 }
 
 Rules:
-- Use only the headline (no browsing). If unclear or informational, choose neutral with confidence <= 0.4.
-- Confidence should be conservative.
+- Base your judgment on article_text when present; otherwise use only the title.
+- Judge sentiment from the perspective of someone holding the linked coin(s). News that is broadly about crypto but has no clear implication for the linked coin(s) is neutral with confidence <= 0.4.
+- The news drives the sentiment label; technical_context calibrates it. Examples: a bullish headline that merely narrates a move the chart already made (price up big, RSI overbought) is likely priced in — lower the confidence or lean neutral; bearish news against a strong uptrend, or bullish news confirming an uptrend, deserves adjusted confidence accordingly. Never output a sentiment derived from technicals alone.
+- If unclear or purely informational, use neutral with confidence <= 0.4.
+- Do not invent facts beyond what is provided.
     `.trim();
 
-    const user = JSON.stringify({ articles: pending }, null, 2);
+    const items: WriteItem[] = await Promise.all(
+      pending.map(async (article) => {
+        const articleText = await fetchArticleText(article.url);
+        const articleCoins = coinsByArticleId.get(String(article._id)) ?? [];
+        const user = JSON.stringify(
+          {
+            title: article.title,
+            source_name: article.sourceName ?? null,
+            coins: articleCoins,
+            article_text: articleText,
+            technical_context: articleCoins
+              .map((coinId) => techByCoinId.get(coinId))
+              .filter((t): t is NonNullable<typeof t> => Boolean(t)),
+          },
+          null,
+          2,
+        );
 
-    const result = await generateText({
-      model: gem("gemini-2.5-flash"),
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      temperature: 0,
-      maxOutputTokens: 600,
-    });
+        try {
+          const result = await generateText({
+            model: gem("gemini-2.5-flash"),
+            messages: [
+              { role: "system", content: system },
+              { role: "user", content: user },
+            ],
+            temperature: 0.1,
+            maxOutputTokens: 800,
+            providerOptions: {
+              // Thinking would eat into maxOutputTokens and truncate the JSON.
+              google: { thinkingConfig: { thinkingBudget: 0 } },
+            },
+          });
 
-    const json = extractJsonObject(result.text.trim());
-    const parsed = SentimentResponseSchema.safeParse(json);
-    if (!parsed.success) {
-      const items = pending.map((p) => {
-        const h = heuristicSentiment(p.title);
+          const parsed = ArticleAnalysisSchema.safeParse(
+            extractJsonObject(result.text.trim()),
+          );
+          if (parsed.success) {
+            return {
+              articleId: article._id,
+              sentiment: parsed.data.sentiment,
+              confidence: Math.min(1, Math.max(0, parsed.data.confidence)),
+              aiSummary: parsed.data.summary.trim().slice(0, 400),
+              aiCategory: normalizeCategory(parsed.data.category),
+            };
+          }
+          console.warn(
+            `analyzeSentimentBatch: unparseable LLM output for ${article._id}: ${result.text.slice(0, 200)}`,
+          );
+        } catch (error) {
+          console.warn(
+            `analyzeSentimentBatch: LLM call failed for ${article._id}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+
+        const h = heuristicSentiment(article.title);
         return {
-          articleId: p._id,
+          articleId: article._id,
           sentiment: h.sentiment,
           confidence: h.confidence,
         };
-      });
-      await ctx.runMutation(
-        internal.coingeckoNewsWriters._setArticleSentimentBatch,
-        { items },
-      );
-      return { analyzed: items.length };
-    }
-
-    const idToDoc = new Map(pending.map((p) => [String(p._id), p._id]));
-    const items = parsed.data.results
-      .map((r) => {
-        const articleId = idToDoc.get(r.articleId);
-        if (!articleId) return null;
-        return { articleId, sentiment: r.sentiment, confidence: r.confidence };
-      })
-      .filter((x) => x !== null);
+      }),
+    );
 
     if (items.length === 0) return { analyzed: 0 };
 
@@ -521,75 +626,5 @@ export const backfillRecentMissingSentiment = internalAction({
       ),
     );
     return { queued: articleIds.length };
-  },
-});
-
-export const relabelRecentLowConfidenceNeutralSentiment: ReturnType<
-  typeof internalAction
-> = internalAction({
-  args: {
-    scanLimit: v.optional(v.number()),
-    analyzeLimit: v.optional(v.number()),
-    maxExistingConfidence: v.optional(v.number()),
-  },
-  returns: v.object({ relabeled: v.number(), candidates: v.number() }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ relabeled: number; candidates: number }> => {
-    const scanLimit = Math.min(500, Math.max(1, args.scanLimit ?? 200));
-    const analyzeLimit = Math.min(200, Math.max(1, args.analyzeLimit ?? 80));
-    const maxExistingConfidence = Math.min(
-      1,
-      Math.max(0, args.maxExistingConfidence ?? 0.4),
-    );
-
-    const articleIds: Id<"coingeckoNewsArticles">[] = await ctx.runQuery(
-      internal.coingeckoNewsWriters._listRecentLowConfidenceNeutralArticles,
-      {
-        scanLimit,
-        analyzeLimit,
-        maxConfidence: maxExistingConfidence,
-      },
-    );
-
-    if (articleIds.length === 0) return { relabeled: 0, candidates: 0 };
-
-    type ArticleDoc = {
-      _id: Id<"coingeckoNewsArticles">;
-      title: string;
-      sentiment?: "bullish" | "bearish" | "neutral";
-      sentimentConfidence?: number;
-    };
-    const docs = (await ctx.runQuery(
-      internal.coingeckoNewsWriters._getNewsArticlesByIds,
-      {
-        articleIds,
-      },
-    )) as Array<ArticleDoc | null>;
-
-    const items = docs.flatMap((doc) => {
-      if (!doc || typeof doc.title !== "string") return [];
-      const h = heuristicSentiment(doc.title);
-      if (h.sentiment === "neutral") return [];
-      return [
-        {
-          articleId: doc._id,
-          sentiment: h.sentiment,
-          confidence: h.confidence,
-        },
-      ];
-    });
-
-    if (items.length === 0)
-      return { relabeled: 0, candidates: articleIds.length };
-
-    const res: { updated: number } = await ctx.runMutation(
-      internal.coingeckoNewsWriters
-        ._overwriteLowConfidenceNeutralSentimentBatch,
-      { items, maxExistingConfidence },
-    );
-
-    return { relabeled: res.updated, candidates: articleIds.length };
   },
 });

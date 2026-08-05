@@ -14,6 +14,17 @@ type SentimentOverlayRow = {
   sentiment: "bullish" | "bearish" | "neutral" | null;
   sentimentConfidence: number | null;
   sentimentUpdatedAt: number | null;
+  aiSummary: string | null;
+  aiCategory:
+    | "regulation"
+    | "security"
+    | "etf"
+    | "partnership"
+    | "market"
+    | "tech"
+    | "macro"
+    | "other"
+    | null;
 };
 
 export function EventsFeedList(props: {
@@ -35,7 +46,10 @@ export function EventsFeedList(props: {
         new Set(
           events
             .map((event) => event.articleId)
-            .filter((articleId): articleId is string => typeof articleId === "string" && articleId.length > 0),
+            .filter(
+              (articleId): articleId is string =>
+                typeof articleId === "string" && articleId.length > 0,
+            ),
         ),
       ),
     [events],
@@ -56,8 +70,13 @@ export function EventsFeedList(props: {
       events.map((event) => {
         if (!event.articleId) return event;
         const overlay = sentimentByArticleId.get(event.articleId);
-        if (!overlay?.sentiment) return event;
-        return { ...event, sentiment: overlay.sentiment };
+        if (!overlay) return event;
+        return {
+          ...event,
+          sentiment: overlay.sentiment ?? event.sentiment,
+          aiSummary: overlay.aiSummary ?? event.aiSummary ?? null,
+          aiCategory: overlay.aiCategory ?? event.aiCategory ?? null,
+        };
       }),
     [events, sentimentByArticleId],
   );

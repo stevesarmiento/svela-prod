@@ -11,6 +11,9 @@
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
+    /* TypeScript 7 no longer auto-includes @types packages here;
+     * node is needed for process.env and the "use node" actions. */
+    "types": ["node"],
 
     /* These compiler options are required by Convex */
     "target": "ESNext",
