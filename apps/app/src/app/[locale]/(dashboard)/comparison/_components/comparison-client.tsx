@@ -1,9 +1,12 @@
 "use client";
 
 import { ComparisonIcon } from "@/components/navigation/comparison-icon";
+import {
+  CompressWatchlistsIcon,
+  ExpandWatchlistsIcon,
+} from "@/components/watchlist-icons";
 import { Button } from "@v1/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
-import { ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useCallback, useState } from "react";
 import { WatchlistMultiLineTimeScaleSelector } from "../../watchlist/_components/watchlist-multi-line-time-scale-selector";
@@ -71,9 +74,9 @@ export function ComparisonClient() {
                 className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
               >
                 {allExpanded ? (
-                  <ChevronsDownUp className="size-4.5 text-muted-foreground group-hover:text-primary" />
+                  <CompressWatchlistsIcon className="size-4.5 text-muted-foreground group-hover:text-primary" />
                 ) : (
-                  <ChevronsUpDown className="size-4.5 text-muted-foreground group-hover:text-primary" />
+                  <ExpandWatchlistsIcon className="size-4.5 text-muted-foreground group-hover:text-primary" />
                 )}
               </Button>
             </TooltipTrigger>
