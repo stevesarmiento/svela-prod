@@ -1,14 +1,21 @@
-'use client'
+"use client";
 
-import { Suspense, useTransition, useDeferredValue, memo, Component, type ErrorInfo } from 'react'
-import { MultiPriceChartLightweight } from "./multi-line-lightweight"
-import { ChartTable } from "./chart-table"
-import { useOptimizedChartsData } from '@/hooks/use-optimized-charts-data'
-import type { CoinMarketData } from '@/types/coins'
-import { WatchlistsGrid } from "../../watchlist/_components/watchlists-grid"
-import { WatchlistTable } from "../../watchlist/_components/watchlist-table"
-import { WatchlistChartsEmptyState } from "./watchlist-charts-empty-state"
-import { ComparisonGridSkeleton } from "../../comparison/_components/comparison-skeleton"
+import { useOptimizedChartsData } from "@/hooks/use-optimized-charts-data";
+import type { CoinMarketData } from "@/types/coins";
+import {
+  Component,
+  type ErrorInfo,
+  Suspense,
+  memo,
+  useDeferredValue,
+  useTransition,
+} from "react";
+import { ComparisonGridSkeleton } from "../../comparison/_components/comparison-skeleton";
+import { WatchlistTable } from "../../watchlist/_components/watchlist-table";
+import { WatchlistsGrid } from "../../watchlist/_components/watchlists-grid";
+import { ChartTable } from "./chart-table";
+import { MultiPriceChartLightweight } from "./multi-line-lightweight";
+import { WatchlistChartsEmptyState } from "./watchlist-charts-empty-state";
 
 interface OptimisticCoinMarketData extends CoinMarketData {
   isOptimistic?: boolean;
@@ -23,28 +30,31 @@ const ChartsContent = memo(function ChartsContent() {
     isInitialized,
     hasWatchlistItems,
     selectedGroup,
-  } = useOptimizedChartsData()
+  } = useOptimizedChartsData();
 
   // React 19: Use transition for time scale changes
-  const [isPending, startTransition] = useTransition()
+  const [isPending, startTransition] = useTransition();
 
   // React 19: Defer expensive coin data for better responsiveness
-  const deferredCoins = useDeferredValue(optimisticCoins)
-  const deferredTimeScale = useDeferredValue(activeTimeScale)
+  const deferredCoins = useDeferredValue(optimisticCoins);
+  const deferredTimeScale = useDeferredValue(activeTimeScale);
 
   // Enhanced time scale setter with transition
   const handleTimeScaleChange = (scale: string) => {
     startTransition(() => {
-      setActiveTimeScale(scale)
-    })
-  }
+      setActiveTimeScale(scale);
+    });
+  };
 
   if (isInitialized && !hasWatchlistItems) {
     return (
       <div className="w-full">
-        <WatchlistChartsEmptyState groupName={selectedGroup?.name} groupColor={selectedGroup?.color} />
+        <WatchlistChartsEmptyState
+          groupName={selectedGroup?.name}
+          groupColor={selectedGroup?.color}
+        />
       </div>
-    )
+    );
   }
 
   return (
@@ -53,7 +63,9 @@ const ChartsContent = memo(function ChartsContent() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-1">
         <div className="lg:col-span-6 min-w-0">
           {/* React 19: Show loading state during transitions */}
-          <div className={`lg:sticky lg:top-4 ${isPending ? 'opacity-60 transition-opacity duration-200' : ''}`}>
+          <div
+            className={`lg:sticky lg:top-4 ${isPending ? "opacity-60 transition-opacity duration-200" : ""}`}
+          >
             <MultiPriceChartLightweight
               coins={deferredCoins as OptimisticCoinMarketData[]}
               activeTimeScale={deferredTimeScale}
@@ -73,8 +85,8 @@ const ChartsContent = memo(function ChartsContent() {
         </div>
       </div>
     </div>
-  )
-})
+  );
+});
 
 // TypeScript interfaces for error boundary
 interface ChartErrorBoundaryProps {
@@ -86,7 +98,10 @@ interface ChartErrorBoundaryState {
 }
 
 // React error boundary class component
-class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBoundaryState> {
+class ChartErrorBoundary extends Component<
+  ChartErrorBoundaryProps,
+  ChartErrorBoundaryState
+> {
   constructor(props: ChartErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false };
@@ -97,7 +112,7 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ChartErrorBoundary caught an error:', error, errorInfo);
+    console.error("ChartErrorBoundary caught an error:", error, errorInfo);
   }
 
   render() {
@@ -108,7 +123,8 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
             <div className="text-center">
               <h3 className="text-lg font-medium mb-2">Something went wrong</h3>
               <p className="text-muted-foreground mb-4">
-                An error occurred while loading the charts. Please try refreshing the page.
+                An error occurred while loading the charts. Please try
+                refreshing the page.
               </p>
               <button
                 type="button"
@@ -123,11 +139,7 @@ class ChartErrorBoundary extends Component<ChartErrorBoundaryProps, ChartErrorBo
       );
     }
 
-    return (
-      <div className="space-y-6 w-full">
-        {this.props.children}
-      </div>
-    );
+    return <div className="space-y-6 w-full">{this.props.children}</div>;
   }
 }
 
@@ -137,48 +149,57 @@ interface ComparisonChartsContentProps {
   /** Controlled time scale (e.g. selector rendered in the page header). Falls back to internal state. */
   activeTimeScale?: string;
   onTimeScaleChange?: (scale: string) => void;
+  /** Passthrough to WatchlistTable: expand/collapse-all from the page header. */
+  expandAllCommand?: { expand: boolean; nonce: number } | null;
+  onAllExpandedChange?: (allExpanded: boolean) => void;
 }
 
 const ComparisonChartsContent = memo(function ComparisonChartsContent({
   inset = true,
   activeTimeScale: controlledTimeScale,
   onTimeScaleChange,
+  expandAllCommand,
+  onAllExpandedChange,
 }: ComparisonChartsContentProps) {
   const {
     activeTimeScale: internalTimeScale,
     setActiveTimeScale,
     isInitialized,
-  } = useOptimizedChartsData({ initialTimeScale: "7d" })
+  } = useOptimizedChartsData({ initialTimeScale: "7d" });
 
-  const isControlled = controlledTimeScale !== undefined
-  const activeTimeScale = controlledTimeScale ?? internalTimeScale
+  const isControlled = controlledTimeScale !== undefined;
+  const activeTimeScale = controlledTimeScale ?? internalTimeScale;
 
-  if (process.env.NODE_ENV !== 'production' && isControlled && !onTimeScaleChange) {
+  if (
+    process.env.NODE_ENV !== "production" &&
+    isControlled &&
+    !onTimeScaleChange
+  ) {
     console.warn(
-      'ComparisonChartsContent: `activeTimeScale` was provided without `onTimeScaleChange`; time scale changes will be ignored.',
-    )
+      "ComparisonChartsContent: `activeTimeScale` was provided without `onTimeScaleChange`; time scale changes will be ignored.",
+    );
   }
 
-  const [isPending, startTransition] = useTransition()
+  const [isPending, startTransition] = useTransition();
 
-  const deferredTimeScale = useDeferredValue(activeTimeScale)
+  const deferredTimeScale = useDeferredValue(activeTimeScale);
 
   const handleTimeScaleChange = (scale: string) => {
     startTransition(() => {
       if (isControlled) {
-        onTimeScaleChange?.(scale)
+        onTimeScaleChange?.(scale);
       } else {
-        setActiveTimeScale(scale)
+        setActiveTimeScale(scale);
       }
-    })
-  }
+    });
+  };
 
   if (!isInitialized) {
-    return <ComparisonGridSkeleton inset={inset} />
+    return <ComparisonGridSkeleton inset={inset} />;
   }
 
   return (
-    <div className={`w-full ${inset ? 'px-4' : ''}`}>
+    <div className={`w-full ${inset ? "px-4" : ""}`}>
       {/* Comparison chart left (1/4), table right (3/4); stacks chart-first below lg */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="lg:col-span-6 min-w-0">
@@ -195,12 +216,16 @@ const ComparisonChartsContent = memo(function ComparisonChartsContent({
         </div>
 
         <div className="lg:col-span-6 min-w-0">
-          <WatchlistTable activeTimeScale={deferredTimeScale} />
+          <WatchlistTable
+            activeTimeScale={deferredTimeScale}
+            expandAllCommand={expandAllCommand}
+            onAllExpandedChange={onAllExpandedChange}
+          />
         </div>
       </div>
     </div>
-  )
-})
+  );
+});
 
 export const ChartsClient = memo(function ChartsClient() {
   return (
@@ -209,20 +234,25 @@ export const ChartsClient = memo(function ChartsClient() {
         <ChartsContent />
       </Suspense>
     </ChartErrorBoundary>
-  )
-})
+  );
+});
 
 interface ComparisonChartsClientProps {
   inset?: boolean;
   /** Controlled time scale (e.g. selector rendered in the page header). */
   activeTimeScale?: string;
   onTimeScaleChange?: (scale: string) => void;
+  /** Passthrough to WatchlistTable: expand/collapse-all from the page header. */
+  expandAllCommand?: { expand: boolean; nonce: number } | null;
+  onAllExpandedChange?: (allExpanded: boolean) => void;
 }
 
 export const ComparisonChartsClient = memo(function ComparisonChartsClient({
   inset = true,
   activeTimeScale,
   onTimeScaleChange,
+  expandAllCommand,
+  onAllExpandedChange,
 }: ComparisonChartsClientProps) {
   return (
     <ChartErrorBoundary>
@@ -231,8 +261,10 @@ export const ComparisonChartsClient = memo(function ComparisonChartsClient({
           inset={inset}
           activeTimeScale={activeTimeScale}
           onTimeScaleChange={onTimeScaleChange}
+          expandAllCommand={expandAllCommand}
+          onAllExpandedChange={onAllExpandedChange}
         />
       </Suspense>
     </ChartErrorBoundary>
-  )
-})
+  );
+});
