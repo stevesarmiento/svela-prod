@@ -61,7 +61,7 @@ const BlurredBackground = memo(function BlurredBackground({
     queryKey: ["coingecko-coin", id],
     queryFn: async () => {
       if (!id) return null
-      return await runPromise(CoinsInternalApi.getCoinGeckoCoinById({ id }))
+      return await runPromise(CoinsInternalApi.use((api) => api.getCoinGeckoCoinById({ id })))
     },
     enabled: !!id,
     staleTime: 10 * 60 * 1000,

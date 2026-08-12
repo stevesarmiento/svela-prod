@@ -65,10 +65,12 @@ export function useTakerBuySell({
     queryFn: async (): Promise<TakerBuySellResponse> => {
       try {
         const result = await runPromise(
-          CoinGlassApi.getTakerBuySell({
-            symbol,
-            range,
-          }),
+          CoinGlassApi.use((api) =>
+            api.getTakerBuySell({
+              symbol,
+              range,
+            }),
+          ),
         )
 
         return {

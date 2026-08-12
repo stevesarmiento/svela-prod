@@ -60,14 +60,16 @@ export function useOpenInterest({
     queryFn: async (): Promise<OpenInterestResponse> => {
       try {
         const result = await runPromise(
-          CoinGlassApi.getOpenInterest({
-            symbol,
-            interval,
-            limit,
-            unit,
-            startTime,
-            endTime,
-          }),
+          CoinGlassApi.use((api) =>
+            api.getOpenInterest({
+              symbol,
+              interval,
+              limit,
+              unit,
+              startTime,
+              endTime,
+            }),
+          ),
         )
 
         return {

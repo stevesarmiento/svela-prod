@@ -510,11 +510,13 @@ export async function fetchCoinGeckoCombinedChartData(args: {
       numericDays > 90
     const swallowToNull = (_: unknown) => Effect.succeed(null)
 
-    const marketEffect = CoinGeckoApi.getMarketChart({
-      coinId: args.coinId,
-      days: config.days,
-      vsCurrency: "usd",
-    }).pipe(
+    const marketEffect = CoinGeckoApi.use((api) =>
+      api.getMarketChart({
+        coinId: args.coinId,
+        days: config.days,
+        vsCurrency: "usd",
+      }),
+    ).pipe(
       Effect.catchTags({
         CoinGeckoInvalidParamsError: swallowToNull,
         CoinGeckoUnauthorizedError: swallowToNull,
@@ -549,11 +551,13 @@ export async function fetchCoinGeckoCombinedChartData(args: {
         isOhlcSupportedDays(config.days)
 
       if (!primaryResult && allowOhlcFallback) {
-        const ohlcEffect = CoinGeckoApi.getOHLC({
-          coinId: args.coinId,
-          days: config.days,
-          vsCurrency: "usd",
-        }).pipe(
+        const ohlcEffect = CoinGeckoApi.use((api) =>
+          api.getOHLC({
+            coinId: args.coinId,
+            days: config.days,
+            vsCurrency: "usd",
+          }),
+        ).pipe(
           Effect.catchTags({
             CoinGeckoInvalidParamsError: swallowToNull,
             CoinGeckoUnauthorizedError: swallowToNull,
@@ -581,11 +585,13 @@ export async function fetchCoinGeckoCombinedChartData(args: {
         }
       }
     } else {
-      const ohlcEffect = CoinGeckoApi.getOHLC({
-        coinId: args.coinId,
-        days: config.days,
-        vsCurrency: "usd",
-      }).pipe(
+      const ohlcEffect = CoinGeckoApi.use((api) =>
+        api.getOHLC({
+          coinId: args.coinId,
+          days: config.days,
+          vsCurrency: "usd",
+        }),
+      ).pipe(
         Effect.catchTags({
           CoinGeckoInvalidParamsError: swallowToNull,
           CoinGeckoUnauthorizedError: swallowToNull,

@@ -83,7 +83,7 @@ export function useHoldingsValueOverTime(args: {
       const swallowToNull = (_: unknown) => Effect.succeed(null);
 
       const fetchEffects = positions.map((row) =>
-        CoinGeckoApi.getMarketChart({ coinId: row.coinId, days }).pipe(
+        CoinGeckoApi.use((api) => api.getMarketChart({ coinId: row.coinId, days })).pipe(
           Effect.map((response) => ({
             coinId: row.coinId,
             holdings: row.holdings,
@@ -103,7 +103,6 @@ export function useHoldingsValueOverTime(args: {
       const results = await runPromise(
         Effect.all(fetchEffects, {
           concurrency: 5,
-          batching: false,
         }),
       );
 

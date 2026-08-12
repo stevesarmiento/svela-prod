@@ -176,7 +176,7 @@ export async function fetchCoinGeckoQuote(
   if (!coinId) return null
 
   try {
-    const result = await runPromise(CoinGeckoApi.getQuotes({ ids: [coinId] }))
+    const result = await runPromise(CoinGeckoApi.use((api) => api.getQuotes({ ids: [coinId] })))
     if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
       throw new Error(result.status.error_message || "API error")
     }
@@ -264,7 +264,7 @@ export function useCoinGeckoQuotesBulk(
       if (!stableIds.length) return {}
 
       try {
-        const result = await runPromise(CoinGeckoApi.getQuotes({ ids: stableIds }))
+        const result = await runPromise(CoinGeckoApi.use((api) => api.getQuotes({ ids: stableIds })))
         if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
           throw new Error(result.status.error_message || "API error")
         }

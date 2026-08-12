@@ -73,7 +73,7 @@ export async function prefetchChartRoute(args: {
   await args.queryClient.prefetchQuery({
     queryKey: ["coingecko-coin", args.coinId],
     queryFn: async () =>
-      await runPromise(CoinsInternalApi.getCoinGeckoCoinById({ id: args.coinId })),
+      await runPromise(CoinsInternalApi.use((api) => api.getCoinGeckoCoinById({ id: args.coinId }))),
     staleTime: 10 * 60 * 1000,
   })
 

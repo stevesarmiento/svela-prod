@@ -70,13 +70,17 @@ export function useGlobalMarketCapOverTime(args: {
       return await runPromise(
         Effect.all(
           {
-            global: CoinGeckoApi.getGlobalMarketCapChart({
-              days,
-              vsCurrency: "usd",
-            }),
-            btc: CoinGeckoApi.getMarketChart({ coinId: "bitcoin", days }),
+            global: CoinGeckoApi.use((api) =>
+              api.getGlobalMarketCapChart({
+                days,
+                vsCurrency: "usd",
+              }),
+            ),
+            btc: CoinGeckoApi.use((api) =>
+              api.getMarketChart({ coinId: "bitcoin", days }),
+            ),
           },
-          { concurrency: 2, batching: false },
+          { concurrency: 2 },
         ).pipe(
           Effect.map(({ global, btc }) => {
             const rangeDays = getRangeDaysFromTimeScale(args.timeScale);

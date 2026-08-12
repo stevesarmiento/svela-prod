@@ -26,7 +26,7 @@ export class WatchlistGroup extends Schema.Class<WatchlistGroup>("WatchlistGroup
   _id: Schema.String,
   _creationTime: Schema.Number,
   userId: Schema.String,
-  name: Schema.String.pipe(Schema.minLength(1), Schema.maxLength(50)),
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(50)),
   slug: Schema.String,
   description: Schema.optional(Schema.String),
   icon: Schema.optional(Schema.String),

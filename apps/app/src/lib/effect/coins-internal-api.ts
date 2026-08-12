@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 
 export class CoinsInternalInvalidParamsError extends Schema.TaggedError<CoinsInternalInvalidParamsError>()(
   "CoinsInternalInvalidParamsError",
@@ -102,11 +102,15 @@ function requestJson<A>(args: {
 
       return Effect.try({
         try: () => args.decode(body),
-        catch: (error) => new CoinsInternalDecodeError({ endpoint: args.endpoint, message: String(error) }),
+        catch: (error) =>
+          new CoinsInternalDecodeError({
+            endpoint: args.endpoint,
+            message: error instanceof Error ? error.message : String(error),
+          }),
       })
     }),
     Effect.timeout("8 seconds"),
-    Effect.catchTag("TimeoutException", () =>
+    Effect.catchTag("TimeoutError", () =>
       Effect.fail(new CoinsInternalApiError({ endpoint: args.endpoint, status: 408, message: "Request timed out" })),
     ),
   )
@@ -138,9 +142,9 @@ const CoinMetaSchema = Schema.Struct({
   logoUrl: Schema.String,
 })
 
-export class CoinsInternalApi extends Effect.Service<CoinsInternalApi>()("CoinsInternalApi", {
-  accessors: true,
-  effect: Effect.gen(function* () {
+// biome-ignore lint/complexity/noStaticOnlyClass: Effect v4 service class — the class is the Context tag; `layer` must be static
+export class CoinsInternalApi extends Context.Service<CoinsInternalApi>()("CoinsInternalApi", {
+  make: Effect.gen(function* () {
     const search = Effect.fn("CoinsInternalApi.search")(function* (args: { query: string; limit?: number }) {
       const query = args.query.trim()
       if (!query) return [] as const
@@ -180,5 +184,7 @@ export class CoinsInternalApi extends Effect.Service<CoinsInternalApi>()("CoinsI
 
     return { search, top, getCoinGeckoCoinById } as const
   }),
-}) {}
+}) {
+  static readonly layer = Layer.effect(this, this.make)
+}
 
