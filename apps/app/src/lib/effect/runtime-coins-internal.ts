@@ -1,5 +1,6 @@
-import { Effect, type Exit, type Fiber } from "effect"
+import { Effect, Tracer } from "effect"
 import { CoinsInternalApi } from "./coins-internal-api"
+import { sentryTracer } from "./sentry-tracer"
 
 /**
  * Client runtime boundary for `/api/internal/coins/*` Effects.
@@ -10,18 +11,15 @@ import { CoinsInternalApi } from "./coins-internal-api"
 function provideCoinsInternal<A, E>(
   effect: Effect.Effect<A, E, CoinsInternalApi>,
 ): Effect.Effect<A, E, never> {
-  return effect.pipe(Effect.provide(CoinsInternalApi.Default))
+  return effect.pipe(
+    Effect.provide(CoinsInternalApi.layer),
+    Effect.provideService(Tracer.Tracer, sentryTracer),
+  )
 }
 
-export function runPromise<A, E>(effect: Effect.Effect<A, E, CoinsInternalApi>): Promise<A> {
-  return Effect.runPromise(provideCoinsInternal(effect))
+export function runPromise<A, E>(
+  effect: Effect.Effect<A, E, CoinsInternalApi>,
+  options?: { signal?: AbortSignal },
+): Promise<A> {
+  return Effect.runPromise(provideCoinsInternal(effect), options)
 }
-
-export function runPromiseExit<A, E>(effect: Effect.Effect<A, E, CoinsInternalApi>): Promise<Exit.Exit<A, E>> {
-  return Effect.runPromiseExit(provideCoinsInternal(effect))
-}
-
-export function runFork<A, E>(effect: Effect.Effect<A, E, CoinsInternalApi>): Fiber.RuntimeFiber<A, E> {
-  return Effect.runFork(provideCoinsInternal(effect))
-}
-

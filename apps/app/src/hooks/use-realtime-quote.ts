@@ -187,14 +187,16 @@ export function useRealtimeQuote(args: UseRealtimeQuoteArgs): RealtimeQuoteStatu
       if (now - lastPersistAtRef.current < PERSIST_INTERVAL_MS) return;
       lastPersistAtRef.current = now;
 
-      void upsertLastKnown({
+      // Best-effort persistence — swallow rejections instead of surfacing
+      // an unhandled promise rejection every 2s when offline.
+      upsertLastKnown({
         coingeckoId: args.coingeckoId,
         source,
         sessionId,
         priceUsd: tick.priceUsd,
         publishTime: tick.publishTimeMs ?? undefined,
         confidence: tick.confidenceUsd ?? undefined,
-      });
+      }).catch(() => {});
     }, 2_000);
 
     return () => window.clearInterval(intervalId);

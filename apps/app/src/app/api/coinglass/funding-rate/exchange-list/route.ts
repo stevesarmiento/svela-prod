@@ -1,20 +1,20 @@
+import { Effect } from "effect";
 import { NextResponse } from "next/server";
-import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { z } from "zod";
-import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../../convex/_generated/api";
+import { ConvexService } from "@/lib/effect/server/convex";
+import { effectRoute } from "@/lib/effect/server/route";
+import { UpstreamHttp } from "@/lib/effect/server/upstream-http";
+import {
+  COINGLASS_BASE_URL,
+  coinglassHeaders,
+  resolveCoinglassSymbol,
+  unwrapCoinglassEnvelope,
+} from "@/lib/effect/server/vendors/coinglass";
 
-const BASE_URL = "https://open-api-v4.coinglass.com/api";
-const API_KEY = process.env.CG_API_KEY || process.env['CG-API-KEY'];
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+const API_KEY = process.env.CG_API_KEY || process.env["CG-API-KEY"];
 
-function getServerToken(): string {
-  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
-  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured");
-  return token;
-}
-
-// Validation schema for funding rate data - make fields optional to handle incomplete data
+// Validation schema for funding rate data - fields optional to handle incomplete data
 const FundingRateItemSchema = z.object({
   exchange: z.string(),
   funding_rate_interval: z.number().optional(),
@@ -28,223 +28,167 @@ const FundingRateDataSchema = z.object({
   token_margin_list: z.array(FundingRateItemSchema),
 });
 
-const CoinglassFundingRateResponseSchema = z.object({
-  code: z.string(),
-  msg: z.string().optional(),
-  data: z.array(FundingRateDataSchema),
-});
+const FundingRateListSchema = z.array(FundingRateDataSchema);
 
-async function fetchWithErrorHandling(url: string) {
-  if (!API_KEY) {
-    return {
-      ok: false,
-      status: 503,
-      statusText: 'CoinGlass API key not configured',
-      json: async () => ({
-        success: false,
-        error: 'CoinGlass API key is not configured. Please set CG_API_KEY or CG-API-KEY in your environment.',
-        data: [],
-        count: 0
-      })
-    };
-  }
-
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'CG-API-KEY': API_KEY,
-        'Content-Type': 'application/json',
-      },
-      next: {
-        revalidate: 20, // Cache for 20 seconds (matches API update frequency)
-      },
-    });
-
-    if (response.status === 429) {
-      throw new Error('Rate limit exceeded. Please try again later.');
-    }
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      throw new Error(errorData?.msg || `API error: ${response.status}`);
-    }
-
-    return response;
-  } catch (error) {
-    console.error("CoinGlass funding rate API error:", error);
-    throw error;
-  }
+interface ResolvedCoin {
+  actualSymbol: string;
+  coinInfo: {
+    symbol: string;
+    name: string;
+    coinId: number;
+    isSupported: boolean;
+  } | null;
 }
 
-async function handleGet(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const symbolOrId = searchParams.get('symbol') || 'BTC';
+function completeRates(
+  rates: ReadonlyArray<z.infer<typeof FundingRateItemSchema>>,
+) {
+  return rates
+    .filter(
+      (rate) =>
+        rate.funding_rate_interval !== undefined &&
+        rate.funding_rate !== undefined &&
+        rate.next_funding_time !== undefined,
+    )
+    .map((rate) => ({
+      exchange: rate.exchange,
+      fundingRateInterval: rate.funding_rate_interval as number,
+      fundingRate: rate.funding_rate as number,
+      nextFundingTime: rate.next_funding_time as number,
+    }));
+}
 
-    let actualSymbol = symbolOrId;
-    let coinInfo = null;
+export const GET = effectRoute(
+  (req) =>
+    Effect.gen(function* () {
+      const symbolOrId = req.nextUrl.searchParams.get("symbol") || "BTC";
+      const convex = yield* ConvexService;
 
-    // Check if the input is a number (coin ID) or a symbol
-    const coinId = Number.parseInt(symbolOrId);
-    if (!Number.isNaN(coinId)) {
-      // It's a coin ID, look up the symbol
-      coinInfo = await convex.query(api.coins.getCoinglassSymbolByCoinId, { 
-        serverToken: getServerToken(),
-        coinId 
+      // Resolve the input (numeric coin id or symbol) to a CoinGlass symbol.
+      const resolvedSymbol = yield* resolveCoinglassSymbol(convex, symbolOrId, {
+        // Route-specific contract: 400 with a supportedCoins sample.
+        coinIdNotFound: (coinId) =>
+          convex
+            .serverQuery(
+              api.coins.getCoinglassSupportedCoinsList,
+              {},
+              { label: "getCoinglassSupportedCoinsList" },
+            )
+            .pipe(
+              Effect.map((supportedCoins) =>
+                NextResponse.json(
+                  {
+                    success: false,
+                    error: `Coin with ID ${coinId} not found or not supported by CoinGlass`,
+                    supportedCoins: supportedCoins.slice(0, 10),
+                    coinId,
+                  },
+                  { status: 400 },
+                ),
+              ),
+            ),
       });
-      
-      if (!coinInfo) {
-        // Get list of supported coins for error message
-        const supportedCoins = await convex.query(api.coins.getCoinglassSupportedCoinsList, {
-          serverToken: getServerToken(),
-        });
-        
-        return NextResponse.json({
-          success: false,
-          error: `Coin with ID ${coinId} not found or not supported by CoinGlass`,
-          supportedCoins: supportedCoins.slice(0, 10), // Just first 10 for brevity
-          coinId
-        }, { status: 400 });
-      }
-      
-      actualSymbol = coinInfo.symbol;
-    } else {
-      // It's a symbol, check if it's supported
-      const symbol = symbolOrId.toUpperCase();
-      const isSupportedPromise = convex.query(api.coins.isCoinglassSupported, {
-        serverToken: getServerToken(),
-        symbol,
-      });
-      const coinPromise = convex.query(api.coins.getCoinBySymbol, {
-        serverToken: getServerToken(),
-        symbol,
-      });
-      const isSupported = await isSupportedPromise;
-      
-      if (!isSupported) {
-        return NextResponse.json({
-          success: false,
-          error: `Symbol ${symbolOrId} is not supported by CoinGlass`,
-          inputSymbol: symbolOrId
-        }, { status: 400 });
-      }
-      
-      actualSymbol = symbol;
-      
-      // Get coin info for response
-      const coin = await coinPromise;
-      
-      if (coin) {
-        coinInfo = {
-          symbol: actualSymbol,
-          name: coin.name,
-          coinId: coin.coinId,
-          isSupported: true
+      if (resolvedSymbol instanceof Response) return resolvedSymbol;
+
+      let resolved: ResolvedCoin;
+      if (resolvedSymbol.record) {
+        // Historical contract: the raw record (incl. `originalSymbol`) passes
+        // through to the response's coinInfo.
+        resolved = {
+          actualSymbol: resolvedSymbol.symbol,
+          coinInfo: resolvedSymbol.record,
+        };
+      } else {
+        const symbol = resolvedSymbol.symbol;
+        const [isSupported, coin] = yield* Effect.all(
+          [
+            convex.serverQuery(
+              api.coins.isCoinglassSupported,
+              { symbol },
+              { label: "isCoinglassSupported" },
+            ),
+            convex.serverQuery(
+              api.coins.getCoinBySymbol,
+              { symbol },
+              { label: "getCoinBySymbol" },
+            ),
+          ],
+          { concurrency: 2 },
+        );
+        if (!isSupported) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Symbol ${symbolOrId} is not supported by CoinGlass`,
+              inputSymbol: symbolOrId,
+            },
+            { status: 400 },
+          );
+        }
+        resolved = {
+          actualSymbol: symbol,
+          coinInfo: coin
+            ? {
+                symbol,
+                name: coin.name,
+                coinId: coin.coinId,
+                isSupported: true,
+              }
+            : null,
         };
       }
-    }
 
-    // Build URL with validated symbol
-    const apiUrl = `${BASE_URL}/futures/funding-rate/exchange-list?symbol=${actualSymbol}`;
+      if (!API_KEY) {
+        // Route-specific 503 body: clients rely on the empty-data envelope.
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "CoinGlass API key is not configured. Please set CG_API_KEY or CG-API-KEY in your environment.",
+            data: [],
+            symbol: resolved.actualSymbol,
+            originalInput: symbolOrId,
+            coinInfo: resolved.coinInfo,
+            lastUpdated: new Date().toISOString(),
+          },
+          { status: 503 },
+        );
+      }
 
-    console.log('Fetching CoinGlass funding rate data:', {
-      url: apiUrl,
-      symbol: actualSymbol,
-      originalInput: symbolOrId,
-      coinInfo
-    });
-
-    // Fetch data from CoinGlass
-    const response = await fetchWithErrorHandling(apiUrl);
-
-    // Handle missing API key case
-    if (!response.ok) {
-      const errorData = await response.json();
-      return NextResponse.json({
-        success: false,
-        error: errorData.error,
-        data: [],
-        symbol: actualSymbol,
-        originalInput: symbolOrId,
-        coinInfo,
-        lastUpdated: new Date().toISOString(),
-      }, { status: 503 });
-    }
-
-    const data = await response.json();
-
-    // Validate response structure
-    const validatedData = CoinglassFundingRateResponseSchema.parse(data);
-
-    if (validatedData.code !== "0") {
-      throw new Error(`CoinGlass API error: ${validatedData.msg || 'Unknown error'}`);
-    }
-
-    // Transform data for our API response - filter out incomplete entries
-    const transformedData = validatedData.data.map(item => ({
-      symbol: item.symbol,
-      stablecoinMarginList: item.stablecoin_margin_list
-        .filter(rate => 
-          rate.funding_rate_interval !== undefined && 
-          rate.funding_rate !== undefined && 
-          rate.next_funding_time !== undefined
-        )
-        .map(rate => ({
-          exchange: rate.exchange,
-          fundingRateInterval: rate.funding_rate_interval!,
-          fundingRate: rate.funding_rate!,
-          nextFundingTime: rate.next_funding_time!,
-        })),
-      tokenMarginList: item.token_margin_list
-        .filter(rate => 
-          rate.funding_rate_interval !== undefined && 
-          rate.funding_rate !== undefined && 
-          rate.next_funding_time !== undefined
-        )
-        .map(rate => ({
-          exchange: rate.exchange,
-          fundingRateInterval: rate.funding_rate_interval!,
-          fundingRate: rate.funding_rate!,
-          nextFundingTime: rate.next_funding_time!,
-        })),
-    }));
-
-    return NextResponse.json({
-      success: true,
-      data: transformedData,
-      symbol: actualSymbol,
-      originalInput: symbolOrId,
-      coinInfo,
-      lastUpdated: new Date().toISOString(),
-    }, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=20, stale-while-revalidate=10',
-      },
-    });
-
-  } catch (error) {
-    console.error('CoinGlass funding rate route error:', error);
-    
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { 
-          error: "Invalid API response format", 
-          details: error.errors,
-          success: false 
+      const http = yield* UpstreamHttp;
+      const rows = yield* http.requestJson({
+        vendor: "coinglass",
+        endpoint: `${COINGLASS_BASE_URL}/futures/funding-rate/exchange-list?symbol=${resolved.actualSymbol}`,
+        decode: (data) =>
+          FundingRateListSchema.parse(unwrapCoinglassEnvelope(data)),
+        init: {
+          headers: coinglassHeaders(API_KEY),
+          // Cache for 20 seconds (matches API update frequency)
+          next: { revalidate: 20 },
         },
-        { status: 500 }
-      );
-    }
+      });
 
-    return NextResponse.json(
-      { 
-        error: error instanceof Error ? error.message : "Failed to fetch funding rate data from CoinGlass",
-        success: false 
-      },
-      { status: 500 }
-    );
-  }
-}
-export const GET = withAuthRatelimit(handleGet, {
-  name: "coinglass-funding-rate",
-});
+      const transformedData = rows.map((item) => ({
+        symbol: item.symbol,
+        stablecoinMarginList: completeRates(item.stablecoin_margin_list),
+        tokenMarginList: completeRates(item.token_margin_list),
+      }));
+
+      return NextResponse.json(
+        {
+          success: true,
+          data: transformedData,
+          symbol: resolved.actualSymbol,
+          originalInput: symbolOrId,
+          coinInfo: resolved.coinInfo,
+          lastUpdated: new Date().toISOString(),
+        },
+        {
+          headers: {
+            "Cache-Control": "public, s-maxage=20, stale-while-revalidate=10",
+          },
+        },
+      );
+    }),
+  { name: "coinglass-funding-rate" },
+);

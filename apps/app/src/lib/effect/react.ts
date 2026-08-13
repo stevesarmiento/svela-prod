@@ -22,7 +22,7 @@ export function useEffectScoped<A, E>(
 
     return () => {
       // Non-blocking interrupt; finalizers run because the program is scoped.
-      Effect.runFork(Fiber.interruptFork(fiber))
+      Effect.runFork(Fiber.interrupt(fiber))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)

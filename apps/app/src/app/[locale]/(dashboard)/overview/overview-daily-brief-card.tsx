@@ -1003,16 +1003,24 @@ export function OverviewDailyBriefCard(props: {
     if (hasRequestedRef.current) return
     hasRequestedRef.current = true
 
+    let cancelled = false
     setIsGenerating(true)
     generateBrief({})
-      .then((next) => setGeneratedBrief(next))
+      .then((next) => {
+        if (!cancelled) setGeneratedBrief(next)
+      })
       .catch(() => {
         // Allow the effect to retry on the next relevant state change —
         // otherwise a transient 5xx permanently disables auto-generation
         // for this mount.
         hasRequestedRef.current = false
       })
-      .finally(() => setIsGenerating(false))
+      .finally(() => {
+        if (!cancelled) setIsGenerating(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [cache, generateBrief, props.enableGeneration, props.status])
 
   // Derived during render (no adjustment effect): prefer whichever brief is

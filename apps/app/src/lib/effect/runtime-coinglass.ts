@@ -1,26 +1,23 @@
-import { Effect, type Exit, type Fiber } from "effect"
+import { Effect, Tracer } from "effect"
 import { CoinGlassApi } from "./coinglass-api"
+import { sentryTracer } from "./sentry-tracer"
 
 /**
  * Client runtime boundary for CoinGlass Effects.
  *
  * Keeps the client bundle smaller by only providing `CoinGlassApi`.
- * Use `apps/app/src/lib/effect/runtime.ts` only when you truly need multiple services.
  */
 
 function provideCoinGlass<A, E>(effect: Effect.Effect<A, E, CoinGlassApi>): Effect.Effect<A, E, never> {
-  return effect.pipe(Effect.provide(CoinGlassApi.Default))
+  return effect.pipe(
+    Effect.provide(CoinGlassApi.layer),
+    Effect.provideService(Tracer.Tracer, sentryTracer),
+  )
 }
 
-export function runPromise<A, E>(effect: Effect.Effect<A, E, CoinGlassApi>): Promise<A> {
-  return Effect.runPromise(provideCoinGlass(effect))
+export function runPromise<A, E>(
+  effect: Effect.Effect<A, E, CoinGlassApi>,
+  options?: { signal?: AbortSignal },
+): Promise<A> {
+  return Effect.runPromise(provideCoinGlass(effect), options)
 }
-
-export function runPromiseExit<A, E>(effect: Effect.Effect<A, E, CoinGlassApi>): Promise<Exit.Exit<A, E>> {
-  return Effect.runPromiseExit(provideCoinGlass(effect))
-}
-
-export function runFork<A, E>(effect: Effect.Effect<A, E, CoinGlassApi>): Fiber.RuntimeFiber<A, E> {
-  return Effect.runFork(provideCoinGlass(effect))
-}
-

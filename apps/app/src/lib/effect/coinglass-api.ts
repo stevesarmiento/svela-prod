@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 
 export class CoinGlassInvalidParamsError extends Schema.TaggedError<CoinGlassInvalidParamsError>()(
   "CoinGlassInvalidParamsError",
@@ -100,11 +100,15 @@ function requestJson<A>(args: {
 
       return Effect.try({
         try: () => args.decode(body),
-        catch: (error) => new CoinGlassDecodeError({ endpoint: args.endpoint, message: String(error) }),
+        catch: (error) =>
+          new CoinGlassDecodeError({
+            endpoint: args.endpoint,
+            message: error instanceof Error ? error.message : String(error),
+          }),
       })
     }),
     Effect.timeout("8 seconds"),
-    Effect.catchTag("TimeoutException", () =>
+    Effect.catchTag("TimeoutError", () =>
       Effect.fail(new CoinGlassApiError({ endpoint: args.endpoint, status: 408, message: "Request timed out" })),
     ),
   )
@@ -230,9 +234,9 @@ const FundingRateResponseSchema = Schema.Struct({
   lastUpdated: Schema.String,
 })
 
-export class CoinGlassApi extends Effect.Service<CoinGlassApi>()("CoinGlassApi", {
-  accessors: true,
-  effect: Effect.gen(function* () {
+// biome-ignore lint/complexity/noStaticOnlyClass: Effect v4 service class — the class is the Context tag; `layer` must be static
+export class CoinGlassApi extends Context.Service<CoinGlassApi>()("CoinGlassApi", {
+  make: Effect.gen(function* () {
     const getOpenInterest = Effect.fn("CoinGlassApi.getOpenInterest")(function* (args: {
       symbol: string
       interval?: string
@@ -333,5 +337,7 @@ export class CoinGlassApi extends Effect.Service<CoinGlassApi>()("CoinGlassApi",
       getFundingRateExchanges,
     } as const
   }),
-}) {}
+}) {
+  static readonly layer = Layer.effect(this, this.make)
+}
 

@@ -2,15 +2,9 @@ import { auth } from "@clerk/nextjs/server";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
+import { getRequestIp } from "@/lib/effect/server/route";
 import { SmartScreenerScreenRequestSchema } from "@/lib/smart-screener/screen-api";
 import { runSmartScreenerScreen } from "@/lib/smart-screener/server/screen";
-
-function getRequestIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (!forwarded) return "127.0.0.1";
-  const first = forwarded.split(",")[0]?.trim();
-  return first && first.length > 0 ? first : "127.0.0.1";
-}
 
 async function handlePost(req: NextRequest) {
   const userId = (await auth().catch(() => null))?.userId ?? null;

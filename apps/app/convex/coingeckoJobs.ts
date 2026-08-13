@@ -6,6 +6,14 @@ import {
   computeVolatilityPctFromPrices,
   toFiniteOrUndefined,
 } from "./_lib/technicalMetrics";
+import {
+  type CoinGeckoMarketRow,
+  parseCoinListRows,
+  parseGlobalMarketCapChartResponse,
+  parseMarketChartResponse,
+  parseMarketRows,
+  parseOhlcRows,
+} from "./_lib/upstream/coingecko";
 
 function chunk<T>(items: ReadonlyArray<T>, size: number): Array<Array<T>> {
   const out: Array<Array<T>> = [];
@@ -13,39 +21,6 @@ function chunk<T>(items: ReadonlyArray<T>, size: number): Array<Array<T>> {
     out.push(items.slice(i, i + size));
   return out;
 }
-
-type CoinGeckoMarketRow = {
-  id: string;
-  symbol: string;
-  name: string;
-  image: string;
-  current_price: number | null;
-  market_cap: number | null;
-  market_cap_rank: number | null;
-  fully_diluted_valuation: number | null;
-  total_volume: number | null;
-  high_24h: number | null;
-  low_24h: number | null;
-  price_change_24h: number | null;
-  price_change_percentage_24h: number | null;
-  market_cap_change_24h: number | null;
-  market_cap_change_percentage_24h: number | null;
-  circulating_supply: number | null;
-  total_supply: number | null;
-  max_supply: number | null;
-  ath: number | null;
-  ath_change_percentage: number | null;
-  ath_date: string | null;
-  atl: number | null;
-  atl_change_percentage: number | null;
-  atl_date: string | null;
-  last_updated: string | null;
-  // Present only when requested via price_change_percentage=24h,7d,30d
-  // and sparkline=true (the 4h top-markets cron; NOT the tracked cron).
-  price_change_percentage_7d_in_currency?: number | null;
-  price_change_percentage_30d_in_currency?: number | null;
-  sparkline_in_7d?: { price?: ReadonlyArray<number> | null } | null;
-};
 
 // Retry-capable fetch (429/5xx/network, honors Retry-After) — _lib/coingeckoFetch.
 async function fetchJson(endpoint: string, apiKey: string): Promise<unknown> {
@@ -96,7 +71,11 @@ function mapMarketRows(rows: ReadonlyArray<CoinGeckoMarketRow>): Array<{
       coin.price_change_percentage_30d_in_currency,
     );
     const volatility7dPct = toFiniteOrUndefined(
-      computeVolatilityPctFromPrices(coin.sparkline_in_7d?.price),
+      computeVolatilityPctFromPrices(
+        coin.sparkline_in_7d?.price?.filter(
+          (p): p is number => typeof p === "number",
+        ),
+      ),
     );
     const hasTechnicals =
       return7dPct !== undefined ||
@@ -112,7 +91,7 @@ function mapMarketRows(rows: ReadonlyArray<CoinGeckoMarketRow>): Array<{
       marketCap: coin.market_cap ?? undefined,
       // CoinGecko sometimes returns 0/null for unranked assets; never store those as a "top rank".
       marketCapRank:
-        coin.market_cap_rank !== null && coin.market_cap_rank > 0
+        coin.market_cap_rank != null && coin.market_cap_rank > 0
           ? coin.market_cap_rank
           : undefined,
       fullyDilutedValuation: coin.fully_diluted_valuation ?? undefined,
@@ -142,20 +121,11 @@ function mapMarketRows(rows: ReadonlyArray<CoinGeckoMarketRow>): Array<{
   });
 }
 
-type CoinGeckoCoinListRow = {
-  id: string;
-  symbol: string;
-  name: string;
-  platforms?: Record<string, string>;
-};
-
-async function fetchCoinList(apiKey: string): Promise<CoinGeckoCoinListRow[]> {
+async function fetchCoinList(apiKey: string) {
   const url = new URL("https://pro-api.coingecko.com/api/v3/coins/list");
   url.searchParams.set("include_platform", "true");
 
-  const data = (await fetchJson(url.toString(), apiKey)) as unknown;
-  if (!Array.isArray(data)) return [];
-  return data as CoinGeckoCoinListRow[];
+  return parseCoinListRows(await fetchJson(url.toString(), apiKey));
 }
 
 async function upsertMarketsByIds(
@@ -181,10 +151,7 @@ async function upsertMarketsByIds(
     url.searchParams.set("price_change_percentage", "24h");
 
     // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
-    const data = (await fetchJson(
-      url.toString(),
-      args.apiKey,
-    )) as Array<CoinGeckoMarketRow>;
+    const data = parseMarketRows(await fetchJson(url.toString(), args.apiKey));
     if (data.length === 0) continue;
 
     const items = mapMarketRows(data);
@@ -327,10 +294,7 @@ export const refreshTopMarkets = internalAction({
       url.searchParams.set("price_change_percentage", "24h,7d,30d");
 
       // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
-      const data = (await fetchJson(
-        url.toString(),
-        apiKey,
-      )) as Array<CoinGeckoMarketRow>;
+      const data = parseMarketRows(await fetchJson(url.toString(), apiKey));
       all.push(...data);
     }
 
@@ -408,19 +372,6 @@ export const refreshTrackedMarketsBatch = internalAction({
   },
 });
 
-type MarketChartApiResponse = {
-  prices: Array<[number, number]>;
-  market_caps: Array<[number, number]>;
-  total_volumes: Array<[number, number]>;
-};
-
-type GlobalMarketCapChartApiResponse = {
-  market_cap_chart: {
-    market_cap: Array<[number, number]>;
-    volume: Array<[number, number]>;
-  };
-};
-
 export async function upsertMarketChart(
   ctx: ActionCtx,
   args: {
@@ -436,15 +387,16 @@ export async function upsertMarketChart(
   url.searchParams.set("vs_currency", "usd");
   url.searchParams.set("days", args.days);
 
-  const data = (await fetchJson(
-    url.toString(),
-    args.apiKey,
-  )) as MarketChartApiResponse;
+  const data = parseMarketChartResponse(
+    await fetchJson(url.toString(), args.apiKey),
+  );
+  const totalVolumes = data.total_volumes ?? [];
+  const marketCaps = data.market_caps ?? [];
   const points = data.prices.map((p, idx) => {
     const tsMs = p[0];
     const price = p[1];
-    const vol = data.total_volumes[idx]?.[1] ?? 0;
-    const mc = data.market_caps[idx]?.[1] ?? undefined;
+    const vol = totalVolumes[idx]?.[1] ?? 0;
+    const mc = marketCaps[idx]?.[1] ?? undefined;
     return {
       timestamp: tsMs,
       price,
@@ -489,10 +441,9 @@ async function upsertGlobalMarketHistory(
   url.searchParams.set("vs_currency", "usd");
   url.searchParams.set("days", args.days);
 
-  const data = (await fetchJson(
-    url.toString(),
-    args.apiKey,
-  )) as GlobalMarketCapChartApiResponse;
+  const data = parseGlobalMarketCapChartResponse(
+    await fetchJson(url.toString(), args.apiKey),
+  );
   const marketCap = data.market_cap_chart?.market_cap ?? [];
   const volume = data.market_cap_chart?.volume ?? [];
   const volumeByTimestamp = new Map(
@@ -638,8 +589,6 @@ export const refreshSingleMarketChart = internalAction({
   },
 });
 
-type OhlcApiRow = [number, number, number, number, number];
-
 export async function upsertOhlc(
   ctx: ActionCtx,
   args: {
@@ -655,10 +604,7 @@ export async function upsertOhlc(
   url.searchParams.set("vs_currency", "usd");
   url.searchParams.set("days", args.days);
 
-  const data = (await fetchJson(
-    url.toString(),
-    args.apiKey,
-  )) as Array<OhlcApiRow>;
+  const data = parseOhlcRows(await fetchJson(url.toString(), args.apiKey));
   const points = data.map((row) => ({
     timestamp: row[0],
     price: row[4],
@@ -749,10 +695,7 @@ export const refreshCoinImagesBatch = internalAction({
       url.searchParams.set("sparkline", "false");
 
       // react-doctor-disable-next-line react-doctor/async-await-in-loop -- deliberate sequential pacing against a rate-limited external API
-      const data = (await fetchJson(
-        url.toString(),
-        apiKey,
-      )) as Array<CoinGeckoMarketRow>;
+      const data = parseMarketRows(await fetchJson(url.toString(), apiKey));
       if (data.length === 0) continue;
 
       const coins = data

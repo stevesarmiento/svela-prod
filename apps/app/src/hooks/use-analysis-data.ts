@@ -9,6 +9,8 @@ import { useCoinGeckoChartData } from "@/hooks/use-coingecko-chart-data";
 import { useLiquidationHistory } from "@/hooks/use-liquidation-history";
 import { useOpenInterest } from "@/hooks/use-open-interest";
 import { useTakerBuySell } from "@/hooks/use-taker-buy-sell";
+import { CoinGeckoApi } from "@/lib/effect/coingecko-api";
+import { runPromise as runCoinGeckoPromise } from "@/lib/effect/runtime-coingecko";
 import { useCompletion } from "@ai-sdk/react";
 import { useQuery } from "@tanstack/react-query";
 import type { Time } from "lightweight-charts";
@@ -95,11 +97,12 @@ export function useAnalysisData({
   // entry deduped with (and invalidated alongside) other consumers.
   const { data: marketData } = useQuery({
     queryKey: ["coingecko-market-data", coinId],
-    queryFn: async () => {
-      const response = await fetch(`/api/coingecko/markets?ids=${coinId}`);
-      if (!response.ok) throw new Error("Failed to fetch market data");
-      const data = await response.json();
-      return data.data?.[0]; // CoinGecko returns an array, get the first item
+    queryFn: async ({ signal }) => {
+      const response = await runCoinGeckoPromise(
+        CoinGeckoApi.use((api) => api.getMarkets({ ids: [coinId] })),
+        { signal },
+      );
+      return response.data[0] ?? null; // CoinGecko returns an array, get the first item
     },
     staleTime: 5 * 60 * 1000,
   });

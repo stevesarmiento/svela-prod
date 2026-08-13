@@ -151,7 +151,7 @@ export function useCoinGeckoBulkChartData(
       const swallowToNull = (_: unknown) => Effect.succeed(null)
 
       const fetchEffects = coinIds.map((coinId) =>
-        CoinGeckoApi.getMarketChart({ coinId, days }).pipe(
+        CoinGeckoApi.use((api) => api.getMarketChart({ coinId, days })).pipe(
           Effect.map((response): SeriesWithCache => {
             const coinMeta = coinMetaById.get(coinId)
             const prices = response.data.prices
@@ -203,7 +203,6 @@ export function useCoinGeckoBulkChartData(
       const results = await runPromise(
         Effect.all(fetchEffects, {
           concurrency: 5,
-          batching: false,
         }),
       )
 

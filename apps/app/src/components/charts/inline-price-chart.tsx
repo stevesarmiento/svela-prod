@@ -127,11 +127,13 @@ function useInlineMarketChartSeries(args: {
       const swallowToNull = (_: unknown) => Effect.succeed(null)
 
       const result = await runPromise(
-        CoinGeckoApi.getMarketChart({
-          coinId: args.coingeckoId,
-          days,
-          vsCurrency: "usd",
-        }).pipe(
+        CoinGeckoApi.use((api) =>
+          api.getMarketChart({
+            coinId: args.coingeckoId,
+            days,
+            vsCurrency: "usd",
+          }),
+        ).pipe(
           Effect.catchTags({
             CoinGeckoInvalidParamsError: swallowToNull,
             CoinGeckoUnauthorizedError: swallowToNull,

@@ -1,9 +1,10 @@
+import { Effect } from "effect";
 import { NextResponse } from "next/server";
-import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { z } from "zod";
-import { auth } from "@clerk/nextjs/server";
 import { api } from "../../../../convex/_generated/api";
-import { convex, getServerToken } from "@/lib/convex-server";
+import { ConvexService } from "@/lib/effect/server/convex";
+import { RequestValidationError } from "@/lib/effect/server/errors";
+import { effectRoute } from "@/lib/effect/server/route";
 
 // Validation schemas
 const SearchQuerySchema = z.object({
@@ -18,114 +19,104 @@ const ListQuerySchema = z.object({
   include_platform: z.string().optional().transform(val => val === 'true'),
 });
 
-async function handleGet(request: Request) {
-  let userId: string | null = null;
-  try {
-    userId = (await auth()).userId;
-  } catch {
-    userId = null;
-  }
-  if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  try {
-    const { searchParams } = new URL(request.url);
-    const query = searchParams.get("query");
-    const coinId = searchParams.get("id");
-    const list = searchParams.get("list");
-    const includePlatform = searchParams.get("include_platform");
-    const serverToken = getServerToken();
-
-    // Handle coins list endpoint
-    if (list === 'true') {
-      const { include_platform: includePlatformFlag } = ListQuerySchema.parse({ include_platform: includePlatform });
-
-      // DB-only: we always return the stored CoinGecko coin list.
-      // `include_platform` is best-effort; platforms are present only if previously ingested.
-      const coins = await convex.query(api.coins.getAllCoinGeckoCoins, {
-        serverToken,
-        limit: 1000,
-      });
-
-      return NextResponse.json({
-        coins,
-        meta: {
-          total: coins.length,
-          includePlatform: includePlatformFlag,
-          source: "convex",
-        }
-      }, {
-        headers: {
-          'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60', // 5 minutes cache
-        },
-      });
-    }
-
-    // Handle search endpoint
-    if (query) {
-      const validatedQuery = SearchQuerySchema.parse({ query });
-      const coins = await convex.query(api.coins.searchCoinGeckoCoins, {
-        serverToken,
-        query: validatedQuery.query,
-        limit: 50,
-      });
-
-      return NextResponse.json({
-        coins,
-        meta: {
-          total: coins.length,
-          source: "convex",
-        },
-      }, {
-        headers: {
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=30',
-        },
-      });
-    }
-
-    // Handle coin details endpoint
-    if (coinId) {
-      const validatedId = CoinIdSchema.parse({ id: coinId });
-
-      const coin = await convex.query(api.coins.getCoinGeckoCoinById, {
-        serverToken,
-        coingeckoId: validatedId.id,
-      });
-
-      return NextResponse.json({
-        coin,
-        meta: {
-          source: "convex",
-        }
-      }, {
-        headers: {
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=30',
-        },
-      });
-    }
-
-    return NextResponse.json(
-      { error: "Missing required parameter. Use ?list=true for coins list, ?query=<search> for search, or ?id=<coin_id> for coin details" },
-      { status: 400 }
-    );
-
-  } catch (error) {
-    console.error("CoinGecko DB route error:", error);
-    
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Invalid parameters", details: error.errors },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to read CoinGecko data from DB" },
-      { status: 500 }
-    );
-  }
+// Route-specific 400 contract: includes zod issue details.
+function invalidParams(error: z.ZodError): Response {
+  return NextResponse.json(
+    { error: "Invalid parameters", details: error.errors },
+    { status: 400 },
+  );
 }
-export const GET = withAuthRatelimit(handleGet, {
-  name: "coingecko-base",
-});
+
+export const GET = effectRoute(
+  (request) =>
+    Effect.gen(function* () {
+      const convex = yield* ConvexService;
+
+      const { searchParams } = new URL(request.url);
+      const query = searchParams.get("query");
+      const coinId = searchParams.get("id");
+      const list = searchParams.get("list");
+      const includePlatform = searchParams.get("include_platform");
+
+      // Handle coins list endpoint
+      if (list === 'true') {
+        const listParsed = ListQuerySchema.safeParse({ include_platform: includePlatform });
+        if (!listParsed.success) return invalidParams(listParsed.error);
+        const { include_platform: includePlatformFlag } = listParsed.data;
+
+        // DB-only: we always return the stored CoinGecko coin list.
+        // `include_platform` is best-effort; platforms are present only if previously ingested.
+        const coins = yield* convex.serverQuery(
+          api.coins.getAllCoinGeckoCoins,
+          { limit: 1000 },
+          { label: "getAllCoinGeckoCoins" },
+        );
+
+        return NextResponse.json({
+          coins,
+          meta: {
+            total: coins.length,
+            includePlatform: includePlatformFlag,
+            source: "convex",
+          }
+        }, {
+          headers: {
+            'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60', // 5 minutes cache
+          },
+        });
+      }
+
+      // Handle search endpoint
+      if (query) {
+        const queryParsed = SearchQuerySchema.safeParse({ query });
+        if (!queryParsed.success) return invalidParams(queryParsed.error);
+        const coins = yield* convex.serverQuery(
+          api.coins.searchCoinGeckoCoins,
+          { query: queryParsed.data.query, limit: 50 },
+          { label: "searchCoinGeckoCoins" },
+        );
+
+        return NextResponse.json({
+          coins,
+          meta: {
+            total: coins.length,
+            source: "convex",
+          },
+        }, {
+          headers: {
+            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=30',
+          },
+        });
+      }
+
+      // Handle coin details endpoint
+      if (coinId) {
+        const idParsed = CoinIdSchema.safeParse({ id: coinId });
+        if (!idParsed.success) return invalidParams(idParsed.error);
+
+        const coin = yield* convex.serverQuery(
+          api.coins.getCoinGeckoCoinById,
+          { coingeckoId: idParsed.data.id },
+          { label: "getCoinGeckoCoinById" },
+        );
+
+        return NextResponse.json({
+          coin,
+          meta: {
+            source: "convex",
+          }
+        }, {
+          headers: {
+            'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=30',
+          },
+        });
+      }
+
+      return yield* Effect.fail(
+        new RequestValidationError({
+          message: "Missing required parameter. Use ?list=true for coins list, ?query=<search> for search, or ?id=<coin_id> for coin details",
+        }),
+      );
+    }),
+  { name: "coingecko-base", requireAuth: true },
+);

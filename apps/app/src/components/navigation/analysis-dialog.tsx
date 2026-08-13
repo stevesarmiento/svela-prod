@@ -240,7 +240,7 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
 
   const logoSrc = React.useMemo(() => {
     const symbol = tokenData?.symbol ?? marketData?.symbol;
-    const fallbackLogoUrl = tokenData?.logoUrl ?? marketData?.image;
+    const fallbackLogoUrl = tokenData?.logoUrl ?? marketData?.image ?? undefined;
     const resolvedLogoUrl = getTokenLogoURL(symbol, fallbackLogoUrl);
 
     if (
@@ -350,7 +350,7 @@ function AnalysisDialogBody({ coinId, tokenData }: AnalysisDialogProps) {
                       (Boolean(marketData) && !hasEnoughChartHistory)
                     }
                     result={analysisResult}
-                    marketData={marketData}
+                    marketData={marketData ?? undefined}
                     tokenData={tokenData}
                   />
                 </div>

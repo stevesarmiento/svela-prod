@@ -1,10 +1,10 @@
-import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
-import { auth } from "@clerk/nextjs/server";
-import { type NextRequest, NextResponse } from "next/server";
+import { Effect } from "effect";
+import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { convex, getServerToken } from "@/lib/convex-server";
 import { api } from "../../../../../convex/_generated/api";
+import { ConvexService } from "@/lib/effect/server/convex";
+import { effectRoute } from "@/lib/effect/server/route";
 
 export const dynamic = "force-dynamic";
 
@@ -75,137 +75,124 @@ function scopeSnapshot(args: {
   };
 }
 
-async function handlePost(request: NextRequest) {
-  const userId = (await auth().catch(() => null))?.userId ?? null;
-  if (!userId)
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export const POST = effectRoute(
+  (request) =>
+    Effect.gen(function* () {
+      const convex = yield* ConvexService;
 
-  const json = (await request.json().catch(() => null)) as unknown;
+      const json = yield* Effect.promise(
+        () => request.json().catch(() => null) as Promise<unknown>,
+      );
 
-  // ---- Preferred: ID-keyed coins shape ----
-  const coinsParsed = CoinsRequestSchema.safeParse(json);
-  if (coinsParsed.success) {
-    const { coins, range, exchange } = coinsParsed.data;
-    const normalizedExchange = exchange ? exchange.trim() : null;
+      // ---- Preferred: ID-keyed coins shape ----
+      const coinsParsed = CoinsRequestSchema.safeParse(json);
+      if (coinsParsed.success) {
+        const { coins, range, exchange } = coinsParsed.data;
+        const normalizedExchange = exchange ? exchange.trim() : null;
 
-    const batch = await convex.query(
-      api.coinglassReads.getTakerBuySellSnapshotsByCoinsBatch,
-      {
-        serverToken: getServerToken(),
-        coins,
-        range,
-      },
-    );
+        const batch = yield* convex.serverQuery(
+          api.coinglassReads.getTakerBuySellSnapshotsByCoinsBatch,
+          { coins, range },
+          { label: "getTakerBuySellSnapshotsByCoinsBatch" },
+        );
 
-    // Warm up a small subset of missing/stale coins (dedup enforced in Convex).
-    const warmupTargets = batch
-      .filter((row) => !row.data || row.stale)
-      .slice(0, 25);
-    if (warmupTargets.length > 0) {
-      void Promise.all(
-        warmupTargets.map((row) =>
-          convex.mutation(
+        // Warm up a small subset of missing/stale coins (dedup enforced in Convex).
+        const warmupTargets = batch
+          .filter((row) => !row.data || row.stale)
+          .slice(0, 25);
+        for (const row of warmupTargets) {
+          yield* convex.warmup(
             api.coinglassWarmup.requestTakerBuySellExchangeListSnapshotRefresh,
-            {
-              serverToken: getServerToken(),
-              symbol: row.symbol,
-              coingeckoId: row.coingeckoId,
-              range,
+            { symbol: row.symbol, coingeckoId: row.coingeckoId, range },
+            "smart-screener-taker-metrics:requestTakerBuySellExchangeListSnapshotRefresh",
+          );
+        }
+
+        const byId: Record<string, ScopedMetrics | null> = {};
+        let staleCount = 0;
+        let missingCount = 0;
+
+        for (const row of batch) {
+          if (!row.data) {
+            byId[row.coingeckoId] = null;
+            missingCount += 1;
+            continue;
+          }
+          byId[row.coingeckoId] = scopeSnapshot({
+            snapshot: row.data,
+            exchange: normalizedExchange,
+            lastUpdated: row.lastUpdated,
+            stale: row.stale,
+          });
+          if (row.stale) staleCount += 1;
+        }
+
+        return NextResponse.json(
+          {
+            success: true,
+            range,
+            exchange: normalizedExchange,
+            byId,
+            counts: {
+              total: batch.length,
+              missing: missingCount,
+              stale: staleCount,
             },
-          ),
-        ),
-      ).catch(() => null);
-    }
-
-    const byId: Record<string, ScopedMetrics | null> = {};
-    let staleCount = 0;
-    let missingCount = 0;
-
-    for (const row of batch) {
-      if (!row.data) {
-        byId[row.coingeckoId] = null;
-        missingCount += 1;
-        continue;
+            warmupScheduled: warmupTargets.length,
+          },
+          { status: 200 },
+        );
       }
-      byId[row.coingeckoId] = scopeSnapshot({
-        snapshot: row.data,
-        exchange: normalizedExchange,
-        lastUpdated: row.lastUpdated,
-        stale: row.stale,
-      });
-      if (row.stale) staleCount += 1;
-    }
 
-    return NextResponse.json(
-      {
-        success: true,
-        range,
-        exchange: normalizedExchange,
-        byId,
-        counts: {
-          total: batch.length,
-          missing: missingCount,
-          stale: staleCount,
+      // ---- Legacy: symbol-keyed shape (stale deployed tabs) ----
+      const parsed = LegacySymbolsRequestSchema.safeParse(json);
+      if (!parsed.success) {
+        // Route-specific 400 contract: includes flattened zod details.
+        return NextResponse.json(
+          { error: "Invalid request", details: parsed.error.flatten() },
+          { status: 400 },
+        );
+      }
+
+      const { symbols, range, exchange } = parsed.data;
+      const normalizedExchange = exchange ? exchange.trim() : null;
+
+      const batch = yield* convex.serverQuery(
+        api.coinglassReads.getTakerBuySellExchangeListSnapshotsBatch,
+        { symbols, range },
+        { label: "getTakerBuySellExchangeListSnapshotsBatch" },
+      );
+
+      const bySymbol: Record<string, ScopedMetrics | null> = {};
+      let staleCount = 0;
+      let missingCount = 0;
+
+      for (const row of batch) {
+        if (!row.data) {
+          bySymbol[row.symbol] = null;
+          missingCount += 1;
+          continue;
+        }
+        bySymbol[row.symbol] = scopeSnapshot({
+          snapshot: row.data,
+          exchange: normalizedExchange,
+          lastUpdated: row.lastUpdated,
+          stale: row.stale,
+        });
+        if (row.stale) staleCount += 1;
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          range,
+          exchange: normalizedExchange,
+          bySymbol,
+          counts: { total: batch.length, missing: missingCount, stale: staleCount },
+          warmupScheduled: 0,
         },
-        warmupScheduled: warmupTargets.length,
-      },
-      { status: 200 },
-    );
-  }
-
-  // ---- Legacy: symbol-keyed shape (stale deployed tabs) ----
-  const parsed = LegacySymbolsRequestSchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid request", details: parsed.error.flatten() },
-      { status: 400 },
-    );
-  }
-
-  const { symbols, range, exchange } = parsed.data;
-  const normalizedExchange = exchange ? exchange.trim() : null;
-
-  const batch = await convex.query(
-    api.coinglassReads.getTakerBuySellExchangeListSnapshotsBatch,
-    {
-      serverToken: getServerToken(),
-      symbols,
-      range,
-    },
-  );
-
-  const bySymbol: Record<string, ScopedMetrics | null> = {};
-  let staleCount = 0;
-  let missingCount = 0;
-
-  for (const row of batch) {
-    if (!row.data) {
-      bySymbol[row.symbol] = null;
-      missingCount += 1;
-      continue;
-    }
-    bySymbol[row.symbol] = scopeSnapshot({
-      snapshot: row.data,
-      exchange: normalizedExchange,
-      lastUpdated: row.lastUpdated,
-      stale: row.stale,
-    });
-    if (row.stale) staleCount += 1;
-  }
-
-  return NextResponse.json(
-    {
-      success: true,
-      range,
-      exchange: normalizedExchange,
-      bySymbol,
-      counts: { total: batch.length, missing: missingCount, stale: staleCount },
-      warmupScheduled: 0,
-    },
-    { status: 200 },
-  );
-}
-
-export const POST = withAuthRatelimit(handlePost, {
-  name: "smart-screener-taker-metrics",
-});
+        { status: 200 },
+      );
+    }),
+  { name: "smart-screener-taker-metrics", requireAuth: true },
+);

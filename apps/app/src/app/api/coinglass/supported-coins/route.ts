@@ -1,135 +1,74 @@
-import { ratelimit } from "@v1/kv/ratelimit";
+import { Effect } from "effect";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@clerk/nextjs/server";
+import { effectRoute } from "@/lib/effect/server/route";
+import { UpstreamHttp } from "@/lib/effect/server/upstream-http";
+import { ConvexQueryError } from "@/lib/effect/server/errors";
+import {
+  COINGLASS_BASE_URL,
+  unwrapCoinglassEnvelope,
+} from "@/lib/effect/server/vendors/coinglass";
 import { getApiHeaders, getUserApiKey } from "@/lib/user-api-keys";
 
-const BASE_URL = "https://open-api-v4.coinglass.com/api";
+const SupportedCoinsSchema = z.array(z.string());
 
-// Validation schema for CoinGlass supported coins response
-const CoinglassResponseSchema = z.object({
-  code: z.string(),
-  msg: z.string(),
-  data: z.array(z.string()),
-});
+export const GET = effectRoute(
+  (_req, _ctx, session) =>
+    Effect.gen(function* () {
+      const apiKeyResult = yield* Effect.tryPromise({
+        try: () => getUserApiKey(session.userId, "coinglass", "CG_API_KEY"),
+        catch: (error) =>
+          new ConvexQueryError({
+            label: "getUserApiKey",
+            message: error instanceof Error ? error.message : String(error),
+          }),
+      });
 
-async function fetchWithErrorHandling(url: string, apiKey: string) {
-  try {
-    const response = await fetch(url, {
-      headers: {
-        ...getApiHeaders("coinglass", apiKey),
-      },
-      next: {
-        revalidate: 60, // Cache for 1 minute as per CoinGlass docs
-      },
-    });
+      if (!apiKeyResult.key) {
+        // Route-specific 503 body: clients rely on the empty-data envelope.
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "CoinGlass API key not available. Please add your API key in settings or configure CG_API_KEY environment variable.",
+            data: [],
+            count: 0,
+            lastUpdated: new Date().toISOString(),
+          },
+          { status: 503 },
+        );
+      }
 
-    if (response.status === 429) {
-      throw new Error('Rate limit exceeded. Please try again later.');
-    }
+      const http = yield* UpstreamHttp;
+      const coins = yield* http.requestJson({
+        vendor: "coinglass",
+        endpoint: `${COINGLASS_BASE_URL}/futures/supported-coins`,
+        decode: (data) =>
+          SupportedCoinsSchema.parse(unwrapCoinglassEnvelope(data)),
+        init: {
+          headers: getApiHeaders("coinglass", apiKeyResult.key),
+          // Cache for 1 minute as per CoinGlass docs
+          next: { revalidate: 60 },
+        },
+      });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      throw new Error(errorData?.msg || `API error: ${response.status}`);
-    }
-
-    return response;
-  } catch (error) {
-    console.error("CoinGlass API error:", error);
-    throw error;
-  }
-}
-
-export async function GET(request: Request) {
-  try {
-    // Rate limiting
-    const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
-    const { success } = await ratelimit.limit(`${ip}-coinglass`);
-
-    if (!success) {
       return NextResponse.json(
-        { error: "Too many requests" },
-        { status: 429 }
+        {
+          success: true,
+          data: coins,
+          count: coins.length,
+          lastUpdated: new Date().toISOString(),
+        },
+        {
+          headers: {
+            "Cache-Control": "public, s-maxage=60, stale-while-revalidate=30",
+          },
+        },
       );
-    }
-
-    // Get user authentication (optional for API key resolution)
-    // Note: auth() may fail in API routes due to middleware config, so we handle it gracefully
-    let clerkId: string | null = null;
-    try {
-      const authResult = await auth();
-      clerkId = authResult.userId;
-    } catch (error) {
-      // Auth failed, will use environment fallback
-    }
-    
-    // Get API key - user's key takes precedence over environment variable
-    const apiKeyResult = await getUserApiKey(clerkId, 'coinglass', 'CG_API_KEY');
-    
-    if (!apiKeyResult.key) {
-      return NextResponse.json({
-        success: false,
-        error: 'CoinGlass API key not available. Please add your API key in settings or configure CG_API_KEY environment variable.',
-        data: [],
-        count: 0,
-        lastUpdated: new Date().toISOString(),
-      }, { status: 503 });
-    }
-
-    // Fetch supported coins from CoinGlass
-    const response = await fetchWithErrorHandling(
-      `${BASE_URL}/futures/supported-coins`,
-      apiKeyResult.key
-    );
-    
-    // Handle missing API key case
-    if (!response.ok) {
-      const errorData = await response.json();
-      return NextResponse.json({
-        success: false,
-        error: errorData.error,
-        data: [],
-        count: 0,
-        lastUpdated: new Date().toISOString(),
-      }, { status: 503 });
-    }
-
-    const data = await response.json();
-    
-    // Validate response structure
-    const validatedData = CoinglassResponseSchema.parse(data);
-    
-    if (validatedData.code !== "0") {
-      throw new Error(`CoinGlass API error: ${validatedData.msg}`);
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: validatedData.data,
-      count: validatedData.data.length,
-      lastUpdated: new Date().toISOString(),
-    }, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=30',
-      },
-    });
-
-  } catch (error) {
-    console.error("CoinGlass supported-coins route error:", error);
-    
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { error: "Invalid API response format", details: error.errors },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(
-      { 
-        error: error instanceof Error ? error.message : "Failed to fetch supported coins from CoinGlass",
-        success: false 
-      },
-      { status: 500 }
-    );
-  }
-}
+    }),
+  {
+    name: "coinglass-supported-coins",
+    // Parity with the previous raw @v1/kv fixed-window budget (10/10s).
+    limiter: "public-burst",
+  },
+);

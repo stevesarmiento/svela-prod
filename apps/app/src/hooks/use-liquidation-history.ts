@@ -64,14 +64,16 @@ export function useLiquidationHistory(params: UseLiquidationHistoryParams = {}) 
     queryFn: async (): Promise<LiquidationHistoryResponse> => {
       try {
         const result = await runPromise(
-          CoinGlassApi.getLiquidationHistory({
-            symbol,
-            interval,
-            exchangeList,
-            limit,
-            startTime,
-            endTime,
-          }),
+          CoinGlassApi.use((api) =>
+            api.getLiquidationHistory({
+              symbol,
+              interval,
+              exchangeList,
+              limit,
+              startTime,
+              endTime,
+            }),
+          ),
         )
 
         return {

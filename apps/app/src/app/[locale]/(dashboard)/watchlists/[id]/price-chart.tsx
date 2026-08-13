@@ -677,7 +677,7 @@ export const PriceChart = memo(function PriceChart({
     queryKey: ["coingecko-coin", deferredCoinId],
     queryFn: async () => {
       if (!deferredCoinId) return null
-      return await runPromise(CoinsInternalApi.getCoinGeckoCoinById({ id: deferredCoinId }))
+      return await runPromise(CoinsInternalApi.use((api) => api.getCoinGeckoCoinById({ id: deferredCoinId })))
     },
     enabled: !!deferredCoinId,
     staleTime: 10 * 60 * 1000,

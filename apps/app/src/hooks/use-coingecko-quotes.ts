@@ -159,7 +159,12 @@ function shouldSyncQuote(
   return incomingMs > existingMs
 }
 
-function formatCoinGeckoError(error: unknown): string {
+/**
+ * Display-formatting helper for UI surfaces. Errors from these hooks are the
+ * tagged Effect error instances themselves (so `_tag`/`status` survive for
+ * retry decisions, see lib/effect/query-errors.ts) — format at render time.
+ */
+export function formatCoinGeckoError(error: unknown): string {
   if (error && typeof error === "object" && "_tag" in error) {
     const tagged = error as { _tag: string; message?: unknown; status?: unknown }
     if (typeof tagged.message === "string") return tagged.message
@@ -170,20 +175,24 @@ function formatCoinGeckoError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function isRateLimitedError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { _tag?: unknown })._tag === "CoinGeckoRateLimitedError"
+  )
+}
+
 export async function fetchCoinGeckoQuote(
   coinId: string,
 ): Promise<CoinGeckoQuoteMarketData | null> {
   if (!coinId) return null
 
-  try {
-    const result = await runPromise(CoinGeckoApi.getQuotes({ ids: [coinId] }))
-    if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
-      throw new Error(result.status.error_message || "API error")
-    }
-    return result.data[coinId] ?? null
-  } catch (error) {
-    throw new Error(formatCoinGeckoError(error))
+  const result = await runPromise(CoinGeckoApi.use((api) => api.getQuotes({ ids: [coinId] })))
+  if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
+    throw new Error(result.status.error_message || "API error")
   }
+  return result.data[coinId] ?? null
 }
 
 export function useCoinGeckoQuote(coinId: string | null | undefined) {
@@ -263,22 +272,18 @@ export function useCoinGeckoQuotesBulk(
     queryFn: async (): Promise<Record<string, CoinGeckoQuoteMarketData>> => {
       if (!stableIds.length) return {}
 
-      try {
-        const result = await runPromise(CoinGeckoApi.getQuotes({ ids: stableIds }))
-        if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
-          throw new Error(result.status.error_message || "API error")
-        }
-        const previousData = queryClient.getQueryData<Record<string, CoinGeckoQuoteMarketData>>(
-          bulkQueryKey,
-        )
-        return mergeQuoteMaps({
-          stableIds,
-          previous: previousData,
-          incoming: result.data,
-        })
-      } catch (error) {
-        throw new Error(formatCoinGeckoError(error))
+      const result = await runPromise(CoinGeckoApi.use((api) => api.getQuotes({ ids: stableIds })))
+      if (result.status?.error_code !== undefined && result.status.error_code !== 0) {
+        throw new Error(result.status.error_message || "API error")
       }
+      const previousData = queryClient.getQueryData<Record<string, CoinGeckoQuoteMarketData>>(
+        bulkQueryKey,
+      )
+      return mergeQuoteMaps({
+        stableIds,
+        previous: previousData,
+        incoming: result.data,
+      })
     },
     enabled: stableIds.length > 0,
     retry: 1,
@@ -286,9 +291,9 @@ export function useCoinGeckoQuotesBulk(
     refetchOnWindowFocus: options.refetchOnWindowFocus ?? COINGECKO_QUOTES_QUERY_OPTIONS.refetchOnWindowFocus,
     refetchInterval: (q) => {
       const data = q.state.data as Record<string, CoinGeckoQuoteMarketData> | undefined
-      const error = q.state.error
-      const errorMessage = error instanceof Error ? error.message.toLowerCase() : ""
-      if (errorMessage.includes("429") || errorMessage.includes("rate")) {
+      // Tagged error survives to here now (no string re-wrapping) — check the
+      // tag instead of regexing "429" out of a message.
+      if (isRateLimitedError(q.state.error)) {
         return 60_000
       }
 

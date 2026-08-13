@@ -213,7 +213,7 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
           Effect.succeed({ data: null, cached: false, needsWarmup: false })
 
         const fetchEffects = coinIds.map((coinId) =>
-          CoinGeckoApi.getMarketChart({ coinId, days }).pipe(
+          CoinGeckoApi.use((api) => api.getMarketChart({ coinId, days })).pipe(
             Effect.map((response) => ({
               data: response.data,
               cached: response.status?.cached ?? false,
@@ -239,7 +239,6 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
         const results = await runPromise(
           Effect.all(fetchEffects, {
             concurrency: 5, // Max 5 concurrent requests
-            batching: false, // Don't batch requests
           }),
         )
         
