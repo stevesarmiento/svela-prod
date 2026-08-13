@@ -40,7 +40,7 @@ interface CoinGeckoApiResponse {
 
 // Fetch real image URLs from API
 async function fetchRealImageUrls(coingeckoIds: string[]): Promise<CoinGeckoApiResponse> {
-  const { getCoinsMarketData } = await import("../lib/coingecko");
+  const { getCoinsMarketData } = await import("./coingecko-script-client");
   const chunkSize = 200; // Keep URLs reasonable (CoinGecko allows up to 250 per page)
   const chunks: string[][] = [];
 
@@ -103,7 +103,7 @@ async function populateCoinGeckoCoins() {
     
     // Fetch coins list from CoinGecko with platform data
     console.log('📡 Fetching coins list from CoinGecko...');
-    const { getCoinsList } = await import("../lib/coingecko");
+    const { getCoinsList } = await import("./coingecko-script-client");
     const coins = await getCoinsList(true); // Include platform data
     
     console.log(`✅ Successfully fetched ${coins.length} coins from CoinGecko`);
