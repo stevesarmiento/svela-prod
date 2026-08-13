@@ -13,6 +13,9 @@ function provideCoinsInternal<A, E>(
   return effect.pipe(Effect.provide(CoinsInternalApi.layer))
 }
 
-export function runPromise<A, E>(effect: Effect.Effect<A, E, CoinsInternalApi>): Promise<A> {
-  return Effect.runPromise(provideCoinsInternal(effect))
+export function runPromise<A, E>(
+  effect: Effect.Effect<A, E, CoinsInternalApi>,
+  options?: { signal?: AbortSignal },
+): Promise<A> {
+  return Effect.runPromise(provideCoinsInternal(effect), options)
 }

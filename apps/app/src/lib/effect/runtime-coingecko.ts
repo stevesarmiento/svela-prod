@@ -11,6 +11,9 @@ function provideCoinGecko<A, E>(effect: Effect.Effect<A, E, CoinGeckoApi>): Effe
   return effect.pipe(Effect.provide(CoinGeckoApi.layer))
 }
 
-export function runPromise<A, E>(effect: Effect.Effect<A, E, CoinGeckoApi>): Promise<A> {
-  return Effect.runPromise(provideCoinGecko(effect))
+export function runPromise<A, E>(
+  effect: Effect.Effect<A, E, CoinGeckoApi>,
+  options?: { signal?: AbortSignal },
+): Promise<A> {
+  return Effect.runPromise(provideCoinGecko(effect), options)
 }

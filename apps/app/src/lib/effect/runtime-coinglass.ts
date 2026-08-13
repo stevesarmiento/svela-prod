@@ -11,6 +11,9 @@ function provideCoinGlass<A, E>(effect: Effect.Effect<A, E, CoinGlassApi>): Effe
   return effect.pipe(Effect.provide(CoinGlassApi.layer))
 }
 
-export function runPromise<A, E>(effect: Effect.Effect<A, E, CoinGlassApi>): Promise<A> {
-  return Effect.runPromise(provideCoinGlass(effect))
+export function runPromise<A, E>(
+  effect: Effect.Effect<A, E, CoinGlassApi>,
+  options?: { signal?: AbortSignal },
+): Promise<A> {
+  return Effect.runPromise(provideCoinGlass(effect), options)
 }
