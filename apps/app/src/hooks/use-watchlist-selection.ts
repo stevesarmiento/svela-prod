@@ -36,6 +36,23 @@ function notifyError(message: string, description: string) {
 }
 
 /**
+ * Thrown by `removeSelected` implementations when a bulk removal partially
+ * succeeds (fan-out per watchlist group), so the toast can say exactly how
+ * many rows were removed vs failed.
+ */
+export class BulkRemoveError extends Error {
+  readonly removedCount: number
+  readonly failedCount: number
+
+  constructor(args: { removedCount: number; failedCount: number }) {
+    super(`Removed ${args.removedCount}, failed ${args.failedCount}`)
+    this.name = "BulkRemoveError"
+    this.removedCount = args.removedCount
+    this.failedCount = args.failedCount
+  }
+}
+
+/**
  * Hover-revealed row-selection motion (same implementation as the old
  * watchlist table): the checkbox sits absolutely at the cell's left edge and
  * slides in while the cell content shifts right. When any row is selected the
@@ -132,8 +149,17 @@ export function useWatchlistSelection({
       notifySuccess(
         `Removed ${idsToRemove.length} ${idsToRemove.length === 1 ? "coin" : "coins"} from watchlist`,
       )
-    } catch {
-      notifyError("Error", "Failed to remove selected coins")
+    } catch (error) {
+      if (error instanceof BulkRemoveError && error.removedCount > 0) {
+        // Partial success: keep the selection (successfully removed ids get
+        // pruned as data refetches) and report exact counts.
+        notifyError(
+          `Removed ${error.removedCount}, failed ${error.failedCount}`,
+          "Some coins could not be removed — try again.",
+        )
+      } else {
+        notifyError("Error", "Failed to remove selected coins")
+      }
     } finally {
       setRemovingCoins(new Set())
     }

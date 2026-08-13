@@ -120,12 +120,45 @@ export interface CoinSummary {
   coingeckoId: string
   name: string
   symbol: string
+  logoUrl: string
 }
 
+// `/api/internal/coins/search` and `/api/internal/coins/top` both serialize
+// full `coingeckoCoins` docs (convex coingeckoCoinValidator), where `logoUrl`
+// is a required string.
 const CoinSummarySchema = Schema.Struct({
   coingeckoId: Schema.String,
   name: Schema.String,
   symbol: Schema.String,
+  logoUrl: Schema.String,
+})
+
+export interface TopMarketRow {
+  coingeckoId: string
+  symbol: string
+  name: string
+  image: string
+  currentPrice?: number
+  marketCap?: number
+  marketCapRank?: number
+  totalVolume?: number
+  priceChangePercentage24h?: number
+  updatedAt?: number
+}
+
+// Permissive: `/api/internal/markets/top` serializes full `coingeckoMarkets`
+// docs; only the identity fields are guaranteed, numerics may be absent.
+const TopMarketRowSchema = Schema.Struct({
+  coingeckoId: Schema.String,
+  symbol: Schema.String,
+  name: Schema.String,
+  image: Schema.String,
+  currentPrice: Schema.optional(Schema.Number),
+  marketCap: Schema.optional(Schema.Number),
+  marketCapRank: Schema.optional(Schema.Number),
+  totalVolume: Schema.optional(Schema.Number),
+  priceChangePercentage24h: Schema.optional(Schema.Number),
+  updatedAt: Schema.optional(Schema.Number),
 })
 
 export interface CoinMeta {
@@ -182,7 +215,21 @@ export class CoinsInternalApi extends Context.Service<CoinsInternalApi>()("Coins
       })
     })
 
-    return { search, top, getCoinGeckoCoinById } as const
+    const topMarkets = Effect.fn("CoinsInternalApi.topMarkets")(function* (args: { limit?: number } = {}) {
+      const searchParams = new URLSearchParams()
+      if (args.limit !== undefined) searchParams.set("limit", String(args.limit))
+
+      const endpoint = searchParams.size
+        ? `/api/internal/markets/top?${searchParams.toString()}`
+        : "/api/internal/markets/top"
+
+      return yield* requestJson({
+        endpoint,
+        decode: (data) => Schema.decodeUnknownSync(Schema.Array(TopMarketRowSchema))(data),
+      })
+    })
+
+    return { search, top, getCoinGeckoCoinById, topMarkets } as const
   }),
 }) {
   static readonly layer = Layer.effect(this, this.make)

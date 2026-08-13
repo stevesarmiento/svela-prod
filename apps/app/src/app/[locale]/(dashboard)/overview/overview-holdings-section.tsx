@@ -4,6 +4,8 @@ import { OverviewPerformanceChart } from "@/components/charts/overview-performan
 import { useCoinGeckoQuotesBulk } from "@/hooks/use-coingecko-quotes";
 import { useGlobalMarketCapOverTime } from "@/hooks/use-global-market-cap-over-time";
 import { useHoldingsValueOverTime } from "@/hooks/use-holdings-value-over-time";
+import { OverviewApi } from "@/lib/effect/overview-api";
+import { runPromise as runOverviewPromise } from "@/lib/effect/runtime-overview";
 import { formatUsdPrice } from "@/lib/format-usd";
 import {
   type BreadthStats,
@@ -418,22 +420,10 @@ function OverviewHoldingsSectionInner(props: {
     api.overview.refreshMyOverviewSnapshot,
   );
   const generateOverviewBrief = useCallback(
-    async ({ force }: { force?: boolean }) => {
-      const response = await fetch("/api/overview/daily-brief", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ force }),
-      });
-
-      if (!response.ok) {
-        const text = await response.text().catch(() => "");
-        throw new Error(
-          text || `Failed to generate daily brief (${response.status})`,
-        );
-      }
-
-      return await response.json();
-    },
+    async ({ force }: { force?: boolean }) =>
+      await runOverviewPromise(
+        OverviewApi.use((api) => api.generateDailyBrief({ force })),
+      ),
     [],
   );
 

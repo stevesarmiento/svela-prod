@@ -2,6 +2,8 @@
 
 import { usePathname } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
+import { CoinsInternalApi } from '@/lib/effect/coins-internal-api'
+import { runPromise as runCoinsInternalPromise } from '@/lib/effect/runtime-coins-internal'
 import { cleanTokenName, getTokenLogoURL } from '@/lib/logo-overrides'
 
 interface TokenHeaderData {
@@ -37,11 +39,15 @@ export function useTokenHeader() {
   }
 
   const { data: coinData, isLoading } = useQuery({
+    // Shared key family with prefetch-routes.ts, which seeds the same
+    // CoinMeta-or-null shape via CoinsInternalApi.getCoinGeckoCoinById.
     queryKey: ["coingecko-coin", coingeckoId],
-    queryFn: async () => {
-      const response = await fetch(`/api/internal/coins/coingecko/${coingeckoId}`)
-      if (!response.ok) throw new Error("Failed to load coin metadata")
-      return await response.json()
+    queryFn: async ({ signal }) => {
+      if (!coingeckoId) throw new Error("no coin id")
+      return await runCoinsInternalPromise(
+        CoinsInternalApi.use((api) => api.getCoinGeckoCoinById({ id: coingeckoId })),
+        { signal },
+      )
     },
     enabled: !!coingeckoId,
     staleTime: 10 * 60 * 1000,

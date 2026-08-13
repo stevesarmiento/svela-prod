@@ -1,5 +1,6 @@
-import { Effect } from "effect"
+import { Effect, Tracer } from "effect"
 import { CoinGlassApi } from "./coinglass-api"
+import { sentryTracer } from "./sentry-tracer"
 
 /**
  * Client runtime boundary for CoinGlass Effects.
@@ -8,9 +9,15 @@ import { CoinGlassApi } from "./coinglass-api"
  */
 
 function provideCoinGlass<A, E>(effect: Effect.Effect<A, E, CoinGlassApi>): Effect.Effect<A, E, never> {
-  return effect.pipe(Effect.provide(CoinGlassApi.layer))
+  return effect.pipe(
+    Effect.provide(CoinGlassApi.layer),
+    Effect.provideService(Tracer.Tracer, sentryTracer),
+  )
 }
 
-export function runPromise<A, E>(effect: Effect.Effect<A, E, CoinGlassApi>): Promise<A> {
-  return Effect.runPromise(provideCoinGlass(effect))
+export function runPromise<A, E>(
+  effect: Effect.Effect<A, E, CoinGlassApi>,
+  options?: { signal?: AbortSignal },
+): Promise<A> {
+  return Effect.runPromise(provideCoinGlass(effect), options)
 }

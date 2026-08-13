@@ -341,14 +341,21 @@ export function FloatingMarketFeed() {
         if (autoRefreshKeyRef.current === key) return;
         autoRefreshKeyRef.current = key;
 
+        let cancelled = false;
         setIsRefreshing(true);
         setRefreshError(null);
         refreshNewsForCoinNow({ coingeckoId: coinId })
             .catch((err: unknown) => {
+                if (cancelled) return;
                 const message = err instanceof Error ? err.message : 'Failed to fetch latest news.';
                 setRefreshError(message);
             })
-            .finally(() => setIsRefreshing(false));
+            .finally(() => {
+                if (!cancelled) setIsRefreshing(false);
+            });
+        return () => {
+            cancelled = true;
+        };
     }, [coinArticles, coinId, hideFeed, isAuthenticated, isAuthLoading, isRefreshing, refreshNewsForCoinNow]);
 
     const onRefresh = React.useCallback(async () => {
