@@ -5,36 +5,16 @@ import { z } from "zod";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
+import {
+  fetchCoinGeckoJson,
+  getCoinGeckoApiKey,
+} from "./_lib/coingeckoFetch";
 import { fetchArticleText } from "./newsArticleText";
-
-function getCoinGeckoApiKey(): string {
-  const key = process.env.X_CG_PRO_API_KEY;
-  if (!key) throw new Error("Missing X_CG_PRO_API_KEY in Convex environment");
-  return key;
-}
 
 function getGemini() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
   return createGoogleGenerativeAI({ apiKey });
-}
-
-async function fetchJson(endpoint: string, apiKey: string): Promise<unknown> {
-  const response = await fetch(endpoint, {
-    headers: {
-      "x-cg-pro-api-key": apiKey,
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(
-      `CoinGecko request failed (${response.status}): ${body.slice(0, 200)}`,
-    );
-  }
-
-  return await response.json();
 }
 
 type CoinGeckoNewsRow = {
@@ -123,7 +103,7 @@ async function refreshNewsForCoin(args: {
   );
   url.searchParams.set("language", "en");
 
-  const data = await fetchJson(url.toString(), apiKey);
+  const data = await fetchCoinGeckoJson(url.toString(), apiKey);
   if (!Array.isArray(data)) return [];
   return mapNewsRows(data as CoinGeckoNewsRow[]);
 }

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { type ActionCtx, internalAction } from "./_generated/server";
+import { fetchUpstreamJson } from "./_lib/upstreamFetch";
 
 function getCoinGlassApiKey(): string {
   const key = process.env.CG_API_KEY || process.env["CG-API-KEY"];
@@ -79,24 +80,19 @@ async function fetchSpotTakerBuySellVolumeHistory(args: {
   url.searchParams.set("interval", args.interval);
   url.searchParams.set("limit", String(args.limit));
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      "CG-API-KEY": args.apiKey,
-      Accept: "application/json",
+  // A hung CoinGlass request must not stall a cron action; per-coin
+  // failures are swallowed by the callers, so fail fast and move on.
+  const raw = await fetchUpstreamJson(url.toString(), {
+    source: "coinglass",
+    init: {
+      headers: {
+        "CG-API-KEY": args.apiKey,
+        Accept: "application/json",
+      },
     },
-    // A hung CoinGlass request must not stall a cron action; per-coin
-    // failures are swallowed by the callers, so fail fast and move on.
-    signal: AbortSignal.timeout(10_000),
+    timeoutMs: 10_000,
+    maxAttempts: 2,
   });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(
-      `CoinGlass request failed (${response.status}): ${body.slice(0, 200)}`,
-    );
-  }
-
-  const raw = (await response.json()) as unknown;
   if (!raw || typeof raw !== "object") return [];
   const record = raw as Record<string, unknown>;
   if (record.code !== "0") {
@@ -146,24 +142,19 @@ async function fetchFuturesTakerBuySellVolumeHistory(args: {
   url.searchParams.set("interval", args.interval);
   url.searchParams.set("limit", String(args.limit));
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      "CG-API-KEY": args.apiKey,
-      Accept: "application/json",
+  // A hung CoinGlass request must not stall a cron action; per-coin
+  // failures are swallowed by the callers, so fail fast and move on.
+  const raw = await fetchUpstreamJson(url.toString(), {
+    source: "coinglass",
+    init: {
+      headers: {
+        "CG-API-KEY": args.apiKey,
+        Accept: "application/json",
+      },
     },
-    // A hung CoinGlass request must not stall a cron action; per-coin
-    // failures are swallowed by the callers, so fail fast and move on.
-    signal: AbortSignal.timeout(10_000),
+    timeoutMs: 10_000,
+    maxAttempts: 2,
   });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(
-      `CoinGlass request failed (${response.status}): ${body.slice(0, 200)}`,
-    );
-  }
-
-  const raw = (await response.json()) as unknown;
   if (!raw || typeof raw !== "object") return [];
   const record = raw as Record<string, unknown>;
   if (record.code !== "0") {
@@ -215,24 +206,19 @@ async function fetchOpenInterestHistory(args: {
   url.searchParams.set("unit", args.unit);
   url.searchParams.set("limit", String(args.limit));
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      "CG-API-KEY": args.apiKey,
-      Accept: "application/json",
+  // A hung CoinGlass request must not stall a cron action; per-coin
+  // failures are swallowed by the callers, so fail fast and move on.
+  const raw = await fetchUpstreamJson(url.toString(), {
+    source: "coinglass",
+    init: {
+      headers: {
+        "CG-API-KEY": args.apiKey,
+        Accept: "application/json",
+      },
     },
-    // A hung CoinGlass request must not stall a cron action; per-coin
-    // failures are swallowed by the callers, so fail fast and move on.
-    signal: AbortSignal.timeout(10_000),
+    timeoutMs: 10_000,
+    maxAttempts: 2,
   });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(
-      `CoinGlass request failed (${response.status}): ${body.slice(0, 200)}`,
-    );
-  }
-
-  const raw = (await response.json()) as unknown;
   if (!raw || typeof raw !== "object") return [];
   const record = raw as Record<string, unknown>;
   if (record.code !== "0") {
@@ -286,24 +272,19 @@ async function fetchLiquidationHistory(args: {
   url.searchParams.set("exchange_list", args.exchangeList);
   url.searchParams.set("limit", String(args.limit));
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      "CG-API-KEY": args.apiKey,
-      Accept: "application/json",
+  // A hung CoinGlass request must not stall a cron action; per-coin
+  // failures are swallowed by the callers, so fail fast and move on.
+  const raw = await fetchUpstreamJson(url.toString(), {
+    source: "coinglass",
+    init: {
+      headers: {
+        "CG-API-KEY": args.apiKey,
+        Accept: "application/json",
+      },
     },
-    // A hung CoinGlass request must not stall a cron action; per-coin
-    // failures are swallowed by the callers, so fail fast and move on.
-    signal: AbortSignal.timeout(10_000),
+    timeoutMs: 10_000,
+    maxAttempts: 2,
   });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(
-      `CoinGlass request failed (${response.status}): ${body.slice(0, 200)}`,
-    );
-  }
-
-  const raw = (await response.json()) as unknown;
   if (!raw || typeof raw !== "object") return [];
   const record = raw as Record<string, unknown>;
   if (record.code !== "0") {
@@ -362,24 +343,19 @@ async function fetchTakerBuySellExchangeList(args: {
   url.searchParams.set("symbol", args.symbol);
   url.searchParams.set("range", args.range);
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      "CG-API-KEY": args.apiKey,
-      Accept: "application/json",
+  // A hung CoinGlass request must not stall a cron action; per-coin
+  // failures are swallowed by the callers, so fail fast and move on.
+  const raw = await fetchUpstreamJson(url.toString(), {
+    source: "coinglass",
+    init: {
+      headers: {
+        "CG-API-KEY": args.apiKey,
+        Accept: "application/json",
+      },
     },
-    // A hung CoinGlass request must not stall a cron action; per-coin
-    // failures are swallowed by the callers, so fail fast and move on.
-    signal: AbortSignal.timeout(10_000),
+    timeoutMs: 10_000,
+    maxAttempts: 2,
   });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(
-      `CoinGlass request failed (${response.status}): ${body.slice(0, 200)}`,
-    );
-  }
-
-  const raw = (await response.json()) as unknown;
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Record<string, unknown>;
   if (record.code !== "0") {
@@ -658,6 +634,7 @@ export const refreshTrackedSpotTakerBuySellVolumeHistoryBatch = internalAction({
     processed: v.number(),
     refreshed: v.number(),
     wrotePoints: v.number(),
+    failed: v.number(),
   }),
   handler: async (ctx, args) => {
     const apiKey = getCoinGlassApiKey();
@@ -687,7 +664,7 @@ export const refreshTrackedSpotTakerBuySellVolumeHistoryBatch = internalAction({
         jobKey,
         cursor: null,
       });
-      return { processed: 0, refreshed: 0, wrotePoints: 0 };
+      return { processed: 0, refreshed: 0, wrotePoints: 0, failed: 0 };
     }
 
     const coins = await ctx.runQuery(
@@ -700,6 +677,8 @@ export const refreshTrackedSpotTakerBuySellVolumeHistoryBatch = internalAction({
     let processed = 0;
     let refreshed = 0;
     let wrotePoints = 0;
+    let failed = 0;
+    const failureSamples: string[] = [];
 
     for (const coin of coins) {
       processed++;
@@ -718,9 +697,20 @@ export const refreshTrackedSpotTakerBuySellVolumeHistoryBatch = internalAction({
           refreshed++;
           wrotePoints += result.points;
         }
-      } catch {
-        // Swallow per-coin failures; unsupported pairs are expected.
+      } catch (error) {
+        // Swallow per-coin failures; unsupported pairs are expected — but
+        // count them so systemic breakage stays visible in logs.
+        failed++;
+        if (failureSamples.length < 3) {
+          failureSamples.push(String(error).slice(0, 120));
+        }
       }
+    }
+
+    if (failed > 0) {
+      console.warn(
+        `[coinglass] refreshTrackedSpotTakerBuySellVolumeHistoryBatch: ${failed}/${coins.length} coins failed; e.g. ${failureSamples.join(" | ")}`,
+      );
     }
 
     await ctx.runMutation(internal.coingeckoState._setJobCursor, {
@@ -728,7 +718,7 @@ export const refreshTrackedSpotTakerBuySellVolumeHistoryBatch = internalAction({
       cursor: page.continueCursor,
     });
 
-    return { processed, refreshed, wrotePoints };
+    return { processed, refreshed, wrotePoints, failed };
   },
 });
 
@@ -744,6 +734,7 @@ export const refreshTrackedFuturesTakerBuySellVolumeHistoryBatch =
       processed: v.number(),
       refreshed: v.number(),
       wrotePoints: v.number(),
+      failed: v.number(),
     }),
     handler: async (ctx, args) => {
       const apiKey = getCoinGlassApiKey();
@@ -773,7 +764,7 @@ export const refreshTrackedFuturesTakerBuySellVolumeHistoryBatch =
           jobKey,
           cursor: null,
         });
-        return { processed: 0, refreshed: 0, wrotePoints: 0 };
+        return { processed: 0, refreshed: 0, wrotePoints: 0, failed: 0 };
       }
 
       const coins = await ctx.runQuery(
@@ -786,6 +777,8 @@ export const refreshTrackedFuturesTakerBuySellVolumeHistoryBatch =
       let processed = 0;
       let refreshed = 0;
       let wrotePoints = 0;
+      let failed = 0;
+      const failureSamples: string[] = [];
 
       for (const coin of coins) {
         processed++;
@@ -804,9 +797,20 @@ export const refreshTrackedFuturesTakerBuySellVolumeHistoryBatch =
             refreshed++;
             wrotePoints += result.points;
           }
-        } catch {
-          // Swallow per-coin failures; unsupported pairs are expected.
+        } catch (error) {
+          // Swallow per-coin failures; unsupported pairs are expected — but
+          // count them so systemic breakage stays visible in logs.
+          failed++;
+          if (failureSamples.length < 3) {
+            failureSamples.push(String(error).slice(0, 120));
+          }
         }
+      }
+
+      if (failed > 0) {
+        console.warn(
+          `[coinglass] refreshTrackedFuturesTakerBuySellVolumeHistoryBatch: ${failed}/${coins.length} coins failed; e.g. ${failureSamples.join(" | ")}`,
+        );
       }
 
       await ctx.runMutation(internal.coingeckoState._setJobCursor, {
@@ -814,7 +818,7 @@ export const refreshTrackedFuturesTakerBuySellVolumeHistoryBatch =
         cursor: page.continueCursor,
       });
 
-      return { processed, refreshed, wrotePoints };
+      return { processed, refreshed, wrotePoints, failed };
     },
   });
 
@@ -851,6 +855,7 @@ export const refreshTrackedOpenInterestHistoryBatch = internalAction({
     processed: v.number(),
     refreshed: v.number(),
     wrotePoints: v.number(),
+    failed: v.number(),
   }),
   handler: async (ctx, args) => {
     const apiKey = getCoinGlassApiKey();
@@ -879,7 +884,7 @@ export const refreshTrackedOpenInterestHistoryBatch = internalAction({
         jobKey,
         cursor: null,
       });
-      return { processed: 0, refreshed: 0, wrotePoints: 0 };
+      return { processed: 0, refreshed: 0, wrotePoints: 0, failed: 0 };
     }
 
     const coins = await ctx.runQuery(
@@ -892,6 +897,8 @@ export const refreshTrackedOpenInterestHistoryBatch = internalAction({
     let processed = 0;
     let refreshed = 0;
     let wrotePoints = 0;
+    let failed = 0;
+    const failureSamples: string[] = [];
 
     for (const coin of coins) {
       processed++;
@@ -909,16 +916,27 @@ export const refreshTrackedOpenInterestHistoryBatch = internalAction({
           refreshed++;
           wrotePoints += result.points;
         }
-      } catch {
-        // Unsupported symbols expected.
+      } catch (error) {
+        // Unsupported symbols expected — but count failures so systemic
+        // breakage stays visible in logs.
+        failed++;
+        if (failureSamples.length < 3) {
+          failureSamples.push(String(error).slice(0, 120));
+        }
       }
+    }
+
+    if (failed > 0) {
+      console.warn(
+        `[coinglass] refreshTrackedOpenInterestHistoryBatch: ${failed}/${coins.length} coins failed; e.g. ${failureSamples.join(" | ")}`,
+      );
     }
 
     await ctx.runMutation(internal.coingeckoState._setJobCursor, {
       jobKey,
       cursor: page.continueCursor,
     });
-    return { processed, refreshed, wrotePoints };
+    return { processed, refreshed, wrotePoints, failed };
   },
 });
 
@@ -955,6 +973,7 @@ export const refreshTrackedLiquidationHistoryBatch = internalAction({
     processed: v.number(),
     refreshed: v.number(),
     wrotePoints: v.number(),
+    failed: v.number(),
   }),
   handler: async (ctx, args) => {
     const apiKey = getCoinGlassApiKey();
@@ -983,7 +1002,7 @@ export const refreshTrackedLiquidationHistoryBatch = internalAction({
         jobKey,
         cursor: null,
       });
-      return { processed: 0, refreshed: 0, wrotePoints: 0 };
+      return { processed: 0, refreshed: 0, wrotePoints: 0, failed: 0 };
     }
 
     const coins = await ctx.runQuery(
@@ -996,6 +1015,8 @@ export const refreshTrackedLiquidationHistoryBatch = internalAction({
     let processed = 0;
     let refreshed = 0;
     let wrotePoints = 0;
+    let failed = 0;
+    const failureSamples: string[] = [];
 
     for (const coin of coins) {
       processed++;
@@ -1013,16 +1034,27 @@ export const refreshTrackedLiquidationHistoryBatch = internalAction({
           refreshed++;
           wrotePoints += result.points;
         }
-      } catch {
-        // Unsupported symbols expected.
+      } catch (error) {
+        // Unsupported symbols expected — but count failures so systemic
+        // breakage stays visible in logs.
+        failed++;
+        if (failureSamples.length < 3) {
+          failureSamples.push(String(error).slice(0, 120));
+        }
       }
+    }
+
+    if (failed > 0) {
+      console.warn(
+        `[coinglass] refreshTrackedLiquidationHistoryBatch: ${failed}/${coins.length} coins failed; e.g. ${failureSamples.join(" | ")}`,
+      );
     }
 
     await ctx.runMutation(internal.coingeckoState._setJobCursor, {
       jobKey,
       cursor: page.continueCursor,
     });
-    return { processed, refreshed, wrotePoints };
+    return { processed, refreshed, wrotePoints, failed };
   },
 });
 
@@ -1052,7 +1084,11 @@ export const refreshTrackedTakerBuySellExchangeListSnapshotBatch =
       range: v.optional(v.string()),
       batchSize: v.optional(v.number()),
     },
-    returns: v.object({ processed: v.number(), refreshed: v.number() }),
+    returns: v.object({
+      processed: v.number(),
+      refreshed: v.number(),
+      failed: v.number(),
+    }),
     handler: async (ctx, args) => {
       const apiKey = getCoinGlassApiKey();
       const range = (args.range ?? "24h").trim();
@@ -1078,7 +1114,7 @@ export const refreshTrackedTakerBuySellExchangeListSnapshotBatch =
           jobKey,
           cursor: null,
         });
-        return { processed: 0, refreshed: 0 };
+        return { processed: 0, refreshed: 0, failed: 0 };
       }
 
       const coins = await ctx.runQuery(
@@ -1090,6 +1126,8 @@ export const refreshTrackedTakerBuySellExchangeListSnapshotBatch =
 
       let processed = 0;
       let refreshed = 0;
+      let failed = 0;
+      const failureSamples: string[] = [];
 
       for (const coin of coins) {
         processed++;
@@ -1103,15 +1141,26 @@ export const refreshTrackedTakerBuySellExchangeListSnapshotBatch =
             apiKey,
           });
           if (result.wrote) refreshed++;
-        } catch {
-          // Unsupported symbols expected.
+        } catch (error) {
+          // Unsupported symbols expected — but count failures so systemic
+          // breakage stays visible in logs.
+          failed++;
+          if (failureSamples.length < 3) {
+            failureSamples.push(String(error).slice(0, 120));
+          }
         }
+      }
+
+      if (failed > 0) {
+        console.warn(
+          `[coinglass] refreshTrackedTakerBuySellExchangeListSnapshotBatch: ${failed}/${coins.length} coins failed; e.g. ${failureSamples.join(" | ")}`,
+        );
       }
 
       await ctx.runMutation(internal.coingeckoState._setJobCursor, {
         jobKey,
         cursor: page.continueCursor,
       });
-      return { processed, refreshed };
+      return { processed, refreshed, failed };
     },
   });
