@@ -1,39 +1,18 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { API_PROVIDERS, type ApiProvider } from "@/constants/api-providers";
-import { getRequestIp } from "@/lib/effect/server/route";
+import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
 import { getApiHeaders } from "@/lib/user-api-keys";
-import { ratelimit } from "@v1/kv/ratelimit";
 
 /**
  * Validates an API key by making a test request to the provider's API
  * This endpoint is used by the frontend to validate keys before saving
+ *
+ * Deliberately not on the Effect layer: the provider probe's "errors" ARE
+ * the successful 200 payload ({isValid:false, error}), and the fetch
+ * already carries a timeout and must not retry.
  */
-export async function POST(request: NextRequest) {
+async function handlePost(request: NextRequest) {
   try {
-    // Rate limiting check
-    const ip = getRequestIp(request);
-    const rateLimitPromise = ratelimit.limit(`${ip}-validate-api-key`);
-    const authPromise = auth();
-
-    const [rateLimitResult, authResult] = await Promise.all([
-      rateLimitPromise,
-      authPromise,
-    ]);
-
-    if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { error: "Too many requests" }, 
-        { status: 429 }
-      );
-    }
-
-    const { userId: clerkId } = authResult;
-    
-    if (!clerkId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = await request.json();
     const { provider, apiKey } = body;
 
@@ -73,11 +52,18 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("API key validation error:", error);
     return NextResponse.json(
-      { error: "Internal server error" }, 
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
 }
+
+export const POST = withAuthRatelimit(handlePost, {
+  name: "validate-api-key",
+  requireAuth: true,
+  // Parity with the previous raw @v1/kv fixed-window budget (10/10s).
+  limiter: "public-burst",
+});
 
 /**
  * Validate API key by making a test request to the provider

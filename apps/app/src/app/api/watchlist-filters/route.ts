@@ -182,9 +182,13 @@ ${JSON.stringify(watchlistGroups)}
         })
         .catch(() => null)
     }
+    // Graceful degrade at 200 (matches the low-confidence path): the body is
+    // success-shaped, so a 500 status would force consumers to special-case
+    // an "error that parses fine". The failure itself goes to logs.
+    console.error("[watchlist-filters] intent parsing failed:", error)
     return NextResponse.json(
       { actions: [], fallbackSearchText: null, confidence: 0 },
-      { status: 500 },
+      { status: 200 },
     )
   }
 }

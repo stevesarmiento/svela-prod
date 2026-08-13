@@ -1,6 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { Effect } from "effect";
 import { getRequestIp } from "@/lib/effect/server/route";
+import { runServerEffect } from "@/lib/effect/server/runtime";
+import { UpstreamHttp } from "@/lib/effect/server/upstream-http";
 import { getUserApiKey } from "@/lib/user-api-keys";
 import { generateText } from "ai";
 import { z } from "zod";
@@ -187,6 +190,42 @@ function normalizeForCompare(text: string): string {
     .trim();
 }
 
+const ARTICLE_FETCH_HEADERS = {
+  // Some publishers block default user agents.
+  "user-agent": "Mozilla/5.0 (compatible; SvelaBot/1.0; +https://svela.dev)",
+  accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+} as const;
+
+/**
+ * Follows redirects manually so every hop is re-validated against
+ * `isSafeHttpUrl` — with `redirect: "follow"` only the initial URL was
+ * checked, letting a publisher redirect us into private address space.
+ */
+async function fetchWithSafeRedirects(
+  url: string,
+  signal: AbortSignal,
+): Promise<Response | null> {
+  const MAX_HOPS = 3;
+  let current = url;
+  for (let hop = 0; hop <= MAX_HOPS; hop++) {
+    if (!isSafeHttpUrl(current)) return null;
+    const res = await fetch(current, {
+      redirect: "manual",
+      headers: ARTICLE_FETCH_HEADERS,
+      signal,
+      next: { revalidate: 60 },
+    });
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location");
+      if (!location) return null;
+      current = new URL(location, current).toString();
+      continue;
+    }
+    return res;
+  }
+  return null;
+}
+
 async function fetchArticleText(args: { url: string; abortSignal: AbortSignal }): Promise<string | null> {
   if (!isSafeHttpUrl(args.url)) return null;
 
@@ -196,18 +235,8 @@ async function fetchArticleText(args: { url: string; abortSignal: AbortSignal })
   args.abortSignal.addEventListener("abort", onAbort, { once: true });
 
   try {
-    const res = await fetch(args.url, {
-      redirect: "follow",
-      headers: {
-        // Some publishers block default user agents.
-        "user-agent": "Mozilla/5.0 (compatible; SvelaBot/1.0; +https://svela.dev)",
-        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      },
-      signal: ctrl.signal,
-      next: { revalidate: 60 },
-    });
-
-    if (!res.ok) return null;
+    const res = await fetchWithSafeRedirects(args.url, ctrl.signal);
+    if (!res || !res.ok) return null;
 
     const ct = res.headers.get("content-type") ?? "";
     if (!ct.toLowerCase().includes("text/html")) return null;
@@ -466,58 +495,50 @@ export async function GET(request: NextRequest) {
   // CoinGecko caps per_page at 20, so larger pulls fan out across consecutive pages.
   const CG_MAX_PER_PAGE = 20;
   const pageCount = Math.max(1, Math.ceil(perPage / CG_MAX_PER_PAGE));
-  const responses = await Promise.all(
-    Array.from({ length: pageCount }, (_, index) => {
-      const url = new URL("https://pro-api.coingecko.com/api/v3/news");
-      url.searchParams.set("page", String(page + index));
-      url.searchParams.set("per_page", String(Math.min(perPage, CG_MAX_PER_PAGE)));
-      url.searchParams.set("language", language);
-      // Enforce news-only (never guides).
-      url.searchParams.set("type", "news");
-      if (coinId) url.searchParams.set("coin_id", coinId);
+  const pageUrls = Array.from({ length: pageCount }, (_, index) => {
+    const url = new URL("https://pro-api.coingecko.com/api/v3/news");
+    url.searchParams.set("page", String(page + index));
+    url.searchParams.set("per_page", String(Math.min(perPage, CG_MAX_PER_PAGE)));
+    url.searchParams.set("language", language);
+    // Enforce news-only (never guides).
+    url.searchParams.set("type", "news");
+    if (coinId) url.searchParams.set("coin_id", coinId);
+    return url.toString();
+  });
 
-      return fetch(url.toString(), {
-        headers: {
-          "x-cg-pro-api-key": apiKey,
-          Accept: "application/json",
-        },
-        next: { revalidate: 60 },
-      });
-    }),
-  );
-
-  const failedResponse = responses.find((response) => !response.ok);
-  if (failedResponse) {
-    const body = await failedResponse.text().catch(() => "");
+  let data: unknown[];
+  try {
+    const pages = await runServerEffect(
+      Effect.all(
+        pageUrls.map((endpoint) =>
+          UpstreamHttp.use((http) =>
+            http.requestJson({
+              vendor: "coingecko",
+              endpoint,
+              decode: (raw) => {
+                if (!Array.isArray(raw)) {
+                  throw new Error("Unexpected CoinGecko news response");
+                }
+                return raw as unknown[];
+              },
+              init: {
+                headers: { "x-cg-pro-api-key": apiKey, Accept: "application/json" },
+                next: { revalidate: 60 },
+              },
+            }),
+          ),
+        ),
+        { concurrency: 3 },
+      ),
+    );
+    data = pages.flat();
+  } catch (error) {
+    // Upstream detail stays in server logs; clients get the stable envelope.
+    console.error("[coingecko-news] upstream fetch failed:", error);
     return NextResponse.json(
-      {
-        error: "CoinGecko news request failed",
-        details: body.slice(0, 300),
-      },
+      { error: "CoinGecko news request failed", articles: [] as CoinGeckoNewsArticlePublic[] },
       { status: 502 },
     );
-  }
-
-  const data: unknown[] = [];
-  for (const response of responses) {
-    let pageData: unknown;
-    try {
-      pageData = await response.json();
-    } catch {
-      return NextResponse.json(
-        { error: "Failed to parse CoinGecko news response", articles: [] as CoinGeckoNewsArticlePublic[] },
-        { status: 502 },
-      );
-    }
-
-    if (!Array.isArray(pageData)) {
-      return NextResponse.json(
-        { error: "Unexpected CoinGecko news response", articles: [] as CoinGeckoNewsArticlePublic[] },
-        { status: 502 },
-      );
-    }
-
-    data.push(...pageData);
   }
 
   const articles: CoinGeckoNewsArticlePublic[] = [];
