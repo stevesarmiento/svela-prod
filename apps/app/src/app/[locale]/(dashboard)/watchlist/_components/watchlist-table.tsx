@@ -10,6 +10,7 @@ import {
 } from "@/hooks/use-coingecko-watchlist-aggregate-chart-isolated";
 import { useCoinGeckoWatchlistCoins } from "@/hooks/use-coingecko-watchlist-coins";
 import {
+  BulkRemoveError,
   SELECT_CELL_VARIANTS,
   SELECT_CHECKBOX_VARIANTS,
   SELECT_CONTENT_VARIANTS,
@@ -1056,11 +1057,25 @@ export function WatchlistTable({
         ids.push(coinId);
         coinIdsByGroup.set(groupId, ids);
       }
-      await Promise.all(
-        Array.from(coinIdsByGroup, ([groupId, coinIds]) =>
+      // allSettled so one failing watchlist doesn't mask the groups that DID
+      // remove — partial outcomes surface exact counts via BulkRemoveError.
+      const entries = Array.from(coinIdsByGroup);
+      const results = await Promise.allSettled(
+        entries.map(([groupId, coinIds]) =>
           removeBulkFromConvexWatchlist(coinIds, groupId),
         ),
       );
+
+      let removedCount = 0;
+      let failedCount = 0;
+      results.forEach((result, index) => {
+        const count = entries[index]?.[1].length ?? 0;
+        if (result.status === "fulfilled") removedCount += count;
+        else failedCount += count;
+      });
+      if (failedCount > 0) {
+        throw new BulkRemoveError({ removedCount, failedCount });
+      }
     },
     [removeBulkFromConvexWatchlist],
   );

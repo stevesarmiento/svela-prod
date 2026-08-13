@@ -330,6 +330,9 @@ export function IndicatorExplainDialog(props: IndicatorExplainDialogProps) {
     await complete(JSON.stringify(body));
   }, [complete, props, setCompletion, stop]);
 
+  // Abort any in-flight completion stream when the dialog unmounts.
+  React.useEffect(() => () => stop(), [stop]);
+
   const explainLoadingSteps = React.useMemo(
     () => [
       { text: "Reading indicator values" },

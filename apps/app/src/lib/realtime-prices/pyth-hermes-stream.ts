@@ -1,3 +1,13 @@
+import {
+  Effect,
+  Fiber,
+  Filter,
+  Option,
+  Schedule,
+  Schema,
+  Stream,
+} from "effect";
+
 export interface HermesParsedPrice {
   id: string;
   price: {
@@ -56,9 +66,111 @@ export interface HermesStreamOptions {
   onError?: (error: unknown) => void;
 }
 
+class HermesStreamError extends Schema.TaggedError<HermesStreamError>()(
+  "HermesStreamError",
+  { message: Schema.String },
+) {}
+
+const HermesParsedPriceSchema = Schema.Struct({
+  id: Schema.String,
+  price: Schema.Struct({
+    price: Schema.String,
+    conf: Schema.String,
+    expo: Schema.Number,
+    publish_time: Schema.Number,
+  }),
+});
+
+// A single SSE `data:` frame may carry MULTIPLE parsed feed updates.
+const HermesSseMessageSchema = Schema.Struct({
+  parsed: Schema.optional(Schema.Array(HermesParsedPriceSchema)),
+});
+
+const decodeSseMessage = Schema.decodeUnknownOption(HermesSseMessageSchema);
+
+/**
+ * `data:` line → all parsed feed entries in the frame. Malformed JSON or
+ * unexpected shapes are skipped (never fail the stream).
+ */
+function parseSseDataLine(
+  line: string,
+): Option.Option<ReadonlyArray<HermesParsedPrice>> {
+  if (!line.startsWith("data:")) return Option.none();
+  const payload = line.slice(5).trim();
+  if (!payload) return Option.none();
+
+  let json: unknown;
+  try {
+    json = JSON.parse(payload);
+  } catch {
+    return Option.none();
+  }
+
+  return Option.map(decodeSseMessage(json), (message) => message.parsed ?? []);
+}
+
+// Reconnect-on-failure backoff: 1s doubling with jitter, capped at ~30s
+// (Schedule.min picks the smaller delay, so the 30s spaced schedule acts as
+// the ceiling). A successful (graceful) close resets the backoff because
+// Effect.retry re-wraps each repeat iteration fresh.
+const reconnectSchedule = Schedule.min([
+  Schedule.jittered(Schedule.exponential("1 second", 2)),
+  Schedule.spaced("30 seconds"),
+]);
+
+// Graceful server close → reconnect on the old fixed cadence.
+const resubscribeSchedule = Schedule.spaced("3 seconds");
+
+function connectOnce(args: {
+  url: string;
+  onTick: (tick: HermesPriceTick) => void;
+}): Effect.Effect<void, HermesStreamError> {
+  return Effect.gen(function* () {
+    const response = yield* Effect.tryPromise({
+      // Fiber interruption (unsubscribe) aborts the in-flight request.
+      try: (signal) => fetch(args.url, { signal }),
+      catch: (error) =>
+        new HermesStreamError({ message: String(error) }),
+    });
+
+    if (!response.ok || !response.body) {
+      return yield* Effect.fail(
+        new HermesStreamError({
+          message: `Hermes stream failed: ${response.status} ${response.statusText}`,
+        }),
+      );
+    }
+    const body = response.body;
+
+    yield* Stream.fromReadableStream({
+      evaluate: () => body,
+      onError: (error) => new HermesStreamError({ message: String(error) }),
+    }).pipe(
+      Stream.decodeText(),
+      Stream.splitLines,
+      Stream.filterMap(Filter.fromPredicateOption(parseSseDataLine)),
+      // Emit EVERY parsed entry in a frame (the old loop dropped all but the
+      // first feed's tick on multi-feed frames).
+      Stream.flatMap((entries) => Stream.fromIterable(entries)),
+      Stream.filterMap(
+        Filter.fromPredicateOption((entry: HermesParsedPrice) =>
+          Option.fromNullishOr(normalizeHermesParsedPrice(entry)),
+        ),
+      ),
+      Stream.runForEach((tick: HermesPriceTick) =>
+        Effect.sync(() => args.onTick(tick)),
+      ),
+    );
+  });
+}
+
 /**
  * Stream Pyth prices via Hermes SSE.
  * Returns an unsubscribe function.
+ *
+ * Internals run on Effect Stream: failures reconnect with jittered
+ * exponential backoff (capped ~30s), graceful closes resubscribe on a 3s
+ * cadence, and unsubscribing interrupts the fiber (aborting the request).
  */
 export function subscribeHermesPriceStream(options: HermesStreamOptions): () => void {
   const baseUrl = options.endpointBaseUrl ?? "https://hermes.pyth.network";
@@ -76,62 +188,17 @@ export function subscribeHermesPriceStream(options: HermesStreamOptions): () => 
   const idsParam = feedIds.map((id) => `ids[]=${id}`).join("&");
   const url = `${baseUrl}/v2/updates/price/stream?${idsParam}&parsed=true`;
 
-  let aborted = false;
-  const abortController = new AbortController();
+  const program = connectOnce({ url, onTick: options.onTick }).pipe(
+    Effect.tapError((error) =>
+      Effect.sync(() => options.onError?.(error)),
+    ),
+    Effect.retry({ schedule: reconnectSchedule }),
+    Effect.repeat({ schedule: resubscribeSchedule }),
+  );
 
-  async function connect(): Promise<void> {
-    try {
-      const response = await fetch(url, { signal: abortController.signal });
-      if (!response.ok || !response.body) {
-        options.onError?.(new Error(`Hermes stream failed: ${response.status} ${response.statusText}`));
-        return;
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (!aborted) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data:")) continue;
-          const payload = line.slice(5).trim();
-          if (!payload) continue;
-
-          try {
-            const data = JSON.parse(payload) as unknown;
-            const parsed = (data as { parsed?: HermesParsedPrice[] }).parsed?.[0];
-            if (!parsed) continue;
-            const tick = normalizeHermesParsedPrice(parsed);
-            if (!tick) continue;
-            options.onTick(tick);
-          } catch {
-            // Skip malformed SSE messages.
-          }
-        }
-      }
-    } catch (error: unknown) {
-      if (aborted) return;
-      if (error instanceof Error && error.name === "AbortError") return;
-      options.onError?.(error);
-    }
-
-    if (!aborted) {
-      setTimeout(() => void connect(), 3_000);
-    }
-  }
-
-  void connect();
+  const fiber = Effect.runFork(program);
 
   return () => {
-    aborted = true;
-    abortController.abort();
+    Effect.runFork(Fiber.interrupt(fiber));
   };
 }
-
