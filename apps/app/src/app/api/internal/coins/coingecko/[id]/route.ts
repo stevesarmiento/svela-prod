@@ -1,31 +1,22 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
-import { ConvexHttpClient } from "convex/browser";
+import { Effect } from "effect";
+import { NextResponse } from "next/server";
 import { api } from "../../../../../../../convex/_generated/api";
+import { ConvexService } from "@/lib/effect/server/convex";
+import { effectRoute } from "@/lib/effect/server/route";
 
-const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-if (!convexUrl) throw new Error("NEXT_PUBLIC_CONVEX_URL is not configured");
+export const GET = effectRoute<{ params: Promise<{ id: string }> }>(
+  (_req, ctx) =>
+    Effect.gen(function* () {
+      const convex = yield* ConvexService;
 
-const convex = new ConvexHttpClient(convexUrl);
+      const { id } = yield* Effect.promise(() => ctx.params);
+      const coin = yield* convex.serverQuery(
+        api.coins.getCoinGeckoCoinById,
+        { coingeckoId: id },
+        { label: "getCoinGeckoCoinById" },
+      );
 
-function getServerToken(): string {
-  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
-  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured");
-  return token;
-}
-
-async function handleGet(_req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },) {
-  const { id } = await params;
-  const coin = await convex.query(api.coins.getCoinGeckoCoinById, {
-    serverToken: getServerToken(),
-    coingeckoId: id,
-  });
-
-  return NextResponse.json(coin);
-}
-
-
-export const GET = withAuthRatelimit(handleGet, {
-  name: "internal-coin-by-id",
-});
+      return NextResponse.json(coin);
+    }),
+  { name: "internal-coin-by-id" },
+);

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import { getRequestIp } from "@/lib/effect/server/route";
 import { getUserApiKey } from "@/lib/user-api-keys";
 import { generateText } from "ai";
 import { z } from "zod";
@@ -55,13 +56,6 @@ function extractJsonObject(text: string): unknown {
   const last = unfenced.lastIndexOf("}");
   if (first === -1 || last === -1 || last <= first) return null;
   return safeJsonParse(unfenced.slice(first, last + 1));
-}
-
-function getRequestIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (!forwarded) return "127.0.0.1";
-  const first = forwarded.split(",")[0]?.trim();
-  return first && first.length > 0 ? first : "127.0.0.1";
 }
 
 function parseArticle(raw: unknown): CoinGeckoNewsArticlePublic | null {

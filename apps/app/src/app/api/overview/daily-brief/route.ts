@@ -5,6 +5,7 @@ import { ratelimit } from "@v1/kv/ratelimit"
 import { generateText, Output } from "ai"
 import { api } from "../../../../../convex/_generated/api"
 import { convex, getServerToken } from "@/lib/convex-server"
+import { getRequestIp } from "@/lib/effect/server/route"
 import { gemini, isGeminiAvailable } from "@/lib/gemini"
 import {
   bollingerSignal,
@@ -34,11 +35,27 @@ import {
   type TechnicalLabels,
 } from "@/lib/overview-daily-brief"
 
-function getRequestIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for")
-  if (!forwarded) return "127.0.0.1"
-  const first = forwarded.split(",")[0]?.trim()
-  return first && first.length > 0 ? first : "127.0.0.1"
+// Bounded fan-out for the technicals sample: don't fire the whole batch of
+// Convex series reads at once.
+async function mapWithConcurrency<T, R>(
+  items: ReadonlyArray<T>,
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length)
+  let next = 0
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (next < items.length) {
+        const i = next
+        next += 1
+        results[i] = await fn(items[i] as T)
+      }
+    },
+  )
+  await Promise.all(workers)
+  return results
 }
 
 // The brief is 24h-only; unknown body keys (e.g. a legacy `window`) are
@@ -297,7 +314,11 @@ export async function POST(req: NextRequest) {
           bollinger: bollingerSignal(computeBollingerPercentB(closes, 20, 2)),
           squeeze: squeezeSignal(computeBbwPercentile(closes, 20, 96)),
         }
-      } catch {
+      } catch (error) {
+        console.warn(
+          `overview daily-brief: technicals series read failed for ${coingeckoId} (skipping):`,
+          error,
+        )
         return null
       }
     }
@@ -327,12 +348,10 @@ export async function POST(req: NextRequest) {
     })()
 
     const technicalSamplesWithSymbol = (
-      await Promise.all(
-        technicalCandidates.map(async (c) => {
-          const labels = await loadTechnicalLabels(c.coingeckoId)
-          return labels ? { symbol: c.symbol, ...labels } : null
-        }),
-      )
+      await mapWithConcurrency(technicalCandidates, 8, async (c) => {
+        const labels = await loadTechnicalLabels(c.coingeckoId)
+        return labels ? { symbol: c.symbol, ...labels } : null
+      })
     ).filter((x): x is { symbol: string } & TechnicalLabels => Boolean(x))
     const technicals = summarizeTechnicals(technicalSamplesWithSymbol)
 

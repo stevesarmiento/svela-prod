@@ -26,7 +26,7 @@ export interface ConvexCallOptions {
 
 type WithoutToken<Args> = Omit<Args, "serverToken">;
 
-interface ConvexServiceShape {
+export interface ConvexServiceShape {
   /** Public query (no server token). */
   readonly query: <Q extends FunctionReference<"query">>(
     fn: Q,

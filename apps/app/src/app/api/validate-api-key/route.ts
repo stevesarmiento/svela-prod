@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { API_PROVIDERS, type ApiProvider } from "@/constants/api-providers";
+import { getRequestIp } from "@/lib/effect/server/route";
 import { getApiHeaders } from "@/lib/user-api-keys";
 import { ratelimit } from "@v1/kv/ratelimit";
 
@@ -11,7 +12,7 @@ import { ratelimit } from "@v1/kv/ratelimit";
 export async function POST(request: NextRequest) {
   try {
     // Rate limiting check
-    const ip = request.headers.get("x-forwarded-for") || "127.0.0.1";
+    const ip = getRequestIp(request);
     const rateLimitPromise = ratelimit.limit(`${ip}-validate-api-key`);
     const authPromise = auth();
 

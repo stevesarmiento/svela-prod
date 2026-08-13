@@ -5,6 +5,7 @@ import { ratelimit } from "@v1/kv/ratelimit"
 import { generateText } from "ai"
 import { api } from "../../../../convex/_generated/api"
 import { convex, getServerToken } from "@/lib/convex-server"
+import { getRequestIp } from "@/lib/effect/server/route"
 import { gemini, isGeminiAvailable } from "@/lib/gemini"
 import { RequestSchema, ResponseSchema } from "@/lib/smart-screener/intent-schemas"
 
@@ -14,14 +15,6 @@ function safeJsonParse(text: string): unknown {
   } catch {
     return null
   }
-}
-
-function getRequestIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for")
-  if (!forwarded) return "127.0.0.1"
-  // Can be a list like "client, proxy1, proxy2"
-  const first = forwarded.split(",")[0]?.trim()
-  return first && first.length > 0 ? first : "127.0.0.1"
 }
 
 export async function POST(req: NextRequest) {

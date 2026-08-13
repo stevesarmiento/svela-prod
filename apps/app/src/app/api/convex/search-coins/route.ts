@@ -1,47 +1,44 @@
-import { ConvexHttpClient } from "convex/browser";
-import { withAuthRatelimit } from "@/lib/api/with-auth-ratelimit";
+import { Effect } from "effect";
+import { NextResponse } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
-import { type NextRequest, NextResponse } from "next/server";
+import { ConvexService } from "@/lib/effect/server/convex";
+import { RequestValidationError } from "@/lib/effect/server/errors";
+import { effectRoute } from "@/lib/effect/server/route";
 
-const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+export const POST = effectRoute(
+  (req) =>
+    Effect.gen(function* () {
+      const convex = yield* ConvexService;
 
-function getServerToken(): string {
-  const token = process.env.INTERNAL_CONVEX_SERVER_TOKEN;
-  if (!token) throw new Error("INTERNAL_CONVEX_SERVER_TOKEN is not configured");
-  return token;
-}
+      const body = yield* Effect.promise(
+        () => req.json().catch(() => null) as Promise<unknown>,
+      );
+      const { query, limit = 20 } = (body ?? {}) as {
+        query?: unknown;
+        limit?: unknown;
+      };
 
-async function handlePost(req: NextRequest) {
-  try {
-    const { query, limit = 20 } = await req.json();
+      if (!query) {
+        return yield* Effect.fail(
+          new RequestValidationError({ message: "Query parameter is required" }),
+        );
+      }
 
-    if (!query) {
-      return NextResponse.json({ error: "Query parameter is required" }, { status: 400 });
-    }
+      // Use CoinGecko search instead of legacy CoinMarketCap search
+      const coins = yield* convex.serverQuery(
+        api.coins.searchCoinGeckoCoins,
+        { query: query.toString(), limit: Number(limit) },
+        { label: "searchCoinGeckoCoins" },
+      );
 
-    // Use CoinGecko search instead of legacy CoinMarketCap search
-    const coins = await convex.query(api.coins.searchCoinGeckoCoins, { 
-      serverToken: getServerToken(),
-      query: query.toString(),
-      limit: Number(limit)
-    });
+      // Transform to match expected interface (coinId -> coingeckoId)
+      const transformedCoins = coins.map(coin => ({
+        coinId: coin.coingeckoId, // Use CoinGecko ID as coinId
+        name: coin.name,
+        symbol: coin.symbol
+      }));
 
-    // Transform to match expected interface (coinId -> coingeckoId)
-    const transformedCoins = coins.map(coin => ({
-      coinId: coin.coingeckoId, // Use CoinGecko ID as coinId
-      name: coin.name,
-      symbol: coin.symbol
-    }));
-
-    return NextResponse.json(transformedCoins);
-  } catch (error) {
-    console.error("Error searching CoinGecko coins:", error);
-    return NextResponse.json(
-      { error: "Failed to search coins" },
-      { status: 500 }
-    );
-  }
-} 
-export const POST = withAuthRatelimit(handlePost, {
-  name: "convex-search-coins",
-});
+      return NextResponse.json(transformedCoins);
+    }),
+  { name: "convex-search-coins" },
+);

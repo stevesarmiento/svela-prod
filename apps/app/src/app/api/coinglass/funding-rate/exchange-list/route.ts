@@ -8,6 +8,7 @@ import { UpstreamHttp } from "@/lib/effect/server/upstream-http";
 import {
   COINGLASS_BASE_URL,
   coinglassHeaders,
+  resolveCoinglassSymbol,
   unwrapCoinglassEnvelope,
 } from "@/lib/effect/server/vendors/coinglass";
 
@@ -64,34 +65,41 @@ export const GET = effectRoute(
       const convex = yield* ConvexService;
 
       // Resolve the input (numeric coin id or symbol) to a CoinGlass symbol.
+      const resolvedSymbol = yield* resolveCoinglassSymbol(convex, symbolOrId, {
+        // Route-specific contract: 400 with a supportedCoins sample.
+        coinIdNotFound: (coinId) =>
+          convex
+            .serverQuery(
+              api.coins.getCoinglassSupportedCoinsList,
+              {},
+              { label: "getCoinglassSupportedCoinsList" },
+            )
+            .pipe(
+              Effect.map((supportedCoins) =>
+                NextResponse.json(
+                  {
+                    success: false,
+                    error: `Coin with ID ${coinId} not found or not supported by CoinGlass`,
+                    supportedCoins: supportedCoins.slice(0, 10),
+                    coinId,
+                  },
+                  { status: 400 },
+                ),
+              ),
+            ),
+      });
+      if (resolvedSymbol instanceof Response) return resolvedSymbol;
+
       let resolved: ResolvedCoin;
-      const coinId = Number.parseInt(symbolOrId);
-      if (!Number.isNaN(coinId)) {
-        const coinInfo = yield* convex.serverQuery(
-          api.coins.getCoinglassSymbolByCoinId,
-          { coinId },
-          { label: "getCoinglassSymbolByCoinId" },
-        );
-        if (!coinInfo) {
-          const supportedCoins = yield* convex.serverQuery(
-            api.coins.getCoinglassSupportedCoinsList,
-            {},
-            { label: "getCoinglassSupportedCoinsList" },
-          );
-          // Route-specific contract: 400 with a supportedCoins sample.
-          return NextResponse.json(
-            {
-              success: false,
-              error: `Coin with ID ${coinId} not found or not supported by CoinGlass`,
-              supportedCoins: supportedCoins.slice(0, 10),
-              coinId,
-            },
-            { status: 400 },
-          );
-        }
-        resolved = { actualSymbol: coinInfo.symbol, coinInfo };
+      if (resolvedSymbol.record) {
+        // Historical contract: the raw record (incl. `originalSymbol`) passes
+        // through to the response's coinInfo.
+        resolved = {
+          actualSymbol: resolvedSymbol.symbol,
+          coinInfo: resolvedSymbol.record,
+        };
       } else {
-        const symbol = symbolOrId.toUpperCase();
+        const symbol = resolvedSymbol.symbol;
         const [isSupported, coin] = yield* Effect.all(
           [
             convex.serverQuery(
