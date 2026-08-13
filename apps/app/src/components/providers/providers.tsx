@@ -1,6 +1,7 @@
 "use client";
 
 import { ClerkProvider, useUser } from "@clerk/nextjs";
+import { isRetryableQueryError } from "@/lib/effect/query-errors";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { LazyMotion, domMax } from "motion/react";
 import dynamic from "next/dynamic";
@@ -36,11 +37,12 @@ function ScopedQueryProvider({ children }: ProvidersProps) {
         queries: {
           staleTime: 5 * 60 * 1000,
           refetchOnWindowFocus: true,
-          // One retry is enough for transient blips; 4xx responses will
-          // not improve on retry, so skip them entirely.
+          // One retry is enough for transient blips; deterministic failures
+          // (4xx, decode errors, already-rate-limited) will not improve on
+          // retry, so skip them entirely. Typed on Effect error tags with a
+          // message-regex fallback for legacy untyped errors.
           retry: (failureCount, error) => {
-            const message = error instanceof Error ? error.message : "";
-            if (/\b4\d\d\b/.test(message)) return false;
+            if (!isRetryableQueryError(error)) return false;
             return failureCount < 1;
           },
           gcTime: ONE_DAY_MS,

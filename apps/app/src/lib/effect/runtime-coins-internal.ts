@@ -1,5 +1,6 @@
-import { Effect } from "effect"
+import { Effect, Tracer } from "effect"
 import { CoinsInternalApi } from "./coins-internal-api"
+import { sentryTracer } from "./sentry-tracer"
 
 /**
  * Client runtime boundary for `/api/internal/coins/*` Effects.
@@ -10,7 +11,10 @@ import { CoinsInternalApi } from "./coins-internal-api"
 function provideCoinsInternal<A, E>(
   effect: Effect.Effect<A, E, CoinsInternalApi>,
 ): Effect.Effect<A, E, never> {
-  return effect.pipe(Effect.provide(CoinsInternalApi.layer))
+  return effect.pipe(
+    Effect.provide(CoinsInternalApi.layer),
+    Effect.provideService(Tracer.Tracer, sentryTracer),
+  )
 }
 
 export function runPromise<A, E>(

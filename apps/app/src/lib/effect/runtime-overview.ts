@@ -1,5 +1,6 @@
-import { Effect } from "effect";
+import { Effect, Tracer } from "effect";
 import { OverviewApi } from "./overview-api";
+import { sentryTracer } from "./sentry-tracer";
 
 /**
  * Client runtime boundary for overview Effects.
@@ -10,7 +11,10 @@ import { OverviewApi } from "./overview-api";
 function provideOverview<A, E>(
   effect: Effect.Effect<A, E, OverviewApi>,
 ): Effect.Effect<A, E, never> {
-  return effect.pipe(Effect.provide(OverviewApi.layer));
+  return effect.pipe(
+    Effect.provide(OverviewApi.layer),
+    Effect.provideService(Tracer.Tracer, sentryTracer),
+  );
 }
 
 export function runPromise<A, E>(

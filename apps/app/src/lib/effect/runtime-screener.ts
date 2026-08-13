@@ -1,5 +1,6 @@
-import { Effect } from "effect";
+import { Effect, Tracer } from "effect";
 import { ScreenerApi } from "./screener-api";
+import { sentryTracer } from "./sentry-tracer";
 
 /**
  * Client runtime boundary for smart-screener Effects.
@@ -10,7 +11,10 @@ import { ScreenerApi } from "./screener-api";
 function provideScreener<A, E>(
   effect: Effect.Effect<A, E, ScreenerApi>,
 ): Effect.Effect<A, E, never> {
-  return effect.pipe(Effect.provide(ScreenerApi.layer));
+  return effect.pipe(
+    Effect.provide(ScreenerApi.layer),
+    Effect.provideService(Tracer.Tracer, sentryTracer),
+  );
 }
 
 export function runPromise<A, E>(

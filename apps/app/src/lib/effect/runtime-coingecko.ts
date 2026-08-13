@@ -1,5 +1,6 @@
-import { Effect } from "effect"
+import { Effect, Tracer } from "effect"
 import { CoinGeckoApi } from "./coingecko-api"
+import { sentryTracer } from "./sentry-tracer"
 
 /**
  * Client runtime boundary for CoinGecko Effects.
@@ -8,7 +9,10 @@ import { CoinGeckoApi } from "./coingecko-api"
  */
 
 function provideCoinGecko<A, E>(effect: Effect.Effect<A, E, CoinGeckoApi>): Effect.Effect<A, E, never> {
-  return effect.pipe(Effect.provide(CoinGeckoApi.layer))
+  return effect.pipe(
+    Effect.provide(CoinGeckoApi.layer),
+    Effect.provideService(Tracer.Tracer, sentryTracer),
+  )
 }
 
 export function runPromise<A, E>(
