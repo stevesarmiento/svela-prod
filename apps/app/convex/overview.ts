@@ -187,6 +187,12 @@ const overviewHoldingsGroupValidator = v.object({
   coinsWithHoldings: v.number(),
 });
 
+// NOTE: these v.* validators and the zod schemas below (MoverRowSchema etc.)
+// deliberately describe the same shapes twice. The v.* validators enforce the
+// Convex function boundary (args/returns); the zod schemas re-validate
+// snapshots after their JSON round-trip through the apiCache table, whose
+// `data` column is v.any() and thus invisible to Convex validators. Keep both
+// in sync — do not consolidate.
 const moverRowValidator = v.object({
   coingeckoId: v.string(),
   name: v.string(),
@@ -216,6 +222,8 @@ const moversSnapshotValidator = v.object({
   breadth: v.optional(v.union(breadthStatsValidator, v.null())),
 });
 
+// zod twin of moverRowValidator/moversSnapshotValidator above — validates
+// apiCache round-trips (v.any() storage), not function boundaries.
 const MoverRowSchema = z.object({
   coingeckoId: z.string(),
   name: z.string(),
@@ -309,6 +317,8 @@ const eventsSnapshotValidator = v.object({
   events: v.array(overviewEventValidator),
 });
 
+// zod twin of overviewEventValidator/eventsSnapshotValidator above — validates
+// apiCache round-trips (v.any() storage), not function boundaries.
 const OverviewEventSchema = z.object({
   id: z.string(),
   articleId: z.string().nullable(),

@@ -2,6 +2,15 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { type ActionCtx, internalAction } from "./_generated/server";
 import { fetchUpstreamJson } from "./_lib/upstreamFetch";
+import {
+  coinglassEnvelopeSchema,
+  coinglassHistoryPointSchema,
+  coinglassLiquidationPointSchema,
+  coinglassOpenInterestPointSchema,
+  coinglassTakerBuySellExchangeRowSchema,
+  coinglassTakerBuySellSnapshotSchema,
+} from "./_lib/upstream/coinglass";
+import { parseUpstream } from "./_lib/upstream/parse";
 
 function getCoinGlassApiKey(): string {
   const key = process.env.CG_API_KEY || process.env["CG-API-KEY"];
@@ -30,34 +39,6 @@ function toFiniteNumberOrNull(value: unknown): number | null {
   }
   return null;
 }
-
-type CoinglassHistoryPoint = {
-  time: number;
-  taker_buy_volume_usd: string | number;
-  taker_sell_volume_usd: string | number;
-};
-
-type CoinglassOpenInterestPoint = {
-  time: number;
-  open: string | number;
-  high: string | number;
-  low: string | number;
-  close: string | number;
-};
-
-type CoinglassLiquidationPoint = {
-  time: number;
-  aggregated_long_liquidation_usd: string | number;
-  aggregated_short_liquidation_usd: string | number;
-};
-
-type CoinglassTakerBuySellExchange = {
-  exchange: string;
-  buy_ratio: string | number;
-  sell_ratio: string | number;
-  buy_vol_usd: string | number;
-  sell_vol_usd: string | number;
-};
 
 async function fetchSpotTakerBuySellVolumeHistory(args: {
   apiKey: string;
@@ -94,27 +75,30 @@ async function fetchSpotTakerBuySellVolumeHistory(args: {
     maxAttempts: 2,
   });
   if (!raw || typeof raw !== "object") return [];
-  const record = raw as Record<string, unknown>;
-  if (record.code !== "0") {
-    const msg = typeof record.msg === "string" ? record.msg : "Unknown error";
-    throw new Error(`CoinGlass API error: ${msg}`);
+  const envelope = parseUpstream({
+    source: "coinglass",
+    schema: coinglassEnvelopeSchema,
+    value: raw,
+  });
+  if (envelope.code !== "0") {
+    throw new Error(`CoinGlass API error: ${envelope.msg ?? "Unknown error"}`);
   }
 
-  const data = record.data;
+  const data = envelope.data;
   if (!Array.isArray(data)) return [];
-  const points = data as Array<CoinglassHistoryPoint>;
-
   const out: Array<{
     timestamp: number;
     takerBuyVolumeUsd: number;
     takerSellVolumeUsd: number;
   }> = [];
-  for (const point of points) {
-    if (!point || typeof point.time !== "number") continue;
+  for (const rawPoint of data) {
+    // Per-point skip: one malformed point must not discard the batch.
+    const point = coinglassHistoryPointSchema.safeParse(rawPoint);
+    if (!point.success) continue;
     out.push({
-      timestamp: point.time,
-      takerBuyVolumeUsd: toNumber(point.taker_buy_volume_usd),
-      takerSellVolumeUsd: toNumber(point.taker_sell_volume_usd),
+      timestamp: point.data.time,
+      takerBuyVolumeUsd: toNumber(point.data.taker_buy_volume_usd),
+      takerSellVolumeUsd: toNumber(point.data.taker_sell_volume_usd),
     });
   }
 
@@ -156,27 +140,30 @@ async function fetchFuturesTakerBuySellVolumeHistory(args: {
     maxAttempts: 2,
   });
   if (!raw || typeof raw !== "object") return [];
-  const record = raw as Record<string, unknown>;
-  if (record.code !== "0") {
-    const msg = typeof record.msg === "string" ? record.msg : "Unknown error";
-    throw new Error(`CoinGlass API error: ${msg}`);
+  const envelope = parseUpstream({
+    source: "coinglass",
+    schema: coinglassEnvelopeSchema,
+    value: raw,
+  });
+  if (envelope.code !== "0") {
+    throw new Error(`CoinGlass API error: ${envelope.msg ?? "Unknown error"}`);
   }
 
-  const data = record.data;
+  const data = envelope.data;
   if (!Array.isArray(data)) return [];
-  const points = data as Array<CoinglassHistoryPoint>;
-
   const out: Array<{
     timestamp: number;
     takerBuyVolumeUsd: number;
     takerSellVolumeUsd: number;
   }> = [];
-  for (const point of points) {
-    if (!point || typeof point.time !== "number") continue;
+  for (const rawPoint of data) {
+    // Per-point skip: one malformed point must not discard the batch.
+    const point = coinglassHistoryPointSchema.safeParse(rawPoint);
+    if (!point.success) continue;
     out.push({
-      timestamp: point.time,
-      takerBuyVolumeUsd: toNumber(point.taker_buy_volume_usd),
-      takerSellVolumeUsd: toNumber(point.taker_sell_volume_usd),
+      timestamp: point.data.time,
+      takerBuyVolumeUsd: toNumber(point.data.taker_buy_volume_usd),
+      takerSellVolumeUsd: toNumber(point.data.taker_sell_volume_usd),
     });
   }
 
@@ -220,16 +207,17 @@ async function fetchOpenInterestHistory(args: {
     maxAttempts: 2,
   });
   if (!raw || typeof raw !== "object") return [];
-  const record = raw as Record<string, unknown>;
-  if (record.code !== "0") {
-    const msg = typeof record.msg === "string" ? record.msg : "Unknown error";
-    throw new Error(`CoinGlass API error: ${msg}`);
+  const envelope = parseUpstream({
+    source: "coinglass",
+    schema: coinglassEnvelopeSchema,
+    value: raw,
+  });
+  if (envelope.code !== "0") {
+    throw new Error(`CoinGlass API error: ${envelope.msg ?? "Unknown error"}`);
   }
 
-  const data = record.data;
+  const data = envelope.data;
   if (!Array.isArray(data)) return [];
-  const points = data as Array<CoinglassOpenInterestPoint>;
-
   const out: Array<{
     timestamp: number;
     open: number;
@@ -237,14 +225,16 @@ async function fetchOpenInterestHistory(args: {
     low: number;
     close: number;
   }> = [];
-  for (const point of points) {
-    if (!point || typeof point.time !== "number") continue;
+  for (const rawPoint of data) {
+    // Per-point skip: one malformed point must not discard the batch.
+    const point = coinglassOpenInterestPointSchema.safeParse(rawPoint);
+    if (!point.success) continue;
     out.push({
-      timestamp: point.time,
-      open: toNumber(point.open),
-      high: toNumber(point.high),
-      low: toNumber(point.low),
-      close: toNumber(point.close),
+      timestamp: point.data.time,
+      open: toNumber(point.data.open),
+      high: toNumber(point.data.high),
+      low: toNumber(point.data.low),
+      close: toNumber(point.data.close),
     });
   }
   return out;
@@ -286,28 +276,35 @@ async function fetchLiquidationHistory(args: {
     maxAttempts: 2,
   });
   if (!raw || typeof raw !== "object") return [];
-  const record = raw as Record<string, unknown>;
-  if (record.code !== "0") {
-    const msg = typeof record.msg === "string" ? record.msg : "Unknown error";
-    throw new Error(`CoinGlass API error: ${msg}`);
+  const envelope = parseUpstream({
+    source: "coinglass",
+    schema: coinglassEnvelopeSchema,
+    value: raw,
+  });
+  if (envelope.code !== "0") {
+    throw new Error(`CoinGlass API error: ${envelope.msg ?? "Unknown error"}`);
   }
 
-  const data = record.data;
+  const data = envelope.data;
   if (!Array.isArray(data)) return [];
-  const points = data as Array<CoinglassLiquidationPoint>;
-
   const out: Array<{
     timestamp: number;
     longLiquidations: number;
     shortLiquidations: number;
     totalLiquidations: number;
   }> = [];
-  for (const point of points) {
-    if (!point || typeof point.time !== "number") continue;
-    const longLiquidations = toNumber(point.aggregated_long_liquidation_usd);
-    const shortLiquidations = toNumber(point.aggregated_short_liquidation_usd);
+  for (const rawPoint of data) {
+    // Per-point skip: one malformed point must not discard the batch.
+    const point = coinglassLiquidationPointSchema.safeParse(rawPoint);
+    if (!point.success) continue;
+    const longLiquidations = toNumber(
+      point.data.aggregated_long_liquidation_usd,
+    );
+    const shortLiquidations = toNumber(
+      point.data.aggregated_short_liquidation_usd,
+    );
     out.push({
-      timestamp: point.time,
+      timestamp: point.data.time,
       longLiquidations,
       shortLiquidations,
       totalLiquidations: longLiquidations + shortLiquidations,
@@ -357,15 +354,21 @@ async function fetchTakerBuySellExchangeList(args: {
     maxAttempts: 2,
   });
   if (!raw || typeof raw !== "object") return null;
-  const record = raw as Record<string, unknown>;
-  if (record.code !== "0") {
-    const msg = typeof record.msg === "string" ? record.msg : "Unknown error";
-    throw new Error(`CoinGlass API error: ${msg}`);
+  const envelope = parseUpstream({
+    source: "coinglass",
+    schema: coinglassEnvelopeSchema,
+    value: raw,
+  });
+  if (envelope.code !== "0") {
+    throw new Error(`CoinGlass API error: ${envelope.msg ?? "Unknown error"}`);
   }
 
-  const data = record.data;
-  if (!data || typeof data !== "object") return null;
-  const d = data as Record<string, unknown>;
+  // Matches the old "data must be an object" check; field values stay loose.
+  const parsedData = coinglassTakerBuySellSnapshotSchema.safeParse(
+    envelope.data,
+  );
+  if (!parsedData.success) return null;
+  const d = parsedData.data;
 
   // Skip the write when every core field is unparsable: persisting zeros
   // would make "no data" indistinguishable from a real all-zero snapshot.
@@ -378,9 +381,30 @@ async function fetchTakerBuySellExchangeList(args: {
   const sellRatio = toNumber(d.sell_ratio);
   const buyVolumeUsd = toNumber(d.buy_vol_usd);
   const sellVolumeUsd = toNumber(d.sell_vol_usd);
-  const exchangesRaw = Array.isArray(d.exchange_list)
-    ? (d.exchange_list as Array<CoinglassTakerBuySellExchange>)
-    : [];
+
+  const exchanges: Array<{
+    exchange: string;
+    buyRatio: number;
+    sellRatio: number;
+    buyVolumeUsd: number;
+    sellVolumeUsd: number;
+    totalVolumeUsd: number;
+  }> = [];
+  for (const rawRow of d.exchange_list ?? []) {
+    // Per-row skip: one malformed exchange row must not discard the snapshot.
+    const row = coinglassTakerBuySellExchangeRowSchema.safeParse(rawRow);
+    if (!row.success) continue;
+    const exBuyVol = toNumber(row.data.buy_vol_usd);
+    const exSellVol = toNumber(row.data.sell_vol_usd);
+    exchanges.push({
+      exchange: row.data.exchange,
+      buyRatio: toNumber(row.data.buy_ratio),
+      sellRatio: toNumber(row.data.sell_ratio),
+      buyVolumeUsd: exBuyVol,
+      sellVolumeUsd: exSellVol,
+      totalVolumeUsd: exBuyVol + exSellVol,
+    });
+  }
 
   return {
     overall: {
@@ -390,18 +414,7 @@ async function fetchTakerBuySellExchangeList(args: {
       sellVolumeUsd,
       totalVolumeUsd: buyVolumeUsd + sellVolumeUsd,
     },
-    exchanges: exchangesRaw.map((ex) => {
-      const exBuyVol = toNumber(ex.buy_vol_usd);
-      const exSellVol = toNumber(ex.sell_vol_usd);
-      return {
-        exchange: ex.exchange,
-        buyRatio: toNumber(ex.buy_ratio),
-        sellRatio: toNumber(ex.sell_ratio),
-        buyVolumeUsd: exBuyVol,
-        sellVolumeUsd: exSellVol,
-        totalVolumeUsd: exBuyVol + exSellVol,
-      };
-    }),
+    exchanges,
   };
 }
 
