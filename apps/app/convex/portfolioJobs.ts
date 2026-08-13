@@ -3,6 +3,13 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { paginationOptsValidator } from "convex/server";
 import type { Id } from "./_generated/dataModel";
+import { fetchUpstreamJson, UpstreamHttpError } from "./_lib/upstreamFetch";
+import { parseBirdeyeTokenOverviewResponse } from "./_lib/upstream/birdeye";
+import {
+  heliusDasAssetSchema,
+  parseHeliusBalancesResponse,
+  parseHeliusDasAssetsByOwnerResponse,
+} from "./_lib/upstream/helius";
 
 interface PortfolioWalletForSync {
   _id: Id<"portfolioWallets">;
@@ -46,60 +53,6 @@ function isBase58Address(value: string): boolean {
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value);
 }
 
-type HeliusBalancesResponse = {
-  balances: Array<{
-    mint: string;
-  }>;
-  pagination?: { hasMore: boolean };
-};
-
-type HeliusDasAsset = {
-  interface?: string;
-  id?: string;
-  token_info?: {
-    price_info?: {
-      total_price?: number;
-      currency?: string;
-    };
-  };
-};
-
-type HeliusDasAssetsByOwnerResult = {
-  items: Array<HeliusDasAsset>;
-  nativeBalance?: {
-    lamports?: number;
-    total_price?: number;
-  };
-};
-
-async function fetchWithRetry(args: {
-  url: string;
-  init?: RequestInit;
-  maxAttempts: number;
-  shouldRetry: (response: Response, bodyText: string) => boolean;
-}): Promise<{ response: Response; bodyText: string }> {
-  let lastBodyText = "";
-  for (let attempt = 1; attempt <= args.maxAttempts; attempt++) {
-    // react-doctor-disable-next-line react-doctor/no-fetch-response-used-without-status-check -- body read feeds shouldRetry/error messages; ok is checked in the helper and by every caller
-    const response = await fetch(args.url, args.init);
-    const bodyText = await response.text().catch(() => "");
-    lastBodyText = bodyText;
-
-    if (response.ok) return { response, bodyText };
-
-    if (attempt >= args.maxAttempts) return { response, bodyText };
-
-    if (!args.shouldRetry(response, bodyText)) return { response, bodyText };
-
-    // Backoff: 250ms, 750ms, 1750ms ...
-    const backoffMs = 250 + (attempt - 1) * (attempt - 1) * 500;
-    await new Promise((resolve) => setTimeout(resolve, backoffMs));
-  }
-
-  // Should be unreachable.
-  throw new Error(`Fetch failed after retries: ${lastBodyText.slice(0, 200)}`);
-}
-
 async function fetchHeliusDasWalletTopMints(args: {
   walletAddress: string;
   heliusApiKey: string;
@@ -124,27 +77,26 @@ async function fetchHeliusDasWalletTopMints(args: {
     },
   };
 
-  const { response, bodyText } = await fetchWithRetry({
-    url: url.toString(),
-    init: {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(payload),
-    },
-    maxAttempts: 3,
-    shouldRetry: (res) => res.status === 429 || res.status >= 500,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Helius DAS getAssetsByOwner failed (${response.status}): ${bodyText.slice(0, 200)}`);
-  }
-
-  const json = JSON.parse(bodyText) as { result?: HeliusDasAssetsByOwnerResult };
-  const result = json?.result;
-  const items = Array.isArray(result?.items) ? result.items : [];
+  const json = parseHeliusDasAssetsByOwnerResponse(
+    await fetchUpstreamJson(url.toString(), {
+      source: "helius",
+      init: {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(payload),
+      },
+      maxAttempts: 3,
+    }),
+  );
+  const result = json.result;
+  const items = result?.items ?? [];
 
   const scored: Array<{ mint: string; score: number }> = [];
-  for (const item of items) {
+  for (const rawItem of items) {
+    // Per-asset skip: one malformed asset must not discard the wallet scan.
+    const parsed = heliusDasAssetSchema.safeParse(rawItem);
+    if (!parsed.success) continue;
+    const item = parsed.data;
     if (item.interface !== "FungibleToken") continue;
     const mint = item.id?.trim();
     if (!mint || !isBase58Address(mint)) continue;
@@ -185,23 +137,28 @@ async function fetchHeliusWalletBalancesTop100(args: {
   url.searchParams.set("showNative", "true");
   url.searchParams.set("showZeroBalance", "false");
 
-  const { response, bodyText } = await fetchWithRetry({
-    url: url.toString(),
-    init: {
-      method: "GET",
-      headers: {
-        "X-Api-Key": args.heliusApiKey,
-        Accept: "application/json",
+  let payload: unknown;
+  try {
+    payload = await fetchUpstreamJson(url.toString(), {
+      source: "helius",
+      init: {
+        method: "GET",
+        headers: {
+          "X-Api-Key": args.heliusApiKey,
+          Accept: "application/json",
+        },
       },
-    },
-    maxAttempts: 3,
-    shouldRetry: (res) => res.status === 429 || res.status >= 500,
-  });
-
-  if (!response.ok) {
+      maxAttempts: 3,
+    });
+  } catch (error) {
     // In practice, we've seen the Wallet API intermittently 500 from Convex actions.
     // Fall back to the DAS API (getAssetsByOwner) which is often more stable.
-    if (response.status === 429 || response.status >= 500) {
+    if (
+      error instanceof UpstreamHttpError &&
+      (error.status === 429 ||
+        (error.status ?? 0) >= 500 ||
+        error.kind !== "http")
+    ) {
       return await fetchHeliusDasWalletTopMints({
         walletAddress: args.walletAddress,
         heliusApiKey: args.heliusApiKey,
@@ -209,25 +166,18 @@ async function fetchHeliusWalletBalancesTop100(args: {
       });
     }
 
-    throw new Error(`Helius balances failed (${response.status}): ${bodyText.slice(0, 200)}`);
+    throw error;
   }
-
-  const data = JSON.parse(bodyText) as HeliusBalancesResponse;
-  const mints = Array.isArray(data?.balances) ? data.balances.map((b) => b.mint) : [];
+  // Deliberately NOT lenient: skipping malformed balance rows would feed
+  // partial data into wallet reconciliation (which deletes coins); a
+  // validation throw keeps the old crash-the-sync blast radius.
+  const data = parseHeliusBalancesResponse(payload);
+  const mints = (data.balances ?? []).map((b) => b.mint);
   return mints.flatMap((m) => {
     const trimmed = m.trim();
     return trimmed.length > 0 && isBase58Address(trimmed) ? [trimmed] : [];
   });
 }
-
-type BirdeyeTokenOverviewResponse = {
-  success?: boolean;
-  data?: {
-    extensions?: {
-      coingeckoId?: string;
-    };
-  };
-};
 
 async function fetchBirdeyeCoingeckoIdByMint(args: {
   mint: string;
@@ -237,18 +187,18 @@ async function fetchBirdeyeCoingeckoIdByMint(args: {
   url.searchParams.set("chain", "solana");
   url.searchParams.set("address", args.mint);
 
-  const response = await fetch(url.toString(), {
-    method: "GET",
-    headers: { "X-API-KEY": args.birdeyeApiKey, Accept: "application/json" },
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Birdeye token_overview failed (${response.status}): ${body.slice(0, 200)}`);
-  }
-
-  const json = (await response.json()) as BirdeyeTokenOverviewResponse;
-  const id = json?.data?.extensions?.coingeckoId?.trim();
+  const json = parseBirdeyeTokenOverviewResponse(
+    await fetchUpstreamJson(url.toString(), {
+      source: "birdeye",
+      init: {
+        method: "GET",
+        headers: { "X-API-KEY": args.birdeyeApiKey, Accept: "application/json" },
+      },
+      maxAttempts: 3,
+      timeoutMs: 10_000,
+    }),
+  );
+  const id = json.data?.extensions?.coingeckoId?.trim();
   if (!id) return null;
   return id;
 }

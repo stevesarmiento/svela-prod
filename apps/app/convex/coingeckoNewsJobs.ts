@@ -5,47 +5,18 @@ import { z } from "zod";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
+import {
+  fetchCoinGeckoJson,
+  getCoinGeckoApiKey,
+} from "./_lib/coingeckoFetch";
+import { coinGeckoNewsRowSchema } from "./_lib/upstream/coingecko";
 import { fetchArticleText } from "./newsArticleText";
-
-function getCoinGeckoApiKey(): string {
-  const key = process.env.X_CG_PRO_API_KEY;
-  if (!key) throw new Error("Missing X_CG_PRO_API_KEY in Convex environment");
-  return key;
-}
 
 function getGemini() {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
   return createGoogleGenerativeAI({ apiKey });
 }
-
-async function fetchJson(endpoint: string, apiKey: string): Promise<unknown> {
-  const response = await fetch(endpoint, {
-    headers: {
-      "x-cg-pro-api-key": apiKey,
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(
-      `CoinGecko request failed (${response.status}): ${body.slice(0, 200)}`,
-    );
-  }
-
-  return await response.json();
-}
-
-type CoinGeckoNewsRow = {
-  title?: string;
-  url?: string;
-  image?: string;
-  author?: string;
-  posted_at?: string;
-  type?: string;
-  source_name?: string;
-};
 
 type NewsItem = {
   url: string;
@@ -63,39 +34,36 @@ function toPostedAtMs(postedAtIso: string | undefined | null): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function mapNewsRows(rows: ReadonlyArray<CoinGeckoNewsRow>): Array<NewsItem> {
+function mapNewsRows(rows: ReadonlyArray<unknown>): Array<NewsItem> {
   const now = Date.now();
-  const mapped = rows
-    .map((row) => {
-      const title = typeof row.title === "string" ? row.title.trim() : "";
-      const url = typeof row.url === "string" ? row.url.trim() : "";
-      const postedAtIso =
-        typeof row.posted_at === "string" ? row.posted_at : undefined;
-      const postedAtMs = toPostedAtMs(postedAtIso) ?? now;
-      const type = typeof row.type === "string" ? row.type : "news";
-      if (!title || !url) return null;
-      if (type !== "news") return null;
+  const mapped: Array<NewsItem> = [];
+  for (const rawRow of rows) {
+    // Wrong-typed fields degrade to undefined inside the schema; only a
+    // non-object row fails outright and is skipped.
+    const parsed = coinGeckoNewsRowSchema.safeParse(rawRow);
+    if (!parsed.success) continue;
+    const row = parsed.data;
 
-      return {
-        url,
-        title,
-        postedAtIso,
-        postedAtMs,
-        sourceName:
-          typeof row.source_name === "string" ? row.source_name : undefined,
-        author:
-          typeof row.author === "string" && row.author.length > 0
-            ? row.author
-            : undefined,
-        image:
-          typeof row.image === "string" && row.image.length > 0
-            ? row.image
-            : undefined,
-      } satisfies NewsItem;
-    })
-    .filter((x) => x !== null);
+    const title = row.title?.trim() ?? "";
+    const url = row.url?.trim() ?? "";
+    const postedAtIso = row.posted_at;
+    const postedAtMs = toPostedAtMs(postedAtIso) ?? now;
+    const type = row.type ?? "news";
+    if (!title || !url) continue;
+    if (type !== "news") continue;
 
-  return mapped as Array<NewsItem>;
+    mapped.push({
+      url,
+      title,
+      postedAtIso,
+      postedAtMs,
+      sourceName: row.source_name,
+      author: row.author && row.author.length > 0 ? row.author : undefined,
+      image: row.image && row.image.length > 0 ? row.image : undefined,
+    } satisfies NewsItem);
+  }
+
+  return mapped;
 }
 
 const SENTIMENT_BATCH_LIMIT = 20;
@@ -123,9 +91,9 @@ async function refreshNewsForCoin(args: {
   );
   url.searchParams.set("language", "en");
 
-  const data = await fetchJson(url.toString(), apiKey);
+  const data = await fetchCoinGeckoJson(url.toString(), apiKey);
   if (!Array.isArray(data)) return [];
-  return mapNewsRows(data as CoinGeckoNewsRow[]);
+  return mapNewsRows(data);
 }
 
 const JOB_KEY_REFRESH_NEWS = "coingecko_refresh_news";
