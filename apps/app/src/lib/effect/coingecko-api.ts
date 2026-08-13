@@ -365,6 +365,45 @@ const CoinGeckoQuotesApiResponseSchema = Schema.Struct({
   status: Schema.optional(CoinGeckoQuotesStatusSchema),
 });
 
+export interface CoinGeckoMarketRow {
+  id: string;
+  name: string;
+  symbol: string;
+  image?: string | null;
+  current_price?: number | null;
+  market_cap?: number | null;
+  market_cap_rank?: number | null;
+  total_volume?: number | null;
+  price_change_percentage_24h?: number | null;
+  fully_diluted_valuation?: number | null;
+  last_updated?: string | null;
+}
+
+export interface CoinGeckoMarketsApiResponse {
+  data: ReadonlyArray<CoinGeckoMarketRow>;
+}
+
+// Permissive union of the fields consumers actually read (screener search
+// merge + analysis header) — identity fields required, the rest may be
+// absent or null.
+const CoinGeckoMarketRowSchema = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  symbol: Schema.String,
+  image: Schema.optional(Schema.NullOr(Schema.String)),
+  current_price: Schema.optional(Schema.NullOr(Schema.Number)),
+  market_cap: Schema.optional(Schema.NullOr(Schema.Number)),
+  market_cap_rank: Schema.optional(Schema.NullOr(Schema.Number)),
+  total_volume: Schema.optional(Schema.NullOr(Schema.Number)),
+  price_change_percentage_24h: Schema.optional(Schema.NullOr(Schema.Number)),
+  fully_diluted_valuation: Schema.optional(Schema.NullOr(Schema.Number)),
+  last_updated: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+const CoinGeckoMarketsApiResponseSchema = Schema.Struct({
+  data: Schema.Array(CoinGeckoMarketRowSchema),
+});
+
 // biome-ignore lint/complexity/noStaticOnlyClass: Effect v4 service class — the class is the Context tag; `layer` must be static
 export class CoinGeckoApi extends Context.Service<CoinGeckoApi>()(
   "CoinGeckoApi",
@@ -481,11 +520,32 @@ export class CoinGeckoApi extends Context.Service<CoinGeckoApi>()(
         });
       });
 
+      const getMarkets = Effect.fn("CoinGeckoApi.getMarkets")(
+        function* (args: {
+          ids: ReadonlyArray<string>;
+          vsCurrency?: string;
+        }) {
+          const searchParams = new URLSearchParams();
+          searchParams.set("ids", args.ids.join(","));
+          if (args.vsCurrency)
+            searchParams.set("vs_currency", args.vsCurrency);
+
+          return yield* requestJson({
+            endpoint: `/api/coingecko/markets?${searchParams.toString()}`,
+            decode: (data) =>
+              Schema.decodeUnknownSync(CoinGeckoMarketsApiResponseSchema)(
+                data,
+              ),
+          });
+        },
+      );
+
       return {
         getMarketChart,
         getGlobalMarketCapChart,
         getOHLC,
         getQuotes,
+        getMarkets,
       } as const;
     }),
   },

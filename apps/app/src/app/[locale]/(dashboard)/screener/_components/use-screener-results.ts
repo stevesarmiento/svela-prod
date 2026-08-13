@@ -4,11 +4,10 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { useScreenerTopMarkets } from "@/hooks/use-screener-top-markets";
+import { ScreenerApi } from "@/lib/effect/screener-api";
+import { runPromise as runScreenerPromise } from "@/lib/effect/runtime-screener";
 import { toCoinMarketData } from "@/lib/screener/coin-market-data";
-import {
-  type SmartScreenerScreenResponse,
-  SmartScreenerScreenResponseSchema,
-} from "@/lib/smart-screener/screen-api";
+import type { SmartScreenerScreenResponse } from "@/lib/smart-screener/screen-api";
 import type { ScreeningDsl } from "@/lib/smart-screener/screening-dsl";
 import type { CoinMarketData } from "@/types/coins";
 import { useScreenerSearchResults } from "./use-screener-search-results";
@@ -55,34 +54,18 @@ export function screenerExecuteQueryKey(dsl: ScreeningDsl) {
   return ["screener", "execute", canonicalDslKey(dsl)] as const;
 }
 
+/**
+ * Thin wrapper over `ScreenerApi.screen` — rejects with the tagged Effect
+ * error (`_tag` readable; `message` carries the server's failure copy).
+ */
 export async function executeScreeningDslRequest(
   dsl: ScreeningDsl,
   signal?: AbortSignal,
 ): Promise<SmartScreenerScreenResponse> {
-  const response = await fetch("/api/smart-screener/screen", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    signal,
-    body: JSON.stringify({ dsl, surface: "screener" }),
-  });
-
-  // The screen API returns structured `ok: false` payloads with 200 only;
-  // a non-2xx status is a transport/infra failure (rate limit, 500, …).
-  if (!response.ok) {
-    throw new Error(`Screen request failed (${response.status})`);
-  }
-
-  const json: unknown = await response.json().catch(() => null);
-  const parsed = SmartScreenerScreenResponseSchema.safeParse(json);
-  if (!parsed.success) {
-    throw new Error(`Screen request failed (${response.status})`);
-  }
-  if (!parsed.data.ok) {
-    throw new Error(
-      parsed.data.error?.message ?? parsed.data.userMessage ?? "Screen failed",
-    );
-  }
-  return parsed.data;
+  return await runScreenerPromise(
+    ScreenerApi.use((api) => api.screen({ dsl, surface: "screener" })),
+    { signal },
+  );
 }
 
 export interface ScreenerResults {

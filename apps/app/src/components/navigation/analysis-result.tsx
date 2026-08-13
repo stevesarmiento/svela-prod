@@ -4,11 +4,11 @@ import React from 'react'
 import ReactMarkdown from 'react-markdown'
 
 interface MarketData {
-  name?: string
-  current_price?: number
-  price_change_percentage_24h?: number
-  market_cap?: number
-  total_volume?: number
+  name?: string | null
+  current_price?: number | null
+  price_change_percentage_24h?: number | null
+  market_cap?: number | null
+  total_volume?: number | null
 }
 
 interface TokenData {

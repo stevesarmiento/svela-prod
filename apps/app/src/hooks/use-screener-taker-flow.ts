@@ -3,6 +3,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
+import { runPromise as runScreenerPromise } from "@/lib/effect/runtime-screener";
+import { ScreenerApi } from "@/lib/effect/screener-api";
+
 export interface TakerFlowMetrics {
   buyRatio: number;
   sellRatio: number;
@@ -61,16 +64,11 @@ export function useScreenerTakerFlow(args: {
 
   const query = useQuery({
     queryKey,
-    queryFn: async ({ signal }): Promise<TakerFlowResponse> => {
-      const response = await fetch("/api/smart-screener/taker-metrics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal,
-        body: JSON.stringify({ coins, range: "24h" }),
-      });
-      if (!response.ok) throw new Error(`Taker flow error: ${response.status}`);
-      return (await response.json()) as TakerFlowResponse;
-    },
+    queryFn: async ({ signal }): Promise<TakerFlowResponse> =>
+      await runScreenerPromise(
+        ScreenerApi.use((api) => api.takerMetrics({ coins, range: "24h" })),
+        { signal },
+      ),
     enabled: (args.enabled ?? true) && coins.length > 0,
     staleTime: 10 * 60 * 1000,
     refetchInterval: 15 * 60 * 1000,

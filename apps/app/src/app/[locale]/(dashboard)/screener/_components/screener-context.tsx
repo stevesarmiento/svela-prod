@@ -1,16 +1,16 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import { Effect } from "effect";
 import * as React from "react";
 
 import {
   type TakerFlowMetrics,
   useScreenerTakerFlow,
 } from "@/hooks/use-screener-taker-flow";
-import {
-  type SmartScreenerScreenResponse,
-  SmartScreenerScreenResponseSchema,
-} from "@/lib/smart-screener/screen-api";
+import { runPromise as runScreenerPromise } from "@/lib/effect/runtime-screener";
+import { ScreenerApi, screenFailedResponse } from "@/lib/effect/screener-api";
+import type { SmartScreenerScreenResponse } from "@/lib/smart-screener/screen-api";
 import {
   type ScreenerResults,
   screenerExecuteQueryKey,
@@ -98,32 +98,44 @@ export function ScreenerProvider({ children }: { children: React.ReactNode }) {
 
       setInterpretStatus("interpreting");
       try {
-        const response = await fetch("/api/smart-screener/screen", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: abortController.signal,
-          body: JSON.stringify({ text: trimmed, surface: "screener" }),
-        });
+        const data = await runScreenerPromise(
+          ScreenerApi.use((api) =>
+            api.screen({ text: trimmed, surface: "screener" }),
+          ).pipe(
+            Effect.catchTags({
+              // Structured `ok: false` — surface the payload so the dialog
+              // can render the server's `userMessage` inline.
+              ScreenerScreenFailedError: (error) => {
+                console.error("smart-screener interpret rejected:", error);
+                return Effect.succeed(screenFailedResponse(error));
+              },
+              // Transport/infra failures (rate limit, 500, malformed body).
+              HttpTransportError: (error) => {
+                console.error("smart-screener interpret failed:", error);
+                return Effect.succeed(null);
+              },
+              HttpStatusError: (error) => {
+                console.error("smart-screener interpret failed:", error);
+                return Effect.succeed(null);
+              },
+              HttpDecodeError: (error) => {
+                console.error("smart-screener interpret failed:", error);
+                return Effect.succeed(null);
+              },
+            }),
+          ),
+          { signal: abortController.signal },
+        );
 
-        // The screen API returns structured `ok: false` payloads with 200 only;
-        // a non-2xx status is a transport/infra failure (rate limit, 500, …).
-        if (!response.ok) return null;
-
-        const json: unknown = await response.json().catch(() => null);
-        const parsed = SmartScreenerScreenResponseSchema.safeParse(json);
-        if (!parsed.success) return null;
-
-        const data = parsed.data;
-        if (data.ok) {
+        if (data?.ok) {
           // Seed BEFORE flipping URL state so the execute query mounts warm
           // (applyScreen resets sort/q, so the key is the DSL's own sort).
           queryClient.setQueryData(screenerExecuteQueryKey(data.dsl), data);
           applyScreen(data.dsl);
         }
         return data;
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError")
-          return null;
+      } catch {
+        // Interruption (cancel-previous abort / unmount) — silent null.
         return null;
       } finally {
         setInterpretStatus("idle");
@@ -131,6 +143,13 @@ export function ScreenerProvider({ children }: { children: React.ReactNode }) {
     },
     [applyScreen, queryClient],
   );
+
+  // Cancel any in-flight interpretation when the provider unmounts.
+  React.useEffect(() => {
+    return () => {
+      interpretAbortRef.current?.abort();
+    };
+  }, []);
 
   const interpret = React.useMemo<ScreenerInterpret>(
     () => ({ status: interpretStatus, run }),

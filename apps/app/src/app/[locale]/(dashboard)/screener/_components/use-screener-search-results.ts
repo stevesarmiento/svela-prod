@@ -1,63 +1,27 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
+import { Effect } from "effect";
+
+import { useDebounce } from "@/hooks/use-debounce";
+import {
+  CoinGeckoApi,
+  type CoinGeckoMarketRow,
+} from "@/lib/effect/coingecko-api";
+import {
+  type CoinSummary,
+  CoinsInternalApi,
+} from "@/lib/effect/coins-internal-api";
+import { runPromise as runSearchPromise } from "@/lib/effect/runtime-search";
 import { toCoinMarketData } from "@/lib/screener/coin-market-data";
 import type { CoinMarketData } from "@/types/coins";
-import { useQuery } from "@tanstack/react-query";
 
-interface CoinSearchResult {
-  coingeckoId: string;
-  name: string;
-  symbol: string;
-  logoUrl: string;
-}
-
-interface CoinGeckoMarketRow {
-  id: string;
-  name: string;
-  symbol: string;
-  image: string | null;
-  current_price: number | null;
-  market_cap: number | null;
-  market_cap_rank: number | null;
-  total_volume: number | null;
-  price_change_percentage_24h: number | null;
-}
-
-interface CoinGeckoMarketsResponse {
-  data: CoinGeckoMarketRow[];
-}
-
-function isCoinSearchResult(value: unknown): value is CoinSearchResult {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.coingeckoId === "string" &&
-    typeof record.name === "string" &&
-    typeof record.symbol === "string" &&
-    typeof record.logoUrl === "string"
-  );
-}
-
-function isCoinGeckoMarketRow(value: unknown): value is CoinGeckoMarketRow {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.id === "string" &&
-    typeof record.name === "string" &&
-    typeof record.symbol === "string"
-  );
-}
-
-function isCoinGeckoMarketsResponse(
-  value: unknown,
-): value is CoinGeckoMarketsResponse {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return Array.isArray(record.data) && record.data.every(isCoinGeckoMarketRow);
-}
+// Keystrokes settle for this long before a search request fires — the
+// debounced value is the query key, so intermediate strings never fetch.
+const SEARCH_DEBOUNCE_MS = 250;
 
 function searchResultToCoinMarketData(
-  result: CoinSearchResult,
+  result: CoinSummary,
   market: CoinGeckoMarketRow | null,
 ): CoinMarketData {
   // Null-preserving (see lib/screener/coin-market-data.ts): a coin without
@@ -75,75 +39,63 @@ function searchResultToCoinMarketData(
   });
 }
 
-async function fetchScreenerSearchResults(
-  query: string,
-  limit: number,
-): Promise<CoinMarketData[]> {
-  const trimmedQuery = query.trim();
-  if (!trimmedQuery) return [];
+function fetchScreenerSearchResults(query: string, limit: number) {
+  return Effect.gen(function* () {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) return [] as CoinMarketData[];
 
-  const searchResponse = await fetch(
-    `/api/internal/coins/search?query=${encodeURIComponent(trimmedQuery)}&limit=${limit}`,
-  );
-  if (!searchResponse.ok) {
-    throw new Error(`Search error: ${searchResponse.status}`);
-  }
+    const searchResults = yield* CoinsInternalApi.use((api) =>
+      api.search({ query: trimmedQuery, limit }),
+    );
+    if (searchResults.length === 0) return [] as CoinMarketData[];
 
-  const searchJson: unknown = await searchResponse.json();
-  if (!Array.isArray(searchJson) || !searchJson.every(isCoinSearchResult)) {
-    throw new Error("Invalid coin search response");
-  }
+    const markets = yield* CoinGeckoApi.use((api) =>
+      api.getMarkets({
+        ids: searchResults.map((coin) => coin.coingeckoId),
+        vsCurrency: "usd",
+      }),
+    );
 
-  if (searchJson.length === 0) return [];
+    const marketById = new Map(
+      markets.data.map((market) => [market.id, market] as const),
+    );
 
-  const ids = searchJson.map((coin) => coin.coingeckoId);
-  const marketsResponse = await fetch(
-    `/api/coingecko/markets?ids=${encodeURIComponent(ids.join(","))}&vs_currency=usd&include_24hr_change=true&include_24hr_vol=true&include_last_updated_at=true`,
-  );
-  if (!marketsResponse.ok) {
-    throw new Error(`Markets error: ${marketsResponse.status}`);
-  }
+    return searchResults
+      .map((result) =>
+        searchResultToCoinMarketData(
+          result,
+          marketById.get(result.coingeckoId) ?? null,
+        ),
+      )
+      .sort((a, b) => {
+        const marketCapA = a.quote.USD.market_cap ?? 0;
+        const marketCapB = b.quote.USD.market_cap ?? 0;
 
-  const marketsJson: unknown = await marketsResponse.json();
-  if (!isCoinGeckoMarketsResponse(marketsJson)) {
-    throw new Error("Invalid coin markets response");
-  }
+        if (marketCapA > 0 && marketCapB > 0) {
+          return marketCapB - marketCapA;
+        }
 
-  const marketById = new Map(
-    marketsJson.data.map((market) => [market.id, market] as const),
-  );
+        if (marketCapA > 0 && marketCapB === 0) return -1;
+        if (marketCapB > 0 && marketCapA === 0) return 1;
 
-  return searchJson
-    .map((result) =>
-      searchResultToCoinMarketData(
-        result,
-        marketById.get(result.coingeckoId) ?? null,
-      ),
-    )
-    .sort((a, b) => {
-      const marketCapA = a.quote.USD.market_cap ?? 0;
-      const marketCapB = b.quote.USD.market_cap ?? 0;
-
-      if (marketCapA > 0 && marketCapB > 0) {
-        return marketCapB - marketCapA;
-      }
-
-      if (marketCapA > 0 && marketCapB === 0) return -1;
-      if (marketCapB > 0 && marketCapA === 0) return 1;
-
-      const rankA = a.cmc_rank ?? Number.POSITIVE_INFINITY;
-      const rankB = b.cmc_rank ?? Number.POSITIVE_INFINITY;
-      return rankA - rankB;
-    });
+        const rankA = a.cmc_rank ?? Number.POSITIVE_INFINITY;
+        const rankB = b.cmc_rank ?? Number.POSITIVE_INFINITY;
+        return rankA - rankB;
+      });
+  });
 }
 
 export function useScreenerSearchResults(query: string, limit = 50) {
   const trimmedQuery = query.trim();
+  const debouncedQuery = useDebounce(trimmedQuery, SEARCH_DEBOUNCE_MS);
 
   const queryResult = useQuery({
-    queryKey: ["screener", "coin-search", trimmedQuery, limit],
-    queryFn: () => fetchScreenerSearchResults(trimmedQuery, limit),
-    enabled: trimmedQuery.length > 0,
+    queryKey: ["screener", "coin-search", debouncedQuery, limit],
+    queryFn: ({ signal }) =>
+      runSearchPromise(fetchScreenerSearchResults(debouncedQuery, limit), {
+        signal,
+      }),
+    enabled: debouncedQuery.length > 0,
     staleTime: 5 * 60 * 1000,
   });
 

@@ -3,6 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
+import { CoinsInternalApi } from "@/lib/effect/coins-internal-api";
+import { runPromise as runCoinsInternalPromise } from "@/lib/effect/runtime-coins-internal";
 import {
   type ScreenerMarketRowLike,
   toCoinMarketData,
@@ -10,18 +12,6 @@ import {
 import type { CoinMarketData } from "@/types/coins";
 
 export type ScreenerTopMarketRow = ScreenerMarketRowLike;
-
-function isScreenerTopMarketRow(value: unknown): value is ScreenerTopMarketRow {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-
-  return (
-    typeof record.coingeckoId === "string" &&
-    typeof record.symbol === "string" &&
-    typeof record.name === "string" &&
-    typeof record.image === "string"
-  );
-}
 
 function normalizeTopMarketsLimit(limit: number) {
   if (!Number.isFinite(limit)) return 500;
@@ -38,19 +28,14 @@ export function screenerTopMarketsQueryKey(limit = 500) {
 
 export async function fetchScreenerTopMarkets(
   limit = 500,
+  signal?: AbortSignal,
 ): Promise<ScreenerTopMarketRow[]> {
   const normalizedLimit = normalizeTopMarketsLimit(limit);
-  const response = await fetch(
-    `/api/internal/markets/top?limit=${encodeURIComponent(String(normalizedLimit))}`,
+  const rows = await runCoinsInternalPromise(
+    CoinsInternalApi.use((api) => api.topMarkets({ limit: normalizedLimit })),
+    { signal },
   );
-  if (!response.ok) throw new Error(`Top markets error: ${response.status}`);
-
-  const json: unknown = await response.json();
-  if (!Array.isArray(json) || !json.every(isScreenerTopMarketRow)) {
-    throw new Error("Invalid top markets response");
-  }
-
-  return json;
+  return [...rows];
 }
 
 export function useScreenerTopMarkets(limit = 500): {
@@ -63,7 +48,7 @@ export function useScreenerTopMarkets(limit = 500): {
 } {
   const query = useQuery({
     queryKey: screenerTopMarketsQueryKey(limit),
-    queryFn: async () => await fetchScreenerTopMarkets(limit),
+    queryFn: async ({ signal }) => await fetchScreenerTopMarkets(limit, signal),
     enabled: limit > 0,
     staleTime: 60 * 60 * 1000,
     refetchInterval: 60 * 60 * 1000,

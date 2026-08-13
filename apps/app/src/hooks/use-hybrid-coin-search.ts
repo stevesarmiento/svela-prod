@@ -3,41 +3,10 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCoinGeckoQuotesBulk } from "@/hooks/use-coingecko-quotes";
-
-interface CoinSearchResult {
-  coingeckoId: string;
-  name: string;
-  symbol: string;
-  logoUrl: string;
-}
-
-function isCoinSearchResult(value: unknown): value is CoinSearchResult {
-  if (typeof value !== "object" || value === null) return false;
-  const record = value as Record<string, unknown>;
-  return (
-    typeof record.coingeckoId === "string" &&
-    typeof record.name === "string" &&
-    typeof record.symbol === "string" &&
-    typeof record.logoUrl === "string"
-  );
-}
-
-// Interface for CoinGecko API pricing response
-interface CoinGeckoPricingData {
-  id: string;
-  name: string;
-  symbol: string;
-  market_cap_rank: number;
-  current_price: number;
-  price_change_percentage_24h: number;
-  price_change_percentage_1h_in_currency?: number;
-  price_change_percentage_7d_in_currency?: number;
-  price_change_percentage_30d_in_currency?: number;
-  market_cap: number;
-  total_volume: number;
-  image: string;
-  sparkline7d?: ReadonlyArray<number>;
-}
+import { CoinGeckoApi } from "@/lib/effect/coingecko-api";
+import { CoinsInternalApi, type CoinSummary } from "@/lib/effect/coins-internal-api";
+import { runPromise as runCoinsInternalPromise } from "@/lib/effect/runtime-coins-internal";
+import { runPromise as runCoinGeckoPromise } from "@/lib/effect/runtime-coingecko";
 
 // Interface for the final combined result
 export interface HybridCoinSearchResult {
@@ -133,17 +102,13 @@ export function useHybridCoinSearch(
     error: dbError,
   } = useQuery({
     queryKey: ["coins", "search", query.trim(), fetchLimit],
-    queryFn: async (): Promise<CoinSearchResult[]> => {
-      const response = await fetch(
-        `/api/internal/coins/search?query=${encodeURIComponent(query.trim())}&limit=${fetchLimit}`,
-      );
-      if (!response.ok) throw new Error(`Search error: ${response.status}`);
-      const json: unknown = await response.json();
-      if (!Array.isArray(json) || !json.every(isCoinSearchResult)) {
-        throw new Error("Invalid coin search response");
-      }
-      return json;
-    },
+    queryFn: async ({ signal }): Promise<ReadonlyArray<CoinSummary>> =>
+      await runCoinsInternalPromise(
+        CoinsInternalApi.use((api) =>
+          api.search({ query: query.trim(), limit: fetchLimit }),
+        ),
+        { signal },
+      ),
     enabled: !!query.trim(),
     staleTime: 10 * 60 * 1000,
   });
@@ -241,16 +206,13 @@ export function useHybridTopCoins(limit = 25, options: { enabled?: boolean } = {
   // Step 1: Get top coins directly from API by market cap (real-time ranking)
   const { data: pricingData, isLoading: isPricingLoading, error: pricingError } = useQuery({
     queryKey: ["hybrid-top-coins-api-first", limit],
-    queryFn: async (): Promise<Record<string, CoinGeckoPricingData>> => {
+    queryFn: async ({ signal }) => {
       // Get top coins directly from API by market cap
-      const response = await fetch(`/api/coingecko/quotes?limit=${limit}`);
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.data || {};
+      const response = await runCoinGeckoPromise(
+        CoinGeckoApi.use((api) => api.getQuotes({ limit })),
+        { signal },
+      );
+      return response.data;
     },
     enabled,
     staleTime: 60 * 60 * 1000,
@@ -264,7 +226,7 @@ export function useHybridTopCoins(limit = 25, options: { enabled?: boolean } = {
     return Object.values(pricingData)
       .flatMap(pricing =>
         (pricing.current_price ?? 0) > 0 &&
-        Number.isFinite(pricing.market_cap_rank) &&
+        pricing.market_cap_rank !== null &&
         pricing.market_cap_rank > 0
           ? [{
               id: pricing.id,
@@ -275,12 +237,12 @@ export function useHybridTopCoins(limit = 25, options: { enabled?: boolean } = {
               quote: {
                 USD: {
                   price: pricing.current_price ?? 0,
-                  percent_change_24h: pricing.price_change_percentage_24h,
-                  percent_change_1h: pricing.price_change_percentage_1h_in_currency,
-                  percent_change_7d: pricing.price_change_percentage_7d_in_currency,
-                  percent_change_30d: pricing.price_change_percentage_30d_in_currency,
-                  market_cap: pricing.market_cap,
-                  volume_24h: pricing.total_volume,
+                  percent_change_24h: pricing.price_change_percentage_24h ?? 0,
+                  percent_change_1h: pricing.price_change_percentage_1h_in_currency ?? undefined,
+                  percent_change_7d: pricing.price_change_percentage_7d_in_currency ?? undefined,
+                  percent_change_30d: pricing.price_change_percentage_30d_in_currency ?? undefined,
+                  market_cap: pricing.market_cap ?? 0,
+                  volume_24h: pricing.total_volume ?? 0,
                 }
               }
             }]
