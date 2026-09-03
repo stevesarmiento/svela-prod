@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 
@@ -103,52 +103,6 @@ async function mergeDuplicateTargetUser(
 ): Promise<void> {
   const now = Date.now();
 
-  // --- portfolioWallets + portfolioWalletCoins ---
-  const [targetWallets, sourceWallets] = await Promise.all([
-    ctx.db
-      .query("portfolioWallets")
-      .withIndex("by_user", (q) => q.eq("userId", target._id))
-      .collect(),
-    ctx.db
-      .query("portfolioWallets")
-      .withIndex("by_user", (q) => q.eq("userId", source._id))
-      .collect(),
-  ]);
-
-  const sourceAddresses = new Set(
-    sourceWallets.map((w) => w.address.toLowerCase()),
-  );
-  const deletedWalletIds = new Set<Id<"portfolioWallets">>();
-
-  await Promise.all(
-    targetWallets.map(async (wallet) => {
-      const coins = await ctx.db
-        .query("portfolioWalletCoins")
-        .withIndex("by_wallet", (q) => q.eq("walletId", wallet._id))
-        .collect();
-
-      if (sourceAddresses.has(wallet.address.toLowerCase())) {
-        // Source already tracks this wallet address; drop the duplicate.
-        deletedWalletIds.add(wallet._id);
-        result.rowsDeleted += 1 + coins.length;
-        if (apply) {
-          await Promise.all(coins.map((coin) => ctx.db.delete(coin._id)));
-          await ctx.db.delete(wallet._id);
-        }
-      } else {
-        result.rowsReassigned += 1 + coins.length;
-        if (apply) {
-          await Promise.all([
-            ctx.db.patch(wallet._id, { userId: source._id, updatedAt: now }),
-            ...coins.map((coin) =>
-              ctx.db.patch(coin._id, { userId: source._id }),
-            ),
-          ]);
-        }
-      }
-    }),
-  );
-
   // --- watchlistGroups ---
   const [targetGroups, sourceGroups] = await Promise.all([
     ctx.db
@@ -172,12 +126,6 @@ async function mergeDuplicateTargetUser(
     if (group.isDefault && sourceHasDefault) patch.isDefault = false;
     if (sourceSlugs.has(group.slug)) {
       patch.slug = `${group.slug}-migrated-${String(group._id).slice(-6)}`;
-    }
-    if (
-      group.portfolioWalletId !== undefined &&
-      deletedWalletIds.has(group.portfolioWalletId)
-    ) {
-      patch.portfolioWalletId = undefined;
     }
 
     result.rowsReassigned++;
@@ -262,38 +210,6 @@ async function mergeDuplicateTargetUser(
     );
   }
 
-  // --- userApiKeys (reassign non-conflicting providers, drop conflicts) ---
-  const [targetKeys, sourceKeys] = await Promise.all([
-    ctx.db
-      .query("userApiKeys")
-      .withIndex("by_user", (q) => q.eq("userId", target._id))
-      .collect(),
-    ctx.db
-      .query("userApiKeys")
-      .withIndex("by_user", (q) => q.eq("userId", source._id))
-      .collect(),
-  ]);
-
-  // Decide keep/delete synchronously first (order-sensitive), then fan out.
-  const sourceProviders = new Set(sourceKeys.map((k) => k.provider));
-  const keyActions = targetKeys.map((key) => {
-    if (sourceProviders.has(key.provider)) {
-      result.rowsDeleted++;
-      return { key, keep: false };
-    }
-    sourceProviders.add(key.provider);
-    result.rowsReassigned++;
-    return { key, keep: true };
-  });
-  if (apply) {
-    await Promise.all(
-      keyActions.map(({ key, keep }) =>
-        keep
-          ? ctx.db.patch(key._id, { userId: source._id, updatedAt: now })
-          : ctx.db.delete(key._id),
-      ),
-    );
-  }
 }
 
 export const updateAvatarUrls = mutation({

@@ -98,29 +98,6 @@ export function AddTokenIcon({ className }: IconProps) {
   );
 }
 
-/** Wallet with flap and coin dot — import from wallet glyph (viewBox 32×32). */
-export function WalletIcon({ className }: IconProps) {
-  return (
-    <svg
-      viewBox="0 0 32 32"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      aria-hidden
-    >
-      <path
-        d="M7.28125 7.25H23.6875C23.722 7.25 23.75 7.27797 23.75 7.3125C23.75 7.34703 23.722 7.375 23.6875 7.375H7.9375C6.52227 7.375 5.375 8.52227 5.375 9.9375C5.375 11.3528 6.52229 12.5 7.9375 12.5H25C26.1218 12.5 27.0312 13.4095 27.0312 14.5312V23.7188C27.0312 24.8405 26.1218 25.75 25 25.75H7.28125C6.15942 25.75 5.25 24.8405 5.25 23.7188V9.28125C5.25 8.15943 6.15943 7.25 7.28125 7.25Z"
-        stroke="currentColor"
-        strokeWidth="2.5"
-      />
-      <path
-        d="M24.2812 18.6407C24.2812 19.5468 23.5467 20.2813 22.6406 20.2813C21.7345 20.2813 21 19.5468 21 18.6407C21 17.7346 21.7345 17 22.6406 17C23.5467 17 24.2812 17.7346 24.2812 18.6407Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
 /** Half-card with inward arrows — collapse all watchlists glyph (viewBox 33×33). */
 export function CompressWatchlistsIcon({ className }: IconProps) {
   return (

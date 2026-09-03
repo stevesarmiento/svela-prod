@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 import { NextResponse, type NextRequest } from "next/server";
 import { api } from "../../../../../convex/_generated/api";
+import { env } from "@/env.mjs";
 import { ConvexService } from "@/lib/effect/server/convex";
-import { ConvexQueryError } from "@/lib/effect/server/errors";
 import { effectRoute } from "@/lib/effect/server/route";
 import { UpstreamHttp } from "@/lib/effect/server/upstream-http";
 import {
@@ -12,7 +12,6 @@ import {
   decodeCoinResponse,
   decodeMarketsRows,
 } from "@/lib/effect/server/vendors/coingecko";
-import { getUserApiKey } from "@/lib/user-api-keys";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -130,7 +129,7 @@ interface CoingeckoMarketUpsertItem {
 }
 
 export const GET = effectRoute(
-  (request: NextRequest, _ctx, session) =>
+  (request: NextRequest) =>
     Effect.gen(function* () {
       const convex = yield* ConvexService;
       const http = yield* UpstreamHttp;
@@ -185,15 +184,7 @@ export const GET = effectRoute(
 
       const data: Record<string, unknown> = {};
 
-      const apiKeyResult = yield* Effect.tryPromise({
-        try: () => getUserApiKey(session.userId, "coingecko", "X_CG_PRO_API_KEY"),
-        catch: (error) =>
-          new ConvexQueryError({
-            label: "getUserApiKey",
-            message: error instanceof Error ? error.message : String(error),
-          }),
-      });
-      const apiKey = apiKeyResult.key;
+      const apiKey = env.X_CG_PRO_API_KEY;
 
       if (apiKey) {
         const headers = coingeckoHeaders(apiKey);

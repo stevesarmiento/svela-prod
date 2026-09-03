@@ -39,10 +39,6 @@ function loadCreateWatchlist() {
   return import("./create-watchlist")
 }
 
-function loadAddWalletDialog() {
-  return import("@/app/[locale]/(dashboard)/portfolio/_components/add-wallet-dialog")
-}
-
 const LazyChartsClient = dynamic(
   () => loadChartsModule().then((module) => module.ChartsClient),
   {
@@ -57,11 +53,6 @@ const LazyChartsClient = dynamic(
 
 const LazyCreateWatchlist = dynamic(
   () => loadCreateWatchlist().then((module) => module.CreateWatchlist),
-  { ssr: false },
-)
-
-const LazyAddWalletDialog = dynamic(
-  () => loadAddWalletDialog().then((module) => module.AddWalletDialog),
   { ssr: false },
 )
 
@@ -85,7 +76,6 @@ export function WatchlistPageView({
   } = useWatchlist()
 
   const [isCreatingWatchlist, setIsCreatingWatchlist] = useState(false)
-  const [isAddWalletOpen, setIsAddWalletOpen] = useState(false)
 
   const { openContextualCommandSearch } = useBottomNavActions()
 
@@ -98,13 +88,6 @@ export function WatchlistPageView({
 
   const preloadCreateWatchlist = useCallback(() => {
     void loadCreateWatchlist()
-    // The create dialog's first step offers "Import from Wallet" — preload
-    // that flow too so choosing it is instant.
-    void loadAddWalletDialog()
-  }, [])
-
-  const preloadAddWalletDialog = useCallback(() => {
-    void loadAddWalletDialog()
   }, [])
 
   // "Add Token" routes to the bottom-nav command search (watchlist context) —
@@ -119,7 +102,6 @@ export function WatchlistPageView({
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return
 
     const addTokenShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'focusAddToken')
-    const addWalletShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'openAddWallet')
     const createWatchlistShortcut = GLOBAL_SHORTCUTS.find(s => s.handler === 'openCreateWatchlist')
 
     if (createWatchlistShortcut && matchesShortcut(event, createWatchlistShortcut)) {
@@ -133,13 +115,6 @@ export function WatchlistPageView({
     if (addTokenShortcut && matchesShortcut(event, addTokenShortcut)) {
       event.preventDefault()
       openAddToken()
-      return
-    }
-
-    if (addWalletShortcut && matchesShortcut(event, addWalletShortcut)) {
-      event.preventDefault()
-      preloadAddWalletDialog()
-      setIsAddWalletOpen(true)
       return
     }
 
@@ -354,14 +329,7 @@ export function WatchlistPageView({
       <LazyCreateWatchlist
         isOpen={isCreatingWatchlist}
         onClose={() => setIsCreatingWatchlist(false)}
-        onImportWallet={() => {
-          setIsCreatingWatchlist(false)
-          preloadAddWalletDialog()
-          setIsAddWalletOpen(true)
-        }}
       />
-
-      <LazyAddWalletDialog open={isAddWalletOpen} onOpenChange={setIsAddWalletOpen} />
     </div>
   )
 }

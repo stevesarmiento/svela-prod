@@ -7,10 +7,7 @@ interface SectionCardProps {
   children: ReactNode;
 }
 
-/**
- * Shared section chrome matching the app's settings design language
- * (see api-keys-management.tsx).
- */
+/** Shared section chrome matching the app's settings design language. */
 export function SectionCard({ title, children }: SectionCardProps) {
   return (
     <div className="rounded-[10px] bg-primary/5 overflow-hidden p-0.5">

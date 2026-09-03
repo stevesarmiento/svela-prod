@@ -22,7 +22,6 @@ const watchlistGroupValidator = v.object({
   description: v.optional(v.string()),
   icon: v.optional(v.string()),
   color: v.optional(v.string()),
-  portfolioWalletId: v.optional(v.id("portfolioWallets")),
   isDefault: v.boolean(),
   createdAt: v.number(),
   updatedAt: v.number(),
@@ -231,18 +230,6 @@ export const updateWatchlistGroup = mutation({
     if (args.color !== undefined) updates.color = args.color;
 
     await ctx.db.patch(args.groupId, updates);
-
-    // If this is a wallet-backed group, keep the portfolio wallet name in sync
-    // so Portfolio (read-only for now) doesn’t drift from Watchlist edits.
-    if (group.portfolioWalletId && typeof updates.name === "string" && updates.name.length > 0) {
-      const wallet = await ctx.db.get(group.portfolioWalletId);
-      if (wallet && wallet.userId === user._id) {
-        await ctx.db.patch(group.portfolioWalletId, {
-          name: updates.name,
-          updatedAt: now,
-        });
-      }
-    }
 
     return null;
   },
@@ -1014,13 +1001,6 @@ export const updateMyWatchlistGroup = mutation({
     if (args.color !== undefined) updates.color = args.color;
 
     await ctx.db.patch(args.groupId, updates);
-
-    if (group.portfolioWalletId && typeof updates.name === "string" && updates.name.length > 0) {
-      const wallet = await ctx.db.get(group.portfolioWalletId);
-      if (wallet && wallet.userId === user._id) {
-        await ctx.db.patch(group.portfolioWalletId, { name: updates.name, updatedAt: now });
-      }
-    }
 
     return null;
   },
