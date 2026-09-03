@@ -1,36 +1,29 @@
 import { Effect } from "effect";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { env } from "@/env.mjs";
 import { effectRoute } from "@/lib/effect/server/route";
 import { UpstreamHttp } from "@/lib/effect/server/upstream-http";
-import { ConvexQueryError } from "@/lib/effect/server/errors";
 import {
   COINGLASS_BASE_URL,
+  coinglassHeaders,
   unwrapCoinglassEnvelope,
 } from "@/lib/effect/server/vendors/coinglass";
-import { getApiHeaders, getUserApiKey } from "@/lib/user-api-keys";
 
 const SupportedCoinsSchema = z.array(z.string());
 
 export const GET = effectRoute(
-  (_req, _ctx, session) =>
+  () =>
     Effect.gen(function* () {
-      const apiKeyResult = yield* Effect.tryPromise({
-        try: () => getUserApiKey(session.userId, "coinglass", "CG_API_KEY"),
-        catch: (error) =>
-          new ConvexQueryError({
-            label: "getUserApiKey",
-            message: error instanceof Error ? error.message : String(error),
-          }),
-      });
+      const apiKey = env.CG_API_KEY;
 
-      if (!apiKeyResult.key) {
+      if (!apiKey) {
         // Route-specific 503 body: clients rely on the empty-data envelope.
         return NextResponse.json(
           {
             success: false,
             error:
-              "CoinGlass API key not available. Please add your API key in settings or configure CG_API_KEY environment variable.",
+              "CoinGlass API key not available. Configure the CG_API_KEY environment variable.",
             data: [],
             count: 0,
             lastUpdated: new Date().toISOString(),
@@ -46,7 +39,7 @@ export const GET = effectRoute(
         decode: (data) =>
           SupportedCoinsSchema.parse(unwrapCoinglassEnvelope(data)),
         init: {
-          headers: getApiHeaders("coinglass", apiKeyResult.key),
+          headers: coinglassHeaders(apiKey),
           // Cache for 1 minute as per CoinGlass docs
           next: { revalidate: 60 },
         },

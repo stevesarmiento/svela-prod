@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { getRequestIp } from "@/lib/effect/server/route";
 import { runServerEffect } from "@/lib/effect/server/runtime";
 import { UpstreamHttp } from "@/lib/effect/server/upstream-http";
-import { getUserApiKey } from "@/lib/user-api-keys";
+import { env } from "@/env.mjs";
 import { generateText } from "ai";
 import { z } from "zod";
 import { gemini } from "@/lib/gemini";
@@ -455,8 +455,7 @@ export async function GET(request: NextRequest) {
     userId = null;
   }
 
-  const apiKeyResult = await getUserApiKey(userId, "coingecko", "X_CG_PRO_API_KEY");
-  const apiKey = apiKeyResult.key;
+  const apiKey = env.X_CG_PRO_API_KEY;
 
   if (!apiKey) {
     return NextResponse.json({ error: "CoinGecko API key not configured" }, { status: 503 });

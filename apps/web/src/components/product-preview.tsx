@@ -1,11 +1,11 @@
 "use client";
 
+import { SvelaLogo } from "@v1/ui/svela-logo";
+import { useEffect, useRef, useState } from "react";
 import type {
   ShowcaseScreenerRow,
   ShowcaseWatchlist,
-} from "@/lib/showcase-watchlists";
-import { SvelaLogo } from "@v1/ui/svela-logo";
-import { useEffect, useRef, useState } from "react";
+} from "../lib/showcase-watchlists";
 
 type PreviewView = "watchlists" | "screener" | "overview";
 

@@ -25,15 +25,13 @@ export default defineSchema({
     description: v.optional(v.string()),
     icon: v.optional(v.string()), // Emoji or icon name from symbols-react
     color: v.optional(v.string()), // Background color for the card
-    portfolioWalletId: v.optional(v.id("portfolioWallets")),
     isDefault: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_user", ["userId"])
     .index("by_user_default", ["userId", "isDefault"])
-    .index("by_user_slug", ["userId", "slug"])
-    .index("by_user_and_portfolio_wallet", ["userId", "portfolioWalletId"]),
+    .index("by_user_slug", ["userId", "slug"]),
 
   watchlists: defineTable({
     userId: v.id("users"),
@@ -370,40 +368,6 @@ export default defineSchema({
     .index("by_coingecko_id_and_article_id", ["coingeckoId", "articleId"])
     .index("by_coingecko_id_and_posted_at_ms", ["coingeckoId", "postedAtMs"]),
 
-  portfolioWallets: defineTable({
-    userId: v.id("users"),
-    address: v.string(),
-    name: v.optional(v.string()),
-    isActive: v.boolean(),
-    lastSyncedAt: v.optional(v.number()),
-    lastSyncError: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_user", ["userId"])
-    .index("by_user_address", ["userId", "address"])
-    .index("by_active", ["isActive", "updatedAt"]),
-
-  portfolioWalletCoins: defineTable({
-    userId: v.id("users"),
-    walletId: v.id("portfolioWallets"),
-    coingeckoId: v.string(),
-    mint: v.string(),
-    createdAt: v.number(),
-  })
-    .index("by_wallet", ["walletId"])
-    .index("by_wallet_coingecko", ["walletId", "coingeckoId"])
-    .index("by_coingecko", ["coingeckoId"])
-    .index("by_user_wallet", ["userId", "walletId"]),
-
-  portfolioMintMappings: defineTable({
-    mint: v.string(),
-    coingeckoId: v.string(),
-    source: v.string(), // "birdeye"
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index("by_mint", ["mint"]),
-
   jobState: defineTable({
     jobKey: v.string(),
     cursor: v.optional(v.string()),
@@ -436,25 +400,6 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
-
-  userApiKeys: defineTable({
-    userId: v.id("users"),
-    provider: v.string(), // 'coingecko', 'coinglass', 'openai', 'gemini'
-    keyName: v.string(), // Display name for the key (e.g., "My CoinGecko Pro Key")
-    encryptedKey: v.string(), // Encrypted API key using AES-256-GCM
-    displayKey: v.optional(v.string()), // Truncated key for display (e.g., "CG-7c6G...HmU8")
-    isActive: v.boolean(), // Whether this key should be used
-    lastValidated: v.optional(v.number()), // Timestamp of last successful validation
-    validationError: v.optional(v.string()), // Last validation error message
-    usageCount: v.optional(v.number()), // Track API usage for user insights
-    rateLimitRemaining: v.optional(v.number()), // Track rate limits if available
-    rateLimitReset: v.optional(v.number()), // When rate limit resets
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_user", ["userId"])
-    .index("by_user_provider", ["userId", "provider"])
-    .index("by_user_active", ["userId", "isActive"]),
 
   // Historical price data - optimized for chart rendering (CoinGecko only)
   priceHistory: defineTable({

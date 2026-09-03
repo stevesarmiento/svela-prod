@@ -16,7 +16,6 @@ import { useWatchlist, type WatchlistGroup } from './watchlist-context'
 import { Dialog, DialogContent } from '@v1/ui/dialog'
 import { Tabs, TabsContent } from '@v1/ui/tabs'
 import { WatchlistMultiLineChart } from './watchlist-multi-line-chart'
-import { useDeletePortfolioWallet } from "@/hooks/use-portfolio-wallets"
 import { useUpdateWatchlistGroup, useDeleteWatchlistGroup } from "@/lib/convex-hooks"
 import { WatchlistGridEmptyState } from './watchlist-grid-empty-state'
 import { WatchlistComparisonEmptyState } from './watchlist-comparison-empty-state'
@@ -235,9 +234,6 @@ export function WatchlistsGrid({
   // Hooks
   const updateGroup = useUpdateWatchlistGroup()
   const deleteGroup = useDeleteWatchlistGroup()
-  // Destructure the stable callback so hooks can depend on it directly
-  // (the hook's return object gets a new identity every render).
-  const { deleteWallet } = useDeletePortfolioWallet()
   const { selectedGroup, watchlistGroups } = useWatchlist()
 
   const gridGroups = useMemo(() => {
@@ -313,24 +309,6 @@ export function WatchlistsGrid({
       return
     }
 
-    if (group.portfolioWalletId) {
-      try {
-        await deleteWallet(group.portfolioWalletId)
-
-        toast({
-          title: "Success",
-          description: "Wallet deleted successfully",
-        })
-      } catch (error) {
-        toast({
-          title: "Request Error",
-          description: error instanceof Error ? error.message : String(error),
-          variant: "destructive",
-        })
-      }
-      return
-    }
-
     try {
       await deleteGroup(group._id)
       toast({
@@ -345,7 +323,7 @@ export function WatchlistsGrid({
       })
       if (isDebug) console.error("Failed to delete watchlist:", error)
     }
-  }, [deleteGroup, deleteWallet])
+  }, [deleteGroup])
 
   const openEditDialog = useCallback((group: WatchlistGroup) => {
     setEditingGroup(group)

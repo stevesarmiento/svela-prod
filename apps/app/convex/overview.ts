@@ -172,7 +172,6 @@ const overviewHoldingsGroupValidator = v.object({
     description: v.optional(v.string()),
     icon: v.optional(v.string()),
     color: v.optional(v.string()),
-    portfolioWalletId: v.optional(v.id("portfolioWallets")),
     isDefault: v.boolean(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -538,7 +537,6 @@ type OverviewHoldingsGroupRow = {
     description?: string;
     icon?: string;
     color?: string;
-    portfolioWalletId?: Id<"portfolioWallets">;
     isDefault: boolean;
     createdAt: number;
     updatedAt: number;

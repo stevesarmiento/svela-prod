@@ -13,17 +13,8 @@ function loadCreateWatchlist() {
   return import('./create-watchlist')
 }
 
-function loadAddWalletDialog() {
-  return import('@/app/[locale]/(dashboard)/portfolio/_components/add-wallet-dialog')
-}
-
 const LazyCreateWatchlist = dynamic(
   () => loadCreateWatchlist().then((module) => module.CreateWatchlist),
-  { ssr: false },
-)
-
-const LazyAddWalletDialog = dynamic(
-  () => loadAddWalletDialog().then((module) => module.AddWalletDialog),
   { ssr: false },
 )
 
@@ -42,15 +33,11 @@ interface WatchlistQuickActionsProps {
  */
 export function WatchlistQuickActions({ withShortcuts = false }: WatchlistQuickActionsProps) {
   const [isCreatingWatchlist, setIsCreatingWatchlist] = useState(false)
-  const [isAddWalletOpen, setIsAddWalletOpen] = useState(false)
 
   const { openContextualCommandSearch } = useBottomNavActions()
 
   const preloadCreateWatchlist = useCallback(() => {
     void loadCreateWatchlist()
-    // The create dialog's first step offers "Import from Wallet" — preload
-    // that flow too so choosing it is instant.
-    void loadAddWalletDialog()
   }, [])
 
   const openCreateWatchlist = useCallback(() => {
@@ -131,13 +118,7 @@ export function WatchlistQuickActions({ withShortcuts = false }: WatchlistQuickA
       <LazyCreateWatchlist
         isOpen={isCreatingWatchlist}
         onClose={() => setIsCreatingWatchlist(false)}
-        onImportWallet={() => {
-          setIsCreatingWatchlist(false)
-          setIsAddWalletOpen(true)
-        }}
       />
-
-      <LazyAddWalletDialog open={isAddWalletOpen} onOpenChange={setIsAddWalletOpen} />
     </>
   )
 }

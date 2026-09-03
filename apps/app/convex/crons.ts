@@ -138,14 +138,6 @@ crons.interval(
   { batchSize: 1000 },
 );
 
-// Refresh portfolio wallet holdings (Helius/Birdeye). Per-wallet dedup is enforced in the job itself.
-crons.interval(
-  "portfolio_sync_wallets",
-  { hours: 4 },
-  internal.portfolioJobs.syncWalletsDaily,
-  { batchSize: 25 },
-);
-
 // Expired API-cache rows (rolling).
 crons.interval(
   "cleanup_expired_api_cache",

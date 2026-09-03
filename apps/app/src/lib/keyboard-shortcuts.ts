@@ -65,14 +65,6 @@ export const GLOBAL_SHORTCUTS: KeyboardShortcut[] = [
     component: 'CoinSearch'
   },
   {
-    key: 'm',
-    combination: ['shift'],
-    description: 'Add wallet',
-    category: 'actions',
-    handler: 'openAddWallet',
-    component: 'AddWalletDialog'
-  },
-  {
     key: 'Escape',
     description: 'Close modal, clear filters, exit selection',
     category: 'global',
