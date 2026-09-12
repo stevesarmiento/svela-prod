@@ -34,7 +34,7 @@ function getFilterKey(filter: ScreenFilter): string {
   return key;
 }
 
-function ChipShell({
+export function ChipShell({
   label,
   value,
   onRemove,
@@ -141,6 +141,24 @@ function FilterChip({
   );
 }
 
+/** The dashed "Add filter" chip. Spreads props so it works under `asChild` triggers. */
+export function AddFilterChipTrigger(props: React.ComponentProps<typeof Button>) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-6 gap-1 rounded-md border border-dashed border-border px-2 pr-1 text-xs text-primary/50 hover:text-primary hover:ring hover:ring-2 hover:ring-white/10"
+      aria-label="Add filter"
+      {...props}
+    >
+      <Plus className="h-3 w-3" />
+      <span>Add filter</span>
+      <Kbd className="ml-0.5 h-4 px-1 text-[10px]">F</Kbd>
+    </Button>
+  );
+}
+
 function AddFilterChip({
   dsl,
   setDsl,
@@ -167,17 +185,7 @@ function AddFilterChip({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-6 gap-1 rounded-md border border-dashed border-border px-2 pr-1 text-xs text-primary/50 hover:text-primary hover:ring hover:ring-2 hover:ring-white/10"
-          aria-label="Add filter"
-        >
-          <Plus className="h-3 w-3" />
-          <span>Add filter</span>
-          <Kbd className="ml-0.5 h-4 px-1 text-[10px]">F</Kbd>
-        </Button>
+        <AddFilterChipTrigger />
       </PopoverTrigger>
       <PopoverContent
         align="start"

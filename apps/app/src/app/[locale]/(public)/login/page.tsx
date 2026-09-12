@@ -3,13 +3,9 @@ import { createMetadata } from "@/lib/metadata";
 import { Card, CardContent, CardDescription, CardHeader } from "@v1/ui/card";
 import { SvelaLogo } from "@v1/ui/svela-logo";
 import type { Metadata } from "next";
-import { ProductPreview } from "../../../../../../web/src/components/product-preview";
-import {
-  getShowcaseScreenerRows,
-  getShowcaseWatchlists,
-} from "../../../../../../web/src/lib/showcase-watchlists";
 import { AuthCardDashes } from "./_components/auth-card-dashes";
-import "./product-preview.css";
+import { LoginProductPreview } from "./_components/login-product-preview";
+import { getLoginShowcaseData } from "./_lib/showcase-data";
 
 export async function generateMetadata({
   params,
@@ -26,10 +22,7 @@ export async function generateMetadata({
 }
 
 export default async function Page() {
-  const [watchlists, screenerRows] = await Promise.all([
-    getShowcaseWatchlists(),
-    getShowcaseScreenerRows(),
-  ]);
+  const showcase = await getLoginShowcaseData();
 
   return (
     <main className="grid min-h-dvh w-full overflow-hidden bg-background lg:grid-cols-[minmax(500px,0.9fr)_minmax(0,1.1fr)]">
@@ -121,10 +114,7 @@ export default async function Page() {
       >
         <div className="absolute inset-y-0 left-12 flex w-[calc(200%_-_20rem)] items-center">
           <div className="w-full shrink-0">
-            <ProductPreview
-              screenerRows={screenerRows}
-              watchlists={watchlists}
-            />
+            <LoginProductPreview data={showcase} />
           </div>
         </div>
       </section>

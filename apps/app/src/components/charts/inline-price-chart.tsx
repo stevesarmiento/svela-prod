@@ -15,6 +15,8 @@ interface InlinePriceChartProps {
   percentChange24h: number // Fallback when series unavailable
   symbol?: string // For debugging
   sparkline7d?: ReadonlyArray<number> // Prefer quotes sparkline to avoid per-row market-chart requests
+  /** Pre-resolved series (unix seconds). With ≥2 points the market-chart fetch is skipped. */
+  staticSeries?: ReadonlyArray<{ time: number; value: number }>
   initialData: CoinMarketData['quote']['USD'] // Required for useCoinGeckoChartData
   onError?: () => void
   className?: string
@@ -204,7 +206,9 @@ export function InlinePriceChart({
   onError: _onError,
   className,
   enabled = true,
+  staticSeries,
 }: InlinePriceChartProps) {
+  const hasStaticSeries = (staticSeries?.length ?? 0) >= 2
   const timeScale = "14d" as const
   const basePrice = initialData?.price && initialData.price > 0 ? initialData.price : 0
   const fallbackTrendPct =
@@ -213,10 +217,12 @@ export function InlinePriceChart({
   const marketChartQuery = useInlineMarketChartSeries({
     coingeckoId,
     timeScale: toTimeScale(timeScale),
-    enabled,
+    enabled: enabled && !hasStaticSeries,
   })
 
-  const rawChartData = marketChartQuery.data?.points ?? EMPTY_CHART_POINTS
+  const rawChartData = hasStaticSeries
+    ? (staticSeries as ReadonlyArray<{ time: number; value: number }>)
+    : (marketChartQuery.data?.points ?? EMPTY_CHART_POINTS)
   const rawChartDataWithLatest = useMemo(
     () => upsertLatestValue(rawChartData, basePrice),
     [rawChartData, basePrice],
@@ -226,7 +232,7 @@ export function InlinePriceChart({
       ? rawChartDataWithLatest
       : buildFallbackSeries({ timeScale: toTimeScale(timeScale), basePrice })
   // Treat "disabled" (offscreen) as loading so Liveline can show its built-in state.
-  const isLoading = enabled ? marketChartQuery.isLoading : true
+  const isLoading = hasStaticSeries ? false : enabled ? marketChartQuery.isLoading : true
 
   const chartData14dWindow = useMemo(() => {
     if (!chartData || chartData.length < 2) return []

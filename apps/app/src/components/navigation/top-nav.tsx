@@ -79,7 +79,7 @@ function getChartCoinId(pathname: string): string | null {
   return pathSegments[baseIndex + 1] ?? null;
 }
 
-function getRouteGreeting(): string {
+export function getRouteGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
@@ -112,18 +112,17 @@ function getStaticRouteTitle(pathname: string): string | null {
   return null;
 }
 
-function ProfileLauncherButton(props: {
+/**
+ * The profile launcher's avatar button. Presentational so static consumers
+ * (login product preview) render the exact same chrome without Clerk.
+ */
+export function TopNavAvatarButton(props: {
+  displayName: string;
+  avatarUrl?: string | null;
   onIntent?: () => void;
   onClick?: () => void;
 }) {
-  const { user } = useUser();
-  const displayName = getUserDisplayName({
-    fullName: user?.fullName ?? undefined,
-    email: user?.primaryEmailAddress?.emailAddress ?? undefined,
-    walletAddress: user?.primaryWeb3Wallet?.web3Wallet ?? undefined,
-    fallback: "User",
-  });
-  const avatarUrl = user?.imageUrl;
+  const { displayName, avatarUrl } = props;
 
   return (
     <Button
@@ -144,6 +143,28 @@ function ProfileLauncherButton(props: {
         </AvatarFallback>
       </Avatar>
     </Button>
+  );
+}
+
+function ProfileLauncherButton(props: {
+  onIntent?: () => void;
+  onClick?: () => void;
+}) {
+  const { user } = useUser();
+  const displayName = getUserDisplayName({
+    fullName: user?.fullName ?? undefined,
+    email: user?.primaryEmailAddress?.emailAddress ?? undefined,
+    walletAddress: user?.primaryWeb3Wallet?.web3Wallet ?? undefined,
+    fallback: "User",
+  });
+
+  return (
+    <TopNavAvatarButton
+      displayName={displayName}
+      avatarUrl={user?.imageUrl}
+      onIntent={props.onIntent}
+      onClick={props.onClick}
+    />
   );
 }
 

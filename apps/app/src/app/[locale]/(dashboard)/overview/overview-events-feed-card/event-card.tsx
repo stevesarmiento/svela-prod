@@ -1,6 +1,5 @@
 "use client";
 
-import { AnalysisDialog } from "@/components/navigation/analysis-dialog";
 import { TokenLogo } from "@/components/token-logo";
 import { getTokenLogoURL } from "@/lib/logo-overrides";
 import {
@@ -11,6 +10,7 @@ import {
 import { Badge } from "@v1/ui/badge";
 import { cn } from "@v1/ui/cn";
 import { m } from "motion/react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   IconArrowDownLeftAndArrowUpRight,
@@ -30,6 +30,16 @@ import {
 import type { OverviewEvent } from "./types";
 
 const MotionDiv = m.div;
+
+// Lazy: the analysis dialog drags the AI SDK + analysis runtimes along, and
+// it's only needed once a card's "Analyze" action is hovered/clicked.
+const LazyAnalysisDialog = dynamic(
+  () =>
+    import("@/components/navigation/analysis-dialog").then(
+      (module) => module.AnalysisDialog,
+    ),
+  { ssr: false, loading: () => null },
+);
 
 function PercentChangeBadge(props: { pct: number }) {
   const clamped = clampPercentChange(props.pct);
@@ -120,8 +130,10 @@ export function EventCard(props: {
   index: number;
   nowMs: number;
   shouldReduceMotion: boolean | null;
+  /** `false` renders the time label only — no hover action cluster. */
+  showActions?: boolean;
 }) {
-  const { event, index, nowMs, shouldReduceMotion } = props;
+  const { event, index, nowMs, shouldReduceMotion, showActions = true } = props;
 
   const logo = getTokenLogoURL(event.symbol, event.logoUrl ?? undefined);
   const timeLabel = formatRelativeTime(event.occurredAtMs, nowMs);
@@ -210,10 +222,16 @@ export function EventCard(props: {
                 showArticleAction ? "min-w-[6.5rem]" : "min-w-[4.5rem]",
               )}
             >
-              <div className="flex items-center gap-1 pt-0.5 text-[13px] leading-none text-white/30 tabular-nums font-berkeley-mono transition-opacity duration-200 group-hover/post:opacity-0 max-sm:opacity-0">
+              <div
+                className={cn(
+                  "flex items-center gap-1 pt-0.5 text-[13px] leading-none text-white/30 tabular-nums font-berkeley-mono transition-opacity duration-200",
+                  showActions && "group-hover/post:opacity-0 max-sm:opacity-0",
+                )}
+              >
                 <IconArrowTurnDownRight className="size-3 fill-current" />
                 <span>{timeLabel}</span>
               </div>
+              {showActions ? (
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center gap-1.5 opacity-0 transition-opacity duration-200 group-hover/post:pointer-events-auto group-hover/post:opacity-100 max-sm:pointer-events-auto max-sm:opacity-100">
                 <Link
                   href={event.tokenHref}
@@ -222,7 +240,7 @@ export function EventCard(props: {
                 >
                   <IconArrowDownLeftAndArrowUpRight className="size-3 fill-current" />
                 </Link>
-                <AnalysisDialog
+                <LazyAnalysisDialog
                   coinId={event.coingeckoId}
                   tokenData={{
                     id: event.coingeckoId,
@@ -248,6 +266,7 @@ export function EventCard(props: {
                   </a>
                 ) : null}
               </div>
+              ) : null}
             </div>
           </div>
           <div className="min-w-0 text-[16px] leading-relaxed text-zinc-500 dark:text-zinc-400 group-hover/post:text-zinc-950 dark:group-hover/post:text-white transition-colors duration-200 ease-out text-pretty">

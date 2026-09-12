@@ -23,6 +23,8 @@ export function ScreenerInlineTrailCell(props: {
   sparkline7d?: ReadonlyArray<number>;
   initialData: CoinMarketData["quote"]["USD"];
   percentChange24h: number;
+  /** Pre-resolved series; skips the market-chart fetch when provided. */
+  staticSeries?: ReadonlyArray<{ time: number; value: number }>;
 }) {
   const { ref, visible } = useVisibleOnce<HTMLDivElement>();
 
@@ -45,6 +47,7 @@ export function ScreenerInlineTrailCell(props: {
           symbol={props.symbol}
           sparkline7d={props.sparkline7d}
           initialData={props.initialData}
+          staticSeries={props.staticSeries}
           rootMarginPx={400}
         />
       ) : (

@@ -4,6 +4,7 @@ import { Card, CardContent } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
 import NumberFlow from '@/components/number-flow'
 import { useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { Button } from "@v1/ui/button"
 import { 
   DropdownMenu,
@@ -21,6 +22,7 @@ import {
 import { AvatarCircles } from "@v1/ui/token-stacks"
 import { WatchlistAggregateChart } from "@/components/charts/watchlist-aggregate-chart"
 import {
+  type AggregateDataPoint,
   getWatchlistAggregateRangeEndMs,
   useCoinGeckoWatchlistAggregateChartIsolated,
 } from "@/hooks/use-coingecko-watchlist-aggregate-chart-isolated"
@@ -49,7 +51,7 @@ import { COLOR_THEMES } from "@/components/color-picker"
 import { Kbd } from "@v1/ui/kbd"
 import type { WatchlistGroup } from "./watchlist-context"
 
-interface WatchlistGroupPreview {
+export interface WatchlistGroupPreview {
   _id: string
   name: string
   slug: string
@@ -67,7 +69,7 @@ function isPersistedWatchlistGroup(group: WatchlistCardGroup): group is Watchlis
   return "userId" in group
 }
 
-interface CoinGeckoWatchlistCoin {
+export interface WatchlistCardCoin {
   id: string; // CoinGecko string ID
   name: string;
   symbol: string;
@@ -91,11 +93,12 @@ interface CoinGeckoWatchlistCoin {
 
 // Hoisted default so the reference is stable across renders (keeps useMemo
 // deps referentially equal when the prop is omitted).
-const EMPTY_COINS: CoinGeckoWatchlistCoin[] = []
+const EMPTY_COINS: WatchlistCardCoin[] = []
+const EMPTY_AGGREGATE: AggregateDataPoint[] = []
 
 interface WatchlistCardProps {
   group: WatchlistCardGroup
-  coins: CoinGeckoWatchlistCoin[]
+  coins: WatchlistCardCoin[]
   isLoading?: boolean
   itemCount?: number
   onEdit?: (group: WatchlistGroup) => void
@@ -239,24 +242,46 @@ function WatchlistCardPerformanceRow({
   )
 }
 
-export function WatchlistCard({
-  group, 
+export interface WatchlistCardViewProps {
+  name: string
+  icon?: string
+  color?: string
+  coins?: WatchlistCardCoin[]
+  /** Overrides `coins.length` (e.g. when items are known but quotes aren't loaded yet). */
+  coinsCount?: number
+  /** Precomputed 1d aggregate series rendered by the sparkline. */
+  aggregateData?: AggregateDataPoint[]
+  isChartReady: boolean
+  /** Drives the loading shine + chart placeholder. */
+  isChartPending?: boolean
+  /** Shows "—" for the up/down counts. */
+  isLoading?: boolean
+  selected?: boolean
+  onSelect?: () => void
+  /** Rendered top-right (e.g. the edit/delete menu). */
+  actionsSlot?: ReactNode
+}
+
+/**
+ * Presentational watchlist card. `WatchlistCard` (below) feeds it live data;
+ * static consumers (e.g. the login product preview) pass precomputed props so
+ * both render byte-identical markup.
+ */
+export function WatchlistCardView({
+  name,
+  icon,
+  color,
   coins = EMPTY_COINS,
+  coinsCount: coinsCountProp,
+  aggregateData = EMPTY_AGGREGATE,
+  isChartReady,
+  isChartPending = false,
   isLoading = false,
-  itemCount,
-  onEdit,
-  onDelete,
-  onSelect,
   selected = false,
-  nameOverride,
-  iconOverride,
-  colorOverride
-}: WatchlistCardProps) {
-  // Use override values if provided, otherwise use group values
-  const displayName = nameOverride ?? group.name
-  const displayIcon = iconOverride ?? group.icon
-  const displayColor = colorOverride ?? group.color
-  const coinsCount = itemCount ?? coins.length
+  onSelect,
+  actionsSlot,
+}: WatchlistCardViewProps) {
+  const coinsCount = coinsCountProp ?? coins.length
 
   // Calculate aggregate stats
   const stats = useMemo(() => {
@@ -291,29 +316,6 @@ export function WatchlistCard({
       .filter((item): item is { imageUrl: string; profileUrl: string } => item !== null)
   }, [coins])
 
-  const rangeEndTimeMs = useMemo(() => getWatchlistAggregateRangeEndMs('1d'), [])
-  const {
-    aggregateData,
-    isLoading: isChartLoading,
-    isFetching: isChartFetching,
-    isPlaceholderData: isChartPlaceholder,
-    isChangeUnavailable,
-  } = useCoinGeckoWatchlistAggregateChartIsolated({
-    coins,
-    timeScale: '1d',
-    rangeEndTimeMs,
-  })
-
-  const isChartReady =
-    !isChangeUnavailable &&
-    !isChartPlaceholder &&
-    aggregateData.length > 0
-  const isChartPending =
-    coinsCount > 0 &&
-    !isChangeUnavailable &&
-    !isChartReady &&
-    (isChartLoading || isChartFetching || isChartPlaceholder)
-
   const latestAggregateChange = useMemo(() => {
     if (!isChartReady) return null
     return aggregateData[aggregateData.length - 1]?.value ?? null
@@ -322,7 +324,7 @@ export function WatchlistCard({
   const isAggregatePositive = (latestAggregateChange ?? 0) >= 0
 
   // Get color theme for this group
-  const colorTheme = COLOR_THEMES[displayColor as keyof typeof COLOR_THEMES] || COLOR_THEMES.default
+  const colorTheme = COLOR_THEMES[color as keyof typeof COLOR_THEMES] || COLOR_THEMES.default
 
   const shouldShowLoadingState = coinsCount > 0 && (isLoading || isChartPending)
 
@@ -336,9 +338,7 @@ export function WatchlistCard({
         selected && "ring-4 dark:ring-white/10 ring-zinc-800/10 ring-offset-4 ring-offset-background"
       )}
       onClick={() => {
-        if (!onSelect) return
-        if (!isPersistedWatchlistGroup(group)) return
-        onSelect(group)
+        onSelect?.()
       }}
     >
       {/* Inject loading shine CSS only once per card */}
@@ -359,7 +359,7 @@ export function WatchlistCard({
         <div className="absolute top-0 left-0 w-24 h-24 -translate-x-2 -translate-y-2 z-0">
           <div className="w-full h-full flex items-center justify-center">
             <WatchlistGroupIcon 
-              icon={displayIcon} 
+              icon={icon} 
               className="w-16 h-16 text-zinc-600 blur-[60px] opacity-20"
               size={64}
             />
@@ -373,20 +373,18 @@ export function WatchlistCard({
               type="button"
               className="flex items-center gap-3 flex-1 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent rounded-lg"
               onClick={() => {
-                if (!onSelect) return
-                if (!isPersistedWatchlistGroup(group)) return
-                onSelect(group)
+                onSelect?.()
               }}
             >
               <div className="w-10 h-10 rounded-full bg-white/5 border border-white/5 backdrop-blur-sm flex items-center justify-center">
                 <WatchlistGroupIcon 
-                  icon={displayIcon} 
+                  icon={icon} 
                   className="text-zinc-300"
                   size={20}
                 />
               </div>
               <div className="flex flex-col min-w-0">
-                <h3 className="font-semibold text-white text-lg truncate">{displayName}</h3>
+                <h3 className="font-semibold text-white text-lg truncate">{name}</h3>
                 <div className="flex text-[10px] flex-row items-center gap-2">
                   <div className="flex items-center gap-1">
                     <IconTriangleFill
@@ -413,13 +411,7 @@ export function WatchlistCard({
             </button>
 
             {/* Actions menu */}
-            {isPersistedWatchlistGroup(group) && (onEdit || onDelete) ? (
-              <WatchlistCardActionsMenu
-                group={group}
-                onEdit={onEdit}
-                onDelete={onDelete}
-              />
-            ) : null}
+            {actionsSlot}
           </div>
 
           {/* Chart or Empty State */}
@@ -466,7 +458,7 @@ export function WatchlistCard({
             <WatchlistCardPerformanceRow
               avatarData={avatarData}
               coinsCount={coinsCount}
-              displayColor={displayColor}
+              displayColor={color}
               latestAggregateChange={latestAggregateChange}
               isAggregatePositive={isAggregatePositive}
             />
@@ -474,5 +466,81 @@ export function WatchlistCard({
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * Live watchlist card: resolves the 1d aggregate series for `coins` and renders
+ * `WatchlistCardView`.
+ */
+export function WatchlistCard({
+  group, 
+  coins = EMPTY_COINS,
+  isLoading = false,
+  itemCount,
+  onEdit,
+  onDelete,
+  onSelect,
+  selected = false,
+  nameOverride,
+  iconOverride,
+  colorOverride
+}: WatchlistCardProps) {
+  // Use override values if provided, otherwise use group values
+  const displayName = nameOverride ?? group.name
+  const displayIcon = iconOverride ?? group.icon
+  const displayColor = colorOverride ?? group.color
+  const coinsCount = itemCount ?? coins.length
+
+  const rangeEndTimeMs = useMemo(() => getWatchlistAggregateRangeEndMs('1d'), [])
+  const {
+    aggregateData,
+    isLoading: isChartLoading,
+    isFetching: isChartFetching,
+    isPlaceholderData: isChartPlaceholder,
+    isChangeUnavailable,
+  } = useCoinGeckoWatchlistAggregateChartIsolated({
+    coins,
+    timeScale: '1d',
+    rangeEndTimeMs,
+  })
+
+  const isChartReady =
+    !isChangeUnavailable &&
+    !isChartPlaceholder &&
+    aggregateData.length > 0
+  const isChartPending =
+    coinsCount > 0 &&
+    !isChangeUnavailable &&
+    !isChartReady &&
+    (isChartLoading || isChartFetching || isChartPlaceholder)
+
+  const isPersisted = isPersistedWatchlistGroup(group)
+  const handleSelect =
+    onSelect && isPersisted ? () => onSelect(group) : undefined
+
+  return (
+    <WatchlistCardView
+      name={displayName}
+      icon={displayIcon}
+      color={displayColor}
+      coins={coins}
+      coinsCount={coinsCount}
+      aggregateData={aggregateData}
+      isChartReady={isChartReady}
+      isChartPending={isChartPending}
+      isLoading={isLoading}
+      selected={selected}
+      onSelect={handleSelect}
+      actionsSlot={
+        isPersisted && (onEdit || onDelete) ? (
+          <WatchlistCardActionsMenu
+            group={group}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
+        ) : null
+      }
+    />
   )
 } 

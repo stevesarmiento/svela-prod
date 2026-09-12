@@ -23,11 +23,18 @@ interface NavigationDockProps {
   onOpenCommandSearch?: (context: CommandContext | null) => void;
 }
 
-const NavigationDockComponent = ({
-  mode,
-  selectionState,
-  onOpenCommandSearch,
-}: NavigationDockProps) => {
+/**
+ * The dock's chrome (pill, shadows, blur). Exported so static consumers (e.g.
+ * the login product preview) render the exact same shell around their own
+ * items.
+ */
+export function DockShell({
+  mode = 'navigation',
+  children,
+}: {
+  mode?: 'navigation' | 'selection';
+  children: React.ReactNode;
+}) {
   const shouldReduceMotion = useReducedMotion()
 
   // Visibility when the command palette is open is handled by the BottomNav wrapper (opacity + pointer-events).
@@ -49,47 +56,61 @@ const NavigationDockComponent = ({
       transition={uiLayoutTransition(shouldReduceMotion)}
     >
       <div className="relative z-10 flex items-center gap-1 p-1 w-auto">
-        <AnimatePresence initial={false} mode="popLayout">
-          {mode === 'navigation' && (
-            <m.div
-              key="navigation"
-              layoutId={shouldReduceMotion ? undefined : "navigation"}
-              initial={shouldReduceMotion ? false : dockContentTransitionState}
-              animate={dockContentRestState}
-              exit={shouldReduceMotion ? undefined : dockContentTransitionState}
-              className="w-auto"
-              transition={uiEnterExitTransition(shouldReduceMotion)}
-              style={{
-                willChange: shouldReduceMotion
-                  ? undefined
-                  : "transform, filter, opacity",
-              }}
-            >
-              <NavigationItems onOpenCommandSearch={onOpenCommandSearch || (() => {})} />
-            </m.div>
-          )}
-
-          {mode === 'selection' && selectionState && (
-            <m.div
-              key="selection"
-              layoutId={shouldReduceMotion ? undefined : "navigation"}
-              initial={shouldReduceMotion ? false : dockContentTransitionState}
-              animate={dockContentRestState}
-              exit={shouldReduceMotion ? undefined : dockContentTransitionState}
-              transition={uiEnterExitTransition(shouldReduceMotion)}
-              className="w-[400px] flex items-center justify-center"
-              style={{
-                willChange: shouldReduceMotion
-                  ? undefined
-                  : "transform, filter, opacity",
-              }}
-            >
-              <SelectionContent selectionState={selectionState} />
-            </m.div>
-          )}
-        </AnimatePresence>
+        {children}
       </div>
     </m.div>
+  );
+}
+
+const NavigationDockComponent = ({
+  mode,
+  selectionState,
+  onOpenCommandSearch,
+}: NavigationDockProps) => {
+  const shouldReduceMotion = useReducedMotion()
+
+  return (
+    <DockShell mode={mode}>
+      <AnimatePresence initial={false} mode="popLayout">
+        {mode === 'navigation' && (
+          <m.div
+            key="navigation"
+            layoutId={shouldReduceMotion ? undefined : "navigation"}
+            initial={shouldReduceMotion ? false : dockContentTransitionState}
+            animate={dockContentRestState}
+            exit={shouldReduceMotion ? undefined : dockContentTransitionState}
+            className="w-auto"
+            transition={uiEnterExitTransition(shouldReduceMotion)}
+            style={{
+              willChange: shouldReduceMotion
+                ? undefined
+                : "transform, filter, opacity",
+            }}
+          >
+            <NavigationItems onOpenCommandSearch={onOpenCommandSearch || (() => {})} />
+          </m.div>
+        )}
+
+        {mode === 'selection' && selectionState && (
+          <m.div
+            key="selection"
+            layoutId={shouldReduceMotion ? undefined : "navigation"}
+            initial={shouldReduceMotion ? false : dockContentTransitionState}
+            animate={dockContentRestState}
+            exit={shouldReduceMotion ? undefined : dockContentTransitionState}
+            transition={uiEnterExitTransition(shouldReduceMotion)}
+            className="w-[400px] flex items-center justify-center"
+            style={{
+              willChange: shouldReduceMotion
+                ? undefined
+                : "transform, filter, opacity",
+            }}
+          >
+            <SelectionContent selectionState={selectionState} />
+          </m.div>
+        )}
+      </AnimatePresence>
+    </DockShell>
   );
 };
 

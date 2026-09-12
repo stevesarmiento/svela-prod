@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useEffectEvent, useState } from "react"
+import type { ComponentType } from "react"
 import dynamic from "next/dynamic"
 import { Spinner } from "@v1/ui/spinner"
 import { Button } from "@v1/ui/button"
@@ -55,6 +56,55 @@ const LazyCreateWatchlist = dynamic(
   () => loadCreateWatchlist().then((module) => module.CreateWatchlist),
   { ssr: false },
 )
+
+/**
+ * Small square icon action in the watchlists page header (desktop). Shared
+ * with the login product preview so both render the same button.
+ */
+export function WatchlistHeaderActionButton({
+  ariaLabel,
+  icon: Icon,
+  tooltip,
+  onClick,
+  onMouseEnter,
+  onFocus,
+}: {
+  ariaLabel: string
+  icon: ComponentType<{ className?: string }>
+  tooltip: { label: string; keys: string[] }
+  onClick?: () => void
+  onMouseEnter?: () => void
+  onFocus?: () => void
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClick}
+          onMouseEnter={onMouseEnter}
+          onFocus={onFocus}
+          aria-label={ariaLabel}
+          className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
+        >
+          <Icon className="size-4.5 text-muted-foreground group-hover:text-primary" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
+        <span>{tooltip.label}</span>
+        {tooltip.keys.map((key, index) => (
+          <Kbd
+            key={key}
+            className={index === tooltip.keys.length - 1 ? "text-[10px] font-diatype-bold" : "text-[10px]"}
+          >
+            {key}
+          </Kbd>
+        ))}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
 
 export interface WatchlistPageViewProps {
   activeTimeScale: string
@@ -210,49 +260,24 @@ export function WatchlistPageView({
         <div className="flex items-center gap-2">
           {/* Desktop: the three actions inline as icon triggers */}
           <div className="hidden items-center gap-2 sm:flex">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    preloadCreateWatchlist()
-                    setIsCreatingWatchlist(true)
-                  }}
-                  onMouseEnter={preloadCreateWatchlist}
-                  onFocus={preloadCreateWatchlist}
-                  aria-label="Create Watchlist"
-                  className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
-                >
-                  <CreateWatchlistIcon className="size-4.5 text-muted-foreground group-hover:text-primary" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
-                <span>Create Watchlist</span>
-                <Kbd className="text-[10px]">Shift</Kbd>
-                <Kbd className="text-[10px] font-diatype-bold">N</Kbd>
-              </TooltipContent>
-            </Tooltip>
+            <WatchlistHeaderActionButton
+              ariaLabel="Create Watchlist"
+              icon={CreateWatchlistIcon}
+              tooltip={{ label: "Create Watchlist", keys: ["Shift", "N"] }}
+              onClick={() => {
+                preloadCreateWatchlist()
+                setIsCreatingWatchlist(true)
+              }}
+              onMouseEnter={preloadCreateWatchlist}
+              onFocus={preloadCreateWatchlist}
+            />
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={openAddToken}
-                  aria-label="Add Token"
-                  className="group h-7 w-7 p-0 rounded-md bg-accent hover:bg-accent/90 hover:ring-1 ring-primary/10"
-                >
-                  <AddTokenIcon className="size-4.5 text-muted-foreground group-hover:text-primary" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="flex items-center gap-2 p-1 pl-2 rounded-md text-xs">
-                <span>Add Token</span>
-                <Kbd className="text-[10px]">Shift</Kbd>
-                <Kbd className="text-[10px] font-diatype-bold">A</Kbd>
-              </TooltipContent>
-            </Tooltip>
-
+            <WatchlistHeaderActionButton
+              ariaLabel="Add Token"
+              icon={AddTokenIcon}
+              tooltip={{ label: "Add Token", keys: ["Shift", "A"] }}
+              onClick={openAddToken}
+            />
           </div>
 
           {/* Mobile: same actions behind the ellipsis trigger */}
