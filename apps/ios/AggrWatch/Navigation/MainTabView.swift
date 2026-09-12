@@ -55,8 +55,9 @@ struct MainTabView: View {
     }
     .overlay { ToastOverlay() }
     .task { env.warnIfAPIHostUnreachableFromDevice() }
-    .task(id: env.isReadyForUserData) {
-      if env.isReadyForUserData { env.watchlistData.start() } else { env.watchlistData.stop() }
+    .task(id: "\(env.isReadyForUserData)|\(env.isSceneActive)|\(env.foregroundRevision)") {
+      if env.isReadyForUserData && env.isSceneActive { await env.watchlistData.refreshOnForeground() }
+      else { env.watchlistData.pause() }
     }
   }
 

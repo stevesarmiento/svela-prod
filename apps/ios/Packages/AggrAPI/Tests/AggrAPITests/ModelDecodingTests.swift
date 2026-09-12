@@ -63,3 +63,14 @@ import Testing
     #expect(APIClient.errorMessage(from: #"{"error":"Too many requests"}"#.data(using: .utf8)!) == "Too many requests")
   }
 }
+
+@Suite struct AnalysisDataCoverageTests {
+  @Test func missingMarketCapDoesNotBecomeZero() throws {
+    let row = try JSONDecoder().decode(CoinMarketRow.self, from: Data(#"{"id":"coin","name":"Coin","symbol":"c","current_price":1,"price_change_percentage_24h":0,"market_cap":null,"total_volume":2}"#.utf8))
+    #expect(throws: AnalysisDataService.Failure.self) { try AnalysisDataService.validatedMarketInput(row) }
+  }
+  @Test func actualZeroVolumeIsAllowed() throws {
+    let row = try JSONDecoder().decode(CoinMarketRow.self, from: Data(#"{"id":"coin","name":"Coin","symbol":"c","current_price":1,"price_change_percentage_24h":0,"market_cap":2,"total_volume":0}"#.utf8))
+    #expect(try AnalysisDataService.validatedMarketInput(row).volume24h == 0)
+  }
+}

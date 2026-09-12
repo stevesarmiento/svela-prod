@@ -13,6 +13,9 @@ public final class RealtimePriceCoordinator {
     public var priceUsd: Double
     public var updatedAtMs: Double
     public var source: Source
+    public init(priceUsd: Double, updatedAtMs: Double, source: Source) {
+      self.priceUsd = priceUsd; self.updatedAtMs = updatedAtMs; self.source = source
+    }
   }
 
   public private(set) var spotByCoin: [String: LiveSpot] = [:]
@@ -27,7 +30,9 @@ public final class RealtimePriceCoordinator {
   private let lastKnown: LastKnownPriceRepository
   private let convex: ConvexService
   private var tasks: [String: Task<Void, Never>] = [:]
+  private var generations: [String: UUID] = [:]
   private var sessionId: String
+  private final class StreamState { var lastTickAt: Double? }
 
   public init(stream: PythHermesStream = PythHermesStream(), resolver: PythFeedResolver = PythFeedResolver(), convex: ConvexService) {
     self.stream = stream
@@ -51,27 +56,37 @@ public final class RealtimePriceCoordinator {
   public func subscribe(coingeckoId: String, symbol: String?) {
     let id = coingeckoId.trimmingCharacters(in: .whitespaces)
     guard !id.isEmpty, tasks[id] == nil else { return }
+    let generation = UUID()
+    generations[id] = generation
     statusByCoin[id] = .fallback
     tasks[id] = Task { [weak self] in
       guard let self else { return }
-      await self.run(coinId: id, symbol: symbol)
+      await self.run(coinId: id, symbol: symbol, generation: generation)
     }
   }
 
   public func unsubscribe(coingeckoId: String) {
+    generations[coingeckoId] = nil
+    statusByCoin[coingeckoId] = .fallback
     tasks[coingeckoId]?.cancel()
     tasks[coingeckoId] = nil
   }
 
-  private func run(coinId: String, symbol: String?) async {
+  public func stopAll() {
+    for id in Array(tasks.keys) { unsubscribe(coingeckoId: id) }
+    spotByCoin = [:]; statusByCoin = [:]
+  }
+
+  private func run(coinId: String, symbol: String?, generation: UUID) async {
     // Warm start from Convex last-known (unauthenticated query).
     let warmTask = Task { [weak self] in
       guard let self else { return }
       do {
         for try await row in lastKnown.latest(coingeckoId: coinId) {
+          guard !Task.isCancelled, generations[coinId] == generation else { return }
           guard let row, row.priceUsd.isFinite, row.priceUsd > 0 else { continue }
           if statusByCoin[coinId] != .realtime {
-            spotByCoin[coinId] = LiveSpot(priceUsd: row.priceUsd, updatedAtMs: row.updatedAt, source: .lastKnown)
+            spotByCoin[coinId] = LiveSpot(priceUsd: row.priceUsd, updatedAtMs: min(row.publishTime ?? row.updatedAt, row.updatedAt), source: .lastKnown)
             statusByCoin[coinId] = .lastKnown
           }
         }
@@ -84,18 +99,23 @@ public final class RealtimePriceCoordinator {
     if feedId == nil, let symbol, !symbol.isEmpty {
       feedId = await resolver.resolveCryptoUsdFeedId(symbol: symbol)
     }
-    guard let feedId, !Task.isCancelled else { return }
+    guard !Task.isCancelled, generations[coinId] == generation else { return }
+    guard let feedId else {
+      await withTaskCancellationHandler { await warmTask.value } onCancel: { warmTask.cancel() }
+      return
+    }
 
     var lastUiUpdate: Double = 0
     var lastPersist: Double = 0
-    var lastTickAt: Double? = nil
+    let state = StreamState()
     var latestTick: PythHermes.Tick? = nil
 
     // Stale watchdog (1s) — degrade to fallback when no tick for 7.5s.
     let watchdog = Task { [weak self] in
       while !Task.isCancelled {
         try? await Task.sleep(for: .seconds(1))
-        guard let self, let at = lastTickAt else { continue }
+        guard !Task.isCancelled else { return }
+        guard let self, generations[coinId] == generation, let at = state.lastTickAt else { continue }
         let now = Date().timeIntervalSince1970 * 1000
         if now - at > Self.realtimeStaleMs, statusByCoin[coinId] == .realtime {
           statusByCoin[coinId] = .fallback
@@ -105,11 +125,11 @@ public final class RealtimePriceCoordinator {
     defer { watchdog.cancel() }
 
     for await tick in stream.ticks(feedIds: [feedId]) {
-      if Task.isCancelled { break }
+      if Task.isCancelled || generations[coinId] != generation { break }
       guard tick.feedId == feedId else { continue }
       let now = Date().timeIntervalSince1970 * 1000
       latestTick = tick
-      lastTickAt = now
+      state.lastTickAt = now
       if now - lastUiUpdate >= Self.uiThrottleMs {
         lastUiUpdate = now
         let updatedAt = tick.publishTimeMs ?? now

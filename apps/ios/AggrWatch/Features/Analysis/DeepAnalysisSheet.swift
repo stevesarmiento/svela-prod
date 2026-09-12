@@ -59,6 +59,7 @@ struct DeepAnalysisSheet: View {
     streamTask = Task {
       do {
         let bundle = try await service.build(coinId: coinId, fallbackName: quote?.name, fallbackSymbol: quote?.symbol)
+        try Task.checkCancellation()
         let body = try JSONEncoder().encode(bundle.data)
         for try await chunk in ai.stream(path: "/api/analyze", body: body, protocol: .text) { text += chunk }
       } catch is CancellationError {
@@ -171,16 +172,18 @@ struct MultiAnalysisSheet: View {
             group.addTask { (id, try? await service.build(coinId: id, fallbackName: quotes[id]??.name, fallbackSymbol: quotes[id]??.symbol)) }
           }
           for await (id, bundle) in group {
+            guard !Task.isCancelled else { break }
             if let bundle { await collector.add(id: id, bundle: bundle) }
             let n = await collector.count
+            guard !Task.isCancelled else { break }
             await MainActor.run { readyCount = n }
           }
         }
       }
-      let timeout = Task<Void, Never> { try? await Task.sleep(for: .seconds(30)); return }
-      _ = await Task.select(gather, timeout)
-      gather.cancel(); timeout.cancel()
+      _ = await AsyncDeadline.wait(for: gather, timeout: .seconds(30))
+      guard !Task.isCancelled else { return }
       let ready = await collector.ordered(ids)
+      guard !Task.isCancelled else { return }
       guard ready.count >= 2 else {
         if !Task.isCancelled { text = "Not enough market data loaded to run a comparison. Please try again."; isLoading = false }
         return
@@ -203,19 +206,6 @@ struct MultiAnalysisSheet: View {
     var count: Int { bundles.count }
     func add(id: String, bundle: AnalysisDataService.Bundle) { bundles[id] = bundle }
     func ordered(_ ids: [String]) -> [AnalysisDataService.Bundle] { ids.compactMap { bundles[$0] } }
-  }
-}
-
-extension Task where Success == Void, Failure == Never {
-  /// Resolves when either task finishes (used for "wait up to N seconds" without cancelling children early).
-  static func select(_ a: Task<Void, Never>, _ b: Task<Void, Never>) async -> Bool {
-    await withTaskGroup(of: Bool.self) { group in
-      group.addTask { await a.value; return true }
-      group.addTask { await b.value; return false }
-      let first = await group.next() ?? false
-      group.cancelAll()
-      return first
-    }
   }
 }
 

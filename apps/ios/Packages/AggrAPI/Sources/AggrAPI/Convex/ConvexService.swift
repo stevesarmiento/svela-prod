@@ -58,6 +58,8 @@ public final class ConvexService {
     }
   }
 
+  public func retryAuthentication() async { _ = await client.loginFromCache() }
+
   /// Push a fresh token to Convex right away (e.g. on app foreground).
   public func refreshAuthNow() async {
     await authProvider.refreshNow()

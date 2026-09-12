@@ -44,6 +44,10 @@ final class SelectionStore {
   func isSelected(_ id: String) -> Bool { selected.contains(id) }
   func selectAll(_ on: Bool) { selected = on ? Set(selectableIds) : [] }
   func clear() { selected = [] }
+  func reset() {
+    selected = []; selectableIds = []; onRemove = nil; onAnalyze = nil; ownerId = nil
+    isRemoving = false
+  }
 
   /// `handleRemoveSelected` with the partial-success toast copy.
   func removeSelected(toasts: ToastCenter) async {

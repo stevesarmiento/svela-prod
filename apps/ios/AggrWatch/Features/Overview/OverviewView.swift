@@ -11,10 +11,19 @@ struct OverviewView: View {
   var body: some View {
     ScrollView {
       if let store {
-        if store.isEmptyDashboard {
+        if let error = store.error, !store.hasLoaded {
+          EmptyState(systemImage: "exclamationmark.triangle", title: "Couldn’t load overview", message: error,
+                     actionTitle: "Retry") { store.retry() }
+        } else if store.isEmptyDashboard {
           OverviewEmptyState()
         } else {
           VStack(spacing: 20) {
+            if let error = store.error {
+              VStack(spacing: 8) {
+                Text(error).font(.footnote).foregroundStyle(.secondary)
+                Button("Retry loading overview") { store.retry() }
+              }
+            }
             PortfolioValueCard(store: store)
             BreadthCard(store: store)
             EventsFeedList(store: store)
@@ -32,10 +41,13 @@ struct OverviewView: View {
         Button { env.router.sheet = .settings } label: { Label("Settings", systemImage: "person.crop.circle") }
       }
     }
-    .task(id: env.isReadyForUserData) {
+    .task(id: "\(env.isReadyForUserData)|\(env.isSceneActive)|\(env.foregroundRevision)") {
       if store == nil { store = OverviewStore(repo: env.overview, watchlistData: env.watchlistData, market: env.market, cache: env.queryCache) }
-      if env.isReadyForUserData { store?.start() } else { store?.stop() }
+      store?.stop()
+      if env.isReadyForUserData && env.isSceneActive { store?.start() }
     }
+    .onDisappear { store?.stop() }
+    .refreshable { store?.retry() }
   }
 
   /// Web top-nav greeting on /overview: time-of-day + first name.
@@ -56,6 +68,7 @@ struct PortfolioValueCard: View {
       HStack(alignment: .top) {
         VStack(alignment: .leading, spacing: 6) {
           AnimatedNumber(value: store.displayValueUsd, font: .system(size: 30, weight: .medium, design: .rounded))
+          if let note = store.coverageNote { Text(note).font(.caption).foregroundStyle(.secondary) }
           if store.hasHoldings, store.rangeChange.isAvailable {
             MoveWithBadge(usdMove: store.rangeChange.deltaUsd, pct: store.rangeChange.deltaPct)
           }
@@ -66,14 +79,20 @@ struct PortfolioValueCard: View {
         Spacer()
         TimeScalePicker(scales: TimeScale.overviewScales, selection: $store.scale)
       }
-      if !store.hasHoldings {
+      if !store.hasLoaded {
+        ProgressView("Loading holdings…").frame(maxWidth: .infinity, minHeight: 200)
+      } else if !store.hasHoldings {
         Text("No holdings to chart yet.").font(.footnote).foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, minHeight: 200)
       } else if store.portfolioChartPoints.count >= 2 {
         RebasedComparisonChart(portfolio: store.portfolioChartPoints, market: store.rebased.marketPoints, scrubTime: $store.scrubTime)
           .frame(height: 240)
-      } else {
+      } else if store.seriesLoading {
         ProgressView().frame(maxWidth: .infinity, minHeight: 200)
+      } else {
+        Text(store.seriesError ?? "Price history is not available yet.").font(.footnote).foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity, minHeight: 200)
+        Button("Retry") { store.retry() }
       }
     }
     .padding(14)

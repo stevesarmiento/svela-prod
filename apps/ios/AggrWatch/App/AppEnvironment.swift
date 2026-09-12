@@ -26,6 +26,9 @@ final class AppEnvironment {
   let analysis: AnalysisDataService
   let news: NewsRepository
   let settings: SettingsRepository
+  var isSceneActive = true
+  var foregroundRevision = 0
+  private var activeUserId: String?
   #if DEBUG
   /// DEBUG only: skip Clerk sign-in to exercise public data (search, token pages, screener browse).
   var debugBypassAuth = false
@@ -58,6 +61,7 @@ final class AppEnvironment {
   /// True once Clerk has an active user AND Convex accepted its token — the gate for `*My*` queries.
   var isReadyForUserData: Bool {
     clerkSession.isSignedIn && convex.authStatus == .authenticated
+      && userBootstrap.bootstrappedUserId == clerkSession.user?.id
   }
 
   /// DEBUG: `xcrun simctl launch booted watch.aggr.ios --debug-bypass-auth --open-url aggrwatch://watchlists/bitcoin`
@@ -94,14 +98,47 @@ final class AppEnvironment {
   }
 
   func handleForeground() async {
+    isSceneActive = true
+    foregroundRevision += 1
     await convex.refreshAuthNow()
-    await watchlistData.refreshOnForeground()
+    await userBootstrap.bootstrapIfNeeded()
   }
 
-  func signOut() async {
+  func handleBackground() {
+    isSceneActive = false
+    watchlistData.pause()
+    realtime.stopAll()
+  }
+
+  func retryUserData() async {
+    if convex.authStatus != .authenticated { await convex.retryAuthentication() }
+    await userBootstrap.bootstrapIfNeeded()
+  }
+
+  func synchronizeUserSession() async {
+    let userID = clerkSession.user?.id
+    guard activeUserId != userID else { return }
+    let hadUser = activeUserId != nil
+    activeUserId = userID
     userBootstrap.reset()
     watchlistData.stop()
+    realtime.stopAll()
+    if hadUser {
+      router.resetAll()
+      selection.reset()
+      watchlistData.selectedGroupSlug = nil
+    }
     await queryCache.removeAll()
+  }
+
+  @discardableResult
+  func signOut() async -> Bool {
     await clerkSession.signOut()
+    guard !clerkSession.isSignedIn else {
+      toasts.error("Couldn’t sign out", clerkSession.lastError ?? "Try again.")
+      return false
+    }
+    await synchronizeUserSession()
+    return true
   }
 }

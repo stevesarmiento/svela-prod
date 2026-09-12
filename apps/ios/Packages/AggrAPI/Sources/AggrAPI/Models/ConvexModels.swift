@@ -67,6 +67,13 @@ public struct WatchlistsPageBootstrap: Codable, Sendable, Hashable {
 
   public static let empty = WatchlistsPageBootstrap()
 
+  /// Includes membership, even when the union of coins has not changed.
+  public var membershipKey: String {
+    groups.map { group in
+      group.id + ":" + (itemsByGroupId[group.id] ?? []).map(\.coinId).sorted().joined(separator: ",")
+    }.sorted().joined(separator: "|")
+  }
+
   public var allCoinIds: [String] {
     var seen = Set<String>()
     var out: [String] = []

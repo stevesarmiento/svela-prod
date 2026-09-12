@@ -80,18 +80,19 @@ struct TokenDetailView: View {
     .sheet(isPresented: $showFeed) {
       if let feed { MarketFeedSheet(store: feed, displayName: LogoOverrides.cleanTokenName(quote?.name ?? coinId)) }
     }
-    .task(id: coinId) {
-      let s = TokenChartStore(coinId: coinId, market: env.market, cache: env.queryCache, initialQuote: env.watchlistData.quote(coinId))
+    .task(id: "\(coinId)|\(env.isSceneActive)|\(env.foregroundRevision)") {
+      guard env.isSceneActive else { store?.stop(); feed?.stop(); return }
+      let s = store ?? TokenChartStore(coinId: coinId, market: env.market, cache: env.queryCache, initialQuote: env.watchlistData.quote(coinId))
       store = s
       s.start(scale: scale)
       env.realtime.subscribe(coingeckoId: coinId, symbol: s.quote?.symbol)
-      let f = MarketFeedStore(coinId: coinId, news: env.news, canMutate: { [weak env] in env?.isReadyForUserData ?? false })
+      let f = feed ?? MarketFeedStore(coinId: coinId, news: env.news, canMutate: { [weak env] in env?.isReadyForUserData ?? false })
       feed = f
       f.start()
     }
     .onChange(of: scale) { _, next in store?.setScale(next) }
     .onChange(of: store?.quote?.symbol) { _, sym in
-      if let sym { env.realtime.unsubscribe(coingeckoId: coinId); env.realtime.subscribe(coingeckoId: coinId, symbol: sym) }
+      if env.isSceneActive, let sym { env.realtime.unsubscribe(coingeckoId: coinId); env.realtime.subscribe(coingeckoId: coinId, symbol: sym) }
     }
     .onDisappear {
       store?.stop()

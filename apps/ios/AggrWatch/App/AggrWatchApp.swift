@@ -30,6 +30,8 @@ struct AggrWatchApp: App {
         .onChange(of: scenePhase) { _, phase in
           if phase == .active {
             Task { await environment.handleForeground() }
+          } else {
+            environment.handleBackground()
           }
         }
     }

@@ -26,7 +26,10 @@ struct WatchlistsView: View {
         .pickerStyle(.segmented)
         .padding(.horizontal, 16)
 
-        if !data.hasLoadedBootstrap {
+        if let error = data.bootstrapError {
+          EmptyState(systemImage: "exclamationmark.triangle", title: "Couldn’t load watchlists", message: error,
+                     actionTitle: "Retry") { data.start() }
+        } else if !data.hasLoadedBootstrap {
           ProgressView().padding(.top, 60)
         } else if data.groups.isEmpty {
           EmptyState(systemImage: "bookmark", title: "No watchlists yet",

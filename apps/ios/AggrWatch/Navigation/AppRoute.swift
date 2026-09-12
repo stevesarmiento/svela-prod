@@ -78,6 +78,6 @@ final class AppRouter {
 
   func resetAll() {
     overviewPath = []; watchlistsPath = []; comparePath = []; screenerPath = []; searchPath = []
-    sheet = nil
+    sheet = nil; pendingScreenerLink = nil; tab = .watchlists
   }
 }

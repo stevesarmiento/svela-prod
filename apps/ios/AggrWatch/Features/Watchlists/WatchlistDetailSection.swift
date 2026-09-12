@@ -69,7 +69,8 @@ struct GroupAggregateCard: View {
     }
     .padding(14)
     .glassEffect(.regular, in: .rect(cornerRadius: 18))
-    .task(id: "\(group.id)|\(scale.rawValue)|\(data.coinIds(in: group).joined(separator: ","))") {
+    .task(id: "\(group.id)|\(scale.rawValue)|\(data.coinIds(in: group).joined(separator: ","))|\(env.isSceneActive)|\(env.foregroundRevision)") {
+      guard env.isSceneActive else { return }
       guard scale != .d1, !scale.isAggregateChangeUnavailable else { series = []; return }
       loading = true
       defer { loading = false }
@@ -110,13 +111,17 @@ struct GroupCoinsChart: View {
     }
     .padding(14)
     .glassEffect(.regular, in: .rect(cornerRadius: 18))
-    .task(id: "\(group.id)|\(scale.rawValue)|\(ids.joined(separator: ","))") {
+    .task(id: "\(group.id)|\(scale.rawValue)|\(ids.joined(separator: ","))|\(env.isSceneActive)|\(env.foregroundRevision)") {
+      guard env.isSceneActive else { return }
       guard !ids.isEmpty else { byCoin = [:]; return }
-      loading = byCoin.isEmpty
-      let fetched = await WatchlistDataStore.fetchMarketChartSeries(ids: ids, days: scale.marketChartDaysParam, market: env.market, cache: env.queryCache, force: false)
-      guard !Task.isCancelled else { return }
-      byCoin = AggregateSeries.alignToSharedAxis(fetched.mapValues { ($0.points, $0.warming) })
-      loading = false
+      while !Task.isCancelled {
+        loading = byCoin.isEmpty
+        let fetched = await WatchlistDataStore.fetchMarketChartSeries(ids: ids, days: scale.marketChartDaysParam, market: env.market, cache: env.queryCache, force: false)
+        guard !Task.isCancelled else { return }
+        byCoin = AggregateSeries.alignToSharedAxis(fetched.mapValues { ($0.points, $0.warming) })
+        loading = false
+        do { try await Task.sleep(for: QueryPolicy.aggregateChart.refetchInterval ?? .seconds(300)) } catch { return }
+      }
     }
   }
 }
@@ -230,7 +235,7 @@ struct HoldingsCell: View {
           .toolbar { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { focused = false } } }
       } else {
         Button {
-          draft = item.holdings.map { Self.qtyFormatter.string(from: NSNumber(value: $0)) ?? "" } ?? ""
+          draft = item.holdings.map { HoldingsAmount.format($0) } ?? ""
           editing = true
           focused = true
         } label: {
@@ -249,14 +254,10 @@ struct HoldingsCell: View {
 
   private func commit() async {
     editing = false
-    let t = draft.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: "")
-    if t.isEmpty {
-      do { try await env.watchlistData.setHoldings(groupId: group.id, coinId: item.coinId, holdings: nil) }
-      catch { env.toasts.error("Could not update holdings", "Try again in a moment.") }
-      return
-    }
-    guard let n = Double(t), n.isFinite, n >= 0 else {
-      env.toasts.error("Invalid amount", "Enter a non-negative number or leave empty to clear.")
+    let n: Double?
+    do { n = try HoldingsAmount.parse(draft) }
+    catch {
+      env.toasts.error("Invalid amount", "Enter a non-negative number using your region’s decimal separator, or leave empty to clear.")
       return
     }
     do { try await env.watchlistData.setHoldings(groupId: group.id, coinId: item.coinId, holdings: n) }

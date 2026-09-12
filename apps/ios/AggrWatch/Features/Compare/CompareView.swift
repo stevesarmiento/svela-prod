@@ -24,7 +24,10 @@ struct CompareView: View {
         }
         .padding(.horizontal, 16)
 
-        if !data.hasLoadedBootstrap {
+        if let error = data.bootstrapError {
+          EmptyState(systemImage: "exclamationmark.triangle", title: "Couldn’t load watchlists", message: error,
+                     actionTitle: "Retry") { data.start() }
+        } else if !data.hasLoadedBootstrap {
           ProgressView().padding(.top, 60)
         } else if data.groups.isEmpty {
           EmptyState(systemImage: "chart.xyaxis.line", title: "Nothing to compare yet", message: "Create watchlists and add tokens to compare them here.",
@@ -47,9 +50,13 @@ struct CompareView: View {
         Button { env.router.sheet = .createGroup } label: { Label("Create watchlist", systemImage: "plus.square.on.square") }
       }
     }
-    .task(id: "\(scale.rawValue)|\(data.bootstrap.allCoinIds.sorted().joined(separator: ","))|\(data.groups.map(\.id).joined(separator: ","))") {
+    .task(id: "\(scale.rawValue)|\(data.bootstrap.membershipKey)|\(env.isSceneActive)|\(env.foregroundRevision)") {
       if !expandedInitialized, !data.groups.isEmpty { expanded = Set(data.groups.map(\.id)); expandedInitialized = true }
-      await loadSeries()
+      guard env.isSceneActive else { return }
+      while !Task.isCancelled {
+        await loadSeries()
+        do { try await Task.sleep(for: QueryPolicy.aggregateChart.refetchInterval ?? .seconds(300)) } catch { return }
+      }
     }
   }
 
@@ -81,7 +88,7 @@ struct CompareView: View {
     let data = env.watchlistData
     guard !scale.isAggregateChangeUnavailable else { seriesByGroup = [:]; changeByCoin = [:]; return }
     let ids = data.bootstrap.allCoinIds
-    guard !ids.isEmpty else { return }
+    guard !ids.isEmpty else { seriesByGroup = [:]; changeByCoin = [:]; loading = false; return }
     loading = seriesByGroup.isEmpty
     let fetched = await WatchlistDataStore.fetchMarketChartSeries(ids: ids, days: scale.marketChartDaysParam, market: env.market, cache: env.queryCache, force: false)
     guard !Task.isCancelled else { return }
@@ -114,7 +121,11 @@ struct WatchlistAccordionTable: View {
     let rows = data.groups.map { g -> GroupRow in
       let items = data.items(in: g)
       let positions = items.filter { $0.holdings != nil }
-      let value = positions.isEmpty ? nil : positions.reduce(0.0) { $0 + ($1.holdings ?? 0) * (data.quote($1.coinId)?.currentPrice ?? 0) }
+      let values = positions.compactMap { item -> Double? in
+        guard let holdings = item.holdings, let price = data.quote(item.coinId)?.currentPrice, price.isFinite, price > 0 else { return nil }
+        return holdings * price
+      }
+      let value = positions.isEmpty || values.count != positions.count ? nil : values.reduce(0, +)
       return GroupRow(group: g, holdingsValue: value)
     }.sorted { ($0.holdingsValue ?? -1) > ($1.holdingsValue ?? -1) }
 

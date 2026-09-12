@@ -15,14 +15,7 @@ public struct AIStreamClient: Sendable {
     return AsyncThrowingStream { continuation in
       let task = Task {
         do {
-          let (request, session) = try await client.makeStreamingRequest(path: path, body: body)
-          let (bytes, response) = try await session.bytes(for: request)
-          guard let http = response as? HTTPURLResponse else { throw APIError.transport(endpoint: path, message: "Non-HTTP response") }
-          guard (200..<300).contains(http.statusCode) else {
-            var data = Data()
-            for try await b in bytes { data.append(b); if data.count > 4096 { break } }
-            throw APIError.fromStatus(http.statusCode, endpoint: path, message: APIClient.errorMessage(from: data) ?? "Request failed: \(http.statusCode)")
-          }
+          let bytes = try await client.openAuthenticatedStream(path: path, body: body)
           switch proto {
           case .text:
             var buffer = Data()
@@ -59,10 +52,28 @@ public struct AIStreamClient: Sendable {
 
 extension APIClient {
   /// Builds an authenticated POST request for streaming (90s timeout) plus the session to run it on.
-  func makeStreamingRequest(path: String, body: Data) async throws -> (URLRequest, URLSession) {
+  func makeStreamingRequest(path: String, body: Data, skipTokenCache: Bool = false) async throws -> (URLRequest, URLSession) {
     var request = Request(method: "POST", path: path, body: body, timeout: 90, retries: 0, requiresAuth: true)
     request.retries = 0
-    let (req, session) = try await buildURLRequest(request, skipTokenCache: false)
+    let (req, session) = try await buildURLRequest(request, skipTokenCache: skipTokenCache)
     return (req, session)
+  }
+}
+
+extension APIClient {
+  /// Only a rejected request may be replayed. Once successful bytes are returned, callers never retry.
+  func openAuthenticatedStream(path: String, body: Data) async throws -> URLSession.AsyncBytes {
+    for attempt in 0...1 {
+      try Task.checkCancellation()
+      let (request, session) = try await makeStreamingRequest(path: path, body: body, skipTokenCache: attempt == 1)
+      let (bytes, response) = try await session.bytes(for: request)
+      guard let http = response as? HTTPURLResponse else { throw APIError.transport(endpoint: path, message: "Non-HTTP response") }
+      if (200..<300).contains(http.statusCode) { return bytes }
+      var data = Data()
+      for try await byte in bytes { data.append(byte); if data.count >= 4096 { break } }
+      if http.statusCode == 401 && attempt == 0 { continue }
+      throw APIError.fromStatus(http.statusCode, endpoint: path, message: APIClient.errorMessage(from: data) ?? "Request failed: \(http.statusCode)")
+    }
+    throw APIError.fromStatus(401, endpoint: path, message: "Please sign in again.")
   }
 }

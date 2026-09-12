@@ -23,6 +23,9 @@ struct ScreenerView: View {
       if let store {
         ToolbarItemGroup(placement: .topBarTrailing) {
           SortMenu(store: store)
+          if let url = URL(string: "https://aggr.watch/screener" + store.webURLQuery) {
+            ShareLink(item: url) { Label("Share screener", systemImage: "square.and.arrow.up") }
+          }
           Button { showPrompt = true } label: {
             Label("Smart Screener", systemImage: "sparkles")
           }
@@ -36,12 +39,13 @@ struct ScreenerView: View {
     .sheet(item: editTargetBinding) { target in
       if let store { FilterEditorSheet(store: store, index: target.index) }
     }
-    .task {
+    .task(id: "\(env.isSceneActive)|\(env.foregroundRevision)") {
+      guard env.isSceneActive else { store?.stop(); return }
       if store == nil { store = ScreenerStore(api: env.screener, market: env.market, cache: env.queryCache) }
       store?.start()
     }
     .onDisappear { store?.stop() }
-    .task(id: pendingLinkKey) {
+    .task(id: "\(pendingLinkKey)|\(store != nil)") {
       guard let link = env.router.pendingScreenerLink, let store else { return }
       store.applyLink(dsl: link.dsl, sort: link.sort, q: link.q)
       env.router.pendingScreenerLink = nil
@@ -231,6 +235,7 @@ struct TrailCell: View {
   let percentChange24h: Double?
   @Environment(AppEnvironment.self) private var env
   @State private var points: [TimePoint] = []
+  @State private var unavailable = false
 
   var body: some View {
     Group {
@@ -241,14 +246,22 @@ struct TrailCell: View {
         let up = (last7.last?.value ?? 0) >= (last7.first?.value ?? 0)
         Sparkline(points: ChartSeries.downsample(points, max: 128), lineWidth: 1.2, tailStart: weekAgo,
                   tailColor: up ? Color(oklch: "oklch(0.7688 0.1687 161.95)") : Color(oklch: "oklch(0.7022 0.1892 22.23)"))
+      } else if unavailable {
+        Text("—").foregroundStyle(.secondary).accessibilityLabel("Price history unavailable")
       } else {
         SkeletonBlock(height: 24, width: 110)
       }
     }
-    .task(id: coinId) {
+    .task(id: "\(coinId)|\(env.isSceneActive)|\(env.foregroundRevision)") {
+      guard env.isSceneActive else { return }
+      unavailable = false
       let key = QueryCache.Key("market-chart", coinId, "14")
-      guard let response = try? await env.queryCache.fetch(key, policy: .screenerTop, fetcher: { [market = env.market] in try await market.marketChart(coinId: coinId, days: "14") }) else { return }
-      points = response.data.prices.map { TimePoint(epochSeconds: TimePoint.normalizeEpochSeconds($0.time), value: $0.value) }
+      do {
+        let response = try await env.queryCache.fetch(key, policy: .screenerTop) { [market = env.market] in try await market.marketChart(coinId: coinId, days: "14") }
+        try Task.checkCancellation()
+        points = response.data.prices.map { TimePoint(epochSeconds: TimePoint.normalizeEpochSeconds($0.time), value: $0.value) }
+        unavailable = points.count < 2
+      } catch { if !Task.isCancelled { unavailable = true } }
     }
   }
 }

@@ -15,15 +15,15 @@ struct UsdText: View {
 
 /// Animated numeric text (replaces number-flow). Formatter is applied to the current value.
 struct AnimatedNumber: View {
-  let value: Double
+  let value: Double?
   var format: (Double) -> String = { UsdFormat.price($0) }
   var font: Font = .title
 
   var body: some View {
-    Text(format(value))
+    Text(value.map(format) ?? "—")
       .font(font)
       .monospacedDigit()
-      .contentTransition(.numericText(value: value))
+      .contentTransition(.numericText(value: value ?? 0))
       .animation(.snappy(duration: 0.4), value: value)
   }
 }

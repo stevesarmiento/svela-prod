@@ -33,6 +33,9 @@ final class WatchlistDataStore {
   private var quotesPollTask: Task<Void, Never>?
   private var aggregateTask: Task<Void, Never>?
   private var lastCoinIdsKey = ""
+  private var lastMembershipKey = ""
+  private var quotesRefreshTask: Task<Void, Never>?
+  private var subscriptionGeneration = 0
 
   init(repository: WatchlistRepository, market: MarketAPI, cache: QueryCache) {
     self.repository = repository
@@ -81,10 +84,15 @@ final class WatchlistDataStore {
 
   func start() {
     guard bootstrapTask == nil else { return }
+    subscriptionGeneration += 1
+    let generation = subscriptionGeneration
+    bootstrapError = nil
     bootstrapTask = Task { [weak self] in
       guard let self else { return }
+      defer { if self.subscriptionGeneration == generation { self.bootstrapTask = nil } }
       do {
         for try await next in repository.pageBootstrap() {
+          guard !Task.isCancelled, self.subscriptionGeneration == generation else { return }
           self.bootstrap = next
           self.hasLoadedBootstrap = true
           self.bootstrapError = nil
@@ -93,24 +101,33 @@ final class WatchlistDataStore {
         }
       } catch is CancellationError {
       } catch {
-        self.bootstrapError = error.localizedDescription
+        if !Task.isCancelled, self.subscriptionGeneration == generation { self.bootstrapError = error.localizedDescription }
       }
     }
     startQuotesPolling()
   }
 
-  func stop() {
+  func pause() {
+    subscriptionGeneration += 1
     bootstrapTask?.cancel(); bootstrapTask = nil
     quotesPollTask?.cancel(); quotesPollTask = nil
     aggregateTask?.cancel(); aggregateTask = nil
+    quotesRefreshTask?.cancel(); quotesRefreshTask = nil
+    isQuotesLoading = false; isAggregateLoading = false
+  }
+
+  func stop() {
+    pause()
     bootstrap = .empty
     hasLoadedBootstrap = false
     quotesById = [:]
     aggregate1dByGroup = [:]
-    lastCoinIdsKey = ""
+    lastCoinIdsKey = ""; lastMembershipKey = ""
+    bootstrapError = nil; quotesError = nil; quotesUpdatedAt = nil
   }
 
   func refreshOnForeground() async {
+    start()
     await refreshQuotes(force: false)
     await refreshAggregates(force: false)
   }
@@ -123,10 +140,16 @@ final class WatchlistDataStore {
 
   private func onCoinSetChanged() {
     let key = bootstrap.allCoinIds.sorted().joined(separator: ",")
-    guard key != lastCoinIdsKey else { return }
-    lastCoinIdsKey = key
-    Task { await refreshQuotes(force: true) }
-    Task { await refreshAggregates(force: true) }
+    if key != lastCoinIdsKey {
+      lastCoinIdsKey = key
+      quotesRefreshTask?.cancel()
+      quotesRefreshTask = Task { await refreshQuotes(force: false) }
+    }
+    if bootstrap.membershipKey != lastMembershipKey {
+      lastMembershipKey = bootstrap.membershipKey
+      aggregateTask?.cancel()
+      aggregateTask = Task { await refreshAggregates(force: false) }
+    }
   }
 
   // MARK: Quotes
@@ -149,7 +172,9 @@ final class WatchlistDataStore {
     isQuotesLoading = quotesById.isEmpty
     defer { isQuotesLoading = false }
     do {
+      let generation = subscriptionGeneration
       let merged = try await fetchQuotes(ids: ids, force: force)
+      guard !Task.isCancelled, generation == subscriptionGeneration else { return }
       // Newest-wins merge (`shouldSyncQuote`): keep existing entries the new payload lacks.
       var next = quotesById
       for (id, q) in merged { next[id] = q }
@@ -180,32 +205,26 @@ final class WatchlistDataStore {
   // MARK: Aggregates (1D)
 
   func refreshAggregates(force: Bool) async {
-    aggregateTask?.cancel()
-    let groups = self.groups
+    let generation = subscriptionGeneration
+    let membership = bootstrap.membershipKey
     let byGroup = groups.map { ($0.id, coinIds(in: $0)) }
     let allIds = Array(Set(byGroup.flatMap(\.1)))
     guard !allIds.isEmpty else { aggregate1dByGroup = [:]; return }
     isAggregateLoading = aggregate1dByGroup.isEmpty
-    let task = Task { [market, cache] () -> [String: [TimePoint]] in
-      let series = await Self.fetchMarketChartSeries(ids: allIds, days: "1", market: market, cache: cache, force: force)
-      let end = TimeScale.d1.rangeEndMs()
-      var result: [String: [TimePoint]] = [:]
-      for (groupId, ids) in byGroup {
-        var byCoin: [String: [TimePoint]] = [:]
-        var warming = Set<String>()
-        for id in ids {
-          if let s = series[id] { byCoin[id] = s.points; if s.warming { warming.insert(id) } }
-        }
-        result[groupId] = AggregateSeries.equalWeightReturnSeries(.init(byCoin: byCoin, warming: warming), scale: .d1, rangeEndMs: end)
+    defer { if generation == subscriptionGeneration { isAggregateLoading = false } }
+    let series = await Self.fetchMarketChartSeries(ids: allIds, days: "1", market: market, cache: cache, force: force)
+    guard !Task.isCancelled, generation == subscriptionGeneration, membership == bootstrap.membershipKey else { return }
+    let end = TimeScale.d1.rangeEndMs()
+    var result: [String: [TimePoint]] = [:]
+    for (groupId, ids) in byGroup {
+      var byCoin: [String: [TimePoint]] = [:]
+      var warming = Set<String>()
+      for id in ids {
+        if let s = series[id] { byCoin[id] = s.points; if s.warming { warming.insert(id) } }
       }
-      return result
+      result[groupId] = AggregateSeries.equalWeightReturnSeries(.init(byCoin: byCoin, warming: warming), scale: .d1, rangeEndMs: end)
     }
-    aggregateTask = Task { [weak self] in
-      let result = await task.value
-      guard let self, !Task.isCancelled else { return }
-      self.aggregate1dByGroup = result
-      self.isAggregateLoading = false
-    }
+    aggregate1dByGroup = result
   }
 
   struct ChartSeries: Sendable { var points: [TimePoint]; var warming: Bool }
@@ -232,6 +251,7 @@ final class WatchlistDataStore {
       }
       while running < 5, let id = iterator.next() { enqueue(id, &group); running += 1 }
       for await (id, series) in group {
+        guard !Task.isCancelled else { group.cancelAll(); break }
         if let series { result[id] = series }
         if let next = iterator.next() { enqueue(next, &group) }
       }

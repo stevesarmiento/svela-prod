@@ -16,8 +16,9 @@ struct PriceChartCard: View {
   var body: some View {
     let quote = store.quote
     let spot = env.realtime.spot(store.coinId)
-    let status = env.realtime.status(store.coinId)
-    let pricing = LivePricing.resolve(quote: quote, spot: spot, alignedPrice: store.alignedPrice, isWarmingUp: store.isWarmingUp)
+    let streamStatus = env.realtime.status(store.coinId)
+    let pricing = LivePricing.resolve(quote: quote, spot: spot, alignedPrice: store.alignedPrice, isWarmingUp: store.isWarmingUp, status: streamStatus)
+    let status = pricing.status
     let scrub = selectedDate.flatMap { scrubValues(at: $0) }
 
     VStack(alignment: .leading, spacing: 12) {
@@ -104,14 +105,20 @@ struct PriceChartCard: View {
 
 /// `resolveLivePricing`: live spot is trusted only when 0.05 < spot/reference < 20.
 enum LivePricing {
-  struct Result { var livePrice: Double; var liveChange24h: Double?; var isLiveSpotTrusted: Bool; var basePrice: Double? }
+  struct Result { var livePrice: Double?; var liveChange24h: Double?; var isLiveSpotTrusted: Bool; var basePrice: Double?; var status: RealtimeQuoteStatus }
 
-  static func resolve(quote: CoinQuote?, spot: RealtimePriceCoordinator.LiveSpot?, alignedPrice: Double?, isWarmingUp: Bool) -> Result {
-    let reference = alignedPrice ?? quote?.currentPrice ?? 0
+  static func resolve(quote: CoinQuote?, spot: RealtimePriceCoordinator.LiveSpot?, alignedPrice: Double?, isWarmingUp: Bool, status: RealtimeQuoteStatus = .fallback, now: Date = .now) -> Result {
+    func positive(_ value: Double?) -> Double? { value.flatMap { $0.isFinite && $0 > 0 ? $0 : nil } }
+    let reference = positive(quote?.currentPrice) ?? positive(alignedPrice)
     var trusted = false
-    if let spot, !isWarmingUp, spot.priceUsd.isFinite, spot.priceUsd > 0, reference > 0 {
-      let ratio = spot.priceUsd / reference
-      trusted = ratio.isFinite && ratio > 0.05 && ratio < 20
+    if let spot, !isWarmingUp, spot.priceUsd.isFinite, spot.priceUsd > 0 {
+      let age = now.timeIntervalSince1970 * 1000 - spot.updatedAtMs
+      let quoteTime = (quote?.lastUpdatedDate?.timeIntervalSince1970 ?? 0) * 1000
+      let fresh = spot.source == .pyth
+        ? status == .realtime && age >= -5_000 && age <= 7_500
+        : age >= -5_000 && age <= 300_000 && spot.updatedAtMs > quoteTime
+      let ratio = reference.map { spot.priceUsd / $0 } ?? 1
+      trusted = fresh && ratio.isFinite && ratio > 0.05 && ratio < 20
     }
     let live = trusted ? spot!.priceUsd : reference
     // Base = price 24h ago inferred from the quote's 24h % change.
@@ -119,9 +126,9 @@ enum LivePricing {
     var change: Double? = quote?.priceChangePercentage24h
     if let p = quote?.currentPrice, let pct = quote?.priceChangePercentage24h, pct.isFinite, 1 + pct / 100 > 0 {
       base = p / (1 + pct / 100)
-      if trusted, let b = base, b > 0 { change = (live - b) / b * 100 }
+      if trusted, let live, let b = base, b > 0 { change = (live - b) / b * 100 }
     }
-    return Result(livePrice: live, liveChange24h: change, isLiveSpotTrusted: trusted, basePrice: base)
+    return Result(livePrice: live, liveChange24h: change, isLiveSpotTrusted: trusted, basePrice: base, status: trusted ? (spot?.source == .pyth ? .realtime : .lastKnown) : .fallback)
   }
 }
 

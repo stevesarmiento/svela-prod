@@ -6,6 +6,16 @@ import Observation
 /// Port of `overview-holdings-section.tsx` data wiring.
 @Observable
 final class OverviewStore {
+  private(set) var bootstrapError: String?
+  private(set) var holdingsError: String?
+  private(set) var refreshError: String?
+  private(set) var seriesError: String?
+  var error: String? { bootstrapError ?? holdingsError ?? refreshError }
+  var hasLoaded: Bool { bootstrap != nil && breakdown != nil }
+  private var generation = 0
+  private var seriesRequest = UUID()
+  private var snapshotTask: Task<Void, Never>?
+  private var scaleTask: Task<Void, Never>?
   private(set) var bootstrap: OverviewBootstrap?
   private(set) var breakdown: [OverviewHoldingsGroup]?
   private(set) var valueSeries: [TimePoint] = []
@@ -14,7 +24,13 @@ final class OverviewStore {
   private(set) var marketLoading = false
   private(set) var seriesLoading = false
   private(set) var sentimentOverlay: [String: NewsSentimentOverlayRow] = [:]
-  var scale: TimeScale = .d1 { didSet { if scale != oldValue { Task { await loadSeries(force: false) } } } }
+  var scale: TimeScale = .d1 {
+    didSet {
+      guard scale != oldValue, !tasks.isEmpty else { return }
+      scaleTask?.cancel()
+      scaleTask = Task { await loadSeries(force: false) }
+    }
+  }
   var scrubTime: Int?
 
   private let repo: OverviewRepository
@@ -43,8 +59,19 @@ final class OverviewStore {
 
   var hasHoldings: Bool { !positions.isEmpty }
 
-  var totalValueUsd: Double {
-    positions.reduce(0) { $0 + $1.holdings * (watchlistData.quote($1.coinId)?.currentPrice ?? 0) }
+  var pricedPositionCount: Int {
+    positions.filter { position in
+      guard let price = watchlistData.quote(position.coinId)?.currentPrice else { return false }
+      return price.isFinite && price > 0
+    }.count
+  }
+  var totalValueUsd: Double? {
+    guard hasLoaded, pricedPositionCount == positions.count else { return nil }
+    return positions.reduce(0) { $0 + $1.holdings * (watchlistData.quote($1.coinId)?.currentPrice ?? 0) }
+  }
+  var coverageNote: String? {
+    guard hasLoaded, pricedPositionCount != positions.count else { return nil }
+    return "\(pricedPositionCount) of \(positions.count) positions priced"
   }
 
   var watchlistCoinIds: [String] { Array(Set(positions.map(\.coinId) + watchlistData.bootstrap.allCoinIds)) }
@@ -70,7 +97,7 @@ final class OverviewStore {
   }
 
   var scrubbedValue: Double? { scrubTime.flatMap { OverviewPerformance.valueAt(valueSeries, time: $0) } }
-  var displayValueUsd: Double { scrubbedValue ?? totalValueUsd }
+  var displayValueUsd: Double? { scrubbedValue ?? totalValueUsd }
 
   var rebased: OverviewPerformance.RebasedComparison { OverviewPerformance.buildRebasedComparison(portfolio: valueSeries, market: marketSeries) }
   var portfolioChartPoints: [TimePoint] { rebased.portfolioPoints.isEmpty ? OverviewPerformance.rebaseFromFirstPoint(valueSeries) : rebased.portfolioPoints }
@@ -106,32 +133,50 @@ final class OverviewStore {
 
   func start() {
     guard tasks.isEmpty else { return }
+    let generation = self.generation
+    bootstrapError = nil; holdingsError = nil
     tasks.append(Task { [weak self] in
       guard let self else { return }
       do {
         for try await b in repo.bootstrap() {
-          self.bootstrap = b
+          guard !Task.isCancelled, self.generation == generation else { return }
+          self.bootstrap = b; self.bootstrapError = nil
           self.requestSnapshotRefreshIfStale(b)
           self.refreshOverlay()
         }
-      } catch {}
+      } catch { if !Task.isCancelled { self.bootstrapError = error.localizedDescription } }
     })
     tasks.append(Task { [weak self] in
       guard let self else { return }
-      do { for try await rows in repo.holdingsBreakdown() { self.breakdown = rows; await self.loadSeriesIfPositionsChanged() } } catch {}
+      do {
+        for try await rows in repo.holdingsBreakdown() {
+          guard !Task.isCancelled, self.generation == generation else { return }
+          self.breakdown = rows; self.holdingsError = nil
+          await self.loadSeriesIfPositionsChanged()
+        }
+      } catch { if !Task.isCancelled { self.holdingsError = error.localizedDescription } }
     })
     tasks.append(Task { [weak self] in
       // 30m poll (use-holdings-value-over-time / use-global-market-cap-over-time).
       while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(1800))
+        do { try await Task.sleep(for: .seconds(1800)) } catch { return }
         await self?.loadSeries(force: true)
       }
     })
   }
 
   func stop() {
+    generation += 1; seriesRequest = UUID()
+    seriesLoading = false; marketLoading = false
+    lastPositionsKey = ""; overlayKey = ""
+    snapshotTask?.cancel(); snapshotTask = nil; snapshotRequestKey = ""
+    scaleTask?.cancel(); scaleTask = nil
     tasks.forEach { $0.cancel() }; tasks = []
     overlayTask?.cancel(); overlayTask = nil
+  }
+
+  func retry() {
+    stop(); snapshotRequestKey = ""; refreshError = nil; start()
   }
 
   private func requestSnapshotRefreshIfStale(_ b: OverviewBootstrap) {
@@ -139,7 +184,13 @@ final class OverviewStore {
     let key = "\(b.status):\(b.generatedAt.map { String($0) } ?? "null")"
     guard key != snapshotRequestKey else { return }
     snapshotRequestKey = key
-    Task { _ = try? await repo.refreshSnapshot(force: false) }
+    snapshotTask?.cancel()
+    snapshotTask = Task {
+      do { _ = try await repo.refreshSnapshot(force: false); refreshError = nil }
+      catch {
+        if !Task.isCancelled { snapshotRequestKey = ""; refreshError = error.localizedDescription }
+      }
+    }
   }
 
   private func refreshOverlay() {
@@ -166,12 +217,15 @@ final class OverviewStore {
   func loadSeries(force: Bool) async {
     let scale = self.scale
     let positions = self.positions
+    let request = UUID(); seriesRequest = request
+    let generation = self.generation
     let end = scale.rangeEndMs(now: Date())
     seriesLoading = true; marketLoading = true
-    defer { seriesLoading = false; marketLoading = false }
+    defer { if seriesRequest == request { seriesLoading = false; marketLoading = false } }
     async let portfolio: [TimePoint] = {
       guard !positions.isEmpty else { return [] }
       let series = await WatchlistDataStore.fetchMarketChartSeries(ids: positions.map(\.coinId), days: scale.marketChartDaysParam, market: market, cache: cache, force: force)
+      guard positions.allSatisfy({ (series[$0.coinId]?.points.count ?? 0) >= 2 }) else { return [] }
       return AggregateSeries.holdingsValueSeries(positions: positions, pricesByCoin: series.mapValues(\.points), scale: scale, rangeEndMs: end)
     }()
     async let marketResult: ([TimePoint], Bool) = {
@@ -185,7 +239,8 @@ final class OverviewStore {
       } catch { return ([], false) }
     }()
     let (p, m) = await (portfolio, marketResult)
-    guard scale == self.scale else { return }
+    guard !Task.isCancelled, generation == self.generation, seriesRequest == request, scale == self.scale else { return }
+    seriesError = !positions.isEmpty && p.count < 2 ? "Price history is unavailable for one or more positions. Try refreshing." : nil
     valueSeries = p
     marketSeries = m.0
     marketWarming = m.1

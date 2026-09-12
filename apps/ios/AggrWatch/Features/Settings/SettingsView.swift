@@ -36,7 +36,9 @@ struct SettingsView: View {
             toggle("Push notifications", key: "pushNotifications", value: s.pushNotifications)
             toggle("Price alerts", key: "priceAlerts", value: s.priceAlerts)
           } else { preferencesPlaceholder }
-        } header: { Text("Notifications") }
+        } header: { Text("Notification preferences") } footer: {
+          Text("Saved to your account. Push notifications and price alerts are not yet delivered to this iOS app.")
+        }
 
         Section {
           if let s = settings {
@@ -49,7 +51,7 @@ struct SettingsView: View {
         }
 
         Section {
-          Button("Sign out", role: .destructive) { Task { await env.signOut(); dismiss() } }
+          Button("Sign out", role: .destructive) { Task { if await env.signOut() { dismiss() } } }
         }
 
         Section {

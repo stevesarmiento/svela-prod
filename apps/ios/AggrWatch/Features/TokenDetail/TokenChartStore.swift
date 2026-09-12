@@ -67,7 +67,7 @@ final class TokenChartStore {
           interval = .seconds(5)
         } else {
           fastPollCount = 0
-          interval = .seconds(300)
+          interval = QueryPolicy.chart.refetchInterval ?? .seconds(120)
         }
         try? await Task.sleep(for: interval)
         if Task.isCancelled { break }
@@ -82,13 +82,14 @@ final class TokenChartStore {
     start(scale: next)
   }
 
-  func stop() { pollTask?.cancel(); pollTask = nil }
+  func stop() { pollTask?.cancel(); pollTask = nil; indicatorGeneration += 1 }
 
   func refreshQuote() async {
     do {
       let ids = [coinId]
       let key = QueryCache.Key("coingecko-quote", coinId)
       let response = try await cache.fetch(key, policy: .quotes) { [market] in try await market.quotes(ids: ids, sparkline: true) }
+      try Task.checkCancellation()
       if let q = response.data[coinId] { quote = q }
       quoteError = nil
     } catch is CancellationError {

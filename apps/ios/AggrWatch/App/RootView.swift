@@ -16,12 +16,25 @@ struct RootView: View {
           .background(Color.black)
       } else if clerk.user == nil && !bypass {
         LoginView()
+      } else if !bypass && !env.isReadyForUserData {
+        VStack(spacing: 16) {
+          if let error = env.userBootstrap.lastError {
+            ContentUnavailableView("Couldn’t load your account", systemImage: "exclamationmark.triangle", description: Text(error))
+          } else {
+            ProgressView("Connecting your account…")
+          }
+          Button("Retry") { Task { await env.retryUserData() } }
+            .disabled(env.userBootstrap.isLoading)
+          Button("Sign out") { Task { _ = await env.signOut() } }
+        }
       } else {
         MainTabView()
           .environment(env.toasts)
       }
     }
     .task(id: BootstrapKey(userId: clerk.user?.id, convexStatus: env.convex.authStatus)) {
+      await env.synchronizeUserSession()
+      guard !Task.isCancelled else { return }
       await env.userBootstrap.bootstrapIfNeeded()
     }
   }

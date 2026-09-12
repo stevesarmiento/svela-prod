@@ -36,6 +36,7 @@ final class ScreenerStore {
   private var takerTask: Task<Void, Never>?
   private var pollTask: Task<Void, Never>?
   private var takerKey = ""
+  private var loadGeneration = UUID()
 
   init(api: ScreenerAPI, market: MarketAPI, cache: QueryCache) {
     self.api = api; self.market = market; self.cache = cache
@@ -113,36 +114,37 @@ final class ScreenerStore {
     pollTask?.cancel()
     pollTask = Task { [weak self] in
       while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(900))
-        await self?.refreshTaker(force: true)
-        if self?.source == .browse, let self { await self.loadBrowse(force: Date().timeIntervalSince1970 * 1000 - (self.lastUpdatedAtMs ?? 0) > 3_600_000) }
+        do { try await Task.sleep(for: .seconds(60)) } catch { return }
+        await self?.refreshTaker(force: false)
+        self?.reload()
       }
     }
   }
 
-  func stop() { resultsTask?.cancel(); takerTask?.cancel(); pollTask?.cancel() }
+  func stop() { resultsTask?.cancel(); takerTask?.cancel(); pollTask?.cancel(); loadGeneration = UUID(); isFetching = false; isLoading = false; takerLoading = false }
 
-  func reload() {
+  func reload(force: Bool = false) {
     resultsTask?.cancel()
     resultsTask = Task { [weak self] in
-      guard let self else { return }
-      if let merged = mergedDsl { await loadScreen(merged) }
-      else if !q.trimmingCharacters(in: .whitespaces).isEmpty { await loadSearch(q.trimmingCharacters(in: .whitespaces)) }
-      else { await loadBrowse(force: false) }
+      guard let self, !Task.isCancelled else { return }
+      if let merged = mergedDsl { await loadScreen(merged, force: force) }
+      else if !q.trimmingCharacters(in: .whitespaces).isEmpty { await loadSearch(q.trimmingCharacters(in: .whitespaces), force: force) }
+      else { await loadBrowse(force: force) }
     }
   }
 
   func refetch() {
-    if source == .browse { Task { await loadBrowse(force: true) } } else { reload() }
+    reload(force: true)
   }
 
-  private func loadScreen(_ merged: ScreeningDsl) async {
+  private func loadScreen(_ merged: ScreeningDsl, force: Bool = false) async {
+    let generation = UUID(); loadGeneration = generation
     source = .screen
     isLoading = rows.isEmpty; isFetching = true
-    defer { isLoading = false; isFetching = false }
+    defer { if loadGeneration == generation { isLoading = false; isFetching = false } }
     do {
       let key = QueryCache.Key("screener", "execute", ScreenerUrlCodec.canonicalKey(merged))
-      let response = try await cache.fetch(key, policy: .screenResults) { [api] in try await api.screen(ScreenRequest(dsl: merged)) }
+      let response = try await cache.fetch(key, policy: .screenResults, force: force) { [api] in try await api.screen(ScreenRequest(dsl: merged)) }
       guard !Task.isCancelled else { return }
       rows = response.rows.map(\.marketRow)
       coverage = response.coverage
@@ -151,19 +153,20 @@ final class ScreenerStore {
       error = nil
       await refreshTaker(force: false)
     } catch is CancellationError {
-    } catch { self.error = error.localizedDescription }
+    } catch { if !Task.isCancelled, loadGeneration == generation { self.error = error.localizedDescription } }
   }
 
-  private func loadSearch(_ text: String) async {
+  private func loadSearch(_ text: String, force: Bool = false) async {
+    let generation = UUID(); loadGeneration = generation
     source = .search
     isLoading = true; isFetching = true
-    defer { isLoading = false; isFetching = false }
+    defer { if loadGeneration == generation { isLoading = false; isFetching = false } }
     do {
       let key = QueryCache.Key("coins-search", text, String(Self.searchLimit))
-      let summaries = try await cache.fetch(key, policy: .search) { [market] in try await market.searchCoins(query: text, limit: Self.searchLimit) }
+      let summaries = try await cache.fetch(key, policy: .search, force: force) { [market] in try await market.searchCoins(query: text, limit: Self.searchLimit) }
       guard !Task.isCancelled else { return }
       let ids = summaries.map(\.coingeckoId)
-      let quotes: [String: CoinQuote] = ids.isEmpty ? [:] : try await cache.fetch(.init("coingecko-quotes", ids.sorted().joined(separator: ",")), policy: .quotes) { [market] in try await market.quotes(ids: ids).data }
+      let quotes: [String: CoinQuote] = ids.isEmpty ? [:] : try await cache.fetch(.init("coingecko-quotes", ids.sorted().joined(separator: ",")), policy: .quotes, force: force) { [market] in try await market.quotes(ids: ids).data }
       guard !Task.isCancelled else { return }
       rows = summaries.map { s in
         let qte = quotes[s.coingeckoId]
@@ -174,13 +177,14 @@ final class ScreenerStore {
       coverage = nil; screenUserMessage = nil; lastUpdatedAtMs = nil; error = nil
       await refreshTaker(force: false)
     } catch is CancellationError {
-    } catch { self.error = error.localizedDescription }
+    } catch { if !Task.isCancelled, loadGeneration == generation { self.error = error.localizedDescription } }
   }
 
   private func loadBrowse(force: Bool) async {
+    let generation = UUID(); loadGeneration = generation
     source = .browse
     isLoading = rows.isEmpty; isFetching = true
-    defer { isLoading = false; isFetching = false }
+    defer { if loadGeneration == generation { isLoading = false; isFetching = false } }
     do {
       let key = QueryCache.Key("screener", "top-markets", String(Self.browseLimit))
       let top = try await cache.fetch(key, policy: .screenerTop, force: force) { [market] in try await market.topMarkets(limit: Self.browseLimit) }
@@ -190,14 +194,14 @@ final class ScreenerStore {
       lastUpdatedAtMs = top.compactMap(\.updatedAt).max()
       await refreshTaker(force: false)
     } catch is CancellationError {
-    } catch { self.error = error.localizedDescription }
+    } catch { if !Task.isCancelled, loadGeneration == generation { self.error = error.localizedDescription } }
   }
 
   private func refreshTaker(force: Bool) async {
     let coins = rows.filter { !$0.symbol.isEmpty }.prefix(500).map { ScreenerAPI.TakerCoin(coingeckoId: $0.coingeckoId, symbol: $0.symbol.uppercased()) }
     let key = coins.map(\.coingeckoId).sorted().joined(separator: ",")
     guard !coins.isEmpty else { takerById = [:]; return }
-    if key == takerKey && !force { return }
+    if key == takerKey && !force, !(await cache.isStale(.init("screener", "taker-flow", key), policy: .takerFlow)) { return }
     takerKey = key
     takerTask?.cancel()
     takerLoading = takerById.isEmpty
@@ -230,6 +234,7 @@ final class ScreenerStore {
       }
       return response
     } catch {
+      if !Task.isCancelled { self.error = error.localizedDescription }
       return nil
     }
   }

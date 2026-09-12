@@ -35,6 +35,14 @@ public struct AnalysisDataService: Sendable {
     self.market = market; self.derivatives = derivatives; self.cache = cache
   }
 
+  static func validatedMarketInput(_ row: CoinMarketRow) throws -> AnalysisPayload.MarketInput {
+    guard let price = row.current_price, price.isFinite, price > 0,
+          let pct = row.price_change_percentage_24h, pct.isFinite,
+          let marketCap = row.market_cap, marketCap.isFinite, marketCap >= 0,
+          let volume24h = row.total_volume, volume24h.isFinite, volume24h >= 0 else { throw Failure.noMarketData }
+    return AnalysisPayload.MarketInput(name: row.name, symbol: row.symbol, price: price, change24h: pct, marketCap: marketCap, volume24h: volume24h)
+  }
+
   public func build(coinId: String, fallbackName: String? = nil, fallbackSymbol: String? = nil) async throws -> Bundle {
     let scale = TimeScale.d30
     async let marketsTask = cache.fetch(QueryCache.Key("coingecko-markets", coinId), policy: .defaults) { [market] in try await market.markets(ids: [coinId]) }
@@ -56,9 +64,9 @@ public struct AnalysisDataService: Sendable {
     let volume = parsed?.volume ?? []
     let (oi, liq, taker) = await (oiTask, liqTask, takerTask)
 
-    let price = row.current_price ?? 0
-    let pct = row.price_change_percentage_24h ?? 0
-    let mkt = AnalysisPayload.MarketInput(name: row.name, symbol: row.symbol, price: price, change24h: pct, marketCap: row.market_cap ?? 0, volume24h: row.total_volume ?? 0)
+    try Task.checkCancellation()
+    let mkt = try Self.validatedMarketInput(row)
+    let price = mkt.price, pct = mkt.change24h, marketCap = mkt.marketCap, volume24h = mkt.volume24h
     let d = AnalysisPayload.derive(chart: line, volume: volume, market: mkt)
 
     let volatility = abs(pct) > 5 ? "high" : (abs(pct) > 2 ? "moderate" : "low")
@@ -68,7 +76,7 @@ public struct AnalysisDataService: Sendable {
     var data = IndicatorData(
       name: row.name.isEmpty ? (fallbackName ?? "Unknown Token") : row.name,
       symbol: row.symbol.isEmpty ? (fallbackSymbol ?? "UNK") : row.symbol,
-      quote: .init(USD: .init(price: price, percent_change_24h: pct, market_cap: row.market_cap ?? 0, volume_24h: row.total_volume ?? 0, volume_change_24h: 0, market_cap_dominance: 0)),
+      quote: .init(USD: .init(price: price, percent_change_24h: pct, market_cap: marketCap, volume_24h: volume24h, volume_change_24h: nil, market_cap_dominance: nil)),
       timeframe: scale.rawValue)
     data.symbolId = coinId
 
@@ -77,16 +85,18 @@ public struct AnalysisDataService: Sendable {
     }
     if d.volumeHistory.count >= 14, let vt = d.volumeTrend, let rv = d.recentVolume, let pv = d.previousVolume {
       let avg = d.volumeHistory.reduce(0, +) / Double(d.volumeHistory.count)
-      data.volumeAnalysis = .init(currentVolume: row.total_volume ?? 0, volumeHistory: d.volumeHistory, volumeTrend: vt, averageVolume: avg, volumeSpike: rv > pv * 1.5)
+      data.volumeAnalysis = .init(currentVolume: volume24h, volumeHistory: d.volumeHistory, volumeTrend: vt, averageVolume: avg, volumeSpike: rv > pv * 1.5)
     }
     if let momentum = d.momentum {
       data.hullSuite = .init(trendDirection: momentum, mhull: nil, shull: nil, crossoverSignal: "none", strength: abs(pct) > 3 ? "strong" : "moderate")
     }
     if let cur = bbLatest {
       let upper = fin(d.bollinger.upper.last), lower = fin(d.bollinger.lower.last), basis = fin(d.bollinger.basis.last)
-      data.bollingerBands = .init(indicator: "RSI", currentValue: cur, upperBand: upper ?? 0, lowerBand: lower ?? 0, basis: basis ?? 0,
-                                  position: cur > (upper ?? 70) ? "overbought" : (cur < (lower ?? 30) ? "oversold" : "normal"),
-                                  breachType: "none", divergence: d.divergence, trend: d.rsiTrend, history: d.rsiHistory)
+      if let upper, let lower, let basis {
+        data.bollingerBands = .init(indicator: "RSI", currentValue: cur, upperBand: upper, lowerBand: lower, basis: basis,
+                                   position: cur > upper ? "overbought" : (cur < lower ? "oversold" : "normal"),
+                                   breachType: "none", divergence: d.divergence, trend: d.rsiTrend, history: d.rsiHistory)
+      }
       data.marketVision = .init(
         rsi: .init(value: cur, signal: cur > 70 ? "overbought" : (cur < 30 ? "oversold" : "neutral"), trend: d.rsiTrend, history: d.rsiHistory, divergence: d.divergence,
                    reverseLevels: d.reverseLevels.map { .init(target: $0.target, price: $0.price) }, reverseBasis: "close_rsi14"),

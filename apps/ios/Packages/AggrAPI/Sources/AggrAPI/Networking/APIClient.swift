@@ -10,6 +10,7 @@ public actor APIClient {
   private let tokenProvider: (any BearerTokenProvider)?
   private let session: URLSession
   private let decoder: JSONDecoder
+  private let marketBudget = RequestBudget()
 
   public init(baseURL: URL, tokenProvider: (any BearerTokenProvider)?, session: URLSession = .shared) {
     self.baseURL = baseURL
@@ -73,6 +74,7 @@ public actor APIClient {
     var delay: Duration = .milliseconds(500)
     var didRetryAuth = false
     while true {
+      try Task.checkCancellation()
       do {
         return try await performOnce(request, skipTokenCache: didRetryAuth)
       } catch let error as APIError {
@@ -112,6 +114,10 @@ public actor APIClient {
   }
 
   private func performOnce(_ request: Request, skipTokenCache: Bool) async throws -> (Data, HTTPURLResponse) {
+    let budget = request.path.hasPrefix("/api/coingecko/") || request.path.hasPrefix("/api/coinglass/") ? marketBudget : nil
+    if let budget { try await budget.acquire() }
+    defer { if let budget { Task { await budget.release() } } }
+    try Task.checkCancellation()
     guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
       throw APIError.transport(endpoint: request.endpoint, message: "Bad base URL")
     }
@@ -137,6 +143,8 @@ public actor APIClient {
     let response: URLResponse
     do {
       (data, response) = try await session.data(for: req)
+    } catch let urlError as URLError where urlError.code == .cancelled {
+      throw CancellationError()
     } catch let urlError as URLError where urlError.code == .timedOut {
       throw APIError.timeout(endpoint: request.endpoint)
     } catch is CancellationError {
