@@ -29,7 +29,7 @@ interface CoinGeckoWatchlistCoin {
   };
 }
 
-interface AggregateDataPoint {
+export interface AggregateDataPoint {
   time: Time
   value: number // Aggregated price value
 }

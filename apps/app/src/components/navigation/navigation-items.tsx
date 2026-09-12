@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Tooltip, TooltipContent, TooltipTrigger } from "@v1/ui/tooltip";
 import { MENU_ITEMS } from './bottom-nav-constants';
+import { NavigationItemButton } from './navigation-item-button';
 import { usePathHelper } from './bottom-nav-hooks';
 import { getShortcutForRoute } from '@/lib/keyboard-shortcuts';
 import { useWatchlistPreservingNavigation } from '@/lib/navigation-utils';
@@ -107,60 +107,33 @@ export const NavigationItems = React.memo(({ onOpenCommandSearch }: NavigationIt
                 : item.title;
 
         return (
-          <Tooltip delayDuration={500} key={item.title}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={handleItemClick(item, isExactActive)}
-                onMouseEnter={() => handleItemPrefetch(item)}
-                onFocus={() => handleItemPrefetch(item)}
-                aria-label={
-                  showTokenBadge
-                    ? `${item.title} — viewing ${tokenData.symbol} chart`
-                    : item.title
-                }
-                aria-current={isExactActive ? "page" : isActive ? "true" : undefined}
-                className={`group relative p-2 rounded-[13px] transition-colors duration-100 cursor-pointer active:scale-[0.98] hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white focus:[&_svg]:!text-white focus-visible:[&_svg]:!text-white dark:focus-visible:ring-zinc-500 dark:focus-visible:ring-offset-zinc-800 after:absolute after:-inset-1 after:content-[''] ${
-                  isActive 
-                    ? "bg-black/10 hover:bg-black/15 dark:bg-white/10 dark:hover:bg-white/15" 
-                    : ""
-                }`}
-              >
-                <item.icon
-                  className={`size-5 ${
-                    isActive
-                      ? "text-white"
-                      : "text-gray-500 group-hover:text-gray-700 dark:text-white/50 dark:group-hover:text-white/50"
-                  }`}
+          <NavigationItemButton
+            key={item.title}
+            icon={item.icon}
+            label={
+              showTokenBadge
+                ? `${item.title} — viewing ${tokenData.symbol} chart`
+                : item.title
+            }
+            tooltipLabel={tooltipLabel}
+            shortcut={shortcut}
+            isActive={isActive}
+            isExactActive={isExactActive}
+            onClick={handleItemClick(item, isExactActive)}
+            onMouseEnter={() => handleItemPrefetch(item)}
+            onFocus={() => handleItemPrefetch(item)}
+            badge={
+              showTokenBadge ? (
+                <TokenLogo
+                  src={tokenData.logoUrl}
+                  alt={`${tokenData.symbol} logo`}
+                  sizePx={18}
+                  fallbackText={tokenData.symbol}
+                  className="ring-2 ring-white dark:ring-zinc-800 shadow-sm"
                 />
-                {showTokenBadge ? (
-                  <span className="pointer-events-none absolute -top-0.5 -right-0.5 z-10">
-                    <TokenLogo
-                      src={tokenData.logoUrl}
-                      alt={`${tokenData.symbol} logo`}
-                      sizePx={18}
-                      fallbackText={tokenData.symbol}
-                      className="ring-2 ring-white dark:ring-zinc-800 shadow-sm"
-                    />
-                  </span>
-                ) : null}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent
-              side="top"
-              sideOffset={15}
-              className="dark flex items-center gap-2 text-xs p-1 pl-2 rounded-lg border border-zinc-800 bg-zinc-900/95 shadow-sm"
-            >
-              <span className="text-xs text-gray-600 dark:text-zinc-400">
-                {tooltipLabel}
-              </span>
-              {shortcut && (
-                <kbd className="rounded-md bg-gray-100 dark:bg-zinc-700 px-1.5 py-0.5 text-xs font-berkeley-mono text-gray-700 dark:text-zinc-300 uppercase">
-                  {shortcut}
-                </kbd>
-              )}
-            </TooltipContent>
-          </Tooltip>
+              ) : null
+            }
+          />
         );
       })}
     </div>

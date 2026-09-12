@@ -31,6 +31,10 @@ const WATCHLISTS_PAGE_SIZE = 12
 
 const PAGE_TRANSITION_S = 0.15
 
+/** Column layout shared by the live grid and the login product preview. */
+export const WATCHLISTS_GRID_CLASSNAME =
+  'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6'
+
 // Vertical page-slide: new page enters from the direction you're heading.
 const pageVariants = {
   enter: (direction: number) => ({ opacity: 0, y: direction * 24 }),
@@ -405,7 +409,7 @@ export function WatchlistsGrid({
                             duration: motionDuration(shouldReduceMotion, PAGE_TRANSITION_S),
                             ease: EASE_OUT_CUBIC,
                           }}
-                          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+                          className={WATCHLISTS_GRID_CLASSNAME}
                         >
                           {(gridPages[pageState.index] ?? []).map(renderWatchlistCard)}
                         </m.div>
@@ -414,7 +418,7 @@ export function WatchlistsGrid({
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 relative">
+                <div className={cn(WATCHLISTS_GRID_CLASSNAME, "relative")}>
                   {gridGroups.map(renderWatchlistCard)}
                 </div>
               )}

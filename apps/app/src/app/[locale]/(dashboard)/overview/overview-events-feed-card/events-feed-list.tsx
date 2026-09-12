@@ -6,8 +6,9 @@ import { useReducedMotion } from "motion/react";
 import { useMemo } from "react";
 import { api } from "../../../../../../convex/_generated/api";
 import { EventCard } from "./event-card";
+import { FeedDateHeader } from "./feed-date-header";
 import { groupByDate } from "./feed-helpers";
-import type { EventsFeedData } from "./types";
+import type { EventsFeedData, OverviewEvent } from "./types";
 
 type SentimentOverlayRow = {
   articleId: string;
@@ -97,6 +98,30 @@ export function EventsFeedList(props: {
   }
 
   return (
+    <EventsFeedGroups
+      groups={groups}
+      nowMs={nowMs}
+      shouldReduceMotion={shouldReduceMotion}
+      listWrapperClassName={props.listWrapperClassName}
+    />
+  );
+}
+
+/**
+ * Presentational feed body: date-bucketed runs of `EventCard`s. `EventsFeedList`
+ * feeds it merged live data; the login product preview passes static groups.
+ */
+export function EventsFeedGroups(props: {
+  groups: { label: string; events: OverviewEvent[] }[];
+  nowMs: number;
+  shouldReduceMotion: boolean | null;
+  listWrapperClassName?: string;
+  /** Pass `false` to hide the hover action cluster (chart / analyze / article). */
+  showEventActions?: boolean;
+}) {
+  const { groups, nowMs, shouldReduceMotion, showEventActions = true } = props;
+
+  return (
     <div
       className={cn(
         props.listWrapperClassName,
@@ -113,10 +138,7 @@ export function EventsFeedList(props: {
 
         return (
           <div key={group.label} className="pt-0">
-            <div className="sticky relative top-4 z-30 py-2 text-xl font-medium text-white">
-              <span className="text-white z-[1] font-bold">{group.label}</span>
-              <div className="z-[-1] absolute top-[-20px] h-[80px] inset-0 pointer-events-none bg-gradient-to-b from-white via-white/50 dark:via-background/90 to-transparent dark:from-background" />
-            </div>
+            <FeedDateHeader label={group.label} />
 
             <div
               className={cn(
@@ -131,6 +153,7 @@ export function EventsFeedList(props: {
                   index={runIdx + i}
                   nowMs={nowMs}
                   shouldReduceMotion={shouldReduceMotion}
+                  showActions={showEventActions}
                 />
               ))}
             </div>

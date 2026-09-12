@@ -65,7 +65,19 @@ function ColumnHeaderTooltip({
   );
 }
 
-export function createScreenerColumns(): ColumnDef<CoinMarketData>[] {
+export interface CreateScreenerColumnsOptions {
+  /**
+   * Static 14d series for the trail cell. When it returns ≥2 points the inline
+   * chart renders them instead of fetching (used by the login product preview).
+   */
+  getStaticTrail?: (
+    coin: CoinMarketData,
+  ) => ReadonlyArray<{ time: number; value: number }> | undefined;
+}
+
+export function createScreenerColumns(
+  options?: CreateScreenerColumnsOptions,
+): ColumnDef<CoinMarketData>[] {
   return [
     {
       id: "token",
@@ -329,6 +341,7 @@ export function createScreenerColumns(): ColumnDef<CoinMarketData>[] {
               sparkline7d={row.original.sparkline7d}
               initialData={row.original.quote.USD}
               percentChange24h={row.original.quote.USD.percent_change_24h ?? 0}
+              staticSeries={options?.getStaticTrail?.(row.original)}
             />
           ) : (
             <Skeleton className="h-8 w-full max-w-56 rounded-sm" />

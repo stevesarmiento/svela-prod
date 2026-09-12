@@ -37,7 +37,7 @@ import React, {
   useState,
 } from "react";
 import { IconCheckmark, IconCircleSlash } from "symbols-react";
-import { BackgroundPattern } from "./background-pattern";
+import { CommandSearchPillShell } from "./command-search-pill-shell";
 import { CommandSearchTrigger } from "./command-search-trigger";
 import { SearchIcon } from "./search-icon";
 import { WatchlistTargetPill } from "./watchlist-target-pill";
@@ -830,12 +830,8 @@ export const CommandSearchPopoverContent = React.memo(
       return "Navigate or search tokens...";
     };
 
-    // NB: no backdrop-blur on the pill — bg-zinc-800 is fully opaque, the filter would burn paint time invisibly
     return (
-      <div className="group relative rounded-[20px] bg-zinc-800 border border-transparent overflow-hidden px-2 py-0 hover:bg-zinc-800 transition-colors duration-150 cursor-pointer shadow-[inset_0_1px_2px_oklch(1_0_0_/_0.2),inset_0_-4px_30px_oklch(0.2978_0.0083_317.72_/_0.9),0_4px_16px_oklch(0_0_0_/_0.6)]">
-        <BackgroundPattern />
-
-        <div className="relative z-10">
+      <CommandSearchPillShell>
           <CommandPopover
             open={isOpen}
             onOpenChange={setIsOpen}
@@ -946,8 +942,7 @@ export const CommandSearchPopoverContent = React.memo(
               showWatchlistPicker={showWatchlistPicker}
             />
           </CommandPopover>
-        </div>
-      </div>
+      </CommandSearchPillShell>
     );
   },
 );

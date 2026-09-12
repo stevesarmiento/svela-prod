@@ -24,6 +24,34 @@ const LazyScreenerSmartPromptDialog = dynamic(
   { ssr: false, loading: () => null },
 );
 
+/** The "Smart Search" launcher. Spreads props so it works under `asChild` triggers. */
+export function SmartSearchButton({
+  hasActiveFilters,
+  className,
+  ...props
+}: { hasActiveFilters: boolean } & React.ComponentProps<typeof Button>) {
+  return (
+    <Button
+      type="button"
+      aria-label="Open Smart Search"
+      variant="ghost"
+      size="sm"
+      className={cn(
+        "group h-6.5 px-2 gap-1.5 rounded-lg bg-accent hover:bg-accent/90 border border-border hover:ring-1 ring-primary/30 relative",
+        hasActiveFilters && "ring-1 ring-blue-500/50 dark:ring-blue-400",
+        className,
+      )}
+      {...props}
+    >
+      <IconSparkles className="size-3 fill-primary/70" />
+      <span>Smart Search</span>
+      {hasActiveFilters ? (
+        <span className="absolute -top-1 -right-1 size-2 bg-blue-500 rounded-full" />
+      ) : null}
+    </Button>
+  );
+}
+
 /**
  * Smart Screener button (S) + editable filter chips + honest coverage
  * caption. All state lives in ScreenerContext (URL-backed) — no prop drill.
@@ -93,16 +121,8 @@ export function ScreenerFiltersBar() {
         <div className="flex items-center gap-2 flex-1 min-w-0 flex-wrap">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                type="button"
-                aria-label="Open Smart Search"
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  "group h-6.5 px-2 gap-1.5 rounded-lg bg-accent hover:bg-accent/90 border border-border hover:ring-1 ring-primary/30 relative",
-                  hasActiveFilters &&
-                    "ring-1 ring-blue-500/50 dark:ring-blue-400",
-                )}
+              <SmartSearchButton
+                hasActiveFilters={hasActiveFilters}
                 onPointerEnter={preloadPromptDialog}
                 onFocus={preloadPromptDialog}
                 onTouchStart={preloadPromptDialog}
@@ -110,13 +130,7 @@ export function ScreenerFiltersBar() {
                   preloadPromptDialog();
                   setIsPromptDialogOpen(true);
                 }}
-              >
-                <IconSparkles className="size-3 fill-primary/70" />
-                <span>Smart Search</span>
-                {hasActiveFilters ? (
-                  <span className="absolute -top-1 -right-1 size-2 bg-blue-500 rounded-full" />
-                ) : null}
-              </Button>
+              />
             </TooltipTrigger>
             <TooltipContent
               side="right"

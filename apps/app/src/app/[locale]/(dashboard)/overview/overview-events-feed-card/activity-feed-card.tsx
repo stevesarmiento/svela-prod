@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent } from "@v1/ui/card";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import type { OverviewDailyBriefCard } from "../overview-daily-brief-card";
 import { EventsFeedList } from "./events-feed-list";
 import type { EventsFeedData } from "./types";
@@ -21,14 +21,21 @@ export interface OverviewActivityFeedCardProps {
   dailyBrief: OverviewActivityDailyBriefProps;
 }
 
-export function OverviewActivityFeedCard(props: OverviewActivityFeedCardProps) {
+/** Chromeless card + section wrapper around the activity feed body. */
+export function ActivityFeedCardShell({ children }: { children: ReactNode }) {
   return (
     <Card className="border-transparent shadow-none bg-transparent">
       <CardContent className="px-5 pb-5 pt-0 space-y-6">
-        <section aria-label="Activity feed">
-          <EventsFeedList data={props.events} emptyClassName="py-8" />
-        </section>
+        <section aria-label="Activity feed">{children}</section>
       </CardContent>
     </Card>
+  );
+}
+
+export function OverviewActivityFeedCard(props: OverviewActivityFeedCardProps) {
+  return (
+    <ActivityFeedCardShell>
+      <EventsFeedList data={props.events} emptyClassName="py-8" />
+    </ActivityFeedCardShell>
   );
 }
