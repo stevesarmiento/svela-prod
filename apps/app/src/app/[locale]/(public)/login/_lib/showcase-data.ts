@@ -27,6 +27,8 @@ import type {
 
 const COINGECKO_PUBLIC_BASE_URL = "https://api.coingecko.com/api/v3";
 const REVALIDATE_SECONDS = 300;
+/** Login must never hang on CoinGecko — abort and use the fixtures instead. */
+const FETCH_TIMEOUT_MS = 8_000;
 const HOUR_SECONDS = 3600;
 const HOUR_MS = HOUR_SECONDS * 1000;
 /** Points used for the 1d aggregate (25 hourly samples = 24h of deltas). */
@@ -265,6 +267,7 @@ async function fetchMarketRows(
     const response = await fetch(url.toString(), {
       headers: apiKey ? coingeckoHeaders(apiKey) : { Accept: "application/json" },
       next: { revalidate: REVALIDATE_SECONDS },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!response.ok) return null;
     const rows = decodeMarketsRows(await response.json());
@@ -397,7 +400,13 @@ function buildWatchlists(
 function pickScreenerCoins(
   coins: ReadonlyArray<ShowcaseCoin>,
 ): ShowcaseCoin[] {
-  const candidates = coins.filter((coin) => !coin.id.includes("xstock"));
+  // Require a chartable sparkline: a row without one would get an empty
+  // static trail and InlinePriceChart would fall back to a client fetch,
+  // breaking the preview's no-network guarantee.
+  const candidates = coins.filter(
+    (coin) =>
+      !coin.id.includes("xstock") && (coin.sparkline7d?.length ?? 0) >= 2,
+  );
   const liquid = candidates.filter(
     (coin) => coin.quote.USD.volume_24h >= SCREENER_MIN_VOLUME_USD,
   );
