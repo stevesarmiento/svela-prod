@@ -1,0 +1,4 @@
+// Copy to Local.xcconfig (gitignored) to override Debug values.
+// Required when running on a physical iPhone: "localhost" is the phone, not your Mac.
+// Find your Mac's LAN IP with `ipconfig getifaddr en0` and make sure `bun dev:app` is running.
+// API_BASE_URL = http:/$()/192.168.1.20:3000

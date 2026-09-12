@@ -1,0 +1,237 @@
+import AggrAPI
+import AggrCore
+import SwiftUI
+
+/// `/comparison` — aggregate view across ALL watchlists: normalized multi-line chart + accordion table.
+struct CompareView: View {
+  @Environment(AppEnvironment.self) private var env
+  @State private var scale: TimeScale = .d7
+  @State private var hidden: Set<String> = []
+  @State private var expanded: Set<String> = []
+  @State private var expandedInitialized = false
+  @State private var seriesByGroup: [String: [TimePoint]] = [:]
+  @State private var changeByCoin: [String: Double] = [:]
+  @State private var loading = false
+
+  var body: some View {
+    let data = env.watchlistData
+    ScrollView {
+      VStack(spacing: 16) {
+        HStack {
+          Text("Watchlist Comparison").font(.headline)
+          Spacer()
+          TimeScalePicker(scales: TimeScale.compareScales, selection: $scale)
+        }
+        .padding(.horizontal, 16)
+
+        if !data.hasLoadedBootstrap {
+          ProgressView().padding(.top, 60)
+        } else if data.groups.isEmpty {
+          EmptyState(systemImage: "chart.xyaxis.line", title: "Nothing to compare yet", message: "Create watchlists and add tokens to compare them here.",
+                     actionTitle: "Create Watchlist") { env.router.sheet = .createGroup }
+        } else {
+          chartCard
+          WatchlistAccordionTable(scale: scale, expanded: $expanded, seriesByGroup: seriesByGroup, changeByCoin: changeByCoin, loading: loading)
+        }
+      }
+      .padding(.bottom, 24)
+    }
+    .navigationTitle("Compare")
+    .toolbar {
+      ToolbarItemGroup(placement: .topBarTrailing) {
+        Button {
+          let all = Set(data.groups.map(\.id))
+          withAnimation(.snappy) { expanded = expanded == all ? [] : all }
+        } label: { Label(expanded.count == data.groups.count ? "Collapse all" : "Expand all", systemImage: expanded.count == data.groups.count ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") }
+        Button { env.router.sheet = .coinSearch(targetGroupId: data.selectedGroup?.id) } label: { Label("Add token", systemImage: "plus.circle") }
+        Button { env.router.sheet = .createGroup } label: { Label("Create watchlist", systemImage: "plus.square.on.square") }
+      }
+    }
+    .task(id: "\(scale.rawValue)|\(data.bootstrap.allCoinIds.sorted().joined(separator: ","))|\(data.groups.map(\.id).joined(separator: ","))") {
+      if !expandedInitialized, !data.groups.isEmpty { expanded = Set(data.groups.map(\.id)); expandedInitialized = true }
+      await loadSeries()
+    }
+  }
+
+  private var chartCard: some View {
+    let data = env.watchlistData
+    let colors = ChartColors.generatePastelColors(data.groups.count)
+    let series = data.groups.enumerated().map { i, g in
+      MultiLineComparisonChart.Series(id: g.id, label: g.name, color: colors[i], points: seriesByGroup[g.id] ?? [])
+    }
+    return VStack {
+      if series.allSatisfy({ $0.points.count < 2 }) {
+        if loading { ProgressView().frame(height: 220) }
+        else { Text(scale.isAggregateChangeUnavailable ? "N/A for this interval" : "No chart data yet").font(.footnote).foregroundStyle(.secondary).frame(height: 220) }
+      } else {
+        MultiLineComparisonChart(series: series, hidden: $hidden, onSelect: { id in
+          if let g = data.groups.first(where: { $0.id == id }) { data.selectedGroupSlug = g.slug }
+          withAnimation(.snappy) { if hidden.contains(id) { hidden.remove(id) } else { hidden.insert(id) } }
+        })
+        .frame(height: 300)
+      }
+    }
+    .padding(14)
+    .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    .padding(.horizontal, 16)
+  }
+
+  /// One market-chart fan-out over the union of coins (concurrency 5), then equal-weight series per group.
+  private func loadSeries() async {
+    let data = env.watchlistData
+    guard !scale.isAggregateChangeUnavailable else { seriesByGroup = [:]; changeByCoin = [:]; return }
+    let ids = data.bootstrap.allCoinIds
+    guard !ids.isEmpty else { return }
+    loading = seriesByGroup.isEmpty
+    let fetched = await WatchlistDataStore.fetchMarketChartSeries(ids: ids, days: scale.marketChartDaysParam, market: env.market, cache: env.queryCache, force: false)
+    guard !Task.isCancelled else { return }
+    let end = scale.rangeEndMs()
+    var out: [String: [TimePoint]] = [:]
+    for g in data.groups {
+      var byCoin: [String: [TimePoint]] = [:]; var warming = Set<String>()
+      for id in data.coinIds(in: g) { if let s = fetched[id] { byCoin[id] = s.points; if s.warming { warming.insert(id) } } }
+      out[g.id] = AggregateSeries.equalWeightReturnSeries(.init(byCoin: byCoin, warming: warming), scale: scale, rangeEndMs: end)
+    }
+    seriesByGroup = out
+    changeByCoin = AggregateSeries.changePctByCoinId(fetched.mapValues(\.points))
+    loading = false
+  }
+}
+
+/// `watchlist-table.tsx`: accordion rows per watchlist with sparkline, aggregate %, coin rows (selection-enabled).
+struct WatchlistAccordionTable: View {
+  let scale: TimeScale
+  @Binding var expanded: Set<String>
+  let seriesByGroup: [String: [TimePoint]]
+  let changeByCoin: [String: Double]
+  let loading: Bool
+  @Environment(AppEnvironment.self) private var env
+
+  private struct GroupRow: Identifiable { let group: WatchlistGroup; let holdingsValue: Double?; var id: String { group.id } }
+
+  var body: some View {
+    let data = env.watchlistData
+    let rows = data.groups.map { g -> GroupRow in
+      let items = data.items(in: g)
+      let positions = items.filter { $0.holdings != nil }
+      let value = positions.isEmpty ? nil : positions.reduce(0.0) { $0 + ($1.holdings ?? 0) * (data.quote($1.coinId)?.currentPrice ?? 0) }
+      return GroupRow(group: g, holdingsValue: value)
+    }.sorted { ($0.holdingsValue ?? -1) > ($1.holdingsValue ?? -1) }
+
+    VStack(spacing: 0) {
+      ForEach(rows) { row in
+        groupHeader(row)
+        if expanded.contains(row.group.id) { coinsPanel(row.group) }
+        Divider()
+      }
+    }
+    .background(.background.secondary, in: .rect(cornerRadius: 18))
+    .padding(.horizontal, 16)
+    .onAppear { registerSelection() }
+    .onChange(of: expanded) { _, _ in registerSelection() }
+    .onChange(of: data.bootstrap) { _, _ in registerSelection() }
+    .onDisappear { env.selection.release(owner: "compare") }
+  }
+
+  private func registerSelection() {
+    let data = env.watchlistData
+    let visibleKeys = data.groups.filter { expanded.contains($0.id) }.flatMap { g in data.items(in: g).map { "\(g.id)|\($0.coinId)" } }
+    env.selection.register(owner: "compare", selectableIds: visibleKeys, onRemove: { keys in
+      var removed = 0, failed = 0
+      let byGroup = Dictionary(grouping: keys.compactMap { k -> (String, String)? in let p = k.split(separator: "|"); return p.count == 2 ? (String(p[0]), String(p[1])) : nil }, by: \.0)
+      for (groupId, pairs) in byGroup {
+        do { removed += try await data.removeBulk(coinIds: pairs.map(\.1), from: groupId) } catch { failed += pairs.count }
+      }
+      if failed > 0 { throw SelectionStore.BulkRemoveError(removedCount: removed, failedCount: failed) }
+    }, onAnalyze: { keys in
+      env.router.sheet = .analyze(Array(Set(keys.map { String($0.split(separator: "|").last ?? "") })))
+    })
+  }
+
+  @ViewBuilder
+  private func groupHeader(_ row: GroupRow) -> some View {
+    let data = env.watchlistData
+    let g = row.group
+    let theme = ColorThemes.resolve(g.color)
+    let items = data.items(in: g)
+    let series = seriesByGroup[g.id] ?? []
+    let chartChange = series.last?.value
+    let estimate = AggregateSeries.equalWeightFromQuotes(items.map { data.quote($0.coinId).flatMap { q in AggregateSeries.quoteIntervalChange(scale: scale, change24h: q.priceChangePercentage24h, change7d: q.priceChangePercentage7d, change30d: q.priceChangePercentage30d) } })
+    let change = chartChange ?? estimate
+    let isEstimate = chartChange == nil && estimate != nil
+    Button { withAnimation(.snappy) { if expanded.contains(g.id) { expanded.remove(g.id) } else { expanded.insert(g.id) } } } label: {
+      HStack(spacing: 10) {
+        HStack(spacing: 5) {
+          WatchlistGroupIconView(icon: g.icon, size: 13).foregroundStyle(.white.opacity(0.85))
+          Text(g.name).font(.caption.weight(.bold)).foregroundStyle(.white).lineLimit(1)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .background(Color(oklch: theme.background), in: Capsule())
+        .overlay(Capsule().strokeBorder(Color(oklch: theme.border)))
+        if !expanded.contains(g.id) {
+          TokenAvatarStack(items: items.prefix(4).compactMap { data.quote($0.coinId) }.map { .init(symbol: $0.symbol, imageURL: $0.image) }, maxVisible: 4, size: 20)
+        }
+        Spacer()
+        if series.count >= 2 {
+          Sparkline(points: series, lineWidth: 1.2, fadeLeading: false, monoColor: (change ?? 0) >= 0 ? .gainGreen : .lossRed).frame(width: 64, height: 22)
+        } else if loading && !scale.isAggregateChangeUnavailable {
+          SkeletonBlock(height: 12, width: 64)
+        }
+        if scale.isAggregateChangeUnavailable {
+          Text("N/A").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+        } else if let change {
+          HStack(spacing: 3) {
+            Image(systemName: "triangle.fill").font(.system(size: 7)).rotationEffect(.degrees(change < 0 ? 180 : 0))
+            Text(String(format: "%.2f%%", abs(change)))
+            if isEstimate { Text("est.").font(.system(size: 9)).foregroundStyle(.secondary) }
+          }
+          .font(.caption.monospacedDigit())
+          .foregroundStyle(change > 0 ? Color.gainGreen : (change < 0 ? Color.lossRed : .secondary))
+        } else {
+          SkeletonBlock(height: 12, width: 40)
+        }
+        if let v = row.holdingsValue { Text(UsdFormat.price(v)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary) }
+        Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
+          .rotationEffect(.degrees(expanded.contains(g.id) ? 0 : -90))
+      }
+      .padding(.horizontal, 12).padding(.vertical, 10)
+      .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+  }
+
+  @ViewBuilder
+  private func coinsPanel(_ g: WatchlistGroup) -> some View {
+    let data = env.watchlistData
+    let items = data.items(in: g).sorted { (data.quote($0.coinId)?.marketCap ?? 0) > (data.quote($1.coinId)?.marketCap ?? 0) }
+    VStack(spacing: 0) {
+      ForEach(items) { item in
+        let q = data.quote(item.coinId)
+        let key = "\(g.id)|\(item.coinId)"
+        let change = changeByCoin[item.coinId] ?? q.flatMap { AggregateSeries.quoteIntervalChange(scale: scale, change24h: $0.priceChangePercentage24h, change7d: $0.priceChangePercentage7d, change30d: $0.priceChangePercentage30d) }
+        SelectableRow(id: key) {
+          Button {
+            if env.selection.isActive { env.selection.toggle(key) } else { env.router.openToken(item.coinId, groupSlug: g.slug) }
+          } label: {
+            HStack(spacing: 8) {
+              TokenLogo(symbol: q?.symbol ?? item.coinId, imageURL: q?.image, size: 18)
+              Text((q?.symbol ?? "N/A").uppercased()).font(.caption.weight(.bold))
+              Text(LogoOverrides.cleanTokenName(q?.name ?? item.coinId)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+              Spacer()
+              UsdText(value: q?.currentPrice, font: .caption.monospacedDigit())
+              if let change, !scale.isAggregateChangeUnavailable {
+                MoveWithBadge(usdMove: q?.currentPrice.flatMap { MarketMetrics.usdMove(priceUsd: $0, percentChange: change) }, pct: change)
+              } else {
+                Text("N/A").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+              }
+            }
+            .contentShape(.rect)
+          }
+          .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 7)
+        .background(Color.black.opacity(0.15))
+      }
+    }
+  }
+}

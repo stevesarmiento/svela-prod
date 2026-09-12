@@ -1,0 +1,12 @@
+{
+  "name": "@v1/ios",
+  "version": "0.1.0",
+  "private": true,
+  "description": "aggr.watch native iOS app (SwiftUI). Scripts only; Turborepo tasks intentionally absent.",
+  "scripts": {
+    "gen": "xcodegen generate",
+    "build:ios": "xcodebuild -project AggrWatch.xcodeproj -scheme AggrWatch -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.1' -derivedDataPath DerivedData build",
+    "test:ios": "xcodebuild -project AggrWatch.xcodeproj -scheme AggrWatch -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.1' -derivedDataPath DerivedData test",
+    "test:core": "swift test --package-path Packages/AggrCore"
+  }
+}

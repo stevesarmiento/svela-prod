@@ -1,0 +1,7 @@
+#include "Base.xcconfig"
+// Dev Convex deployment + dev Clerk instance (publishable key is public by design).
+CONVEX_URL = https:/$()/scrupulous-crow-750.convex.cloud
+CLERK_PUBLISHABLE_KEY = pk_test_cGxlYXNlZC13b2xmLTM2LmNsZXJrLmFjY291bnRzLmRldiQ
+// Local Next.js dev server (bun dev:app). Override in Local.xcconfig (gitignored).
+API_BASE_URL = http:/$()/localhost:3000
+#include? "Local.xcconfig"

@@ -6,7 +6,8 @@
       ".next",
       "**/.react-email/**",
       "**/convex/_generated/**",
-      "**/*.d.ts"
+      "**/*.d.ts",
+      "apps/ios/**"
     ]
   },
   "organizeImports": {
@@ -21,7 +22,8 @@
       "**/convex/_generated/**",
       "**/.react-email/**",
       "**/src/lib/number-flow/**",
-      "**/src/components/number-flow.tsx"
+      "**/src/components/number-flow.tsx",
+      "apps/ios/**"
     ],
     "enabled": true,
     "rules": {
@@ -42,7 +44,9 @@
   },
   "overrides": [
     {
-      "include": ["**/src/components/icons.tsx"],
+      "include": [
+        "**/src/components/icons.tsx"
+      ],
       "linter": {
         "rules": {
           "suspicious": {
@@ -52,7 +56,9 @@
       }
     },
     {
-      "include": ["**/src/components/progressive-blur.tsx"],
+      "include": [
+        "**/src/components/progressive-blur.tsx"
+      ],
       "linter": {
         "rules": {
           "suspicious": {

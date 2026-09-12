@@ -1,0 +1,5 @@
+#include "Base.xcconfig"
+// TODO(prod): fill with the production Convex deployment URL and pk_live_ key.
+CONVEX_URL = https:/$()/REPLACE_ME.convex.cloud
+CLERK_PUBLISHABLE_KEY = pk_live_REPLACE_ME
+API_BASE_URL = https:/$()/aggr.watch
