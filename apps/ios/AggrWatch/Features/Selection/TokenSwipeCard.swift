@@ -5,11 +5,11 @@ import SwiftUI
 /// same rounded-rect shape, full row height, tucked under the card so the pair
 /// reads as one continuous shape — with just an icon, no caption.
 ///
-/// Swipe LEFT deletes (red, trash): releasing once the panel is fully
+/// Swipe LEFT removes the bookmark (accent, bookmark): releasing once the panel is fully
 /// revealed asks through a confirmation alert; the row stays revealed while
 /// the alert is up and springs back when it closes. No resting open state.
 ///
-/// Swipe RIGHT selects (accent, checklist): releasing once the panel is fully
+/// Swipe RIGHT selects (blue, checklist): releasing once the panel is fully
 /// revealed toggles the row and it springs back closed. Neither panel is a
 /// Button — release is the commit.
 ///
@@ -34,6 +34,8 @@ struct TokenSwipeCard<Content: View>: View {
     var deleteButtonTitle: String = "Remove token"
     var deleteMessage: String = "If this is the token’s last watchlist, its saved holdings will also be cleared."
     var deleteAccessibilityLabel: String = "Remove from watchlist"
+    var deleteIcon = "bookmark.slash.fill"
+    var requiresDeleteConfirmation = true
     var onDelete: (() -> Void)? = nil
     @ViewBuilder let content: () -> Content
 
@@ -118,7 +120,7 @@ struct TokenSwipeCard<Content: View>: View {
                 withAnimation(reduceMotion ? nil : .snappy) { toggleSelection() }
             }
             .accessibilityActions {
-                if canDelete { Button(deleteAccessibilityLabel) { confirmingDelete = true } }
+                if canDelete { Button(deleteAccessibilityLabel) { performBookmarkAction() } }
             }
             .alert(deleteTitle, isPresented: $confirmingDelete) {
                 Button("Cancel", role: .cancel) {}
@@ -144,23 +146,23 @@ struct TokenSwipeCard<Content: View>: View {
     /// completes, so "fully dragged" is visible before the finger lifts.
     private var restingFill: Color { Color(white: 0.22) }
 
-    /// Grey → red. Indicator only; release at the reveal is what asks.
+    /// Grey → accent. Indicator only; release at the reveal is what asks.
     private var deletePanel: some View {
         let progress = TokenSwipeRules.fillProgress(travel: deleteTravel)
-        return panel(travel: deleteTravel, fill: restingFill.mix(with: .red, by: progress), edge: .trailing) {
-            Image(systemName: "trash.fill")
+        return panel(travel: deleteTravel, fill: restingFill.mix(with: .accentColor, by: progress), edge: .trailing) {
+            Image(systemName: deleteIcon)
                 .font(.body.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.white.mix(with: .black, by: progress))
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
-    /// Grey → accent with a white checklist glyph. Indicator only; release at
+    /// Grey → blue with a white checklist glyph. Indicator only; release at
     /// the reveal is what toggles.
     private var selectPanel: some View {
         let progress = TokenSwipeRules.fillProgress(travel: selectTravel)
-        return panel(travel: selectTravel, fill: restingFill.mix(with: .accentColor, by: progress), edge: .leading) {
+        return panel(travel: selectTravel, fill: restingFill.mix(with: .blue, by: progress), edge: .leading) {
             Image(systemName: "checklist")
                 .font(.body.weight(.bold))
                 .foregroundStyle(.white)
@@ -203,6 +205,15 @@ struct TokenSwipeCard<Content: View>: View {
         onToggleSelection()
     }
 
+    private func performBookmarkAction() {
+        if requiresDeleteConfirmation {
+            confirmingDelete = true
+        } else {
+            openRowID = nil
+            onDelete?()
+        }
+    }
+
     private var pan: TokenHorizontalPanGesture {
         TokenHorizontalPanGesture(
             onBegan: { x in
@@ -231,7 +242,7 @@ struct TokenSwipeCard<Content: View>: View {
                     case .commitDelete:
                         // Stay revealed while the alert is up; closes on dismiss.
                         openRowID = id
-                        confirmingDelete = true
+                        performBookmarkAction()
                     case .close:
                         openRowID = nil
                     case .toggleSelect:

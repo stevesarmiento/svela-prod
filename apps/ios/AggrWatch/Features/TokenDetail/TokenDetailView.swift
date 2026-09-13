@@ -7,6 +7,7 @@ struct TokenDetailView: View {
   let coinId: String
   let groupSlug: String?
   var onClose: (() -> Void)? = nil
+  var onArtworkChange: ((TokenPageArtwork) -> Void)? = nil
   @Environment(AppEnvironment.self) private var env
   @State private var store: TokenChartStore?
   @State private var scale: TimeScale = .d30
@@ -40,15 +41,20 @@ struct TokenDetailView: View {
       .padding(.bottom, 32)
     }
     .defaultScrollAnchor(debugScrollBottom ? .bottom : .top)
+    .scrollEdgeEffectStyle(.soft, for: .top)
     .background {
       // Blurred token-logo glow like the web token page.
-      if let quote {
+      if onClose == nil, let quote {
         TokenLogo(symbol: quote.symbol, imageURL: quote.image, size: 260)
           .blur(radius: 90).opacity(0.35).offset(y: -180)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
           .ignoresSafeArea()
           .allowsHitTesting(false)
       }
+    }
+    .containerBackground(onClose == nil ? Color(uiColor: .systemBackground) : Color.clear, for: .navigation)
+    .onChange(of: TokenPageArtwork(symbol: quote?.symbol ?? coinId, imageURL: quote?.image), initial: true) { _, artwork in
+      onArtworkChange?(artwork)
     }
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {

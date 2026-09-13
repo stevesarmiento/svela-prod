@@ -3,7 +3,7 @@ import AggrCore
 import SwiftUI
 
 /// Command palette replacement (`command-search-popover-content.tsx` + `use-hybrid-coin-search.ts`).
-/// - Search tab: navigate to a token, star to add/remove from the selected watchlist.
+/// - Search tab: navigate to a token, swipe to add/remove from the selected watchlist.
 /// - Sheet (`.coinSearch(targetGroupId:)`): add mode with a target watchlist picker.
 struct CoinSearchView: View {
   enum Mode { case navigate, addToWatchlist }
@@ -20,10 +20,17 @@ struct CoinSearchView: View {
   @State private var error: String?
   @State private var targetGroupId: String?
   @State private var pendingIds: Set<String> = []
+  @State private var analysisSheet: SheetRoute?
+
+  private var visibleCoins: [CoinQuote] { debounced.isEmpty ? topCoins : results }
+  private var selectionOwner: String { mode == .navigate ? "search" : "search-add" }
+  private var target: WatchlistGroup? {
+    let data = env.watchlistData
+    return data.groups.first { $0.id == (targetGroupId ?? initialTargetGroupId) } ?? data.selectedGroup
+  }
 
   var body: some View {
     let data = env.watchlistData
-    let target = data.groups.first { $0.id == (targetGroupId ?? initialTargetGroupId) } ?? data.selectedGroup
     List {
       if mode == .addToWatchlist || !data.groups.isEmpty {
         Section {
@@ -42,6 +49,8 @@ struct CoinSearchView: View {
             }
           }
         }
+        .listRowBackground(Color.black)
+        .listRowSeparator(.hidden)
       }
 
       if debounced.isEmpty {
@@ -58,15 +67,46 @@ struct CoinSearchView: View {
       }
       if let error { Section { Text(error).font(.footnote).foregroundStyle(Color.lossRed) } }
     }
-    .listStyle(.insetGrouped)
+    .listStyle(.plain)
+    .scrollContentBackground(.hidden)
+    .background(.black)
+    .overlay { if mode == .addToWatchlist { ToastOverlay() } }
+    .scrollDismissesKeyboard(.interactively)
     .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search tokens")
     .textInputAutocapitalization(.never)
     .autocorrectionDisabled()
-    .navigationTitle(mode == .navigate ? "Search" : "Add token")
+    .navigationTitle("")
     .navigationBarTitleDisplayMode(.inline)
+    .modifier(SelectionNavigationModifier(
+      tab: mode == .navigate ? .search : env.router.tab,
+      owner: selectionOwner,
+      title: mode == .navigate ? "Search" : "Add token"
+    ))
     .toolbar {
       if mode == .addToWatchlist {
         ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+      }
+    }
+    .onAppear { registerSelection() }
+    .onChange(of: visibleCoins.map(\.id)) { _, _ in registerSelection() }
+    .onChange(of: target?.id) { _, _ in
+      env.selection.release(owner: selectionOwner)
+      registerSelection()
+    }
+    .onChange(of: env.router.tab) { _, tab in
+      if mode == .navigate && tab == .search { registerSelection() }
+    }
+    .onChange(of: env.router.sheet) { _, sheet in
+      if mode == .navigate && sheet == nil { registerSelection() }
+    }
+    .onChange(of: env.selection.isActive) { _, active in
+      if active && env.selection.ownerId == selectionOwner { dismissSearchKeyboard() }
+    }
+    .onDisappear { env.selection.release(owner: selectionOwner) }
+    .sheet(item: $analysisSheet) { sheet in
+      if case .analyze(let ids) = sheet {
+        if ids.count == 1, let id = ids.first { DeepAnalysisSheet(coinId: id) }
+        else { MultiAnalysisSheet(coinIds: ids) }
       }
     }
     .task { await loadTop() }
@@ -83,43 +123,67 @@ struct CoinSearchView: View {
   private func row(_ coin: CoinQuote, target: WatchlistGroup?) -> some View {
     let data = env.watchlistData
     let inTarget = target.map { data.isInGroup(coin.id, groupId: $0.id) } ?? false
-    HStack(spacing: 12) {
-      TokenLogo(symbol: coin.symbol, imageURL: coin.image, size: 32)
-      VStack(alignment: .leading, spacing: 2) {
-        HStack(spacing: 6) {
-          Text(coin.symbol.uppercased()).font(.subheadline.weight(.semibold))
-          if let r = coin.marketCapRank, r > 0 { Text("#\(r)").font(.caption2).foregroundStyle(.secondary) }
-        }
-        Text(LogoOverrides.cleanTokenName(coin.name)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-      }
-      Spacer()
-      VStack(alignment: .trailing, spacing: 2) {
-        UsdText(value: coin.currentPrice, font: .subheadline)
-        PercentBadge(pct: coin.priceChangePercentage24h, compact: true)
-      }
+    let bookmark: (() async -> Void)? = target.map { group in
+      { await toggle(coin, target: group, currentlyIn: inTarget) }
+    }
+    SelectableRow(id: coin.id, removalTitle: "Remove from \(target?.name ?? "watchlist")?",
+                  onBookmark: bookmark,
+                  isBookmarked: inTarget, backgroundColor: .black) {
       Button {
-        Task { await toggle(coin, target: target, currentlyIn: inTarget) }
+        if env.selection.isActive {
+          env.selection.toggle(coin.id)
+        } else if mode == .navigate {
+          env.router.openToken(coin.id, groupSlug: target?.slug, sourceID: "search|\(coin.id)")
+        } else {
+          Task { await toggle(coin, target: target, currentlyIn: inTarget) }
+        }
       } label: {
-        Image(systemName: inTarget ? "bookmark.fill" : "bookmark")
-          .foregroundStyle(inTarget ? Color.accentColor : .secondary)
-          .frame(width: 32, height: 32)
+        HStack(spacing: 12) {
+          GlassTokenLogo(symbol: coin.symbol, imageURL: coin.image, size: 34)
+          VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+              Text(coin.symbol.uppercased()).font(.subheadline.weight(.semibold))
+              if let r = coin.marketCapRank, r > 0 { Text("#\(r)").font(.caption2).foregroundStyle(.secondary) }
+              if inTarget {
+                Image(systemName: "bookmark.fill").font(.caption2).foregroundStyle(Color.accentColor)
+              }
+            }
+            Text(LogoOverrides.cleanTokenName(coin.name)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+          }
+          Spacer()
+          VStack(alignment: .trailing, spacing: 3) {
+            UsdText(value: coin.currentPrice, font: .subheadline.weight(.medium))
+            MoveWithBadge(usdMove: coin.usdMove24h, pct: coin.priceChangePercentage24h)
+          }
+        }
+        .contentShape(.rect)
       }
       .buttonStyle(.plain)
-      .disabled(target == nil || pendingIds.contains(coin.id))
+      .accessibilityIdentifier("search-token-\(coin.id)")
     }
-    .contentShape(.rect)
+    .disabled(pendingIds.contains(coin.id))
     .tokenTransitionSource("search|\(coin.id)")
-    .onTapGesture {
-      if mode == .navigate {
-        env.router.openToken(coin.id, groupSlug: target?.slug, sourceID: "search|\(coin.id)")
-      } else {
-        Task { await toggle(coin, target: target, currentlyIn: inTarget) }
-      }
-    }
+    .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+    .listRowBackground(Color.black)
+    .listRowSeparator(.hidden)
+  }
+
+  private func registerSelection() {
+    guard mode == .addToWatchlist || (env.router.tab == .search && env.router.searchPath.isEmpty) else { return }
+    // The add sheet owns its selection while covering the tab beneath it.
+    guard mode == .addToWatchlist || env.router.sheet == nil else { return }
+    env.selection.register(owner: selectionOwner, selectableIds: visibleCoins.map(\.id), onRemove: nil, onAnalyze: { ids in
+      if mode == .addToWatchlist { analysisSheet = .analyze(ids) }
+      else { env.router.sheet = .analyze(ids) }
+    })
+  }
+
+  private func dismissSearchKeyboard() {
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
   }
 
   private func toggle(_ coin: CoinQuote, target: WatchlistGroup?, currentlyIn: Bool) async {
-    guard let target else { return }
+    guard let target, !pendingIds.contains(coin.id) else { return }
     pendingIds.insert(coin.id)
     defer { pendingIds.remove(coin.id) }
     do {

@@ -221,21 +221,47 @@ struct TokenPagePresenter: UIViewControllerRepresentable {
   }
 }
 
+struct TokenPageArtwork: Equatable {
+  let symbol: String
+  let imageURL: String?
+}
+
 /// Full-page content, with its own handle and controls rather than a system sheet container.
 struct TokenPresentationView: View {
   let token: TokenPresentation
   let close: () -> Void
+  @Environment(AppEnvironment.self) private var env
+  @State private var artwork: TokenPageArtwork?
 
   var body: some View {
-    VStack(spacing: 0) {
+    NavigationStack {
+      TokenDetailView(coinId: token.coinId, groupSlug: token.groupSlug, onClose: close,
+                      onArtworkChange: { artwork = $0 })
+    }
+    .overlay(alignment: .top) {
       Capsule().fill(.secondary.opacity(0.5)).frame(width: 36, height: 4)
         .frame(height: 16).frame(maxWidth: .infinity)
+        .offset(y: -8)
         .accessibilityHidden(true)
-      NavigationStack {
-        TokenDetailView(coinId: token.coinId, groupSlug: token.groupSlug, onClose: close)
-      }
+        .allowsHitTesting(false)
     }
-    .background(Color.black.ignoresSafeArea())
+    .background {
+      GeometryReader { geometry in
+        let quote = env.watchlistData.quote(token.coinId)
+        let logo = artwork ?? TokenPageArtwork(symbol: quote?.symbol ?? token.coinId, imageURL: quote?.image)
+        ZStack(alignment: .top) {
+          Color.black
+          TokenLogo(symbol: logo.symbol, imageURL: logo.imageURL, size: 260)
+            .blur(radius: 90).opacity(0.35)
+            // Preserve the original glow's position while extending it above the
+            // navigation container, through the handle and status-bar safe area.
+            .offset(y: geometry.safeAreaInsets.top - 180)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+      }
+      .ignoresSafeArea()
+      .allowsHitTesting(false)
+    }
     .overlay { ToastOverlay() }
     .fontDesign(.rounded)
     .tint(Color("AccentColor"))

@@ -49,7 +49,6 @@ struct MainTabView: View {
       Tab(value: .search, role: .search) {
         NavigationStack(path: $router.searchPath) {
           CoinSearchView(mode: .navigate).navigationDestination(for: Route.self, destination: destination)
-            .modifier(SelectionNavigationModifier(tab: .search))
         }
       } label: {
         Image(systemName: "magnifyingglass").accessibilityLabel("Search")
@@ -68,7 +67,9 @@ struct MainTabView: View {
       case .createGroup: GroupEditorSheet(mode: .create)
       case .editGroup(let g): GroupEditorSheet(mode: .edit(g))
       case .coinSearch(let targetGroupId):
-        NavigationStack { CoinSearchView(mode: .addToWatchlist, initialTargetGroupId: targetGroupId) }
+        NavigationStack {
+          CoinSearchView(mode: .addToWatchlist, initialTargetGroupId: targetGroupId)
+        }
           .presentationDetents([.large])
       case .analyze(let ids):
         if ids.count == 1, let id = ids.first { DeepAnalysisSheet(coinId: id) } else { MultiAnalysisSheet(coinIds: ids) }
@@ -93,24 +94,47 @@ struct MainTabView: View {
 
 /// Keep the TabView and its navigation stacks alive; only their controls change.
 /// Selection replaces the system tab bar rather than adding an accessory above it.
-private struct SelectionNavigationModifier: ViewModifier {
+struct SelectionNavigationModifier: ViewModifier {
   let tab: AppTab
+  var owner: String? = nil
+  var title: String? = nil
   @Environment(AppEnvironment.self) private var env
   @State private var confirmingRemoval = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  private var selecting: Bool { env.router.tab == tab && env.selection.isActive }
+  private var selecting: Bool {
+    env.router.tab == tab && env.selection.isActive
+      && (owner.map { env.selection.ownerId == $0 } ?? (env.selection.ownerId != "search-add"))
+  }
 
   func body(content: Content) -> some View {
     content
       .toolbar(selecting ? .hidden : .visible, for: .tabBar)
-      .navigationBarTitleDisplayMode(selecting || tab == .watchlists ? .inline : .automatic)
+      .navigationBarTitleDisplayMode(selecting || tab == .watchlists || title != nil ? .inline : .automatic)
       .toolbar {
-        if selecting {
-          ToolbarItem(placement: .principal) {
-            Text("\(env.selection.selected.count) Selected")
-              .font(.headline.monospacedDigit())
-              .contentTransition(.numericText())
+        if selecting || title != nil {
+          ToolbarItem(placement: title == nil ? .principal : .topBarLeading) {
+            ZStack(alignment: title == nil ? .center : .leading) {
+              if selecting {
+                Text("\(env.selection.selected.count) Selected")
+                  .font(title == nil
+                    ? .system(.headline, design: .rounded).monospacedDigit()
+                    : .system(.title2, design: .rounded, weight: .bold).monospacedDigit())
+                  .contentTransition(reduceMotion ? .opacity : .numericText())
+                  .transition(SelectionMotion.disclose(anchor: title == nil ? .center : .leading, reduceMotion: reduceMotion))
+              } else if let title {
+                Text(title)
+                  .font(.system(.title2, design: .rounded, weight: .bold))
+                  .transition(SelectionMotion.disclose(anchor: .leading, reduceMotion: reduceMotion))
+              }
+            }
+            .fixedSize()
+            .accessibilityAddTraits(.isHeader)
+            .animation(reduceMotion ? nil : .snappy, value: selecting)
+            .animation(reduceMotion ? nil : .snappy, value: env.selection.selected.count)
           }
+          .sharedBackgroundVisibility(.hidden)
+        }
+        if selecting {
           ToolbarItem(placement: .topBarTrailing) {
             Button(env.selection.allSelected ? "Deselect all" : "Select all") {
               withAnimation(reduceMotion ? nil : .snappy) { env.selection.selectAll(!env.selection.allSelected) }

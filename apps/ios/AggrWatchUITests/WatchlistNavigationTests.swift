@@ -1,6 +1,129 @@
 import XCTest
 
 final class WatchlistNavigationTests: XCTestCase {
+  @MainActor func testAddTokenSheetSelectionReturnsToWatchlist() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid"]
+    app.launch()
+    app.tabBars.buttons["Watchlists"].tap()
+    let card = app.buttons["watchlist-card-preview-growth"]
+    XCTAssertTrue(card.waitForExistence(timeout: 5))
+    card.tap()
+    app.buttons["Add token"].tap()
+    let bitcoin = app.buttons["search-token-bitcoin"]
+    XCTAssertTrue(bitcoin.waitForExistence(timeout: 5))
+    bitcoin.swipeLeft()
+    // Adding should commit directly, whereas removing an existing bookmark confirms.
+    // Offline fixtures reject writes; verify the action reaches the real mutation path
+    // and reports its error rather than pretending to save the bookmark.
+    XCTAssertTrue(app.staticTexts["Could not update watchlist"].waitForExistence(timeout: 5))
+    XCTAssertFalse(app.alerts.firstMatch.exists)
+    bitcoin.swipeRight()
+    let cancel = app.buttons["Cancel selection"]
+    XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+    capture("Add token sheet selection")
+    cancel.tap()
+    app.buttons["Done"].tap()
+    let solana = app.buttons["watchlist-token-solana"]
+    XCTAssertTrue(solana.waitForExistence(timeout: 5))
+    solana.swipeRight()
+    XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+    cancel.tap()
+  }
+
+  @MainActor func testSearchCardsSelectionBookmarkAndNavigation() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid"]
+    app.launch()
+    // Pick a known target watchlist before opening search.
+    app.tabBars.buttons["Watchlists"].tap()
+    let card = app.buttons["watchlist-card-preview-core"]
+    XCTAssertTrue(card.waitForExistence(timeout: 5))
+    card.tap()
+    app.tabBars.buttons["Search"].tap()
+    let row = app.buttons["search-token-bitcoin"]
+    XCTAssertTrue(row.waitForExistence(timeout: 10))
+    capture("Search token cards on black")
+    row.swipeRight()
+    let cancel = app.buttons["Cancel selection"]
+    XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["Analyze selected"].exists)
+    capture("Search selection controls")
+    row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
+    XCTAssertFalse(app.buttons["token-page-close"].exists)
+    row.swipeLeft()
+    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5))
+    app.alerts.buttons["Cancel"].tap()
+    row.tap()
+    let close = app.buttons["token-page-close"]
+    XCTAssertTrue(close.waitForExistence(timeout: 5))
+    close.tap()
+    XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+    let search = app.searchFields.firstMatch
+    XCTAssertTrue(search.waitForExistence(timeout: 5))
+    search.tap()
+    search.typeText("Solana")
+    let solana = app.buttons["search-token-solana"]
+    XCTAssertTrue(row.waitForNonExistence(timeout: 5))
+    XCTAssertTrue(solana.waitForExistence(timeout: 5))
+    solana.swipeRight()
+    XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+    cancel.tap()
+    XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
+  }
+
+  @MainActor func testTokenChromeWhileScrolled() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid"]
+    app.launch()
+    app.tabBars.buttons["Watchlists"].tap()
+    let card = app.buttons["watchlist-card-preview-core"]
+    XCTAssertTrue(card.waitForExistence(timeout: 5))
+    card.tap()
+    let row = app.buttons["watchlist-token-bitcoin"]
+    XCTAssertTrue(row.waitForExistence(timeout: 5))
+    row.tap()
+    let close = app.buttons["token-page-close"]
+    XCTAssertTrue(close.waitForExistence(timeout: 5))
+    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.75))
+    start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -220)))
+    capture("Scrolled token with soft header blur")
+    close.tap()
+    XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["comparison-title"].waitForExistence(timeout: 5))
+    capture("Comparison after token close")
+  }
+
+  @MainActor func testTapDeselectThenSelectInAnotherWatchlist() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid"]
+    app.launch()
+    app.tabBars.buttons["Watchlists"].tap()
+    for (group, coin) in [("preview-core", "bitcoin"), ("preview-growth", "solana"),
+                          ("preview-core", "ethereum"), ("preview-growth", "solana")] {
+      let card = app.buttons["watchlist-card-\(group)"]
+      XCTAssertTrue(card.waitForExistence(timeout: 5))
+      card.tap()
+      let row = app.buttons["watchlist-token-\(coin)"]
+      XCTAssertTrue(row.waitForExistence(timeout: 5))
+      row.swipeRight()
+      let cancel = app.buttons["Cancel selection"]
+      XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+      // Tap the physical row overlay: its content button is disabled in selection mode.
+      row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+      XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
+      XCTAssertFalse(app.buttons["token-page-close"].exists)
+      let chooser = app.buttons["watchlist-chooser"]
+      XCTAssertTrue(chooser.waitForExistence(timeout: 5))
+      chooser.tap()
+    }
+  }
+
   @MainActor func testChooserTokenDismissalAndComparisonState() {
     continueAfterFailure = false
     let app = XCUIApplication()

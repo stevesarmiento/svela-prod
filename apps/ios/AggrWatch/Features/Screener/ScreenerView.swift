@@ -78,7 +78,7 @@ private struct ScreenerContent: View {
   @Environment(AppEnvironment.self) private var env
 
   private func registerSelection(_ rows: [ScreenerMarketRow]) {
-    guard env.router.tab == .screener, env.router.screenerPath.isEmpty else { return }
+    guard env.router.tab == .screener, env.router.screenerPath.isEmpty, env.router.sheet == nil else { return }
     // Read-only table: no Remove (screener passes nil), Analyze only.
     env.selection.register(owner: "screener", selectableIds: rows.map(\.coingeckoId), onRemove: nil, onAnalyze: { ids in env.router.sheet = .analyze(ids) })
   }
@@ -133,6 +133,9 @@ private struct ScreenerContent: View {
     .refreshable { store.refetch() }
     .onAppear { registerSelection(rows) }
     .onChange(of: rows.map(\.id)) { _, _ in registerSelection(store.sortedRows) }
+    .onChange(of: env.router.sheet) { _, sheet in
+      if sheet == nil { registerSelection(store.sortedRows) }
+    }
     .onDisappear { env.selection.release(owner: "screener") }
   }
 }
@@ -147,7 +150,7 @@ struct ScreenerRowView: View {
     let loading = row.isLoadingQuote
     VStack(spacing: 8) {
       HStack(spacing: 10) {
-        TokenLogo(symbol: row.symbol, imageURL: row.image, size: 22)
+        GlassTokenLogo(symbol: row.symbol, imageURL: row.image, size: 22)
         Text(row.symbol.uppercased()).font(.subheadline.weight(.bold))
         Text(LogoOverrides.cleanTokenName(row.name)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
         Spacer()

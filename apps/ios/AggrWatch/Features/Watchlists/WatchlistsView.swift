@@ -27,7 +27,7 @@ struct WatchlistsView: View {
       } else {
         if let group = data.selectedGroup {
           ScrollView {
-            WatchlistDetailSection()
+            WatchlistDetailSection(group: group)
               .padding(.top, 12).padding(.bottom, 24)
           }
           .id(group.id)
@@ -64,17 +64,18 @@ struct WatchlistsView: View {
               .accessibilityAddTraits(.isHeader)
           }
         }
-        ToolbarItem(placement: .topBarLeading) {
-          if !choosing, let group = data.selectedGroup {
+        if !choosing, let group = data.selectedGroup {
+          ToolbarItem(placement: .topBarLeading) {
             Button(action: showChooser) {
               WatchlistGroupIconView(icon: group.icon, size: 24)
                 .frame(width: 28, height: 28).compositingGroup()
             }
             .accessibilityIdentifier("watchlist-chooser")
             .accessibilityLabel("Choose watchlist, current watchlist: \(group.name)")
-          } else {
-            Button { router.sheet = .settings } label: { Label("Settings", systemImage: "person.crop.circle") }
           }
+        } else {
+          ToolbarItem(placement: .topBarLeading) { SettingsProfileButton() }
+            .sharedBackgroundVisibility(.hidden)
         }
         if !choosing, let group = data.selectedGroup {
           ToolbarItem(placement: .topBarLeading) {
@@ -134,7 +135,7 @@ struct WatchlistsGrid: View {
 
   var body: some View {
     let data = env.watchlistData
-    LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
+    LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 16), count: 2), spacing: 16) {
       ForEach(data.groups) { group in
         let ids = data.coinIds(in: group)
         let coins = ids.compactMap { data.quote($0) }

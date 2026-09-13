@@ -4,11 +4,11 @@ import SwiftUI
 
 /// Selected watchlist comparison, with chart controls and editable token holdings.
 struct WatchlistDetailSection: View {
+  let group: WatchlistGroup
   @Environment(AppEnvironment.self) private var env
   @State private var scale: TimeScale = .d1
 
   var body: some View {
-    let data = env.watchlistData
     VStack(spacing: 16) {
       HStack {
         Text("Performance").font(.subheadline.weight(.semibold))
@@ -17,11 +17,9 @@ struct WatchlistDetailSection: View {
       }
       .padding(.horizontal, 16)
 
-      if let group = data.selectedGroup {
-        GroupCoinsChart(group: group, scale: scale)
-          .padding(.horizontal, 16)
-        CoinRowsList(group: group)
-      }
+      GroupCoinsChart(group: group, scale: scale)
+        .padding(.horizontal, 16)
+      CoinRowsList(group: group)
     }
   }
 }
@@ -132,6 +130,9 @@ struct CoinRowsList: View {
     .padding(.horizontal, 16)
     .onAppear { register(items) }
     .onChange(of: items) { _, next in register(next) }
+    .onChange(of: env.router.sheet) { _, sheet in
+      if sheet == nil { register(items) }
+    }
     .onChange(of: env.router.showsWatchlistChooser) { _, choosing in
       if choosing { env.selection.release(owner: "watchlist-\(group.id)") }
       else { register(items) }
@@ -143,8 +144,12 @@ struct CoinRowsList: View {
   }
 
   private func register(_ items: [WatchlistItem]) {
-    guard env.router.tab == .watchlists, !env.router.showsWatchlistChooser, env.router.watchlistsPath.isEmpty else { return }
+    guard env.router.tab == .watchlists, !env.router.showsWatchlistChooser, env.router.watchlistsPath.isEmpty,
+          env.router.sheet == nil else { return }
     let data = env.watchlistData
+    // Outgoing rows can still receive updates while SwiftUI animates the group change.
+    // Only the displayed group may claim selection or replace its action callbacks.
+    guard data.selectedGroup?.id == group.id else { return }
     env.selection.register(owner: "watchlist-\(group.id)", selectableIds: items.map(\.coinId), onRemove: { ids in
       _ = try await data.removeBulk(coinIds: ids, from: group.id)
     }, onAnalyze: { ids in env.router.sheet = .analyze(ids) })
@@ -167,7 +172,7 @@ struct CoinRow: View {
       if env.selection.isActive { env.selection.toggle(item.coinId) } else { env.router.openToken(item.coinId, groupSlug: group.slug, sourceID: "watchlist|\(group.id)|\(item.coinId)") }
     } label: {
       HStack(spacing: 12) {
-        TokenLogo(symbol: quote?.symbol ?? item.coinId, imageURL: quote?.image, size: 34)
+        GlassTokenLogo(symbol: quote?.symbol ?? item.coinId, imageURL: quote?.image, size: 34)
         VStack(alignment: .leading, spacing: 2) {
           Text((quote?.symbol ?? "N/A").uppercased()).font(.subheadline.weight(.semibold))
           Text(LogoOverrides.cleanTokenName(quote?.name ?? item.coinId)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -255,7 +260,7 @@ struct HoldingsCell: View {
 
 #if DEBUG
 #Preview("Watchlist details") {
-  PreviewHost(tab: .watchlists) { _ in ScrollView { WatchlistDetailSection().padding() } }
+  PreviewHost(tab: .watchlists) { _ in ScrollView { WatchlistDetailSection(group: PreviewFixtures.group).padding() } }
 }
 #Preview("Token cards and holdings") {
   PreviewHost { env in

@@ -17,66 +17,58 @@ struct WatchlistCardView: View {
   private var theme: ColorTheme { ColorThemes.resolve(color) }
 
   var body: some View {
-    let up = coins.filter { ($0.priceChangePercentage24h ?? 0) > 0 }.count
-    let down = coins.filter { ($0.priceChangePercentage24h ?? 0) < 0 }.count
-    VStack(alignment: .leading, spacing: 10) {
-      HStack(alignment: .top, spacing: 12) {
-        ZStack {
-          Circle().fill(.white.opacity(0.06)).overlay(Circle().strokeBorder(.white.opacity(0.06)))
-          WatchlistGroupIconView(icon: icon, size: 20).foregroundStyle(Color(oklch: "oklch(0.871 0.006 286.286)"))
-        }
-        .frame(width: 40, height: 40)
-        VStack(alignment: .leading, spacing: 3) {
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 8) {
+        WatchlistGroupIconView(icon: icon, size: 20)
+          .foregroundStyle(Color(oklch: "oklch(0.871 0.006 286.286)"))
+          .frame(width: 28, height: 28)
+        VStack(alignment: .leading, spacing: 2) {
           Text(name).font(.headline).foregroundStyle(.white).lineLimit(1)
-          HStack(spacing: 8) {
-            countLabel(up, "up", .gainGreen, flip: false)
-            countLabel(down, "down", .lossRed, flip: true)
-          }
-        }
-        Spacer(minLength: 0)
-      }
-
-      Group {
-        if coinsCount == 0 {
-          VStack(spacing: 4) {
-            Text("To add tokens to this watchlist")
-            Text("tap the + button above").fontWeight(.medium)
-          }
-          .font(.footnote).foregroundStyle(.white.opacity(0.6))
-          .frame(maxWidth: .infinity).padding(.vertical, 22)
-        } else if aggregate.count >= 2 {
-          Sparkline(points: aggregate, lineWidth: 1.6,
-                    monoColor: (aggregateChange?.value ?? 0) >= 0 ? Color.gainGreen : Color.lossRed)
-            .frame(height: 70)
-        } else {
-          Rectangle().fill(.clear).frame(height: 70)
-            .overlay { if isLoading { ProgressView().tint(.white.opacity(0.5)) } }
-        }
-      }
-
-      if coinsCount > 0 {
-        HStack(alignment: .bottom) {
-          TokenAvatarStack(items: coins.prefix(4).map { .init(symbol: $0.symbol, imageURL: $0.image) }, maxVisible: 4, size: 26)
-          if coinsCount > 4 {
-            Text("+\(coinsCount - 4)").font(.caption2).foregroundStyle(.white.opacity(0.6))
-          }
-          Spacer()
-          if let change = aggregateChange {
+            .frame(maxWidth: .infinity, alignment: .leading)
+          if coinsCount == 0 {
+            Text("No tokens yet").font(.caption).foregroundStyle(.white.opacity(0.6))
+          } else if let change = aggregateChange {
             HStack(spacing: 2) {
               if change.isEstimate { Text("≈").foregroundStyle(.white.opacity(0.5)) }
               Text(UsdFormat.signedPercent(change.value))
             }
-            .font(.system(.subheadline, design: .rounded).monospacedDigit().weight(.bold))
+            .font(.system(.caption, design: .rounded).monospacedDigit().weight(.semibold))
             .foregroundStyle(Color(oklch: theme.accentText))
             .contentTransition(.numericText())
           } else {
-            Text("—").font(.subheadline.weight(.bold)).foregroundStyle(.white.opacity(0.6))
+            Text("—").font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.6))
           }
         }
       }
+
+      Spacer(minLength: 0)
+
+      Group {
+        if aggregate.count >= 2, coinsCount > 0 {
+          Sparkline(points: aggregate, lineWidth: 1.4, monoColor: .white.opacity(0.65))
+        } else {
+          Color.clear.overlay {
+            if isLoading { ProgressView().controlSize(.mini).tint(.white.opacity(0.5)) }
+          }
+        }
+      }
+      .frame(height: 16)
+
+      Spacer(minLength: 0)
+
+      HStack(spacing: 8) {
+        if coinsCount > 0 {
+          TokenAvatarStack(items: coins.prefix(3).map { .init(symbol: $0.symbol, imageURL: $0.image) }, maxVisible: 3, size: 18, usesGlass: true)
+          if coinsCount > 3 {
+            Text("+\(coinsCount - 3)").font(.caption2).foregroundStyle(.white.opacity(0.6))
+          }
+        }
+        Spacer(minLength: 0)
+      }
+      .frame(height: 18)
     }
+    .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
     .padding(12)
-    .frame(maxWidth: .infinity, minHeight: 200, alignment: .topLeading)
     .background {
       ZStack {
         RoundedRectangle(cornerRadius: 20).fill(Color(oklch: theme.background))
@@ -95,14 +87,6 @@ struct WatchlistCardView: View {
     }
   }
 
-  private func countLabel(_ n: Int, _ word: String, _ tint: Color, flip: Bool) -> some View {
-    HStack(spacing: 3) {
-      Image(systemName: "triangle.fill").font(.system(size: 6)).foregroundStyle(tint).rotationEffect(.degrees(flip ? 180 : 0))
-      Text(isLoading ? "—" : "\(n)").foregroundStyle(.white).monospacedDigit()
-      Text(word).foregroundStyle(.white.opacity(0.5))
-    }
-    .font(.system(size: 10))
-  }
 }
 
 /// The 10×10 dotted texture behind the card.

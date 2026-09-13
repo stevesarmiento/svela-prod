@@ -77,6 +77,9 @@ struct SelectableRow<Content: View>: View {
   let id: String
   var removalTitle = "Remove token?"
   var onRemove: (() async throws -> Void)? = nil
+  var onBookmark: (() async -> Void)? = nil
+  var isBookmarked = false
+  var backgroundColor: Color? = nil
   @ViewBuilder var content: () -> Content
   @Environment(AppEnvironment.self) private var env
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -88,7 +91,17 @@ struct SelectableRow<Content: View>: View {
       id: id, openRowID: $selection.openRowID,
       isSelected: selection.isSelected(id), inSelectionMode: selection.isActive,
       onToggleSelection: { selection.toggle(id) }, deleteTitle: removalTitle,
-      onDelete: onRemove.map { remove in {
+      deleteAccessibilityLabel: onBookmark != nil && !isBookmarked ? "Add to watchlist" : "Remove from watchlist",
+      deleteIcon: onBookmark != nil && !isBookmarked ? "bookmark.fill" : "bookmark.slash.fill",
+      requiresDeleteConfirmation: onBookmark == nil || isBookmarked,
+      onDelete: onBookmark.map { bookmark in {
+        guard !isRemoving else { return }
+        isRemoving = true
+        Task {
+          defer { isRemoving = false }
+          await bookmark()
+        }
+      } } ?? onRemove.map { remove in {
         guard !isRemoving else { return }
         isRemoving = true
         Task {
@@ -110,7 +123,7 @@ struct SelectableRow<Content: View>: View {
       }
       .padding(14)
       .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-      .background(.white.opacity(selection.isSelected(id) ? 0.10 : 0.06), in: .rect(cornerRadius: 16))
+      .background(backgroundColor ?? .white.opacity(selection.isSelected(id) ? 0.10 : 0.06), in: .rect(cornerRadius: 16))
       .clipShape(.rect(cornerRadius: 16))
       .contentShape(.rect(cornerRadius: 16))
       .animation(reduceMotion ? nil : .snappy, value: selection.isActive)

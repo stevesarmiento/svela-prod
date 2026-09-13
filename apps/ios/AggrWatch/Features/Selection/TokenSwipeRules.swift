@@ -26,7 +26,7 @@ enum TokenSwipeRules {
 
     /// Free in a direction that can act (up to the reveal, then rubber-banded
     /// /4 so the card never slides far), rubber-banded /4 outright otherwise.
-    /// A right drag from an OPEN delete row (`base < 0`) still rubber-bands
+    /// A right drag from an OPEN removal row (`base < 0`) still rubber-bands
     /// past zero so "close delete" and "select" can never happen in one gesture.
     static func offset(base: CGFloat, translation: CGFloat, canDelete: Bool, canSelect: Bool) -> CGFloat {
         let x = base + translation

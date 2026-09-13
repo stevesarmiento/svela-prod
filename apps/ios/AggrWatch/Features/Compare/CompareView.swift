@@ -116,36 +116,26 @@ struct WatchlistAccordionTable: View {
   let loading: Bool
   @Environment(AppEnvironment.self) private var env
 
-  private struct GroupRow: Identifiable { let group: WatchlistGroup; let holdingsValue: Double?; var id: String { group.id } }
-
   var body: some View {
     let data = env.watchlistData
-    let rows = data.groups.map { g -> GroupRow in
-      let items = data.items(in: g)
-      let positions = items.filter { $0.holdings != nil }
-      let values = positions.compactMap { item -> Double? in
-        guard let holdings = item.holdings, let price = data.quote(item.coinId)?.currentPrice, price.isFinite, price > 0 else { return nil }
-        return holdings * price
-      }
-      let value = positions.isEmpty || values.count != positions.count ? nil : values.reduce(0, +)
-      return GroupRow(group: g, holdingsValue: value)
-    }.sorted { ($0.holdingsValue ?? -1) > ($1.holdingsValue ?? -1) }
-
     VStack(spacing: 12) {
-      ForEach(rows) { row in
-        groupHeader(row)
-        if expanded.contains(row.group.id) { coinsPanel(row.group) }
+      ForEach(data.groups) { group in
+        groupHeader(group)
+        if expanded.contains(group.id) { coinsPanel(group) }
       }
     }
     .padding(.horizontal, 16)
     .onAppear { registerSelection() }
     .onChange(of: expanded) { _, _ in registerSelection() }
     .onChange(of: data.bootstrap) { _, _ in registerSelection() }
+    .onChange(of: env.router.sheet) { _, sheet in
+      if sheet == nil { registerSelection() }
+    }
     .onDisappear { env.selection.release(owner: "compare") }
   }
 
   private func registerSelection() {
-    guard env.router.tab == .compare, env.router.comparePath.isEmpty else { return }
+    guard env.router.tab == .compare, env.router.comparePath.isEmpty, env.router.sheet == nil else { return }
     let data = env.watchlistData
     let visibleKeys = data.groups.filter { expanded.contains($0.id) }.flatMap { g in data.items(in: g).map { "\(g.id)|\($0.coinId)" } }
     env.selection.register(owner: "compare", selectableIds: visibleKeys, onRemove: { keys in
@@ -161,9 +151,8 @@ struct WatchlistAccordionTable: View {
   }
 
   @ViewBuilder
-  private func groupHeader(_ row: GroupRow) -> some View {
+  private func groupHeader(_ g: WatchlistGroup) -> some View {
     let data = env.watchlistData
-    let g = row.group
     let theme = ColorThemes.resolve(g.color)
     let items = data.items(in: g)
     let series = seriesByGroup[g.id] ?? []
@@ -181,7 +170,7 @@ struct WatchlistAccordionTable: View {
         .background(Color(oklch: theme.background), in: Capsule())
         .overlay(Capsule().strokeBorder(Color(oklch: theme.border)))
         if !expanded.contains(g.id) {
-          TokenAvatarStack(items: items.prefix(4).compactMap { data.quote($0.coinId) }.map { .init(symbol: $0.symbol, imageURL: $0.image) }, maxVisible: 4, size: 20)
+          TokenAvatarStack(items: items.prefix(4).compactMap { data.quote($0.coinId) }.map { .init(symbol: $0.symbol, imageURL: $0.image) }, maxVisible: 4, size: 20, usesGlass: true)
         }
         Spacer()
         if series.count >= 2 {
@@ -202,7 +191,6 @@ struct WatchlistAccordionTable: View {
         } else {
           SkeletonBlock(height: 12, width: 40)
         }
-        if let v = row.holdingsValue { Text(UsdFormat.price(v)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary) }
         Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
           .rotationEffect(.degrees(expanded.contains(g.id) ? 0 : -90))
       }
@@ -227,16 +215,21 @@ struct WatchlistAccordionTable: View {
           Button {
             if env.selection.isActive { env.selection.toggle(key) } else { env.router.openToken(item.coinId, groupSlug: g.slug, sourceID: "compare|\(key)") }
           } label: {
-            HStack(spacing: 8) {
-              TokenLogo(symbol: q?.symbol ?? item.coinId, imageURL: q?.image, size: 18)
-              Text((q?.symbol ?? "N/A").uppercased()).font(.caption.weight(.bold))
-              Text(LogoOverrides.cleanTokenName(q?.name ?? item.coinId)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            HStack(spacing: 12) {
+              GlassTokenLogo(symbol: q?.symbol ?? item.coinId, imageURL: q?.image, size: 34)
+              VStack(alignment: .leading, spacing: 2) {
+                Text((q?.symbol ?? "N/A").uppercased()).font(.subheadline.weight(.semibold))
+                Text(LogoOverrides.cleanTokenName(q?.name ?? item.coinId))
+                  .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+              }
               Spacer()
-              UsdText(value: q?.currentPrice, font: .caption.monospacedDigit())
-              if let change, !scale.isAggregateChangeUnavailable {
-                MoveWithBadge(usdMove: q?.currentPrice.flatMap { MarketMetrics.usdMove(priceUsd: $0, percentChange: change) }, pct: change)
-              } else {
-                Text("N/A").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+              VStack(alignment: .trailing, spacing: 3) {
+                UsdText(value: q?.currentPrice, font: .subheadline.weight(.medium))
+                if let change, !scale.isAggregateChangeUnavailable {
+                  MoveWithBadge(usdMove: q?.currentPrice.flatMap { MarketMetrics.usdMove(priceUsd: $0, percentChange: change) }, pct: change)
+                } else {
+                  Text("N/A").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+                }
               }
             }
             .contentShape(.rect)

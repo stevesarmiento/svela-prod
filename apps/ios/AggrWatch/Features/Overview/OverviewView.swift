@@ -38,8 +38,9 @@ struct OverviewView: View {
     .navigationTitle(greeting)
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
-        Button { env.router.sheet = .settings } label: { Label("Settings", systemImage: "person.crop.circle") }
+        SettingsProfileButton()
       }
+      .sharedBackgroundVisibility(.hidden)
     }
     .task(id: "\(env.isReadyForUserData)|\(env.isSceneActive)|\(env.foregroundRevision)") {
       if store == nil { store = OverviewStore(repo: env.overview, watchlistData: env.watchlistData, market: env.market, cache: env.queryCache) }
