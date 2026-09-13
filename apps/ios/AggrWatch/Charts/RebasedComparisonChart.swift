@@ -59,3 +59,12 @@ struct RebasedComparisonChart: View {
     HStack(spacing: 5) { Circle().fill(color).frame(width: 6, height: 6); Text(text).font(.caption2.monospacedDigit()).foregroundStyle(.secondary) }
   }
 }
+
+#if DEBUG
+#Preview("Portfolio vs market") {
+  PreviewValue(Int?.none) { scrub in
+    RebasedComparisonChart(portfolio: PreviewFixtures.returns, market: PreviewFixtures.returns.map { .init(epochSeconds: $0.epochSeconds, value: $0.value * 0.65) }, scrubTime: scrub)
+      .frame(height: 260).padding().preferredColorScheme(.dark)
+  }
+}
+#endif

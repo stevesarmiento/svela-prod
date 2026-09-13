@@ -36,31 +36,34 @@ final class AppEnvironment {
   var debugScrollBottom = false
   #endif
 
-  init(config: AppConfig) {
+  init(config: AppConfig, convex: ConvexService? = nil, clerkSession: ClerkSessionStore? = nil, apiClient: APIClient? = nil) {
     self.config = config
-    self.convex = ConvexService(deploymentUrl: config.convexURL)
-    self.clerkSession = ClerkSessionStore()
-    self.userBootstrap = UserBootstrap(convex: convex)
-    self.watchlists = WatchlistRepository(convex: convex)
-    self.apiClient = APIClient(baseURL: config.apiBaseURL, tokenProvider: ClerkDefaultTokenProvider())
-    self.market = MarketAPI(client: apiClient)
+    self.convex = convex ?? ConvexService(deploymentUrl: config.convexURL)
+    self.clerkSession = clerkSession ?? ClerkSessionStore()
+    self.userBootstrap = UserBootstrap(convex: self.convex)
+    self.watchlists = WatchlistRepository(convex: self.convex)
+    self.apiClient = apiClient ?? APIClient(baseURL: config.apiBaseURL, tokenProvider: ClerkDefaultTokenProvider())
+    self.market = MarketAPI(client: self.apiClient)
     self.queryCache = QueryCache()
     self.toasts = ToastCenter()
     self.router = AppRouter()
     self.watchlistData = WatchlistDataStore(repository: watchlists, market: market, cache: queryCache)
-    self.realtime = RealtimePriceCoordinator(convex: convex)
-    self.overview = OverviewRepository(convex: convex)
-    self.screener = ScreenerAPI(client: apiClient)
+    self.realtime = RealtimePriceCoordinator(convex: self.convex)
+    self.overview = OverviewRepository(convex: self.convex)
+    self.screener = ScreenerAPI(client: self.apiClient)
     self.selection = SelectionStore()
-    self.derivatives = DerivativesAPI(client: apiClient)
+    self.derivatives = DerivativesAPI(client: self.apiClient)
     self.analysis = AnalysisDataService(market: market, derivatives: derivatives, cache: queryCache)
-    self.news = NewsRepository(convex: convex)
-    self.settings = SettingsRepository(convex: convex)
+    self.news = NewsRepository(convex: self.convex)
+    self.settings = SettingsRepository(convex: self.convex)
   }
 
   /// True once Clerk has an active user AND Convex accepted its token — the gate for `*My*` queries.
   var isReadyForUserData: Bool {
-    clerkSession.isSignedIn && convex.authStatus == .authenticated
+    #if DEBUG
+    if convex.isPreview { return clerkSession.isSignedIn }
+    #endif
+    return clerkSession.isSignedIn && convex.authStatus == .authenticated
       && userBootstrap.bootstrappedUserId == clerkSession.user?.id
   }
 
@@ -99,6 +102,9 @@ final class AppEnvironment {
 
   func handleForeground() async {
     isSceneActive = true
+    #if DEBUG
+    if convex.isPreview { return }
+    #endif
     foregroundRevision += 1
     await convex.refreshAuthNow()
     await userBootstrap.bootstrapIfNeeded()
@@ -111,11 +117,17 @@ final class AppEnvironment {
   }
 
   func retryUserData() async {
+    #if DEBUG
+    if convex.isPreview { return }
+    #endif
     if convex.authStatus != .authenticated { await convex.retryAuthentication() }
     await userBootstrap.bootstrapIfNeeded()
   }
 
   func synchronizeUserSession() async {
+    #if DEBUG
+    if convex.isPreview { return }
+    #endif
     let userID = clerkSession.user?.id
     guard activeUserId != userID else { return }
     let hadUser = activeUserId != nil

@@ -38,3 +38,13 @@ struct SkeletonBlock: View {
       .redacted(reason: .placeholder)
   }
 }
+
+#if DEBUG
+#Preview("Empty and retry states") {
+  VStack(spacing: 24) {
+    EmptyState(systemImage: "bookmark", title: "No tokens yet", message: "Add tokens to build your watchlist.", actionTitle: "Add token", action: {})
+    EmptyState(systemImage: "wifi.slash", title: "Couldn’t load data", message: "Try again in a moment.", actionTitle: "Retry", action: {})
+    SkeletonBlock(height: 18); SkeletonBlock(height: 12, width: 140)
+  }.padding().preferredColorScheme(.dark)
+}
+#endif

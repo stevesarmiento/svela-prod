@@ -29,3 +29,12 @@ struct TimeScalePicker: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("Interactive time ranges") {
+  VStack(spacing: 24) {
+    PreviewValue(TimeScale.d1) { TimeScalePicker(scales: TimeScale.overviewScales, selection: $0) }
+    PreviewValue(TimeScale.d30) { TimeScalePicker(scales: TimeScale.tokenScales, selection: $0) }
+  }.padding().preferredColorScheme(.dark)
+}
+#endif

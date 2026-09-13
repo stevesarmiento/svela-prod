@@ -122,3 +122,15 @@ private struct DotPattern: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("Watchlist card") {
+  WatchlistCardView(name: "Core holdings", icon: "wallet", color: "blue", coins: PreviewFixtures.quotes, coinsCount: 3, aggregate: PreviewFixtures.returns, aggregateChange: (2.84, false)).padding().preferredColorScheme(.dark)
+}
+#Preview("Selected card") {
+  WatchlistCardView(name: "Core holdings", icon: "wallet", color: "blue", coins: PreviewFixtures.quotes, coinsCount: 3, aggregate: PreviewFixtures.returns, aggregateChange: (2.84, false), selected: true).padding().preferredColorScheme(.dark)
+}
+#Preview("Loading card") {
+  WatchlistCardView(name: "Core holdings", icon: "wallet", color: "blue", coins: [], coinsCount: 3, aggregate: [], aggregateChange: nil, isLoading: true).padding().preferredColorScheme(.dark)
+}
+#endif

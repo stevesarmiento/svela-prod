@@ -142,3 +142,12 @@ struct GroupEditorSheet: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("Create watchlist") {
+  PreviewHost(navigation: false) { _ in GroupEditorSheet(mode: .create) }
+}
+#Preview("Edit watchlist") {
+  PreviewHost(navigation: false) { _ in GroupEditorSheet(mode: .edit(PreviewFixtures.group)) }
+}
+#endif

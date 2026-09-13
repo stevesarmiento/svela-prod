@@ -298,3 +298,15 @@ extension Array {
     return stride(from: 0, to: count, by: size).map { Array(self[$0..<Swift.min($0 + size, count)]) }
   }
 }
+
+#if DEBUG
+extension WatchlistDataStore {
+  func seedPreview() {
+    bootstrap = PreviewFixtures.bootstrap
+    hasLoadedBootstrap = true
+    quotesById = Dictionary(uniqueKeysWithValues: PreviewFixtures.quotes.map { ($0.id, $0) })
+    quotesUpdatedAt = .now
+    aggregate1dByGroup = [PreviewFixtures.group.id: PreviewFixtures.returns, PreviewFixtures.secondGroup.id: PreviewFixtures.returns]
+  }
+}
+#endif

@@ -70,6 +70,9 @@ final class ScreenerStore {
   }
 
   private func persist() {
+    #if DEBUG
+    if PreviewData.isRunning { return }
+    #endif
     let d = UserDefaults.standard
     d.set(dsl.map(ScreenerUrlCodec.encode), forKey: "screener.dsl")
     d.set(sort?.serialized, forKey: "screener.sort")
@@ -77,6 +80,9 @@ final class ScreenerStore {
   }
 
   private func restore() {
+    #if DEBUG
+    if PreviewData.isRunning { return }
+    #endif
     let d = UserDefaults.standard
     dsl = d.string(forKey: "screener.dsl").flatMap(ScreenerUrlCodec.decode)
     sort = d.string(forKey: "screener.sort").flatMap(ScreenerSort.parse)
@@ -249,3 +255,15 @@ final class ScreenerStore {
     return parts.joined(separator: " · ")
   }
 }
+
+#if DEBUG
+extension ScreenerStore {
+  func seedPreview(state: PreviewData.State) {
+    dsl = nil; sort = nil; q = ""
+    rows = state == .populated ? PreviewFixtures.marketRows.map(\.screenerRow) : []
+    isLoading = state == .loading
+    error = state == .error ? "Sample connection error. Please try again." : nil
+    lastUpdatedAtMs = Double(PreviewFixtures.now) * 1000
+  }
+}
+#endif

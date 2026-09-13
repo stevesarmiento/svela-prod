@@ -71,3 +71,14 @@ struct StatTile: View {
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
+
+#if DEBUG
+#Preview("Meters and breadth") {
+  VStack(spacing: 24) {
+    TickMeter(value: 68, min: 0, max: 100, origin: .value(50), color: .gainGreen).frame(height: 12)
+    TickMeter(value: -4, min: -10, max: 10, origin: .value(0), color: .lossRed).frame(height: 12)
+    TickSplitBar(breadth: BreadthStats.compute([2.84, -1.32, 6.12, 0])!)
+    HStack { StatTile(value: "24", label: "Up", tint: .gainGreen); StatTile(value: "8", label: "Down", tint: .lossRed) }
+  }.padding().preferredColorScheme(.dark)
+}
+#endif

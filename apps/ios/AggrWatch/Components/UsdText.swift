@@ -42,3 +42,17 @@ struct MoveWithBadge: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("Currency and numeric changes") {
+  PreviewValue(67_420.0) { price in
+    VStack(spacing: 16) {
+      AnimatedNumber(value: price.wrappedValue)
+      Button("Change price") { price.wrappedValue += 125.50 }
+      HStack { UsdText(value: 0.0000123); UsdText(value: 3_480); UsdText(value: nil) }
+      MoveWithBadge(usdMove: 184.50, pct: 2.84)
+      MoveWithBadge(usdMove: -32.14, pct: -1.32)
+    }.padding().preferredColorScheme(.dark)
+  }
+}
+#endif

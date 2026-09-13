@@ -250,3 +250,19 @@ struct VolumeChart: View {
     .chartLegend(.hidden)
   }
 }
+
+#if DEBUG
+#Preview("Price, Hull and projection") {
+  PreviewHost { env in
+    let store = PreviewData.tokenStore(env)
+    PreviewValue(Date?.none) { date in
+      PriceChart(line: store.data.line, ohlc: store.data.ohlc, marketCap: store.data.marketCap, hull: store.hull,
+                 projection: store.projection, livePriceUsd: nil, showPrice: true, scale: .d30, selectedDate: date)
+        .frame(height: 300).padding()
+    }
+  }
+}
+#Preview("Volume") {
+  VolumeChart(volume: PreviewFixtures.chart.volume, domain: nil).frame(height: 100).padding().preferredColorScheme(.dark)
+}
+#endif

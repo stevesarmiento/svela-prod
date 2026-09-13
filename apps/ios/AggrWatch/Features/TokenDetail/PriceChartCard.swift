@@ -170,3 +170,28 @@ struct SpotStatusPill: View {
     switch status { case .realtime: .gainGreen; case .lastKnown: .yellow; default: .secondary }
   }
 }
+
+#if DEBUG
+#Preview("Interactive chart card") {
+  PreviewHost { env in
+    PreviewValue(TimeScale.d30) { scale in
+      PreviewValue(true) { price in
+        PreviewValue(true) { marketCap in
+          PriceChartCard(store: PreviewData.tokenStore(env), scale: scale, showPrice: price, showMarketCap: marketCap).padding()
+        }
+      }
+    }
+  }
+}
+#Preview("Loading chart card") {
+  PreviewHost { env in
+    PriceChartCard(store: PreviewData.tokenStore(env, loading: true), scale: .constant(.d30), showPrice: .constant(true), showMarketCap: .constant(true)).padding()
+  }
+}
+#Preview("Spot status and legend") {
+  VStack(spacing: 20) {
+    HStack { SpotStatusPill(status: .realtime); SpotStatusPill(status: .lastKnown); SpotStatusPill(status: .fallback) }
+    PreviewValue(true) { LegendToggle(title: "PRICE", color: .white, isOn: $0) }
+  }.padding().preferredColorScheme(.dark)
+}
+#endif

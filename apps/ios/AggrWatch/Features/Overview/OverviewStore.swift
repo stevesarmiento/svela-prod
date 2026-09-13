@@ -246,3 +246,14 @@ final class OverviewStore {
     marketWarming = m.1
   }
 }
+
+#if DEBUG
+extension OverviewStore {
+  func seedPreview() {
+    bootstrap = PreviewFixtures.overview
+    breakdown = PreviewFixtures.overview.holdingsBreakdown
+    valueSeries = PreviewFixtures.line
+    marketSeries = PreviewFixtures.chart.marketCap
+  }
+}
+#endif

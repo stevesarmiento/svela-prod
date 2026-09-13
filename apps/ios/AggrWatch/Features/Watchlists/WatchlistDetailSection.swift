@@ -134,18 +134,16 @@ struct CoinRowsList: View {
   var body: some View {
     let data = env.watchlistData
     let items = data.items(in: group)
-    VStack(spacing: 0) {
+    VStack(spacing: 10) {
       if items.isEmpty {
         EmptyState(systemImage: "plus.circle", title: "No tokens yet", message: "Add tokens to \(group.name) to see prices and holdings.",
                    actionTitle: "Add token") { env.router.sheet = .coinSearch(targetGroupId: group.id) }
       } else {
         ForEach(items) { item in
           CoinRow(item: item, group: group)
-          if item.id != items.last?.id { Divider().padding(.leading, 60) }
         }
       }
     }
-    .background(.background.secondary, in: .rect(cornerRadius: 18))
     .padding(.horizontal, 16)
     .onAppear { register(items) }
     .onChange(of: items) { _, next in register(next) }
@@ -153,6 +151,7 @@ struct CoinRowsList: View {
   }
 
   private func register(_ items: [WatchlistItem]) {
+    guard env.router.tab == .watchlists, env.router.watchlistsPath.isEmpty else { return }
     let data = env.watchlistData
     env.selection.register(owner: "watchlist-\(group.id)", selectableIds: items.map(\.coinId), onRemove: { ids in
       _ = try await data.removeBulk(coinIds: ids, from: group.id)
@@ -168,7 +167,10 @@ struct CoinRow: View {
   var body: some View {
     let data = env.watchlistData
     let quote = data.quote(item.coinId)
-    SelectableRow(id: item.coinId) {
+    SelectableRow(id: item.coinId, removalTitle: "Remove from \(group.name)?", onRemove: {
+      try await data.remove(coinId: item.coinId, from: group.id)
+    }) {
+    HStack(spacing: 12) {
     Button {
       if env.selection.isActive { env.selection.toggle(item.coinId) } else { env.router.openToken(item.coinId, groupSlug: group.slug) }
     } label: {
@@ -188,19 +190,11 @@ struct CoinRow: View {
             SkeletonBlock(height: 10, width: 50)
           }
         }
-        HoldingsCell(item: item, group: group, priceUsd: quote?.currentPrice)
       }
-      .padding(.horizontal, 14).padding(.vertical, 10)
       .contentShape(.rect)
     }
     .buttonStyle(.plain)
-    .swipeActions(edge: .trailing) {
-      Button(role: .destructive) {
-        Task {
-          do { try await data.remove(coinId: item.coinId, from: group.id); env.toasts.success("Removed from \(group.name)") }
-          catch { env.toasts.error("Could not remove token", error.localizedDescription) }
-        }
-      } label: { Label("Remove", systemImage: "trash") }
+      HoldingsCell(item: item, group: group, priceUsd: quote?.currentPrice)
     }
     }
   }
@@ -264,3 +258,23 @@ struct HoldingsCell: View {
     catch { env.toasts.error("Could not update holdings", "Try again in a moment.") }
   }
 }
+
+#if DEBUG
+#Preview("Watchlist details") {
+  PreviewHost(tab: .watchlists) { _ in ScrollView { WatchlistDetailSection().padding() } }
+}
+#Preview("Token cards and holdings") {
+  PreviewHost { env in
+    ScrollView { CoinRowsList(group: PreviewFixtures.group).padding() }
+      .onAppear { env.selection.register(owner: "preview", selectableIds: PreviewFixtures.quotes.map(\.id), onRemove: { _ in }, onAnalyze: { _ in }) }
+  }
+}
+#Preview("Group charts") {
+  PreviewHost { _ in
+    ScrollView { VStack(spacing: 20) {
+      GroupAggregateCard(group: PreviewFixtures.group, scale: .d1)
+      GroupCoinsChart(group: PreviewFixtures.group, scale: .d7)
+    }.padding() }
+  }
+}
+#endif

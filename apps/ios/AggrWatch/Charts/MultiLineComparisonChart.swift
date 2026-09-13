@@ -102,3 +102,14 @@ struct MultiLineComparisonChart: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("Toggle and scrub series") {
+  PreviewValue(Set<String>()) { hidden in
+    MultiLineComparisonChart(series: [
+      .init(id: "btc", label: "BTC", color: ChartColors.pastel[0], points: PreviewFixtures.returns),
+      .init(id: "eth", label: "ETH", color: ChartColors.pastel[1], points: PreviewFixtures.returns.map { .init(epochSeconds: $0.epochSeconds, value: $0.value * 0.6 - 2) })
+    ], hidden: hidden).frame(height: 300).padding().preferredColorScheme(.dark)
+  }
+}
+#endif

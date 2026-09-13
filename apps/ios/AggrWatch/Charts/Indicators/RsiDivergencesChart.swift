@@ -64,3 +64,11 @@ struct RsiDivergencesChart: View {
     switch t { case .bullish: "Bull"; case .bearish: "Bear"; case .h_bullish: "H Bull"; case .h_bearish: "H Bear" }
   }
 }
+
+#if DEBUG
+#Preview("Indicator chart") {
+  PreviewValue(Date?.none) { date in
+    RsiDivergencesChart(result: PreviewFixtures.indicators.rsiDivergences, windowDays: 14, selectedDate: date).padding().preferredColorScheme(.dark)
+  }
+}
+#endif

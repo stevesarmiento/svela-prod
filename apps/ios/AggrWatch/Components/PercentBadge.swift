@@ -34,3 +34,12 @@ struct PercentBadge: View {
     return .secondary
   }
 }
+
+#if DEBUG
+#Preview("Gain, loss, zero and missing") {
+  VStack(spacing: 16) {
+    HStack { PercentBadge(pct: 12.34); PercentBadge(pct: -4.56); PercentBadge(pct: 0); PercentBadge(pct: nil) }
+    HStack { PercentBadge(pct: 12.34, compact: true); PercentBadge(pct: -4.56, compact: true) }
+  }.padding().preferredColorScheme(.dark)
+}
+#endif

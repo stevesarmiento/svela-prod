@@ -50,6 +50,9 @@ struct DeepAnalysisSheet: View {
   }
 
   private func run() {
+    #if DEBUG
+    if env.convex.isPreview { text = PreviewData.analysisText; isLoading = false; return }
+    #endif
     streamTask?.cancel()
     text = ""; failed = false; isLoading = true
     let ai = AIStreamClient(client: env.apiClient)
@@ -156,6 +159,9 @@ struct MultiAnalysisSheet: View {
   }
 
   private func run() {
+    #if DEBUG
+    if env.convex.isPreview { text = PreviewData.analysisText; isLoading = false; return }
+    #endif
     streamTask?.cancel()
     text = ""; stats = nil; readyCount = 0; isLoading = true
     guard coinIds.count >= 2 else { text = "Select at least two tokens to compare."; isLoading = false; return }
@@ -243,3 +249,24 @@ struct ComparativeStatsPanel: View {
     Text(v.map { String(format: "%.\(digits)f%@", $0, suffix) } ?? "—").foregroundStyle(v == nil ? .secondary : .primary)
   }
 }
+
+#if DEBUG
+#Preview("Deep analysis") {
+  PreviewHost(navigation: false) { _ in DeepAnalysisSheet(coinId: "bitcoin") }
+}
+#Preview("Compare analysis") {
+  PreviewHost(navigation: false) { _ in MultiAnalysisSheet(coinIds: ["bitcoin", "ethereum"]) }
+}
+#Preview("Token header") {
+  AnalysisTokenHeader(coinId: "bitcoin", quote: PreviewFixtures.quotes[0]).padding().preferredColorScheme(.dark)
+}
+#endif
+
+#if DEBUG
+#Preview("Comparative statistics") {
+  ComparativeStatsPanel(stats: ComparativeStats.compute(PreviewFixtures.quotes.map { quote in
+    .init(id: quote.id, symbol: quote.symbol, name: quote.name, marketCap: quote.marketCap,
+          series: PreviewFixtures.line, rsi: 56, bbwpPct: 42)
+  })!).padding().preferredColorScheme(.dark)
+}
+#endif

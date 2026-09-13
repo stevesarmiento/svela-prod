@@ -39,6 +39,9 @@ public final class RealtimePriceCoordinator {
     self.resolver = resolver
     self.convex = convex
     self.lastKnown = LastKnownPriceRepository(convex: convex)
+    #if DEBUG
+    if convex.isPreview { sessionId = "preview"; return }
+    #endif
     let key = "SVELA_REALTIME_PRICE_SESSION_ID"
     if let existing = UserDefaults.standard.string(forKey: key), existing.count > 8 {
       sessionId = existing
@@ -54,6 +57,9 @@ public final class RealtimePriceCoordinator {
 
   /// Starts warm-start + stream + persistence for a coin. Idempotent.
   public func subscribe(coingeckoId: String, symbol: String?) {
+    #if DEBUG
+    if convex.isPreview { return }
+    #endif
     let id = coingeckoId.trimmingCharacters(in: .whitespaces)
     guard !id.isEmpty, tasks[id] == nil else { return }
     let generation = UUID()

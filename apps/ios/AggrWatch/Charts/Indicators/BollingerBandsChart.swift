@@ -52,3 +52,11 @@ struct BollingerBandsChart: View {
     .chartLegend(.hidden)
   }
 }
+
+#if DEBUG
+#Preview("Indicator chart") {
+  PreviewValue(Date?.none) { date in
+    BollingerBandsChart(result: PreviewFixtures.indicators.bollinger, windowDays: 14, selectedDate: date).padding().preferredColorScheme(.dark)
+  }
+}
+#endif

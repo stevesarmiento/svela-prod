@@ -274,3 +274,36 @@ struct OverviewEmptyState: View {
       .padding(.top, 60)
   }
 }
+
+#if DEBUG
+#Preview("Populated") {
+  PreviewHost(tab: .overview) { _ in OverviewView() }
+}
+#Preview("Empty") {
+  PreviewHost(state: .empty, tab: .overview) { _ in OverviewView() }
+}
+#Preview("Loading") {
+  PreviewHost(state: .loading, tab: .overview) { _ in OverviewView() }
+}
+#Preview("Load error") {
+  PreviewHost(state: .error, tab: .overview) { _ in OverviewView() }
+}
+#endif
+
+#if DEBUG
+#Preview("Portfolio card and breadth") {
+  PreviewHost { env in
+    let store = PreviewData.overviewStore(env)
+    ScrollView { VStack(spacing: 20) { PortfolioValueCard(store: store); BreadthCard(store: store) }.padding() }
+  }
+}
+#Preview("News event and badges") {
+  PreviewHost { _ in
+    VStack(spacing: 20) {
+      EventCard(event: PreviewFixtures.event, nowMs: Double(PreviewFixtures.now) * 1000)
+      HStack { SentimentBadge(sentiment: .bullish); SentimentBadge(sentiment: .bearish); SentimentBadge(sentiment: .neutral) }
+      CategoryBadge(label: "Markets")
+    }.padding()
+  }
+}
+#endif

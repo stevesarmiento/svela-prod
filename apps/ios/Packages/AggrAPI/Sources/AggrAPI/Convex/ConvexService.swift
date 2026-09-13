@@ -35,7 +35,25 @@ public enum ConvexServiceError: LocalizedError, Sendable {
 @MainActor
 @Observable
 public final class ConvexService {
-  public let client: ConvexClientWithAuth<String>
+  private let liveClient: ConvexClientWithAuth<String>?
+  public var client: ConvexClientWithAuth<String> {
+    guard let liveClient else { preconditionFailure("Offline previews have no Convex client") }
+    return liveClient
+  }
+  #if DEBUG
+  private var suspendPreviewSubscriptions = false
+  private var previewResponses: [String: Data]?
+  public var isPreview: Bool { previewResponses != nil }
+
+  /// Local, read-only fixtures. Does not construct a socket or bind a Clerk session.
+  public init(previewResponses: [String: Data], suspendSubscriptions: Bool = false) {
+    self.liveClient = nil
+    self.authProvider = ClerkConvexAuthProvider()
+    self.previewResponses = previewResponses
+    self.suspendPreviewSubscriptions = suspendSubscriptions
+    self.authStatus = .authenticated
+  }
+  #endif
   public private(set) var authStatus: ConvexAuthStatus = .loading
 
   private let authProvider: ClerkConvexAuthProvider
@@ -43,7 +61,7 @@ public final class ConvexService {
 
   public init(deploymentUrl: String, authProvider: ClerkConvexAuthProvider = ClerkConvexAuthProvider()) {
     self.authProvider = authProvider
-    self.client = ConvexClientWithAuth(deploymentUrl: deploymentUrl, authProvider: authProvider)
+    self.liveClient = ConvexClientWithAuth(deploymentUrl: deploymentUrl, authProvider: authProvider)
     authProvider.bind(client: client)
     let publisher = client.authState
     authObservation = Task { @MainActor [weak self] in
@@ -58,10 +76,14 @@ public final class ConvexService {
     }
   }
 
-  public func retryAuthentication() async { _ = await client.loginFromCache() }
+  public func retryAuthentication() async {
+    guard let liveClient else { return }
+    _ = await liveClient.loginFromCache()
+  }
 
   /// Push a fresh token to Convex right away (e.g. on app foreground).
   public func refreshAuthNow() async {
+    guard liveClient != nil else { return }
     await authProvider.refreshNow()
   }
 
@@ -71,7 +93,19 @@ public final class ConvexService {
     args: ConvexArgs? = nil,
     as type: T.Type = T.self
   ) -> AsyncThrowingStream<T, Error> {
-    Self.bridge(client.subscribe(to: name, with: args?.toSDKArgs(), yielding: T.self))
+    #if DEBUG
+    if let previewResponses {
+      if suspendPreviewSubscriptions { return AsyncThrowingStream { _ in } }
+      return AsyncThrowingStream { continuation in
+        do {
+          guard let data = previewResponses[name] else { throw ConvexServiceError.client("No preview fixture for \(name)") }
+          continuation.yield(try JSONDecoder().decode(T.self, from: data))
+          continuation.finish()
+        } catch { continuation.finish(throwing: error) }
+      }
+    }
+    #endif
+    return Self.bridge(client.subscribe(to: name, with: args?.toSDKArgs(), yielding: T.self))
   }
 
   /// Combine → AsyncThrowingStream. `nonisolated` on purpose: the Convex FFI delivers values on a tokio
@@ -95,21 +129,25 @@ public final class ConvexService {
   }
 
   public func mutation<T: Decodable & Sendable>(_ name: String, args: ConvexArgs? = nil) async throws -> T {
+    guard liveClient != nil else { throw ConvexServiceError.client("This action is unavailable in an offline preview.") }
     let raw = args?.toSDKArgs()
     do { return try await client.mutation(name, with: raw) } catch let e as ClientError { throw ConvexServiceError.map(e) }
   }
 
   public func mutation(_ name: String, args: ConvexArgs? = nil) async throws {
+    guard liveClient != nil else { throw ConvexServiceError.client("This action is unavailable in an offline preview.") }
     let raw = args?.toSDKArgs()
     do { try await client.mutation(name, with: raw) } catch let e as ClientError { throw ConvexServiceError.map(e) }
   }
 
   public func action<T: Decodable & Sendable>(_ name: String, args: ConvexArgs? = nil) async throws -> T {
+    guard liveClient != nil else { throw ConvexServiceError.client("This action is unavailable in an offline preview.") }
     let raw = args?.toSDKArgs()
     do { return try await client.action(name, with: raw) } catch let e as ClientError { throw ConvexServiceError.map(e) }
   }
 
   public func action(_ name: String, args: ConvexArgs? = nil) async throws {
+    guard liveClient != nil else { throw ConvexServiceError.client("This action is unavailable in an offline preview.") }
     let raw = args?.toSDKArgs()
     do { try await client.action(name, with: raw) } catch let e as ClientError { throw ConvexServiceError.map(e) }
   }

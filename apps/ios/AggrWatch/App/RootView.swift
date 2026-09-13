@@ -6,7 +6,7 @@ import SwiftUI
 /// Also drives the `users:upsertCurrentUser` bootstrap whenever Convex auth becomes live.
 struct RootView: View {
   @Environment(AppEnvironment.self) private var env
-  @Environment(Clerk.self) private var clerk
+  private var clerk: ClerkSessionStore { env.clerkSession }
 
   var body: some View {
     Group {
@@ -33,6 +33,9 @@ struct RootView: View {
       }
     }
     .task(id: BootstrapKey(userId: clerk.user?.id, convexStatus: env.convex.authStatus)) {
+      #if DEBUG
+      if env.convex.isPreview { return }
+      #endif
       await env.synchronizeUserSession()
       guard !Task.isCancelled else { return }
       await env.userBootstrap.bootstrapIfNeeded()
@@ -52,3 +55,12 @@ struct RootView: View {
     var convexStatus: ConvexAuthStatus
   }
 }
+
+#if DEBUG
+#Preview("Signed in") {
+  PreviewHost(navigation: false) { _ in RootView() }
+}
+#Preview("Signed out") {
+  PreviewHost(signedIn: false, navigation: false) { _ in RootView() }
+}
+#endif

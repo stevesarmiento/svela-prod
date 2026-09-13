@@ -41,13 +41,15 @@ struct CompareView: View {
     }
     .navigationTitle("Compare")
     .toolbar {
-      ToolbarItemGroup(placement: .topBarTrailing) {
-        Button {
-          let all = Set(data.groups.map(\.id))
-          withAnimation(.snappy) { expanded = expanded == all ? [] : all }
-        } label: { Label(expanded.count == data.groups.count ? "Collapse all" : "Expand all", systemImage: expanded.count == data.groups.count ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") }
-        Button { env.router.sheet = .coinSearch(targetGroupId: data.selectedGroup?.id) } label: { Label("Add token", systemImage: "plus.circle") }
-        Button { env.router.sheet = .createGroup } label: { Label("Create watchlist", systemImage: "plus.square.on.square") }
+      if !env.selection.isActive {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+          Button {
+            let all = Set(data.groups.map(\.id))
+            withAnimation(.snappy) { expanded = expanded == all ? [] : all }
+          } label: { Label(expanded.count == data.groups.count ? "Collapse all" : "Expand all", systemImage: expanded.count == data.groups.count ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") }
+          Button { env.router.sheet = .coinSearch(targetGroupId: data.selectedGroup?.id) } label: { Label("Add token", systemImage: "plus.circle") }
+          Button { env.router.sheet = .createGroup } label: { Label("Create watchlist", systemImage: "plus.square.on.square") }
+        }
       }
     }
     .task(id: "\(scale.rawValue)|\(data.bootstrap.membershipKey)|\(env.isSceneActive)|\(env.foregroundRevision)") {
@@ -129,14 +131,12 @@ struct WatchlistAccordionTable: View {
       return GroupRow(group: g, holdingsValue: value)
     }.sorted { ($0.holdingsValue ?? -1) > ($1.holdingsValue ?? -1) }
 
-    VStack(spacing: 0) {
+    VStack(spacing: 12) {
       ForEach(rows) { row in
         groupHeader(row)
         if expanded.contains(row.group.id) { coinsPanel(row.group) }
-        Divider()
       }
     }
-    .background(.background.secondary, in: .rect(cornerRadius: 18))
     .padding(.horizontal, 16)
     .onAppear { registerSelection() }
     .onChange(of: expanded) { _, _ in registerSelection() }
@@ -145,6 +145,7 @@ struct WatchlistAccordionTable: View {
   }
 
   private func registerSelection() {
+    guard env.router.tab == .compare, env.router.comparePath.isEmpty else { return }
     let data = env.watchlistData
     let visibleKeys = data.groups.filter { expanded.contains($0.id) }.flatMap { g in data.items(in: g).map { "\(g.id)|\($0.coinId)" } }
     env.selection.register(owner: "compare", selectableIds: visibleKeys, onRemove: { keys in
@@ -215,12 +216,14 @@ struct WatchlistAccordionTable: View {
   private func coinsPanel(_ g: WatchlistGroup) -> some View {
     let data = env.watchlistData
     let items = data.items(in: g).sorted { (data.quote($0.coinId)?.marketCap ?? 0) > (data.quote($1.coinId)?.marketCap ?? 0) }
-    VStack(spacing: 0) {
+    VStack(spacing: 10) {
       ForEach(items) { item in
         let q = data.quote(item.coinId)
         let key = "\(g.id)|\(item.coinId)"
         let change = changeByCoin[item.coinId] ?? q.flatMap { AggregateSeries.quoteIntervalChange(scale: scale, change24h: $0.priceChangePercentage24h, change7d: $0.priceChangePercentage7d, change30d: $0.priceChangePercentage30d) }
-        SelectableRow(id: key) {
+        SelectableRow(id: key, removalTitle: "Remove from \(g.name)?", onRemove: {
+          try await data.remove(coinId: item.coinId, from: g.id)
+        }) {
           Button {
             if env.selection.isActive { env.selection.toggle(key) } else { env.router.openToken(item.coinId, groupSlug: g.slug) }
           } label: {
@@ -240,9 +243,30 @@ struct WatchlistAccordionTable: View {
           }
           .buttonStyle(.plain)
         }
-        .padding(.horizontal, 14).padding(.vertical, 7)
-        .background(Color.black.opacity(0.15))
       }
     }
   }
 }
+
+#if DEBUG
+#Preview("Populated") {
+  PreviewHost(tab: .compare) { _ in CompareView() }
+}
+#Preview("Empty") {
+  PreviewHost(state: .empty, tab: .compare) { _ in CompareView() }
+}
+#endif
+
+#if DEBUG
+#Preview("Expanded comparison table") {
+  PreviewHost(tab: .compare) { _ in
+    PreviewValue(Set([PreviewFixtures.group.id])) { expanded in
+      ScrollView {
+        WatchlistAccordionTable(scale: .d7, expanded: expanded,
+          seriesByGroup: [PreviewFixtures.group.id: PreviewFixtures.returns],
+          changeByCoin: ["bitcoin": 2.84, "ethereum": -1.32, "solana": 6.12], loading: false).padding()
+      }
+    }
+  }
+}
+#endif

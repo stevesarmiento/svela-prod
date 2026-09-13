@@ -88,3 +88,28 @@ struct MarketFeedSheet: View {
     }
   }
 }
+
+#if DEBUG
+private struct MarketFeedPreview: View {
+  @State private var env: AppEnvironment
+  @State private var store: MarketFeedStore
+  init(state: PreviewData.State) {
+    let env = PreviewData.environment(state: state)
+    _env = State(initialValue: env)
+    _store = State(initialValue: MarketFeedStore(coinId: "bitcoin", news: env.news, canMutate: { false }))
+  }
+  var body: some View {
+    MarketFeedSheet(store: store, displayName: "Bitcoin").environment(env).preferredColorScheme(.dark)
+      .task { store.start() }.onDisappear { store.stop() }
+  }
+}
+#Preview("News feed") {
+  MarketFeedPreview(state: .populated)
+}
+#Preview("No news") {
+  MarketFeedPreview(state: .empty)
+}
+#Preview("Loading news") {
+  MarketFeedPreview(state: .loading)
+}
+#endif

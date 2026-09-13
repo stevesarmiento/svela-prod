@@ -57,3 +57,15 @@ struct ToastOverlay: View {
     switch k { case .success: .gainGreen; case .error: .lossRed; case .info: .secondary }
   }
 }
+
+#if DEBUG
+#Preview("Show toast messages") {
+  PreviewHost { env in
+    VStack(spacing: 20) {
+      Button("Success") { env.toasts.success("Added to watchlist") }
+      Button("Error") { env.toasts.error("Couldn’t update watchlist", "Try again in a moment.") }
+      Button("Info") { env.toasts.info("Sample notification") }
+    }.overlay(alignment: .top) { ToastOverlay() }
+  }
+}
+#endif

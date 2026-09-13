@@ -178,3 +178,15 @@ struct CoinSearchView: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("Populated") {
+  PreviewHost(tab: .search) { _ in CoinSearchView(mode: .navigate) }
+}
+#endif
+
+#if DEBUG
+#Preview("Add tokens") {
+  PreviewHost { _ in CoinSearchView(mode: .addToWatchlist, initialTargetGroupId: PreviewFixtures.group.id) }
+}
+#endif

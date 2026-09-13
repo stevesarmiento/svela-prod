@@ -113,3 +113,13 @@ enum MonotoneCubic {
     return h00 * ys[lo] + h10 * h * tangent(lo) + h01 * ys[hi] + h11 * h * tangent(hi)
   }
 }
+
+#if DEBUG
+#Preview("Trend sparklines") {
+  VStack(spacing: 24) {
+    Sparkline(points: PreviewFixtures.line).frame(height: 80)
+    Sparkline(points: PreviewFixtures.line, monoColor: .gainGreen).frame(height: 50)
+    Sparkline(points: []).frame(height: 50)
+  }.padding().preferredColorScheme(.dark)
+}
+#endif

@@ -20,17 +20,19 @@ struct ScreenerView: View {
     }
     .navigationTitle("Screener")
     .toolbar {
-      if let store {
-        ToolbarItemGroup(placement: .topBarTrailing) {
-          SortMenu(store: store)
-          if let url = URL(string: "https://aggr.watch/screener" + store.webURLQuery) {
-            ShareLink(item: url) { Label("Share screener", systemImage: "square.and.arrow.up") }
-          }
-          Button { showPrompt = true } label: {
-            Label("Smart Screener", systemImage: "sparkles")
-          }
-          .overlay(alignment: .topTrailing) {
-            if store.dsl != nil { Circle().fill(.blue).frame(width: 7, height: 7).offset(x: 2, y: -2) }
+      if !env.selection.isActive {
+        if let store {
+          ToolbarItemGroup(placement: .topBarTrailing) {
+            SortMenu(store: store)
+            if let url = URL(string: "https://aggr.watch/screener" + store.webURLQuery) {
+              ShareLink(item: url) { Label("Share screener", systemImage: "square.and.arrow.up") }
+            }
+            Button { showPrompt = true } label: {
+              Label("Smart Screener", systemImage: "sparkles")
+            }
+            .overlay(alignment: .topTrailing) {
+              if store.dsl != nil { Circle().fill(.blue).frame(width: 7, height: 7).offset(x: 2, y: -2) }
+            }
           }
         }
       }
@@ -76,6 +78,7 @@ private struct ScreenerContent: View {
   @Environment(AppEnvironment.self) private var env
 
   private func registerSelection(_ rows: [ScreenerMarketRow]) {
+    guard env.router.tab == .screener, env.router.screenerPath.isEmpty else { return }
     // Read-only table: no Remove (screener passes nil), Analyze only.
     env.selection.register(owner: "screener", selectableIds: rows.map(\.coingeckoId), onRemove: nil, onAnalyze: { ids in env.router.sheet = .analyze(ids) })
   }
@@ -115,6 +118,9 @@ private struct ScreenerContent: View {
                 .contentShape(.rect)
                 .onTapGesture { if env.selection.isActive { env.selection.toggle(row.coingeckoId) } else { env.router.openToken(row.coingeckoId) } }
             }
+            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
           }
         }
       } header: {
@@ -549,3 +555,56 @@ struct SmartPromptSheet: View {
     inlineError = response?.userMessage ?? "Couldn't interpret that right now. Try again in a moment."
   }
 }
+
+#if DEBUG
+#Preview("Populated") {
+  PreviewHost(tab: .screener) { _ in ScreenerView() }
+}
+#endif
+
+#if DEBUG
+#Preview("Token row and loading row") {
+  VStack(spacing: 20) {
+    ScreenerRowView(row: PreviewFixtures.marketRows[0].screenerRow, taker: nil, takerLoading: false)
+    SkeletonRow()
+    HStack { TakerVolumeCell(metrics: nil, isLoading: true); TakerVolumeCell(metrics: nil, isLoading: false) }
+    FreshnessIndicator(lastUpdatedAtMs: Double(PreviewFixtures.now) * 1000, isRefreshing: false)
+    FilterChip(text: "Market cap > $1B", onTap: {}, onRemove: {})
+  }.padding().preferredColorScheme(.dark)
+}
+#Preview("Filter editor") {
+  PreviewHost(navigation: false) { env in
+    FilterEditorSheet(store: ScreenerStore(api: env.screener, market: env.market, cache: env.queryCache), index: nil)
+  }
+}
+#Preview("Smart screener prompt") {
+  PreviewHost(navigation: false) { env in
+    SmartPromptSheet(store: ScreenerStore(api: env.screener, market: env.market, cache: env.queryCache))
+  }
+}
+#endif
+
+#if DEBUG
+private struct ScreenerStatePreview: View {
+  @State private var env: AppEnvironment
+  @State private var store: ScreenerStore
+  @State private var showPrompt = false
+  @State private var editingFilterIndex: Int??
+  init(state: PreviewData.State) {
+    let env = PreviewData.environment(tab: .screener)
+    let store = ScreenerStore(api: env.screener, market: env.market, cache: env.queryCache)
+    store.seedPreview(state: state)
+    _env = State(initialValue: env)
+    _store = State(initialValue: store)
+  }
+  var body: some View {
+    NavigationStack {
+      ScreenerContent(store: store, showPrompt: $showPrompt, editingFilterIndex: $editingFilterIndex)
+        .navigationTitle("Screener")
+    }.environment(env).preferredColorScheme(.dark)
+  }
+}
+#Preview("Loading screener") { ScreenerStatePreview(state: .loading) }
+#Preview("Empty screener") { ScreenerStatePreview(state: .empty) }
+#Preview("Screener error") { ScreenerStatePreview(state: .error) }
+#endif

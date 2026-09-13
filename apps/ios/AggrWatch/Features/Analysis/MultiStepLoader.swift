@@ -99,3 +99,12 @@ struct StreamingMarkdownText: View {
     (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
   }
 }
+
+#if DEBUG
+#Preview("Analysis progress") {
+  MultiStepLoader(steps: DeepAnalysisSheet.steps).padding().preferredColorScheme(.dark)
+}
+#Preview("Markdown report") {
+  ScrollView { StreamingMarkdownText(text: PreviewData.analysisText).padding() }.preferredColorScheme(.dark)
+}
+#endif

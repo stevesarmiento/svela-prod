@@ -132,3 +132,12 @@ struct WatchlistToggleButton: View {
   }
 }
 
+
+#if DEBUG
+#Preview("Token details") {
+  PreviewHost { _ in TokenDetailView(coinId: "bitcoin", groupSlug: PreviewFixtures.group.slug) }
+}
+#Preview("Bookmark control") {
+  PreviewHost { _ in WatchlistToggleButton(coinId: "bitcoin", groupSlug: PreviewFixtures.group.slug) }
+}
+#endif

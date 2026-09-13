@@ -169,3 +169,15 @@ final class TokenChartStore {
     }
   }
 }
+
+#if DEBUG
+extension TokenChartStore {
+  func seedPreview() {
+    data = PreviewFixtures.chart
+    isLoading = false
+    indicators = PreviewFixtures.indicators
+    hull = HullSuite.compute(PreviewFixtures.bars, config: .tokenPage)
+    projection = PriceProjection.compute(PreviewFixtures.bars.map { .init(timeEpochSec: $0.time, close: $0.close) })
+  }
+}
+#endif

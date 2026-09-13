@@ -92,6 +92,9 @@ struct IndicatorExplainSheet<ChartView: View, Badges: View>: View {
   }
 
   private func run() {
+    #if DEBUG
+    if env.convex.isPreview { text = PreviewData.analysisText; isLoading = false; return }
+    #endif
     streamTask?.cancel()
     text = ""; error = nil; isLoading = true
     let ai = AIStreamClient(client: env.apiClient)
@@ -110,3 +113,17 @@ struct IndicatorExplainSheet<ChartView: View, Badges: View>: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("Indicator explanation") {
+  PreviewHost(navigation: false) { _ in
+    IndicatorExplainSheet(title: "Volatility", request: .init(
+      token: .init(coinId: "bitcoin", name: "Bitcoin", symbol: "BTC"), timeframe: "30",
+      marketContext: .init(priceUsd: 67_420, change24hPct: 2.84, volume24hUsd: 28_600_000_000, marketCapUsd: 1_330_000_000_000, closeHistory: PreviewFixtures.line.map(\.value), closeTimesUtc: PreviewFixtures.line.map(\.epochSeconds)),
+      snapshot: .bbwp(bbwpCurrent: 42, bbwpHistory: [30, 35, 42], lookback: BBWP.Config.default.lookback)
+    ), quote: PreviewFixtures.quotes[0], coinId: "bitcoin") {
+      PreviewValue(Date?.none) { BBWPChart(result: PreviewFixtures.indicators.bbwp, windowDays: 14, selectedDate: $0) }
+    } badges: { IndicatorStat(label: "BBWP", value: "42%") }
+  }
+}
+#endif

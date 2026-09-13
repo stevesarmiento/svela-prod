@@ -30,3 +30,12 @@ struct SectionCard<Content: View>: View {
     .background(.background.secondary, in: .rect(cornerRadius: 20))
   }
 }
+
+#if DEBUG
+#Preview("Glass cards") {
+  VStack(spacing: 20) {
+    GlassCard { Text("A reusable glass surface").padding() }
+    SectionCard(title: "Market overview", subtitle: "Sample content") { PercentBadge(pct: 3.2) }
+  }.padding().preferredColorScheme(.dark)
+}
+#endif

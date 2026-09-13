@@ -8,7 +8,10 @@ struct TokenLogo: View {
   var size: CGFloat = 28
 
   private var resolvedURL: URL? {
-    LogoOverrides.tokenLogoURL(symbol: symbol, fallback: imageURL)
+    #if DEBUG
+    if PreviewData.isRunning { return nil }
+    #endif
+    return LogoOverrides.tokenLogoURL(symbol: symbol, fallback: imageURL)
   }
 
   var body: some View {
@@ -67,3 +70,12 @@ struct TokenAvatarStack: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("Token avatars and overflow") {
+  VStack(spacing: 20) {
+    HStack { TokenLogo(symbol: "BTC", imageURL: nil, size: 48); TokenLogo(symbol: "ETH", imageURL: nil); TokenLogo(symbol: "?", imageURL: nil) }
+    TokenAvatarStack(items: ["BTC", "ETH", "SOL", "AVAX", "LINK", "ARB"].map { .init(symbol: $0, imageURL: nil) })
+  }.padding().preferredColorScheme(.dark)
+}
+#endif

@@ -48,13 +48,15 @@ struct WatchlistsView: View {
     }
     .navigationTitle("Watchlists")
     .toolbar {
-      ToolbarItem(placement: .topBarLeading) {
-        Button { router.sheet = .settings } label: { Label("Settings", systemImage: "person.crop.circle") }
-      }
-      ToolbarItemGroup(placement: .topBarTrailing) {
-        Button { router.sheet = .coinSearch(targetGroupId: data.selectedGroup?.id) } label: { Label("Add token", systemImage: "plus.circle") }
-          .disabled(data.selectedGroup == nil)
-        Button { router.sheet = .createGroup } label: { Label("Create watchlist", systemImage: "plus.square.on.square") }
+      if !env.selection.isActive {
+        ToolbarItem(placement: .topBarLeading) {
+          Button { router.sheet = .settings } label: { Label("Settings", systemImage: "person.crop.circle") }
+        }
+        ToolbarItemGroup(placement: .topBarTrailing) {
+          Button { router.sheet = .coinSearch(targetGroupId: data.selectedGroup?.id) } label: { Label("Add token", systemImage: "plus.circle") }
+            .disabled(data.selectedGroup == nil)
+          Button { router.sheet = .createGroup } label: { Label("Create watchlist", systemImage: "plus.square.on.square") }
+        }
       }
     }
     .confirmationDialog("Delete \"\(groupToDelete?.name ?? "")\"?", isPresented: Binding(get: { groupToDelete != nil }, set: { if !$0 { groupToDelete = nil } }), titleVisibility: .visible) {
@@ -103,3 +105,24 @@ struct WatchlistsGrid: View {
     .padding(.horizontal, 16)
   }
 }
+
+#if DEBUG
+#Preview("Populated") {
+  PreviewHost(tab: .watchlists) { _ in WatchlistsView() }
+}
+#Preview("Empty") {
+  PreviewHost(state: .empty, tab: .watchlists) { _ in WatchlistsView() }
+}
+#Preview("Loading") {
+  PreviewHost(state: .loading, tab: .watchlists) { _ in WatchlistsView() }
+}
+#Preview("Load error") {
+  PreviewHost(state: .error, tab: .watchlists) { _ in WatchlistsView() }
+}
+#endif
+
+#if DEBUG
+#Preview("Watchlist grid") {
+  PreviewHost { _ in ScrollView { WatchlistsGrid(onSelect: { _ in }, onEdit: { _ in }, onDelete: { _ in }) } }
+}
+#endif

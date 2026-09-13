@@ -85,3 +85,19 @@ struct MetricLabel: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("Market metrics") {
+  MarketMetricsGrid(quote: PreviewFixtures.quotes[0], alignedPrice: 67_420, dailyOhlcv: PreviewFixtures.bars, isPending: false).padding().preferredColorScheme(.dark)
+}
+#Preview("Loading metrics") {
+  MarketMetricsGrid(quote: nil, alignedPrice: nil, dailyOhlcv: [], isPending: true).padding().preferredColorScheme(.dark)
+}
+#endif
+
+#if DEBUG
+#Preview("Metric help popover") {
+  MetricLabel(label: "Market cap", help: "Current price multiplied by circulating supply.")
+    .padding().preferredColorScheme(.dark)
+}
+#endif

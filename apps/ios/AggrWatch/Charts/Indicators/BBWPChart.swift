@@ -40,3 +40,11 @@ struct BBWPChart: View {
     .chartLegend(.hidden)
   }
 }
+
+#if DEBUG
+#Preview("Indicator chart") {
+  PreviewValue(Date?.none) { date in
+    BBWPChart(result: PreviewFixtures.indicators.bbwp, windowDays: 14, selectedDate: date).padding().preferredColorScheme(.dark)
+  }
+}
+#endif

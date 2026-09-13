@@ -262,3 +262,15 @@ struct RsiStat: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("All indicators") {
+  PreviewHost { env in
+    ScrollView { TokenIndicatorsSection(store: PreviewData.tokenStore(env), coinId: "bitcoin", quote: PreviewFixtures.quotes[0]).padding() }
+  }
+}
+#Preview("Indicator statistics") {
+  VStack(spacing: 20) { RsiStat(value: 76); RsiStat(value: 25); RsiStat(value: 52); RsiStat(value: nil) }
+    .padding().preferredColorScheme(.dark)
+}
+#endif

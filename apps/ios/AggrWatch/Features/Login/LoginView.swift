@@ -50,3 +50,9 @@ struct LoginView: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("Sign in") {
+  PreviewHost(signedIn: false, navigation: false) { _ in LoginView() }
+}
+#endif

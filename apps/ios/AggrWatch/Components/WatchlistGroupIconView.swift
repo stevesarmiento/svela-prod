@@ -82,3 +82,13 @@ struct IconGridPicker: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("Icons and color pickers") {
+  ScrollView { VStack(spacing: 24) {
+    HStack { WatchlistGroupIconView(icon: "wallet", size: 32); WatchlistGroupIconView(icon: "sparkles", size: 32); WatchlistGroupIconView(icon: nil, size: 32) }
+    PreviewValue("blue") { ColorGridPicker(selection: $0) }
+    PreviewValue("wallet") { IconGridPicker(selection: $0) }
+  }.padding() }.preferredColorScheme(.dark)
+}
+#endif

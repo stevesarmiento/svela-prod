@@ -83,3 +83,11 @@ struct MarketVisionChart: View {
     }
   }
 }
+
+#if DEBUG
+#Preview("Indicator chart") {
+  PreviewValue(Date?.none) { date in
+    MarketVisionChart(result: PreviewFixtures.indicators.marketVision, windowDays: 14, selectedDate: date).padding().preferredColorScheme(.dark)
+  }
+}
+#endif
