@@ -78,7 +78,6 @@ struct PortfolioValueCard: View {
           }
         }
         Spacer()
-        TimeScalePicker(scales: TimeScale.overviewScales, selection: $store.scale)
       }
       if !store.hasLoaded {
         ProgressView("Loading holdings…").frame(maxWidth: .infinity, minHeight: 200)
@@ -95,9 +94,10 @@ struct PortfolioValueCard: View {
           .frame(maxWidth: .infinity, minHeight: 200)
         Button("Retry") { store.retry() }
       }
+      TimeScalePicker(scales: TimeScale.overviewScales, selection: $store.scale)
+        .padding(.top, 4)
     }
-    .padding(14)
-    .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    .padding(.vertical, 14)
   }
 }
 
@@ -128,8 +128,7 @@ struct BreadthCard: View {
         Text("Add a quantity to any watchlist coin to see your holdings value here.").font(.caption).foregroundStyle(.secondary)
       }
     }
-    .padding(14)
-    .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    .padding(.vertical, 14)
   }
 
   @ViewBuilder

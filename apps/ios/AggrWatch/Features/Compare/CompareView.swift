@@ -20,7 +20,6 @@ struct CompareView: View {
         HStack {
           Text("Watchlist Comparison").font(.headline)
           Spacer()
-          TimeScalePicker(scales: TimeScale.compareScales, selection: $scale)
         }
         .padding(.horizontal, 16)
 
@@ -79,9 +78,10 @@ struct CompareView: View {
         })
         .frame(height: 300)
       }
+      TimeScalePicker(scales: TimeScale.compareScales, selection: $scale)
+        .padding(.top, 12)
     }
-    .padding(14)
-    .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    .padding(.vertical, 14)
     .padding(.horizontal, 16)
   }
 

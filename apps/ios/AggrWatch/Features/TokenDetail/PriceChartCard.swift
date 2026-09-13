@@ -1,105 +1,165 @@
 import AggrAPI
 import AggrCore
+import AggrLiveline
 import Charts
 import SwiftUI
 
-/// Port of `price-chart.tsx`: header (logo, name, scrub/live price, 24h badge), 1M/1Y/2Y selector,
-/// Price / Mkt cap legend toggles, spot status pill, chart body + volume pane.
+/// The mobile price surface. The shared token header owns its readout.
 struct PriceChartCard: View {
   let store: TokenChartStore
   @Binding var scale: TimeScale
-  @Binding var showPrice: Bool
-  @Binding var showMarketCap: Bool
+  @Binding var selection: LivelineSelection?
   @Environment(AppEnvironment.self) private var env
   @State private var selectedDate: Date?
+  #if DEBUG
+  @AppStorage("charts.useLegacyPriceRenderer") private var useLegacyRenderer = false
+  #else
+  @AppStorage("charts.useLegacyPriceRenderer") private var useLegacyRenderer = true
+  #endif
 
   var body: some View {
-    let quote = store.quote
     let spot = env.realtime.spot(store.coinId)
-    let streamStatus = env.realtime.status(store.coinId)
-    let pricing = LivePricing.resolve(quote: quote, spot: spot, alignedPrice: store.alignedPrice, isWarmingUp: store.isWarmingUp, status: streamStatus)
-    let status = pricing.status
-    let scrub = selectedDate.flatMap { scrubValues(at: $0) }
-
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(alignment: .top) {
-        VStack(alignment: .leading, spacing: 4) {
-          HStack(spacing: 6) {
-            TokenLogo(symbol: quote?.symbol ?? store.coinId, imageURL: quote?.image, size: 16)
-            Text(LogoOverrides.cleanTokenName(quote?.name ?? store.coinId)).font(.caption).foregroundStyle(.secondary)
-            SpotStatusPill(status: status)
-          }
-          HStack(alignment: .firstTextBaseline, spacing: 8) {
-            AnimatedNumber(value: scrub?.price ?? pricing.livePrice, font: .system(size: 28, weight: .semibold, design: .rounded))
-              .lineLimit(1).minimumScaleFactor(0.6)
-            if let scrub, let base = pricing.basePrice, base > 0 {
-              PercentBadge(pct: (scrub.price - base) / base * 100)
-            } else {
-              PercentBadge(pct: pricing.liveChange24h)
+    let pricing = LivePricing.resolve(quote: store.quote, spot: spot, alignedPrice: store.alignedPrice,
+                                     isWarmingUp: store.isWarmingUp, status: env.realtime.status(store.coinId))
+    VStack(spacing: 20) {
+      Group {
+        if useLegacyRenderer {
+          MinimalLegacyPriceChart(input: AggrPriceChart.input(
+            coinId: store.coinId, data: store.data, hull: store.hull, projection: nil,
+            scale: store.dataScale, liveObservation: nil, showPrice: true, showMarketCap: true,
+            isLoading: store.isLoading, hasObservedHistory: store.hasObservedHistory, simplified: true),
+                                  livePrice: pricing.isLiveSpotTrusted ? pricing.livePrice : nil,
+                                  selectedDate: $selectedDate)
+            .onChange(of: selectedDate) { _, date in
+              guard let date, let point = store.priceWindow.points.min(by: {
+                abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
+              }) else { selection = nil; return }
+              selection = .init(time: Double(point.epochSeconds), value: point.value, values: ["price": point.value],
+                                isProjection: false, nearestObservation: nil)
             }
-          }
-          if let scrub {
-            HStack(spacing: 10) {
-              Text(scrub.date, format: .dateTime.month(.abbreviated).day().year().hour().minute()).foregroundStyle(.secondary)
-              if let mcap = scrub.marketCap { Text("MCAP \(UsdFormat.largeUsd(mcap))").foregroundStyle(Color(oklch: "oklch(0.85 0.16 95 / 0.8)")) }
-              if let proj = scrub.projection { Text("Proj \(UsdFormat.price(proj.base)) · ▲\(UsdFormat.price(proj.bull)) · ▼\(UsdFormat.price(proj.bear))").foregroundStyle(.secondary) }
+            .overlay {
+              if !store.hasObservedHistory {
+                if store.isLoading { ProgressView() }
+                else { Text("Price history unavailable").font(.footnote).foregroundStyle(.secondary) }
+              }
             }
-            .font(.caption2.monospacedDigit())
-          }
+        } else {
+          AggrPriceChart(coinId: store.coinId, data: store.data, hull: store.hull, projection: nil,
+                         scale: store.dataScale,
+                         liveObservation: pricing.isLiveSpotTrusted ? spot.map { .init(time: $0.updatedAtMs / 1000, value: $0.priceUsd) } : nil,
+                         showPrice: true, showMarketCap: true,
+                         isLoading: store.isLoading, isWarmingUp: store.isWarmingUp,
+                         hasObservedHistory: store.hasObservedHistory, isActive: env.isSceneActive, simplified: true,
+                         onSelection: { selection = $0 })
+            .equatable()
         }
-        Spacer()
-        TimeScalePicker(scales: TimeScale.tokenScales, selection: $scale)
       }
-
-      PriceChart(
-        line: store.data.line, ohlc: store.data.ohlc, marketCap: showMarketCap ? store.data.marketCap : [],
-        hull: store.hull, projection: store.projection, livePriceUsd: pricing.isLiveSpotTrusted ? pricing.livePrice : nil,
-        showPrice: showPrice, scale: scale, selectedDate: $selectedDate
-      )
-      .frame(height: 280)
-      .overlay {
-        if store.isLoading && store.data.line.isEmpty { ProgressView() }
-        else if store.data.line.count < 2 { Text(store.isWarmingUp ? "Warming up chart data…" : "No chart data").font(.footnote).foregroundStyle(.secondary) }
+      .frame(height: 260)
+      .overlay(alignment: .top) {
+        if let selection {
+          PriceScrubTooltip(selection: selection, points: store.priceWindow.points)
+        }
       }
-
-      if store.data.volume.contains(where: { $0.value > 0 }) {
-        VolumeChart(volume: store.data.volume, domain: xDomain)
-          .frame(height: 56)
-      }
-
-      HStack(spacing: 8) {
-        LegendToggle(title: "PRICE", color: .white, isOn: $showPrice)
-        LegendToggle(title: "MKT CAP", color: Color(oklch: "oklch(0.85 0.16 95 / 0.9)"), isOn: $showMarketCap)
-        if store.isStale { Text("stale · refreshing").font(.caption2).foregroundStyle(.secondary) }
-        Spacer()
-        if let e = store.error { Text(e).font(.caption2).foregroundStyle(Color.lossRed).lineLimit(1) }
+      TimeScalePicker(scales: TimeScale.tokenScales, selection: $scale)
+      if store.error != nil {
+        HStack(spacing: 8) {
+          Text(store.hasObservedHistory ? "Couldn’t refresh chart" : "Price history unavailable")
+            .font(.caption).foregroundStyle(.secondary)
+          Button("Retry") { Task { await store.load(force: true) } }.font(.caption.weight(.semibold))
+        }
       }
     }
-    .padding(14)
-    .glassEffect(.regular, in: .rect(cornerRadius: 20))
+    .onChange(of: scale) { _, _ in selectedDate = nil; selection = nil }
+    .onDisappear { selection = nil }
+    .padding(.bottom, 12)
+  }
+}
+
+/// Keeps the release fallback visually consistent during the native renderer rollout.
+private struct MinimalLegacyPriceChart: View {
+  let input: LivelineInput
+  let livePrice: Double?
+  @Binding var selectedDate: Date?
+  private var line: [TimePoint] {
+    var result = (input.series.first { $0.id == "price" }?.points ?? []).map {
+      TimePoint(epochSeconds: Int($0.time), value: $0.value)
+    }
+    if let livePrice, let last = result.last { result[result.count - 1] = .init(epochSeconds: last.epochSeconds, value: livePrice) }
+    return result
+  }
+  var body: some View {
+    let values = line
+    let overlays = input.series.filter { $0.id != "price" && $0.visible }
+    let allValues = values.map(\.value) + overlays.flatMap { series in series.points.map { $0.value * series.multiplier } }
+    let low = allValues.min() ?? 0
+    let high = allValues.max() ?? 1
+    let padding = max((high - low) * 0.12, abs(high) * 0.001, 1e-20)
+    Chart {
+      ForEach(values, id: \.epochSeconds) { point in
+        LineMark(x: .value("Time", point.date), y: .value("Price", point.value), series: .value("Series", "price"))
+          .interpolationMethod(.monotone).foregroundStyle(.white)
+          .lineStyle(.init(lineWidth: 2.5, lineCap: .round))
+      }
+      overlayContent(overlays)
+      if let last = values.last {
+        PointMark(x: .value("Time", last.date), y: .value("Price", last.value)).foregroundStyle(.white).symbolSize(35)
+      }
+      if let selectedDate {
+        RuleMark(x: .value("Selected", selectedDate)).foregroundStyle(.white.opacity(0.3))
+      }
+    }
+    .chartXSelection(value: $selectedDate)
+    .chartYScale(domain: (low - padding)...(high + padding))
+    .chartXAxis(.hidden).chartYAxis(.hidden).chartLegend(.hidden)
+    .padding(.vertical, 14)
+    .accessibilityIdentifier("legacy-price-chart")
   }
 
-  private var xDomain: ClosedRange<Date>? {
-    guard let first = store.data.line.first, let last = (store.projection?.base.last ?? store.data.line.last) else { return nil }
-    return first.date...last.date
+  @ChartContentBuilder
+  private func overlayContent(_ overlays: [LivelineSeries]) -> some ChartContent {
+    ForEach(overlays, id: \.id) { series in
+      overlaySeries(series)
+    }
   }
 
-  private struct ScrubValues { var date: Date; var price: Double; var marketCap: Double?; var projection: (base: Double, bull: Double, bear: Double)? }
+  @ChartContentBuilder
+  private func overlaySeries(_ series: LivelineSeries) -> some ChartContent {
+    let color = Color(.sRGB, red: series.color.red, green: series.color.green,
+                      blue: series.color.blue, opacity: series.color.alpha)
+    let stroke = StrokeStyle(lineWidth: CGFloat(series.width), dash: series.dash.map { CGFloat($0) })
+    ForEach(series.points, id: \.time) { point in
+      LineMark(x: .value("Time", Date(timeIntervalSince1970: point.time)),
+               y: .value("Price", point.value * series.multiplier), series: .value("Series", series.id))
+        .interpolationMethod(.monotone)
+        .foregroundStyle(color)
+        .lineStyle(stroke)
+    }
+  }
 
-  private func scrubValues(at date: Date) -> ScrubValues? {
-    let t = date.timeIntervalSince1970
-    func nearest(_ pts: [TimePoint]) -> TimePoint? {
-      guard !pts.isEmpty else { return nil }
-      var lo = 0, hi = pts.count - 1
-      while hi - lo > 1 { let mid = (lo + hi) / 2; if Double(pts[mid].epochSeconds) <= t { lo = mid } else { hi = mid } }
-      return abs(Double(pts[lo].epochSeconds) - t) <= abs(Double(pts[hi].epochSeconds) - t) ? pts[lo] : pts[hi]
+}
+
+/// Date/time stays beside the inspected chart, with its capsule kept inside both edges.
+private struct PriceScrubTooltip: View {
+  let selection: LivelineSelection
+  let points: [TimePoint]
+  @ScaledMetric(relativeTo: .caption) private var preferredWidth = 210.0
+
+  var body: some View {
+    GeometryReader { geometry in
+      let width = min(preferredWidth, geometry.size.width)
+      let start = Double(points.first?.epochSeconds ?? 0)
+      let end = Double(points.last?.epochSeconds ?? 1)
+      let fraction = min(1, max(0, (selection.time - start) / max(1, end - start)))
+      Text(Date(timeIntervalSince1970: selection.time), format: .dateTime.month(.abbreviated).day().year().hour().minute())
+        .font(.system(.caption, design: .rounded, weight: .medium).monospacedDigit())
+        .lineLimit(1).minimumScaleFactor(0.7)
+        .padding(.vertical, 7)
+        .frame(width: width)
+        .background(.regularMaterial, in: Capsule())
+        .position(x: min(geometry.size.width - width / 2, max(width / 2, geometry.size.width * fraction)), y: 18)
+        .accessibilityIdentifier("price-chart-inspection")
     }
-    if let last = store.data.line.last, t > Double(last.epochSeconds), let proj = store.projection {
-      guard let b = nearest(proj.base), let u = nearest(proj.bull), let d = nearest(proj.bear) else { return nil }
-      return ScrubValues(date: b.date, price: b.value, marketCap: nil, projection: (b.value, u.value, d.value))
-    }
-    guard let p = nearest(store.data.line) else { return nil }
-    return ScrubValues(date: p.date, price: p.value, marketCap: nearest(store.data.marketCap)?.value, projection: nil)
+    .allowsHitTesting(false)
   }
 }
 
@@ -132,71 +192,16 @@ enum LivePricing {
   }
 }
 
-struct LegendToggle: View {
-  let title: String
-  let color: Color
-  @Binding var isOn: Bool
-  var body: some View {
-    Button { withAnimation(.snappy) { isOn.toggle() } } label: {
-      HStack(spacing: 5) {
-        Circle().fill(color).frame(width: 6, height: 6)
-        Text(title).font(.system(size: 9, weight: .semibold, design: .rounded).monospacedDigit()).tracking(1)
-      }
-      .padding(.horizontal, 8).padding(.vertical, 5)
-      .foregroundStyle(isOn ? .primary : .secondary)
-      .opacity(isOn ? 1 : 0.55)
-      .glassEffect(.regular.interactive(), in: Capsule())
-    }
-    .buttonStyle(.plain)
-  }
-}
-
-/// LIVE / WARM / CACHED pill with pulsing dot (`spotStatus`).
-struct SpotStatusPill: View {
-  let status: RealtimeQuoteStatus
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  var body: some View {
-    if status != .disabled {
-      HStack(spacing: 4) {
-        if status == .realtime, !reduceMotion {
-          dot.phaseAnimator([0.4, 1.0]) { view, phase in view.opacity(phase) } animation: { _ in .easeInOut(duration: 0.9) }
-        } else {
-          dot
-        }
-        Text(status.label).font(.system(size: 8, weight: .bold, design: .rounded).monospacedDigit()).tracking(1)
-      }
-      .padding(.horizontal, 6).padding(.vertical, 3)
-      .foregroundStyle(color)
-      .background(color.opacity(0.12), in: Capsule())
-    }
-  }
-  private var dot: some View { Circle().fill(color).frame(width: 5, height: 5) }
-  private var color: Color {
-    switch status { case .realtime: .gainGreen; case .lastKnown: .yellow; default: .secondary }
-  }
-}
 
 #if DEBUG
-#Preview("Interactive chart card") {
+#Preview("Mobile price chart") {
   PreviewHost { env in
-    PreviewValue(TimeScale.d30) { scale in
-      PreviewValue(true) { price in
-        PreviewValue(true) { marketCap in
-          PriceChartCard(store: PreviewData.tokenStore(env), scale: scale, showPrice: price, showMarketCap: marketCap).padding()
-        }
-      }
-    }
+    PriceChartCard(store: PreviewData.tokenStore(env), scale: .constant(.d30), selection: .constant(nil)).padding()
   }
 }
-#Preview("Loading chart card") {
+#Preview("Loading price chart") {
   PreviewHost { env in
-    PriceChartCard(store: PreviewData.tokenStore(env, loading: true), scale: .constant(.d30), showPrice: .constant(true), showMarketCap: .constant(true)).padding()
+    PriceChartCard(store: PreviewData.tokenStore(env, loading: true), scale: .constant(.d30), selection: .constant(nil)).padding()
   }
-}
-#Preview("Spot status and legend") {
-  VStack(spacing: 20) {
-    HStack { SpotStatusPill(status: .realtime); SpotStatusPill(status: .lastKnown); SpotStatusPill(status: .fallback) }
-    PreviewValue(true) { LegendToggle(title: "PRICE", color: .white, isOn: $0) }
-  }.padding().preferredColorScheme(.dark)
 }
 #endif

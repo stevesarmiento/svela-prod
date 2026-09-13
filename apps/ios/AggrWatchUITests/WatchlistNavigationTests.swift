@@ -1,6 +1,123 @@
 import XCTest
 
 final class WatchlistNavigationTests: XCTestCase {
+  @MainActor func testTokenPullDismissalRespectsContentScroll() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid", "-charts.useLegacyPriceRenderer", "NO"]
+    app.launch()
+    app.tabBars.buttons["Watchlists"].tap()
+    let card = app.buttons["watchlist-card-preview-core"]
+    XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+    let row = app.buttons["watchlist-token-bitcoin"]
+    XCTAssertTrue(row.waitForExistence(timeout: 5)); row.tap()
+    let close = app.buttons["token-page-close"]
+    let chart = app.descendants(matching: .any)["native-price-chart"].firstMatch
+    XCTAssertTrue(chart.waitForExistence(timeout: 5))
+    // The content itself can dismiss when its scroll starts at the top.
+    var start = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.4))
+    start.press(forDuration: 0.01, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 160)), withVelocity: .slow, thenHoldForDuration: 0.1)
+    XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+    row.tap()
+    XCTAssertTrue(chart.waitForExistence(timeout: 5))
+    // A short pull cancels cleanly and leaves the page interactive.
+    start = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.4))
+    start.press(forDuration: 0.01, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 20)), withVelocity: .slow, thenHoldForDuration: 0.1)
+    XCTAssertTrue(close.isHittable)
+    // Upward motion scrolls, and downward motion within scrolled content stays scrolling.
+    let originalY = chart.frame.minY
+    start = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.8))
+    start.press(forDuration: 0.01, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -150)), withVelocity: .slow, thenHoldForDuration: 0.1)
+    XCTAssertLessThan(chart.frame.minY, originalY - 50)
+    let scrolledY = chart.frame.minY
+    start = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.85))
+    start.press(forDuration: 0.01, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 70)), withVelocity: .slow, thenHoldForDuration: 0.1)
+    XCTAssertTrue(close.isHittable)
+    XCTAssertGreaterThan(chart.frame.minY, scrolledY + 15)
+    capture("Token header with dollar change after content scroll")
+    // The fixed header remains a dismissal surface at any scroll position.
+    start = close.coordinate(withNormalizedOffset: CGVector(dx: 1.5, dy: 0.5))
+    start.press(forDuration: 0.01, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 160)), withVelocity: .slow, thenHoldForDuration: 0.1)
+    XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+    row.tap()
+    XCTAssertTrue(close.waitForExistence(timeout: 5))
+    close.tap()
+    XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+  }
+
+  @MainActor func testMinimalPriceChartRangesScrubScrollAndReopen() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid", "-charts.useLegacyPriceRenderer", "NO"]
+    app.launch()
+    app.tabBars.buttons["Watchlists"].tap()
+    let card = app.buttons["watchlist-card-preview-core"]
+    XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+    let row = app.buttons["watchlist-token-bitcoin"]
+    XCTAssertTrue(row.waitForExistence(timeout: 5)); row.tap()
+    let close = app.buttons["token-page-close"]
+    XCTAssertTrue(close.waitForExistence(timeout: 5))
+    let chart = app.descendants(matching: .any)["native-price-chart"].firstMatch
+    XCTAssertTrue(chart.waitForExistence(timeout: 5))
+    XCTAssertFalse(app.buttons["MKT CAP"].exists)
+    XCTAssertFalse(app.staticTexts["CACHED"].exists)
+    XCTAssertTrue(app.buttons["token-bookmark"].isHittable)
+    capture("Simple token chart expanded")
+    let start = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.35))
+    start.press(forDuration: 0.25, thenDragTo: chart.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.35)))
+    XCTAssertTrue(close.exists)
+    XCTAssertTrue(app.descendants(matching: .any)["price-chart-inspection"].firstMatch.waitForNonExistence(timeout: 3))
+    for timeframe in ["1W", "1M", "1Y", "1D"] {
+      app.buttons[timeframe].tap()
+      XCTAssertTrue(chart.waitForExistence(timeout: 5))
+      XCTAssertTrue(close.exists)
+    }
+    let oldY = chart.frame.minY
+    chart.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.6)).press(forDuration: 0.01,
+      thenDragTo: chart.coordinate(withNormalizedOffset: CGVector(dx: 0.4, dy: 0.1)))
+    XCTAssertLessThan(chart.frame.minY, oldY - 20, "Vertical dragging on the chart must scroll the page")
+    capture("Simple token chart compact header")
+    XCTAssertFalse(app.staticTexts["token-header-name"].exists)
+    XCTAssertTrue(app.staticTexts["token-header-price"].exists)
+    XCTAssertTrue(app.buttons["token-actions"].isHittable)
+    XCTAssertTrue(app.buttons["token-bookmark"].isHittable)
+    XCTAssertLessThanOrEqual(app.buttons["token-actions"].frame.maxX, app.frame.maxX)
+    app.buttons["token-actions"].tap()
+    XCTAssertTrue(app.buttons["Deep analysis"].waitForExistence(timeout: 3))
+    XCTAssertTrue(app.buttons["Deep analysis"].isHittable)
+    app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.65)).tap()
+    close.tap()
+    XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+    row.tap()
+    XCTAssertTrue(chart.waitForExistence(timeout: 5))
+    close.tap()
+    XCTAssertTrue(close.waitForNonExistence(timeout: 5))
+  }
+
+  @MainActor func testMinimalLegacyChartWithLargeText() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid", "-charts.useLegacyPriceRenderer", "YES",
+                           "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXXL"]
+    app.launch()
+    app.tabBars.buttons["Watchlists"].tap()
+    let card = app.buttons["watchlist-card-preview-core"]
+    XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+    let row = app.buttons["watchlist-token-bitcoin"]
+    XCTAssertTrue(row.waitForExistence(timeout: 5)); row.tap()
+    let chart = app.descendants(matching: .any)["legacy-price-chart"].firstMatch
+    XCTAssertTrue(chart.waitForExistence(timeout: 5))
+    capture("Simple token legacy chart large text")
+    app.buttons["1W"].tap()
+    chart.swipeUp()
+    XCTAssertTrue(app.buttons["token-page-close"].isHittable)
+    XCTAssertTrue(app.buttons["token-actions"].isHittable)
+    XCTAssertTrue(app.buttons["token-bookmark"].isHittable)
+    capture("Simple token legacy compact large text")
+    app.buttons["token-page-close"].tap()
+    XCTAssertTrue(chart.waitForNonExistence(timeout: 5))
+  }
+
   @MainActor func testAddTokenSheetSelectionReturnsToWatchlist() {
     continueAfterFailure = false
     let app = XCUIApplication()

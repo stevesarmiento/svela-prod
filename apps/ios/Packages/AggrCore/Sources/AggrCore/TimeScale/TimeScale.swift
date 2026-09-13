@@ -27,8 +27,8 @@ public enum TimeScale: String, Sendable, CaseIterable, Codable, Hashable, Identi
   public static let overviewScales: [TimeScale] = [.d1, .d7, .d30, .max]
   /// Compare selector: 1D/1W/1Y.
   public static let compareScales: [TimeScale] = [.d1, .d7, .max]
-  /// Token price chart: 1M/1Y/2Y.
-  public static let tokenScales: [TimeScale] = [.d30, .max, .y2]
+  /// Mobile token price chart: 1D/1W/1M/1Y.
+  public static let tokenScales: [TimeScale] = [.d1, .d7, .d30, .max]
 
   /// `getRangeDaysFromTimeScale`
   public var rangeDays: Int {

@@ -18,6 +18,8 @@ import UIKit
   private var pullDistance: CGFloat = 200
   private var closing = false
   private var startsInHeader = false
+  private var startsAtTop = false
+  private weak var touchedScroll: UIScrollView?
   var isFinishing: Bool { closing }
   var onDismissed: (() -> Void)?
 
@@ -65,16 +67,39 @@ import UIKit
 
   func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
     guard let page else { return false }
-    startsInHeader = touch.location(in: page.view).y < page.view.safeAreaInsets.top + 76
-    return startsInHeader
+    startsInHeader = touch.location(in: page.view).y < page.view.safeAreaInsets.top + 88
+    // The nearest vertical scroll owns content gestures. Snapshot its position at touch-down:
+    // scrolling back to the top must never turn into a dismissal halfway through that drag.
+    var ancestor = touch.view
+    touchedScroll = nil
+    while let view = ancestor, view !== page.view {
+      if let scroll = view as? UIScrollView, scroll.isScrollEnabled,
+         scroll.contentSize.height + scroll.adjustedContentInset.top + scroll.adjustedContentInset.bottom > scroll.bounds.height {
+        touchedScroll = scroll
+        break
+      }
+      ancestor = view.superview
+    }
+    startsAtTop = touchedScroll.map {
+      $0.contentOffset.y <= -$0.adjustedContentInset.top + 1 && !$0.isDecelerating
+    } ?? false
+    return startsInHeader || startsAtTop
   }
 
   func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
     guard let page, let pan = gestureRecognizer as? UIPanGestureRecognizer,
-          startsInHeader, !closing, !page.isBeingPresented, !page.isBeingDismissed,
+          startsInHeader || startsAtTop, !closing, !page.isBeingPresented, !page.isBeingDismissed,
           page.presentedViewController == nil, page.transitionCoordinator == nil else { return false }
     let velocity = pan.velocity(in: page.view.window)
     return velocity.y > 0 && velocity.y > abs(velocity.x) * 1.5
+  }
+
+  func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                         shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+    // Give a qualified downward pull first refusal. Upward/horizontal motion fails our
+    // direction check immediately, leaving scrolling and chart inspection in control.
+    guard let scroll = otherGestureRecognizer.view as? UIScrollView else { return false }
+    return otherGestureRecognizer === scroll.panGestureRecognizer
   }
 
   private func prepareCard() -> Bool {
@@ -128,6 +153,11 @@ import UIKit
       guard overlay.superview != nil, pageImage != nil else { return }
       // The opaque overlay still covers this, but restoring hit testing allows another pull
       // to interrupt the spring back before it has settled.
+      let progress = max(0, initialProgress + pan.translation(in: page.view.window).y / pullDistance)
+      if pan.state == .ended, progress >= 0.2, pan.velocity(in: page.view.window).y > 700 {
+        finishPull()
+        return
+      }
       page.view.alpha = 1
       let animator = UIViewPropertyAnimator(duration: reduceMotion ? 0 : 0.28, dampingRatio: 0.9) {
         self.card.transform = .identity

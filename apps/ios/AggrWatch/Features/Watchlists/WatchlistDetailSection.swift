@@ -13,11 +13,12 @@ struct WatchlistDetailSection: View {
       HStack {
         Text("Performance").font(.subheadline.weight(.semibold))
         Spacer()
-        TimeScalePicker(scales: TimeScale.overviewScales, selection: $scale)
       }
       .padding(.horizontal, 16)
 
       GroupCoinsChart(group: group, scale: scale)
+        .padding(.horizontal, 16)
+      TimeScalePicker(scales: TimeScale.overviewScales, selection: $scale)
         .padding(.horizontal, 16)
       CoinRowsList(group: group)
     }
@@ -50,8 +51,7 @@ struct GroupAggregateCard: View {
           .overlay { Text(scale.isAggregateChangeUnavailable ? "N/A for 2Y" : (loading ? "" : "No chart data yet")).font(.footnote).foregroundStyle(.secondary) }
       }
     }
-    .padding(14)
-    .glassEffect(.regular, in: .rect(cornerRadius: 18))
+    .padding(.vertical, 14)
     .task(id: "\(group.id)|\(scale.rawValue)|\(data.coinIds(in: group).joined(separator: ","))|\(env.isSceneActive)|\(env.foregroundRevision)") {
       guard env.isSceneActive else { return }
       guard scale != .d1, !scale.isAggregateChangeUnavailable else { series = []; return }
@@ -92,8 +92,7 @@ struct GroupCoinsChart: View {
         MultiLineComparisonChart(series: series, hidden: $hidden).frame(height: 300)
       }
     }
-    .padding(14)
-    .glassEffect(.regular, in: .rect(cornerRadius: 18))
+    .padding(.vertical, 14)
     .task(id: "\(group.id)|\(scale.rawValue)|\(ids.joined(separator: ","))|\(env.isSceneActive)|\(env.foregroundRevision)") {
       guard env.isSceneActive else { return }
       guard !ids.isEmpty else { byCoin = [:]; return }

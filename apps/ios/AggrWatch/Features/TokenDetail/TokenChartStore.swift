@@ -10,6 +10,8 @@ final class TokenChartStore {
   let coinId: String
   private(set) var scale: TimeScale = .d30
   private(set) var data: ParsedChartData = .empty
+  private(set) var dataScale: TimeScale = .d30
+  private(set) var hasObservedHistory = false
   private(set) var isLoading = true
   private(set) var isWarmingUp = false
   private(set) var isStale = false
@@ -21,6 +23,7 @@ final class TokenChartStore {
   private(set) var projection: PriceProjection.Result?
   /// Phase 6: MarketVision / Bollinger / BBWP / RSI divergences (+ explain series), computed off-main.
   private(set) var indicators: IndicatorBundle?
+  private var indicatorHistory: ParsedChartData?
   private var indicatorGeneration = 0
 
   private let market: MarketAPI
@@ -38,11 +41,13 @@ final class TokenChartStore {
   // MARK: Derived
 
   var alignedPrice: Double? { ChartSeries.alignedPrice(data.line) }
+  var priceWindow: TokenPriceWindow { TokenPriceWindow(history: hasObservedHistory ? data.line : [], scale: dataScale) }
 
   /// OHLC bars with volume merged by epoch (token-page `indicatorData`).
   var indicatorBars: [OHLCVBar] {
-    let volByEpoch = Dictionary(data.volume.map { ($0.epochSeconds, $0.value) }, uniquingKeysWith: { _, b in b })
-    return data.ohlc.map { b in var c = b; c.volume = volByEpoch[b.time] ?? 0; return c }
+    let history = indicatorHistory ?? data
+    let volByEpoch = Dictionary(history.volume.map { ($0.epochSeconds, $0.value) }, uniquingKeysWith: { _, b in b })
+    return history.ohlc.map { b in var c = b; c.volume = volByEpoch[b.time] ?? 0; return c }
   }
 
   var dailyOhlcv: [OHLCVBar] { ChartSeries.bucketizeOHLCV(indicatorBars, bucketSeconds: 86_400) }
@@ -105,23 +110,46 @@ final class TokenChartStore {
       let response = try await cache.fetch(key, policy: .chart, force: force) { [market, coinId] in
         try await market.marketChart(coinId: coinId, days: scale.tokenChartDaysParam, vsCurrency: "usd")
       }
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled, scale == self.scale else { return }
       let prices = response.data.prices.map { ChartSeries.RawPoint(time: $0.time, value: $0.value) }
       let volumes = response.data.volumes.map { ChartSeries.RawPoint(time: $0.time, value: $0.value) }
       let mcaps = response.data.market_caps.map { ChartSeries.RawPoint(time: $0.time, value: $0.value) }
-      var parsed = ChartSeries.parseMarketChart(prices: prices, volumes: volumes, marketCaps: mcaps, scale: scale) ?? fallbackData()
+      let observed = ChartSeries.parseMarketChart(prices: prices, volumes: volumes, marketCaps: mcaps, scale: scale)
+      var parsed = observed ?? fallbackData()
+      hasObservedHistory = observed != nil
+      dataScale = scale
       if let p = quote?.currentPrice, p > 0 {
         let t = Int((quote?.lastUpdatedDate ?? Date()).timeIntervalSince1970)
-        parsed = ChartSeries.upsertLatestPrice(parsed, latestPrice: p, atEpochSeconds: t)
+        if t >= (parsed.line.last?.epochSeconds ?? Int.min) {
+          parsed = ChartSeries.upsertLatestPrice(parsed, latestPrice: p, atEpochSeconds: t)
+        }
       }
       data = parsed
+      hull = HullSuite.compute(parsed.ohlc, config: .tokenPage)
       isStale = response.status?.stale ?? false
       let points = response.status?.points.map { Int($0) } ?? parsed.line.count
-      isWarmingUp = (response.status?.warmupRequested ?? false) || points < 2
+      isWarmingUp = (response.status?.warmupRequested ?? false) || points < 2 || !hasObservedHistory
       error = nil
+      isLoading = false
+      // Short mobile ranges still need warmup history for indicators and daily metrics.
+      // Reuse the cached 90-day request used by the 1M view; this does not expand the price window.
+      if scale == .d1 || scale == .d7 {
+        let history = try? await cache.fetch(QueryCache.Key("token-chart", coinId, TimeScale.d30.rawValue), policy: .chart, force: force) { [market, coinId] in
+          try await market.marketChart(coinId: coinId, days: TimeScale.d30.tokenChartDaysParam, vsCurrency: "usd")
+        }
+        guard !Task.isCancelled, scale == self.scale else { return }
+        if let history {
+          indicatorHistory = ChartSeries.parseMarketChart(
+            prices: history.data.prices.map { .init(time: $0.time, value: $0.value) },
+            volumes: history.data.volumes.map { .init(time: $0.time, value: $0.value) },
+            marketCaps: [], scale: .d30)
+        }
+      } else { indicatorHistory = nil }
       recomputeOverlays()
     } catch is CancellationError {
+      return
     } catch {
+      guard !Task.isCancelled, scale == self.scale else { return }
       self.error = error.localizedDescription
       if data.line.isEmpty { data = fallbackData(); recomputeOverlays() }
     }
@@ -141,7 +169,7 @@ final class TokenChartStore {
 
   private func recomputeOverlays() {
     let bars = indicatorBars
-    hull = HullSuite.compute(bars, config: .tokenPage)
+    hull = HullSuite.compute(data.ohlc, config: .tokenPage)
     let inputs = data.ohlc.map { PriceProjection.InputPoint(timeEpochSec: $0.time, close: $0.close) }
     let warming = isWarmingUp
     // Hull-only cone immediately; BBWP vol regime + RSI divergence tilt land once the bundle is ready.
@@ -174,6 +202,7 @@ final class TokenChartStore {
 extension TokenChartStore {
   func seedPreview() {
     data = PreviewFixtures.chart
+    hasObservedHistory = true
     isLoading = false
     indicators = PreviewFixtures.indicators
     hull = HullSuite.compute(PreviewFixtures.bars, config: .tokenPage)
@@ -181,3 +210,50 @@ extension TokenChartStore {
   }
 }
 #endif
+
+/// A visible price window is independent of the longer history used to warm indicators.
+struct TokenPriceWindow {
+  let points: [TimePoint]
+  let isPartial: Bool
+
+  init(history: [TimePoint], scale: TimeScale) {
+    let valid = history.filter { $0.value.isFinite && $0.value > 0 }.sorted { $0.epochSeconds < $1.epochSeconds }
+    guard let last = valid.last, let first = valid.first else { points = []; isPartial = true; return }
+    let start = last.epochSeconds - scale.rangeDays * 86_400
+    // A feed's first bucket can sit just after the requested boundary. Treat a
+    // normal sampling gap as a full range, but label materially shorter histories.
+    let cadence = valid.count > 1 ? valid[1].epochSeconds - first.epochSeconds : 0
+    let tolerance = min(Double(scale.rangeDays * 86_400) * 0.05, Double(max(60, cadence)))
+    isPartial = Double(first.epochSeconds - start) > tolerance
+    var visible = valid.filter { $0.epochSeconds >= start }
+    // Interpolate only between observed samples, never extend missing history backward.
+    if let before = valid.last(where: { $0.epochSeconds < start }), let after = visible.first, after.epochSeconds > start {
+      let fraction = Double(start - before.epochSeconds) / Double(after.epochSeconds - before.epochSeconds)
+      visible.insert(.init(epochSeconds: start, value: before.value + (after.value - before.value) * fraction), at: 0)
+    }
+    points = visible
+  }
+
+  func dollarChange(to value: Double?) -> Double? {
+    guard points.count >= 2, let base = points.first?.value, base > 0,
+          let value, value.isFinite, value > 0 else { return nil }
+    return value - base
+  }
+
+  func percentChange(to value: Double?) -> Double? {
+    guard points.count >= 2, let base = points.first?.value, base > 0,
+          let value, value.isFinite, value > 0 else { return nil }
+    return (value / base - 1) * 100
+  }
+
+  func periodLabel(scale: TimeScale) -> String {
+    if isPartial { return "Available history" }
+    switch scale {
+    case .d1: return "Past day"
+    case .d7: return "Past week"
+    case .d30: return "Past month"
+    case .max: return "Past year"
+    case .y2: return "Past 2 years"
+    }
+  }
+}

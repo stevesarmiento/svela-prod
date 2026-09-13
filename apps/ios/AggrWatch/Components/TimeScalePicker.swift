@@ -1,33 +1,32 @@
 import AggrCore
 import SwiftUI
 
-/// Glass segmented selector for time scales (1D / 1W / 1M / 1Y / 2Y).
+/// Centered chart time ranges with a background only on the active selection.
 struct TimeScalePicker: View {
   let scales: [TimeScale]
   @Binding var selection: TimeScale
 
   var body: some View {
-    GlassEffectContainer(spacing: 4) {
-      HStack(spacing: 2) {
-        ForEach(scales) { scale in
-          Button {
-            withAnimation(.snappy(duration: 0.25)) { selection = scale }
-          } label: {
-            Text(scale.label)
-              .font(.caption.weight(.semibold))
-              .monospacedDigit()
-              .padding(.horizontal, 10)
-              .padding(.vertical, 6)
-              .foregroundStyle(selection == scale ? .primary : .secondary)
-              .background(selection == scale ? Color.white.opacity(0.12) : .clear, in: Capsule())
-          }
-          .buttonStyle(.plain)
-          .accessibilityAddTraits(selection == scale ? .isSelected : [])
+    HStack(spacing: 6) {
+      ForEach(scales) { scale in
+        Button {
+          withAnimation(.snappy(duration: 0.25)) { selection = scale }
+        } label: {
+          Text(scale.label)
+            .font(.system(.body, design: .rounded, weight: .semibold))
+            .monospacedDigit()
+            .lineLimit(1).minimumScaleFactor(0.7)
+            .padding(.horizontal, 12)
+            .frame(minWidth: 48, minHeight: 44)
+            .foregroundStyle(selection == scale ? .primary : .secondary)
+            .background(selection == scale ? Color.white.opacity(0.12) : .clear, in: Capsule())
+            .contentShape(Capsule())
         }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selection == scale ? .isSelected : [])
       }
-      .padding(3)
-      .glassEffect(.regular, in: Capsule())
     }
+    .frame(maxWidth: .infinity, alignment: .center)
   }
 }
 

@@ -1,6 +1,7 @@
 #if DEBUG
 import AggrAPI
 import AggrCore
+import AggrLiveline
 import Foundation
 import Testing
 @testable import AggrWatch
@@ -91,5 +92,55 @@ import Testing
   #expect(overview.totalValueUsd != nil)
   #expect(overview.portfolioChartPoints.count > 2)
   #expect(overview.breadth?.total == 3)
+}
+
+@Test @MainActor func minimalPriceInputHasNoForecastOrVolume() {
+  let env = PreviewData.environment()
+  let store = PreviewData.tokenStore(env)
+  let input = AggrPriceChart.input(coinId: "bitcoin", data: store.data, hull: store.hull, projection: store.projection,
+                                  scale: .d1, liveObservation: nil, showPrice: true, showMarketCap: true,
+                                  isLoading: false, hasObservedHistory: true, simplified: true)
+  #expect(input.series.map(\.id) == ["price", "marketCap", "mhull", "shull"])
+  for series in input.series {
+    #expect(!series.points.isEmpty)
+    #expect(series.points.allSatisfy { $0.value.isFinite })
+  }
+  let cap = input.series.first { $0.id == "marketCap" }!
+  #expect(cap.visible && cap.multiplier > 0 && cap.multiplier < 1)
+  #expect(input.volume.isEmpty)
+  #expect(input.band == nil)
+  #expect(input.projectionID == nil)
+  if case .historical(let range) = input.viewport {
+    #expect(range.upperBound - range.lowerBound <= 86_400)
+    #expect(range.upperBound == Double(store.data.line.last!.epochSeconds))
+    #expect(input.series.allSatisfy { $0.points.allSatisfy { range.contains($0.time) } })
+  } else { Issue.record("Expected a historical price window") }
+}
+
+@Test @MainActor func tokenPriceWindowUsesVisiblePeriodAndInterpolatesBoundary() {
+  let day = 86_400
+  let history: [TimePoint] = [
+    .init(epochSeconds: 0, value: 50),
+    .init(epochSeconds: day, value: 100),
+    .init(epochSeconds: day * 3, value: 200)
+  ]
+  let window = TokenPriceWindow(history: history, scale: .d1)
+  #expect(window.points.first?.epochSeconds == day * 2)
+  #expect(window.points.first?.value == 150)
+  #expect(!window.isPartial)
+  #expect(abs(window.percentChange(to: 180)! - 20) < 0.0001)
+  #expect(window.percentChange(to: nil) == nil)
+  #expect(window.dollarChange(to: 180) == 30)
+  #expect(window.dollarChange(to: 120) == -30)
+  #expect(window.dollarChange(to: nil) == nil)
+  #expect(history.first?.epochSeconds == 0)
+  let month = TokenPriceWindow(history: history, scale: .d30)
+  #expect(month.isPartial)
+  #expect(month.periodLabel(scale: .d30) == "Available history")
+  #expect(TokenPriceWindow(history: [], scale: .d1).percentChange(to: 200) == nil)
+  let sampledDay = TokenPriceWindow(history: [.init(epochSeconds: 300, value: 100), .init(epochSeconds: 3600, value: 110),
+                                              .init(epochSeconds: day, value: 120)], scale: .d1)
+  #expect(!sampledDay.isPartial)
+  #expect(sampledDay.periodLabel(scale: .d1) == "Past day")
 }
 #endif

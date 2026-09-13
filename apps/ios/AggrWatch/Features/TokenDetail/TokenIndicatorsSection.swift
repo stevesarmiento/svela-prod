@@ -37,8 +37,7 @@ struct TokenIndicatorsSection: View {
       SkeletonBlock(height: 14, width: 160)
       SkeletonBlock(height: 200)
     }
-    .padding(12)
-    .background(.background.secondary, in: .rect(cornerRadius: 18))
+    .padding(.vertical, 12)
   }
 
   // MARK: Cards
@@ -219,8 +218,7 @@ struct IndicatorCardFrame<ChartView: View, Badges: View>: View {
       .padding(.top, 6)
       .overlay(alignment: .top) { Divider().opacity(0.6) }
     }
-    .padding(12)
-    .background(.background.secondary, in: .rect(cornerRadius: 18))
+    .padding(.vertical, 12)
     .opacity(isPending ? 0.9 : 1)
   }
 }

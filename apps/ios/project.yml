@@ -12,6 +12,12 @@ configs:
 configFiles:
   Debug: Config/Debug.xcconfig
   Release: Config/Release.xcconfig
+settings:
+  base:
+    DEVELOPMENT_TEAM: GZ2BM4VMQU
+    CODE_SIGN_STYLE: Automatic
+    "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Development
+    "CODE_SIGN_IDENTITY[sdk=iphonesimulator*]": "-"
 packages:
   ConvexMobile:
     url: https://github.com/get-convex/convex-swift
@@ -19,6 +25,8 @@ packages:
   ClerkKit:
     url: https://github.com/clerk/clerk-ios
     exactVersion: 1.5.4
+  AggrLiveline:
+    path: Packages/AggrLiveline
   AggrCore:
     path: Packages/AggrCore
   AggrAPI:
@@ -32,6 +40,7 @@ targets:
         excludes:
           - "App/Info.plist"
     dependencies:
+      - package: AggrLiveline
       - package: AggrCore
       - package: AggrAPI
       - package: ClerkKit
@@ -72,7 +81,7 @@ targets:
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: YES
         CODE_SIGN_STYLE: Automatic
-        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_IDENTITY: "$(inherited)"
         TARGETED_DEVICE_FAMILY: "1,2"
         ENABLE_PREVIEWS: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -87,7 +96,6 @@ targets:
     settings:
       base:
         SWIFT_VERSION: "6.0"
-        CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: watch.aggr.ios.tests
   AggrWatchUITests:
@@ -99,7 +107,6 @@ targets:
     settings:
       base:
         SWIFT_VERSION: "6.0"
-        CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: watch.aggr.ios.uitests
 schemes:
@@ -117,5 +124,6 @@ schemes:
       targets:
         - AggrWatchTests
         - AggrWatchUITests
+        - package: AggrLiveline/AggrLivelineTests
         - package: AggrCore/AggrCoreTests
         - package: AggrAPI/AggrAPITests
