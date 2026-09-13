@@ -44,7 +44,7 @@ struct MultiLineComparisonChart: View {
       .chartYAxis {
         AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { v in
           AxisGridLine().foregroundStyle(Color.white.opacity(0.05))
-          AxisValueLabel { if let d = v.as(Double.self) { Text(UsdFormat.signedPercent(d, fractionDigits: 1)).font(.system(size: 9, design: .monospaced)) } }
+          AxisValueLabel { if let d = v.as(Double.self) { Text(UsdFormat.signedPercent(d, fractionDigits: 1)).font(.system(size: 9, design: .rounded).monospacedDigit()) } }
         }
       }
       .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) { v in AxisValueLabel { if let d = v.as(Date.self) { Text(d, format: .dateTime.month(.abbreviated).day()).font(.system(size: 9)) } } } }
@@ -55,7 +55,7 @@ struct MultiLineComparisonChart: View {
           ForEach(visible) { s in
             if let v = value(of: s, at: selectedDate), let y = proxy.position(forY: v) {
               Text("\(s.label) \(UsdFormat.signedPercent(v, fractionDigits: 1))")
-                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                .font(.system(size: 8, weight: .semibold, design: .rounded).monospacedDigit())
                 .padding(.horizontal, 4).padding(.vertical, 1)
                 .background(Color(oklch: s.color).opacity(0.9), in: Capsule())
                 .foregroundStyle(.black)

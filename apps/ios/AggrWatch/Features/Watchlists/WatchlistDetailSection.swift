@@ -2,8 +2,7 @@ import AggrAPI
 import AggrCore
 import SwiftUI
 
-/// Chart segment: selected group picker, aggregate chart (1D), coin rows with editable holdings
-/// (`chart-client.tsx` + `chart-table.tsx`). Multi-line chart + other time scales land in Phase 5.
+/// Selected watchlist comparison, with chart controls and editable token holdings.
 struct WatchlistDetailSection: View {
   @Environment(AppEnvironment.self) private var env
   @State private var scale: TimeScale = .d1
@@ -12,21 +11,7 @@ struct WatchlistDetailSection: View {
     let data = env.watchlistData
     VStack(spacing: 16) {
       HStack {
-        Menu {
-          ForEach(data.groups) { g in
-            Button { data.selectedGroupSlug = g.slug } label: {
-              Label { Text(g.name) } icon: { WatchlistGroupIconView(icon: g.icon, size: 16) }
-            }
-          }
-        } label: {
-          HStack(spacing: 8) {
-            WatchlistGroupIconView(icon: data.selectedGroup?.icon, size: 16)
-            Text(data.selectedGroup?.name ?? "Select watchlist").fontWeight(.semibold)
-            Image(systemName: "chevron.down").font(.caption.weight(.bold)).foregroundStyle(.secondary)
-          }
-          .padding(.horizontal, 12).padding(.vertical, 8)
-          .glassEffect(.regular.interactive(), in: Capsule())
-        }
+        Text("Performance").font(.subheadline.weight(.semibold))
         Spacer()
         TimeScalePicker(scales: TimeScale.overviewScales, selection: $scale)
       }
@@ -147,11 +132,18 @@ struct CoinRowsList: View {
     .padding(.horizontal, 16)
     .onAppear { register(items) }
     .onChange(of: items) { _, next in register(next) }
+    .onChange(of: env.router.showsWatchlistChooser) { _, choosing in
+      if choosing { env.selection.release(owner: "watchlist-\(group.id)") }
+      else { register(items) }
+    }
+    .onChange(of: env.router.tab) { _, tab in
+      if tab == .watchlists { register(items) }
+    }
     .onDisappear { env.selection.release(owner: "watchlist-\(group.id)") }
   }
 
   private func register(_ items: [WatchlistItem]) {
-    guard env.router.tab == .watchlists, env.router.watchlistsPath.isEmpty else { return }
+    guard env.router.tab == .watchlists, !env.router.showsWatchlistChooser, env.router.watchlistsPath.isEmpty else { return }
     let data = env.watchlistData
     env.selection.register(owner: "watchlist-\(group.id)", selectableIds: items.map(\.coinId), onRemove: { ids in
       _ = try await data.removeBulk(coinIds: ids, from: group.id)
@@ -172,7 +164,7 @@ struct CoinRow: View {
     }) {
     HStack(spacing: 12) {
     Button {
-      if env.selection.isActive { env.selection.toggle(item.coinId) } else { env.router.openToken(item.coinId, groupSlug: group.slug) }
+      if env.selection.isActive { env.selection.toggle(item.coinId) } else { env.router.openToken(item.coinId, groupSlug: group.slug, sourceID: "watchlist|\(group.id)|\(item.coinId)") }
     } label: {
       HStack(spacing: 12) {
         TokenLogo(symbol: quote?.symbol ?? item.coinId, imageURL: quote?.image, size: 34)
@@ -194,9 +186,11 @@ struct CoinRow: View {
       .contentShape(.rect)
     }
     .buttonStyle(.plain)
+    .accessibilityIdentifier("watchlist-token-\(item.coinId)")
       HoldingsCell(item: item, group: group, priceUsd: quote?.currentPrice)
     }
     }
+    .tokenTransitionSource("watchlist|\(group.id)|\(item.coinId)")
   }
 }
 

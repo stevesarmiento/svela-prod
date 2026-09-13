@@ -142,14 +142,14 @@ struct BreadthCard: View {
       ForEach(visible) { row in
         Button {
           env.watchlistData.selectedGroupSlug = row.slug
-          UserDefaults.standard.set("chart", forKey: "watchlists.wt")
+          env.router.showsWatchlistChooser = false
           env.router.tab = .watchlists
         } label: {
           HStack(spacing: 8) {
             Circle().fill(Color(oklch: ColorThemes.resolve(row.color).background)).frame(width: 8, height: 8)
             Text(row.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
             Spacer()
-            Text(UsdFormat.signedPercent(row.changePct)).font(.system(size: 12, design: .monospaced)).foregroundStyle(tint(row.changePct))
+            Text(UsdFormat.signedPercent(row.changePct)).font(.system(size: 12, design: .rounded).monospacedDigit()).foregroundStyle(tint(row.changePct))
             TickMeter(value: row.changePct, min: -maxAbs, max: maxAbs, origin: .value(0), color: tint(row.changePct))
               .frame(width: 96, height: 8)
           }
@@ -217,7 +217,7 @@ struct EventCard: View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(alignment: .top) {
         HStack(spacing: 6) {
-          Button { env.router.openToken(event.coingeckoId) } label: {
+          Button { env.router.openToken(event.coingeckoId, sourceID: "event|\(event.id)") } label: {
             HStack(spacing: 5) {
               TokenLogo(symbol: event.symbol, imageURL: event.logoUrl, size: 14)
               Text(event.symbol.uppercased()).font(.system(size: 13, weight: .semibold))
@@ -226,6 +226,7 @@ struct EventCard: View {
             .background(.white.opacity(0.1), in: Capsule())
           }
           .buttonStyle(.plain)
+          .tokenTransitionSource("event|\(event.id)")
           if let pct = event.percent, pct.isFinite { PercentBadge(pct: pct, compact: true) }
           if let s = event.sentiment { SentimentBadge(sentiment: s) }
           if let c = event.aiCategory, let label = FeedHelpers.categoryLabel(c) { CategoryBadge(label: label) }
@@ -250,7 +251,7 @@ struct SentimentBadge: View {
   var body: some View {
     let color: Color = sentiment == .bullish ? .gainGreen : (sentiment == .bearish ? .lossRed : .yellow)
     Text(FeedHelpers.sentimentLabel(sentiment))
-      .font(.system(size: 11, weight: .semibold, design: .monospaced))
+      .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
       .padding(.horizontal, 7).frame(height: 22)
       .foregroundStyle(color).background(color.opacity(0.12), in: Capsule())
   }
@@ -259,7 +260,7 @@ struct SentimentBadge: View {
 struct CategoryBadge: View {
   let label: String
   var body: some View {
-    Text(label).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+    Text(label).font(.system(size: 11, design: .rounded).monospacedDigit()).foregroundStyle(.secondary)
       .padding(.horizontal, 7).frame(height: 22)
       .overlay(Capsule().strokeBorder(.white.opacity(0.12)))
   }

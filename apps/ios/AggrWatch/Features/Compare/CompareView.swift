@@ -225,7 +225,7 @@ struct WatchlistAccordionTable: View {
           try await data.remove(coinId: item.coinId, from: g.id)
         }) {
           Button {
-            if env.selection.isActive { env.selection.toggle(key) } else { env.router.openToken(item.coinId, groupSlug: g.slug) }
+            if env.selection.isActive { env.selection.toggle(key) } else { env.router.openToken(item.coinId, groupSlug: g.slug, sourceID: "compare|\(key)") }
           } label: {
             HStack(spacing: 8) {
               TokenLogo(symbol: q?.symbol ?? item.coinId, imageURL: q?.image, size: 18)
@@ -243,6 +243,7 @@ struct WatchlistAccordionTable: View {
           }
           .buttonStyle(.plain)
         }
+        .tokenTransitionSource("compare|\(key)")
       }
     }
   }

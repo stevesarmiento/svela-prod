@@ -66,7 +66,7 @@ struct WatchlistCardView: View {
               if change.isEstimate { Text("≈").foregroundStyle(.white.opacity(0.5)) }
               Text(UsdFormat.signedPercent(change.value))
             }
-            .font(.system(.subheadline, design: .monospaced).weight(.bold))
+            .font(.system(.subheadline, design: .rounded).monospacedDigit().weight(.bold))
             .foregroundStyle(Color(oklch: theme.accentText))
             .contentTransition(.numericText())
           } else {

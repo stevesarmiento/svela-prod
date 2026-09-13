@@ -45,6 +45,9 @@ import Testing
   await store.load(force: true)
   #expect(store.error == nil)
   #expect(store.data.line.count > 2)
+  let now = Int(Date.now.timeIntervalSince1970)
+  #expect(store.data.line.allSatisfy { (now - 30 * 86_400...now + 86_400).contains($0.epochSeconds) })
+  #expect(store.data.marketCap.allSatisfy { (now - 30 * 86_400...now + 86_400).contains($0.epochSeconds) })
   #expect(!store.isLoading)
   store.stop()
 }

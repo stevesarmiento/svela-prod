@@ -79,7 +79,7 @@ struct IndicatorExplainSheet<ChartView: View, Badges: View>: View {
           Text("N/A").foregroundStyle(.secondary)
         }
       }
-      .font(.system(.caption, design: .monospaced).weight(.bold))
+      .font(.system(.caption, design: .rounded).monospacedDigit().weight(.bold))
       .foregroundStyle((change ?? 0) >= 0 ? Color.gainGreen : Color.lossRed)
     }
   }

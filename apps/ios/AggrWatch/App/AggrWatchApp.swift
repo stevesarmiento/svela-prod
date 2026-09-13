@@ -1,6 +1,7 @@
 import AggrAPI
 import ClerkKit
 import SwiftUI
+import UIKit
 
 @main
 struct AggrWatchApp: App {
@@ -8,6 +9,7 @@ struct AggrWatchApp: App {
   @Environment(\.scenePhase) private var scenePhase
 
   init() {
+    AppTypography.configureNavigation()
     #if DEBUG
     if PreviewData.isRunning {
       _environment = State(initialValue: PreviewData.environment())
@@ -50,3 +52,16 @@ struct AggrWatchApp: App {
   PreviewHost(navigation: false) { _ in RootView() }
 }
 #endif
+
+/// Native navigation chrome does not always inherit SwiftUI's font design environment.
+@MainActor enum AppTypography {
+  static func configureNavigation() {
+    func rounded(_ style: UIFont.TextStyle) -> UIFont {
+      let base = UIFont.preferredFont(forTextStyle: style)
+      return UIFont(descriptor: base.fontDescriptor.withDesign(.rounded) ?? base.fontDescriptor, size: 0)
+    }
+    UINavigationBar.appearance().titleTextAttributes = [.font: rounded(.headline)]
+    UINavigationBar.appearance().largeTitleTextAttributes = [.font: rounded(.largeTitle)]
+    UIBarButtonItem.appearance().setTitleTextAttributes([.font: rounded(.body)], for: .normal)
+  }
+}

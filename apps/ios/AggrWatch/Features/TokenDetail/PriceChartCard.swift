@@ -140,7 +140,7 @@ struct LegendToggle: View {
     Button { withAnimation(.snappy) { isOn.toggle() } } label: {
       HStack(spacing: 5) {
         Circle().fill(color).frame(width: 6, height: 6)
-        Text(title).font(.system(size: 9, weight: .semibold, design: .monospaced)).tracking(1)
+        Text(title).font(.system(size: 9, weight: .semibold, design: .rounded).monospacedDigit()).tracking(1)
       }
       .padding(.horizontal, 8).padding(.vertical, 5)
       .foregroundStyle(isOn ? .primary : .secondary)
@@ -154,18 +154,23 @@ struct LegendToggle: View {
 /// LIVE / WARM / CACHED pill with pulsing dot (`spotStatus`).
 struct SpotStatusPill: View {
   let status: RealtimeQuoteStatus
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   var body: some View {
     if status != .disabled {
       HStack(spacing: 4) {
-        Circle().fill(color).frame(width: 5, height: 5)
-          .phaseAnimator([0.4, 1.0]) { view, phase in view.opacity(status == .realtime ? phase : 1) } animation: { _ in .easeInOut(duration: 0.9) }
-        Text(status.label).font(.system(size: 8, weight: .bold, design: .monospaced)).tracking(1)
+        if status == .realtime, !reduceMotion {
+          dot.phaseAnimator([0.4, 1.0]) { view, phase in view.opacity(phase) } animation: { _ in .easeInOut(duration: 0.9) }
+        } else {
+          dot
+        }
+        Text(status.label).font(.system(size: 8, weight: .bold, design: .rounded).monospacedDigit()).tracking(1)
       }
       .padding(.horizontal, 6).padding(.vertical, 3)
       .foregroundStyle(color)
       .background(color.opacity(0.12), in: Capsule())
     }
   }
+  private var dot: some View { Circle().fill(color).frame(width: 5, height: 5) }
   private var color: Color {
     switch status { case .realtime: .gainGreen; case .lastKnown: .yellow; default: .secondary }
   }

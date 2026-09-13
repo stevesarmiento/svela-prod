@@ -69,6 +69,7 @@ struct PreviewHost<Content: View>: View {
 
   init(state: PreviewData.State = .populated, signedIn: Bool = true, tab: AppTab = .overview,
        navigation: Bool = true, @ViewBuilder content: @escaping (AppEnvironment) -> Content) {
+    AppTypography.configureNavigation()
     _env = State(initialValue: PreviewData.environment(state: state, signedIn: signedIn, tab: tab))
     self.navigation = navigation
     self.content = content
@@ -82,6 +83,8 @@ struct PreviewHost<Content: View>: View {
     .environment(env)
     .environment(env.toasts)
     .preferredColorScheme(.dark)
+    .fontDesign(.rounded)
+    .tint(Color("AccentColor"))
     .task { env.watchlistData.start() }
     .onDisappear { env.watchlistData.pause(); env.realtime.stopAll() }
   }

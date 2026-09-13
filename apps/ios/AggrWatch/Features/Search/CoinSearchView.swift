@@ -108,9 +108,10 @@ struct CoinSearchView: View {
       .disabled(target == nil || pendingIds.contains(coin.id))
     }
     .contentShape(.rect)
+    .tokenTransitionSource("search|\(coin.id)")
     .onTapGesture {
       if mode == .navigate {
-        env.router.openToken(coin.id, groupSlug: target?.slug)
+        env.router.openToken(coin.id, groupSlug: target?.slug, sourceID: "search|\(coin.id)")
       } else {
         Task { await toggle(coin, target: target, currentlyIn: inTarget) }
       }

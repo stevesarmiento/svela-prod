@@ -7,6 +7,7 @@ If the project is missing a newly added file, run `xcodegen generate` from `apps
 ## Useful starting points
 
 - `Navigation/MainTabView.swift`: icon-only navigation and selection replacing the tab bar.
+- `Navigation/TokenPresentationView.swift`: an interactive comparison where tapping a token expands its full-screen detail page; pull down from the header or tap the token logo to return, and tap the watchlist icon to open the card chooser. The page opens from its token row. Header pulls scale the rounded page around its center, then collapse it into the original row at 80% size; shorter pulls reset. Horizontal gestures and content scrolling stay independent.
 - `Features/Watchlists/WatchlistsView.swift`: populated, empty, loading, error, and grid views.
 - `Features/Watchlists/WatchlistDetailSection.swift`: separate token cards, holdings, and group charts.
 - `Features/Selection/TokenSwipeCard.swift`: interactive right-select and left-remove gestures.

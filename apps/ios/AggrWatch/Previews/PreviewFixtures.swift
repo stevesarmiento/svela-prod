@@ -84,7 +84,8 @@ nonisolated enum PreviewFixtures {
     let price = quotes.first { $0.id == id }?.currentPrice ?? 67_420
     let factor = price / 67_420
     func points(_ multiplier: Double) -> [[String: Double]] {
-      line.map { ["time": Double($0.epochSeconds) * 1000, "value": $0.value * multiplier] }
+      // The web market-chart endpoints already normalize their `time` values to seconds.
+      line.map { ["time": Double($0.epochSeconds), "value": $0.value * multiplier] }
     }
     switch url.path {
     case "/api/coingecko/quotes": return data(["data": object(Dictionary(uniqueKeysWithValues: quotes.map { ($0.id, $0) }))])

@@ -9,6 +9,7 @@ enum AppTab: Hashable {
 
 struct MainTabView: View {
   @Environment(AppEnvironment.self) private var env
+  @State private var tokenSources = TokenTransitionSources()
 
   var body: some View {
     @Bindable var router = env.router
@@ -54,7 +55,13 @@ struct MainTabView: View {
         Image(systemName: "magnifyingglass").accessibilityLabel("Search")
       }
     }
+    .environment(\.tokenTransitionSources, tokenSources)
     .tabBarMinimizeBehavior(.onScrollDown)
+    .background {
+      TokenPagePresenter(token: $router.tokenPresentation, env: env, sources: tokenSources,
+                         otherSheetPresented: router.sheet != nil)
+        .frame(width: 0, height: 0)
+    }
     .onChange(of: router.tab) { _, _ in env.selection.clear() }
     .sheet(item: $router.sheet) { sheet in
       switch sheet {
@@ -96,7 +103,7 @@ private struct SelectionNavigationModifier: ViewModifier {
   func body(content: Content) -> some View {
     content
       .toolbar(selecting ? .hidden : .visible, for: .tabBar)
-      .navigationBarTitleDisplayMode(selecting ? .inline : .automatic)
+      .navigationBarTitleDisplayMode(selecting || tab == .watchlists ? .inline : .automatic)
       .toolbar {
         if selecting {
           ToolbarItem(placement: .principal) {

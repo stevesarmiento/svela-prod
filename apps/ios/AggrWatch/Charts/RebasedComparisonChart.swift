@@ -40,7 +40,7 @@ struct RebasedComparisonChart: View {
       .chartYAxis {
         AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { v in
           AxisGridLine().foregroundStyle(Color.white.opacity(0.05))
-          AxisValueLabel { if let d = v.as(Double.self) { Text(String(format: "%.0f", d)).font(.system(size: 9, design: .monospaced)) } }
+          AxisValueLabel { if let d = v.as(Double.self) { Text(String(format: "%.0f", d)).font(.system(size: 9, design: .rounded).monospacedDigit()) } }
         }
       }
       .chartXAxis {

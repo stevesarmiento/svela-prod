@@ -27,7 +27,7 @@ struct IndicatorPaneModifier: ViewModifier {
       .chartYAxis {
         AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { _ in
           AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
-          AxisValueLabel().font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
+          AxisValueLabel().font(.system(size: 9, design: .rounded).monospacedDigit()).foregroundStyle(.secondary)
         }
       }
       .frame(height: height)

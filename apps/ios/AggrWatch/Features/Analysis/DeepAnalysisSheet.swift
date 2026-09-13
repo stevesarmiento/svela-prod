@@ -86,7 +86,7 @@ struct AnalysisTokenHeader: View {
       VStack(alignment: .leading, spacing: 2) {
         Text(LogoOverrides.cleanTokenName(quote?.name ?? coinId)).font(.headline)
         HStack(spacing: 6) {
-          if let p = quote?.currentPrice { Text(UsdFormat.price(p)).font(.system(.subheadline, design: .monospaced)) }
+          if let p = quote?.currentPrice { Text(UsdFormat.price(p)).font(.system(.subheadline, design: .rounded).monospacedDigit()) }
           PercentBadge(pct: quote?.priceChangePercentage24h, compact: true)
         }
       }
@@ -237,7 +237,7 @@ struct ComparativeStatsPanel: View {
         }
       }
     }
-    .font(.system(.caption2, design: .monospaced))
+    .font(.system(.caption2, design: .rounded).monospacedDigit())
     .padding(12)
     .background(.background.secondary, in: .rect(cornerRadius: 14))
   }

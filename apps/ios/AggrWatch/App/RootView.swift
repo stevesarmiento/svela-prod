@@ -32,6 +32,8 @@ struct RootView: View {
           .environment(env.toasts)
       }
     }
+    .fontDesign(.rounded)
+    .tint(Color("AccentColor"))
     .task(id: BootstrapKey(userId: clerk.user?.id, convexStatus: env.convex.authStatus)) {
       #if DEBUG
       if env.convex.isPreview { return }

@@ -65,7 +65,7 @@ struct StatTile: View {
   var tint: Color = .primary
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
-      Text(value).font(.system(.subheadline, design: .monospaced).weight(.semibold)).foregroundStyle(tint).lineLimit(1)
+      Text(value).font(.system(.subheadline, design: .rounded).monospacedDigit().weight(.semibold)).foregroundStyle(tint).lineLimit(1)
       Text(label.uppercased()).font(.system(size: 10)).tracking(0.6).foregroundStyle(.secondary).lineLimit(1)
     }
     .frame(maxWidth: .infinity, alignment: .leading)

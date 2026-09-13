@@ -6,6 +6,7 @@ import SwiftUI
 struct TokenDetailView: View {
   let coinId: String
   let groupSlug: String?
+  var onClose: (() -> Void)? = nil
   @Environment(AppEnvironment.self) private var env
   @State private var store: TokenChartStore?
   @State private var scale: TimeScale = .d30
@@ -51,12 +52,26 @@ struct TokenDetailView: View {
     }
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
-      ToolbarItem(placement: .principal) {
-        HStack(spacing: 8) {
-          TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 24)
-          VStack(spacing: 0) {
-            Text((quote?.symbol ?? coinId).uppercased()).font(.headline)
-            Text(Date.now, format: .dateTime.weekday(.wide).month(.abbreviated).day()).font(.caption2).foregroundStyle(.secondary)
+      if let onClose {
+        ToolbarItem(placement: .topBarLeading) {
+          Button(action: onClose) {
+            TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 44)
+          }
+          .buttonStyle(.plain)
+          .glassEffect(.regular.interactive(), in: .circle)
+          .accessibilityLabel("Close token")
+          .accessibilityIdentifier("token-page-close")
+        }
+        .sharedBackgroundVisibility(.hidden)
+        ToolbarItem(placement: .topBarLeading) {
+          tokenTitle(symbol: quote?.symbol ?? coinId)
+        }
+        .sharedBackgroundVisibility(.hidden)
+      } else {
+        ToolbarItem(placement: .principal) {
+          HStack(spacing: 8) {
+            TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 24)
+            tokenTitle(symbol: quote?.symbol ?? coinId)
           }
         }
       }
@@ -98,6 +113,13 @@ struct TokenDetailView: View {
       store?.stop()
       feed?.stop()
       env.realtime.unsubscribe(coingeckoId: coinId)
+    }
+  }
+  private func tokenTitle(symbol: String) -> some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Text(symbol.uppercased()).font(.headline).lineLimit(1)
+      Text(Date.now, format: .dateTime.month(.abbreviated).day())
+        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
     }
   }
 }

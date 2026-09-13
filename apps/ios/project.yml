@@ -76,6 +76,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         ENABLE_PREVIEWS: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: aggr-blueprint aggr-testflight
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
   AggrWatchTests:
     type: bundle.unit-test
@@ -89,12 +90,25 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: watch.aggr.ios.tests
+  AggrWatchUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [AggrWatchUITests]
+    dependencies:
+      - target: AggrWatch
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_IDENTITY: "-"
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: watch.aggr.ios.uitests
 schemes:
   AggrWatch:
     build:
       targets:
         AggrWatch: all
         AggrWatchTests: [test]
+        AggrWatchUITests: [test]
     run:
       config: Debug
     test:
@@ -102,5 +116,6 @@ schemes:
       gatherCoverageData: false
       targets:
         - AggrWatchTests
+        - AggrWatchUITests
         - package: AggrCore/AggrCoreTests
         - package: AggrAPI/AggrAPITests

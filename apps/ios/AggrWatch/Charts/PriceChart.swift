@@ -88,7 +88,7 @@ struct PriceChart: View {
     .chartYAxis {
       AxisMarks(position: .trailing, values: .automatic(desiredCount: 5)) { value in
         AxisGridLine().foregroundStyle(Color.white.opacity(0.06))
-        AxisValueLabel { if let v = value.as(Double.self) { Text(UsdFormat.price(v)).font(.system(size: 9, design: .monospaced)) } }
+        AxisValueLabel { if let v = value.as(Double.self) { Text(UsdFormat.price(v)).font(.system(size: 9, design: .rounded).monospacedDigit()) } }
       }
     }
     .chartXAxis {
@@ -187,9 +187,9 @@ struct PriceChart: View {
   private func annotationContent(_ price: [Pt]) -> some ChartContent {
     if price.count >= 2, let hi = price.max(by: { $0.value < $1.value }), let lo = price.min(by: { $0.value < $1.value }) {
       PointMark(x: .value("t", hi.date), y: .value("v", hi.value)).symbolSize(0)
-        .annotation(position: .top, spacing: 2, overflowResolution: .init(x: .fit, y: .disabled)) { Text(UsdFormat.price(hi.value)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary).fixedSize() }
+        .annotation(position: .top, spacing: 2, overflowResolution: .init(x: .fit, y: .disabled)) { Text(UsdFormat.price(hi.value)).font(.system(size: 9, design: .rounded).monospacedDigit()).foregroundStyle(.secondary).fixedSize() }
       PointMark(x: .value("t", lo.date), y: .value("v", lo.value)).symbolSize(0)
-        .annotation(position: .bottom, spacing: 2, overflowResolution: .init(x: .fit, y: .disabled)) { Text(UsdFormat.price(lo.value)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary).fixedSize() }
+        .annotation(position: .bottom, spacing: 2, overflowResolution: .init(x: .fit, y: .disabled)) { Text(UsdFormat.price(lo.value)).font(.system(size: 9, design: .rounded).monospacedDigit()).foregroundStyle(.secondary).fixedSize() }
     }
     if let last = price.last {
       PointMark(x: .value("t", last.date), y: .value("v", last.value)).symbolSize(28).foregroundStyle(.white)
@@ -244,7 +244,7 @@ struct VolumeChart: View {
     .chartXAxis(.hidden)
     .chartYAxis {
       AxisMarks(position: .trailing, values: .automatic(desiredCount: 2)) { value in
-        AxisValueLabel { if let v = value.as(Double.self) { Text(UsdFormat.largeUsd(v)).font(.system(size: 8, design: .monospaced)) } }
+        AxisValueLabel { if let v = value.as(Double.self) { Text(UsdFormat.largeUsd(v)).font(.system(size: 8, design: .rounded).monospacedDigit()) } }
       }
     }
     .chartLegend(.hidden)

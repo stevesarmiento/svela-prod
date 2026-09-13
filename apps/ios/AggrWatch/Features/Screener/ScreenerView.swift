@@ -116,8 +116,9 @@ private struct ScreenerContent: View {
             SelectableRow(id: row.coingeckoId) {
               ScreenerRowView(row: row, taker: store.takerById[row.coingeckoId], takerLoading: store.takerLoading)
                 .contentShape(.rect)
-                .onTapGesture { if env.selection.isActive { env.selection.toggle(row.coingeckoId) } else { env.router.openToken(row.coingeckoId) } }
+                .onTapGesture { if env.selection.isActive { env.selection.toggle(row.coingeckoId) } else { env.router.openToken(row.coingeckoId, sourceID: "screener|\(row.coingeckoId)") } }
             }
+            .tokenTransitionSource("screener|\(row.coingeckoId)")
             .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
@@ -150,7 +151,7 @@ struct ScreenerRowView: View {
         Text(row.symbol.uppercased()).font(.subheadline.weight(.bold))
         Text(LogoOverrides.cleanTokenName(row.name)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
         Spacer()
-        if loading { SkeletonBlock(height: 12, width: 64) } else { UsdText(value: row.currentPrice, font: .system(.footnote, design: .monospaced)) }
+        if loading { SkeletonBlock(height: 12, width: 64) } else { UsdText(value: row.currentPrice, font: .system(.footnote, design: .rounded).monospacedDigit()) }
       }
       HStack(spacing: 10) {
         if loading {
@@ -179,7 +180,7 @@ struct ScreenerRowView: View {
   private func statText(_ label: String, _ value: String) -> some View {
     HStack(spacing: 4) {
       Text(label).font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
-      Text(value).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+      Text(value).font(.system(size: 11, design: .rounded).monospacedDigit()).foregroundStyle(.secondary)
     }
   }
 }
@@ -212,7 +213,7 @@ struct TakerVolumeCell: View {
             Image(systemName: "triangle.fill").font(.system(size: 5)).rotationEffect(.degrees(buyPct < 50 ? 180 : 0))
             Text(String(format: "%.1f%%", buyPct >= 50 ? buyPct : 100 - buyPct))
           }
-          .font(.system(size: 11, weight: .semibold, design: .monospaced))
+          .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
           .foregroundStyle(badgeColor)
           .padding(.horizontal, 6).padding(.vertical, 2)
           .background(badgeColor.opacity(skew == 0 ? 0.08 : 0.12), in: Capsule())
@@ -282,7 +283,7 @@ struct FreshnessIndicator: View {
         .phaseAnimator([0.3, 1]) { v, p in v.opacity(isRefreshing ? p : 1) } animation: { _ in .easeInOut(duration: 0.8) }
       Text(isRefreshing ? "Refreshing…" : "Updated:").font(.system(size: 10)).foregroundStyle(.tertiary)
       Text(lastUpdatedAtMs.map { Date(timeIntervalSince1970: $0 / 1000).formatted(.dateTime.month(.abbreviated).day().hour().minute()) } ?? "—")
-        .font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+        .font(.system(size: 10, design: .rounded).monospacedDigit()).foregroundStyle(.secondary)
     }
   }
 }
@@ -450,7 +451,7 @@ struct FilterEditorSheet: View {
       breadcrumb
       List(ScreenFilterOp.allCases, id: \.self) { o in
         Button { op = o; withAnimation { stage = 2 } } label: {
-          HStack { Text(o.symbol).font(.system(.body, design: .monospaced)).frame(width: 28); Text(o.label) }
+          HStack { Text(o.symbol).font(.system(.body, design: .rounded).monospacedDigit()).frame(width: 28); Text(o.label) }
         }
       }
     }

@@ -20,7 +20,7 @@ struct PercentBadge: View {
         Text("N/A")
       }
     }
-    .font(.system(size: compact ? 11 : 12, weight: .semibold, design: .monospaced))
+    .font(.system(size: compact ? 11 : 12, weight: .semibold, design: .rounded).monospacedDigit())
     .foregroundStyle(tint(value))
     .padding(.horizontal, compact ? 5 : 7)
     .padding(.vertical, compact ? 2 : 3)

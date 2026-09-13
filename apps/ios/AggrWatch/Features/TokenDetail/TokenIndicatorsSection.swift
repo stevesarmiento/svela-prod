@@ -238,7 +238,7 @@ struct IndicatorStat: View {
   var body: some View {
     HStack(spacing: 6) {
       Text(label.uppercased()).font(.system(size: 9)).tracking(0.5).foregroundStyle(.secondary)
-      Text(value).font(.system(size: 12, design: .monospaced)).foregroundStyle(tint).lineLimit(1)
+      Text(value).font(.system(size: 12, design: .rounded).monospacedDigit()).foregroundStyle(tint).lineLimit(1)
       if let meter {
         TickMeter(value: meter.value, min: meter.min, max: meter.max, origin: meter.origin, color: meterTint ?? tint)
       }

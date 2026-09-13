@@ -22,6 +22,7 @@ struct TimeScalePicker: View {
               .background(selection == scale ? Color.white.opacity(0.12) : .clear, in: Capsule())
           }
           .buttonStyle(.plain)
+          .accessibilityAddTraits(selection == scale ? .isSelected : [])
         }
       }
       .padding(3)

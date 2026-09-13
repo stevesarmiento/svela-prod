@@ -4,10 +4,9 @@ import ClerkKit
 import ClerkKitUI
 import SwiftUI
 
-/// Matches the web settings scope: profile and working account/authentication actions.
-/// Stored preference fields are not surfaced until a feature actually consumes them.
+/// Account actions plus device-specific appearance settings.
 struct SettingsView: View {
-  private enum Destination: Hashable { case account }
+  private enum Destination: Hashable { case account, appIcon }
   @Environment(AppEnvironment.self) private var env
   @Environment(\.dismiss) private var dismiss
   @State private var path = NavigationPath()
@@ -19,6 +18,13 @@ struct SettingsView: View {
       List {
         Section { ProfileCardView(user: env.clerkSession.user) }
           .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
+
+        Section("Appearance") {
+          NavigationLink(value: Destination.appIcon) {
+            Label("App Icon", systemImage: "app.dashed")
+          }
+          .accessibilityIdentifier("settings-app-icon")
+        }
 
         Section {
           NavigationLink(value: Destination.account) {
@@ -44,7 +50,11 @@ struct SettingsView: View {
       }
       .navigationTitle("Settings")
       .navigationBarTitleDisplayMode(.inline)
-      .navigationDestination(for: Destination.self) { _ in
+      .navigationDestination(for: Destination.self) { destination in
+        switch destination {
+        case .appIcon:
+          AppIconPickerView()
+        case .account:
         // Share the parent path so Clerk's profile/security pages have a working back stack.
         // Clerk gates passkeys, MFA, sessions and deletion on actual account capabilities.
         #if DEBUG
@@ -56,6 +66,7 @@ struct SettingsView: View {
         #else
         accountView
         #endif
+        }
       }
       .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } } }
     }
@@ -96,7 +107,7 @@ struct ProfileCardView: View {
         Text(name).font(.headline)
         if let email { Text(email).font(.caption).foregroundStyle(.secondary) }
         HStack(spacing: 8) {
-          Text(Self.memberId(seed: user?.id ?? "anonymous")).font(.system(.caption2, design: .monospaced))
+          Text(Self.memberId(seed: user?.id ?? "anonymous")).font(.system(.caption2, design: .rounded).monospacedDigit())
           if let d = user?.createdAt { Text("Issued \(d.formatted(.dateTime.month(.abbreviated).day(.twoDigits).year()))").font(.caption2).foregroundStyle(.secondary) }
         }
       }

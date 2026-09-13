@@ -57,7 +57,7 @@ struct MarketMetricsGrid: View {
             case .performance(let usd, let pct): MoveWithBadge(usdMove: usd, pct: pct)
             }
           }
-          .font(.system(.footnote, design: .monospaced))
+          .font(.system(.footnote, design: .rounded).monospacedDigit())
           .opacity(isPending ? 0.7 : 1)
         }
         .frame(maxWidth: .infinity)
