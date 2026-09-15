@@ -33,7 +33,7 @@ struct MarketFeedSheet: View {
           Button { store.cycleSize() } label: { Text("\(store.feedSize) items").font(.caption.weight(.semibold)) }
             .accessibilityLabel("Pull \(store.feedSize) items. Tap to choose the next amount.")
           Button { Task { await store.refresh() } } label: {
-            if store.isRefreshing { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.clockwise") }
+            if store.isRefreshing { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.trianglehead.clockwise") }
           }
           .disabled(store.isRefreshing || !env.isReadyForUserData)
         }
@@ -83,7 +83,7 @@ struct MarketFeedSheet: View {
       Label("Neutral", systemImage: "thermometer.low").font(.caption2).foregroundStyle(.secondary)
         .padding(.horizontal, 6).padding(.vertical, 2).background(.white.opacity(0.06), in: .capsule)
     case nil:
-      Label("Analyzing", systemImage: "sparkles").font(.caption2).foregroundStyle(.secondary).symbolEffect(.pulse)
+      Label("Analyzing", systemImage: "arrow.turn.down.right").font(.caption2).foregroundStyle(.secondary).symbolEffect(.pulse)
         .padding(.horizontal, 6).padding(.vertical, 2).background(.white.opacity(0.06), in: .capsule)
     }
   }

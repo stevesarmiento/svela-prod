@@ -1,69 +1,80 @@
 import AggrCore
-import Charts
+import AggrLiveline
 import SwiftUI
 
-/// `overview-performance-chart.tsx`: portfolio vs market, both rebased to 100; scrub reports the nearest time.
+/// Native Liveline counterpart to the web's portfolio / global market comparison.
+/// Both lines share a baseline of 100; dollar readouts remain in the overview header.
 struct RebasedComparisonChart: View {
   let portfolio: [TimePoint]
   let market: [TimePoint]
   @Binding var scrubTime: Int?
-  @State private var selected: Date?
+  var scale: TimeScale = .d1
+  var isActive = true
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  private struct Pt: Identifiable { let id: String; let date: Date; let value: Double; let series: String }
+  static func input(portfolio: [TimePoint], market: [TimePoint], scale: TimeScale) -> LivelineInput {
+    func points(_ source: [TimePoint]) -> [LivelinePoint] {
+      source.filter { $0.value.isFinite }.map { .init(time: Double($0.epochSeconds), value: $0.value) }
+        .sorted { $0.time < $1.time }
+    }
+    let p = points(portfolio), m = points(market)
+    let times = (p + m).map(\.time)
+    let start = times.min() ?? 0, end = times.max() ?? 1
+    return .init(id: "overview|\(scale.rawValue)", series: [
+      .init(id: "portfolio", points: p, width: 2.5),
+      .init(id: "market", points: m, color: .init(0.42, 0.82, 0.73, 0.55), width: 1.5)
+    ], primaryID: p.isEmpty ? "market" : "portfolio", viewport: .historical(start...max(start + 60, end)),
+      state: times.isEmpty ? .empty : .ready)
+  }
 
   var body: some View {
-    let pts = portfolio.map { Pt(id: "p\($0.epochSeconds)", date: $0.date, value: $0.value, series: "Portfolio") }
-      + market.map { Pt(id: "m\($0.epochSeconds)", date: $0.date, value: $0.value, series: "Market") }
-    let all = (portfolio + market).sorted { $0.epochSeconds < $1.epochSeconds }
-    let includeYear = (all.last?.epochSeconds ?? 0) - (all.first?.epochSeconds ?? 0) > 180 * 86_400
-    let pLast = portfolio.last?.value, mLast = market.last?.value
-    VStack(alignment: .leading, spacing: 6) {
-      HStack(spacing: 12) {
-        if let pLast { legend("Portfolio \(UsdFormat.signedPercent(pLast - 100))", Color(oklch: "oklch(0.9276 0.0058 264.53)")) }
-        if let mLast { legend("Market \(UsdFormat.signedPercent(mLast - 100))", Color(oklch: "oklch(0.7845 0.1325 181.91 / 0.8)")) }
+    VStack(alignment: .leading, spacing: 10) {
+      HStack(spacing: 16) {
+        if let value = readout(portfolio) { legend("Portfolio", value, .white) }
+        if let value = readout(market) { legend("Market", value, .mint.opacity(0.8)) }
       }
-      Chart {
-        RuleMark(y: .value("Base", 100)).foregroundStyle(Color.white.opacity(0.12)).lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-        ForEach(pts) { p in
-          LineMark(x: .value("Time", p.date), y: .value("Index", p.value), series: .value("Series", p.series))
-            .interpolationMethod(.monotone)
-            .foregroundStyle(by: .value("Series", p.series))
-            .lineStyle(StrokeStyle(lineWidth: p.series == "Portfolio" ? 1.8 : 1.4))
-        }
-        if let selected {
-          RuleMark(x: .value("Selected", selected)).foregroundStyle(Color.white.opacity(0.3)).lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
-        }
-      }
-      .chartForegroundStyleScale(["Portfolio": Color(oklch: "oklch(0.9276 0.0058 264.53)"), "Market": Color(oklch: "oklch(0.7845 0.1325 181.91 / 0.25)")])
-      .chartXSelection(value: $selected)
-      .chartYScale(domain: .automatic(includesZero: false))
-      .chartYAxis {
-        AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { v in
-          AxisGridLine().foregroundStyle(Color.white.opacity(0.05))
-          AxisValueLabel { if let d = v.as(Double.self) { Text(String(format: "%.0f", d)).font(.system(size: 9, design: .rounded).monospacedDigit()) } }
-        }
-      }
-      .chartXAxis {
-        AxisMarks(values: .automatic(desiredCount: 4)) { v in
-          AxisValueLabel { if let d = v.as(Date.self) { Text(d, format: includeYear ? .dateTime.month(.abbreviated).day().year() : .dateTime.month(.abbreviated).day()).font(.system(size: 9)) } }
-        }
-      }
-      .chartLegend(.hidden)
-      .onChange(of: selected) { _, d in
-        scrubTime = d.flatMap { OverviewPerformance.closestTime(all, to: Int($0.timeIntervalSince1970)) }
-      }
+      let input = Self.input(portfolio: portfolio, market: market, scale: scale)
+      var config = LivelineConfiguration()
+      let _ = {
+        config.fill = false; config.grid = false; config.badge = false
+        config.pulse = false; config.extrema = false; config.timeAxis = false
+        config.referenceValue = 100; config.reduceMotion = reduceMotion
+      }()
+      LivelineView(input: input, configuration: config, isActive: isActive,
+        formatValue: { UsdFormat.signedPercent($0 - 100) },
+        formatTime: { Date(timeIntervalSince1970: $0).formatted(.dateTime.month(.abbreviated).day().year().hour().minute()) },
+        onSelection: { selection in
+          scrubTime = selection.flatMap { OverviewPerformance.closestTime(portfolio + market, to: Int($0.time)) }
+        })
+        .accessibilityIdentifier("overview-performance-chart")
+        .accessibilityLabel("Portfolio and total market cap performance chart")
     }
   }
 
-  private func legend(_ text: String, _ color: Color) -> some View {
-    HStack(spacing: 5) { Circle().fill(color).frame(width: 6, height: 6); Text(text).font(.caption2.monospacedDigit()).foregroundStyle(.secondary) }
+  private func readout(_ points: [TimePoint]) -> Double? {
+    scrubTime.flatMap { OverviewPerformance.valueAt(points, time: $0) } ?? points.last?.value
+  }
+
+  private func legend(_ name: String, _ value: Double, _ color: Color) -> some View {
+    HStack(spacing: 5) {
+      Circle().fill(color).frame(width: 6, height: 6)
+      Text("\(name) \(UsdFormat.signedPercent(value - 100))")
+        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+    }
   }
 }
 
 #if DEBUG
-#Preview("Portfolio vs market") {
+#Preview("Portfolio vs total market · Liveline") {
   PreviewValue(Int?.none) { scrub in
-    RebasedComparisonChart(portfolio: PreviewFixtures.returns, market: PreviewFixtures.returns.map { .init(epochSeconds: $0.epochSeconds, value: $0.value * 0.65) }, scrubTime: scrub)
+    let p = OverviewPerformance.rebaseFromFirstPoint(PreviewFixtures.line)
+    RebasedComparisonChart(portfolio: p, market: p.map { .init(epochSeconds: $0.epochSeconds, value: 100 + ($0.value - 100) * 0.65) }, scrubTime: scrub)
+      .frame(height: 260).padding().preferredColorScheme(.dark)
+  }
+}
+#Preview("Market without holdings · Liveline") {
+  PreviewValue(Int?.none) { scrub in
+    RebasedComparisonChart(portfolio: [], market: OverviewPerformance.rebaseFromFirstPoint(PreviewFixtures.chart.marketCap), scrubTime: scrub)
       .frame(height: 260).padding().preferredColorScheme(.dark)
   }
 }

@@ -10,6 +10,7 @@ final class OverviewStore {
   private(set) var holdingsError: String?
   private(set) var refreshError: String?
   private(set) var seriesError: String?
+  private(set) var marketError: String?
   var error: String? { bootstrapError ?? holdingsError ?? refreshError }
   var hasLoaded: Bool { bootstrap != nil && breakdown != nil }
   private var generation = 0
@@ -26,7 +27,10 @@ final class OverviewStore {
   private(set) var sentimentOverlay: [String: NewsSentimentOverlayRow] = [:]
   var scale: TimeScale = .d1 {
     didSet {
-      guard scale != oldValue, !tasks.isEmpty else { return }
+      guard scale != oldValue else { return }
+      scrubTime = nil
+      valueSeries = []; marketSeries = []
+      guard !tasks.isEmpty else { return }
       scaleTask?.cancel()
       scaleTask = Task { await loadSeries(force: false) }
     }
@@ -41,7 +45,7 @@ final class OverviewStore {
   private var snapshotRequestKey = ""
   private var overlayTask: Task<Void, Never>?
   private var overlayKey = ""
-  private var lastPositionsKey = ""
+  private var lastPositionsKey: String?
 
   init(repo: OverviewRepository, watchlistData: WatchlistDataStore, market: MarketAPI, cache: QueryCache) {
     self.repo = repo; self.watchlistData = watchlistData; self.market = market; self.cache = cache
@@ -101,6 +105,15 @@ final class OverviewStore {
 
   var rebased: OverviewPerformance.RebasedComparison { OverviewPerformance.buildRebasedComparison(portfolio: valueSeries, market: marketSeries) }
   var portfolioChartPoints: [TimePoint] { rebased.portfolioPoints.isEmpty ? OverviewPerformance.rebaseFromFirstPoint(valueSeries) : rebased.portfolioPoints }
+
+  var displayMarketCapUsd: Double? {
+    scrubTime.flatMap { OverviewPerformance.valueAt(marketSeries, time: $0) } ?? marketSeries.last?.value
+  }
+
+  var marketChartPoints: [TimePoint] {
+    // Use a shared baseline when comparing holdings; a market-only chart can stand alone.
+    portfolioChartPoints.isEmpty ? OverviewPerformance.rebaseFromFirstPoint(marketSeries) : rebased.marketPoints
+  }
 
   var chartNote: String? {
     guard hasHoldings, rebased.marketPoints.isEmpty else { return nil }
@@ -168,7 +181,7 @@ final class OverviewStore {
   func stop() {
     generation += 1; seriesRequest = UUID()
     seriesLoading = false; marketLoading = false
-    lastPositionsKey = ""; overlayKey = ""
+    lastPositionsKey = nil; overlayKey = ""
     snapshotTask?.cancel(); snapshotTask = nil; snapshotRequestKey = ""
     scaleTask?.cancel(); scaleTask = nil
     tasks.forEach { $0.cancel() }; tasks = []
@@ -213,38 +226,66 @@ final class OverviewStore {
     await loadSeries(force: false)
   }
 
-  /// Portfolio value series (holdings × forward-filled prices) + global market-cap series on shared buckets.
+  private enum SeriesResult: Sendable {
+    case portfolio([TimePoint])
+    case market([TimePoint], warming: Bool, error: String?)
+  }
+
+  /// Both requests share time buckets, but publish independently like the two web hooks.
   func loadSeries(force: Bool) async {
     let scale = self.scale
     let positions = self.positions
     let request = UUID(); seriesRequest = request
     let generation = self.generation
     let end = scale.rangeEndMs(now: Date())
-    seriesLoading = true; marketLoading = true
+    let market = self.market, cache = self.cache
+    seriesLoading = true; marketLoading = true; marketError = nil
     defer { if seriesRequest == request { seriesLoading = false; marketLoading = false } }
-    async let portfolio: [TimePoint] = {
-      guard !positions.isEmpty else { return [] }
-      let series = await WatchlistDataStore.fetchMarketChartSeries(ids: positions.map(\.coinId), days: scale.marketChartDaysParam, market: market, cache: cache, force: force)
-      guard positions.allSatisfy({ (series[$0.coinId]?.points.count ?? 0) >= 2 }) else { return [] }
-      return AggregateSeries.holdingsValueSeries(positions: positions, pricesByCoin: series.mapValues(\.points), scale: scale, rangeEndMs: end)
-    }()
-    async let marketResult: ([TimePoint], Bool) = {
-      let key = QueryCache.Key("global-market-cap", scale.globalMarketCapDaysParam)
-      do {
-        let response = try await cache.fetch(key, policy: .globalMarketCap, force: force) { [market] in try await market.globalMarketCap(days: scale.globalMarketCapDaysParam) }
-        let start = end - scale.rangeDays * 86_400_000
-        let buckets = TimeScale.bucketTimesMs(start: start, end: end, bucketMs: scale.bucketMs).map { $0 / 1000 }
-        let src = response.data.market_cap.filter { $0.value > 0 }.map { TimePoint(epochSeconds: TimePoint.normalizeEpochSeconds($0.time), value: $0.value) }
-        return (OverviewPerformance.forwardFill(source: src, bucketTimesSec: buckets), response.status?.needsWarmup ?? false)
-      } catch { return ([], false) }
-    }()
-    let (p, m) = await (portfolio, marketResult)
-    guard !Task.isCancelled, generation == self.generation, seriesRequest == request, scale == self.scale else { return }
-    seriesError = !positions.isEmpty && p.count < 2 ? "Price history is unavailable for one or more positions. Try refreshing." : nil
-    valueSeries = p
-    marketSeries = m.0
-    marketWarming = m.1
+    await withTaskGroup(of: SeriesResult.self) { group in
+      group.addTask {
+        do {
+          let key = QueryCache.Key("global-market-cap", scale.globalMarketCapDaysParam)
+          let response = try await cache.fetch(key, policy: .globalMarketCap, force: force) {
+            try await market.globalMarketCap(days: scale.globalMarketCapDaysParam)
+          }
+          let start = end - scale.rangeDays * 86_400_000
+          let buckets = TimeScale.bucketTimesMs(start: start, end: end, bucketMs: scale.bucketMs).map { $0 / 1000 }
+          let src = response.data.market_cap.filter { $0.time.isFinite && $0.value.isFinite && $0.value > 0 }
+            .map { TimePoint(epochSeconds: TimePoint.normalizeEpochSeconds($0.time), value: $0.value) }
+          return .market(OverviewPerformance.forwardFill(source: src, bucketTimesSec: buckets),
+                         warming: response.status?.needsWarmup ?? false, error: nil)
+        } catch {
+          return .market([], warming: false, error: error.localizedDescription)
+        }
+      }
+      group.addTask {
+        guard !positions.isEmpty else { return .portfolio([]) }
+        let series = await WatchlistDataStore.fetchMarketChartSeries(ids: positions.map(\.coinId), days: scale.marketChartDaysParam,
+                                                                    market: market, cache: cache, force: force)
+        guard positions.allSatisfy({ (series[$0.coinId]?.points.count ?? 0) >= 2 }) else { return .portfolio([]) }
+        return .portfolio(AggregateSeries.holdingsValueSeries(positions: positions, pricesByCoin: series.mapValues(\.points),
+                                                            scale: scale, rangeEndMs: end))
+      }
+      for await result in group {
+        guard !Task.isCancelled, generation == self.generation, seriesRequest == request, scale == self.scale else {
+          group.cancelAll(); return
+        }
+        switch result {
+        case .portfolio(let points):
+          seriesError = !positions.isEmpty && points.count < 2 ? "Price history is unavailable for one or more positions. Try refreshing." : nil
+          valueSeries = points
+          seriesLoading = false
+        case .market(let points, let warming, let error):
+          // Keep previously loaded data on a failed refresh, and make the error visible.
+          if error == nil { marketSeries = points }
+          marketError = error
+          marketWarming = warming
+          marketLoading = false
+        }
+      }
+    }
   }
+
 }
 
 #if DEBUG

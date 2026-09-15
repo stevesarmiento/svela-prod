@@ -29,7 +29,7 @@ struct CompareView: View {
         } else if !data.hasLoadedBootstrap {
           ProgressView().padding(.top, 60)
         } else if data.groups.isEmpty {
-          EmptyState(systemImage: "chart.xyaxis.line", title: "Nothing to compare yet", message: "Create watchlists and add tokens to compare them here.",
+          EmptyState(illustration: .comparison, title: "No watchlists to compare", message: "Create some watchlists to compare their performance here.",
                      actionTitle: "Create Watchlist") { env.router.sheet = .createGroup }
         } else {
           chartCard
@@ -45,9 +45,9 @@ struct CompareView: View {
           Button {
             let all = Set(data.groups.map(\.id))
             withAnimation(.snappy) { expanded = expanded == all ? [] : all }
-          } label: { Label(expanded.count == data.groups.count ? "Collapse all" : "Expand all", systemImage: expanded.count == data.groups.count ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") }
-          Button { env.router.sheet = .coinSearch(targetGroupId: data.selectedGroup?.id) } label: { Label("Add token", systemImage: "plus.circle") }
-          Button { env.router.sheet = .createGroup } label: { Label("Create watchlist", systemImage: "plus.square.on.square") }
+          } label: { Label(expanded.count == data.groups.count ? "Collapse all" : "Expand all", image: expanded.count == data.groups.count ? "ActionCollapseWatchlists" : "ActionExpandWatchlists") }
+          Button { env.router.sheet = .coinSearch(targetGroupId: data.selectedGroup?.id) } label: { Label("Add token", image: "ActionAddToken") }
+          Button { env.router.sheet = .createGroup } label: { Label("Create watchlist", image: "ActionCreateWatchlist") }
         }
       }
     }
@@ -75,7 +75,8 @@ struct CompareView: View {
         MultiLineComparisonChart(series: series, hidden: $hidden, onSelect: { id in
           if let g = data.groups.first(where: { $0.id == id }) { data.selectedGroupSlug = g.slug }
           withAnimation(.snappy) { if hidden.contains(id) { hidden.remove(id) } else { hidden.insert(id) } }
-        })
+        }, datasetID: "watchlists", scale: scale, isActive: env.isSceneActive && env.router.tab == .compare,
+           accessibilityID: "watchlists-comparison-chart")
         .frame(height: 300)
       }
       TimeScalePicker(scales: TimeScale.compareScales, selection: $scale)
@@ -174,7 +175,9 @@ struct WatchlistAccordionTable: View {
         }
         Spacer()
         if series.count >= 2 {
-          Sparkline(points: series, lineWidth: 1.2, fadeLeading: false, monoColor: (change ?? 0) >= 0 ? .gainGreen : .lossRed).frame(width: 64, height: 22)
+          AggrSparkline(points: series, isActive: env.isSceneActive && env.router.tab == .compare,
+                        color: (change ?? 0) >= 0 ? .gainGreen : .lossRed, lineWidth: 1.2, fadeLeading: false)
+            .equatable().frame(width: 64, height: 22)
         } else if loading && !scale.isAggregateChangeUnavailable {
           SkeletonBlock(height: 12, width: 64)
         }

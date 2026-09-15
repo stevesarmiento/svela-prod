@@ -40,10 +40,18 @@ final class LivelineRenderer {
   }
 
   func layout(size: CGSize, engine: LivelineEngine) -> LivelineLayout {
+    if engine.configuration.compact {
+      // Leave room for round stroke caps without spending the tiny plot on axes.
+      let inset = max(1, (engine.input?.series.map(\.width).max() ?? 2) / 2)
+      let plot = CGRect(x: inset, y: inset, width: max(1, size.width - inset * 2),
+                        height: max(1, size.height - inset * 2))
+      return .init(plot: plot, volume: nil, x: engine.xRange, y: engine.yRange)
+    }
     let volumeHeight: CGFloat = engine.input?.volume.contains(where: { $0.value > 0 }) == true ? 68 : 0
     let badgeSpace = engine.configuration.badge ? measure(formatValue(engine.displayedValue), font: badgeFont).width + 32 : 0
     let axisWidth = min(size.width * 0.4, max(56, badgeSpace, measure(formatValue(engine.yRange.upperBound), font: labelFont).width + 16))
-    let right = engine.configuration.grid || engine.configuration.badge ? axisWidth : 12
+    let right = !engine.configuration.seriesLabels.isEmpty ? 12
+      : engine.configuration.grid || engine.configuration.badge ? axisWidth : 12
     let bottom: CGFloat = engine.configuration.timeAxis ? 24 : 14
     let plot = CGRect(x: 8, y: 14, width: max(1, size.width - 8 - right), height: max(1, size.height - 14 - bottom - volumeHeight))
     let volume = volumeHeight > 0 ? CGRect(x: plot.minX, y: plot.maxY + 28, width: plot.width, height: 40) : nil
@@ -145,7 +153,7 @@ final class LivelineRenderer {
     }
     if reveal > 0.1 {
       if cfg.timeAxis { drawTimeAxis(ctx, layout: layout, engine: engine, dt: dt) }
-      if cfg.grid { drawGridLabels(layout: layout, engine: engine, opacity: reveal) }
+      if cfg.grid && cfg.seriesLabels.isEmpty { drawGridLabels(layout: layout, engine: engine, opacity: reveal) }
       drawVolume(ctx, layout: layout, engine: engine)
       if cfg.extrema { drawExtrema(layout: layout, engine: engine) }
       drawEndpoint(ctx, layout: layout, engine: engine, dt: dt)
@@ -401,6 +409,16 @@ final class LivelineRenderer {
     let x = layout.toX(time), y = min(layout.plot.maxY, max(layout.plot.minY, layout.toY(selection.value)))
     let color = UIColor.white.withAlphaComponent(0.68 * engine.scrubAmount)
     line(ctx, from: CGPoint(x: x, y: layout.plot.minY), to: CGPoint(x: x, y: layout.volume?.maxY ?? layout.plot.maxY), color: color, dash: [4, 4])
+    if !engine.configuration.seriesLabels.isEmpty {
+      for series in engine.input?.series ?? [] where series.visible {
+        guard let value = selection.values[series.id] else { continue }
+        let y = layout.toY(value * series.multiplier)
+        guard y >= layout.plot.minY, y <= layout.plot.maxY else { continue }
+        ctx.setFillColor(series.color.uiColor.withAlphaComponent(engine.scrubAmount).cgColor)
+        ctx.fillEllipse(in: CGRect(x: x - 3, y: y - 3, width: 6, height: 6))
+      }
+      return
+    }
     line(ctx, from: CGPoint(x: layout.plot.minX, y: y), to: CGPoint(x: layout.plot.maxX, y: y), color: color, dash: [4, 4])
     if engine.configuration.dimAfterScrub {
       ctx.setFillColor(UIColor.black.withAlphaComponent(0.35 * engine.scrubAmount).cgColor)
@@ -409,6 +427,7 @@ final class LivelineRenderer {
     let radius = CGFloat(4 * min(1, engine.scrubAmount * 3))
     ctx.setFillColor(UIColor.white.cgColor); ctx.fillEllipse(in: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2))
   }
+
   private func line(_ ctx: CGContext, from: CGPoint, to: CGPoint, color: UIColor, dash: [CGFloat] = []) {
     ctx.saveGState(); ctx.setStrokeColor(color.cgColor); ctx.setLineWidth(1); ctx.setLineDash(phase: 0, lengths: dash)
     ctx.move(to: from); ctx.addLine(to: to); ctx.strokePath(); ctx.restoreGState()

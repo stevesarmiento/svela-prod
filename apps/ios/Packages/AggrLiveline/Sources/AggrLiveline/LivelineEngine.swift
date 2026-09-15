@@ -49,6 +49,7 @@ public final class LivelineEngine {
     let next = newInput
     guard next != input || wasPaused else { return }
     let newIdentity = input?.id != next.id
+    let primaryChanged = input?.primaryID != next.primaryID
     let sameToken = input?.id.split(separator: "|").first == next.id.split(separator: "|").first
     var clean = next
     clean.series = next.series.map { s in var s = s; s.points = LivelineMath.clean(s.points); return s }
@@ -71,6 +72,7 @@ public final class LivelineEngine {
     splines = historicalSplines
     let value = clean.observation?.value ?? historicalSplines[clean.primaryID]?.points.last?.value ?? 0
     if !initialized || !sameToken { displayedValue = value; reveal = 0; alpha = [:] }
+    else if primaryChanged { displayedValue = value }
     updateDisplayedEndpoint()
     let target = viewport(marketTime: marketTime)
     if !initialized || !sameToken { xRange = target; fromX = target; toX = target }

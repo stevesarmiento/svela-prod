@@ -14,8 +14,6 @@ struct OverviewView: View {
         if let error = store.error, !store.hasLoaded {
           EmptyState(systemImage: "exclamationmark.triangle", title: "Couldn’t load overview", message: error,
                      actionTitle: "Retry") { store.retry() }
-        } else if store.isEmptyDashboard {
-          OverviewEmptyState()
         } else {
           VStack(spacing: 20) {
             if let error = store.error {
@@ -24,9 +22,14 @@ struct OverviewView: View {
                 Button("Retry loading overview") { store.retry() }
               }
             }
-            PortfolioValueCard(store: store)
-            BreadthCard(store: store)
-            EventsFeedList(store: store)
+            if store.isEmptyDashboard {
+              OverviewEmptyState()
+              PortfolioValueCard(store: store)
+            } else {
+              PortfolioValueCard(store: store)
+              BreadthCard(store: store)
+              EventsFeedList(store: store)
+            }
           }
           .padding(16)
           .padding(.bottom, 32)
@@ -63,11 +66,13 @@ struct OverviewView: View {
 /// `overview-portfolio-value-card.tsx` + `overview-performance-chart.tsx`
 struct PortfolioValueCard: View {
   @Bindable var store: OverviewStore
+  @Environment(AppEnvironment.self) private var env
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack(alignment: .top) {
         VStack(alignment: .leading, spacing: 6) {
+          Text("Your holdings").font(.subheadline).foregroundStyle(.secondary)
           AnimatedNumber(value: store.displayValueUsd, font: .system(size: 30, weight: .medium, design: .rounded))
           if let note = store.coverageNote { Text(note).font(.caption).foregroundStyle(.secondary) }
           if store.hasHoldings, store.rangeChange.isAvailable {
@@ -79,20 +84,39 @@ struct PortfolioValueCard: View {
         }
         Spacer()
       }
-      if !store.hasLoaded {
-        ProgressView("Loading holdings…").frame(maxWidth: .infinity, minHeight: 200)
-      } else if !store.hasHoldings {
-        Text("No holdings to chart yet.").font(.footnote).foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity, minHeight: 200)
-      } else if store.portfolioChartPoints.count >= 2 {
-        RebasedComparisonChart(portfolio: store.portfolioChartPoints, market: store.rebased.marketPoints, scrubTime: $store.scrubTime)
-          .frame(height: 240)
-      } else if store.seriesLoading {
-        ProgressView().frame(maxWidth: .infinity, minHeight: 200)
+      HStack(alignment: .firstTextBaseline) {
+        Text("Total market cap").font(.subheadline).foregroundStyle(.secondary)
+        Spacer()
+        Text(store.displayMarketCapUsd.map { UsdFormat.largeUsd($0) } ?? "—")
+          .font(.system(.title3, design: .rounded, weight: .medium).monospacedDigit())
+          .accessibilityIdentifier("overview-total-market-cap")
+      }
+      .padding(.top, 8)
+      if store.portfolioChartPoints.count >= 2 || store.marketChartPoints.count >= 2 {
+        RebasedComparisonChart(portfolio: store.portfolioChartPoints, market: store.marketChartPoints,
+                               scrubTime: $store.scrubTime, scale: store.scale,
+                               isActive: env.isSceneActive && env.router.tab == .overview)
+          .frame(height: 260)
+      } else if !store.hasLoaded || store.seriesLoading || store.marketLoading {
+        ProgressView("Loading chart…").frame(maxWidth: .infinity, minHeight: 260)
       } else {
-        Text(store.seriesError ?? "Price history is not available yet.").font(.footnote).foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity, minHeight: 200)
-        Button("Retry") { store.retry() }
+        VStack(spacing: 10) {
+          Text(store.seriesError ?? (store.marketWarming ? "Market data is warming up." : "Chart data is unavailable."))
+            .font(.footnote).foregroundStyle(.secondary)
+          Button("Retry chart") { Task { await store.loadSeries(force: true) } }
+        }
+        .frame(maxWidth: .infinity, minHeight: 260)
+      }
+      if let error = store.marketError {
+        VStack(alignment: .leading, spacing: 6) {
+          Text("Couldn’t refresh total market cap: \(error)")
+            .font(.caption).foregroundStyle(.secondary)
+          Button("Retry market data") { Task { await store.loadSeries(force: true) } }
+            .font(.caption)
+        }
+      } else if !store.marketLoading && store.marketSeries.isEmpty && !store.portfolioChartPoints.isEmpty {
+        Button("Retry market data") { Task { await store.loadSeries(force: true) } }
+          .font(.caption)
       }
       TimeScalePicker(scales: TimeScale.overviewScales, selection: $store.scale)
         .padding(.top, 4)
@@ -269,10 +293,9 @@ struct CategoryBadge: View {
 struct OverviewEmptyState: View {
   @Environment(AppEnvironment.self) private var env
   var body: some View {
-    EmptyState(systemImage: "chart.pie", title: "Your holdings overview",
+    EmptyState(illustration: .overview, title: "Your holdings overview",
                message: "Create a watchlist and add some tokens to unlock your holdings tracking, movers, and daily briefs.",
                actionTitle: "Go to Watchlists") { env.router.tab = .watchlists }
-      .padding(.top, 60)
   }
 }
 

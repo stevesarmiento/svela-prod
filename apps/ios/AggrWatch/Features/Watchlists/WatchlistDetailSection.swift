@@ -10,12 +10,6 @@ struct WatchlistDetailSection: View {
 
   var body: some View {
     VStack(spacing: 16) {
-      HStack {
-        Text("Performance").font(.subheadline.weight(.semibold))
-        Spacer()
-      }
-      .padding(.horizontal, 16)
-
       GroupCoinsChart(group: group, scale: scale)
         .padding(.horizontal, 16)
       TimeScalePicker(scales: TimeScale.overviewScales, selection: $scale)
@@ -44,7 +38,9 @@ struct GroupAggregateCard: View {
         if let change { PercentBadge(pct: change) } else if loading { ProgressView().controlSize(.small) } else { Text("—").foregroundStyle(.secondary) }
       }
       if points.count >= 2 {
-        Sparkline(points: points, lineWidth: 1.8, fadeLeading: false, monoColor: (change ?? 0) >= 0 ? .gainGreen : .lossRed)
+        AggrSparkline(points: points, isActive: env.isSceneActive && env.router.tab == .watchlists && !env.router.showsWatchlistChooser,
+                      color: (change ?? 0) >= 0 ? .gainGreen : .lossRed, lineWidth: 1.8, fadeLeading: false)
+          .equatable()
           .frame(height: 120)
       } else {
         Rectangle().fill(.clear).frame(height: 120)
@@ -89,7 +85,9 @@ struct GroupCoinsChart: View {
       } else if series.allSatisfy({ $0.points.count < 2 }) {
         if loading { ProgressView().frame(height: 220) } else { Text("No chart data yet").font(.footnote).foregroundStyle(.secondary).frame(height: 220) }
       } else {
-        MultiLineComparisonChart(series: series, hidden: $hidden).frame(height: 300)
+        MultiLineComparisonChart(series: series, hidden: $hidden, datasetID: "watchlist-\(group.id)", scale: scale,
+                                 isActive: env.isSceneActive && env.router.tab == .watchlists && !env.router.showsWatchlistChooser,
+                                 accessibilityID: "watchlist-coins-comparison-chart").frame(height: 300)
       }
     }
     .padding(.vertical, 14)
@@ -118,7 +116,7 @@ struct CoinRowsList: View {
     let items = data.items(in: group)
     VStack(spacing: 10) {
       if items.isEmpty {
-        EmptyState(systemImage: "plus.circle", title: "No tokens yet", message: "Add tokens to \(group.name) to see prices and holdings.",
+        EmptyState(illustration: .tokens, title: "Add some tokens to watch", message: "Add tokens to \(group.name) to compare their performance here.",
                    actionTitle: "Add token") { env.router.sheet = .coinSearch(targetGroupId: group.id) }
       } else {
         ForEach(items) { item in
@@ -166,35 +164,54 @@ struct CoinRow: View {
     SelectableRow(id: item.coinId, removalTitle: "Remove from \(group.name)?", onRemove: {
       try await data.remove(coinId: item.coinId, from: group.id)
     }) {
-    HStack(spacing: 12) {
-    Button {
-      if env.selection.isActive { env.selection.toggle(item.coinId) } else { env.router.openToken(item.coinId, groupSlug: group.slug, sourceID: "watchlist|\(group.id)|\(item.coinId)") }
-    } label: {
-      HStack(spacing: 12) {
-        GlassTokenLogo(symbol: quote?.symbol ?? item.coinId, imageURL: quote?.image, size: 34)
-        VStack(alignment: .leading, spacing: 2) {
-          Text((quote?.symbol ?? "N/A").uppercased()).font(.subheadline.weight(.semibold))
-          Text(LogoOverrides.cleanTokenName(quote?.name ?? item.coinId)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+      HStack(spacing: 10) {
+        Button(action: openToken) {
+          GlassTokenLogo(symbol: quote?.symbol ?? item.coinId, imageURL: quote?.image, size: 34)
+            .frame(width: 34, height: 34)
+            .contentShape(.rect)
         }
-        Spacer()
-        VStack(alignment: .trailing, spacing: 3) {
-          if let price = quote?.currentPrice, price > 0 {
-            UsdText(value: price, font: .subheadline.weight(.medium))
-            MoveWithBadge(usdMove: quote?.usdMove24h, pct: quote?.priceChangePercentage24h)
-          } else {
-            SkeletonBlock(height: 12, width: 70)
-            SkeletonBlock(height: 10, width: 50)
+        .accessibilityLabel("Open \(quote?.name ?? item.coinId)")
+
+        VStack(alignment: .leading, spacing: 4) {
+          Button(action: openToken) {
+            Text((quote?.symbol ?? "N/A").uppercased())
+              .font(.subheadline.weight(.semibold))
+              .lineLimit(1)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .contentShape(.rect)
           }
+          .accessibilityIdentifier("watchlist-token-\(item.coinId)")
+          HoldingsCell(item: item, group: group, symbol: quote?.symbol ?? "", priceUsd: quote?.currentPrice)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+        Button(action: openToken) {
+          VStack(alignment: .trailing, spacing: 3) {
+            if let price = quote?.currentPrice, price > 0 {
+              UsdText(value: price, font: .subheadline.weight(.medium))
+              PercentBadge(pct: quote?.priceChangePercentage24h, compact: true)
+                .fixedSize(horizontal: true, vertical: false)
+            } else {
+              SkeletonBlock(height: 12, width: 70)
+              SkeletonBlock(height: 10, width: 50)
+            }
+          }
+          .fixedSize(horizontal: true, vertical: false)
+          .contentShape(.rect)
+        }
+        .accessibilityIdentifier("watchlist-price-\(item.coinId)")
+        .fixedSize(horizontal: true, vertical: false)
       }
-      .contentShape(.rect)
+      .buttonStyle(.plain)
     }
-    .buttonStyle(.plain)
-    .accessibilityIdentifier("watchlist-token-\(item.coinId)")
-      HoldingsCell(item: item, group: group, priceUsd: quote?.currentPrice)
-    }
-    }
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier("watchlist-row-\(item.coinId)")
     .tokenTransitionSource("watchlist|\(group.id)|\(item.coinId)")
+  }
+
+  private func openToken() {
+    if env.selection.isActive { env.selection.toggle(item.coinId) }
+    else { env.router.openToken(item.coinId, groupSlug: group.slug, sourceID: "watchlist|\(group.id)|\(item.coinId)") }
   }
 }
 
@@ -203,6 +220,7 @@ struct HoldingsCell: View {
   @Environment(AppEnvironment.self) private var env
   let item: WatchlistItem
   let group: WatchlistGroup
+  let symbol: String
   let priceUsd: Double?
   @State private var editing = false
   @State private var draft = ""
@@ -213,13 +231,13 @@ struct HoldingsCell: View {
   }()
 
   var body: some View {
-    VStack(alignment: .trailing, spacing: 3) {
+    HStack(spacing: 6) {
       if editing {
         TextField("0", text: $draft)
           .keyboardType(.decimalPad)
-          .multilineTextAlignment(.trailing)
+          .multilineTextAlignment(.leading)
           .focused($focused)
-          .frame(width: 84)
+          .frame(maxWidth: 84)
           .padding(.horizontal, 6).padding(.vertical, 3)
           .background(.white.opacity(0.08), in: .rect(cornerRadius: 6))
           .onSubmit { Task { await commit() } }
@@ -231,17 +249,26 @@ struct HoldingsCell: View {
           editing = true
           focused = true
         } label: {
-          Text(item.holdings.map { Self.qtyFormatter.string(from: NSNumber(value: $0)) ?? "—" } ?? "+ Add")
+          Text(item.holdings.map { amount in
+            [Self.qtyFormatter.string(from: NSNumber(value: amount)) ?? "—", symbol.uppercased()]
+              .filter { !$0.isEmpty }.joined(separator: " ")
+          } ?? "Add Holdings")
             .font(.caption.monospacedDigit())
             .foregroundStyle(item.holdings == nil ? .secondary : .primary)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(item.holdings == nil ? "Add Holdings" : "Edit token amount")
+        .accessibilityIdentifier("edit-holdings-\(item.coinId)")
       }
       if let h = item.holdings, let p = priceUsd, p > 0 {
-        Text(UsdFormat.price(h * p)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+        Text("·").foregroundStyle(.tertiary)
+        Text(UsdFormat.price(h * p)).foregroundStyle(.secondary)
       }
     }
-    .frame(minWidth: 70, alignment: .trailing)
+    .font(.caption.monospacedDigit())
+    .lineLimit(1)
+    .minimumScaleFactor(0.75)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private func commit() async {
@@ -273,6 +300,15 @@ struct HoldingsCell: View {
       GroupAggregateCard(group: PreviewFixtures.group, scale: .d1)
       GroupCoinsChart(group: PreviewFixtures.group, scale: .d7)
     }.padding() }
+  }
+}
+#Preview("Selected token rows with holdings") {
+  PreviewHost { env in
+    ScrollView { CoinRowsList(group: PreviewFixtures.group).padding(.vertical) }
+      .onAppear {
+        env.selection.register(owner: "preview", selectableIds: PreviewFixtures.quotes.map(\.id), onRemove: { _ in }, onAnalyze: { _ in })
+        env.selection.toggle("bitcoin")
+      }
   }
 }
 #endif

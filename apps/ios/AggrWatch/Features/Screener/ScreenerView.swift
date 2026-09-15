@@ -103,9 +103,9 @@ private struct ScreenerContent: View {
       Section {
         if rows.isEmpty && !store.isLoading {
           if store.source == .browse {
-            EmptyState(systemImage: "binoculars", title: "No screener data available", message: "Try again in a moment.", actionTitle: "Retry") { store.refetch() }
+            EmptyState(illustration: .screener, title: "No screener data available", message: "Try again in a moment.", actionTitle: "Retry") { store.refetch() }
           } else {
-            EmptyState(systemImage: "line.3.horizontal.decrease.circle", title: "No tokens match your filters",
+            EmptyState(illustration: .screener, title: "No tokens match your filters",
                        message: store.screenUserMessage ?? (store.coverage.map { "0 of \(Int($0.scanned)) scanned matched your filters." } ?? "Try adjusting your search or filter criteria"),
                        actionTitle: "Clear filters") { store.clearAll() }
           }

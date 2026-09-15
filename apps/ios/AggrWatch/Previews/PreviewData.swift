@@ -44,7 +44,9 @@ enum PreviewData {
     let env = AppEnvironment(config: AppConfig(convexURL: "https://preview.invalid", clerkPublishableKey: "", apiBaseURL: URL(string: "https://preview.invalid")!),
                              convex: convex, clerkSession: ClerkSessionStore(previewUser: signedIn ? user : nil), apiClient: client)
     env.router.tab = tab
-    if state == .populated { env.watchlistData.seedPreview() }
+    let progressive = ProcessInfo.processInfo.arguments.contains("--preview-progressive-charts")
+    if progressive || ProcessInfo.processInfo.arguments.contains("--preview-delayed-charts") { env.router.tab = .watchlists }
+    if state == .populated { env.watchlistData.seedPreview(loadCharts: !progressive) }
     return env
   }
 

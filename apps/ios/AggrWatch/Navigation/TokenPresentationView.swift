@@ -168,6 +168,7 @@ struct TokenPagePresenter: UIViewControllerRepresentable {
       page.pullDismissal?.onDismissed = { [weak self, weak page] in
         if let page { self?.finished(page) }
       }
+      NavigationFeedback.pageChanged()
       presenter.present(page, animated: true) { [weak self] in self?.synchronize() }
       page.presentationController?.delegate = self
     }

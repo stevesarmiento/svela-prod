@@ -205,7 +205,10 @@ struct IndicatorCardFrame<ChartView: View, Badges: View>: View {
           Text(description).font(.caption).foregroundStyle(.secondary)
         }
         Spacer(minLength: 0)
-        Button(action: onExplain) { Image(systemName: "sparkles").font(.caption.weight(.semibold)).frame(width: 30, height: 30) }
+        Button(action: onExplain) {
+          Image("ActionAnalyze").renderingMode(.template).resizable().scaledToFit()
+            .frame(width: 14, height: 14).frame(width: 30, height: 30)
+        }
           .buttonStyle(.glass)
           .buttonBorderShape(.circle)
           .accessibilityLabel("Explain \(title)")

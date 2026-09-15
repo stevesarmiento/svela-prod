@@ -71,6 +71,8 @@ public struct LivelineInput: Sendable, Equatable {
 }
 
 public struct LivelineConfiguration: Sendable, Equatable {
+  /// Minimal plot insets for small, decorative charts embedded in cards.
+  public var compact = false
   public var profile: LivelineProfile = .aggr
   public var fill = true
   public var grid = true
@@ -86,6 +88,8 @@ public struct LivelineConfiguration: Sendable, Equatable {
   public var currentPriceGuide = false
   public var extrema = true
   public var referenceValue: Double?
+  /// Series names for comparison crosshairs and multi-series accessibility.
+  public var seriesLabels: [String: String] = [:]
   public var highlight: LivelineHighlight = .none
   public var paused = false
   public var reduceMotion = false
@@ -93,6 +97,20 @@ public struct LivelineConfiguration: Sendable, Equatable {
   public var emptyText = "No chart data"
   public var lerpSpeed = 0.08
   public init() {}
+
+  public static var sparkline: Self {
+    var config = Self()
+    config.compact = true
+    config.fill = false
+    config.grid = false
+    config.timeAxis = false
+    config.badge = false
+    config.dot = false
+    config.pulse = false
+    config.scrub = false
+    config.extrema = false
+    return config
+  }
 }
 
 public struct LivelineSelection: Sendable, Equatable {

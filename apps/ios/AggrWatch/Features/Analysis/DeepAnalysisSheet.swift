@@ -10,6 +10,11 @@ struct DeepAnalysisSheet: View {
   @State private var text = ""
   @State private var isLoading = false
   @State private var failed = false
+  @State private var bundle: AnalysisDataService.Bundle?
+  @State private var priceData: AnalysisPriceChart.Model?
+  @State private var chartFailed = false
+  @State private var generation = UUID()
+  @State private var analysisDate = Date()
   @State private var streamTask: Task<Void, Never>?
 
   static let steps = ["Analyzing price data", "Looking at trend", "Understanding orderflow", "Considering liquidations", "Looking at open interest",
@@ -19,20 +24,21 @@ struct DeepAnalysisSheet: View {
   var body: some View {
     let quote = env.watchlistData.quote(coinId)
     NavigationStack {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
-          AnalysisTokenHeader(coinId: coinId, quote: quote)
-          if isLoading && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            MultiStepLoader(steps: Self.steps, interval: .milliseconds(2200))
-          } else {
-            StreamingMarkdownText(text: text).foregroundStyle(failed ? .secondary : .primary)
-          }
-          if !isLoading && !text.isEmpty {
-            Text("AI-generated. Not financial advice.").font(.caption2).foregroundStyle(.tertiary).padding(.top, 8)
-          }
-        }
-        .padding(16)
-        .padding(.bottom, 24)
+      AnalysisWorkspace {
+        AnalysisTokenHeader(coinId: coinId, quote: quote, priceOverride: bundle?.series.last?.value)
+        Text("Analysis as of \(analysisDate.formatted(date: .abbreviated, time: .shortened))")
+          .font(.caption).foregroundStyle(.secondary)
+      } chart: {
+        if let priceData { AnalysisPriceChart(model: priceData) }
+        else if chartFailed {
+          Text("Price chart unavailable").font(.caption).foregroundStyle(.secondary)
+        } else { ProgressView("Loading price history").frame(maxWidth: .infinity, minHeight: 180) }
+      } metrics: {
+        if let bundle { AnalysisMarketMetrics(bundle: bundle) }
+        else if isLoading { ProgressView("Preparing market data").frame(maxWidth: .infinity, minHeight: 160) }
+        else { Text("Market data unavailable. Try regenerating the analysis.").foregroundStyle(.secondary) }
+      } report: {
+        AnalysisReport(text: text, isLoading: isLoading, failed: failed, steps: Self.steps)
       }
       .navigationTitle("Deep Analysis")
       .navigationBarTitleDisplayMode(.inline)
@@ -43,18 +49,19 @@ struct DeepAnalysisSheet: View {
         }
       }
     }
+    .frame(idealWidth: 1000)
+    .presentationSizing(.page.fitted(horizontal: true, vertical: false))
     .presentationDetents([.large])
     .presentationBackground(.thinMaterial)
     .onAppear { run() }
-    .onDisappear { streamTask?.cancel() }
+    .task(id: generation) { await loadChart() }
+    .onDisappear { streamTask?.cancel(); generation = UUID() }
   }
 
   private func run() {
-    #if DEBUG
-    if env.convex.isPreview { text = PreviewData.analysisText; isLoading = false; return }
-    #endif
     streamTask?.cancel()
-    text = ""; failed = false; isLoading = true
+    let runID = UUID(); generation = runID
+    text = ""; failed = false; isLoading = true; analysisDate = Date()
     let ai = AIStreamClient(client: env.apiClient)
     let service = env.analysis
     let coinId = coinId
@@ -63,30 +70,51 @@ struct DeepAnalysisSheet: View {
       do {
         let bundle = try await service.build(coinId: coinId, fallbackName: quote?.name, fallbackSymbol: quote?.symbol)
         try Task.checkCancellation()
+        guard generation == runID else { return }
+        self.bundle = bundle
+        #if DEBUG
+        if env.convex.isPreview { text = PreviewData.analysisText; isLoading = false; return }
+        #endif
         let body = try JSONEncoder().encode(bundle.data)
-        for try await chunk in ai.stream(path: "/api/analyze", body: body, protocol: .text) { text += chunk }
+        for try await chunk in ai.stream(path: "/api/analyze", body: body, protocol: .text) {
+          guard !Task.isCancelled, generation == runID else { return }
+          text += chunk
+        }
       } catch is CancellationError {
-      } catch AnalysisDataService.Failure.noMarketData {
-        text = "Unable to prepare analysis data. Please try again."; failed = true
       } catch {
-        if !Task.isCancelled { text = "Failed to generate analysis. Please try again.\n\n\(error.localizedDescription)"; failed = true }
+        if !Task.isCancelled, generation == runID {
+          text = "Failed to generate analysis. Please try again.\n\n\(error.localizedDescription)"; failed = true
+        }
       }
-      isLoading = false
+      if !Task.isCancelled, generation == runID { isLoading = false }
     }
   }
+
+  private func loadChart() async {
+    chartFailed = false
+    do {
+      let chart = try await env.analysis.priceChart(coinId: coinId)
+      try Task.checkCancellation()
+      priceData = .init(data: chart)
+    } catch {
+      if !Task.isCancelled { chartFailed = true }
+    }
+  }
+
 }
 
 /// Quote header shared by the analysis sheets.
 struct AnalysisTokenHeader: View {
   let coinId: String
   let quote: CoinQuote?
+  var priceOverride: Double? = nil
   var body: some View {
     HStack(spacing: 10) {
-      TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 36)
+      GlassTokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 36)
       VStack(alignment: .leading, spacing: 2) {
         Text(LogoOverrides.cleanTokenName(quote?.name ?? coinId)).font(.headline)
         HStack(spacing: 6) {
-          if let p = quote?.currentPrice { Text(UsdFormat.price(p)).font(.system(.subheadline, design: .rounded).monospacedDigit()) }
+          if let p = priceOverride ?? quote?.currentPrice { Text(UsdFormat.price(p)).font(.system(.subheadline, design: .rounded).monospacedDigit()) }
           PercentBadge(pct: quote?.priceChangePercentage24h, compact: true)
         }
       }
@@ -104,6 +132,11 @@ struct MultiAnalysisSheet: View {
   @State private var text = ""
   @State private var isLoading = false
   @State private var stats: ComparativeStats.Result?
+  @State private var chartLines: [AnalysisChartSeries.Line] = []
+  @State private var includedIds: [String] = []
+  @State private var failed = false
+  @State private var generation = UUID()
+  @State private var analysisDate = Date()
   @State private var readyCount = 0
   @State private var streamTask: Task<Void, Never>?
 
@@ -113,19 +146,23 @@ struct MultiAnalysisSheet: View {
 
   var body: some View {
     NavigationStack {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
-          tokensRow
-          if let stats { ComparativeStatsPanel(stats: stats) }
-          if isLoading && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            MultiStepLoader(steps: Self.steps, interval: .milliseconds(2400))
-            Text("\(readyCount) of \(coinIds.count) tokens ready").font(.caption).foregroundStyle(.secondary)
-          } else {
-            StreamingMarkdownText(text: text)
-          }
+      AnalysisWorkspace {
+        tokensRow
+        Text("Analysis as of \(analysisDate.formatted(date: .abbreviated, time: .shortened))")
+          .font(.caption).foregroundStyle(.secondary)
+        if !includedIds.isEmpty && includedIds.count < requestedIds.count {
+          Text("Comparing \(includedIds.count) of \(requestedIds.count) tokens. Unavailable: \(missingSymbols).")
+            .font(.caption).foregroundStyle(.orange)
         }
-        .padding(16)
-        .padding(.bottom, 24)
+      } chart: {
+        if stats != nil { AnalysisComparisonChart(lines: chartLines) }
+        else if isLoading { ProgressView("\(readyCount) of \(requestedIds.count) tokens ready").frame(maxWidth: .infinity, minHeight: 180) }
+      } metrics: {
+        if let stats { ComparativeStatsPanel(stats: stats) }
+        else if isLoading { ProgressView("Computing comparison statistics").frame(maxWidth: .infinity, minHeight: 160) }
+        else { Text("Comparison data unavailable. Try regenerating the analysis.").foregroundStyle(.secondary) }
+      } report: {
+        AnalysisReport(text: text, isLoading: isLoading, failed: failed, steps: Self.steps)
       }
       .navigationTitle("Compare \(coinIds.count) tokens")
       .navigationBarTitleDisplayMode(.inline)
@@ -136,16 +173,18 @@ struct MultiAnalysisSheet: View {
         }
       }
     }
+    .frame(idealWidth: 1000)
+    .presentationSizing(.page.fitted(horizontal: true, vertical: false))
     .presentationDetents([.large])
     .presentationBackground(.thinMaterial)
     .onAppear { run() }
-    .onDisappear { streamTask?.cancel() }
+    .onDisappear { streamTask?.cancel(); generation = UUID() }
   }
 
   private var tokensRow: some View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 8) {
-        ForEach(coinIds, id: \.self) { id in
+        ForEach(requestedIds, id: \.self) { id in
           let q = env.watchlistData.quote(id)
           HStack(spacing: 6) {
             TokenLogo(symbol: q?.symbol ?? id, imageURL: q?.image, size: 18)
@@ -159,13 +198,11 @@ struct MultiAnalysisSheet: View {
   }
 
   private func run() {
-    #if DEBUG
-    if env.convex.isPreview { text = PreviewData.analysisText; isLoading = false; return }
-    #endif
     streamTask?.cancel()
-    text = ""; stats = nil; readyCount = 0; isLoading = true
-    guard coinIds.count >= 2 else { text = "Select at least two tokens to compare."; isLoading = false; return }
-    let ids = Array(coinIds.prefix(SelectionStore.maxAnalyzeTokens))
+    let runID = UUID(); generation = runID
+    text = ""; stats = nil; chartLines = []; includedIds = []; failed = false; readyCount = 0; isLoading = true; analysisDate = Date()
+    let ids = requestedIds
+    guard ids.count >= 2 else { text = "Select at least two tokens to compare."; failed = true; isLoading = false; return }
     let service = env.analysis
     let ai = AIStreamClient(client: env.apiClient)
     let quotes = Dictionary(uniqueKeysWithValues: ids.map { ($0, env.watchlistData.quote($0)) })
@@ -182,29 +219,45 @@ struct MultiAnalysisSheet: View {
             if let bundle { await collector.add(id: id, bundle: bundle) }
             let n = await collector.count
             guard !Task.isCancelled else { break }
-            await MainActor.run { readyCount = n }
+            await MainActor.run { if generation == runID { readyCount = n } }
           }
         }
       }
       _ = await AsyncDeadline.wait(for: gather, timeout: .seconds(30))
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled, generation == runID else { return }
       let ready = await collector.ordered(ids)
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled, generation == runID else { return }
       guard ready.count >= 2 else {
-        if !Task.isCancelled { text = "Not enough market data loaded to run a comparison. Please try again."; isLoading = false }
+        if !Task.isCancelled { text = "Not enough market data loaded to run a comparison. Please try again."; failed = true; isLoading = false }
         return
       }
       let comparative = ComparativeStats.compute(ready.map(\.comparativeInput))
       stats = comparative
+      includedIds = ready.map { $0.data.symbolId }
+      chartLines = AnalysisChartSeries.normalized(ready.map { .init(id: $0.data.symbolId, symbol: $0.data.symbol, points: $0.series) })
+      #if DEBUG
+      if env.convex.isPreview { text = PreviewData.analysisText; isLoading = false; return }
+      #endif
       do {
         let body = try JSONEncoder().encode(CompareRequest(tokens: ready.map(\.data), comparative: comparative))
-        for try await chunk in ai.stream(path: "/api/analyze/compare", body: body, protocol: .text) { text += chunk }
+        for try await chunk in ai.stream(path: "/api/analyze/compare", body: body, protocol: .text) {
+          guard !Task.isCancelled, generation == runID else { return }
+          text += chunk
+        }
       } catch is CancellationError {
       } catch {
-        if !Task.isCancelled { text = "Failed to generate comparison. Please try again.\n\n\(error.localizedDescription)" }
+        if !Task.isCancelled, generation == runID { text = "Failed to generate comparison. Please try again.\n\n\(error.localizedDescription)"; failed = true }
       }
-      isLoading = false
+      if !Task.isCancelled, generation == runID { isLoading = false }
     }
+  }
+
+  private var requestedIds: [String] {
+    var seen = Set<String>()
+    return Array(coinIds.filter { seen.insert($0).inserted }.prefix(SelectionStore.maxAnalyzeTokens))
+  }
+  private var missingSymbols: String {
+    requestedIds.filter { !includedIds.contains($0) }.map { (env.watchlistData.quote($0)?.symbol ?? $0).uppercased() }.joined(separator: ", ")
   }
 
   private actor Collector {
@@ -212,41 +265,6 @@ struct MultiAnalysisSheet: View {
     var count: Int { bundles.count }
     func add(id: String, bundle: AnalysisDataService.Bundle) { bundles[id] = bundle }
     func ordered(_ ids: [String]) -> [AnalysisDataService.Bundle] { ids.compactMap { bundles[$0] } }
-  }
-}
-
-/// Compact port of `comparative-stats-panel.tsx`.
-struct ComparativeStatsPanel: View {
-  let stats: ComparativeStats.Result
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text("Benchmark: \(stats.benchmarkSymbol.uppercased())").font(.caption).foregroundStyle(.secondary)
-      Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
-        GridRow {
-          Text("").frame(width: 48, alignment: .leading)
-          ForEach(["7d", "30d", "Vol", "β", "RSI", "BBWP"], id: \.self) { h in Text(h).font(.system(size: 9)).foregroundStyle(.secondary) }
-        }
-        ForEach(stats.tokens) { t in
-          GridRow {
-            Text(t.symbol.uppercased()).font(.caption.weight(.semibold)).frame(width: 48, alignment: .leading)
-            pct(t.return7dPct); pct(t.return30dPct)
-            num(t.volatility30dAnnualizedPct, suffix: "%"); num(t.betaVsBenchmark, digits: 2)
-            num(t.rsi, digits: 0); num(t.bbwpPct, digits: 0)
-          }
-        }
-      }
-    }
-    .font(.system(.caption2, design: .rounded).monospacedDigit())
-    .padding(12)
-    .background(.background.secondary, in: .rect(cornerRadius: 14))
-  }
-
-  private func pct(_ v: Double?) -> some View {
-    Text(v.map { UsdFormat.signedPercent($0, fractionDigits: 1) } ?? "—").foregroundStyle(v == nil ? .secondary : ((v ?? 0) >= 0 ? Color.gainGreen : Color.lossRed))
-  }
-  private func num(_ v: Double?, digits: Int = 1, suffix: String = "") -> some View {
-    Text(v.map { String(format: "%.\(digits)f%@", $0, suffix) } ?? "—").foregroundStyle(v == nil ? .secondary : .primary)
   }
 }
 

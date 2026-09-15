@@ -113,10 +113,10 @@ import UIKit
       card.transform = .identity
       card.frame = page.view.convert(page.view.bounds, to: window)
       // A centered scale moves the top edge by half the lost height. Hand off to the
-      // row collapse within the island/status-bar region, before it becomes a tiny page.
-      let topEdgeLimit = max(12, window.safeAreaInsets.top - 12)
+      // row collapse 5 points past the previous island/status-bar cutoff.
+      let topEdgeLimit = max(12, window.safeAreaInsets.top - 12) + 5
       maximumShrink = min(0.2, 2 * topEdgeLimit / max(1, card.bounds.height))
-      // Preserve the existing finger-to-scale response, but finish the pull sooner.
+      // Preserve the existing finger-to-scale response as the cutoff changes.
       pullDistance = 200 * maximumShrink / 0.2
       card.layer.cornerRadius = 44
       let image = UIImageView(image: snapshot)
@@ -178,6 +178,7 @@ import UIKit
     stopReturn()
     guard prepareCard() else {
       closing = true
+      NavigationFeedback.pageChanged()
       page.dismiss(animated: false) { [self] in onDismissed?() }
       return
     }
@@ -187,6 +188,7 @@ import UIKit
   private func finishPull() {
     guard !closing, let page, let pageImage else { return }
     closing = true
+    NavigationFeedback.pageChanged()
     overlay.isUserInteractionEnabled = true
     page.view.isUserInteractionEnabled = false
     // Convert the pulled transform to an explicit frame. Only the outer container changes

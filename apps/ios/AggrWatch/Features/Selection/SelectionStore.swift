@@ -115,6 +115,7 @@ struct SelectableRow<Content: View>: View {
         if selection.isActive {
           Image(systemName: selection.isSelected(id) ? "checkmark.circle.fill" : "circle.dashed")
             .font(.title3).foregroundStyle(selection.isSelected(id) ? Color.accentColor : .secondary)
+            .opacity(selection.isSelected(id) ? 1 : 0.5)
             .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace.offUp.byLayer))
             .transition(SelectionMotion.disclose(anchor: .leading, edge: .leading, reduceMotion: reduceMotion))
             .accessibilityHidden(true)

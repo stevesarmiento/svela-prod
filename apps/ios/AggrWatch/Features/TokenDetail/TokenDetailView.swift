@@ -211,7 +211,7 @@ private struct TokenPageHeader: View {
             .frame(width: 44, height: 44)
             .accessibilityIdentifier("token-bookmark")
           Menu {
-            Button(action: showAnalysis) { Label("Deep analysis", systemImage: "sparkles") }
+            Button(action: showAnalysis) { Label("Deep analysis", image: "ActionAnalyze") }
             Button(action: showNews) { Label(unseenNews > 0 ? "News (\(unseenNews) new)" : "News", systemImage: "newspaper") }
           } label: {
             Image(systemName: "ellipsis").font(.title3.weight(.semibold)).frame(width: 44, height: 44)

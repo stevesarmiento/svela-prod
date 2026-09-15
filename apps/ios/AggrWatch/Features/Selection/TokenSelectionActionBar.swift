@@ -1,9 +1,7 @@
 import SwiftUI
 
-/// Adapts Aufn’s glass action pill to Cancel / Remove / Analyze, the way a wallet's edit mode
-/// swaps its tab bar for actions. Shaped glass per segment (plain button +
-/// explicit glassEffect — `.buttonStyle(.glass)` blobs non-square labels) so
-/// the segments read as one control inside the container.
+/// Analyze / Remove / Cancel share one glass pill, with clear button surfaces
+/// so additional material layers don't obscure the pill's Liquid Glass.
 struct TokenSelectionActionBar: View {
     var canRemove = true
     var isBusy = false
@@ -13,23 +11,24 @@ struct TokenSelectionActionBar: View {
     let onAnalyze: () -> Void
 
     @ScaledMetric(relativeTo: .footnote) private var segmentHeight: CGFloat = 72
+    @ScaledMetric(relativeTo: .title2) private var iconSize: CGFloat = 24
 
     var body: some View {
         GlassEffectContainer(spacing: 6) {
             HStack(spacing: 6) {
-                segment("Cancel", systemImage: "xmark", accessibilityLabel: "Cancel selection") {
-                    onCancel()
-                }
-                if canRemove {
-                    segment("Remove", systemImage: "trash.fill", tint: .red, accessibilityLabel: "Remove selected") {
-                        onRemove()
-                    }
-                }
-                segment("Analyze", systemImage: "sparkles", accessibilityLabel: "Analyze selected") {
+                segment("Analyze", icon: Image("ActionAnalyze"), tint: .accentColor, accessibilityLabel: "Analyze selected") {
                     onAnalyze()
                 }
                     .disabled(!canAnalyze)
                     .opacity(canAnalyze ? 1 : 0.4)
+                if canRemove {
+                    segment("Remove", icon: Image(systemName: "trash"), tint: .red, accessibilityLabel: "Remove selected") {
+                        onRemove()
+                    }
+                }
+                segment("Cancel", icon: Image(systemName: "xmark"), tint: .secondary, accessibilityLabel: "Cancel selection") {
+                    onCancel()
+                }
             }
             .disabled(isBusy)
             .padding(6)
@@ -43,15 +42,16 @@ struct TokenSelectionActionBar: View {
 
     private func segment(
         _ title: String,
-        systemImage: String,
+        icon: Image,
         tint: Color? = nil,
         accessibilityLabel: String,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             VStack(spacing: 6) {
-                Image(systemName: systemImage)
+                icon.renderingMode(.template).resizable().scaledToFit()
                     .font(.title2.weight(.semibold))
+                    .frame(width: iconSize, height: iconSize)
                 Text(title)
                     .font(.footnote.weight(.semibold))
             }
@@ -60,12 +60,32 @@ struct TokenSelectionActionBar: View {
             .multilineTextAlignment(.center)
             .contentShape(.rect(cornerRadius: 24))
         }
-        .buttonStyle(.plain)
-        .glassEffect(
-            tint.map { .regular.tint($0.opacity(0.22)).interactive() } ?? .regular.interactive(),
-            in: .rect(cornerRadius: 24)
-        )
+        .buttonStyle(SelectionActionButtonStyle(highlight: tint ?? .white))
         .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+/// Momentary feedback leaves the shared glass unobstructed when the button is idle.
+private struct SelectionActionButtonStyle: ButtonStyle {
+    let highlight: Color
+    @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        let pressed = configuration.isPressed && isEnabled
+        configuration.label
+            .scaleEffect(pressed && !reduceMotion ? 0.96 : 1)
+            .background {
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(highlight.opacity(pressed ? 0.16 : 0))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 24)
+                    .strokeBorder(highlight.opacity(pressed ? 0.22 : 0), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .contentShape(.rect(cornerRadius: 24))
+            .animation(reduceMotion ? nil : .easeOut(duration: pressed ? 0.08 : 0.18), value: pressed)
     }
 }
 
@@ -79,5 +99,15 @@ struct TokenSelectionActionBar: View {
 }
 #Preview("Too many selected") {
   TokenSelectionActionBar(canAnalyze: false, onCancel: {}, onRemove: {}, onAnalyze: {}).preferredColorScheme(.dark)
+}
+#Preview("Web action icons") {
+  VStack(alignment: .leading, spacing: 20) {
+    ForEach(["ActionAnalyze", "ActionCreateWatchlist", "ActionAddToken", "ActionCollapseWatchlists", "ActionExpandWatchlists", "ActionWatchlists", "NavigationSearch"], id: \.self) { name in
+      HStack(spacing: 16) {
+        Image(name).renderingMode(.template).resizable().scaledToFit().frame(width: 28, height: 28)
+        Text(name).font(.caption)
+      }
+    }
+  }.padding().preferredColorScheme(.dark)
 }
 #endif

@@ -31,7 +31,9 @@ public struct MarketAPI: Sendable {
   }
 
   public func globalMarketCap(days: String) async throws -> GlobalMarketCapResponse {
-    try await client.get("/api/coingecko/global-market-cap", query: [.init(name: "days", value: days)])
+    try await client.get("/api/coingecko/global-market-cap", query: [
+      .init(name: "days", value: days), .init(name: "vs_currency", value: "usd")
+    ])
   }
 
   public func markets(ids: [String]) async throws -> CoinMarketsResponse {

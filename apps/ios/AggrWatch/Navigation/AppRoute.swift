@@ -1,6 +1,7 @@
 import AggrAPI
 import Foundation
 import Observation
+import UIKit
 
 /// Pushable destinations (per-tab `NavigationStack`).
 enum Route: Hashable {
@@ -111,5 +112,14 @@ final class AppRouter {
     overviewPath = []; watchlistsPath = []; comparePath = []; screenerPath = []; searchPath = []
     sheet = nil; tokenPresentation = nil; sheetAfterTokenDismissal = nil; pendingScreenerLink = nil; tab = .watchlists
     showsWatchlistChooser = true
+  }
+}
+
+/// Shared, light feedback for committed page navigation (not touch-down or a cancelled pull).
+@MainActor enum NavigationFeedback {
+  private static let impact = UIImpactFeedbackGenerator(style: .light)
+
+  static func pageChanged() {
+    impact.impactOccurred(intensity: 0.65)
   }
 }

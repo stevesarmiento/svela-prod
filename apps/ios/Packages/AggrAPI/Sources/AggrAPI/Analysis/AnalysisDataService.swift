@@ -8,6 +8,7 @@ public struct AnalysisDataService: Sendable {
     public var data: IndicatorData
     /// 30d line series (for `ComparativeStats` returns/correlations).
     public var series: [TimePoint]
+    public var volume: [TimePoint]
     public var bbwpPct: Double?
     public var comparativeInput: ComparativeStats.Input {
       let wt = data.marketVision?.waveTrend, mf = data.marketVision?.moneyFlow
@@ -24,7 +25,13 @@ public struct AnalysisDataService: Sendable {
 
   public enum Failure: Error, LocalizedError {
     case noMarketData
-    public var errorDescription: String? { "Unable to prepare analysis data. Please try again." }
+    case insufficientHistory
+    public var errorDescription: String? {
+      switch self {
+      case .noMarketData: "Unable to prepare analysis data. Please try again."
+      case .insufficientHistory: "Not enough price and volume history is available for this analysis."
+      }
+    }
   }
 
   let market: MarketAPI
@@ -35,12 +42,34 @@ public struct AnalysisDataService: Sendable {
     self.market = market; self.derivatives = derivatives; self.cache = cache
   }
 
+  /// The single-token sidebar uses its own 7d history, independently of report preparation.
+  public func priceChart(coinId: String) async throws -> ParsedChartData {
+    let response = try await cache.fetch(QueryCache.Key("token-chart", coinId, TimeScale.d7.rawValue), policy: .chart) { [market] in
+      try await market.marketChart(coinId: coinId, days: "7", vsCurrency: "usd")
+    }
+    guard let parsed = ChartSeries.parseMarketChart(
+      prices: response.data.prices.map { .init(time: $0.time, value: $0.value) },
+      volumes: response.data.volumes.map { .init(time: $0.time, value: $0.value) },
+      marketCaps: [], scale: .d7) else { throw Failure.noMarketData }
+    return parsed
+  }
+
   static func validatedMarketInput(_ row: CoinMarketRow) throws -> AnalysisPayload.MarketInput {
     guard let price = row.current_price, price.isFinite, price > 0,
           let pct = row.price_change_percentage_24h, pct.isFinite,
           let marketCap = row.market_cap, marketCap.isFinite, marketCap >= 0,
           let volume24h = row.total_volume, volume24h.isFinite, volume24h >= 0 else { throw Failure.noMarketData }
     return AnalysisPayload.MarketInput(name: row.name, symbol: row.symbol, price: price, change24h: pct, marketCap: marketCap, volume24h: volume24h)
+  }
+
+  /// Chart parsing fills absent volume buckets with zero for drawing. Those synthetic values
+  /// must not count toward the analysis readiness gate; real zero-volume observations do count.
+  static func validateHistory(line: [TimePoint], rawVolume: [ChartSeries.RawPoint], bucketSeconds: Int) throws {
+    let observed = Set(rawVolume.filter { $0.time.isFinite && $0.value.isFinite && $0.value >= 0 }
+      .map { Int($0.time.rounded(.down)) / bucketSeconds * bucketSeconds })
+    guard line.count >= 30, line.filter({ observed.contains($0.epochSeconds) }).count >= 30 else {
+      throw Failure.insufficientHistory
+    }
   }
 
   public func build(coinId: String, fallbackName: String? = nil, fallbackSymbol: String? = nil) async throws -> Bundle {
@@ -60,8 +89,9 @@ public struct AnalysisDataService: Sendable {
     let volumes = chartResponse.data.volumes.map { ChartSeries.RawPoint(time: $0.time, value: $0.value) }
     let mcaps = chartResponse.data.market_caps.map { ChartSeries.RawPoint(time: $0.time, value: $0.value) }
     let parsed = ChartSeries.parseMarketChart(prices: prices, volumes: volumes, marketCaps: mcaps, scale: scale)
-    let line = parsed?.line ?? []
-    let volume = parsed?.volume ?? []
+    let line = AnalysisChartSeries.clean(parsed?.line ?? [])
+    let volume = AnalysisChartSeries.clean(parsed?.volume ?? [], allowsZero: true)
+    try Self.validateHistory(line: line, rawVolume: volumes, bucketSeconds: ChartSeries.marketChartBucketSeconds(scale: scale, prices: prices))
     let (oi, liq, taker) = await (oiTask, liqTask, takerTask)
 
     try Task.checkCancellation()
@@ -120,6 +150,6 @@ public struct AnalysisDataService: Sendable {
       data.priceAction = .init(trend: pct > 2 ? "uptrend" : (pct < -2 ? "downtrend" : "sideways"), volatility: volatility, volume_profile: vt,
                                priceLevel: "neutral", momentum: momentum, divergenceSignal: d.divergence != "none")
     }
-    return Bundle(data: data, series: line, bbwpPct: AnalysisPayload.dailyBbwpPct(series: line))
+    return Bundle(data: data, series: line, volume: volume, bbwpPct: AnalysisPayload.dailyBbwpPct(series: line))
   }
 }

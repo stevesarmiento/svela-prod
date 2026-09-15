@@ -51,7 +51,7 @@ struct MainTabView: View {
           CoinSearchView(mode: .navigate).navigationDestination(for: Route.self, destination: destination)
         }
       } label: {
-        Image(systemName: "magnifyingglass").accessibilityLabel("Search")
+        Image("NavigationSearch").renderingMode(.template).accessibilityLabel("Search")
       }
     }
     .environment(\.tokenTransitionSources, tokenSources)
@@ -61,7 +61,10 @@ struct MainTabView: View {
                          otherSheetPresented: router.sheet != nil)
         .frame(width: 0, height: 0)
     }
-    .onChange(of: router.tab) { _, _ in env.selection.clear() }
+    .onChange(of: router.tab) { _, _ in
+      NavigationFeedback.pageChanged()
+      env.selection.clear()
+    }
     .sheet(item: $router.sheet) { sheet in
       switch sheet {
       case .createGroup: GroupEditorSheet(mode: .create)
@@ -101,6 +104,7 @@ struct SelectionNavigationModifier: ViewModifier {
   @Environment(AppEnvironment.self) private var env
   @State private var confirmingRemoval = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  private var usesWatchlistHeader: Bool { tab == .watchlists && owner == nil && title == nil }
   private var selecting: Bool {
     env.router.tab == tab && env.selection.isActive
       && (owner.map { env.selection.ownerId == $0 } ?? (env.selection.ownerId != "search-add"))
@@ -111,7 +115,8 @@ struct SelectionNavigationModifier: ViewModifier {
       .toolbar(selecting ? .hidden : .visible, for: .tabBar)
       .navigationBarTitleDisplayMode(selecting || tab == .watchlists || title != nil ? .inline : .automatic)
       .toolbar {
-        if selecting || title != nil {
+        // Watchlists owns both states inside one persistent, full-width header.
+        if !usesWatchlistHeader && (selecting || title != nil) {
           ToolbarItem(placement: title == nil ? .principal : .topBarLeading) {
             ZStack(alignment: title == nil ? .center : .leading) {
               if selecting {
@@ -134,7 +139,7 @@ struct SelectionNavigationModifier: ViewModifier {
           }
           .sharedBackgroundVisibility(.hidden)
         }
-        if selecting {
+        if selecting && !usesWatchlistHeader {
           ToolbarItem(placement: .topBarTrailing) {
             Button(env.selection.allSelected ? "Deselect all" : "Select all") {
               withAnimation(reduceMotion ? nil : .snappy) { env.selection.selectAll(!env.selection.allSelected) }

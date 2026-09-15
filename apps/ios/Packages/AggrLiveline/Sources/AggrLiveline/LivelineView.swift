@@ -20,7 +20,9 @@ public struct LivelineView: UIViewRepresentable {
     self.formatValue = formatValue; self.formatVolume = formatVolume; self.formatTime = formatTime
     self.onSelection = onSelection
   }
-  public func makeUIView(context: Context) -> LivelineChartView { LivelineChartView() }
+  public func makeUIView(context: Context) -> LivelineChartView {
+    LivelineChartView(isDecorative: configuration.compact && !configuration.scrub)
+  }
   public func updateUIView(_ view: LivelineChartView, context: Context) {
     view.apply(input: input, configuration: configuration, isActive: isActive,
                formatValue: formatValue, formatVolume: formatVolume, formatTime: formatTime, onSelection: onSelection)
@@ -42,21 +44,36 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
   private var inspectionX: CGFloat?
   private var isHolding = false
   private var settleFrames = 0
+  private let isDecorative: Bool
+  private var lastLayoutSize: CGSize = .zero
+  #if DEBUG
+  private(set) var displayLinkStartCount = 0
+  var hasActiveDisplayLink: Bool { displayLink != nil }
+  #endif
   private let haptic = UISelectionFeedbackGenerator()
   private lazy var pan = LivelinePanRecognizer(target: self, action: #selector(scrub(_:)))
   private lazy var hold = UILongPressGestureRecognizer(target: self, action: #selector(hold(_:)))
   public var accessibilityChartDescriptor: AXChartDescriptor?
 
-  public init() {
+  /// Decorative card charts rely on their host's visibility updates and never
+  /// participate in scroll gestures or observe every content-offset change.
+  public init(isDecorative: Bool = false) {
+    self.isDecorative = isDecorative
     super.init(frame: .zero)
     isOpaque = false; backgroundColor = .clear; contentMode = .redraw
     accessibilityIdentifier = "native-price-chart"
     isAccessibilityElement = true; accessibilityLabel = "Price chart"
     accessibilityHint = "Swipe up or down to inspect historical prices."
     accessibilityTraits = [.adjustable]
-    pan.maximumNumberOfTouches = 1; pan.delegate = self; addGestureRecognizer(pan)
-    hold.minimumPressDuration = 0.18; hold.allowableMovement = 8; hold.delegate = self; addGestureRecognizer(hold)
-    let hover = UIHoverGestureRecognizer(target: self, action: #selector(hover(_:))); addGestureRecognizer(hover)
+    if !isDecorative {
+      pan.maximumNumberOfTouches = 1; pan.delegate = self; addGestureRecognizer(pan)
+      hold.minimumPressDuration = 0.18; hold.allowableMovement = 8; hold.delegate = self; addGestureRecognizer(hold)
+      let hover = UIHoverGestureRecognizer(target: self, action: #selector(hover(_:))); addGestureRecognizer(hover)
+    } else {
+      isUserInteractionEnabled = false
+      isAccessibilityElement = false
+      accessibilityTraits = []
+    }
     NotificationCenter.default.addObserver(self, selector: #selector(activityChanged), name: UIApplication.didBecomeActiveNotification, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(activityChanged), name: UIApplication.willResignActiveNotification, object: nil)
     NotificationCenter.default.addObserver(self, selector: #selector(activityChanged), name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
@@ -74,22 +91,26 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
     let identityChanged = engine.input?.id != input.id
     var config = configuration
     config.reduceMotion = config.reduceMotion || UIAccessibility.isReduceMotionEnabled
+    let configurationChanged = engine.configuration != config
     active = isActive
     self.onSelection = onSelection
     renderer.formatValue = formatValue; renderer.formatVolume = formatVolume; renderer.formatTime = formatTime
     engine.update(input, configuration: config, marketTime: Date().timeIntervalSince1970)
-    if identityChanged {
+    if identityChanged && !isDecorative {
       inspectionX = nil; lastSelection = nil
       Task { @MainActor [weak self] in self?.onSelection(nil) }
     }
-    if changed { updateAccessibility(input) }
-    settleFrames = 90
+    if changed && !isDecorative { updateAccessibility(input) }
+    if !isDecorative || changed || configurationChanged {
+      settleFrames = isDecorative ? 1 : 90
+    }
     wake()
   }
 
   public override func didMoveToWindow() {
     super.didMoveToWindow()
     observations = []
+    if isDecorative { wake(); return }
     var parent = superview
     while let view = parent {
       if let scroll = view as? UIScrollView {
@@ -102,7 +123,14 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
     }
     wake()
   }
-  public override func layoutSubviews() { super.layoutSubviews(); settleFrames = 90; wake() }
+  public override func layoutSubviews() {
+    super.layoutSubviews()
+    if !isDecorative || bounds.size != lastLayoutSize {
+      lastLayoutSize = bounds.size
+      settleFrames = isDecorative ? 1 : 90
+      wake()
+    }
+  }
   public override func draw(_ rect: CGRect) {
     guard let context = UIGraphicsGetCurrentContext() else { return }
     renderer.draw(context, size: bounds.size, engine: engine, frameMilliseconds: frameDelta)
@@ -125,7 +153,13 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
   }
   private func wake() {
     guard visible else { suspend(); return }
+    // A settled card's backing layer scrolls with its parent. There is nothing
+    // to redraw until its data, appearance, or actual plot dimensions change.
+    if isDecorative && settleFrames <= 0 && !engine.isAnimating { return }
     guard displayLink == nil else { return }
+    #if DEBUG
+    displayLinkStartCount += 1
+    #endif
     engine.resetClock(); lastTimestamp = nil
     let link = CADisplayLink(target: DisplayTarget(self), selector: #selector(DisplayTarget.tick(_:)))
     // 60 Hz reference cadence first; engine math is independent of display frequency.
@@ -212,6 +246,24 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
     guard let primary = input.series.first(where: { $0.id == input.primaryID }),
           let first = primary.points.first, let last = primary.points.last, first.time < last.time else { accessibilityChartDescriptor = nil; return }
     let timeFormatter = renderer.formatTime, valueFormatter = renderer.formatValue
+    if !engine.configuration.seriesLabels.isEmpty {
+      let visible = input.series.filter { $0.visible && !$0.points.isEmpty }
+      let points = visible.flatMap(\.points)
+      guard let start = points.map(\.time).min(), let end = points.map(\.time).max(), start < end else {
+        accessibilityChartDescriptor = nil; return
+      }
+      let x = AXNumericDataAxisDescriptor(title: "Time", range: start...end, gridlinePositions: [], valueDescriptionProvider: timeFormatter)
+      let range = LivelineMath.range(visible.flatMap { s in s.points.map { $0.value * s.multiplier } })
+      let y = AXNumericDataAxisDescriptor(title: "Return", range: range, gridlinePositions: [], valueDescriptionProvider: valueFormatter)
+      let series = visible.map { s in
+        AXDataSeriesDescriptor(name: engine.configuration.seriesLabels[s.id] ?? s.id, isContinuous: true,
+                               dataPoints: s.points.map { AXDataPoint(x: $0.time, y: $0.value * s.multiplier) })
+      }
+      accessibilityChartDescriptor = AXChartDescriptor(title: "Comparison performance", summary: "\(series.count) visible series.",
+                                                       xAxis: x, yAxis: y, series: series)
+      accessibilityValue = "\(series.count) visible series"
+      return
+    }
     let x = AXNumericDataAxisDescriptor(title: "Time", range: first.time...last.time, gridlinePositions: [], valueDescriptionProvider: timeFormatter)
     let range = LivelineMath.range(primary.points.map(\.value))
     let y = AXNumericDataAxisDescriptor(title: "Price", range: range, gridlinePositions: [], valueDescriptionProvider: valueFormatter)

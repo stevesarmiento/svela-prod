@@ -12,7 +12,8 @@ struct AggrWatchApp: App {
     AppTypography.configureNavigation()
     #if DEBUG
     if PreviewData.isRunning {
-      _environment = State(initialValue: PreviewData.environment())
+      _environment = State(initialValue: PreviewData.environment(
+        state: ProcessInfo.processInfo.arguments.contains("--preview-empty") ? .empty : .populated))
       return
     }
     #endif

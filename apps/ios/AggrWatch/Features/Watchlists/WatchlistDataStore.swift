@@ -20,6 +20,7 @@ final class WatchlistDataStore {
   /// 1D equal-weight return series per group id (for card sparklines / agg %).
   private(set) var aggregate1dByGroup: [String: [TimePoint]] = [:]
   private(set) var isAggregateLoading = false
+  private(set) var aggregatePendingGroupIDs: Set<String> = []
 
   /// `wg` — selected group slug (persisted like the URL param).
   var selectedGroupSlug: String? {
@@ -36,6 +37,7 @@ final class WatchlistDataStore {
   private var lastMembershipKey = ""
   private var quotesRefreshTask: Task<Void, Never>?
   private var subscriptionGeneration = 0
+  private var aggregateRequestID = UUID()
 
   init(repository: WatchlistRepository, market: MarketAPI, cache: QueryCache) {
     self.repository = repository
@@ -114,6 +116,7 @@ final class WatchlistDataStore {
     aggregateTask?.cancel(); aggregateTask = nil
     quotesRefreshTask?.cancel(); quotesRefreshTask = nil
     isQuotesLoading = false; isAggregateLoading = false
+    aggregatePendingGroupIDs = []
   }
 
   func stop() {
@@ -206,31 +209,60 @@ final class WatchlistDataStore {
 
   func refreshAggregates(force: Bool) async {
     let generation = subscriptionGeneration
+    let requestID = UUID()
+    aggregateRequestID = requestID
     let membership = bootstrap.membershipKey
     let byGroup = groups.map { ($0.id, coinIds(in: $0)) }
-    let allIds = Array(Set(byGroup.flatMap(\.1)))
+    // Preserve group order while fetching shared tokens only once.
+    var seen = Set<String>()
+    let allIds = byGroup.flatMap(\.1).filter { seen.insert($0).inserted }
+    var pending = Dictionary(uniqueKeysWithValues: byGroup.map { ($0.0, Set($0.1)) })
+    aggregatePendingGroupIDs = Set(byGroup.filter { !$0.1.isEmpty }.map(\.0))
+    isAggregateLoading = !allIds.isEmpty
+    aggregate1dByGroup = aggregate1dByGroup.filter { !(pending[$0.key]?.isEmpty ?? true) }
     guard !allIds.isEmpty else { aggregate1dByGroup = [:]; return }
-    isAggregateLoading = aggregate1dByGroup.isEmpty
-    defer { if generation == subscriptionGeneration { isAggregateLoading = false } }
-    let series = await Self.fetchMarketChartSeries(ids: allIds, days: "1", market: market, cache: cache, force: force)
-    guard !Task.isCancelled, generation == subscriptionGeneration, membership == bootstrap.membershipKey else { return }
-    let end = TimeScale.d1.rangeEndMs()
-    var result: [String: [TimePoint]] = [:]
-    for (groupId, ids) in byGroup {
-      var byCoin: [String: [TimePoint]] = [:]
-      var warming = Set<String>()
-      for id in ids {
-        if let s = series[id] { byCoin[id] = s.points; if s.warming { warming.insert(id) } }
+    // Fetching and having cached data are independent. Individual cards decide
+    // whether they need a loading treatment, while ready cards retain their chart.
+    defer {
+      if generation == subscriptionGeneration, requestID == aggregateRequestID {
+        isAggregateLoading = false
+        aggregatePendingGroupIDs = []
       }
-      result[groupId] = AggregateSeries.equalWeightReturnSeries(.init(byCoin: byCoin, warming: warming), scale: .d1, rangeEndMs: end)
     }
-    aggregate1dByGroup = result
+    let end = TimeScale.d1.rangeEndMs()
+    var received: [String: ChartSeries] = [:]
+    var failed = Set<String>()
+    _ = await Self.fetchMarketChartSeries(ids: allIds, days: "1", market: market, cache: cache, force: force) { [self] id, series in
+      guard !Task.isCancelled, generation == subscriptionGeneration, requestID == aggregateRequestID,
+            membership == bootstrap.membershipKey else { return }
+      if let series { received[id] = series } else { failed.insert(id) }
+      for (groupId, ids) in byGroup where pending[groupId]?.contains(id) == true {
+        pending[groupId]?.remove(id)
+        guard pending[groupId]?.isEmpty == true else { continue }
+        // Wait for every member to settle so the percentage never represents a
+        // temporarily incomplete set. Other groups need not wait for this one.
+        aggregatePendingGroupIDs.remove(groupId)
+        let cached = aggregate1dByGroup[groupId] ?? []
+        if !failed.isDisjoint(with: ids), cached.count >= 2 { continue }
+        var byCoin: [String: [TimePoint]] = [:]
+        var warming = Set<String>()
+        for coinId in ids {
+          if let s = received[coinId] {
+            byCoin[coinId] = s.points
+            if s.warming { warming.insert(coinId) }
+          }
+        }
+        let updated = AggregateSeries.equalWeightReturnSeries(.init(byCoin: byCoin, warming: warming), scale: .d1, rangeEndMs: end)
+        if updated.count >= 2 || cached.isEmpty { aggregate1dByGroup[groupId] = updated }
+      }
+    }
   }
 
   struct ChartSeries: Sendable { var points: [TimePoint]; var warming: Bool }
 
   /// Fan-out market-chart fetches (concurrency 5) through the cache; failures are swallowed to nil like the web.
-  static func fetchMarketChartSeries(ids: [String], days: String, market: MarketAPI, cache: QueryCache, force: Bool) async -> [String: ChartSeries] {
+  static func fetchMarketChartSeries(ids: [String], days: String, market: MarketAPI, cache: QueryCache, force: Bool,
+                                     onResult: ((String, ChartSeries?) async -> Void)? = nil) async -> [String: ChartSeries] {
     var result: [String: ChartSeries] = [:]
     await withTaskGroup(of: (String, ChartSeries?).self) { group in
       var iterator = ids.makeIterator()
@@ -253,6 +285,7 @@ final class WatchlistDataStore {
       for await (id, series) in group {
         guard !Task.isCancelled else { group.cancelAll(); break }
         if let series { result[id] = series }
+        await onResult?(id, series)
         if let next = iterator.next() { enqueue(next, &group) }
       }
     }
@@ -301,12 +334,15 @@ extension Array {
 
 #if DEBUG
 extension WatchlistDataStore {
-  func seedPreview() {
+  func seedPreview(loadCharts: Bool = true) {
     bootstrap = PreviewFixtures.bootstrap
     hasLoadedBootstrap = true
     quotesById = Dictionary(uniqueKeysWithValues: PreviewFixtures.quotes.map { ($0.id, $0) })
     quotesUpdatedAt = .now
-    aggregate1dByGroup = [PreviewFixtures.group.id: PreviewFixtures.returns, PreviewFixtures.secondGroup.id: PreviewFixtures.returns]
+    aggregate1dByGroup = loadCharts ? Dictionary(uniqueKeysWithValues: bootstrap.groups.map { ($0.id, PreviewFixtures.returns) }) : [:]
+    if ProcessInfo.processInfo.arguments.contains("--preview-delayed-charts") {
+      aggregate1dByGroup.removeValue(forKey: PreviewFixtures.group.id)
+    }
   }
 }
 #endif

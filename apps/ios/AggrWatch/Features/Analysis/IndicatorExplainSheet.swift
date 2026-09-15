@@ -29,8 +29,10 @@ struct IndicatorExplainSheet<ChartView: View, Badges: View>: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
           header
+          Text("\(title) · \(request.timeframe) timeframe")
+            .font(.caption).foregroundStyle(.secondary)
           chart().clipShape(.rect(cornerRadius: 12))
-          HStack { badges() }.font(.caption)
+          ScrollView(.horizontal, showsIndicators: false) { HStack { badges() }.font(.caption) }
           Divider()
           if let error {
             ContentUnavailableView("Couldn't explain", systemImage: "exclamationmark.triangle", description: Text(error))
@@ -48,7 +50,7 @@ struct IndicatorExplainSheet<ChartView: View, Badges: View>: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
         ToolbarItem(placement: .primaryAction) {
-          Button { run() } label: { Label("Regenerate", systemImage: "arrow.clockwise") }.disabled(isLoading)
+          Button { run() } label: { Label("Regenerate", image: "ActionAnalyze") }.disabled(isLoading)
         }
       }
     }
@@ -60,14 +62,14 @@ struct IndicatorExplainSheet<ChartView: View, Badges: View>: View {
 
   private var header: some View {
     let name = displayName
-    let change = quote?.priceChangePercentage24h
+    let change = request.marketContext.change24hPct ?? quote?.priceChangePercentage24h
     return VStack(alignment: .leading, spacing: 4) {
       HStack(spacing: 8) {
         TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 20)
         Text(name).font(.subheadline.weight(.bold))
         Text("is currently").font(.subheadline).foregroundStyle(.secondary)
       }
-      if let price = quote?.currentPrice, price > 0 {
+      if let price = request.marketContext.priceUsd ?? quote?.currentPrice, price > 0 {
         Text(UsdFormat.price(price)).font(.system(size: 30, weight: .bold)).contentTransition(.numericText()).lineLimit(1).minimumScaleFactor(0.6)
       }
       HStack(spacing: 6) {
