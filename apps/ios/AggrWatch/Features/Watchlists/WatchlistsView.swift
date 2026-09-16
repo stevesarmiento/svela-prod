@@ -137,7 +137,7 @@ private struct WatchlistNavigationHeader: View {
         .accessibilityAddTraits(.isHeader)
         .accessibilityIdentifier("watchlist-selection-title")
       Button(env.selection.allSelected ? "Deselect all" : "Select all") {
-        withAnimation(reduceMotion ? nil : .snappy) {
+        withAnimation(reduceMotion ? nil : SelectionMotion.open) {
           env.selection.selectAll(!env.selection.allSelected)
         }
       }
@@ -277,6 +277,14 @@ enum WatchlistCardSort: String, CaseIterable {
     }
   }
 
+  func title(changePeriod: String) -> String {
+    switch self {
+    case .changeDescending: "\(changePeriod) change: high to low"
+    case .changeAscending: "\(changePeriod) change: low to high"
+    default: title
+    }
+  }
+
   func ordered(_ groups: [WatchlistGroup], change: (WatchlistGroup) -> Double?,
                tokenCount: (WatchlistGroup) -> Int) -> [WatchlistGroup] {
     if self == .original {
@@ -316,6 +324,58 @@ enum WatchlistCardSort: String, CaseIterable {
   }
 }
 
+/// Shared watchlist heading and local display-order menu.
+struct WatchlistSectionHeader: View {
+  @Binding var sort: WatchlistCardSort
+  var changePeriod = "24h"
+  var accessibilityID = "watchlist-sort"
+
+  var body: some View {
+    ListFilterHeader(title: "Your Watchlists", actionLabel: "Sort watchlists",
+                     value: sort.title(changePeriod: changePeriod), isActive: sort != .original,
+                     accessibilityID: accessibilityID) {
+      Picker("Sort watchlists", selection: $sort) {
+        ForEach(WatchlistCardSort.allCases, id: \.self) { option in
+          Text(option.title(changePeriod: changePeriod)).tag(option)
+        }
+      }
+    }
+  }
+}
+
+struct ListFilterHeader<MenuContent: View>: View {
+  let title: String
+  let actionLabel: String
+  let value: String
+  let isActive: Bool
+  let accessibilityID: String
+  @ViewBuilder var menu: () -> MenuContent
+
+  var body: some View {
+    HStack {
+      Text(title)
+        .font(.system(.headline, design: .rounded, weight: .semibold))
+        .accessibilityAddTraits(.isHeader)
+      Spacer()
+      Menu {
+        menu()
+      } label: {
+        Image(systemName: "line.3.horizontal.decrease")
+          .font(.system(size: 18, weight: .semibold))
+          .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
+          .frame(width: 44, height: 44)
+          .contentShape(.rect)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(actionLabel)
+      .accessibilityValue(value)
+      .accessibilityIdentifier(accessibilityID)
+    }
+    .padding(.leading, 20)
+    .padding(.trailing, 12)
+  }
+}
+
 /// `watchlists-grid.tsx`: responsive grid of cards.
 struct WatchlistsGrid: View {
   @Environment(AppEnvironment.self) private var env
@@ -328,31 +388,7 @@ struct WatchlistsGrid: View {
   var body: some View {
     let data = env.watchlistData
     VStack(spacing: 12) {
-      HStack {
-        Text("Your Watchlists")
-          .font(.system(.headline, design: .rounded, weight: .semibold))
-          .accessibilityAddTraits(.isHeader)
-        Spacer()
-        Menu {
-          Picker("Sort watchlists", selection: $sort) {
-            ForEach(WatchlistCardSort.allCases, id: \.self) { option in
-              Text(option.title).tag(option)
-            }
-          }
-        } label: {
-          Image(systemName: "line.3.horizontal.decrease")
-            .font(.system(size: 18, weight: .semibold))
-            .foregroundStyle(sort == .original ? Color.secondary : Color.accentColor)
-            .frame(width: 44, height: 44)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Sort watchlists")
-        .accessibilityValue(sort.title)
-        .accessibilityIdentifier("watchlist-sort")
-      }
-      .padding(.leading, 20)
-      .padding(.trailing, 12)
+      WatchlistSectionHeader(sort: $sort)
 
       cards(data: data)
     }

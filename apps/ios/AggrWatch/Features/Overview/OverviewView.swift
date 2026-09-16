@@ -84,14 +84,6 @@ struct PortfolioValueCard: View {
         }
         Spacer()
       }
-      HStack(alignment: .firstTextBaseline) {
-        Text("Total market cap").font(.subheadline).foregroundStyle(.secondary)
-        Spacer()
-        Text(store.displayMarketCapUsd.map { UsdFormat.largeUsd($0) } ?? "—")
-          .font(.system(.title3, design: .rounded, weight: .medium).monospacedDigit())
-          .accessibilityIdentifier("overview-total-market-cap")
-      }
-      .padding(.top, 8)
       if store.portfolioChartPoints.count >= 2 || store.marketChartPoints.count >= 2 {
         RebasedComparisonChart(portfolio: store.portfolioChartPoints, market: store.marketChartPoints,
                                scrubTime: $store.scrubTime, scale: store.scale,

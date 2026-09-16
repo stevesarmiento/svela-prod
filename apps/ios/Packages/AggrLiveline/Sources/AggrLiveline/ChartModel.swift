@@ -21,12 +21,15 @@ public struct LivelineSeries: Sendable, Equatable {
   public var width: Double
   public var dash: [Double]
   public var visible: Bool
+  /// Visual emphasis without excluding the series from the range or scrubbing.
+  public var opacity: Double
+  var targetOpacity: Double { visible ? min(1, max(0, opacity)) : 0 }
   /// Data stays in its original units; rendering and range use this multiplier.
   public var multiplier: Double
   public init(id: String, points: [LivelinePoint], color: LivelineColor = .white,
-              width: Double = 1.5, dash: [Double] = [], visible: Bool = true, multiplier: Double = 1) {
+              width: Double = 1.5, dash: [Double] = [], visible: Bool = true, multiplier: Double = 1, opacity: Double = 1) {
     self.id = id; self.points = points; self.color = color; self.width = width
-    self.dash = dash; self.visible = visible; self.multiplier = multiplier
+    self.dash = dash; self.visible = visible; self.multiplier = multiplier; self.opacity = opacity
   }
 }
 
@@ -67,6 +70,18 @@ public struct LivelineInput: Sendable, Equatable {
     a.id == b.id && a.series == b.series && a.primaryID == b.primaryID && a.viewport == b.viewport
       && a.observation == b.observation && a.volume == b.volume && a.band?.lower == b.band?.lower
       && a.band?.upper == b.band?.upper && a.projectionID == b.projectionID && a.state == b.state
+  }
+
+  /// Opacity does not change chart geometry or the accessible data series.
+  func matchesExceptOpacity(_ other: Self) -> Bool {
+    guard series.count == other.series.count else { return false }
+    var comparable = self
+    comparable.series = zip(series, other.series).map { incoming, existing in
+      var series = incoming
+      series.opacity = existing.opacity
+      return series
+    }
+    return comparable == other
   }
 }
 

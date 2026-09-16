@@ -10,6 +10,7 @@ struct TokenIndicatorsSection: View {
   let quote: CoinQuote?
 
   @State private var scrub: Date?
+  @State private var explainScrub: Date?
   @State private var explain: ExplainTarget?
 
   private enum ExplainTarget: Identifiable { case marketVision, bollinger, bbwp, rsi; var id: Self { self } }
@@ -27,6 +28,7 @@ struct TokenIndicatorsSection: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+    .onChange(of: explain) { _, _ in explainScrub = nil }
     .sheet(item: $explain) { target in
       if let b = store.indicators { explainSheet(target, b) }
     }
@@ -44,7 +46,7 @@ struct TokenIndicatorsSection: View {
 
   private func momentumCard(_ b: IndicatorBundle) -> some View {
     IndicatorCardFrame(title: "Momentum & Money Flow", description: "Tracks momentum shifts using WaveTrend + money flow.",
-                       isPending: store.isLoading, onExplain: { explain = .marketVision }) {
+                       isPending: store.isIndicatorPending, onExplain: { explain = .marketVision }) {
       MarketVisionChart(result: b.marketVision, windowDays: store.indicatorWindowDays, selectedDate: $scrub)
     } badges: { momentumBadges(b.marketVision) }
   }
@@ -67,8 +69,8 @@ struct TokenIndicatorsSection: View {
   }
 
   private func bollingerCard(_ b: IndicatorBundle) -> some View {
-    IndicatorCardFrame(title: "Bolinger Bands", description: "Shows RSI relative to its own bands (overextension vs mean).",
-                       isPending: store.isLoading, onExplain: { explain = .bollinger }) {
+    IndicatorCardFrame(title: "Bollinger Bands", description: "Shows RSI relative to its own bands (overextension vs mean).",
+                       isPending: store.isIndicatorPending, onExplain: { explain = .bollinger }) {
       BollingerBandsChart(result: b.bollinger, windowDays: store.indicatorWindowDays, selectedDate: $scrub)
     } badges: { bollingerBadges(b.bollinger) }
   }
@@ -84,7 +86,7 @@ struct TokenIndicatorsSection: View {
 
   private func volatilityCard(_ b: IndicatorBundle) -> some View {
     IndicatorCardFrame(title: "Volatility", description: "Percentile rank of bandwidth (detects compression vs expansion).",
-                       isPending: store.isLoading, onExplain: { explain = .bbwp }) {
+                       isPending: store.isIndicatorPending, onExplain: { explain = .bbwp }) {
       BBWPChart(result: b.bbwp, windowDays: store.indicatorWindowDays, selectedDate: $scrub)
     } badges: { bbwpBadges(b.bbwp) }
   }
@@ -100,7 +102,7 @@ struct TokenIndicatorsSection: View {
 
   private func divergencesCard(_ b: IndicatorBundle) -> some View {
     IndicatorCardFrame(title: "Divergences", description: "Compares RSI pivots against price pivots to flag bullish and bearish divergence.",
-                       isPending: store.isLoading, onExplain: { explain = .rsi }) {
+                       isPending: store.isIndicatorPending, onExplain: { explain = .rsi }) {
       RsiDivergencesChart(result: b.rsiDivergences, windowDays: store.indicatorWindowDays, selectedDate: $scrub)
     } badges: { divergenceBadges(b.rsiDivergences) }
   }
@@ -128,7 +130,7 @@ struct TokenIndicatorsSection: View {
 
   private var marketContext: IndicatorExplainRequest.MarketContext {
     let bars = store.indicators?.explainBars ?? []
-    return .init(priceUsd: quote?.currentPrice, change24hPct: quote?.priceChangePercentage24h, volume24hUsd: quote?.totalVolume,
+    return .init(priceUsd: store.alignedPrice ?? quote?.currentPrice, change24hPct: quote?.priceChangePercentage24h, volume24hUsd: quote?.totalVolume,
                  marketCapUsd: quote?.marketCap, closeHistory: bars.map(\.close), closeTimesUtc: bars.map(\.time))
   }
 
@@ -159,7 +161,7 @@ struct TokenIndicatorsSection: View {
                         allowEqual: c.allowEqual, priceEps: c.priceEps, rsiEps: c.rsiEps, showRegular: c.showRegular, showHidden: c.showHidden,
                         signalPeriod: c.signalPeriod, signalType: c.signalType.rawValue, alertHigh: c.alertHigh, alertLow: c.alertLow))
     }
-    return IndicatorExplainRequest(token: tokenRef, timeframe: store.scale.rawValue, marketContext: marketContext, snapshot: snapshot)
+    return IndicatorExplainRequest(token: tokenRef, timeframe: store.indicatorScale.rawValue, marketContext: marketContext, snapshot: snapshot)
   }
 
   @ViewBuilder private func explainSheet(_ target: ExplainTarget, _ b: IndicatorBundle) -> some View {
@@ -168,19 +170,19 @@ struct TokenIndicatorsSection: View {
     switch target {
     case .marketVision:
       IndicatorExplainSheet(title: "Momentum & Money Flow", request: req, quote: quote, coinId: coinId) {
-        MarketVisionChart(result: b.marketVision, windowDays: days, selectedDate: .constant(nil), height: 220)
+        MarketVisionChart(result: b.marketVision, windowDays: days, selectedDate: $explainScrub, height: 220)
       } badges: { momentumBadges(b.marketVision) }
     case .bollinger:
-      IndicatorExplainSheet(title: "Bolinger Bands", request: req, quote: quote, coinId: coinId) {
-        BollingerBandsChart(result: b.bollinger, windowDays: days, selectedDate: .constant(nil), height: 220)
+      IndicatorExplainSheet(title: "Bollinger Bands", request: req, quote: quote, coinId: coinId) {
+        BollingerBandsChart(result: b.bollinger, windowDays: days, selectedDate: $explainScrub, height: 220)
       } badges: { bollingerBadges(b.bollinger) }
     case .bbwp:
       IndicatorExplainSheet(title: "Volatility", request: req, quote: quote, coinId: coinId) {
-        BBWPChart(result: b.bbwp, windowDays: days, selectedDate: .constant(nil), height: 220)
+        BBWPChart(result: b.bbwp, windowDays: days, selectedDate: $explainScrub, height: 220)
       } badges: { bbwpBadges(b.bbwp) }
     case .rsi:
       IndicatorExplainSheet(title: "RSI Divergences", request: req, quote: quote, coinId: coinId) {
-        RsiDivergencesChart(result: b.rsiDivergences, windowDays: days, selectedDate: .constant(nil), height: 220)
+        RsiDivergencesChart(result: b.rsiDivergences, windowDays: days, selectedDate: $explainScrub, height: 220)
       } badges: { divergenceBadges(b.rsiDivergences) }
     }
   }
@@ -201,8 +203,8 @@ struct IndicatorCardFrame<ChartView: View, Badges: View>: View {
     VStack(alignment: .leading, spacing: 8) {
       HStack(alignment: .top, spacing: 12) {
         VStack(alignment: .leading, spacing: 2) {
-          Text(title).font(.subheadline.weight(.semibold))
-          Text(description).font(.caption).foregroundStyle(.secondary)
+          Text(title).font(.system(.subheadline, design: .rounded, weight: .semibold))
+          Text(description).font(.system(.caption, design: .rounded)).foregroundStyle(.secondary)
         }
         Spacer(minLength: 0)
         Button(action: onExplain) {
@@ -212,17 +214,47 @@ struct IndicatorCardFrame<ChartView: View, Badges: View>: View {
           .buttonStyle(.glass)
           .buttonBorderShape(.circle)
           .accessibilityLabel("Explain \(title)")
+          .disabled(isPending)
       }
       chart()
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 14) { badges() }
-          .padding(.horizontal, 4)
-      }
+      IndicatorStatsLayout(spacing: 12, rowSpacing: 8) { badges() }
+        .padding(.horizontal, 4)
       .padding(.top, 6)
       .overlay(alignment: .top) { Divider().opacity(0.6) }
     }
     .padding(.vertical, 12)
     .opacity(isPending ? 0.9 : 1)
+  }
+}
+
+/// Web's wrapping stats strip: all readouts stay discoverable on a narrow screen.
+private struct IndicatorStatsLayout: Layout {
+  let spacing: CGFloat
+  let rowSpacing: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let width = proposal.width ?? 350
+    return CGSize(width: width, height: positions(subviews, width: width).height)
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    let layout = positions(subviews, width: bounds.width)
+    for (view, origin) in zip(subviews, layout.origins) {
+      view.place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y), anchor: .topLeading, proposal: .unspecified)
+    }
+  }
+
+  private func positions(_ subviews: Subviews, width: CGFloat) -> (origins: [CGPoint], height: CGFloat) {
+    var origins: [CGPoint] = []
+    var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
+    for view in subviews {
+      let size = view.sizeThatFits(.unspecified)
+      if x > 0 && x + size.width > width { x = 0; y += rowHeight + rowSpacing; rowHeight = 0 }
+      origins.append(CGPoint(x: x, y: y))
+      x += size.width + spacing
+      rowHeight = max(rowHeight, size.height)
+    }
+    return (origins, y + rowHeight)
   }
 }
 

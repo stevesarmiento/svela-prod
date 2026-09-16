@@ -5,10 +5,11 @@ import SwiftUI
 /// `/comparison` — aggregate view across ALL watchlists: normalized multi-line chart + accordion table.
 struct CompareView: View {
   @Environment(AppEnvironment.self) private var env
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var scale: TimeScale = .d7
-  @State private var hidden: Set<String> = []
+  @State private var focusedGroupIDs: Set<String> = []
   @State private var expanded: Set<String> = []
-  @State private var expandedInitialized = false
+  @AppStorage("compare.watchlistSort") private var sort: WatchlistCardSort = .original
   @State private var seriesByGroup: [String: [TimePoint]] = [:]
   @State private var changeByCoin: [String: Double] = [:]
   @State private var loading = false
@@ -17,12 +18,6 @@ struct CompareView: View {
     let data = env.watchlistData
     ScrollView {
       VStack(spacing: 16) {
-        HStack {
-          Text("Watchlist Comparison").font(.headline)
-          Spacer()
-        }
-        .padding(.horizontal, 16)
-
         if let error = data.bootstrapError {
           EmptyState(systemImage: "exclamationmark.triangle", title: "Couldn’t load watchlists", message: error,
                      actionTitle: "Retry") { data.start() }
@@ -33,18 +28,22 @@ struct CompareView: View {
                      actionTitle: "Create Watchlist") { env.router.sheet = .createGroup }
         } else {
           chartCard
-          WatchlistAccordionTable(scale: scale, expanded: $expanded, seriesByGroup: seriesByGroup, changeByCoin: changeByCoin, loading: loading)
+          WatchlistSectionHeader(sort: $sort, changePeriod: scale.label, accessibilityID: "comparison-watchlist-sort")
+          WatchlistAccordionTable(scale: scale, expanded: $expanded, focusedGroupIDs: $focusedGroupIDs, sort: sort, seriesByGroup: seriesByGroup, changeByCoin: changeByCoin, loading: loading)
         }
       }
       .padding(.bottom, 24)
     }
-    .navigationTitle("Compare")
+    .navigationTitle("")
+    .modifier(SelectionNavigationModifier(tab: .compare, title: "Compare"))
     .toolbar {
       if !env.selection.isActive {
         ToolbarItemGroup(placement: .topBarTrailing) {
           Button {
             let all = Set(data.groups.map(\.id))
-            withAnimation(.snappy) { expanded = expanded == all ? [] : all }
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.22, extraBounce: 0)) {
+              expanded = expanded == all ? [] : all
+            }
           } label: { Label(expanded.count == data.groups.count ? "Collapse all" : "Expand all", image: expanded.count == data.groups.count ? "ActionCollapseWatchlists" : "ActionExpandWatchlists") }
           Button { env.router.sheet = .coinSearch(targetGroupId: data.selectedGroup?.id) } label: { Label("Add token", image: "ActionAddToken") }
           Button { env.router.sheet = .createGroup } label: { Label("Create watchlist", image: "ActionCreateWatchlist") }
@@ -52,7 +51,6 @@ struct CompareView: View {
       }
     }
     .task(id: "\(scale.rawValue)|\(data.bootstrap.membershipKey)|\(env.isSceneActive)|\(env.foregroundRevision)") {
-      if !expandedInitialized, !data.groups.isEmpty { expanded = Set(data.groups.map(\.id)); expandedInitialized = true }
       guard env.isSceneActive else { return }
       while !Task.isCancelled {
         await loadSeries()
@@ -72,10 +70,8 @@ struct CompareView: View {
         if loading { ProgressView().frame(height: 220) }
         else { Text(scale.isAggregateChangeUnavailable ? "N/A for this interval" : "No chart data yet").font(.footnote).foregroundStyle(.secondary).frame(height: 220) }
       } else {
-        MultiLineComparisonChart(series: series, hidden: $hidden, onSelect: { id in
-          if let g = data.groups.first(where: { $0.id == id }) { data.selectedGroupSlug = g.slug }
-          withAnimation(.snappy) { if hidden.contains(id) { hidden.remove(id) } else { hidden.insert(id) } }
-        }, datasetID: "watchlists", scale: scale, isActive: env.isSceneActive && env.router.tab == .compare,
+        MultiLineComparisonChart(series: series, selectedIDs: focusedGroupIDs,
+          datasetID: "watchlists", scale: scale, isActive: env.isSceneActive && env.router.tab == .compare,
            accessibilityID: "watchlists-comparison-chart")
         .frame(height: 300)
       }
@@ -112,15 +108,19 @@ struct CompareView: View {
 struct WatchlistAccordionTable: View {
   let scale: TimeScale
   @Binding var expanded: Set<String>
+  @Binding var focusedGroupIDs: Set<String>
+  var sort: WatchlistCardSort = .original
   let seriesByGroup: [String: [TimePoint]]
   let changeByCoin: [String: Double]
   let loading: Bool
   @Environment(AppEnvironment.self) private var env
 
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
   var body: some View {
     let data = env.watchlistData
     VStack(spacing: 12) {
-      ForEach(data.groups) { group in
+      ForEach(sort.ordered(data.groups, change: aggregateChange, tokenCount: { data.coinIds(in: $0).count })) { group in
         groupHeader(group)
         if expanded.contains(group.id) { coinsPanel(group) }
       }
@@ -128,7 +128,10 @@ struct WatchlistAccordionTable: View {
     .padding(.horizontal, 16)
     .onAppear { registerSelection() }
     .onChange(of: expanded) { _, _ in registerSelection() }
-    .onChange(of: data.bootstrap) { _, _ in registerSelection() }
+    .onChange(of: data.bootstrap) { _, _ in
+      registerSelection()
+      focusedGroupIDs.formIntersection(data.groups.map(\.id))
+    }
     .onChange(of: env.router.sheet) { _, sheet in
       if sheet == nil { registerSelection() }
     }
@@ -151,6 +154,18 @@ struct WatchlistAccordionTable: View {
     })
   }
 
+  private func aggregateChange(_ group: WatchlistGroup) -> Double? {
+    guard !scale.isAggregateChangeUnavailable else { return nil }
+    if let value = seriesByGroup[group.id]?.last?.value { return value }
+    let data = env.watchlistData
+    return AggregateSeries.equalWeightFromQuotes(data.items(in: group).map { item in
+      data.quote(item.coinId).flatMap { quote in
+        AggregateSeries.quoteIntervalChange(scale: scale, change24h: quote.priceChangePercentage24h,
+          change7d: quote.priceChangePercentage7d, change30d: quote.priceChangePercentage30d)
+      }
+    })
+  }
+
   @ViewBuilder
   private func groupHeader(_ g: WatchlistGroup) -> some View {
     let data = env.watchlistData
@@ -158,49 +173,99 @@ struct WatchlistAccordionTable: View {
     let items = data.items(in: g)
     let series = seriesByGroup[g.id] ?? []
     let chartChange = series.last?.value
-    let estimate = AggregateSeries.equalWeightFromQuotes(items.map { data.quote($0.coinId).flatMap { q in AggregateSeries.quoteIntervalChange(scale: scale, change24h: q.priceChangePercentage24h, change7d: q.priceChangePercentage7d, change30d: q.priceChangePercentage30d) } })
-    let change = chartChange ?? estimate
-    let isEstimate = chartChange == nil && estimate != nil
-    Button { withAnimation(.snappy) { if expanded.contains(g.id) { expanded.remove(g.id) } else { expanded.insert(g.id) } } } label: {
-      HStack(spacing: 10) {
-        HStack(spacing: 5) {
-          WatchlistGroupIconView(icon: g.icon, size: 13).foregroundStyle(.white.opacity(0.85))
-          Text(g.name).font(.caption.weight(.bold)).foregroundStyle(.white).lineLimit(1)
+    let change = aggregateChange(g)
+    let isEstimate = chartChange == nil && change != nil
+    let focused = focusedGroupIDs.contains(g.id)
+    let cardBackground = Color(white: focused ? 0.10 : 0.06)
+    TokenSwipeCard(id: "scope-\(g.id)", openRowID: .constant(nil), isSelected: focused,
+                   onToggleSelection: {
+                     if focusedGroupIDs.contains(g.id) { focusedGroupIDs.remove(g.id) }
+                     else { focusedGroupIDs.insert(g.id) }
+                   },
+                   selectionIcon: "scope", selectionAccessibilityLabel: "Focus watchlist chart",
+                   deselectionAccessibilityLabel: "Remove watchlist from chart focus", deleteTitle: "") {
+      Button {
+        withAnimation(reduceMotion ? nil : .snappy(duration: 0.22, extraBounce: 0)) {
+          if expanded.contains(g.id) { expanded.remove(g.id) } else { expanded.insert(g.id) }
         }
-        .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(Color(oklch: theme.background), in: Capsule())
-        .overlay(Capsule().strokeBorder(Color(oklch: theme.border)))
-        if !expanded.contains(g.id) {
-          TokenAvatarStack(items: items.prefix(4).compactMap { data.quote($0.coinId) }.map { .init(symbol: $0.symbol, imageURL: $0.image) }, maxVisible: 4, size: 20, usesGlass: true)
-        }
-        Spacer()
-        if series.count >= 2 {
-          AggrSparkline(points: series, isActive: env.isSceneActive && env.router.tab == .compare,
-                        color: (change ?? 0) >= 0 ? .gainGreen : .lossRed, lineWidth: 1.2, fadeLeading: false)
-            .equatable().frame(width: 64, height: 22)
-        } else if loading && !scale.isAggregateChangeUnavailable {
-          SkeletonBlock(height: 12, width: 64)
-        }
-        if scale.isAggregateChangeUnavailable {
-          Text("N/A").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-        } else if let change {
-          HStack(spacing: 3) {
-            Image(systemName: "triangle.fill").font(.system(size: 7)).rotationEffect(.degrees(change < 0 ? 180 : 0))
-            Text(String(format: "%.2f%%", abs(change)))
-            if isEstimate { Text("est.").font(.system(size: 9)).foregroundStyle(.secondary) }
+      } label: {
+        HStack(spacing: 10) {
+          WatchlistGroupIconView(icon: g.icon, size: 22)
+            .foregroundStyle(.white.opacity(0.9))
+            .frame(width: 40, height: 40)
+            .background(Color(oklch: theme.background), in: .rect(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(oklch: theme.border)))
+            .overlay(alignment: .bottomTrailing) {
+              Image(systemName: "scope")
+                .resizable()
+                .scaledToFit()
+                .fontWeight(.bold)
+                .padding(5)
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(.blue, in: Circle())
+                .overlay(Circle().strokeBorder(cardBackground, lineWidth: 3))
+                .scaleEffect(focused || reduceMotion ? 1 : 0, anchor: .center)
+                .opacity(focused ? 1 : 0)
+                .animation(reduceMotion ? nil : .snappy(duration: 0.25, extraBounce: 0.1), value: focused)
+                .offset(x: 4, y: 4)
+            }
+            .accessibilityHidden(true)
+
+          VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+              Text(g.name)
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .foregroundStyle(.primary).lineLimit(1)
+              TokenAvatarStack(items: items.map { item in
+                let quote = data.quote(item.coinId)
+                return .init(symbol: quote?.symbol ?? item.coinId, imageURL: quote?.image)
+              }, maxVisible: 3, size: 16, usesGlass: true)
+                .fixedSize().accessibilityHidden(true)
+            }
+            HStack(spacing: 5) {
+              if scale.isAggregateChangeUnavailable {
+                PercentBadge(pct: nil)
+              } else if let change {
+                PercentBadge(pct: change)
+                if isEstimate {
+                  Text("est.").font(.system(.caption2, design: .rounded)).foregroundStyle(.secondary)
+                }
+              } else if loading {
+                SkeletonBlock(height: 18, width: 56)
+              } else {
+                PercentBadge(pct: nil)
+              }
+            }
           }
-          .font(.caption.monospacedDigit())
-          .foregroundStyle(change > 0 ? Color.gainGreen : (change < 0 ? Color.lossRed : .secondary))
-        } else {
-          SkeletonBlock(height: 12, width: 40)
+          .frame(maxWidth: .infinity, alignment: .leading)
+
+          ZStack {
+            if series.count >= 2 {
+              AggrSparkline(points: series, isActive: env.isSceneActive && env.router.tab == .compare,
+                            color: (change ?? 0) >= 0 ? .gainGreen : .lossRed, lineWidth: 1.5, fadeLeading: false)
+                .equatable()
+            } else if loading && !scale.isAggregateChangeUnavailable {
+              SkeletonBlock(height: 22, width: 88)
+            }
+          }
+          .frame(width: 88, height: 40)
+
+          Image(systemName: "chevron.down")
+            .font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
+            .rotationEffect(.degrees(expanded.contains(g.id) ? 0 : -90))
+            .accessibilityHidden(true)
         }
-        Image(systemName: "chevron.down").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
-          .rotationEffect(.degrees(expanded.contains(g.id) ? 0 : -90))
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+        .background(cardBackground, in: .rect(cornerRadius: 16))
+        .contentShape(.rect(cornerRadius: 16))
       }
-      .padding(.horizontal, 12).padding(.vertical, 10)
-      .contentShape(.rect)
+      .buttonStyle(.plain)
     }
-    .buttonStyle(.plain)
+    .accessibilityIdentifier("comparison-watchlist-\(g.id)")
+    .accessibilityValue("\(expanded.contains(g.id) ? "Expanded" : "Collapsed")\(focused ? ", Chart focused" : "")")
+    .accessibilityHint("Tap to \(expanded.contains(g.id) ? "hide" : "show") tokens. Swipe right to \(focused ? "remove this watchlist from chart focus" : "focus this watchlist’s chart").")
   }
 
   @ViewBuilder
@@ -239,6 +304,7 @@ struct WatchlistAccordionTable: View {
           }
           .buttonStyle(.plain)
         }
+        .accessibilityIdentifier("comparison-token-\(key)")
         .tokenTransitionSource("compare|\(key)")
       }
     }
@@ -258,10 +324,12 @@ struct WatchlistAccordionTable: View {
 #Preview("Expanded comparison table") {
   PreviewHost(tab: .compare) { _ in
     PreviewValue(Set([PreviewFixtures.group.id])) { expanded in
-      ScrollView {
-        WatchlistAccordionTable(scale: .d7, expanded: expanded,
-          seriesByGroup: [PreviewFixtures.group.id: PreviewFixtures.returns],
-          changeByCoin: ["bitcoin": 2.84, "ethereum": -1.32, "solana": 6.12], loading: false).padding()
+      PreviewValue(Set<String>()) { focused in
+        ScrollView {
+          WatchlistAccordionTable(scale: .d7, expanded: expanded, focusedGroupIDs: focused,
+            seriesByGroup: [PreviewFixtures.group.id: PreviewFixtures.returns],
+            changeByCoin: ["bitcoin": 2.84, "ethereum": -1.32, "solana": 6.12], loading: false).padding()
+        }
       }
     }
   }

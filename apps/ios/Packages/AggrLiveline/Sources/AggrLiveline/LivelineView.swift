@@ -7,21 +7,26 @@ public struct LivelineView: UIViewRepresentable {
   public var input: LivelineInput
   public var configuration: LivelineConfiguration
   public var isActive: Bool
+  /// Hosts using onScrollVisibilityChange already deliver boundary updates.
+  public var tracksScrollVisibility: Bool
   public var formatValue: (Double) -> String
   public var formatVolume: (Double) -> String
   public var formatTime: (Double) -> String
   public var onSelection: (LivelineSelection?) -> Void
   public init(input: LivelineInput, configuration: LivelineConfiguration = .init(), isActive: Bool = true,
+              tracksScrollVisibility: Bool = true,
               formatValue: @escaping (Double) -> String,
               formatVolume: @escaping (Double) -> String = { String(format: "%.0f", $0) },
               formatTime: @escaping (Double) -> String,
               onSelection: @escaping (LivelineSelection?) -> Void = { _ in }) {
     self.input = input; self.configuration = configuration; self.isActive = isActive
+    self.tracksScrollVisibility = tracksScrollVisibility
     self.formatValue = formatValue; self.formatVolume = formatVolume; self.formatTime = formatTime
     self.onSelection = onSelection
   }
   public func makeUIView(context: Context) -> LivelineChartView {
-    LivelineChartView(isDecorative: configuration.compact && !configuration.scrub)
+    LivelineChartView(isDecorative: configuration.compact && !configuration.scrub,
+                      tracksScrollVisibility: tracksScrollVisibility)
   }
   public func updateUIView(_ view: LivelineChartView, context: Context) {
     view.apply(input: input, configuration: configuration, isActive: isActive,
@@ -45,10 +50,19 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
   private var isHolding = false
   private var settleFrames = 0
   private let isDecorative: Bool
+  private let tracksScrollVisibility: Bool
+  private var lastScrollVisibility: Bool?
   private var lastLayoutSize: CGSize = .zero
+  private var comparisonContainer: CALayer?
+  private var comparisonLayers: [String: CAShapeLayer] = [:]
+  private var comparisonLayout: LivelineLayout?
   #if DEBUG
   private(set) var displayLinkStartCount = 0
   var hasActiveDisplayLink: Bool { displayLink != nil }
+  var scrollObserverCount: Int { observations.count }
+  private(set) var rasterDrawCount = 0
+  var compositedSeriesCount: Int { comparisonLayers.count }
+  func compositedOpacity(for id: String) -> Float? { comparisonLayers[id]?.opacity }
   #endif
   private let haptic = UISelectionFeedbackGenerator()
   private lazy var pan = LivelinePanRecognizer(target: self, action: #selector(scrub(_:)))
@@ -57,8 +71,9 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
 
   /// Decorative card charts rely on their host's visibility updates and never
   /// participate in scroll gestures or observe every content-offset change.
-  public init(isDecorative: Bool = false) {
+  public init(isDecorative: Bool = false, tracksScrollVisibility: Bool = true) {
     self.isDecorative = isDecorative
+    self.tracksScrollVisibility = tracksScrollVisibility
     super.init(frame: .zero)
     isOpaque = false; backgroundColor = .clear; contentMode = .redraw
     accessibilityIdentifier = "native-price-chart"
@@ -88,10 +103,12 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
              formatValue: @escaping (Double) -> String, formatVolume: @escaping (Double) -> String,
              formatTime: @escaping (Double) -> String, onSelection: @escaping (LivelineSelection?) -> Void) {
     let changed = engine.input != input
+    let emphasisOnly = engine.input.map { input.matchesExceptOpacity($0) } ?? false
     let identityChanged = engine.input?.id != input.id
     var config = configuration
     config.reduceMotion = config.reduceMotion || UIAccessibility.isReduceMotionEnabled
     let configurationChanged = engine.configuration != config
+    if (changed && !emphasisOnly) || configurationChanged { clearComparisonLayers() }
     active = isActive
     self.onSelection = onSelection
     renderer.formatValue = formatValue; renderer.formatVolume = formatVolume; renderer.formatTime = formatTime
@@ -100,9 +117,9 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
       inspectionX = nil; lastSelection = nil
       Task { @MainActor [weak self] in self?.onSelection(nil) }
     }
-    if changed && !isDecorative { updateAccessibility(input) }
-    if !isDecorative || changed || configurationChanged {
-      settleFrames = isDecorative ? 1 : 90
+    if changed && !isDecorative && !emphasisOnly { updateAccessibility(input) }
+    if changed || configurationChanged {
+      settleFrames = 1
     }
     wake()
   }
@@ -110,30 +127,111 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
   public override func didMoveToWindow() {
     super.didMoveToWindow()
     observations = []
+    lastScrollVisibility = nil
     if isDecorative { wake(); return }
     var parent = superview
     while let view = parent {
       if let scroll = view as? UIScrollView {
         scroll.panGestureRecognizer.require(toFail: pan)
-        observations.append(scroll.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
-          Task { @MainActor [weak self] in self?.wake() }
-        })
+        if tracksScrollVisibility {
+          observations.append(scroll.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
+            // UIKit scroll offsets are delivered on the main thread. Only
+            // visibility boundaries need work, not a Task for every pixel.
+            MainActor.assumeIsolated { self?.scrollVisibilityChanged() }
+          })
+        }
       }
       parent = view.superview
     }
     wake()
   }
+  private func scrollVisibilityChanged() {
+    let next = visible
+    guard lastScrollVisibility != next else { return }
+    lastScrollVisibility = next
+    if next { wake() } else { suspend() }
+  }
   public override func layoutSubviews() {
     super.layoutSubviews()
-    if !isDecorative || bounds.size != lastLayoutSize {
+    if bounds.size != lastLayoutSize {
+      clearComparisonLayers()
       lastLayoutSize = bounds.size
-      settleFrames = isDecorative ? 1 : 90
+      settleFrames = 1
       wake()
     }
   }
   public override func draw(_ rect: CGRect) {
     guard let context = UIGraphicsGetCurrentContext() else { return }
-    renderer.draw(context, size: bounds.size, engine: engine, frameMilliseconds: frameDelta)
+    #if DEBUG
+    rasterDrawCount += 1
+    #endif
+    renderer.draw(context, size: bounds.size, engine: engine, frameMilliseconds: frameDelta,
+                  drawsSeries: comparisonContainer == nil)
+  }
+
+  private func clearComparisonLayers() {
+    guard comparisonContainer != nil else { return }
+    comparisonContainer?.removeFromSuperlayer()
+    comparisonContainer = nil; comparisonLayers = [:]; comparisonLayout = nil
+    setNeedsDisplay()
+  }
+
+  /// A settled comparison has static geometry. Keep its lines on individual
+  /// compositor layers so selection fades change opacity without repainting
+  /// the entire chart. Scrubbing, data, and viewport changes use the renderer.
+  private func updateComparisonLayers(isAnimating: Bool) -> Bool {
+    let config = engine.configuration
+    guard let input = engine.input, !config.seriesLabels.isEmpty,
+          !config.fill, !config.dot, !config.badge, !config.extrema,
+          input.band == nil, input.volume.isEmpty, input.projectionID == nil,
+          input.state == .ready, engine.reveal == 1, engine.inspectionTime == nil else {
+      clearComparisonLayers(); return false
+    }
+    let layout = renderer.layout(size: bounds.size, engine: engine)
+    if comparisonLayout != layout { clearComparisonLayers() }
+    if comparisonContainer == nil {
+      guard !isAnimating else { return false }
+      let container = CALayer()
+      container.frame = bounds
+      if config.grid {
+        let mask = CAGradientLayer()
+        mask.frame = layout.plot.insetBy(dx: -1, dy: -1)
+        mask.colors = [UIColor.clear.cgColor, UIColor.black.cgColor, UIColor.black.cgColor]
+        mask.locations = [0, NSNumber(value: min(40, layout.plot.width * 0.12) / mask.bounds.width), 1]
+        mask.startPoint = CGPoint(x: 0, y: 0.5); mask.endPoint = CGPoint(x: 1, y: 0.5)
+        container.mask = mask
+      } else {
+        let mask = CAShapeLayer()
+        mask.path = CGPath(rect: layout.plot.insetBy(dx: -1, dy: -1), transform: nil)
+        container.mask = mask
+      }
+      CATransaction.begin(); CATransaction.setDisableActions(true)
+      for series in input.series {
+        guard let spline = engine.splines[series.id], spline.points.count >= 2 else { continue }
+        let line = CAShapeLayer()
+        line.frame = bounds
+        line.contentsScale = window?.screen.scale ?? contentScaleFactor
+        line.path = renderer.curve(spline, id: series.id, multiplier: series.multiplier,
+                                  layout: layout, reveal: 1, elapsed: engine.elapsed)
+        line.fillColor = nil; line.strokeColor = series.color.uiColor.cgColor
+        line.lineWidth = series.width; line.lineCap = .round; line.lineJoin = .round
+        line.lineDashPattern = series.dash.map { NSNumber(value: $0) }
+        line.opacity = Float(engine.alpha[series.id] ?? series.targetOpacity)
+        container.addSublayer(line)
+        comparisonLayers[series.id] = line
+      }
+      layer.addSublayer(container)
+      comparisonContainer = container; comparisonLayout = layout
+      CATransaction.commit()
+      // Replace the old painted lines with an axes-only backing image once.
+      return false
+    }
+    CATransaction.begin(); CATransaction.setDisableActions(true)
+    for series in input.series {
+      comparisonLayers[series.id]?.opacity = Float(engine.alpha[series.id] ?? series.targetOpacity)
+    }
+    CATransaction.commit()
+    return true
   }
   private var visible: Bool {
     guard active, let window, !isHidden, alpha > 0, bounds.width > 0, bounds.height > 0,
@@ -153,9 +251,9 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
   }
   private func wake() {
     guard visible else { suspend(); return }
-    // A settled card's backing layer scrolls with its parent. There is nothing
+    // A settled chart's backing layer scrolls with its parent. There is nothing
     // to redraw until its data, appearance, or actual plot dimensions change.
-    if isDecorative && settleFrames <= 0 && !engine.isAnimating { return }
+    if settleFrames <= 0 && !engine.isAnimating && inspectionX == nil { return }
     guard displayLink == nil else { return }
     #if DEBUG
     displayLinkStartCount += 1
@@ -168,6 +266,8 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
   }
   public func stop() { displayLink?.invalidate(); displayLink = nil; lastTimestamp = nil; engine.resetClock() }
   func suspend() {
+    // Clear a visible crosshair on the next frame when the chart returns.
+    if engine.inspectionTime != nil { settleFrames = max(1, settleFrames) }
     inspectionX = nil; isHolding = false; engine.clearInspection(); stop()
     // Visibility can change inside a SwiftUI update. Publish the cleared readout afterward.
     if lastSelection != nil {
@@ -184,7 +284,7 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
     if let x = inspectionX { engine.selectedTime = renderer.layout(size: bounds.size, engine: engine).time(x) }
     let animated = engine.advance(monotonicTime: link.timestamp, marketTime: Date().timeIntervalSince1970)
     publishSelection()
-    setNeedsDisplay()
+    if !updateComparisonLayers(isAnimating: animated) { setNeedsDisplay() }
     settleFrames -= 1
     if !animated && settleFrames <= 0 && inspectionX == nil { stop() }
   }
@@ -193,11 +293,14 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
     if inspectionX == nil { haptic.selectionChanged(); haptic.prepare() }
     inspectionX = location.x
     engine.selectedTime = renderer.layout(size: bounds.size, engine: engine).time(location.x)
-    publishSelection(); settleFrames = 90; wake()
+    publishSelection(); settleFrames = 1; wake()
   }
   private func endInspection() {
+    // A vertical scroll fails the scrub recognizer without starting inspection.
+    // It must not schedule chart frames just to clear an absent crosshair.
+    guard inspectionX != nil || engine.selectedTime != nil || isHolding else { return }
     inspectionX = nil; engine.selectedTime = nil; isHolding = false
-    publishSelection(); settleFrames = 90; wake()
+    publishSelection(); settleFrames = 1; wake()
   }
   private func publishSelection() {
     let selection = engine.inspectionTime.flatMap { engine.selection(at: $0) }
@@ -240,7 +343,7 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
     let current = engine.selectedTime ?? points.last!.time
     let index = points.indices.min { abs(points[$0].time - current) < abs(points[$1].time - current) } ?? 0
     engine.selectedTime = points[min(points.count - 1, max(0, index + direction))].time
-    inspectionX = nil; publishSelection(); settleFrames = 90; wake()
+    inspectionX = nil; publishSelection(); settleFrames = 1; wake()
   }
   private func updateAccessibility(_ input: LivelineInput) {
     guard let primary = input.series.first(where: { $0.id == input.primaryID }),

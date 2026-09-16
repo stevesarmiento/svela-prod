@@ -2,6 +2,130 @@ import XCTest
 import UIKit
 
 final class WatchlistNavigationTests: XCTestCase {
+  @MainActor func testComparisonAccordionSwipeScopesWithoutSelectingTokens() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid"]
+    app.launch()
+    app.tabBars.buttons["Compare"].tap()
+    let expand = app.buttons["Expand all"]
+    XCTAssertTrue(expand.waitForExistence(timeout: 10))
+    let title = app.navigationBars.staticTexts["Compare"].firstMatch
+    XCTAssertTrue(title.exists)
+    XCTAssertLessThan(abs(title.frame.midY - expand.frame.midY), 8)
+    XCTAssertFalse(app.staticTexts["Watchlist Comparison"].exists)
+    XCTAssertTrue(app.staticTexts["Your Watchlists"].exists)
+    let core = app.descendants(matching: .any)["comparison-watchlist-preview-core"].firstMatch
+    let growth = app.descendants(matching: .any)["comparison-watchlist-preview-growth"].firstMatch
+    XCTAssertTrue(core.waitForExistence(timeout: 5))
+    XCTAssertEqual(core.value as? String, "Collapsed")
+    XCTAssertEqual(growth.value as? String, "Collapsed")
+    let sort = app.buttons["comparison-watchlist-sort"]
+    for (option, first, second) in [("Name: Z–A", growth, core), ("Fewest tokens", growth, core),
+                                    ("1W change: high to low", core, growth), ("Oldest first (default)", core, growth)] {
+      sort.tap()
+      let choice = app.buttons[option]
+      XCTAssertTrue(choice.waitForExistence(timeout: 3))
+      choice.tap()
+      XCTAssertEqual(sort.value as? String, option)
+      XCTAssertLessThan(first.frame.minY, second.frame.minY)
+    }
+    capture("Compare inline header and sorted closed accordions")
+    core.swipeRight()
+    XCTAssertEqual(core.value as? String, "Collapsed, Chart focused")
+    XCTAssertFalse(app.buttons["Cancel selection"].exists)
+    capture("Accordion scope focuses Core holdings")
+    growth.swipeRight()
+    XCTAssertEqual(growth.value as? String, "Collapsed, Chart focused")
+    XCTAssertEqual(core.value as? String, "Collapsed, Chart focused")
+    capture("Multiple watchlists scoped with icon badges")
+    growth.swipeRight()
+    XCTAssertEqual(growth.value as? String, "Collapsed")
+    XCTAssertEqual(core.value as? String, "Collapsed, Chart focused")
+    growth.swipeRight()
+    XCTAssertEqual(growth.value as? String, "Collapsed, Chart focused")
+    core.tap()
+    XCTAssertEqual(core.value as? String, "Expanded, Chart focused")
+    let token = app.descendants(matching: .any)["comparison-token-preview-core|bitcoin"].firstMatch
+    XCTAssertTrue(token.waitForExistence(timeout: 5))
+    token.swipeRight()
+    let cancel = app.buttons["Cancel selection"]
+    XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+    // Token selection remains independent from the focused watchlist.
+    XCTAssertEqual(core.value as? String, "Expanded, Chart focused")
+    XCTAssertEqual(growth.value as? String, "Collapsed, Chart focused")
+    cancel.tap()
+    core.tap()
+    // Let the collapsing rows settle and bring the header clear of the bottom dock.
+    app.scrollViews.firstMatch.swipeUp()
+    growth.swipeRight()
+    XCTAssertEqual(growth.value as? String, "Collapsed")
+    XCTAssertEqual(core.value as? String, "Collapsed, Chart focused")
+    core.swipeRight()
+    XCTAssertEqual(core.value as? String, "Collapsed")
+    capture("Accordion scope cleared restores comparison lines")
+  }
+
+  @MainActor func testWatchlistTokenSortPreservesSelection() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid"]
+    app.launch()
+    app.tabBars.buttons["Watchlists"].tap()
+    let card = app.buttons["watchlist-card-preview-core"]
+    XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+    XCTAssertTrue(app.staticTexts["Tokens in Core holdings"].waitForExistence(timeout: 10))
+    let filter = app.buttons["watchlist-token-sort"]
+    let btc = app.buttons["watchlist-token-bitcoin"]
+    let eth = app.buttons["watchlist-token-ethereum"]
+    let sol = app.buttons["watchlist-token-solana"]
+    filter.tap(); app.buttons["Watchlist order (default)"].tap()
+    filter.tap(); app.buttons["24h change: high to low"].tap()
+    XCTAssertEqual(filter.value as? String, "24h change: high to low")
+    XCTAssertLessThan(sol.frame.minY, btc.frame.minY)
+    XCTAssertLessThan(btc.frame.minY, eth.frame.minY)
+    btc.swipeRight()
+    XCTAssertTrue(app.buttons["Cancel selection"].waitForExistence(timeout: 5))
+    filter.tap(); app.buttons["Price: low to high"].tap()
+    XCTAssertLessThan(sol.frame.minY, eth.frame.minY)
+    XCTAssertLessThan(eth.frame.minY, btc.frame.minY)
+    XCTAssertEqual(app.staticTexts["watchlist-selection-title"].label, "1 Selected")
+    filter.tap(); app.buttons["Watchlist order (default)"].tap()
+    XCTAssertLessThan(btc.frame.minY, eth.frame.minY)
+    app.buttons["Cancel selection"].tap()
+    capture("Tokens header and filter in watchlist detail")
+  }
+
+  @MainActor func testEthereumSwipeSelectionInLargeWatchlistDetail() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "--preview-large-token-list", "-watchlists.wt", "grid", "-watchlists.tokenSort", "original"]
+    app.launch()
+    app.tabBars.buttons["Watchlists"].tap()
+    let card = app.buttons["watchlist-card-preview-core"]
+    XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+    let chart = app.descendants(matching: .any)["watchlist-coins-comparison-chart"].firstMatch
+    XCTAssertTrue(chart.waitForExistence(timeout: 10))
+    let eth = app.buttons["watchlist-token-ethereum"]
+    XCTAssertTrue(eth.waitForExistence(timeout: 5))
+    eth.swipeRight()
+    let cancel = app.buttons["Cancel selection"]
+    XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+    XCTAssertEqual(app.staticTexts["watchlist-selection-title"].label, "1 Selected")
+    capture("Ethereum selected in a forty-token watchlist")
+    app.buttons["watchlist-token-bitcoin"].swipeRight()
+    XCTAssertEqual(app.staticTexts["watchlist-selection-title"].label, "2 Selected")
+    eth.tap()
+    XCTAssertEqual(app.staticTexts["watchlist-selection-title"].label, "1 Selected")
+    cancel.tap()
+    XCTAssertTrue(app.buttons["comparison-title"].waitForExistence(timeout: 5))
+    let before = chart.frame.minY
+    let start = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+    start.press(forDuration: 0.01, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -130)))
+    XCTAssertLessThan(chart.frame.minY, before - 20)
+    capture("Large watchlist scrolls after selection")
+  }
+
   @MainActor func testLivelineComparisonTogglesRangesAndScroll() {
     continueAfterFailure = false
     let app = XCUIApplication()
@@ -10,12 +134,9 @@ final class WatchlistNavigationTests: XCTestCase {
     app.tabBars.buttons["Compare"].tap()
     let chart = app.descendants(matching: .any)["watchlists-comparison-chart"].firstMatch
     XCTAssertTrue(chart.waitForExistence(timeout: 10))
-    let core = app.buttons["comparison-series-preview-core"]
-    XCTAssertTrue(core.waitForExistence(timeout: 5))
-    core.tap()
-    XCTAssertEqual(core.value as? String, "Hidden")
-    app.buttons["comparison-show-all"].tap()
-    XCTAssertEqual(core.value as? String, "Visible")
+    // Accordions now start closed; expand them to give this scroll test overflow.
+    app.buttons["Expand all"].tap()
+    XCTAssertFalse(app.buttons["comparison-series-preview-core"].exists)
     let picker = app.segmentedControls["chart-time-range"].firstMatch
     picker.buttons["1Y"].tap()
     XCTAssertTrue(picker.buttons["1Y"].isSelected)
@@ -30,11 +151,14 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
     let tokens = app.descendants(matching: .any)["watchlist-coins-comparison-chart"].firstMatch
     XCTAssertTrue(tokens.waitForExistence(timeout: 10))
-    let btc = app.buttons["comparison-series-bitcoin"]
-    XCTAssertTrue(btc.waitForExistence(timeout: 5)); btc.tap()
-    XCTAssertEqual(btc.value as? String, "Hidden")
-    app.buttons["comparison-show-all"].tap()
-    XCTAssertEqual(btc.value as? String, "Visible")
+    XCTAssertFalse(app.buttons["comparison-series-bitcoin"].exists)
+    let btc = app.buttons["watchlist-token-bitcoin"]
+    XCTAssertTrue(btc.waitForExistence(timeout: 5))
+    btc.swipeRight()
+    let cancel = app.buttons["Cancel selection"]
+    XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+    capture("Liveline selected Bitcoin with other lines dimmed")
+    cancel.tap()
     capture("Liveline individual token comparison")
   }
 
@@ -422,6 +546,9 @@ final class WatchlistNavigationTests: XCTestCase {
     app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.65)).tap()
     app.buttons["token-page-close"].tap()
     app.tabBars.buttons["Compare"].tap()
+    let initiallyExpand = app.buttons["Expand all"]
+    XCTAssertTrue(initiallyExpand.waitForExistence(timeout: 5))
+    initiallyExpand.tap()
     let collapse = app.buttons["Collapse all"]
     XCTAssertTrue(collapse.waitForExistence(timeout: 5))
     capture("Web collapse-watchlists and add icons")
@@ -729,6 +856,60 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertTrue(cancel.waitForExistence(timeout: 5))
     cancel.tap()
     XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
+  }
+
+  @MainActor func testTokenIndicatorsRenderPanAndScrub() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid"]
+    app.launch()
+    app.tabBars.buttons["Watchlists"].tap()
+    let card = app.buttons["watchlist-card-preview-core"]
+    XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+    let token = app.buttons["watchlist-token-bitcoin"]
+    XCTAssertTrue(token.waitForExistence(timeout: 5)); token.tap()
+    XCTAssertTrue(app.buttons["token-page-close"].waitForExistence(timeout: 5))
+    for id in ["indicator-market-vision", "indicator-bollinger", "indicator-bbwp", "indicator-caretaker-rsi"] {
+      let chart = app.descendants(matching: .any)[id].firstMatch
+      for _ in 0..<12 {
+        if chart.exists && chart.frame.minY > 120 && chart.frame.maxY < app.frame.maxY - 70 { break }
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.80))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -180)))
+      }
+      XCTAssertTrue(chart.isHittable, id)
+      capture(id)
+      let point = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.45))
+      point.press(forDuration: 0.5, thenDragTo: chart.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.45)))
+      XCTAssertTrue(app.buttons["token-page-close"].exists)
+    }
+  }
+
+  @MainActor func testTokenStatsPreserveMetricsAndExplainValues() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid"]
+    app.launch()
+    app.tabBars.buttons["Watchlists"].tap()
+    let card = app.buttons["watchlist-card-preview-core"]
+    XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+    let row = app.buttons["watchlist-token-bitcoin"]
+    XCTAssertTrue(row.waitForExistence(timeout: 5)); row.tap()
+    XCTAssertTrue(app.buttons["token-page-close"].waitForExistence(timeout: 5))
+    let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.94, dy: 0.80))
+    start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -360)))
+    let marketCap = app.buttons["token-stat-mcap"]
+    XCTAssertTrue(marketCap.waitForExistence(timeout: 5))
+    XCTAssertTrue(marketCap.label.contains("$1.33T"))
+    XCTAssertTrue(app.buttons["token-stat-fdv"].exists)
+    XCTAssertFalse(app.buttons["Rank"].exists)
+    XCTAssertFalse(app.buttons["token-more-stats"].exists)
+    for id in ["vol", "float", "atr", "range", "perf", "turn"] {
+      XCTAssertTrue(app.buttons["token-stat-\(id)"].exists, id)
+    }
+    capture("Token stats restyled with existing metrics")
+    marketCap.tap()
+    XCTAssertTrue(app.staticTexts["The USD market value of the circulating supply."].waitForExistence(timeout: 3))
+    capture("Token market cap explanation")
   }
 
   @MainActor func testTokenChromeWhileScrolled() {

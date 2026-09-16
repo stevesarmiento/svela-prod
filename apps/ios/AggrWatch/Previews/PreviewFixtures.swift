@@ -6,11 +6,21 @@ import Foundation
 /// Pure fixtures are nonisolated so URLSession's protocol can read them off the main actor.
 nonisolated enum PreviewFixtures {
   static let now = Int(Date().timeIntervalSince1970)
-  static let quotes: [CoinQuote] = [
+  static let quotes: [CoinQuote] = {
+    var quotes: [CoinQuote] = [
     CoinQuote(id: "bitcoin", name: "Bitcoin", symbol: "BTC", marketCapRank: 1, currentPrice: 67_420, marketCap: 1_330_000_000_000, totalVolume: 28_600_000_000, priceChangePercentage24h: 2.84, sparkline7d: line.map(\.value)),
     CoinQuote(id: "ethereum", name: "Ethereum", symbol: "ETH", marketCapRank: 2, currentPrice: 3_480, marketCap: 418_000_000_000, totalVolume: 12_400_000_000, priceChangePercentage24h: -1.32, sparkline7d: line.reversed().map(\.value)),
     CoinQuote(id: "solana", name: "Solana", symbol: "SOL", marketCapRank: 5, currentPrice: 148.60, marketCap: 68_000_000_000, totalVolume: 3_100_000_000, priceChangePercentage24h: 6.12, sparkline7d: line.map(\.value))
-  ]
+    ]
+    if ProcessInfo.processInfo.arguments.contains("--preview-large-token-list") {
+      for index in 3..<40 {
+        quotes.append(CoinQuote(id: "preview-token-\(index)", name: "Preview token \(index)",
+          symbol: ["BTC", "ETH", "SOL"][index % 3], currentPrice: Double(100 + index),
+          priceChangePercentage24h: Double(index % 9) - 4, sparkline7d: line.map(\.value)))
+      }
+    }
+    return quotes
+  }()
   static let group = WatchlistGroup(id: "preview-core", userId: "preview-user", name: "Core holdings", slug: "core-holdings", description: "Long-term watchlist", icon: "wallet", color: "blue", isDefault: true)
   static let secondGroup = WatchlistGroup(id: "preview-growth", userId: "preview-user", name: "On my radar", slug: "on-my-radar", icon: "sparkles", color: "purple")
   static let items = [
@@ -21,6 +31,11 @@ nonisolated enum PreviewFixtures {
   static let bootstrap: WatchlistsPageBootstrap = {
     var groups = [group, secondGroup]
     var byGroup = [group.id: items, secondGroup.id: [WatchlistItem(id: "preview-radar-sol", watchlistGroupId: secondGroup.id, coinId: "solana")]]
+    if ProcessInfo.processInfo.arguments.contains("--preview-large-token-list") {
+      byGroup[group.id] = items + quotes.dropFirst(3).map {
+        WatchlistItem(id: "item-\($0.id)", watchlistGroupId: group.id, coinId: $0.id, holdings: 2)
+      }
+    }
     if ProcessInfo.processInfo.arguments.contains("--preview-large-watchlists") {
       let colors = ["blue", "purple", "green", "amber", "charcoal"]
       for index in 2..<19 {

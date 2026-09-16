@@ -14,23 +14,22 @@ struct MultiLineComparisonChart: View {
   }
 
   let series: [Series]
-  @Binding var hidden: Set<String>
-  var onSelect: ((String) -> Void)? = nil
+  var selectedIDs: Set<String> = []
   var datasetID = "comparison"
   var scale: TimeScale = .d1
   var isActive = true
   var accessibilityID = "comparison-chart"
   @State private var selection: LivelineSelection?
-  @State private var pressed: String?
   @State private var isVisible = true
   @Environment(\.scenePhase) private var scenePhase
 
-  static func input(series: [Series], hidden: Set<String>, pressed: String?, datasetID: String, scale: TimeScale) -> LivelineInput {
+  static func input(series: [Series], selectedIDs: Set<String>, datasetID: String, scale: TimeScale) -> LivelineInput {
+    let focused = selectedIDs.intersection(series.map(\.id))
     let lines = series.map { s in
       LivelineSeries(id: s.id,
         points: LivelineMath.clean(s.points.map { .init(time: Double($0.epochSeconds), value: $0.value) }),
-        color: Color(oklch: pressed == nil || pressed == s.id ? s.color : OklchColor.withAlpha(s.color, 0.25)).livelineColor,
-        width: pressed == s.id ? 2.2 : 1.4, visible: !hidden.contains(s.id))
+        color: Color(oklch: s.color).livelineColor, width: 1.4,
+        opacity: focused.isEmpty || focused.contains(s.id) ? 1 : 0.18)
     }
     let times = lines.flatMap { $0.points.map(\.time) }
     let start = times.min() ?? 0, end = times.max() ?? 1
@@ -42,62 +41,19 @@ struct MultiLineComparisonChart: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
-      NativeComparisonPlot(series: series, hidden: hidden, pressed: pressed, datasetID: datasetID,
+      NativeComparisonPlot(series: series, selectedIDs: selectedIDs, datasetID: datasetID,
                            scale: scale, isActive: isActive && isVisible && scenePhase == .active,
                            accessibilityID: accessibilityID, onSelection: { selection = $0 })
         .equatable()
         .overlay(alignment: .top) {
           if let selection {
-            ComparisonScrubTooltip(selection: selection, series: series, hidden: hidden, focused: pressed)
+            ComparisonScrubTooltip(selection: selection, series: series, selectedIDs: selectedIDs)
           }
         }
-      legend
     }
     .onScrollVisibilityChange(threshold: 0.01) { isVisible = $0 }
     .onChange(of: scale) { _, _ in selection = nil }
-    .onChange(of: hidden) { _, _ in
-      selection = nil
-      if let pressed, hidden.contains(pressed) { self.pressed = nil }
-    }
-  }
-
-  private var legend: some View {
-    ScrollView(.horizontal, showsIndicators: false) {
-      GlassEffectContainer(spacing: 6) {
-        HStack(spacing: 6) {
-          ForEach(series) { s in
-            let isHidden = hidden.contains(s.id)
-            Button {
-              if let onSelect { onSelect(s.id) }
-              else if isHidden { hidden.remove(s.id) }
-              else { hidden.insert(s.id) }
-            } label: {
-              HStack(spacing: 5) {
-                Circle().fill(Color(oklch: s.color)).frame(width: 7, height: 7)
-                Text(s.label).font(.caption2.weight(.semibold)).lineLimit(1)
-                if let value = selection == nil ? s.latest : selection?.values[s.id] {
-                  Text(UsdFormat.signedPercent(value)).font(.caption2.monospacedDigit())
-                    .foregroundStyle(value >= 0 ? Color.gainGreen : Color.lossRed)
-                } else { Text("—").font(.caption2) }
-              }
-              .padding(.horizontal, 8).padding(.vertical, 5)
-              .opacity(isHidden ? 0.4 : 1)
-              .glassEffect(.regular.interactive(), in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("comparison-series-\(s.id)")
-            .accessibilityValue(isHidden ? "Hidden" : "Visible")
-            .simultaneousGesture(LongPressGesture(minimumDuration: 0.25).onEnded { _ in pressed = pressed == s.id ? nil : s.id })
-            .accessibilityAction(named: "Emphasize series") { pressed = pressed == s.id ? nil : s.id }
-          }
-          if !hidden.isEmpty {
-            Button("Show all (\(hidden.count) hidden)") { hidden = [] }
-              .font(.caption2).accessibilityIdentifier("comparison-show-all")
-          }
-        }
-      }
-    }
-    .fixedSize(horizontal: false, vertical: true)
+    .onChange(of: selectedIDs) { _, _ in selection = nil }
   }
 }
 
@@ -106,8 +62,7 @@ struct MultiLineComparisonChart: View {
 private struct ComparisonScrubTooltip: View {
   let selection: LivelineSelection
   let series: [MultiLineComparisonChart.Series]
-  let hidden: Set<String>
-  let focused: String?
+  let selectedIDs: Set<String>
   @ScaledMetric(relativeTo: .caption) private var preferredWidth = 250.0
 
   var body: some View {
@@ -117,8 +72,8 @@ private struct ComparisonScrubTooltip: View {
       let end = series.compactMap { $0.points.last?.epochSeconds }.max() ?? 1
       let fraction = min(1, max(0, (selection.time - Double(start)) / max(1, Double(end - start))))
       let x = 8 + fraction * max(0, geometry.size.width - 20)
-      let visible = series.filter { !hidden.contains($0.id) && selection.values[$0.id]?.isFinite == true }
-      let ordered = visible.filter { $0.id == focused } + visible.filter { $0.id != focused }
+      let focused = selectedIDs.intersection(series.map(\.id))
+      let ordered = series.filter { (focused.isEmpty || focused.contains($0.id)) && selection.values[$0.id]?.isFinite == true }
       VStack(alignment: .leading, spacing: 6) {
         Text(Date(timeIntervalSince1970: selection.time), format: .dateTime.month(.abbreviated).day().year().hour().minute())
           .foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7)
@@ -134,7 +89,7 @@ private struct ComparisonScrubTooltip: View {
           }
         }
         if ordered.count > 5 {
-          Text("+\(ordered.count - 5) more in legend").foregroundStyle(.secondary)
+          Text("+\(ordered.count - 5) more · select rows to focus").foregroundStyle(.secondary)
         }
       }
       .font(.system(.caption, design: .rounded, weight: .medium).monospacedDigit())
@@ -148,20 +103,48 @@ private struct ComparisonScrubTooltip: View {
   }
 }
 
-/// Inspection updates only the readout/legend, without rebuilding every series.
+/// Preparation is keyed by data, not selection or visibility. This is an
+/// unobserved memo: updating it never schedules another SwiftUI render.
+@MainActor final class ComparisonChartPreparation {
+  private var series: [MultiLineComparisonChart.Series] = []
+  private var datasetID: String?
+  private var scale: TimeScale?
+  private var prepared: LivelineInput?
+  #if DEBUG
+  private(set) var preparationCount = 0
+  #endif
+
+  func input(series: [MultiLineComparisonChart.Series], selectedIDs: Set<String>, datasetID: String, scale: TimeScale) -> LivelineInput {
+    if prepared == nil || self.series != series || self.datasetID != datasetID || self.scale != scale {
+      prepared = MultiLineComparisonChart.input(series: series, selectedIDs: [], datasetID: datasetID, scale: scale)
+      self.series = series; self.datasetID = datasetID; self.scale = scale
+      #if DEBUG
+      preparationCount += 1
+      #endif
+    }
+    var input = prepared!
+    let focused = selectedIDs.intersection(input.series.map(\.id))
+    for index in input.series.indices {
+      input.series[index].opacity = focused.isEmpty || focused.contains(input.series[index].id) ? 1 : 0.18
+    }
+    return input
+  }
+}
+
+/// Inspection updates only the tooltip, without rebuilding every series.
 private struct NativeComparisonPlot: View, Equatable {
   let series: [MultiLineComparisonChart.Series]
-  let hidden: Set<String>
-  let pressed: String?
+  let selectedIDs: Set<String>
   let datasetID: String
   let scale: TimeScale
   let isActive: Bool
   let accessibilityID: String
   let onSelection: (LivelineSelection?) -> Void
+  @State private var preparation = ComparisonChartPreparation()
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    let input = MultiLineComparisonChart.input(series: series, hidden: hidden, pressed: pressed, datasetID: datasetID, scale: scale)
+    let input = preparation.input(series: series, selectedIDs: selectedIDs, datasetID: datasetID, scale: scale)
     var config = LivelineConfiguration()
     let _ = {
       config.fill = false; config.badge = false; config.dot = false
@@ -171,6 +154,7 @@ private struct NativeComparisonPlot: View, Equatable {
     }()
     ZStack {
       LivelineView(input: input, configuration: config, isActive: isActive && input.state == .ready,
+        tracksScrollVisibility: false,
         formatValue: { UsdFormat.signedPercent($0, fractionDigits: 1) },
         formatTime: { time in
           let date = Date(timeIntervalSince1970: time)
@@ -180,14 +164,14 @@ private struct NativeComparisonPlot: View, Equatable {
         .accessibilityIdentifier(accessibilityID)
         .accessibilityLabel("Comparison performance chart")
       if input.state == .empty {
-        Text(series.allSatisfy { hidden.contains($0.id) } ? "All series hidden" : "No chart data yet")
+        Text("No chart data yet")
           .font(.footnote).foregroundStyle(.secondary).allowsHitTesting(false)
       }
     }
   }
 
   static func == (a: Self, b: Self) -> Bool {
-    a.series == b.series && a.hidden == b.hidden && a.pressed == b.pressed
+    a.series == b.series && a.selectedIDs == b.selectedIDs
       && a.datasetID == b.datasetID && a.scale == b.scale && a.isActive == b.isActive
       && a.accessibilityID == b.accessibilityID
   }
@@ -240,12 +224,12 @@ struct AggrSparkline: View, Equatable {
 }
 
 #if DEBUG
-#Preview("Liveline comparison · toggle and scrub") {
-  PreviewValue(Set<String>()) { hidden in
+#Preview("Liveline comparison · select and scrub") {
+  PreviewValue(Set<String>()) { selected in
     MultiLineComparisonChart(series: [
       .init(id: "btc", label: "BTC", color: ChartColors.pastel[0], points: PreviewFixtures.returns),
       .init(id: "eth", label: "ETH", color: ChartColors.pastel[1], points: PreviewFixtures.returns.map { .init(epochSeconds: $0.epochSeconds, value: $0.value * 0.6 - 2) })
-    ], hidden: hidden).frame(height: 300).padding().preferredColorScheme(.dark)
+    ], selectedIDs: selected.wrappedValue).frame(height: 300).padding().preferredColorScheme(.dark)
   }
 }
 #Preview("Liveline comparison · many watchlists") {
@@ -256,8 +240,8 @@ struct AggrSparkline: View, Equatable {
     return MultiLineComparisonChart.Series(id: "group-\(index)", label: "Watchlist \(index + 1)",
       color: ChartColors.pastel[index % ChartColors.pastel.count], points: points)
   }
-  PreviewValue(Set<String>()) { hidden in
-    MultiLineComparisonChart(series: series, hidden: hidden).frame(height: 300).padding().preferredColorScheme(.dark)
+  PreviewValue(Set<String>()) { selected in
+    MultiLineComparisonChart(series: series, selectedIDs: selected.wrappedValue).frame(height: 300).padding().preferredColorScheme(.dark)
   }
 }
 #endif

@@ -1,7 +1,7 @@
 #if canImport(UIKit)
 import UIKit
 
-struct LivelineLayout {
+struct LivelineLayout: Equatable {
   let plot: CGRect
   let volume: CGRect?
   let x: ClosedRange<Double>
@@ -31,6 +31,18 @@ final class LivelineRenderer {
   private var arrowDown = 0.0
   private var identity: String?
   private var cachedPaths: [String: (points: [LivelinePoint], path: CGPath, bounds: CGRect)] = [:]
+  private struct ScreenPath {
+    let points: [LivelinePoint]
+    let plot: CGRect
+    let x: ClosedRange<Double>
+    let y: ClosedRange<Double>
+    let multiplier: Double
+    let path: CGPath
+  }
+  private var screenPaths: [String: ScreenPath] = [:]
+  #if DEBUG
+  private(set) var screenPathBuildCount = 0
+  #endif
   private let labelFont = font(9)
   private let badgeFont = font(11, weight: .semibold)
 
@@ -58,16 +70,17 @@ final class LivelineRenderer {
     return .init(plot: plot, volume: volume, x: engine.xRange, y: engine.yRange)
   }
 
-  func draw(_ ctx: CGContext, size: CGSize, engine: LivelineEngine, frameMilliseconds dt: Double) {
+  func draw(_ ctx: CGContext, size: CGSize, engine: LivelineEngine, frameMilliseconds dt: Double, drawsSeries: Bool = true) {
     guard let input = engine.input else { return }
     if identity != input.id {
       identity = input.id; badgeY = nil; badgeWidth = 0
-      gridStep = 0; gridLabels = [:]; timeLabels = [:]; cachedPaths = [:]
+      gridStep = 0; gridLabels = [:]; timeLabels = [:]; cachedPaths = [:]; screenPaths = [:]
     }
     let layout = layout(size: size, engine: engine), cfg = engine.configuration
     let plot = layout.plot
     let reveal = engine.reveal
     cachedPaths = cachedPaths.filter { engine.splines[$0.key] != nil }
+    screenPaths = screenPaths.filter { engine.splines[$0.key] != nil }
     ctx.saveGState()
     ctx.beginTransparencyLayer(auxiliaryInfo: nil)
     ctx.clip(to: plot.insetBy(dx: -1, dy: -1))
@@ -90,8 +103,8 @@ final class LivelineRenderer {
         for p in lower.points.reversed() { path.addLine(to: CGPoint(x: layout.toX(p.time), y: layout.toY(p.value))) }
         path.closeSubpath(); ctx.addPath(path); ctx.setFillColor(UIColor.white.withAlphaComponent(0.05 * reveal).cgColor); ctx.fillPath()
       }
-      for series in input.series {
-        let alpha = (engine.alpha[series.id] ?? (series.visible ? 1 : 0))
+      for series in drawsSeries ? input.series : [] {
+        let alpha = (engine.alpha[series.id] ?? series.targetOpacity)
         guard alpha > 0.001, let spline = engine.splines[series.id], spline.points.count >= 2 else { continue }
         let isPrimary = series.id == input.primaryID
         let path = curve(spline, id: series.id, multiplier: series.multiplier, layout: layout,
@@ -163,6 +176,13 @@ final class LivelineRenderer {
 
   func curve(_ spline: LivelineSpline, id: String, multiplier: Double, layout: LivelineLayout, reveal: Double, elapsed: Double) -> CGPath {
     let points = spline.points
+    // During selection, only alpha changes. Reuse the final screen geometry
+    // instead of copying every curve through a transform on every fade frame.
+    if reveal >= 1, let cached = screenPaths[id], cached.points == points,
+       cached.plot == layout.plot, cached.x == layout.x, cached.y == layout.y,
+       cached.multiplier == multiplier {
+      return cached.path
+    }
     let origin = points.first!.time
     // Cache data-space Beziers. Viewport animation is a transform, not a per-point rebuild.
     let raw: CGPath, bounds: CGRect
@@ -185,7 +205,13 @@ final class LivelineRenderer {
       let sy = -layout.plot.height / max(1e-20, layout.y.upperBound - layout.y.lowerBound)
       var transform = CGAffineTransform(a: sx, b: 0, c: 0, d: sy * multiplier,
                                        tx: layout.toX(origin), ty: layout.toY(0))
-      return raw.copy(using: &transform)!
+      let path = raw.copy(using: &transform)!
+      screenPaths[id] = ScreenPath(points: points, plot: layout.plot, x: layout.x, y: layout.y,
+                                   multiplier: multiplier, path: path)
+      #if DEBUG
+      screenPathBuildCount += 1
+      #endif
+      return path
     }
     // Port the original screen-space spline morph, including the retracting tip.
     // The endpoint below reads this exact same geometry rather than the final data Y.
@@ -336,7 +362,7 @@ final class LivelineRenderer {
     guard let input = engine.input, let series = input.series.first(where: { $0.id == input.primaryID }),
           let spline = engine.splines[input.primaryID], let last = spline.points.last else { return }
     let cfg = engine.configuration
-    let visibility = engine.alpha[series.id] ?? (series.visible ? 1 : 0)
+    let visibility = engine.alpha[series.id] ?? series.targetOpacity
     guard visibility > 0.001 else { return }
     let tip = endpoint(spline, layout: layout, reveal: engine.reveal, elapsed: cfg.reduceMotion ? 0 : engine.elapsed)
     let x = tip.x, y = tip.y
@@ -414,7 +440,7 @@ final class LivelineRenderer {
         guard let value = selection.values[series.id] else { continue }
         let y = layout.toY(value * series.multiplier)
         guard y >= layout.plot.minY, y <= layout.plot.maxY else { continue }
-        ctx.setFillColor(series.color.uiColor.withAlphaComponent(engine.scrubAmount).cgColor)
+        ctx.setFillColor(series.color.uiColor.withAlphaComponent(engine.scrubAmount * (engine.alpha[series.id] ?? series.targetOpacity)).cgColor)
         ctx.fillEllipse(in: CGRect(x: x - 3, y: y - 3, width: 6, height: 6))
       }
       return

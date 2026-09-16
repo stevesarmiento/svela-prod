@@ -2,59 +2,41 @@ import AggrCore
 import Charts
 import SwiftUI
 
-/// Port of `bollinger-bands-chart.tsx`: RSI (0–100) inside its own Bollinger band, basis dashed, breaches marked.
+/// Web parity: muted dotted bands, dashed basis, RSI and prominent breach dots.
 struct BollingerBandsChart: View {
   let result: BollingerBands.Result
   let windowDays: Int
   @Binding var selectedDate: Date?
   var height: CGFloat = 250
+  @State private var viewport = IndicatorViewport()
 
   var body: some View {
-    let ind = result.indicator.chartPoints
-    let upper = result.upper.chartPoints
-    let band = pairBands(upper, result.lower.chartPoints)
-    let basis = result.basis.chartPoints
-    let lineColor = Color(oklch: result.isMfi ? BollingerBands.Colors.mfi : BollingerBands.Colors.rsi)
+    let indicator = result.indicator.chartPoints
+    let window = viewport.window(points: indicator, days: windowDays)
+    let upper = result.upper.chartPoints, lower = result.lower.chartPoints, basis = result.basis.chartPoints
+    let domain = IndicatorPlotScale.domain(points: result.indicator + result.upper + result.lower, visible: window.epochs)
+    let scrubDate = indicator.nearest(to: selectedDate)?.date
     Chart {
-      RuleMark(y: .value("70", 70)).foregroundStyle(Color.white.opacity(0.12)).lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-      RuleMark(y: .value("30", 30)).foregroundStyle(Color.white.opacity(0.12)).lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-      ForEach(band) { p in
-        AreaMark(x: .value("t", p.date), yStart: .value("lower", p.lower), yEnd: .value("upper", p.upper), series: .value("s", "band"))
-          .foregroundStyle(Color(oklch: BollingerBands.Colors.bands).opacity(0.10))
-          .interpolationMethod(.monotone)
-      }
-      ForEach(upper) { p in
-        LineMark(x: .value("t", p.date), y: .value("Upper", p.value), series: .value("s", "upper"))
-          .foregroundStyle(Color(oklch: BollingerBands.Colors.bands).opacity(0.7)).lineStyle(StrokeStyle(lineWidth: 1)).interpolationMethod(.monotone)
-      }
-      ForEach(result.lower.chartPoints) { p in
-        LineMark(x: .value("t", p.date), y: .value("Lower", p.value), series: .value("s", "lower"))
-          .foregroundStyle(Color(oklch: BollingerBands.Colors.bands).opacity(0.7)).lineStyle(StrokeStyle(lineWidth: 1)).interpolationMethod(.monotone)
-      }
-      ForEach(basis) { p in
-        LineMark(x: .value("t", p.date), y: .value("Basis", p.value), series: .value("s", "basis"))
-          .foregroundStyle(Color(oklch: BollingerBands.Colors.basis).opacity(0.8)).lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3])).interpolationMethod(.monotone)
-      }
-      ForEach(ind) { p in
-        LineMark(x: .value("t", p.date), y: .value("RSI", p.value), series: .value("s", "ind"))
-          .foregroundStyle(lineColor).lineStyle(StrokeStyle(lineWidth: 2)).interpolationMethod(.monotone)
-      }
-      ForEach(result.overboughtBreaches.chartPoints) { p in
-        PointMark(x: .value("t", p.date), y: .value("v", p.value)).foregroundStyle(Color.lossRed).symbolSize(20)
-      }
-      ForEach(result.oversoldBreaches.chartPoints) { p in
-        PointMark(x: .value("t", p.date), y: .value("v", p.value)).foregroundStyle(Color.gainGreen).symbolSize(20)
-      }
-      ScrubRule(date: selectedDate)
+      IndicatorLine(id: "upper", points: upper.visible(in: window), color: Color(oklch: "oklch(0.7118 0.0129 286.07 / 0.46)"), dash: [1, 3])
+      IndicatorLine(id: "lower", points: lower.visible(in: window), color: Color(oklch: "oklch(0.7118 0.0129 286.07 / 0.46)"), dash: [1, 3])
+      IndicatorLine(id: "basis", points: basis.visible(in: window), color: Color(oklch: "oklch(0.7118 0.0129 286.07 / 0.75)"), dash: [4, 4])
+      IndicatorLine(id: "RSI", points: indicator.visible(in: window), color: Color(oklch: result.isMfi ? BollingerBands.Colors.mfi : BollingerBands.Colors.rsi), width: 2)
+      IndicatorDots(points: result.overboughtBreaches.chartPoints.visible(in: window), color: Color(oklch: "oklch(0.645 0.2154 16.44 / 0.95)"), diameter: 8)
+      IndicatorDots(points: result.oversoldBreaches.chartPoints.visible(in: window), color: Color(oklch: "oklch(0.6959 0.1491 162.48 / 0.95)"), diameter: 8)
+      ScrubRule(date: scrubDate)
     }
     .chartXSelection(value: $selectedDate)
-    .indicatorPane(windowDays: windowDays, lastDate: ind.last?.date, yDomain: 0...100, height: height)
+    .indicatorPane(window: window, windowDays: windowDays, viewport: $viewport, yDomain: domain, height: height)
     .chartLegend(.hidden)
+    .overlay(alignment: .topLeading) {
+      IndicatorReadout(date: scrubDate, series: [(result.isMfi ? "MFI" : "RSI", indicator), ("Upper", upper), ("Basis", basis), ("Lower", lower)])
+    }
+    .accessibilityIdentifier("indicator-bollinger")
   }
 }
 
 #if DEBUG
-#Preview("Indicator chart") {
+#Preview("Bollinger — web parity") {
   PreviewValue(Date?.none) { date in
     BollingerBandsChart(result: PreviewFixtures.indicators.bollinger, windowDays: 14, selectedDate: date).padding().preferredColorScheme(.dark)
   }

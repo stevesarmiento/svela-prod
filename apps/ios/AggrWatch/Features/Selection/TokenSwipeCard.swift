@@ -30,6 +30,9 @@ struct TokenSwipeCard<Content: View>: View {
     var isSelected = false
     var inSelectionMode = false
     var onToggleSelection: () -> Void = {}
+    var selectionIcon = "checklist"
+    var selectionAccessibilityLabel = "Select"
+    var deselectionAccessibilityLabel = "Deselect"
     let deleteTitle: String
     var deleteButtonTitle: String = "Remove token"
     var deleteMessage: String = "If this is the token’s last watchlist, its saved holdings will also be cleared."
@@ -47,6 +50,7 @@ struct TokenSwipeCard<Content: View>: View {
 
     @State private var translation: CGFloat = 0
     @State private var confirmingDelete = false
+    @State private var selectionFeedback = 0
     /// Driven by the pan recognizer's raw touches: true from touch-down through
     /// a swipe; false on lift, cancel, or when the scroll takes the touch.
     @State private var isPressed = false
@@ -59,9 +63,6 @@ struct TokenSwipeCard<Content: View>: View {
     }
     private var deleteTravel: CGFloat { max(0, -offset) }
     private var selectTravel: CGFloat { max(0, offset) }
-    /// The finger has crossed the point where release commits.
-    private var selectArmed: Bool { offset >= TokenSwipeRules.revealWidth }
-    private var deleteArmed: Bool { offset <= -TokenSwipeRules.revealWidth }
 
     var body: some View {
         content()
@@ -76,7 +77,7 @@ struct TokenSwipeCard<Content: View>: View {
                     Color.clear
                         .contentShape(.rect(cornerRadius: 16))
                         .onTapGesture {
-                            withAnimation(reduceMotion ? nil : .snappy) { toggleSelection() }
+                            withAnimation(reduceMotion ? nil : SelectionMotion.open) { toggleSelection() }
                         }
                 }
             }
@@ -105,19 +106,15 @@ struct TokenSwipeCard<Content: View>: View {
                     selectPanel
                 }
             }
-            .sensoryFeedback(trigger: selectArmed) { _, armed in
-                armed ? .impact(weight: .medium, intensity: 1) : nil
-            }
-            .sensoryFeedback(trigger: deleteArmed) { _, armed in
-                armed ? .impact(weight: .medium, intensity: 1) : nil
-            }
-            .sensoryFeedback(.impact(weight: .medium), trigger: isSelected)
+            // Feedback belongs to the committed interaction, not threshold
+            // crossings or external selection changes across several rows.
+            .sensoryFeedback(.impact(weight: .medium), trigger: selectionFeedback)
             .sensoryFeedback(trigger: confirmingDelete) { _, showing in
                 showing ? .warning : nil
             }
             .accessibilityAddTraits(isSelected ? .isSelected : [])
-            .accessibilityAction(named: Text(isSelected ? "Deselect" : "Select")) {
-                withAnimation(reduceMotion ? nil : .snappy) { toggleSelection() }
+            .accessibilityAction(named: Text(isSelected ? deselectionAccessibilityLabel : selectionAccessibilityLabel)) {
+                withAnimation(reduceMotion ? nil : SelectionMotion.open) { toggleSelection() }
             }
             .accessibilityActions {
                 if canDelete { Button(deleteAccessibilityLabel) { performBookmarkAction() } }
@@ -130,7 +127,10 @@ struct TokenSwipeCard<Content: View>: View {
             }
             .onChange(of: inSelectionMode) { _, active in
                 if active {
-                    withAnimation(closeAnimation) { translation = 0; openRowID = nil }
+                    withAnimation(closeAnimation) {
+                        if translation != 0 { translation = 0 }
+                        if openRowID != nil { openRowID = nil }
+                    }
                 }
             }
             .onDisappear { if isOpen { openRowID = nil } }
@@ -163,7 +163,7 @@ struct TokenSwipeCard<Content: View>: View {
     private var selectPanel: some View {
         let progress = TokenSwipeRules.fillProgress(travel: selectTravel)
         return panel(travel: selectTravel, fill: restingFill.mix(with: .blue, by: progress), edge: .leading) {
-            Image(systemName: "checklist")
+            Image(systemName: selectionIcon)
                 .font(.body.weight(.bold))
                 .foregroundStyle(.white)
         }
@@ -203,6 +203,7 @@ struct TokenSwipeCard<Content: View>: View {
     private func toggleSelection() {
         if openRowID != nil { openRowID = nil }
         onToggleSelection()
+        selectionFeedback += 1
     }
 
     private func performBookmarkAction() {

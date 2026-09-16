@@ -4,6 +4,8 @@ import AggrCore
 @testable import AggrLiveline
 import Foundation
 import Testing
+import Observation
+import Synchronization
 import UIKit
 @testable import AggrWatch
 
@@ -21,47 +23,267 @@ private actor OverviewRequestGate {
   }
 }
 
-@Test @MainActor func comparisonLivelinePreservesReturnsAndSwitchesHiddenPrimary() {
+@Test @MainActor func comparisonSelectionDimsWithoutChangingDataOrRange() {
   let series: [MultiLineComparisonChart.Series] = [
     .init(id: "btc", label: "BTC", color: ChartColors.pastel[0], points: [.init(epochSeconds: 1, value: 0), .init(epochSeconds: 2, value: 10)]),
     .init(id: "eth", label: "ETH", color: ChartColors.pastel[1], points: [.init(epochSeconds: 1, value: 0), .init(epochSeconds: 2, value: -7)])
   ]
-  let initial = MultiLineComparisonChart.input(series: series, hidden: [], pressed: nil, datasetID: "group", scale: .d7)
-  let hidden = MultiLineComparisonChart.input(series: series, hidden: ["btc"], pressed: nil, datasetID: "group", scale: .d7)
-  #expect(initial.primaryID == "btc")
-  #expect(hidden.primaryID == "eth")
-  #expect(hidden.viewport == initial.viewport)
-  #expect(hidden.series[0].visible == false)
-  #expect(hidden.series[1].points.last?.value == -7)
+  func input(_ selected: Set<String>) -> LivelineInput {
+    MultiLineComparisonChart.input(series: series, selectedIDs: selected, datasetID: "group", scale: .d7)
+  }
+  let initial = input([]), selected = input(["eth"])
+  #expect(selected.primaryID == initial.primaryID)
+  #expect(selected.viewport == initial.viewport)
+  #expect(selected.series.allSatisfy { $0.visible })
+  #expect(selected.series[0].opacity == 0.18)
+  #expect(selected.series[1].opacity == 1)
+  #expect(selected.series[1].points.last?.value == -7)
+  #expect(input(["btc", "eth"]).series.allSatisfy { $0.opacity == 1 })
+  #expect(input(["another-watchlist"]).series.allSatisfy { $0.opacity == 1 })
   let engine = LivelineEngine()
   var config = LivelineConfiguration(); config.reduceMotion = true; config.referenceValue = 0
   engine.update(initial, configuration: config, marketTime: 2)
   engine.advance(monotonicTime: 0, marketTime: 2)
-  engine.update(hidden, configuration: config, marketTime: 2)
-  // Hiding BTC must never briefly move ETH's tip to BTC's +10% value.
-  #expect(engine.displayedValue == -7)
-  #expect(engine.splines["eth"]?.points.last?.value == -7)
+  let originalRange = engine.yRange
+  engine.update(selected, configuration: config, marketTime: 2)
+  engine.advance(monotonicTime: 1, marketTime: 2)
+  #expect(engine.yRange == originalRange)
+  #expect(engine.alpha["btc"] == 0.18)
+  #expect(engine.alpha["eth"] == 1)
+  #expect(engine.selection(at: 1.5)?.values["btc"] == 5)
   #expect(engine.selection(at: 1.5)?.values["eth"] == -3.5)
-  let empty = MultiLineComparisonChart.input(series: series, hidden: ["btc", "eth"], pressed: nil, datasetID: "group", scale: .d7)
-  #expect(empty.state == .empty)
-  let changedScale = MultiLineComparisonChart.input(series: series, hidden: [], pressed: nil, datasetID: "group", scale: .d1)
-  #expect(changedScale.id != initial.id)
+  engine.update(initial, configuration: config, marketTime: 2)
+  engine.advance(monotonicTime: 2, marketTime: 2)
+  #expect(engine.alpha["btc"] == 1)
+  // Normal motion fades to the new emphasis instead of hiding/revealing the line.
+  config.reduceMotion = false
+  engine.update(selected, configuration: config, marketTime: 2)
+  engine.advance(monotonicTime: 2.016, marketTime: 2)
+  #expect((engine.alpha["btc"] ?? 0) > 0.18)
+  #expect((engine.alpha["btc"] ?? 1) < 1)
 }
 
-@Test @MainActor func settledCardChartsDoNotRestartRenderingDuringScroll() async throws {
+@Test @MainActor func comparisonEmphasisSettlesWithinQuarterSecond() {
+  let engine = LivelineEngine()
+  var input = LivelineInput(id: "compare", series: [
+    .init(id: "btc", points: [.init(time: 1, value: 0), .init(time: 2, value: 10)]),
+    .init(id: "eth", points: [.init(time: 1, value: 0), .init(time: 2, value: -5)])
+  ], primaryID: "btc", viewport: .historical(1...2))
+  var config = LivelineConfiguration()
+  config.reduceMotion = true; config.seriesLabels = ["btc": "BTC", "eth": "ETH"]
+  engine.update(input, configuration: config, marketTime: 2)
+  engine.advance(monotonicTime: 0, marketTime: 2)
+  config.reduceMotion = false; input.series[0].opacity = 0.18
+  engine.update(input, configuration: config, marketTime: 2)
+  for frame in 1...15 { engine.advance(monotonicTime: Double(frame) / 60, marketTime: 2) }
+  #expect(engine.alpha["btc"] == 0.18)
+  #expect(engine.alpha["eth"] == 1)
+  #expect(!engine.isAnimating)
+}
+
+@Test @MainActor func tokenSortUsesQuotesAndHoldingsAndKeepsMissingValuesLast() {
+  let items = PreviewFixtures.items
+  let quotes = Dictionary(uniqueKeysWithValues: PreviewFixtures.quotes.map { ($0.id, $0) })
+  func ids(_ sort: WatchlistTokenSort, _ source: [WatchlistItem]? = nil) -> [String] {
+    sort.ordered(source ?? items, quote: { quotes[$0] }).map(\.coinId)
+  }
+  #expect(ids(.original) == ["bitcoin", "ethereum", "solana"])
+  #expect(ids(.changeDescending) == ["solana", "bitcoin", "ethereum"])
+  #expect(ids(.changeAscending) == ["ethereum", "bitcoin", "solana"])
+  #expect(ids(.priceAscending) == ["solana", "ethereum", "bitcoin"])
+  #expect(ids(.priceDescending) == ["bitcoin", "ethereum", "solana"])
+  #expect(ids(.nameDescending) == ["solana", "ethereum", "bitcoin"])
+  #expect(ids(.holdingsDescending) == ["bitcoin", "ethereum", "solana"])
+  let missing = WatchlistItem(id: "missing", watchlistGroupId: PreviewFixtures.group.id, coinId: "unknown", holdings: 1)
+  for sort in [WatchlistTokenSort.priceAscending, .priceDescending, .changeAscending, .changeDescending, .holdingsDescending] {
+    #expect(ids(sort, [missing] + items).last == "unknown")
+  }
+  let largeHolding = WatchlistItem(id: "sol-rich", watchlistGroupId: PreviewFixtures.group.id, coinId: "solana", holdings: 1_000)
+  #expect(ids(.holdingsDescending, [items[0], items[1], largeHolding]).first == "solana")
+}
+
+@Test @MainActor func comparisonEmphasisReusesGeometryWithFortySeries() {
+  let engine = LivelineEngine()
+  let renderer = LivelineRenderer()
+  var config = LivelineConfiguration()
+  config.reduceMotion = true
+  config.grid = false; config.timeAxis = false; config.badge = false
+  config.fill = false; config.dot = false; config.extrema = false; config.pulse = false
+  var input = LivelineInput(id: "large-watchlist", series: (0..<40).map { index in
+    LivelineSeries(id: "token-\(index)", points: (1...400).map {
+      LivelinePoint(time: Double($0), value: sin(Double($0) / 20) * Double(index + 1))
+    })
+  }, primaryID: "token-0", viewport: .historical(1...400))
+  var size = CGSize(width: 390, height: 300)
+  func draw() {
+    autoreleasepool {
+      _ = UIGraphicsImageRenderer(size: size).image { context in
+        renderer.draw(context.cgContext, size: size, engine: engine, frameMilliseconds: 16.67)
+      }
+    }
+  }
+  engine.update(input, configuration: config, marketTime: 400)
+  engine.advance(monotonicTime: 0, marketTime: 400)
+  draw()
+  let splineBuilds = engine.splineBuildCount
+  let screenBuilds = renderer.screenPathBuildCount
+  let range = engine.yRange
+  #expect(splineBuilds == 40)
+  #expect(screenBuilds == 40)
+  config.reduceMotion = false
+  for selected in 0..<5 {
+    input.series = input.series.enumerated().map { index, original in
+      var series = original; series.opacity = index <= selected ? 1 : 0.18; return series
+    }
+    engine.update(input, configuration: config, marketTime: 400)
+    for frame in 0..<8 {
+      engine.advance(monotonicTime: Double(1 + selected * 8 + frame) / 60, marketTime: 400)
+      draw()
+    }
+  }
+  #expect(engine.splineBuildCount == splineBuilds)
+  #expect(renderer.screenPathBuildCount == screenBuilds)
+  #expect(engine.yRange == range)
+  #expect(engine.alpha["token-39"]! < 1)
+  #expect(engine.selection(at: 200)?.values.count == 40)
+  // Resizing and new prices still invalidate the relevant geometry.
+  size.width = 430; draw()
+  #expect(renderer.screenPathBuildCount == screenBuilds + 40)
+  input.series[0].points[200].value += 0.25
+  engine.update(input, configuration: config, marketTime: 400)
+  engine.advance(monotonicTime: 1, marketTime: 400); draw()
+  #expect(engine.splineBuildCount > splineBuilds)
+  #expect(renderer.screenPathBuildCount > screenBuilds + 40)
+}
+
+@Test @MainActor func selectingComparisonLinesDoesNotRepaintTheChart() async throws {
+  let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+  let chart = LivelineChartView(tracksScrollVisibility: false)
+  chart.frame = CGRect(x: 0, y: 100, width: 390, height: 300)
+  window.addSubview(chart); window.isHidden = false
+  chart.layoutIfNeeded()
+  defer { chart.stop(); window.isHidden = true }
+  var input = LivelineInput(id: "watchlist", series: (0..<40).map { index in
+    LivelineSeries(id: "token-\(index)", points: (1...400).map {
+      LivelinePoint(time: Double($0), value: sin(Double($0) / 20) * Double(index + 1))
+    })
+  }, primaryID: "token-0", viewport: .historical(1...400))
+  var config = LivelineConfiguration()
+  config.fill = false; config.dot = false; config.badge = false; config.extrema = false; config.pulse = false
+  config.seriesLabels = Dictionary(uniqueKeysWithValues: input.series.map { ($0.id, $0.id) })
+  func apply() {
+    chart.apply(input: input, configuration: config, isActive: true,
+                formatValue: { String($0) }, formatVolume: { String($0) }, formatTime: { String($0) }, onSelection: { _ in })
+  }
+  func settle() async throws {
+    for _ in 0..<400 {
+      if !chart.hasActiveDisplayLink { break }
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    chart.layer.displayIfNeeded()
+    #expect(!chart.hasActiveDisplayLink)
+  }
+  apply(); try await settle()
+  #expect(chart.compositedSeriesCount == 40)
+  let draws = chart.rasterDrawCount
+  input.series = input.series.enumerated().map { index, original in
+    var line = original; line.opacity = index == 1 ? 1 : 0.18; return line
+  }
+  apply()
+  try await Task.sleep(for: .milliseconds(100))
+  #expect(chart.compositedOpacity(for: "token-0")! > 0.18)
+  #expect(chart.compositedOpacity(for: "token-0")! < 1)
+  try await settle()
+  #expect(chart.rasterDrawCount == draws)
+  #expect(abs(chart.compositedOpacity(for: "token-0")! - 0.18) < 0.001)
+  #expect(chart.compositedOpacity(for: "token-1") == 1)
+  // Inspection switches back to the full renderer, then data refresh restores layers.
+  chart.accessibilityDecrement()
+  try await settle()
+  #expect(chart.compositedSeriesCount == 0)
+  #expect(chart.rasterDrawCount > draws)
+  input.id = "watchlist-next-range"
+  apply(); try await settle()
+  #expect(chart.compositedSeriesCount == 40)
+}
+
+@Test @MainActor func chartPreparationIgnoresSelectionButRefreshesChangedData() {
+  let cache = ComparisonChartPreparation()
+  var series = (0..<40).map { index in
+    MultiLineComparisonChart.Series(id: "token-\(index)", label: "T\(index)", color: ChartColors.pastel[0],
+      points: (1...400).map { TimePoint(epochSeconds: $0, value: Double($0 + index)) })
+  }
+  func prepare(_ selected: Set<String> = [], scale: TimeScale = .d1, dataset: String = "group") -> LivelineInput {
+    cache.input(series: series, selectedIDs: selected, datasetID: dataset, scale: scale)
+  }
+  let initial = prepare()
+  for index in 0..<40 {
+    let focused = prepare(["token-\(index)"])
+    #expect(focused.series[index].opacity == 1)
+    #expect(focused.series[(index + 1) % 40].opacity == 0.18)
+    #expect(focused.viewport == initial.viewport)
+    #expect(focused.series[index].points == initial.series[index].points)
+  }
+  #expect(prepare(["removed-token"]).series.allSatisfy { $0.opacity == 1 })
+  #expect(prepare() == initial)
+  #expect(cache.preparationCount == 1)
+  series[0] = .init(id: series[0].id, label: series[0].label, color: series[0].color,
+                   points: [.init(epochSeconds: 1, value: -3), .init(epochSeconds: 500, value: 9)])
+  let updated = prepare()
+  #expect(updated.series[0].points.last?.value == 9)
+  #expect(updated.viewport == .historical(1...500))
+  #expect(cache.preparationCount == 2)
+  #expect(prepare(scale: .d7).id == "group|\(TimeScale.d7.rawValue)")
+  #expect(cache.preparationCount == 3)
+  #expect(prepare(dataset: "another-group").id == "another-group|\(TimeScale.d1.rawValue)")
+  #expect(cache.preparationCount == 4)
+}
+
+@Test @MainActor func selectionOnlyInvalidatesChangedRowsAndModeBoundaries() {
+  let selection = SelectionStore()
+  selection.register(owner: "first", selectableIds: ["btc", "eth", "sol"], onRemove: nil, onAnalyze: nil)
+  selection.toggle("btc")
+  let unrelatedChanges = Mutex(0), selectedChanges = Mutex(0), modeChanges = Mutex(0), openChanges = Mutex(0)
+  withObservationTracking { _ = selection.isSelected("eth") } onChange: { unrelatedChanges.withLock { $0 += 1 } }
+  withObservationTracking { _ = selection.isSelected("btc") } onChange: { selectedChanges.withLock { $0 += 1 } }
+  withObservationTracking { _ = selection.isActive } onChange: { modeChanges.withLock { $0 += 1 } }
+  withObservationTracking { _ = selection.openRowID } onChange: { openChanges.withLock { $0 += 1 } }
+  selection.toggle("sol")
+  #expect(selection.isSelected("sol")) // First lookup after selection must be correct too.
+  #expect(unrelatedChanges.withLock { $0 } == 0)
+  #expect(selectedChanges.withLock { $0 } == 0)
+  #expect(modeChanges.withLock { $0 } == 0)
+  #expect(openChanges.withLock { $0 } == 0)
+  selection.toggle("btc")
+  #expect(selectedChanges.withLock { $0 } == 1)
+  #expect(modeChanges.withLock { $0 } == 0)
+  selection.selectAll(true)
+  #expect(unrelatedChanges.withLock { $0 } == 1)
+  #expect(selection.isSelected("btc") && selection.isSelected("eth"))
+  selection.register(owner: "second", selectableIds: ["eth"], onRemove: nil, onAnalyze: nil)
+  #expect(modeChanges.withLock { $0 } == 1)
+  #expect(!selection.isActive && !selection.isSelected("btc") && !selection.isSelected("eth"))
+  selection.toggle("eth")
+  #expect(selection.isActive && selection.isSelected("eth"))
+  selection.clear()
+  #expect(!selection.isActive && !selection.isSelected("eth"))
+}
+
+@Test(arguments: [true, false], [true, false]) @MainActor func settledCardChartsDoNotRestartRenderingDuringScroll(isDecorative: Bool, tracksScrollVisibility: Bool) async throws {
   let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
   let scroll = UIScrollView(frame: window.bounds)
   scroll.contentSize = CGSize(width: 390, height: 2000)
   window.addSubview(scroll)
   window.isHidden = false
-  let chart = LivelineChartView(isDecorative: true)
+  let chart = LivelineChartView(isDecorative: isDecorative, tracksScrollVisibility: tracksScrollVisibility)
   chart.frame = CGRect(x: 20, y: 200, width: 160, height: 16)
   scroll.addSubview(chart)
   window.layoutIfNeeded()
   scroll.layoutIfNeeded()
   chart.layoutIfNeeded()
   defer { chart.stop(); window.isHidden = true }
-  var config = LivelineConfiguration.sparkline
+  var config = isDecorative ? LivelineConfiguration.sparkline : LivelineConfiguration()
+  config.pulse = false
   config.reduceMotion = true
   var input = LivelineInput(id: "card", series: [.init(id: "price", points: [
     .init(time: 1, value: 0), .init(time: 2, value: 3)
@@ -79,7 +301,9 @@ private actor OverviewRequestGate {
   #expect(!chart.hasActiveDisplayLink)
   let starts = chart.displayLinkStartCount
   #expect(starts > 0)
-  #expect(chart.gestureRecognizers?.isEmpty != false)
+  #expect(chart.scrollObserverCount == (!isDecorative && tracksScrollVisibility ? 1 : 0))
+  if isDecorative { #expect(chart.gestureRecognizers?.isEmpty != false) }
+  else { #expect((chart.gestureRecognizers?.count ?? 0) >= 2) }
   for offset in stride(from: 0, through: 100, by: 5) {
     scroll.contentOffset.y = CGFloat(offset)
     chart.setNeedsLayout()
@@ -517,6 +741,26 @@ private actor OverviewRequestGate {
                                              .init(id: "ethereum", symbol: "ETH", points: eth.series)])
   #expect(lines.count == 2)
   #expect(lines[0].points.map(\.epochSeconds) == lines[1].points.map(\.epochSeconds))
+}
+
+@Test @MainActor func indicatorViewportFitsShortHistoriesAndKeepsPanningWithinData() {
+  let points = (0..<400).map { IPt(time: 1_700_000_000 + $0 * 3600, value: Double($0)) }
+  var viewport = IndicatorViewport()
+  let initial = viewport.window(points: points, days: 14)
+  #expect(initial.length == 14 * 86_400 + 3600)
+  #expect(initial.start.addingTimeInterval(initial.length) == initial.domain.upperBound)
+  viewport.start = points[100].date
+  let panned = viewport.window(points: points, days: 14)
+  #expect(panned.start <= panned.domain.upperBound.addingTimeInterval(-panned.length))
+  viewport.zoom = 2
+  let zoomed = viewport.window(points: points, days: 14)
+  #expect(zoomed.length < initial.length && zoomed.start == viewport.start)
+  let visible = points.visible(in: zoomed)
+  #expect(visible.count < points.count)
+  #expect(visible.first!.date <= zoomed.start)
+  #expect(visible.last!.date >= zoomed.start.addingTimeInterval(zoomed.length))
+  let short = IndicatorViewport().window(points: Array(points.prefix(8)), days: 14)
+  #expect(short.start == points[0].date && short.length == 8 * 3600)
 }
 
 #endif

@@ -33,7 +33,6 @@ struct MainTabView: View {
       Tab(value: .compare) {
         NavigationStack(path: $router.comparePath) {
           CompareView().navigationDestination(for: Route.self, destination: destination)
-            .modifier(SelectionNavigationModifier(tab: .compare))
         }
       } label: {
         Image("NavigationCompare").renderingMode(.template).accessibilityLabel("Compare")
@@ -134,15 +133,15 @@ struct SelectionNavigationModifier: ViewModifier {
             }
             .fixedSize()
             .accessibilityAddTraits(.isHeader)
-            .animation(reduceMotion ? nil : .snappy, value: selecting)
-            .animation(reduceMotion ? nil : .snappy, value: env.selection.selected.count)
+            .animation(reduceMotion ? nil : SelectionMotion.open, value: selecting)
+            .animation(reduceMotion ? nil : SelectionMotion.open, value: env.selection.selected.count)
           }
           .sharedBackgroundVisibility(.hidden)
         }
         if selecting && !usesWatchlistHeader {
           ToolbarItem(placement: .topBarTrailing) {
             Button(env.selection.allSelected ? "Deselect all" : "Select all") {
-              withAnimation(reduceMotion ? nil : .snappy) { env.selection.selectAll(!env.selection.allSelected) }
+              withAnimation(reduceMotion ? nil : SelectionMotion.open) { env.selection.selectAll(!env.selection.allSelected) }
             }
             .disabled(env.selection.isRemoving)
           }
@@ -154,7 +153,7 @@ struct SelectionNavigationModifier: ViewModifier {
             TokenSelectionActionBar(
               canRemove: env.selection.canRemove, isBusy: env.selection.isRemoving,
               canAnalyze: env.selection.canAnalyze,
-              onCancel: { withAnimation(reduceMotion ? nil : .snappy) { env.selection.clear() } },
+              onCancel: { withAnimation(reduceMotion ? nil : SelectionMotion.open) { env.selection.clear() } },
               onRemove: { confirmingRemoval = true },
               onAnalyze: { env.selection.onAnalyze?(Array(env.selection.selected)) }
             )
@@ -169,9 +168,9 @@ struct SelectionNavigationModifier: ViewModifier {
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, selecting ? 8 : 0)
-        .animation(reduceMotion ? nil : .snappy, value: selecting)
+        .animation(reduceMotion ? nil : SelectionMotion.open, value: selecting)
       }
-      .animation(reduceMotion ? nil : .snappy, value: selecting)
+      .animation(reduceMotion ? nil : SelectionMotion.open, value: selecting)
       .confirmationDialog("Remove selected tokens?", isPresented: $confirmingRemoval, titleVisibility: .visible) {
         Button("Remove \(env.selection.selected.count) tokens", role: .destructive) {
           Task { await env.selection.removeSelected(toasts: env.toasts) }

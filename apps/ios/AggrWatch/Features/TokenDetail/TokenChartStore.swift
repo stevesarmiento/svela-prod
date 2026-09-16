@@ -23,6 +23,7 @@ final class TokenChartStore {
   private(set) var projection: PriceProjection.Result?
   /// Phase 6: MarketVision / Bollinger / BBWP / RSI divergences (+ explain series), computed off-main.
   private(set) var indicators: IndicatorBundle?
+  private(set) var isComputingIndicators = false
   private var indicatorHistory: ParsedChartData?
   private var indicatorGeneration = 0
 
@@ -52,12 +53,17 @@ final class TokenChartStore {
 
   var dailyOhlcv: [OHLCVBar] { ChartSeries.bucketizeOHLCV(indicatorBars, bucketSeconds: 86_400) }
 
+  /// Short price windows use the same 90-day indicator history as the web 1M view.
+  var indicatorScale: TimeScale { scale == .d1 || scale == .d7 ? .d30 : scale }
+  var isIndicatorPending: Bool { isLoading || isComputingIndicators }
+
   /// `indicatorWindowDays`
   var indicatorWindowDays: Int { scale == .y2 ? 60 : (scale == .max ? 30 : 14) }
 
   // MARK: Lifecycle
 
   func start(scale: TimeScale) {
+    indicatorGeneration += 1
     self.scale = scale
     pollTask?.cancel()
     pollTask = Task { [weak self] in
@@ -131,6 +137,7 @@ final class TokenChartStore {
       isWarmingUp = (response.status?.warmupRequested ?? false) || points < 2 || !hasObservedHistory
       error = nil
       isLoading = false
+      isComputingIndicators = true
       // Short mobile ranges still need warmup history for indicators and daily metrics.
       // Reuse the cached 90-day request used by the 1M view; this does not expand the price window.
       if scale == .d1 || scale == .d7 {
@@ -138,8 +145,8 @@ final class TokenChartStore {
           try await market.marketChart(coinId: coinId, days: TimeScale.d30.tokenChartDaysParam, vsCurrency: "usd")
         }
         guard !Task.isCancelled, scale == self.scale else { return }
-        if let history {
-          indicatorHistory = ChartSeries.parseMarketChart(
+        indicatorHistory = history.flatMap { history in
+          ChartSeries.parseMarketChart(
             prices: history.data.prices.map { .init(time: $0.time, value: $0.value) },
             volumes: history.data.volumes.map { .init(time: $0.time, value: $0.value) },
             marketCaps: [], scale: .d30)
@@ -151,6 +158,7 @@ final class TokenChartStore {
     } catch {
       guard !Task.isCancelled, scale == self.scale else { return }
       self.error = error.localizedDescription
+      isComputingIndicators = false
       if data.line.isEmpty { data = fallbackData(); recomputeOverlays() }
     }
     isLoading = false
@@ -168,6 +176,7 @@ final class TokenChartStore {
   }
 
   private func recomputeOverlays() {
+    isComputingIndicators = true
     let bars = indicatorBars
     hull = HullSuite.compute(data.ohlc, config: .tokenPage)
     let inputs = data.ohlc.map { PriceProjection.InputPoint(timeEpochSec: $0.time, close: $0.close) }
@@ -178,9 +187,10 @@ final class TokenChartStore {
     indicatorGeneration += 1
     let generation = indicatorGeneration
     let scale = self.scale
+    let indicatorScale = self.indicatorScale
     let smoother = hull.mhull
     Task.detached(priority: .userInitiated) { [weak self] in
-      let bundle = IndicatorBundle.compute(bars: bars, scale: scale)
+      let bundle = IndicatorBundle.compute(bars: bars, scale: indicatorScale)
       var modifiers = hullOnly
       if let bundle {
         modifiers = PriceProjection.Modifiers(
@@ -190,8 +200,9 @@ final class TokenChartStore {
       }
       let projection = warming ? nil : PriceProjection.compute(inputs, modifiers: modifiers)
       await MainActor.run { [weak self] in
-        guard let self, self.indicatorGeneration == generation else { return }
+        guard let self, self.indicatorGeneration == generation, self.scale == scale else { return }
         self.indicators = bundle
+        self.isComputingIndicators = false
         self.projection = projection
       }
     }

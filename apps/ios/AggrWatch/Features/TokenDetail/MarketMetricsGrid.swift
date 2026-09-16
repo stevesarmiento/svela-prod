@@ -2,102 +2,166 @@ import AggrAPI
 import AggrCore
 import SwiftUI
 
-/// Port of `market-metrics.tsx`: 8 tiles, each with an info popover.
+/// All market metrics share one list of icon-led rows.
 struct MarketMetricsGrid: View {
   let quote: CoinQuote?
   let alignedPrice: Double?
   let dailyOhlcv: [OHLCVBar]
   var isPending = false
+  @State private var help: Metric?
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-  private struct Metric: Identifiable { let id: String; let label: String; let help: String; let value: MetricValue }
-  private enum MetricValue { case text(String), dash, infinity, performance(usdMove: Double?, pct: Double) }
+  private struct Metric: Identifiable {
+    let id: String
+    let label: String
+    let icon: String
+    let help: String
+    let value: String
+  }
+
+  private func usdAmount(_ value: Double?) -> String {
+    guard let value, value.isFinite, value >= 0 else { return "—" }
+    return UsdFormat.largeUsd(value)
+  }
+
+  private var marketCap: Metric {
+    Metric(id: "mcap", label: "Market Cap", icon: "chart.pie", help: "The USD market value of the circulating supply.",
+           value: usdAmount(quote?.marketCap))
+  }
+
+  private var fdv: Metric {
+    let value = MarketMetrics.fdvUsd(priceUsd: alignedPrice ?? quote?.currentPrice, maxSupply: quote?.maxSupply)
+    return Metric(id: "fdv", label: "FDV", icon: "chart.bar.xaxis",
+                  help: "Fully diluted valuation: price × max supply. Shows ∞ when max supply is unknown or uncapped.",
+                  value: value.map { UsdFormat.largeUsd($0) } ?? "∞")
+  }
 
   private var metrics: [Metric] {
-    let price = alignedPrice ?? quote?.currentPrice
-    let mcap = quote?.marketCap
-    let vol = quote?.totalVolume
-    let fdv = MarketMetrics.fdvUsd(priceUsd: price, maxSupply: quote?.maxSupply)
     let floatPct = MarketMetrics.floatPct(circulatingSupply: quote?.circulatingSupply, maxSupply: quote?.maxSupply)
-    let turnover = MarketMetrics.turnoverPct(volume24hUsd: vol, marketCapUsd: mcap)
-    let range30 = MarketMetrics.rangePositionPct(dailyOhlcv: dailyOhlcv, days: 30)
+    let turnover = MarketMetrics.turnoverPct(volume24hUsd: quote?.totalVolume, marketCapUsd: quote?.marketCap)
+    let range = MarketMetrics.rangePositionPct(dailyOhlcv: dailyOhlcv, days: 30)
     let atr = MarketMetrics.atrPct14d(dailyOhlcv: dailyOhlcv)
-    let perf: MetricValue = {
-      guard let pct = quote?.priceChangePercentage24h, pct.isFinite, let p = price, p > 0 else { return .dash }
-      return .performance(usdMove: MarketMetrics.usdMove(priceUsd: p, percentChange: pct), pct: pct)
-    }()
     return [
-      Metric(id: "mcap", label: "Market Cap", help: "Market cap in USD (spot price × circulating supply when available).",
-             value: mcap.map { .text(UsdFormat.largeUsd($0)) } ?? .dash),
-      Metric(id: "fdv", label: "FDV", help: "Fully diluted valuation: price × max supply. Shows ∞ when max supply is unknown/uncapped (e.g. ETH).",
-             value: fdv.map { .text(UsdFormat.largeUsd($0)) } ?? .infinity),
-      Metric(id: "float", label: "Float %", help: "Circulating supply ÷ max supply. Shows ∞ when max supply is unknown/uncapped.",
-             value: floatPct.map { .text(String(format: "%.1f%%", $0)) } ?? .infinity),
-      Metric(id: "atr", label: "ATR % (14d)", help: "14-day Average True Range as a percent of price, using daily-bucketed candles (volatility proxy).",
-             value: atr.map { .text(String(format: "%.2f%%", $0)) } ?? .dash),
-      Metric(id: "range", label: "30d Position", help: "Where today's close sits within the last 30 daily candles' low→high range. 0% = near 30d lows, 100% = near 30d highs.",
-             value: range30.map { .text(String(format: "%.0f%%", $0)) } ?? .dash),
-      Metric(id: "vol", label: "24h Volume", help: "Notional USD traded in the last 24 hours across tracked venues.",
-             value: vol.map { .text(UsdFormat.largeUsd($0)) } ?? .dash),
-      Metric(id: "perf", label: "Daily Performance", help: "Rolling 24h move. Left number is the inferred USD move; badge is the 24h percent change.", value: perf),
-      Metric(id: "turn", label: "Turnover", help: "24h volume ÷ market cap. Interpreted as “% of the market cap that traded today” (a liquidity/velocity proxy).",
-             value: turnover.map { .text(String(format: "%.2f%%", $0)) } ?? .dash),
+      marketCap,
+      fdv,
+      Metric(id: "vol", label: "24h Volume", icon: "chart.xyaxis.line", help: "Notional USD traded in the last 24 hours across tracked venues.", value: usdAmount(quote?.totalVolume)),
+      Metric(id: "float", label: "Float %", icon: "circle.lefthalf.filled", help: "Circulating supply divided by max supply. Shows ∞ when max supply is unknown or uncapped.", value: floatPct.map { String(format: "%.1f%%", $0) } ?? "∞"),
+      Metric(id: "atr", label: "ATR % (14d)", icon: "waveform.path", help: "14-day Average True Range as a percent of price, using daily candles to measure volatility.", value: atr.map { String(format: "%.2f%%", $0) } ?? "—"),
+      Metric(id: "range", label: "30d Position", icon: "slider.horizontal.3", help: "Where the latest daily close sits within the last 30 daily candles’ low-to-high range. 0% is near the lows; 100% is near the highs.", value: range.map { String(format: "%.0f%%", $0) } ?? "—"),
+      Metric(id: "perf", label: "Daily Performance", icon: "arrow.up.arrow.down", help: "The rolling 24-hour price change and its inferred dollar value.", value: ""),
+      Metric(id: "turn", label: "Turnover", icon: "arrow.triangle.2.circlepath", help: "24-hour volume divided by market cap: the percentage of market cap traded in a day.", value: turnover.map { String(format: "%.2f%%", $0) } ?? "—"),
     ]
   }
 
   var body: some View {
-    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 14) {
-      ForEach(metrics) { m in
-        VStack(spacing: 6) {
-          MetricLabel(label: m.label, help: m.help)
-          Group {
-            switch m.value {
-            case .text(let s): Text(s)
-            case .dash: Text("—").foregroundStyle(.secondary)
-            case .infinity: Image(systemName: "infinity").foregroundStyle(.secondary)
-            case .performance(let usd, let pct): MoveWithBadge(usdMove: usd, pct: pct)
-            }
-          }
-          .font(.system(.footnote, design: .rounded).monospacedDigit())
-          .opacity(isPending ? 0.7 : 1)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+    VStack(spacing: 24) {
+      HStack(spacing: 16) {
+        rule
+        Text("Market Stats")
+          .font(.system(.subheadline, design: .rounded, weight: .semibold))
+          .foregroundStyle(.secondary)
+          .accessibilityAddTraits(.isHeader)
+        rule
+      }
+
+      VStack(spacing: 0) {
+        metricRows(metrics)
       }
     }
-    .padding(8)
-    .glassEffect(.regular, in: .rect(cornerRadius: 16))
-  }
-}
-
-struct MetricLabel: View {
-  let label: String
-  let help: String
-  @State private var showHelp = false
-  var body: some View {
-    HStack(spacing: 4) {
-      Text(label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-      Button { showHelp = true } label: { Image(systemName: "info.circle").font(.system(size: 10)).foregroundStyle(.tertiary) }
-        .buttonStyle(.plain)
-        .popover(isPresented: $showHelp) {
-          Text(help).font(.footnote).padding(12).frame(maxWidth: 260).presentationCompactAdaptation(.popover)
-        }
-        .accessibilityLabel("\(label) info")
+    .padding(.top, 12)
+    .accessibilityIdentifier("token-market-stats")
+    .popover(item: $help) { metric in
+      VStack(alignment: .leading, spacing: 8) {
+        Text(metric.label).font(.system(.headline, design: .rounded))
+        Text(metric.help).font(.system(.subheadline, design: .rounded)).foregroundStyle(.secondary)
+      }
+      .padding(20).frame(idealWidth: 280, maxWidth: 320)
+      .presentationCompactAdaptation(.popover)
     }
   }
+
+  private var rule: some View {
+    Rectangle().fill(.white.opacity(0.10)).frame(height: 1).accessibilityHidden(true)
+  }
+
+  private func metricRows(_ metrics: [Metric]) -> some View {
+    ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
+      Button { help = metric } label: {
+        ViewThatFits(in: .horizontal) {
+          HStack(spacing: 12) {
+            rowLabel(metric)
+            Spacer(minLength: 8)
+            metricValue(metric).fixedSize()
+          }
+          VStack(alignment: .leading, spacing: 8) {
+            rowLabel(metric)
+            metricValue(metric).padding(.leading, 36)
+          }
+        }
+        .font(.system(.body, design: .rounded))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+        .background(index.isMultiple(of: 2) ? Color.clear : Color.white.opacity(0.055), in: .rect(cornerRadius: 10))
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityElement(children: .combine)
+      .accessibilityIdentifier("token-stat-\(metric.id)")
+      .accessibilityHint("Explains this metric")
+    }
+  }
+
+  private func rowLabel(_ metric: Metric) -> some View {
+    HStack(spacing: 12) {
+      Image(systemName: metric.icon).frame(width: 24).accessibilityHidden(true)
+      Text(metric.label).fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
+    }
+    .foregroundStyle(.secondary)
+  }
+
+  @ViewBuilder private func metricValue(_ metric: Metric) -> some View {
+    Group {
+      if metric.id == "perf", let pct = quote?.priceChangePercentage24h, pct.isFinite,
+         let price = alignedPrice ?? quote?.currentPrice, price.isFinite, price > 0 {
+        MoveWithBadge(usdMove: MarketMetrics.usdMove(priceUsd: price, percentChange: pct), pct: pct)
+      } else {
+        Text(metric.id == "perf" ? "—" : metric.value)
+          .fontWeight(.semibold).monospacedDigit()
+          .foregroundStyle(.white)
+      }
+    }
+    .opacity(isPending ? 0.7 : 1)
+  }
 }
 
 #if DEBUG
-#Preview("Market metrics") {
-  MarketMetricsGrid(quote: PreviewFixtures.quotes[0], alignedPrice: 67_420, dailyOhlcv: PreviewFixtures.bars, isPending: false).padding().preferredColorScheme(.dark)
+private var statsPreviewQuote: CoinQuote {
+  var quote = PreviewFixtures.quotes[0]
+  quote.circulatingSupply = 19_750_000
+  quote.maxSupply = 21_000_000
+  return quote
 }
-#Preview("Loading metrics") {
-  MarketMetricsGrid(quote: nil, alignedPrice: nil, dailyOhlcv: [], isPending: true).padding().preferredColorScheme(.dark)
-}
-#endif
 
-#if DEBUG
-#Preview("Metric help popover") {
-  MetricLabel(label: "Market cap", help: "Current price multiplied by circulating supply.")
-    .padding().preferredColorScheme(.dark)
+#Preview("Token stats") {
+  ScrollView {
+    MarketMetricsGrid(quote: statsPreviewQuote, alignedPrice: 67_420, dailyOhlcv: PreviewFixtures.bars)
+      .padding(20)
+  }
+  .background(.black).preferredColorScheme(.dark)
+}
+
+#Preview("Token stats — large text") {
+  ScrollView {
+    MarketMetricsGrid(quote: statsPreviewQuote, alignedPrice: 67_420, dailyOhlcv: PreviewFixtures.bars)
+      .padding(16)
+  }
+  .background(.black).preferredColorScheme(.dark)
+  .environment(\.dynamicTypeSize, .accessibility2)
+}
+
+#Preview("Token stats — unavailable") {
+  MarketMetricsGrid(quote: nil, alignedPrice: nil, dailyOhlcv: [], isPending: true)
+    .padding(20).background(.black).preferredColorScheme(.dark)
 }
 #endif

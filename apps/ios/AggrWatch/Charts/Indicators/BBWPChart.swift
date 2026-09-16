@@ -2,47 +2,44 @@ import AggrCore
 import Charts
 import SwiftUI
 
-/// Port of `bbwp-chart.tsx`: 0–100 percentile line with 5-point spectrum, MA line, extreme bands.
+/// Web's per-value OKLCH spectrum, 0/50/100 scale guides, 2/98 extremes and dashed MA.
 struct BBWPChart: View {
   let result: BBWP.Result
   let windowDays: Int
   @Binding var selectedDate: Date?
   var height: CGFloat = 250
-
-  /// `spectrumPreset: "5point"` blue → cyan → green → yellow → red across 0..100.
-  private let spectrum = LinearGradient(colors: [.blue, .cyan, .green, .yellow, .red], startPoint: .bottom, endPoint: .top)
+  @State private var viewport = IndicatorViewport()
+  private static let palette = (0...100).map { IndicatorPlotScale.volatilityColor(Double($0)) }
 
   var body: some View {
     let line = result.bbwp.chartPoints
     let ma = result.ma.chartPoints
+    let window = viewport.window(points: line, days: windowDays)
+    let colored = line.visible(in: window).map { p in
+      var point = p; point.color = Self.palette[min(100, max(0, Int(p.value.rounded())))]; return point
+    }
+    let scrubDate = line.nearest(to: selectedDate)?.date
     Chart {
-      if let first = line.first?.date, let last = line.last?.date {
-        RectangleMark(xStart: .value("s", first), xEnd: .value("e", last), yStart: .value("a", result.extremeHigh), yEnd: .value("b", 100))
-          .foregroundStyle(Color.lossRed.opacity(0.12))
-        RectangleMark(xStart: .value("s", first), xEnd: .value("e", last), yStart: .value("a", 0), yEnd: .value("b", result.extremeLow))
-          .foregroundStyle(Color.gainGreen.opacity(0.12))
-      }
-      RuleMark(y: .value("hi", result.extremeHigh)).foregroundStyle(Color.lossRed.opacity(0.4)).lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-      RuleMark(y: .value("lo", result.extremeLow)).foregroundStyle(Color.gainGreen.opacity(0.4)).lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
-      RuleMark(y: .value("50", 50)).foregroundStyle(Color.white.opacity(0.1))
-      ForEach(ma) { p in
-        LineMark(x: .value("t", p.date), y: .value("MA", p.value), series: .value("s", "ma"))
-          .foregroundStyle(Color.white.opacity(0.55)).lineStyle(StrokeStyle(lineWidth: 1.5, dash: [3, 3])).interpolationMethod(.monotone)
-      }
-      ForEach(line) { p in
-        LineMark(x: .value("t", p.date), y: .value("BBWP", p.value), series: .value("s", "bbwp"))
-          .foregroundStyle(spectrum).lineStyle(StrokeStyle(lineWidth: 2)).interpolationMethod(.monotone)
-      }
-      ScrubRule(date: selectedDate)
+      RuleMark(y: .value("100", 100)).foregroundStyle(Color(oklch: "oklch(0.628 0.2577 29.23 / 0.16)"))
+      RuleMark(y: .value("0", 0)).foregroundStyle(Color(oklch: "oklch(0.452 0.3132 264.05 / 0.16)"))
+      RuleMark(y: .value("50", 50)).foregroundStyle(Color(oklch: "oklch(0.7252 0 0 / 0.22)")).lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+      RuleMark(y: .value("Extreme high", result.extremeHigh)).foregroundStyle(Color(oklch: "oklch(0.628 0.2577 29.23 / 0.18)")).lineStyle(StrokeStyle(lineWidth: 1, dash: [1, 3]))
+      RuleMark(y: .value("Extreme low", result.extremeLow)).foregroundStyle(Color(oklch: "oklch(0.452 0.3132 264.05 / 0.18)")).lineStyle(StrokeStyle(lineWidth: 1, dash: [1, 3]))
+      IndicatorLine(id: "BBWP", points: colored, width: 2)
+      IndicatorLine(id: "MA", points: ma.visible(in: window), color: .white.opacity(0.55), width: 2, dash: [4, 4])
+      ScrubRule(date: scrubDate)
     }
     .chartXSelection(value: $selectedDate)
-    .indicatorPane(windowDays: windowDays, lastDate: line.last?.date, yDomain: 0...100, height: height)
+    .indicatorPane(window: window, windowDays: windowDays, viewport: $viewport,
+                   yDomain: IndicatorPlotScale.domain(points: [], visible: window.epochs, anchors: [0, 100], margin: 0.15), height: height)
     .chartLegend(.hidden)
+    .overlay(alignment: .topLeading) { IndicatorReadout(date: scrubDate, series: [("BBWP", line), ("MA", ma)]) }
+    .accessibilityIdentifier("indicator-bbwp")
   }
 }
 
 #if DEBUG
-#Preview("Indicator chart") {
+#Preview("Volatility — web parity") {
   PreviewValue(Date?.none) { date in
     BBWPChart(result: PreviewFixtures.indicators.bbwp, windowDays: 14, selectedDate: date).padding().preferredColorScheme(.dark)
   }

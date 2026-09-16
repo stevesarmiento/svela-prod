@@ -29,6 +29,9 @@ public final class LivelineEngine {
   private var previousObservation: LivelineObservation?
   private var initialized = false
   private var revision = 0
+  #if DEBUG
+  private(set) var splineBuildCount = 0
+  #endif
   private struct RangeKey: Equatable {
     let revision: Int
     let x: ClosedRange<Double>
@@ -48,6 +51,13 @@ public final class LivelineEngine {
     if configuration.paused { return }
     let next = newInput
     guard next != input || wasPaused else { return }
+    // Focusing comparison lines changes only emphasis. Preserve the splines,
+    // animated endpoint, and cached range while the opacity interpolates.
+    if !wasPaused, let current = input, next.matchesExceptOpacity(current) {
+      input = next
+      isAnimating = true
+      return
+    }
     let newIdentity = input?.id != next.id
     let primaryChanged = input?.primaryID != next.primaryID
     let sameToken = input?.id.split(separator: "|").first == next.id.split(separator: "|").first
@@ -69,6 +79,9 @@ public final class LivelineEngine {
     input = clean
     revision += 1
     historicalSplines = Dictionary(uniqueKeysWithValues: clean.series.map { ($0.id, LivelineSpline($0.points)) })
+    #if DEBUG
+    splineBuildCount += clean.series.count
+    #endif
     splines = historicalSplines
     let value = clean.observation?.value ?? historicalSplines[clean.primaryID]?.points.last?.value ?? 0
     if !initialized || !sameToken { displayedValue = value; reveal = 0; alpha = [:] }
@@ -117,7 +130,7 @@ public final class LivelineEngine {
     updateDisplayedEndpoint()
     if case .liveWindow = input.viewport { toX = viewport(marketTime: marketTime) }
     let t = noMotion ? 1 : min(1, max(0, (elapsed - transitionStart) / 750))
-    if t >= 1 { xRange = toX }
+    if t >= 1 || fromX == toX { xRange = toX }
     else {
       let eased = (1 - cos(t * .pi)) / 2
       let span = exp(log(max(fromX.upperBound - fromX.lowerBound, 1e-6)) * (1 - eased)
@@ -126,9 +139,10 @@ public final class LivelineEngine {
       xRange = (end - span)...end
     }
     for s in input.series {
-      let target = s.visible ? 1.0 : 0
+      let target = s.targetOpacity
       let current = alpha[s.id] ?? target
-      let next = LivelineMath.lerp(current, target, speed: noMotion ? 1 : 0.10, milliseconds: dt)
+      let emphasisSpeed = configuration.seriesLabels.isEmpty ? 0.10 : 0.40
+      let next = LivelineMath.lerp(current, target, speed: noMotion ? 1 : emphasisSpeed, milliseconds: dt)
       alpha[s.id] = abs(next - target) < 0.001 ? target : next
     }
     targetY = computeRange()
@@ -145,9 +159,10 @@ public final class LivelineEngine {
     if scrubAmount == 0 && selectedTime == nil { lastInspectionTime = nil }
     let span = max(targetY.upperBound - targetY.lowerBound, 1e-15)
     let rangeMoving = abs(lo - targetY.lowerBound) + abs(hi - targetY.upperBound) > span * 1e-5
-    let alphaMoving = input.series.contains { abs((alpha[$0.id] ?? 1) - ($0.visible ? 1 : 0)) > 0.001 }
+    if !rangeMoving { yRange = targetY }
+    let alphaMoving = input.series.contains { abs((alpha[$0.id] ?? 1) - $0.targetOpacity) > 0.001 }
     let liveWindow: Bool = { if case .liveWindow = input.viewport { return true }; return false }()
-    isAnimating = firstFrame || t < 1 || rangeMoving || alphaMoving || displayedValue != value
+    isAnimating = firstFrame || (fromX != toX && t < 1) || rangeMoving || alphaMoving || displayedValue != value
       || reveal != revealTarget || scrubAmount != scrubTarget
       || (!noMotion && ((configuration.pulse && input.observation != nil) || input.state == .loading || liveWindow))
     firstFrame = false
@@ -179,7 +194,7 @@ public final class LivelineEngine {
 
   private func computeRange() -> ClosedRange<Double> {
     guard let input else { return 0...1 }
-    let visible = input.series.filter { (alpha[$0.id] ?? ($0.visible ? 1 : 0)) > 0.01 }
+    let visible = input.series.filter { (alpha[$0.id] ?? $0.targetOpacity) > 0.01 }
     let key = RangeKey(revision: revision, x: xRange, visible: visible.map(\.id),
                        profile: configuration.profile, reference: configuration.referenceValue, exaggerate: configuration.exaggerate)
     if key == rangeKey { return cachedRange }

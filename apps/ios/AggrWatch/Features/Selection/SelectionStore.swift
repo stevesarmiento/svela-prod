@@ -11,7 +11,24 @@ final class SelectionStore {
 
   struct BulkRemoveError: Error { let removedCount: Int; let failedCount: Int }
 
-  private(set) var selected: Set<String> = []
+  private(set) var selected: Set<String> = [] {
+    didSet {
+      selectionSnapshot = selected
+      for id in oldValue.symmetricDifference(selected) {
+        rowStates[id]?.isSelected = selected.contains(id)
+      }
+      let active = !selected.isEmpty
+      if isActive != active { isActive = active }
+    }
+  }
+  @Observable fileprivate final class RowState {
+    var isSelected: Bool
+    init(isSelected: Bool) { self.isSelected = isSelected }
+  }
+  // Each row observes its own flag; looking it up must not subscribe to the
+  // entire selection set (including on the first render of a lazy row).
+  @ObservationIgnored private var rowStates: [String: RowState] = [:]
+  @ObservationIgnored private var selectionSnapshot: Set<String> = []
   private(set) var selectableIds: [String] = []
   private(set) var isRemoving = false
   /// nil for read-only tables (screener) → the dock hides Remove.
@@ -24,7 +41,7 @@ final class SelectionStore {
   var analysisCoinIds: [String] { Array(Set(selected.map { String($0.split(separator: "|").last ?? "") })).sorted() }
   var canAnalyze: Bool { !analysisCoinIds.isEmpty && analysisCoinIds.count <= Self.maxAnalyzeTokens && !isRemoving }
 
-  var isActive: Bool { !selected.isEmpty }
+  private(set) var isActive = false
   var canRemove: Bool { onRemove != nil }
   var totalCount: Int { selectableIds.count }
   var allSelected: Bool { !selectableIds.isEmpty && selected.count == selectableIds.count }
@@ -36,7 +53,8 @@ final class SelectionStore {
     self.onRemove = onRemove
     self.onAnalyze = onAnalyze
     // A loaded empty list must not leave stale actions enabled.
-    selected = selected.intersection(selectableIds)
+    let remaining = selected.intersection(selectableIds)
+    if remaining != selected { selected = remaining }
   }
 
   func release(owner: String) {
@@ -44,10 +62,30 @@ final class SelectionStore {
     clear(); selectableIds = []; onRemove = nil; onAnalyze = nil; ownerId = nil
   }
 
-  func toggle(_ id: String) { guard selectableIds.contains(id), !isRemoving else { return }; openRowID = nil; if selected.contains(id) { selected.remove(id) } else { selected.insert(id) } }
-  func isSelected(_ id: String) -> Bool { selected.contains(id) }
-  func selectAll(_ on: Bool) { guard !isRemoving else { return }; openRowID = nil; selected = on ? Set(selectableIds) : [] }
-  func clear() { selected = []; openRowID = nil }
+  func toggle(_ id: String) {
+    guard selectableIds.contains(id), !isRemoving else { return }
+    if openRowID != nil { openRowID = nil }
+    if selected.contains(id) { selected.remove(id) } else { selected.insert(id) }
+  }
+  func isSelected(_ id: String) -> Bool {
+    let state: RowState
+    if let existing = rowStates[id] { state = existing }
+    else {
+      state = RowState(isSelected: selectionSnapshot.contains(id))
+      rowStates[id] = state
+    }
+    return state.isSelected
+  }
+  func selectAll(_ on: Bool) {
+    guard !isRemoving else { return }
+    if openRowID != nil { openRowID = nil }
+    let next = on ? Set(selectableIds) : []
+    if next != selected { selected = next }
+  }
+  func clear() {
+    if !selected.isEmpty { selected = [] }
+    if openRowID != nil { openRowID = nil }
+  }
   func reset() {
     clear(); selectableIds = []; onRemove = nil; onAnalyze = nil; ownerId = nil
     isRemoving = false
@@ -127,8 +165,8 @@ struct SelectableRow<Content: View>: View {
       .background(backgroundColor ?? .white.opacity(selection.isSelected(id) ? 0.10 : 0.06), in: .rect(cornerRadius: 16))
       .clipShape(.rect(cornerRadius: 16))
       .contentShape(.rect(cornerRadius: 16))
-      .animation(reduceMotion ? nil : .snappy, value: selection.isActive)
-      .animation(reduceMotion ? nil : .snappy, value: selection.isSelected(id))
+      .animation(reduceMotion ? nil : SelectionMotion.open, value: selection.isActive)
+      .animation(reduceMotion ? nil : SelectionMotion.open, value: selection.isSelected(id))
       .onLongPressGesture {
         withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { selection.toggle(id) }
       }

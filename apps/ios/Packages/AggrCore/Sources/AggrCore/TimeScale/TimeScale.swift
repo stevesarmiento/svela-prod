@@ -25,8 +25,8 @@ public enum TimeScale: String, Sendable, CaseIterable, Codable, Hashable, Identi
 
   /// Overview + watchlist chart selector: 1D/1W/1M/1Y.
   public static let overviewScales: [TimeScale] = [.d1, .d7, .d30, .max]
-  /// Compare selector: 1D/1W/1Y.
-  public static let compareScales: [TimeScale] = [.d1, .d7, .max]
+  /// Compare selector: 1D/1W/1M/1Y.
+  public static let compareScales: [TimeScale] = [.d1, .d7, .d30, .max]
   /// Mobile token price chart: 1D/1W/1M/1Y.
   public static let tokenScales: [TimeScale] = [.d1, .d7, .d30, .max]
 
