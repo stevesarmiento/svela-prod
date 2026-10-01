@@ -12,40 +12,39 @@ struct SettingsView: View {
   @State private var path = NavigationPath()
   @State private var isSigningOut = false
   @State private var signOutError: String?
+  @AppStorage(PreferenceKeys.reduceHaptics) private var reduceHaptics = false
 
   var body: some View {
     NavigationStack(path: $path) {
-      List {
-        Section { ProfileCardView(user: env.clerkSession.user) }
-          .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
-
-        Section("Appearance") {
-          NavigationLink(value: Destination.appIcon) {
-            Label("App Icon", systemImage: "app.dashed")
+      SettingsKitPage {
+        ProfileCardView(user: env.clerkSession.user, inset: false)
+        SettingsSectionHeader("Appearance")
+        SettingsGroup {
+          SettingsLinkRow(iconName: "app.dashed", title: "App Icon", accessibilityIdentifier: "settings-app-icon") {
+            path.append(Destination.appIcon)
           }
-          .accessibilityIdentifier("settings-app-icon")
         }
-
-        Section {
-          NavigationLink(value: Destination.account) {
-            Label("Manage account", systemImage: "person.text.rectangle")
-          }
-          .disabled(env.clerkSession.user == nil)
-        } header: { Text("Account") } footer: {
-          Text("Manage your profile, email, connected accounts and available security options.")
+        SettingsSectionHeader("Interaction")
+        SettingsGroup {
+          SettingsToggleRow(iconName: "waveform", title: "Reduce Haptics",
+                            caption: "Turn off tap and selection feedback while moving through the app.",
+                            isOn: $reduceHaptics)
         }
-
-        Section {
-          Button(role: .destructive) { Task { await signOut() } } label: {
-            HStack {
-              Text("Sign out")
-              Spacer()
-              if isSigningOut { ProgressView() }
-            }
+        SettingsSectionHeader("Account")
+        SettingsGroup {
+          SettingsLinkRow(iconName: "person.text.rectangle", title: "Manage account",
+                          enabled: env.clerkSession.user != nil) { path.append(Destination.account) }
+        }
+        SettingsFootnote("Manage your profile, email, connected accounts and available security options.")
+        SettingsSectionHeader("Session")
+        SettingsGroup {
+          SettingsLinkRow(iconName: "rectangle.portrait.and.arrow.right", title: "Sign out",
+                          enabled: !isSigningOut && env.clerkSession.user != nil, destructive: true, isBusy: isSigningOut) {
+            Task { await signOut() }
           }
-          .disabled(isSigningOut || env.clerkSession.user == nil)
-        } footer: {
-          if let signOutError { Text(signOutError).foregroundStyle(.red) }
+        }
+        if let signOutError {
+          SettingsFootnote(signOutError, systemImageName: "exclamationmark.triangle", tint: Theme.lossRed)
         }
       }
       .navigationTitle("Settings")
@@ -94,28 +93,30 @@ struct SettingsView: View {
 /// Port of `profile-card.tsx`: avatar, display name, email, member id and issue date.
 struct ProfileCardView: View {
   let user: User?
+  /// Pages that pad their own content pass `false`.
+  var inset = true
 
   var body: some View {
     let email = user?.primaryEmailAddress?.emailAddress
     let name = UserDisplay.displayName(fullName: user.flatMap { [$0.firstName, $0.lastName].compactMap { $0 }.joined(separator: " ").ifEmpty(nil) }, email: email, walletAddress: nil)
     HStack(spacing: 14) {
-      AsyncImage(url: user.flatMap { URL(string: $0.imageUrl) }) { img in img.resizable().scaledToFill() } placeholder: {
-        Text(Self.initials(name: name, email: email)).font(.headline).frame(maxWidth: .infinity, maxHeight: .infinity).background(.white.opacity(0.08))
+      CachedRemoteImage(url: user.flatMap { URL(string: $0.imageUrl) }, variant: .full) {
+        Text(Self.initials(name: name, email: email)).font(.headline).frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.elevated)
       }
       .frame(width: 56, height: 56).clipShape(.circle)
       VStack(alignment: .leading, spacing: 3) {
         Text(name).font(.headline)
         if let email { Text(email).font(.caption).foregroundStyle(.secondary) }
         HStack(spacing: 8) {
-          Text(Self.memberId(seed: user?.id ?? "anonymous")).font(.system(.caption2, design: .rounded).monospacedDigit())
+          Text(Self.memberId(seed: user?.id ?? "anonymous")).font(.number(.caption2, weight: .regular))
           if let d = user?.createdAt { Text("Issued \(d.formatted(.dateTime.month(.abbreviated).day(.twoDigits).year()))").font(.caption2).foregroundStyle(.secondary) }
         }
       }
       Spacer()
     }
     .padding(16)
-    .glassEffect(.regular, in: .rect(cornerRadius: 20))
-    .padding(.horizontal, 16)
+    .glassEffect(.regular, in: .rect(cornerRadius: Theme.Radius.card))
+    .padding(.horizontal, inset ? 16 : 0)
   }
 
   static func initials(name: String, email: String?) -> String {

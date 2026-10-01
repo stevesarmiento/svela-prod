@@ -31,8 +31,10 @@ struct IndicatorExplainSheet<ChartView: View, Badges: View>: View {
           header
           Text("\(title) · \(request.timeframe) timeframe")
             .font(.caption).foregroundStyle(.secondary)
-          chart().clipShape(.rect(cornerRadius: 12))
-          ScrollView(.horizontal, showsIndicators: false) { HStack { badges() }.font(.caption) }
+          chart().clipShape(.rect(cornerRadius: Theme.Radius.sm))
+          ScrollView(.horizontal, showsIndicators: false) { HStack { badges() }.font(.caption).padding(.horizontal, 16) }
+            .padding(.horizontal, -16)
+            .horizontalEdgeFade(16)
           Divider()
           if let error {
             ContentUnavailableView("Couldn't explain", systemImage: "exclamationmark.triangle", description: Text(error))
@@ -70,7 +72,7 @@ struct IndicatorExplainSheet<ChartView: View, Badges: View>: View {
         Text("is currently").font(.subheadline).foregroundStyle(.secondary)
       }
       if let price = request.marketContext.priceUsd ?? quote?.currentPrice, price > 0 {
-        Text(UsdFormat.price(price)).font(.system(size: 30, weight: .bold)).contentTransition(.numericText()).lineLimit(1).minimumScaleFactor(0.6)
+        Text(UsdFormat.price(price)).font(.number(size: 30, weight: .bold)).contentTransition(.numericText()).lineLimit(1).minimumScaleFactor(0.6)
       }
       HStack(spacing: 6) {
         if let change, change.isFinite {
@@ -81,7 +83,7 @@ struct IndicatorExplainSheet<ChartView: View, Badges: View>: View {
           Text("N/A").foregroundStyle(.secondary)
         }
       }
-      .font(.system(.caption, design: .rounded).monospacedDigit().weight(.bold))
+      .font(.number(.caption, weight: .bold))
       .foregroundStyle((change ?? 0) >= 0 ? Color.gainGreen : Color.lossRed)
     }
   }

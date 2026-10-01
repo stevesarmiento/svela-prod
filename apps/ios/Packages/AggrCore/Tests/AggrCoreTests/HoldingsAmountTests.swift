@@ -24,4 +24,11 @@ import Testing
       #expect(try HoldingsAmount.parse(HoldingsAmount.format(value, locale: locale), locale: locale) == value)
     }
   }
+  @Test(arguments: ["en_US", "fr_FR", "de_DE"])
+  func formatIsIdempotentAcrossCalls(_ identifier: String) {
+    let locale = Locale(identifier: identifier)
+    let first = HoldingsAmount.format(1234.5678, locale: locale)
+    _ = try? HoldingsAmount.parse("1", locale: locale)
+    #expect(HoldingsAmount.format(1234.5678, locale: locale) == first)
+  }
 }

@@ -14,9 +14,16 @@ import UIKit
   func remove(_ view: UIView, id: String) {
     if views[id]?.view === view { views.removeValue(forKey: id) }
   }
+  /// Destination geometry can be requested before UIKit attaches the presentation to a window.
+  func frame(for id: String, in ancestor: UIView) -> CGRect? {
+    guard let view = views[id]?.view, view.isDescendant(of: ancestor), !view.bounds.isEmpty else { return nil }
+    return view.convert(view.bounds, to: ancestor)
+  }
+
+  /// Nil when unregistered, detached from a window, or not yet laid out.
   func view(for id: String?) -> UIView? {
     // Full-screen presentations can temporarily detach the retained source hierarchy.
-    guard let id, let view = views[id]?.view, !view.bounds.isEmpty else { return nil }
+    guard let id, let view = views[id]?.view, view.window != nil, !view.bounds.isEmpty else { return nil }
     return view
   }
 }
@@ -34,6 +41,7 @@ extension EnvironmentValues {
 
 private struct TokenSourceAnchor: UIViewRepresentable {
   let id: String
+  let cornerRadius: CGFloat
   let sources: TokenTransitionSources
 
   final class AnchorView: UIView {
@@ -46,11 +54,11 @@ private struct TokenSourceAnchor: UIViewRepresentable {
     view.isUserInteractionEnabled = false
     view.isAccessibilityElement = false
     view.backgroundColor = .clear
-    view.layer.cornerRadius = 16
     view.layer.cornerCurve = .continuous
     return view
   }
   func updateUIView(_ view: AnchorView, context: Context) {
+    view.layer.cornerRadius = cornerRadius
     view.sources?.remove(view, id: view.id)
     view.id = id
     view.sources = sources
@@ -63,18 +71,20 @@ private struct TokenSourceAnchor: UIViewRepresentable {
 
 private struct TokenTransitionSource: ViewModifier {
   let id: String
+  let cornerRadius: CGFloat
   @Environment(\.tokenTransitionSources) private var sources
 
   func body(content: Content) -> some View {
     content.background {
-      if let sources { TokenSourceAnchor(id: id, sources: sources) }
+      if let sources { TokenSourceAnchor(id: id, cornerRadius: cornerRadius, sources: sources) }
     }
   }
 }
 
 extension View {
-  func tokenTransitionSource(_ id: String) -> some View {
-    modifier(TokenTransitionSource(id: id))
+  /// Registers an invisible anchor sharing this view's frame as a zoom / pull-dismissal source.
+  func tokenTransitionSource(_ id: String, cornerRadius: CGFloat = Theme.Radius.md) -> some View {
+    modifier(TokenTransitionSource(id: id, cornerRadius: cornerRadius))
   }
 }
 
@@ -145,7 +155,7 @@ struct TokenPagePresenter: UIViewControllerRepresentable {
       let page = PageController(rootView: AnyView(content))
       page.modalPresentationStyle = .fullScreen
       page.overrideUserInterfaceStyle = .dark
-      page.view.backgroundColor = .black
+      page.view.backgroundColor = UIColor(Theme.background)
       page.view.clipsToBounds = true
       page.view.accessibilityViewIsModal = true
       if parent.reduceMotion {
@@ -162,13 +172,14 @@ struct TokenPagePresenter: UIViewControllerRepresentable {
           sources?.view(for: token.sourceID)
         }
       }
-      page.pullDismissal = TokenPageDismissal(page: page, source: presenter.view, rowSource: parent.sources.view(for: token.sourceID), reduceMotion: parent.reduceMotion)
+      page.pullDismissal = TokenPageDismissal(page: page, source: presenter.pageBackdropView, rowSource: parent.sources.view(for: token.sourceID),
+                                              rowCornerRadius: Theme.Radius.md, reduceMotion: parent.reduceMotion)
       self.page = page
       displayedToken = token
       page.pullDismissal?.onDismissed = { [weak self, weak page] in
         if let page { self?.finished(page) }
       }
-      NavigationFeedback.pageChanged()
+      Haptics.pageChanged()
       presenter.present(page, animated: true) { [weak self] in self?.synchronize() }
       page.presentationController?.delegate = self
     }
@@ -251,7 +262,7 @@ struct TokenPresentationView: View {
         let quote = env.watchlistData.quote(token.coinId)
         let logo = artwork ?? TokenPageArtwork(symbol: quote?.symbol ?? token.coinId, imageURL: quote?.image)
         ZStack(alignment: .top) {
-          Color.black
+          Theme.background
           TokenLogo(symbol: logo.symbol, imageURL: logo.imageURL, size: 260)
             .blur(radius: 90).opacity(0.35)
             // Preserve the original glow's position while extending it above the
@@ -265,7 +276,7 @@ struct TokenPresentationView: View {
     }
     .overlay { ToastOverlay() }
     .fontDesign(.rounded)
-    .tint(Color("AccentColor"))
+    .tint(Theme.accent)
     .accessibilityAction(.escape) { close() }
   }
 }

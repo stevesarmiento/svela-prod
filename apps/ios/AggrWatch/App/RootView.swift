@@ -11,9 +11,9 @@ struct RootView: View {
   var body: some View {
     Group {
       if !clerk.isLoaded {
-        ProgressView("Loading…")
+        RingLoader("Loading…", size: .large)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
-          .background(Color.black)
+          .background(Theme.background)
       } else if clerk.user == nil && !bypass {
         LoginView()
       } else if !bypass && !env.isReadyForUserData {
@@ -21,11 +21,13 @@ struct RootView: View {
           if let error = env.userBootstrap.lastError {
             ContentUnavailableView("Couldn’t load your account", systemImage: "exclamationmark.triangle", description: Text(error))
           } else {
-            ProgressView("Connecting your account…")
+            RingLoader("Connecting your account…")
           }
           Button("Retry") { Task { await env.retryUserData() } }
+            .buttonStyle(.glassProminent)
             .disabled(env.userBootstrap.isLoading)
           Button("Sign out") { Task { _ = await env.signOut() } }
+            .buttonStyle(.glass)
         }
       } else {
         MainTabView()
@@ -33,7 +35,7 @@ struct RootView: View {
       }
     }
     .fontDesign(.rounded)
-    .tint(Color("AccentColor"))
+    .tint(Theme.accent)
     .task(id: BootstrapKey(userId: clerk.user?.id, convexStatus: env.convex.authStatus)) {
       #if DEBUG
       if env.convex.isPreview { return }

@@ -69,7 +69,7 @@ struct CoinSearchView: View {
     }
     .listStyle(.plain)
     .scrollContentBackground(.hidden)
-    .background(.black)
+    .background(Theme.background)
     .overlay { if mode == .addToWatchlist { ToastOverlay() } }
     .scrollDismissesKeyboard(.interactively)
     .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search tokens")

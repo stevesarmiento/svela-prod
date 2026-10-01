@@ -20,13 +20,10 @@ struct AnalysisWorkspace<Header: View, Chart: View, Metrics: View, Report: View>
         }
       } else {
         VStack(spacing: 0) {
-          Picker("Analysis content", selection: $showMetrics) {
-            Text("Report").tag(false)
-            Text("Market data").tag(true)
-          }
-          .pickerStyle(.segmented)
-          .padding(.horizontal, 16).padding(.vertical, 10)
-          .accessibilityIdentifier("analysis-content-picker")
+          SegmentedGlassPicker(options: [false, true], label: { $0 ? "Market data" : "Report" }, selection: $showMetrics,
+                               accessibilityLabel: "Analysis content", accessibilityIdentifier: "analysis-content-picker",
+                               segmentWidth: 120)
+            .padding(.horizontal, 16).padding(.vertical, 10)
           ScrollView {
             VStack(alignment: .leading, spacing: 22) {
               header()
@@ -60,7 +57,7 @@ struct AnalysisReport: View {
         Text(text).foregroundStyle(.secondary)
       } else {
         StreamingMarkdownText(text: text)
-        if isLoading { ProgressView("Writing analysis…").font(.caption) }
+        if isLoading { RingLoader("Writing analysis…", size: .small).font(.caption) }
         else if !text.isEmpty { Text("AI-generated. Not financial advice.").font(.caption2).foregroundStyle(.tertiary) }
       }
     }.frame(maxWidth: .infinity, alignment: .leading)

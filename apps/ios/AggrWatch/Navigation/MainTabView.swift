@@ -61,7 +61,7 @@ struct MainTabView: View {
         .frame(width: 0, height: 0)
     }
     .onChange(of: router.tab) { _, _ in
-      NavigationFeedback.pageChanged()
+      Haptics.pageChanged()
       env.selection.clear()
     }
     .sheet(item: $router.sheet) { sheet in
@@ -120,9 +120,7 @@ struct SelectionNavigationModifier: ViewModifier {
             ZStack(alignment: title == nil ? .center : .leading) {
               if selecting {
                 Text("\(env.selection.selected.count) Selected")
-                  .font(title == nil
-                    ? .system(.headline, design: .rounded).monospacedDigit()
-                    : .system(.title2, design: .rounded, weight: .bold).monospacedDigit())
+                  .font(title == nil ? .number(.headline, weight: .regular) : .number(.title2, weight: .bold))
                   .contentTransition(reduceMotion ? .opacity : .numericText())
                   .transition(SelectionMotion.disclose(anchor: title == nil ? .center : .leading, reduceMotion: reduceMotion))
               } else if let title {
@@ -133,15 +131,15 @@ struct SelectionNavigationModifier: ViewModifier {
             }
             .fixedSize()
             .accessibilityAddTraits(.isHeader)
-            .animation(reduceMotion ? nil : SelectionMotion.open, value: selecting)
-            .animation(reduceMotion ? nil : SelectionMotion.open, value: env.selection.selected.count)
+            .animation(Motion.animation(Motion.ui, reduceMotion: reduceMotion), value: selecting)
+            .animation(Motion.animation(Motion.ui, reduceMotion: reduceMotion), value: env.selection.selected.count)
           }
           .sharedBackgroundVisibility(.hidden)
         }
         if selecting && !usesWatchlistHeader {
           ToolbarItem(placement: .topBarTrailing) {
             Button(env.selection.allSelected ? "Deselect all" : "Select all") {
-              withAnimation(reduceMotion ? nil : SelectionMotion.open) { env.selection.selectAll(!env.selection.allSelected) }
+              withAnimation(Motion.animation(Motion.ui, reduceMotion: reduceMotion)) { env.selection.selectAll(!env.selection.allSelected) }
             }
             .disabled(env.selection.isRemoving)
           }
@@ -153,7 +151,7 @@ struct SelectionNavigationModifier: ViewModifier {
             TokenSelectionActionBar(
               canRemove: env.selection.canRemove, isBusy: env.selection.isRemoving,
               canAnalyze: env.selection.canAnalyze,
-              onCancel: { withAnimation(reduceMotion ? nil : SelectionMotion.open) { env.selection.clear() } },
+              onCancel: { withAnimation(Motion.animation(Motion.ui, reduceMotion: reduceMotion)) { env.selection.clear() } },
               onRemove: { confirmingRemoval = true },
               onAnalyze: { env.selection.onAnalyze?(Array(env.selection.selected)) }
             )
@@ -168,9 +166,9 @@ struct SelectionNavigationModifier: ViewModifier {
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, selecting ? 8 : 0)
-        .animation(reduceMotion ? nil : SelectionMotion.open, value: selecting)
+        .animation(Motion.animation(Motion.ui, reduceMotion: reduceMotion), value: selecting)
       }
-      .animation(reduceMotion ? nil : SelectionMotion.open, value: selecting)
+      .animation(Motion.animation(Motion.ui, reduceMotion: reduceMotion), value: selecting)
       .confirmationDialog("Remove selected tokens?", isPresented: $confirmingRemoval, titleVisibility: .visible) {
         Button("Remove \(env.selection.selected.count) tokens", role: .destructive) {
           Task { await env.selection.removeSelected(toasts: env.toasts) }

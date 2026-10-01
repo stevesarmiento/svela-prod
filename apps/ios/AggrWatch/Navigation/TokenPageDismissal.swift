@@ -1,16 +1,33 @@
 import UIKit
 
+extension UIViewController {
+  /// The view a new page is about to cover: the topmost presented page, or the window root
+  /// when nothing is presented. A pull-to-dismiss snapshots this for its collapse overlay, so
+  /// pages opened from another full-screen page collapse back onto that page, not the root.
+  var pageBackdropView: UIView {
+    guard let root = view.window?.rootViewController else { return view }
+    var top: UIViewController = root
+    while let presented = top.presentedViewController, !(presented is UIAlertController), presented.isBeingDismissed == false {
+      top = presented
+    }
+    return top.view
+  }
+}
+
 /// A centered, rounded pull followed by a collapse into the originating row. The animated
 /// container owns its clipping; the live hosting view keeps its layout and safe areas intact.
 @MainActor final class TokenPageDismissal: NSObject, UIGestureRecognizerDelegate {
+  /// The view the collapse overlay was captured from; exposed for tests.
+  private(set) weak var backdropView: UIView?
   private weak var page: UIViewController?
   private let overlay = UIView()
   private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
   private let shade = UIView()
   private let card = UIView()
-  private var pageImage: UIImageView?
-  private var rowImage: UIImageView?
+  private var pageImage: UIView?
+  private var rowImage: UIView?
   private let rowFrame: CGRect?
+  private let rowCornerRadius: CGFloat
   private let reduceMotion: Bool
   private var returning: UIViewPropertyAnimator?
   private var initialProgress: CGFloat = 0
@@ -23,19 +40,19 @@ import UIKit
   var isFinishing: Bool { closing }
   var onDismissed: (() -> Void)?
 
-  init(page: UIViewController, source: UIView, rowSource: UIView?, reduceMotion: Bool) {
+  init(page: UIViewController, source: UIView, rowSource: UIView?, rowCornerRadius: CGFloat = Theme.Radius.md, reduceMotion: Bool) {
     self.page = page
     self.reduceMotion = reduceMotion
-    let sourceImage = UIGraphicsImageRenderer(bounds: source.bounds).image { _ in
-      source.drawHierarchy(in: source.bounds, afterScreenUpdates: false)
-    }
+    self.rowCornerRadius = rowCornerRadius
+    self.backdropView = source
+    // Layer snapshots: rasterising the backdrop with drawHierarchy stalls the main thread on
+    // the tap, right as the zoom starts. Headless runners may return nil; the plain view
+    // fallback keeps the collapse machinery (and its tests) working.
+    let background = source.snapshotView(afterScreenUpdates: false) ?? UIView()
     if let rowSource, let window = source.window {
       rowFrame = rowSource.convert(rowSource.bounds, to: window)
       let rect = rowSource.convert(rowSource.bounds, to: source)
-      let pixels = rect.applying(CGAffineTransform(scaleX: sourceImage.scale, y: sourceImage.scale))
-      if let cropped = sourceImage.cgImage?.cropping(to: pixels) {
-        rowImage = UIImageView(image: UIImage(cgImage: cropped, scale: sourceImage.scale, orientation: .up))
-      }
+      rowImage = source.resizableSnapshotView(from: rect, afterScreenUpdates: false, withCapInsets: .zero)
     } else {
       rowFrame = nil
     }
@@ -43,7 +60,6 @@ import UIKit
     overlay.backgroundColor = .black
     overlay.isUserInteractionEnabled = false
     overlay.frame = source.bounds
-    let background = UIImageView(image: sourceImage)
     background.frame = overlay.bounds
     background.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     overlay.addSubview(background)
@@ -88,7 +104,7 @@ import UIKit
 
   func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
     guard let page, let pan = gestureRecognizer as? UIPanGestureRecognizer,
-          startsInHeader || startsAtTop, !closing, !page.isBeingPresented, !page.isBeingDismissed,
+          startsInHeader || startsAtTop, !page.isModalInPresentation, !closing, !page.isBeingPresented, !page.isBeingDismissed,
           page.presentedViewController == nil, page.transitionCoordinator == nil else { return false }
     let velocity = pan.velocity(in: page.view.window)
     return velocity.y > 0 && velocity.y > abs(velocity.x) * 1.5
@@ -105,9 +121,7 @@ import UIKit
   private func prepareCard() -> Bool {
     guard let page, let window = page.view.window else { return false }
     if overlay.superview == nil {
-      let snapshot = UIGraphicsImageRenderer(bounds: page.view.bounds).image { _ in
-        page.view.drawHierarchy(in: page.view.bounds, afterScreenUpdates: false)
-      }
+      let snapshot = page.view.snapshotView(afterScreenUpdates: false) ?? UIView()
       overlay.frame = window.bounds
       overlay.autoresizingMask = [.flexibleWidth, .flexibleHeight]
       card.transform = .identity
@@ -118,11 +132,10 @@ import UIKit
       maximumShrink = min(0.2, 2 * topEdgeLimit / max(1, card.bounds.height))
       // Preserve the existing finger-to-scale response as the cutoff changes.
       pullDistance = 200 * maximumShrink / 0.2
-      card.layer.cornerRadius = 44
-      let image = UIImageView(image: snapshot)
-      image.frame = card.bounds
-      card.addSubview(image)
-      pageImage = image
+      card.layer.cornerRadius = Theme.Radius.circle
+      snapshot.frame = card.bounds
+      card.addSubview(snapshot)
+      pageImage = snapshot
       window.addSubview(overlay)
     }
     // Hiding only the pixels avoids moving/re-laying out the live page's navigation bar.
@@ -144,9 +157,9 @@ import UIKit
       if !reduceMotion {
         let scale = 1 - progress * maximumShrink
         card.transform = CGAffineTransform(scaleX: scale, y: scale)
-        card.layer.cornerRadius = 44
+        card.layer.cornerRadius = Theme.Radius.circle
       }
-      if progress >= 1 { finishPull() }
+      if progress >= 1 { finishPull(fingerVelocity: pan.velocity(in: page.view.window).y) }
     case .ended, .cancelled, .failed:
       // A logo tap can fail/cancel the pan without ever creating a card. It must not
       // restore a page whose visibility is owned by a presentation or dismissal.
@@ -154,12 +167,22 @@ import UIKit
       // The opaque overlay still covers this, but restoring hit testing allows another pull
       // to interrupt the spring back before it has settled.
       let progress = max(0, initialProgress + pan.translation(in: page.view.window).y / pullDistance)
-      if pan.state == .ended, progress >= 0.2, pan.velocity(in: page.view.window).y > 700 {
-        finishPull()
+      let fingerVelocity = pan.velocity(in: page.view.window).y
+      if pan.state == .ended, progress >= 0.2, fingerVelocity > 700 {
+        finishPull(fingerVelocity: fingerVelocity)
         return
       }
       page.view.alpha = 1
-      let animator = UIViewPropertyAnimator(duration: reduceMotion ? 0 : 0.28, dampingRatio: 0.9) {
+      // Carry the release speed into the spring: an upward flick snaps back instead of
+      // decelerating to a stop and restarting from rest.
+      let remaining = 1 - card.transform.a
+      let scaleVelocity = -fingerVelocity * maximumShrink / pullDistance
+      let initial = remaining > 0.001 ? Self.clampedVelocity(scaleVelocity / remaining) : 0
+      let animator = UIViewPropertyAnimator(
+        duration: reduceMotion ? 0 : 0.28,
+        timingParameters: UISpringTimingParameters(dampingRatio: 0.9, initialVelocity: CGVector(dx: initial, dy: initial))
+      )
+      animator.addAnimations {
         self.card.transform = .identity
       }
       returning = animator
@@ -178,17 +201,22 @@ import UIKit
     stopReturn()
     guard prepareCard() else {
       closing = true
-      NavigationFeedback.pageChanged()
+      Haptics.pageChanged()
       page.dismiss(animated: false) { [self] in onDismissed?() }
       return
     }
     finishPull()
   }
 
-  private func finishPull() {
+  /// Spring velocities are relative to the remaining distance; keep a hard flick from overshooting.
+  private static func clampedVelocity(_ value: CGFloat) -> CGFloat {
+    min(12, max(0, value))
+  }
+
+  private func finishPull(fingerVelocity: CGFloat = 0) {
     guard !closing, let page, let pageImage else { return }
     closing = true
-    NavigationFeedback.pageChanged()
+    Haptics.pageChanged()
     overlay.isUserInteractionEnabled = true
     page.view.isUserInteractionEnabled = false
     // Convert the pulled transform to an explicit frame. Only the outer container changes
@@ -203,10 +231,17 @@ import UIKit
       rowImage.alpha = 0
       card.addSubview(rowImage)
     }
-    let animator = UIViewPropertyAnimator(duration: reduceMotion ? 0 : 0.28, dampingRatio: 1) {
+    // A flick toward the row keeps its momentum into the collapse.
+    let travel = target.map { $0.midY - current.midY } ?? 0
+    let initial = abs(travel) > 1 && fingerVelocity * travel > 0 ? Self.clampedVelocity(fingerVelocity / travel) : 0
+    let animator = UIViewPropertyAnimator(
+      duration: reduceMotion ? 0 : 0.28,
+      timingParameters: UISpringTimingParameters(dampingRatio: 1, initialVelocity: CGVector(dx: initial, dy: initial))
+    )
+    animator.addAnimations {
       if let target, self.rowImage != nil {
         self.card.frame = target
-        self.card.layer.cornerRadius = 16
+        self.card.layer.cornerRadius = self.rowCornerRadius
         pageImage.frame = CGRect(x: 0, y: 0, width: target.width, height: current.height * target.width / current.width)
         pageImage.alpha = 0
         self.rowImage?.frame = self.card.bounds

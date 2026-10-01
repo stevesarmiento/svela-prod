@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 @testable import AggrWatch
 
 @Test @MainActor func tokenPresentationReturnsToItsOriginWithoutPushing() {
@@ -50,3 +51,42 @@ import Testing
   #expect(env.router.tab == .overview)
 }
 #endif
+
+@Test @MainActor func transitionSourcesIgnoreDetachedAndEmptyViews() {
+  let sources = TokenTransitionSources()
+  let empty = UIView()
+  sources.register(empty, id: "empty")
+  #expect(sources.view(for: "empty") == nil)
+  let row = UIView(frame: CGRect(x: 10, y: 20, width: 44, height: 44))
+  sources.register(row, id: "row")
+  #expect(sources.view(for: "row") == nil, "A source outside any window cannot anchor a transition")
+  let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+  let container = UIView(frame: CGRect(x: 100, y: 100, width: 200, height: 200))
+  window.addSubview(container)
+  container.addSubview(row)
+  window.isHidden = false
+  defer { window.isHidden = true }
+  #expect(sources.view(for: "row") === row)
+  #expect(sources.frame(for: "row", in: window) == CGRect(x: 110, y: 120, width: 44, height: 44))
+  #expect(sources.frame(for: "row", in: UIView()) == nil)
+  sources.remove(row, id: "row")
+  #expect(sources.view(for: "row") == nil)
+}
+
+@Test @MainActor func pullDismissalSnapshotsTheBackdropAndFindsThePresentedPage() {
+  let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+  let root = UIViewController()
+  window.rootViewController = root
+  window.isHidden = false
+  defer { window.isHidden = true }
+  let row = UIView(frame: CGRect(x: 16, y: 300, width: 358, height: 72))
+  root.view.addSubview(row)
+  let page = UIViewController()
+  let dismissal = TokenPageDismissal(page: page, source: root.view, rowSource: row, rowCornerRadius: 20, reduceMotion: true)
+  #expect(dismissal.backdropView === root.view)
+  #expect(!dismissal.isFinishing)
+  #expect(page.view.gestureRecognizers?.contains { $0 is UIPanGestureRecognizer } == true)
+  #expect(root.pageBackdropView === root.view)
+  root.present(page, animated: false)
+  #expect(root.pageBackdropView === page.view)
+}

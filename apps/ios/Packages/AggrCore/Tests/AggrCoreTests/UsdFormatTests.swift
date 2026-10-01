@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import AggrCore
 
@@ -37,5 +38,29 @@ import Testing
     #expect(UsdFormat.signedPercent(.nan) == "N/A")
     #expect(abs((UsdFormat.usdMove(priceUsd: 110, percentChange: 10) ?? 0) - 10) < 1e-9)
     #expect(UsdFormat.usdMove(priceUsd: nil, percentChange: 10) == nil)
+  }
+  @Test func optionalPrice() {
+    #expect(UsdFormat.price(nil as Double?) == "—")
+    #expect(UsdFormat.price(Optional(1.0)) == "$1.00")
+  }
+
+  @Test func nonFiniteLargeNumbers() {
+    #expect(UsdFormat.large(.nan) == "—")
+    #expect(UsdFormat.large(.infinity) == "—")
+    #expect(UsdFormat.largeUsd(-.infinity) == "—")
+  }
+
+  @Test func cachedFormattersAreReusedAndStable() {
+    let a = NumberFormatterCache.formatter("test|a") { $0.numberStyle = .decimal }
+    let b = NumberFormatterCache.formatter("test|a") { $0.numberStyle = .currency }
+    let c = NumberFormatterCache.formatter("test|c") { $0.numberStyle = .decimal }
+    #expect(a === b)
+    #expect(a !== c)
+    #expect(b.numberStyle == .decimal)
+    let results = UnsafeMutableBufferPointer<String>.allocate(capacity: 64)
+    results.initialize(repeating: "")
+    defer { results.deallocate() }
+    DispatchQueue.concurrentPerform(iterations: 64) { i in results[i] = UsdFormat.price(43250.32) }
+    #expect(results.allSatisfy { $0 == "$43,250.32" })
   }
 }

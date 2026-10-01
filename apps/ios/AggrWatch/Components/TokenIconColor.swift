@@ -63,51 +63,41 @@ enum TokenIconColor {
 enum TokenLineColor {
   private static var cache: [String: LivelineColor] = [:]
 
-  /// The line color for a logo whose color is already known; seeds the first frame.
+  /// The line color for a logo whose color is already known, or whose artwork is already decoded
+  /// in the image cache; seeds the first frame instead of swapping from white once `derive` runs.
   static func cached(symbol: String, imageURL: String?) -> LivelineColor? {
-    key(symbol: symbol, imageURL: imageURL).flatMap { cache[$0] }
+    guard let key = key(symbol: symbol, imageURL: imageURL) else { return nil }
+    if let known = cache[key] { return known }
+    let image: UIImage? = TokenLogo.bundledImage(symbol: symbol)
+      ?? TokenLogo.logoCandidates(symbol: symbol, imageURL: imageURL).lazy
+        .compactMap { AggrImageCache.shared.cachedImage(for: $0) }.first
+    guard let image else { return nil }
+    return remember(TokenIconColor.color(from: image) ?? .white, for: key)
   }
 
   static func derive(symbol: String, imageURL: String?) async -> LivelineColor? {
     guard let key = key(symbol: symbol, imageURL: imageURL) else { return nil }
     if let known = cache[key] { return known }
-    let image: UIImage?
-    if let bundled = TokenLogo.bundledImage(symbol: symbol) {
-      image = bundled
-    } else if let url = resolvedURL(symbol: symbol, imageURL: imageURL) {
-      image = await fetch(url)
-    } else {
-      image = nil
+    var image = TokenLogo.bundledImage(symbol: symbol)
+    if image == nil {
+      for url in TokenLogo.logoCandidates(symbol: symbol, imageURL: imageURL) {
+        image = await AggrImageCache.shared.image(for: url)
+        if image != nil || Task.isCancelled { break }
+      }
     }
     guard let image, !Task.isCancelled else { return nil }
     // A colorless logo settles on white so the sampling never reruns for it.
-    let derived = TokenIconColor.color(from: image) ?? .white
+    return remember(TokenIconColor.color(from: image) ?? .white, for: key)
+  }
+
+  private static func remember(_ color: LivelineColor, for key: String) -> LivelineColor {
     if cache.count >= 128 { cache.removeAll() }
-    cache[key] = derived
-    return derived
+    cache[key] = color
+    return color
   }
 
   private static func key(symbol: String, imageURL: String?) -> String? {
     if LogoOverrides.bundledAssetName(symbol: symbol) != nil { return "asset:\(symbol.lowercased())" }
-    return resolvedURL(symbol: symbol, imageURL: imageURL)?.absoluteString
-  }
-
-  /// Mirrors `TokenLogo`: curated override first (SVGs can't be rasterized here), else the API URL.
-  private static func resolvedURL(symbol: String, imageURL: String?) -> URL? {
-    #if DEBUG
-    if PreviewData.isRunning { return nil }
-    #endif
-    let api = imageURL.flatMap(URL.init(string:)).flatMap {
-      ["https", "http"].contains($0.scheme?.lowercased() ?? "") ? $0 : nil
-    }
-    let url = LogoOverrides.tokenLogoURL(symbol: symbol, fallback: imageURL)
-    return url?.pathExtension.lowercased() == "svg" ? api : url ?? api
-  }
-
-  private static func fetch(_ url: URL) async -> UIImage? {
-    // Shares the URLCache AsyncImage already warmed, so this is usually a disk/memory hit.
-    guard let (data, response) = try? await URLSession.shared.data(from: url),
-          (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true else { return nil }
-    return UIImage(data: data)
+    return TokenLogo.logoCandidates(symbol: symbol, imageURL: imageURL).first?.absoluteString
   }
 }

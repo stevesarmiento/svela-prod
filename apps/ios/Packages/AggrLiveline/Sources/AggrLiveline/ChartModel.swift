@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 public struct LivelinePoint: Sendable, Hashable, Codable {
@@ -136,8 +137,17 @@ public struct LivelineSelection: Sendable, Equatable {
   public var values: [String: Double]
   public var isProjection: Bool
   public var nearestObservation: LivelinePoint?
-  public init(time: Double, value: Double, values: [String: Double], isProjection: Bool, nearestObservation: LivelinePoint?) {
+  /// Screen x of the crosshair in the chart view's coordinate space (the same x the renderer
+  /// draws it at), so hosts can pin readouts to the drawn line instead of recomputing plot insets.
+  /// Not part of equality: a layout-only change must not republish an unchanged readout.
+  public var x: CGFloat?
+  public init(time: Double, value: Double, values: [String: Double], isProjection: Bool,
+              nearestObservation: LivelinePoint?, x: CGFloat? = nil) {
     self.time = time; self.value = value; self.values = values
-    self.isProjection = isProjection; self.nearestObservation = nearestObservation
+    self.isProjection = isProjection; self.nearestObservation = nearestObservation; self.x = x
+  }
+  public static func == (a: Self, b: Self) -> Bool {
+    a.time == b.time && a.value == b.value && a.values == b.values
+      && a.isProjection == b.isProjection && a.nearestObservation == b.nearestObservation
   }
 }

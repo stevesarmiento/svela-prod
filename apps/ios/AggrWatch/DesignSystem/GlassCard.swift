@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// Card surface using iOS 26 Liquid Glass (replaces the shadow-heavy web `Card`).
+/// Card surface on iOS 26 Liquid Glass.
+/// Conventions: primary CTA `.buttonStyle(.glassProminent)`, secondary `.buttonStyle(.glass)`,
+/// adjacent glass shapes inside one `GlassEffectContainer`.
 struct GlassCard<Content: View>: View {
-  var cornerRadius: CGFloat = 20
+  var cornerRadius: CGFloat = Theme.Radius.card
   var tint: Color? = nil
   @ViewBuilder var content: () -> Content
 
@@ -12,22 +14,22 @@ struct GlassCard<Content: View>: View {
   }
 }
 
-/// Section card with a title row, mirrors the web dashboard cards.
+/// Opaque section card with a title row, for content that should not refract what is behind it.
 struct SectionCard<Content: View>: View {
   let title: String
   var subtitle: String? = nil
   @ViewBuilder var content: () -> Content
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
       VStack(alignment: .leading, spacing: 2) {
         Text(title).font(.headline)
         if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
       }
       content()
     }
-    .padding(16)
-    .background(.background.secondary, in: .rect(cornerRadius: 20))
+    .padding(Theme.Spacing.base)
+    .background(Theme.surface, in: .rect(cornerRadius: Theme.Radius.card))
   }
 }
 

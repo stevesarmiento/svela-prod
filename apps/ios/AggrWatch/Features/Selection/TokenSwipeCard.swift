@@ -5,18 +5,19 @@ import SwiftUI
 /// same rounded-rect shape, full row height, tucked under the card so the pair
 /// reads as one continuous shape — with just an icon, no caption.
 ///
-/// Swipe LEFT removes the bookmark (accent, bookmark): releasing once the panel is fully
-/// revealed asks through a confirmation alert; the row stays revealed while
-/// the alert is up and springs back when it closes. No resting open state.
+/// Swipe RIGHT removes the bookmark (accent, bookmark, panel on the leading edge):
+/// releasing once the panel is fully revealed asks through a confirmation alert;
+/// the row stays revealed while the alert is up and springs back when it closes.
+/// No resting open state.
 ///
-/// Swipe RIGHT selects (blue, checklist): releasing once the panel is fully
-/// revealed toggles the row and it springs back closed. Neither panel is a
-/// Button — release is the commit.
+/// Swipe LEFT selects (blue, checklist, panel on the trailing edge): releasing
+/// once the panel is fully revealed toggles the row and it springs back closed.
+/// Neither panel is a Button — release is the commit.
 ///
 /// A finger resting on the card lightens it (a press state), so a tap reads
 /// as landing on the card before anything happens.
 ///
-/// While the parent has a selection ("selection mode") the left swipe goes
+/// While the parent has a selection ("selection mode") the right swipe goes
 /// inert (delete lives in the action bar), the card's own controls are
 /// disabled, and a tap anywhere on the card toggles it.
 ///
@@ -45,8 +46,8 @@ struct TokenSwipeCard<Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.layoutDirection) private var layoutDirection
     private var direction: CGFloat { layoutDirection == .leftToRight ? 1 : -1 }
-    private var openAnimation: Animation? { reduceMotion ? nil : SelectionMotion.open }
-    private var closeAnimation: Animation? { reduceMotion ? nil : SelectionMotion.close }
+    private var openAnimation: Animation? { Motion.animation(Motion.ui, reduceMotion: reduceMotion) }
+    private var closeAnimation: Animation? { Motion.animation(Motion.close, reduceMotion: reduceMotion) }
 
     @State private var translation: CGFloat = 0
     @State private var confirmingDelete = false
@@ -57,17 +58,17 @@ struct TokenSwipeCard<Content: View>: View {
 
     private var canDelete: Bool { onDelete != nil && !inSelectionMode }
     private var isOpen: Bool { openRowID == id }
-    private var baseOffset: CGFloat { isOpen ? -TokenSwipeRules.revealWidth : 0 }
+    private var baseOffset: CGFloat { isOpen ? TokenSwipeRules.revealWidth : 0 }
     private var offset: CGFloat {
         TokenSwipeRules.offset(base: baseOffset, translation: translation, canDelete: canDelete, canSelect: true)
     }
-    private var deleteTravel: CGFloat { max(0, -offset) }
-    private var selectTravel: CGFloat { max(0, offset) }
+    private var deleteTravel: CGFloat { max(0, offset) }
+    private var selectTravel: CGFloat { max(0, -offset) }
 
     var body: some View {
         content()
             // Chips and sliders go quiet in selection mode; the pan below is
-            // attached OUTSIDE this subtree so the right swipe keeps working.
+            // attached OUTSIDE this subtree so the left swipe keeps working.
             .disabled(inSelectionMode)
             .overlay {
                 // Conditional child, not a conditional modifier chain: the
@@ -75,46 +76,44 @@ struct TokenSwipeCard<Content: View>: View {
                 // entering and leaving the mode.
                 if inSelectionMode {
                     Color.clear
-                        .contentShape(.rect(cornerRadius: 16))
+                        .contentShape(.rect(cornerRadius: Theme.Radius.md))
                         .onTapGesture {
-                            withAnimation(reduceMotion ? nil : SelectionMotion.open) { toggleSelection() }
+                            withAnimation(openAnimation) { toggleSelection() }
                         }
                 }
             }
             // Press state: a touch resting on the card lightens it.
             .overlay {
                 Color.white.opacity(isPressed ? 0.07 : 0)
-                    .clipShape(.rect(cornerRadius: 16))
+                    .clipShape(.rect(cornerRadius: Theme.Radius.md))
                     .allowsHitTesting(false)
                     .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isPressed)
             }
             // TrackCard's fill is 6% white over black; without an opaque
             // backing the panel tucked underneath would tint the card.
-            .background(.black, in: .rect(cornerRadius: 16))
+            .background(Theme.background, in: .rect(cornerRadius: Theme.Radius.md))
             .offset(x: offset * direction)
             .gesture(pan)
             // Panels are backgrounds attached AFTER the offset: sized to the
             // card's own layout frame (full row height) and they stay put
             // while the card slides over them.
-            .background(alignment: .trailing) {
+            .background(alignment: .leading) {
                 if deleteTravel > 0.5 && canDelete {
                     deletePanel
                 }
             }
-            .background(alignment: .leading) {
+            .background(alignment: .trailing) {
                 if selectTravel > 0.5 {
                     selectPanel
                 }
             }
             // Feedback belongs to the committed interaction, not threshold
             // crossings or external selection changes across several rows.
-            .sensoryFeedback(.impact(weight: .medium), trigger: selectionFeedback)
-            .sensoryFeedback(trigger: confirmingDelete) { _, showing in
-                showing ? .warning : nil
-            }
+            .onChange(of: selectionFeedback) { _, _ in Haptics.tap() }
+            .onChange(of: confirmingDelete) { _, showing in if showing { Haptics.warning() } }
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityAction(named: Text(isSelected ? deselectionAccessibilityLabel : selectionAccessibilityLabel)) {
-                withAnimation(reduceMotion ? nil : SelectionMotion.open) { toggleSelection() }
+                withAnimation(openAnimation) { toggleSelection() }
             }
             .accessibilityActions {
                 if canDelete { Button(deleteAccessibilityLabel) { performBookmarkAction() } }
@@ -149,7 +148,7 @@ struct TokenSwipeCard<Content: View>: View {
     /// Grey → accent. Indicator only; release at the reveal is what asks.
     private var deletePanel: some View {
         let progress = TokenSwipeRules.fillProgress(travel: deleteTravel)
-        return panel(travel: deleteTravel, fill: restingFill.mix(with: .accentColor, by: progress), edge: .trailing) {
+        return panel(travel: deleteTravel, fill: restingFill.mix(with: .accentColor, by: progress), edge: .leading) {
             Image(systemName: deleteIcon)
                 .font(.body.weight(.semibold))
                 .foregroundStyle(Color.white.mix(with: .black, by: progress))
@@ -162,7 +161,7 @@ struct TokenSwipeCard<Content: View>: View {
     /// the reveal is what toggles.
     private var selectPanel: some View {
         let progress = TokenSwipeRules.fillProgress(travel: selectTravel)
-        return panel(travel: selectTravel, fill: restingFill.mix(with: .blue, by: progress), edge: .leading) {
+        return panel(travel: selectTravel, fill: restingFill.mix(with: .blue, by: progress), edge: .trailing) {
             Image(systemName: selectionIcon)
                 .font(.body.weight(.bold))
                 .foregroundStyle(.white)
@@ -264,7 +263,7 @@ struct TokenSwipeCard<Content: View>: View {
 }
 
 #if DEBUG
-#Preview("Swipe right to select, left to remove") {
+#Preview("Swipe left to select, right to remove") {
   PreviewValue(false) { selected in
     PreviewValue(String?.none) { openRow in
       ScrollView {

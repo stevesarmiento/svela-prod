@@ -53,11 +53,8 @@ struct IconGridPicker: View {
 
   var body: some View {
     VStack(spacing: 12) {
-      Picker("", selection: $tab) {
-        Text("Emojis").tag(0)
-        Text("Icons").tag(1)
-      }
-      .pickerStyle(.segmented)
+      SegmentedGlassPicker(options: [0, 1], label: { $0 == 0 ? "Emojis" : "Icons" }, selection: $tab,
+                           accessibilityLabel: "Icon style", segmentWidth: 100)
       ScrollView {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 6), spacing: 8) {
           ForEach(tab == 0 ? WatchlistGroupIcons.emojis : WatchlistGroupIcons.symbols) { option in

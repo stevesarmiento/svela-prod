@@ -6,6 +6,7 @@ import Torph
 struct PercentBadge: View {
   let pct: Double?
   var compact = false
+  var textSize: CGFloat? = nil
 
   static func label(for pct: Double?) -> String {
     guard let pct, pct.isFinite else { return "N/A" }
@@ -24,18 +25,11 @@ struct PercentBadge: View {
         .lineLimit(1)
     }
     .fixedSize()
-    .font(.system(size: compact ? 11 : 12, weight: .semibold, design: .rounded).monospacedDigit())
-    .foregroundStyle(tint(value))
+    .font(.number(size: textSize ?? (compact ? 11 : 12), weight: .semibold))
+    .foregroundStyle(Color.change(value))
     .padding(.horizontal, compact ? 5 : 7)
     .padding(.vertical, compact ? 2 : 3)
-    .background(tint(value).opacity(0.12), in: Capsule())
-  }
-
-  private func tint(_ value: Double?) -> Color {
-    guard let value, value.isFinite else { return .secondary }
-    if value > 0 { return .gainGreen }
-    if value < 0 { return .lossRed }
-    return .secondary
+    .background(Color.change(value).opacity(0.12), in: Capsule())
   }
 }
 

@@ -18,17 +18,25 @@ public enum UsdFormat {
   /// `formatUsdPrice`: currency USD, min 2 fraction digits, max per ladder. Non-finite → $0.00.
   public static func price(_ value: Double, locale: Locale = Locale(identifier: "en_US")) -> String {
     let safe = value.isFinite ? value : 0
-    let formatter = NumberFormatter()
-    formatter.locale = locale
-    formatter.numberStyle = .currency
-    formatter.currencyCode = "USD"
-    formatter.minimumFractionDigits = 2
-    formatter.maximumFractionDigits = maximumFractionDigits(for: safe)
+    let digits = maximumFractionDigits(for: safe)
+    let formatter = NumberFormatterCache.formatter("usd-price|\(locale.identifier)|\(digits)") { formatter in
+      formatter.locale = locale
+      formatter.numberStyle = .currency
+      formatter.currencyCode = "USD"
+      formatter.minimumFractionDigits = 2
+      formatter.maximumFractionDigits = digits
+    }
     return formatter.string(from: NSNumber(value: safe)) ?? "$0.00"
+  }
+
+  /// Optional convenience: `nil` renders as an em dash (missing is not zero).
+  public static func price(_ value: Double?) -> String {
+    value.map { price($0) } ?? "—"
   }
 
   /// `formatLargeNumber`: T/B/M/K with 2 decimals; sign preserved.
   public static func large(_ num: Double) -> String {
+    guard num.isFinite else { return "—" }
     let abs = Swift.abs(num)
     if abs >= 1e12 { return String(format: "%.2fT", num / 1e12) }
     if abs >= 1e9 { return String(format: "%.2fB", num / 1e9) }
@@ -39,7 +47,8 @@ public enum UsdFormat {
 
   /// "$1.23B" style used in table cells (`$` + `formatLargeNumber`).
   public static func largeUsd(_ num: Double) -> String {
-    num < 0 ? "-$" + large(-num) : "$" + large(num)
+    guard num.isFinite else { return "—" }
+    return num < 0 ? "-$" + large(-num) : "$" + large(num)
   }
 
   /// Signed percent with 2 decimals, e.g. "+3.21%" / "-0.40%".

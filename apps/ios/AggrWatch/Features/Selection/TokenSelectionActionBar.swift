@@ -32,7 +32,7 @@ struct TokenSelectionActionBar: View {
             }
             .disabled(isBusy)
             .padding(6)
-            .glassEffect(.regular, in: .rect(cornerRadius: 30))
+            .glassEffect(.regular, in: .rect(cornerRadius: Theme.Radius.pill))
         }
         // Aufn's content-sized pill: 312 × 84 pt for three segments at default text size.
         // Labels can wrap and height grows with Dynamic Type.
@@ -58,7 +58,7 @@ struct TokenSelectionActionBar: View {
             .foregroundStyle(tint ?? .primary)
             .frame(maxWidth: 96, minHeight: segmentHeight)
             .multilineTextAlignment(.center)
-            .contentShape(.rect(cornerRadius: 24))
+            .contentShape(.rect(cornerRadius: Theme.Radius.lg))
         }
         .buttonStyle(SelectionActionButtonStyle(highlight: tint ?? .white))
         .accessibilityLabel(accessibilityLabel)
@@ -76,15 +76,15 @@ private struct SelectionActionButtonStyle: ButtonStyle {
         configuration.label
             .scaleEffect(pressed && !reduceMotion ? 0.96 : 1)
             .background {
-                RoundedRectangle(cornerRadius: 24)
+                RoundedRectangle(cornerRadius: Theme.Radius.lg)
                     .fill(highlight.opacity(pressed ? 0.16 : 0))
             }
             .overlay {
-                RoundedRectangle(cornerRadius: 24)
+                RoundedRectangle(cornerRadius: Theme.Radius.lg)
                     .strokeBorder(highlight.opacity(pressed ? 0.22 : 0), lineWidth: 1)
                     .allowsHitTesting(false)
             }
-            .contentShape(.rect(cornerRadius: 24))
+            .contentShape(.rect(cornerRadius: Theme.Radius.lg))
             .animation(reduceMotion ? nil : .easeOut(duration: pressed ? 0.08 : 0.18), value: pressed)
     }
 }

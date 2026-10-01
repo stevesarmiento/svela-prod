@@ -53,7 +53,7 @@ struct IndicatorPaneModifier: ViewModifier {
       .chartYAxis {
         AxisMarks(position: .trailing, values: .automatic(desiredCount: 4)) { _ in
           if horizontalGrid { AxisGridLine(stroke: StrokeStyle(lineWidth: 1, dash: [1, 3])).foregroundStyle(Color.white.opacity(0.06)) }
-          AxisValueLabel().font(.system(size: 9, design: .rounded).monospacedDigit()).foregroundStyle(.secondary)
+          AxisValueLabel().font(.number(size: 9, weight: .regular)).foregroundStyle(.secondary)
         }
       }
       .chartPlotStyle { $0.clipped() }
@@ -213,7 +213,7 @@ struct IndicatorReadout: View {
       }
       .font(.system(.caption, design: .rounded))
       .padding(10).frame(width: 180)
-      .background(.ultraThinMaterial, in: .rect(cornerRadius: 12))
+      .background(.ultraThinMaterial, in: .rect(cornerRadius: Theme.Radius.sm))
       .padding(4).allowsHitTesting(false)
     }
   }

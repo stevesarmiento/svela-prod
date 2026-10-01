@@ -1,5 +1,6 @@
 import AggrAPI
 import AggrCore
+import AggrLiveline
 import SwiftUI
 
 /// Selected watchlist comparison, with chart controls and editable token holdings.
@@ -7,15 +8,18 @@ struct WatchlistDetailSection: View {
   let group: WatchlistGroup
   @Environment(AppEnvironment.self) private var env
   @State private var scale: TimeScale = .d1
+  /// Scrubbing the comparison chart turns the token rows into its readout.
+  @State private var scrub = ComparisonScrubStore()
 
   var body: some View {
     VStack(spacing: 16) {
-      GroupCoinsChart(group: group, scale: scale)
+      GroupCoinsChart(group: group, scale: scale, scrub: scrub)
         .padding(.horizontal, 16)
       TimeScalePicker(scales: TimeScale.overviewScales, selection: $scale)
         .padding(.horizontal, 16)
-      CoinRowsList(group: group)
+      CoinRowsList(group: group, scrub: scrub)
     }
+    .onChange(of: group.id) { _, _ in scrub.setSelection(nil) }
   }
 }
 
@@ -35,7 +39,7 @@ struct GroupAggregateCard: View {
       HStack {
         Text("Equal-weight return · \(scale.label)").font(.caption).foregroundStyle(.secondary)
         Spacer()
-        if let change { PercentBadge(pct: change) } else if loading { ProgressView().controlSize(.small) } else { Text("—").foregroundStyle(.secondary) }
+        if let change { PercentBadge(pct: change) } else if loading { RingLoader(size: .small, tint: .secondary) } else { Text("—").foregroundStyle(.secondary) }
       }
       if points.count >= 2 {
         AggrSparkline(points: points, isActive: env.isSceneActive && env.router.tab == .watchlists && !env.router.showsWatchlistChooser,
@@ -68,6 +72,7 @@ struct GroupCoinsChart: View {
   @Environment(AppEnvironment.self) private var env
   let group: WatchlistGroup
   let scale: TimeScale
+  var scrub: ComparisonScrubStore? = nil
   @State private var byCoin: [String: [TimePoint]] = [:]
   @State private var loading = false
 
@@ -82,10 +87,11 @@ struct GroupCoinsChart: View {
       if ids.isEmpty {
         Text("Add tokens to chart them.").font(.footnote).foregroundStyle(.secondary).frame(height: 160)
       } else if series.allSatisfy({ $0.points.count < 2 }) {
-        if loading { ProgressView().frame(height: 220) } else { Text("No chart data yet").font(.footnote).foregroundStyle(.secondary).frame(height: 220) }
+        if loading { RingLoader().frame(height: 220) } else { Text("No chart data yet").font(.footnote).foregroundStyle(.secondary).frame(height: 220) }
       } else {
         SelectedGroupCoinsPlot(series: series, groupID: group.id, scale: scale,
-                               isActive: env.isSceneActive && env.router.tab == .watchlists && !env.router.showsWatchlistChooser)
+                               isActive: env.isSceneActive && env.router.tab == .watchlists && !env.router.showsWatchlistChooser,
+                               onSelection: { scrub?.setSelection($0) })
           .frame(height: 300)
       }
     }
@@ -99,6 +105,10 @@ struct GroupCoinsChart: View {
         guard !Task.isCancelled else { return }
         byCoin = AggregateSeries.alignToSharedAxis(fetched.mapValues { ($0.points, $0.warming) })
           .mapValues { AggregateSeries.returnSeries($0) }
+        if let scrub {
+          scrub.prices = fetched.mapValues(\.points)
+          scrub.windowStart = byCoin.values.compactMap { $0.first?.epochSeconds }.min().map(Double.init)
+        }
         loading = false
         do { try await Task.sleep(for: QueryPolicy.aggregateChart.refetchInterval ?? .seconds(300)) } catch { return }
       }
@@ -113,13 +123,14 @@ private struct SelectedGroupCoinsPlot: View {
   let groupID: String
   let scale: TimeScale
   let isActive: Bool
+  var onSelection: (LivelineSelection?) -> Void = { _ in }
   @Environment(AppEnvironment.self) private var env
 
   var body: some View {
     MultiLineComparisonChart(series: series,
       selectedIDs: env.selection.ownerId == "watchlist-\(groupID)" ? env.selection.selected : [],
       datasetID: "watchlist-\(groupID)", scale: scale, isActive: isActive,
-      accessibilityID: "watchlist-coins-comparison-chart")
+      accessibilityID: "watchlist-coins-comparison-chart", onSelection: onSelection)
   }
 }
 
@@ -178,6 +189,7 @@ struct CoinRowsList: View {
   @Environment(AppEnvironment.self) private var env
   @AppStorage("watchlists.tokenSort") private var sort: WatchlistTokenSort = .original
   let group: WatchlistGroup
+  var scrub: ComparisonScrubStore? = nil
 
   var body: some View {
     let data = env.watchlistData
@@ -197,7 +209,7 @@ struct CoinRowsList: View {
                      actionTitle: "Add token") { env.router.sheet = .coinSearch(targetGroupId: group.id) }
         } else {
           ForEach(sort.ordered(items, quote: data.quote)) { item in
-            CoinRow(item: item, group: group)
+            CoinRow(item: item, group: group, scrub: scrub)
           }
         }
       }
@@ -235,10 +247,15 @@ struct CoinRow: View {
   @Environment(AppEnvironment.self) private var env
   let item: WatchlistItem
   let group: WatchlistGroup
+  var scrub: ComparisonScrubStore? = nil
 
   var body: some View {
     let data = env.watchlistData
     let quote = data.quote(item.coinId)
+    // While the chart is scrubbed, the row reads the inspected price and return instead of live.
+    let inspecting = scrub?.isScrubbing == true
+    let price = inspecting ? (scrub?.price(for: item.coinId) ?? quote?.currentPrice) : quote?.currentPrice
+    let change = inspecting ? (scrub?.value(for: item.coinId) ?? scrub?.change(for: item.coinId) ?? quote?.priceChangePercentage24h) : quote?.priceChangePercentage24h
     SelectableRow(id: item.coinId, removalTitle: "Remove from \(group.name)?", onRemove: {
       try await data.remove(coinId: item.coinId, from: group.id)
     }) {
@@ -265,9 +282,10 @@ struct CoinRow: View {
 
         Button(action: openToken) {
           VStack(alignment: .trailing, spacing: 3) {
-            if let price = quote?.currentPrice, price > 0 {
+            if let price, price > 0 {
               UsdText(value: price, font: .subheadline.weight(.medium))
-              PercentBadge(pct: quote?.priceChangePercentage24h, compact: true)
+                .contentTransition(.numericText(value: price))
+              PercentBadge(pct: change, compact: true)
                 .fixedSize(horizontal: true, vertical: false)
             } else {
               SkeletonBlock(height: 12, width: 70)

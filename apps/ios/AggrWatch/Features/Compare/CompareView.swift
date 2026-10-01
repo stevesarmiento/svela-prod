@@ -13,6 +13,8 @@ struct CompareView: View {
   @State private var seriesByGroup: [String: [TimePoint]] = [:]
   @State private var changeByCoin: [String: Double] = [:]
   @State private var loading = false
+  /// Scrubbing the comparison chart turns the accordion rows into its readout.
+  @State private var scrub = ComparisonScrubStore()
 
   var body: some View {
     let data = env.watchlistData
@@ -22,14 +24,14 @@ struct CompareView: View {
           EmptyState(systemImage: "exclamationmark.triangle", title: "Couldn’t load watchlists", message: error,
                      actionTitle: "Retry") { data.start() }
         } else if !data.hasLoadedBootstrap {
-          ProgressView().padding(.top, 60)
+          RingLoader(size: .large).padding(.top, 60)
         } else if data.groups.isEmpty {
           EmptyState(illustration: .comparison, title: "No watchlists to compare", message: "Create some watchlists to compare their performance here.",
                      actionTitle: "Create Watchlist") { env.router.sheet = .createGroup }
         } else {
           chartCard
           WatchlistSectionHeader(sort: $sort, changePeriod: scale.label, accessibilityID: "comparison-watchlist-sort")
-          WatchlistAccordionTable(scale: scale, expanded: $expanded, focusedGroupIDs: $focusedGroupIDs, sort: sort, seriesByGroup: seriesByGroup, changeByCoin: changeByCoin, loading: loading)
+          WatchlistAccordionTable(scale: scale, expanded: $expanded, focusedGroupIDs: $focusedGroupIDs, sort: sort, seriesByGroup: seriesByGroup, changeByCoin: changeByCoin, loading: loading, scrub: scrub)
         }
       }
       .padding(.bottom, 24)
@@ -41,7 +43,7 @@ struct CompareView: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
           Button {
             let all = Set(data.groups.map(\.id))
-            withAnimation(reduceMotion ? nil : .snappy(duration: 0.22, extraBounce: 0)) {
+            withAnimation(Motion.animation(Motion.ui, reduceMotion: reduceMotion)) {
               expanded = expanded == all ? [] : all
             }
           } label: { Label(expanded.count == data.groups.count ? "Collapse all" : "Expand all", image: expanded.count == data.groups.count ? "ActionCollapseWatchlists" : "ActionExpandWatchlists") }
@@ -67,12 +69,12 @@ struct CompareView: View {
     }
     return VStack {
       if series.allSatisfy({ $0.points.count < 2 }) {
-        if loading { ProgressView().frame(height: 220) }
+        if loading { RingLoader().frame(height: 220) }
         else { Text(scale.isAggregateChangeUnavailable ? "N/A for this interval" : "No chart data yet").font(.footnote).foregroundStyle(.secondary).frame(height: 220) }
       } else {
         MultiLineComparisonChart(series: series, selectedIDs: focusedGroupIDs,
           datasetID: "watchlists", scale: scale, isActive: env.isSceneActive && env.router.tab == .compare,
-           accessibilityID: "watchlists-comparison-chart")
+          accessibilityID: "watchlists-comparison-chart", onSelection: scrub.setSelection)
         .frame(height: 300)
       }
       TimeScalePicker(scales: TimeScale.compareScales, selection: $scale)
@@ -100,6 +102,8 @@ struct CompareView: View {
     }
     seriesByGroup = out
     changeByCoin = AggregateSeries.changePctByCoinId(fetched.mapValues(\.points))
+    scrub.prices = fetched.mapValues(\.points)
+    scrub.windowStart = out.values.compactMap { $0.first?.epochSeconds }.min().map(Double.init)
     loading = false
   }
 }
@@ -113,6 +117,8 @@ struct WatchlistAccordionTable: View {
   let seriesByGroup: [String: [TimePoint]]
   let changeByCoin: [String: Double]
   let loading: Bool
+  /// Chart scrub state; rows read the inspected return and price from it.
+  var scrub = ComparisonScrubStore()
   @Environment(AppEnvironment.self) private var env
 
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -173,10 +179,12 @@ struct WatchlistAccordionTable: View {
     let items = data.items(in: g)
     let series = seriesByGroup[g.id] ?? []
     let chartChange = series.last?.value
-    let change = aggregateChange(g)
-    let isEstimate = chartChange == nil && change != nil
+    // While the chart is scrubbed the header reads the inspected return instead of the latest.
+    let inspected = scrub.isScrubbing ? scrub.value(for: g.id) : nil
+    let change = inspected ?? aggregateChange(g)
+    let isEstimate = inspected == nil && chartChange == nil && change != nil
     let focused = focusedGroupIDs.contains(g.id)
-    let cardBackground = Color(white: focused ? 0.10 : 0.06)
+    let cardBackground = focused ? Theme.elevated : Theme.surface
     TokenSwipeCard(id: "scope-\(g.id)", openRowID: .constant(nil), isSelected: focused,
                    onToggleSelection: {
                      if focusedGroupIDs.contains(g.id) { focusedGroupIDs.remove(g.id) }
@@ -185,7 +193,7 @@ struct WatchlistAccordionTable: View {
                    selectionIcon: "scope", selectionAccessibilityLabel: "Focus watchlist chart",
                    deselectionAccessibilityLabel: "Remove watchlist from chart focus", deleteTitle: "") {
       Button {
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.22, extraBounce: 0)) {
+        withAnimation(Motion.animation(Motion.ui, reduceMotion: reduceMotion)) {
           if expanded.contains(g.id) { expanded.remove(g.id) } else { expanded.insert(g.id) }
         }
       } label: {
@@ -243,7 +251,7 @@ struct WatchlistAccordionTable: View {
           ZStack {
             if series.count >= 2 {
               AggrSparkline(points: series, isActive: env.isSceneActive && env.router.tab == .compare,
-                            color: (change ?? 0) >= 0 ? .gainGreen : .lossRed, lineWidth: 1.5, fadeLeading: false)
+                            color: Color.change(change), lineWidth: 1.5, fadeLeading: false)
                 .equatable()
             } else if loading && !scale.isAggregateChangeUnavailable {
               SkeletonBlock(height: 22, width: 88)
@@ -258,14 +266,14 @@ struct WatchlistAccordionTable: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
-        .background(cardBackground, in: .rect(cornerRadius: 16))
-        .contentShape(.rect(cornerRadius: 16))
+        .background(cardBackground, in: .rect(cornerRadius: Theme.Radius.md))
+        .contentShape(.rect(cornerRadius: Theme.Radius.md))
       }
       .buttonStyle(.plain)
     }
     .accessibilityIdentifier("comparison-watchlist-\(g.id)")
     .accessibilityValue("\(expanded.contains(g.id) ? "Expanded" : "Collapsed")\(focused ? ", Chart focused" : "")")
-    .accessibilityHint("Tap to \(expanded.contains(g.id) ? "hide" : "show") tokens. Swipe right to \(focused ? "remove this watchlist from chart focus" : "focus this watchlist’s chart").")
+    .accessibilityHint("Tap to \(expanded.contains(g.id) ? "hide" : "show") tokens. Swipe left to \(focused ? "remove this watchlist from chart focus" : "focus this watchlist’s chart").")
   }
 
   @ViewBuilder
@@ -276,7 +284,10 @@ struct WatchlistAccordionTable: View {
       ForEach(items) { item in
         let q = data.quote(item.coinId)
         let key = "\(g.id)|\(item.coinId)"
-        let change = changeByCoin[item.coinId] ?? q.flatMap { AggregateSeries.quoteIntervalChange(scale: scale, change24h: $0.priceChangePercentage24h, change7d: $0.priceChangePercentage7d, change30d: $0.priceChangePercentage30d) }
+        let liveChange = changeByCoin[item.coinId] ?? q.flatMap { AggregateSeries.quoteIntervalChange(scale: scale, change24h: $0.priceChangePercentage24h, change7d: $0.priceChangePercentage7d, change30d: $0.priceChangePercentage30d) }
+        let inspecting = scrub.isScrubbing
+        let price = inspecting ? (scrub.price(for: item.coinId) ?? q?.currentPrice) : q?.currentPrice
+        let change = inspecting ? (scrub.change(for: item.coinId) ?? liveChange) : liveChange
         SelectableRow(id: key, removalTitle: "Remove from \(g.name)?", onRemove: {
           try await data.remove(coinId: item.coinId, from: g.id)
         }) {
@@ -292,9 +303,10 @@ struct WatchlistAccordionTable: View {
               }
               Spacer()
               VStack(alignment: .trailing, spacing: 3) {
-                UsdText(value: q?.currentPrice, font: .subheadline.weight(.medium))
+                UsdText(value: price, font: .subheadline.weight(.medium))
+                  .contentTransition(.numericText(value: price ?? 0))
                 if let change, !scale.isAggregateChangeUnavailable {
-                  MoveWithBadge(usdMove: q?.currentPrice.flatMap { MarketMetrics.usdMove(priceUsd: $0, percentChange: change) }, pct: change)
+                  MoveWithBadge(usdMove: price.flatMap { MarketMetrics.usdMove(priceUsd: $0, percentChange: change) }, pct: change)
                 } else {
                   Text("N/A").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
                 }

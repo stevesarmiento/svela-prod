@@ -3,7 +3,6 @@ import AggrCore
 import AggrLiveline
 import Observation
 import SwiftUI
-import Torph
 import UIKit
 
 /// `/watchlists/[id]` — price chart card, market metrics, (Phase 6: indicators, news, AI).
@@ -37,12 +36,11 @@ struct TokenDetailView: View {
         VStack(spacing: 20) {
           Color.clear.frame(height: headerHeight - 16)
           if let store {
-            PriceChartCard(store: store, scale: $scale, selection: $chrome.selection,
-                           onSelection: chrome.setSelection)
+            PriceChartCard(store: store, scale: $scale, chrome: chrome)
             MarketMetricsGrid(quote: quote, alignedPrice: store.alignedPrice, dailyOhlcv: store.dailyOhlcv, isPending: store.isLoading)
             TokenIndicatorsSection(store: store, coinId: coinId, quote: quote)
           } else {
-            ProgressView().padding(.top, 80)
+            RingLoader(size: .large).padding(.top, 80)
           }
         }
         .padding(16)
@@ -54,7 +52,7 @@ struct TokenDetailView: View {
         chrome.scrollOffset = offset
       }
       .overlay(alignment: .top) {
-        TokenPageHeader(coinId: coinId, groupSlug: groupSlug, store: store, chrome: chrome,
+        TokenPageHeader(coinId: coinId, groupSlug: groupSlug, store: store, chrome: chrome, scale: scale,
                         expandedHeight: headerHeight, topInset: pageGeometry.safeAreaInsets.top, unseenNews: feed?.unseenCount ?? 0,
                         close: { if let onClose { onClose() } else { dismiss() } },
                         showNews: { showFeed = true }, showAnalysis: { showDeepAnalysis = true })
@@ -72,7 +70,7 @@ struct TokenDetailView: View {
             .allowsHitTesting(false)
         }
       }
-      .containerBackground(onClose == nil ? Color(uiColor: .systemBackground) : Color.clear, for: .navigation)
+      .containerBackground(onClose == nil ? Theme.background : Color.clear, for: .navigation)
       .onChange(of: TokenPageArtwork(symbol: quote?.symbol ?? coinId, imageURL: quote?.image), initial: true) { _, artwork in
         onArtworkChange?(artwork)
       }
@@ -87,7 +85,8 @@ struct TokenDetailView: View {
         store = s
         s.start(scale: scale)
         env.realtime.subscribe(coingeckoId: coinId, symbol: s.quote?.symbol)
-        let f = feed ?? MarketFeedStore(coinId: coinId, news: env.news, canMutate: { [weak env] in env?.isReadyForUserData ?? false })
+        let environment = env
+        let f = feed ?? MarketFeedStore(coinId: coinId, news: env.news, canMutate: { [weak environment] in environment?.isReadyForUserData ?? false })
         feed = f
         f.start()
       }
@@ -104,38 +103,10 @@ struct TokenDetailView: View {
   }
 }
 
+/// The token page's scrub store plus the header's scroll progress.
 @Observable
-final class TokenPageChrome {
+final class TokenPageChrome: ChartScrubStore {
   var scrollOffset: CGFloat = 0
-  var selection: LivelineSelection?
-
-  @ObservationIgnored private var pendingSelection: LivelineSelection?
-  @ObservationIgnored private var publishScheduled = false
-  @ObservationIgnored private var lastPointTime: Double?
-  @ObservationIgnored private let scrubTick = UISelectionFeedbackGenerator()
-
-  /// Wallet scrub policy: tick once per newly inspected data point (release is silent) and
-  /// defer the published write out of the chart's render pass, so one frame's worth of
-  /// selections costs one SwiftUI update.
-  func setSelection(_ next: LivelineSelection?) {
-    pendingSelection = next
-    if let time = next?.nearestObservation?.time {
-      if time != lastPointTime {
-        lastPointTime = time
-        scrubTick.selectionChanged()
-        scrubTick.prepare()
-      }
-    } else {
-      lastPointTime = nil
-    }
-    guard !publishScheduled else { return }
-    publishScheduled = true
-    Task { @MainActor [weak self] in
-      guard let self else { return }
-      publishScheduled = false
-      selection = pendingSelection
-    }
-  }
 }
 
 /// One artwork control and one readout, moving into a compact header as the page scrolls.
@@ -144,6 +115,7 @@ private struct TokenPageHeader: View {
   let groupSlug: String?
   let store: TokenChartStore?
   let chrome: TokenPageChrome
+  let scale: TimeScale
   let expandedHeight: CGFloat
   let topInset: CGFloat
   let unseenNews: Int
@@ -164,6 +136,8 @@ private struct TokenPageHeader: View {
     let window = store?.priceWindow
     let change = window?.percentChange(to: price)
     let dollarChange = window?.dollarChange(to: price)
+    // An empty window reports partial history; fall back to the requested range like the wallet.
+    let periodLabel = (window?.points.count ?? 0) >= 2 ? window!.periodLabel(scale: store?.dataScale ?? scale) : scale.periodLabel
     let textScale = expandedHeight / 154
     let progress = min(1, max(0, chrome.scrollOffset / max(1, expandedHeight - 84 * textScale)))
     // Direct manipulation has no trailing spring. Reduce Motion switches between the two layouts.
@@ -173,10 +147,10 @@ private struct TokenPageHeader: View {
       let nameScale = 1 - 0.1 * p
       let detailScale = 1 - 0.15 * p
       let nameX = 52 + 18 * p
-      let nameAvailable = width - nameX - 120
+      let nameAvailable = max(0, width - nameX - 120)
       let valueScale = 1 - (2.0 / 9.0) * p
       let textX = 20 + 58 * p
-      let available = width - textX - (20 + 100 * p)
+      let available = max(0, width - textX - (20 + 100 * p))
       ZStack(alignment: .topLeading) {
         // Tint the existing blurred backdrop without the gray lift of a system material.
         Rectangle().fill(Color.black.opacity(0.8))
@@ -211,10 +185,12 @@ private struct TokenPageHeader: View {
             .allowsHitTesting(false)
         }
 
-        // Torph rolls digits by place value on live ticks; instant swaps while scrubbing
-        // (gesture-rate updates would otherwise live in a mid-roll smear).
-        TorphText(styledPrice(price), options: .init(duration: 0.25, disabled: chrome.selection != nil))
-          .font(.system(size: priceSize, weight: .medium, design: .rounded).monospacedDigit())
+        // Digits roll on live ticks; instant swaps while scrubbing (gesture-rate updates would
+        // otherwise live in a mid-roll smear).
+        Text(StyledUsd.price(price))
+          .font(.number(size: priceSize))
+          .contentTransition(.numericText(value: price ?? 0))
+          .animation(chrome.selection == nil ? Motion.animation(Motion.numeric, reduceMotion: reduceMotion) : nil, value: price)
           .lineLimit(1)
           .frame(width: available / valueScale, alignment: .leading)
           .clipped()
@@ -227,11 +203,16 @@ private struct TokenPageHeader: View {
 
         HStack(spacing: 8) {
           Text(dollarChange.map { UsdFormat.signedPrice($0) } ?? "—")
-            .font(.system(.subheadline, design: .rounded, weight: .medium).monospacedDigit())
-            .foregroundStyle(dollarChange.map { $0 > 0 ? Color.gainGreen : $0 < 0 ? Color.lossRed : Color.secondary } ?? .secondary)
+            .font(.number(.subheadline, weight: .medium))
+            .foregroundStyle(Color.change(dollarChange))
             .lineLimit(1).minimumScaleFactor(0.7)
             .accessibilityIdentifier("token-header-dollar-change")
           PercentBadge(pct: change)
+          Text(periodLabel)
+            .font(.system(.caption, design: .rounded))
+            .foregroundStyle(.secondary)
+            .lineLimit(1).minimumScaleFactor(0.6).layoutPriority(-1)
+            .accessibilityIdentifier("token-header-period")
         }
         .frame(width: available / detailScale, alignment: .leading)
         .scaleEffect(detailScale, anchor: .topLeading)
@@ -240,13 +221,13 @@ private struct TokenPageHeader: View {
 
         HStack(spacing: 0) {
           WatchlistToggleButton(coinId: coinId, groupSlug: groupSlug)
-            .frame(width: 44, height: 44)
+            .frame(width: Theme.hitTarget, height: Theme.hitTarget)
             .accessibilityIdentifier("token-bookmark")
           Menu {
             Button(action: showAnalysis) { Label("Deep analysis", image: "ActionAnalyze") }
             Button(action: showNews) { Label(unseenNews > 0 ? "News (\(unseenNews) new)" : "News", systemImage: "newspaper") }
           } label: {
-            Image(systemName: "ellipsis").font(.title3.weight(.semibold)).frame(width: 44, height: 44)
+            Image(systemName: "ellipsis").font(.title3.weight(.semibold)).frame(width: Theme.hitTarget, height: Theme.hitTarget)
           }
           .accessibilityLabel("Token actions")
           .accessibilityIdentifier("token-actions")
@@ -261,16 +242,6 @@ private struct TokenPageHeader: View {
       }
       .frame(width: width, height: geometry.size.height, alignment: .topLeading)
     }
-  }
-  private func styledPrice(_ value: Double?) -> AttributedString {
-    guard let value, value.isFinite else { return AttributedString("—") }
-    let formatted = UsdFormat.price(value)
-    var result = AttributedString(formatted)
-    if let currency = result.range(of: "$") { result[currency].foregroundColor = .secondary }
-    if let decimal = formatted.firstIndex(of: "."), let fraction = result.range(of: String(formatted[decimal...])) {
-      result[fraction].foregroundColor = .secondary
-    }
-    return result
   }
 }
 
@@ -324,7 +295,7 @@ struct WatchlistToggleButton: View {
   PreviewHost(navigation: false) { env in
     let chrome = TokenPageChrome()
     let _ = { chrome.scrollOffset = 160 }()
-    TokenPageHeader(coinId: "bitcoin", groupSlug: PreviewFixtures.group.slug, store: PreviewData.tokenStore(env), chrome: chrome,
+    TokenPageHeader(coinId: "bitcoin", groupSlug: PreviewFixtures.group.slug, store: PreviewData.tokenStore(env), chrome: chrome, scale: .d1,
                     expandedHeight: 154, topInset: 0, unseenNews: 2, close: {}, showNews: {}, showAnalysis: {})
       .frame(height: 154)
   }

@@ -626,6 +626,14 @@ private actor OverviewRequestGate {
   #expect(store.data.line.allSatisfy { (now - 30 * 86_400...now + 86_400).contains($0.epochSeconds) })
   #expect(store.data.marketCap.allSatisfy { (now - 30 * 86_400...now + 86_400).contains($0.epochSeconds) })
   #expect(!store.isLoading)
+  // A poll with an unchanged payload writes nothing the chart or header observe.
+  nonisolated(unsafe) var fired = false
+  withObservationTracking {
+    _ = store.isLoading; _ = store.dataScale; _ = store.hasObservedHistory; _ = store.isWarmingUp; _ = store.error
+  } onChange: { fired = true }
+  await store.load(force: true)
+  #expect(!fired)
+  #expect(!store.isLoading)
   store.stop()
 }
 
@@ -718,6 +726,8 @@ private actor OverviewRequestGate {
                                               .init(epochSeconds: day, value: 120)], scale: .d1)
   #expect(!sampledDay.isPartial)
   #expect(sampledDay.periodLabel(scale: .d1) == "Past day")
+  #expect(TimeScale.d7.periodLabel == "Past week")
+  #expect(TimeScale.y2.periodLabel == "Past 2 years")
 }
 @Test @MainActor func analysisRetainsRealDataForSidebarAndComparison() async throws {
   let env = PreviewData.environment()

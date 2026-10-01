@@ -32,10 +32,10 @@ struct DeepAnalysisSheet: View {
         if let priceData { AnalysisPriceChart(model: priceData) }
         else if chartFailed {
           Text("Price chart unavailable").font(.caption).foregroundStyle(.secondary)
-        } else { ProgressView("Loading price history").frame(maxWidth: .infinity, minHeight: 180) }
+        } else { RingLoader("Loading price history").frame(maxWidth: .infinity, minHeight: 180) }
       } metrics: {
         if let bundle { AnalysisMarketMetrics(bundle: bundle) }
-        else if isLoading { ProgressView("Preparing market data").frame(maxWidth: .infinity, minHeight: 160) }
+        else if isLoading { RingLoader("Preparing market data").frame(maxWidth: .infinity, minHeight: 160) }
         else { Text("Market data unavailable. Try regenerating the analysis.").foregroundStyle(.secondary) }
       } report: {
         AnalysisReport(text: text, isLoading: isLoading, failed: failed, steps: Self.steps)
@@ -114,7 +114,7 @@ struct AnalysisTokenHeader: View {
       VStack(alignment: .leading, spacing: 2) {
         Text(LogoOverrides.cleanTokenName(quote?.name ?? coinId)).font(.headline)
         HStack(spacing: 6) {
-          if let p = priceOverride ?? quote?.currentPrice { Text(UsdFormat.price(p)).font(.system(.subheadline, design: .rounded).monospacedDigit()) }
+          if let p = priceOverride ?? quote?.currentPrice { Text(UsdFormat.price(p)).font(.number(.subheadline, weight: .regular)) }
           PercentBadge(pct: quote?.priceChangePercentage24h, compact: true)
         }
       }
@@ -156,10 +156,10 @@ struct MultiAnalysisSheet: View {
         }
       } chart: {
         if stats != nil { AnalysisComparisonChart(lines: chartLines) }
-        else if isLoading { ProgressView("\(readyCount) of \(requestedIds.count) tokens ready").frame(maxWidth: .infinity, minHeight: 180) }
+        else if isLoading { RingLoader("\(readyCount) of \(requestedIds.count) tokens ready").frame(maxWidth: .infinity, minHeight: 180) }
       } metrics: {
         if let stats { ComparativeStatsPanel(stats: stats) }
-        else if isLoading { ProgressView("Computing comparison statistics").frame(maxWidth: .infinity, minHeight: 160) }
+        else if isLoading { RingLoader("Computing comparison statistics").frame(maxWidth: .infinity, minHeight: 160) }
         else { Text("Comparison data unavailable. Try regenerating the analysis.").foregroundStyle(.secondary) }
       } report: {
         AnalysisReport(text: text, isLoading: isLoading, failed: failed, steps: Self.steps)

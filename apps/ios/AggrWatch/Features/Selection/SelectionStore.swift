@@ -150,25 +150,25 @@ struct SelectableRow<Content: View>: View {
       } }
     ) {
       HStack(spacing: 10) {
+        content()
         if selection.isActive {
           Image(systemName: selection.isSelected(id) ? "checkmark.circle.fill" : "circle.dashed")
             .font(.title3).foregroundStyle(selection.isSelected(id) ? Color.accentColor : .secondary)
             .opacity(selection.isSelected(id) ? 1 : 0.5)
             .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace.offUp.byLayer))
-            .transition(SelectionMotion.disclose(anchor: .leading, edge: .leading, reduceMotion: reduceMotion))
+            .transition(SelectionMotion.disclose(anchor: .trailing, edge: .trailing, reduceMotion: reduceMotion))
             .accessibilityHidden(true)
         }
-        content()
       }
       .padding(14)
       .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
-      .background(backgroundColor ?? .white.opacity(selection.isSelected(id) ? 0.10 : 0.06), in: .rect(cornerRadius: 16))
-      .clipShape(.rect(cornerRadius: 16))
-      .contentShape(.rect(cornerRadius: 16))
-      .animation(reduceMotion ? nil : SelectionMotion.open, value: selection.isActive)
-      .animation(reduceMotion ? nil : SelectionMotion.open, value: selection.isSelected(id))
+      .background(backgroundColor ?? (selection.isSelected(id) ? Theme.elevated : Theme.surface), in: .rect(cornerRadius: Theme.Radius.md))
+      .clipShape(.rect(cornerRadius: Theme.Radius.md))
+      .contentShape(.rect(cornerRadius: Theme.Radius.md))
+      .animation(Motion.animation(Motion.ui, reduceMotion: reduceMotion), value: selection.isActive)
+      .animation(Motion.animation(Motion.ui, reduceMotion: reduceMotion), value: selection.isSelected(id))
       .onLongPressGesture {
-        withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { selection.toggle(id) }
+        withAnimation(Motion.animation(Motion.ui, reduceMotion: reduceMotion)) { selection.toggle(id) }
       }
     }
     .disabled(isRemoving || selection.isRemoving)

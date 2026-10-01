@@ -15,7 +15,7 @@ struct ScreenerView: View {
       if let store {
         ScreenerContent(store: store, showPrompt: $showPrompt, editingFilterIndex: $editingFilterIndex)
       } else {
-        ProgressView()
+        RingLoader(size: .large)
       }
     }
     .navigationTitle("Screener")
@@ -154,7 +154,7 @@ struct ScreenerRowView: View {
         Text(row.symbol.uppercased()).font(.subheadline.weight(.bold))
         Text(LogoOverrides.cleanTokenName(row.name)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
         Spacer()
-        if loading { SkeletonBlock(height: 12, width: 64) } else { UsdText(value: row.currentPrice, font: .system(.footnote, design: .rounded).monospacedDigit()) }
+        if loading { SkeletonBlock(height: 12, width: 64) } else { UsdText(value: row.currentPrice, font: .number(.footnote, weight: .regular)) }
       }
       HStack(spacing: 10) {
         if loading {
@@ -183,7 +183,7 @@ struct ScreenerRowView: View {
   private func statText(_ label: String, _ value: String) -> some View {
     HStack(spacing: 4) {
       Text(label).font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
-      Text(value).font(.system(size: 11, design: .rounded).monospacedDigit()).foregroundStyle(.secondary)
+      Text(value).font(.number(size: 11, weight: .regular)).foregroundStyle(.secondary)
     }
   }
 }
@@ -216,7 +216,7 @@ struct TakerVolumeCell: View {
             Image(systemName: "triangle.fill").font(.system(size: 5)).rotationEffect(.degrees(buyPct < 50 ? 180 : 0))
             Text(String(format: "%.1f%%", buyPct >= 50 ? buyPct : 100 - buyPct))
           }
-          .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+          .font(.number(size: 11, weight: .semibold))
           .foregroundStyle(badgeColor)
           .padding(.horizontal, 6).padding(.vertical, 2)
           .background(badgeColor.opacity(skew == 0 ? 0.08 : 0.12), in: Capsule())
@@ -286,7 +286,7 @@ struct FreshnessIndicator: View {
         .phaseAnimator([0.3, 1]) { v, p in v.opacity(isRefreshing ? p : 1) } animation: { _ in .easeInOut(duration: 0.8) }
       Text(isRefreshing ? "Refreshing…" : "Updated:").font(.system(size: 10)).foregroundStyle(.tertiary)
       Text(lastUpdatedAtMs.map { Date(timeIntervalSince1970: $0 / 1000).formatted(.dateTime.month(.abbreviated).day().hour().minute()) } ?? "—")
-        .font(.system(size: 10, design: .rounded).monospacedDigit()).foregroundStyle(.secondary)
+        .font(.number(size: 10, weight: .regular)).foregroundStyle(.secondary)
     }
   }
 }
@@ -414,9 +414,9 @@ struct FilterEditorSheet: View {
   private var breadcrumb: some View {
     HStack(spacing: 6) {
       if let metricId, let m = MetricCatalog.metric(metricId) {
-        Button(m.label) { withAnimation { stage = 0 } }.buttonStyle(.bordered).controlSize(.small)
+        Button(m.label) { withAnimation(Motion.ui) { stage = 0 } }.buttonStyle(.glass).controlSize(.small)
       }
-      if stage == 2 { Button(op.symbol) { withAnimation { stage = 1 } }.buttonStyle(.bordered).controlSize(.small) }
+      if stage == 2 { Button(op.symbol) { withAnimation(Motion.ui) { stage = 1 } }.buttonStyle(.glass).controlSize(.small) }
       Spacer()
     }
     .padding(.horizontal, 16).padding(.top, 8)
@@ -454,7 +454,7 @@ struct FilterEditorSheet: View {
       breadcrumb
       List(ScreenFilterOp.allCases, id: \.self) { o in
         Button { op = o; withAnimation { stage = 2 } } label: {
-          HStack { Text(o.symbol).font(.system(.body, design: .rounded).monospacedDigit()).frame(width: 28); Text(o.label) }
+          HStack { Text(o.symbol).font(.number(.body, weight: .regular)).frame(width: 28); Text(o.label) }
         }
       }
     }
@@ -467,7 +467,7 @@ struct FilterEditorSheet: View {
       TextField(ScreeningDslFormat.placeholder(unit: unit), text: $raw)
         .keyboardType(unit == .rank ? .numberPad : .asciiCapable)
         .textInputAutocapitalization(.never).autocorrectionDisabled()
-        .padding(12).background(.white.opacity(0.06), in: .rect(cornerRadius: 12))
+        .padding(12).background(Theme.surface, in: .rect(cornerRadius: Theme.Radius.sm))
         .padding(.horizontal, 16)
         .onSubmit { apply() }
       if let error { Text(error).font(.caption).foregroundStyle(Color.lossRed).padding(.horizontal, 16) }
@@ -520,7 +520,7 @@ struct SmartPromptSheet: View {
           .onSubmit { Task { await submit(draft) } }
         if let inlineError { Text(inlineError).font(.caption).foregroundStyle(Color.lossRed) }
         if store.isInterpreting {
-          HStack(spacing: 8) { ProgressView().controlSize(.small); Text("Interpreting…").font(.caption).foregroundStyle(.secondary) }
+          HStack(spacing: 8) { RingLoader(size: .small, tint: .secondary); Text("Interpreting…").font(.caption).foregroundStyle(.secondary) }
         }
         VStack(alignment: .leading, spacing: 8) {
           ForEach(examples, id: \.self) { ex in

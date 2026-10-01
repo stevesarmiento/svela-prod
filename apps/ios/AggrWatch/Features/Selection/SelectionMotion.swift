@@ -1,10 +1,7 @@
 import SwiftUI
 
-/// Aufn's disclosure timing, shared by the swipe row and selection dock.
+/// Disclosure transition shared by the swipe row and selection dock; timing comes from `Motion`.
 enum SelectionMotion {
-  static let open: Animation = .snappy(duration: 0.22, extraBounce: 0)
-  static let close: Animation = .easeOut(duration: 0.16)
-
   static func disclose(anchor: UnitPoint, edge: Edge? = nil, reduceMotion: Bool) -> AnyTransition {
     if reduceMotion { return .identity }
     var insertion = AnyTransition.scale(scale: 0.7, anchor: anchor)
@@ -15,6 +12,6 @@ enum SelectionMotion {
       insertion = insertion.combined(with: .move(edge: edge))
       removal = removal.combined(with: .move(edge: edge))
     }
-    return .asymmetric(insertion: insertion.animation(open), removal: removal.animation(close))
+    return .asymmetric(insertion: insertion.animation(Motion.ui), removal: removal.animation(Motion.close))
   }
 }

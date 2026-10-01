@@ -23,6 +23,17 @@ public enum TimeScale: String, Sendable, CaseIterable, Codable, Hashable, Identi
     }
   }
 
+  /// Readout under a header change row ("Past day"); windows swap in "Available history".
+  public var periodLabel: String {
+    switch self {
+    case .d1: "Past day"
+    case .d7: "Past week"
+    case .d30: "Past month"
+    case .max: "Past year"
+    case .y2: "Past 2 years"
+    }
+  }
+
   /// Overview + watchlist chart selector: 1D/1W/1M/1Y.
   public static let overviewScales: [TimeScale] = [.d1, .d7, .d30, .max]
   /// Compare selector: 1D/1W/1M/1Y.

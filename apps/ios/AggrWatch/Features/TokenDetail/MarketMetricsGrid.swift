@@ -55,20 +55,15 @@ struct MarketMetricsGrid: View {
 
   var body: some View {
     VStack(spacing: 24) {
-      HStack(spacing: 16) {
-        rule
-        Text("Market Stats")
-          .font(.system(.subheadline, design: .rounded, weight: .semibold))
-          .foregroundStyle(.secondary)
-          .accessibilityAddTraits(.isHeader)
-        rule
-      }
+      RuledSectionHeading(title: "Market Stats")
 
       VStack(spacing: 0) {
         metricRows(metrics)
       }
     }
     .padding(.top, 12)
+    // An explicit container: its identifier must not cascade onto the `token-stat-*` rows.
+    .accessibilityElement(children: .contain)
     .accessibilityIdentifier("token-market-stats")
     .popover(item: $help) { metric in
       VStack(alignment: .leading, spacing: 8) {
@@ -78,10 +73,6 @@ struct MarketMetricsGrid: View {
       .padding(20).frame(idealWidth: 280, maxWidth: 320)
       .presentationCompactAdaptation(.popover)
     }
-  }
-
-  private var rule: some View {
-    Rectangle().fill(.white.opacity(0.10)).frame(height: 1).accessibilityHidden(true)
   }
 
   private func metricRows(_ metrics: [Metric]) -> some View {

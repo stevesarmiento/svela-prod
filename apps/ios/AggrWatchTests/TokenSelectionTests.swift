@@ -10,18 +10,19 @@ import Testing
 }
 
 @Test @MainActor func tokenSwipeCommitsOnlyAtThreshold() {
-  #expect(TokenSwipeRules.outcome(base: 0, translation: 55, canDelete: true, canSelect: true) == .close)
-  #expect(TokenSwipeRules.outcome(base: 0, translation: 56, canDelete: true, canSelect: true) == .toggleSelect)
   #expect(TokenSwipeRules.outcome(base: 0, translation: -55, canDelete: true, canSelect: true) == .close)
-  #expect(TokenSwipeRules.outcome(base: 0, translation: -56, canDelete: true, canSelect: true) == .commitDelete)
-  #expect(TokenSwipeRules.outcome(base: 0, translation: -200, canDelete: false, canSelect: true) == .close)
-  #expect(TokenSwipeRules.outcome(base: -56, translation: 200, canDelete: true, canSelect: true) == .close)
+  #expect(TokenSwipeRules.outcome(base: 0, translation: -56, canDelete: true, canSelect: true) == .toggleSelect)
+  #expect(TokenSwipeRules.outcome(base: 0, translation: 55, canDelete: true, canSelect: true) == .close)
+  #expect(TokenSwipeRules.outcome(base: 0, translation: 56, canDelete: true, canSelect: true) == .commitDelete)
+  #expect(TokenSwipeRules.outcome(base: 0, translation: 200, canDelete: false, canSelect: true) == .close)
+  #expect(TokenSwipeRules.outcome(base: 56, translation: -200, canDelete: true, canSelect: true) == .close)
 }
 
 @Test @MainActor func tokenSwipeRubberBandsAndTucksUnderCardCorners() {
-  #expect(TokenSwipeRules.offset(base: 0, translation: 96, canDelete: true, canSelect: true) == 66)
   #expect(TokenSwipeRules.offset(base: 0, translation: -96, canDelete: true, canSelect: true) == -66)
-  #expect(TokenSwipeRules.offset(base: 0, translation: -40, canDelete: false, canSelect: true) == -10)
+  #expect(TokenSwipeRules.offset(base: 0, translation: 96, canDelete: true, canSelect: true) == 66)
+  #expect(TokenSwipeRules.offset(base: 0, translation: 40, canDelete: false, canSelect: true) == 10)
+  #expect(TokenSwipeRules.offset(base: 56, translation: -96, canDelete: true, canSelect: true) == -10)
   #expect(TokenSwipeRules.panelWidth(travel: 56) == 72)
   #expect(TokenSwipeRules.fillProgress(travel: 28) == 0.5)
   #expect(TokenSwipeRules.fillProgress(travel: 100) == 1)

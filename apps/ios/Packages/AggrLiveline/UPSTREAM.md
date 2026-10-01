@@ -8,6 +8,8 @@ The September 13 fidelity pass also adapts rendering behavior from `/Users/steve
 
 The September 30 runtime pass adapts that repo's chart runtime at commit `cba0ae54a348cf1a14f2ee3ba25915fce5c3169a` (covered by the same bundled attribution): the reused-bitmap render path (`LivelineRenderBuffer`, rendering into `layer.contents` from display-link ticks instead of `UIView.draw`), the 80–120 Hz frame-rate range, the touch-driven scrub policy (`LivelineScrubGesture`: 0.075 s hold or 15 pt horizontal commit, ancestor pans refused mid-scrub), CAShapeLayer pulse rings that keep animating while the display link is stopped (`LivelinePulseLayers`), scrub dimming right of the cursor, the crosshair fade near the live dot, the bounded text cache (`LivelineTextCache`), and the token-logo line color (`TokenIconColor`, in the app target). The loading morph needed no change: aggr's `revealedY`/`loadingBreath` were already numerically identical to that repo's `morphY`/breath.
 
+The October 1 token-page pass adds `LivelineSelection.x`: the crosshair's screen x in the chart view's coordinate space, computed from the same `LivelineLayout.toX` the renderer draws with. It is excluded from `Equatable` so the deduped `onSelection` cadence is unchanged; hosts use it to pin readouts to the drawn line instead of recomputing plot insets.
+
 Regenerate the independent expected values from this directory:
 
 ```sh

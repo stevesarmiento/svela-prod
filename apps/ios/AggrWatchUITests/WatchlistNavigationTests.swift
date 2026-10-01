@@ -31,24 +31,24 @@ final class WatchlistNavigationTests: XCTestCase {
       XCTAssertLessThan(first.frame.minY, second.frame.minY)
     }
     capture("Compare inline header and sorted closed accordions")
-    core.swipeRight()
+    core.swipeLeft()
     XCTAssertEqual(core.value as? String, "Collapsed, Chart focused")
     XCTAssertFalse(app.buttons["Cancel selection"].exists)
     capture("Accordion scope focuses Core holdings")
-    growth.swipeRight()
+    growth.swipeLeft()
     XCTAssertEqual(growth.value as? String, "Collapsed, Chart focused")
     XCTAssertEqual(core.value as? String, "Collapsed, Chart focused")
     capture("Multiple watchlists scoped with icon badges")
-    growth.swipeRight()
+    growth.swipeLeft()
     XCTAssertEqual(growth.value as? String, "Collapsed")
     XCTAssertEqual(core.value as? String, "Collapsed, Chart focused")
-    growth.swipeRight()
+    growth.swipeLeft()
     XCTAssertEqual(growth.value as? String, "Collapsed, Chart focused")
     core.tap()
     XCTAssertEqual(core.value as? String, "Expanded, Chart focused")
     let token = app.descendants(matching: .any)["comparison-token-preview-core|bitcoin"].firstMatch
     XCTAssertTrue(token.waitForExistence(timeout: 5))
-    token.swipeRight()
+    token.swipeLeft()
     let cancel = app.buttons["Cancel selection"]
     XCTAssertTrue(cancel.waitForExistence(timeout: 5))
     // Token selection remains independent from the focused watchlist.
@@ -58,10 +58,10 @@ final class WatchlistNavigationTests: XCTestCase {
     core.tap()
     // Let the collapsing rows settle and bring the header clear of the bottom dock.
     app.scrollViews.firstMatch.swipeUp()
-    growth.swipeRight()
+    growth.swipeLeft()
     XCTAssertEqual(growth.value as? String, "Collapsed")
     XCTAssertEqual(core.value as? String, "Collapsed, Chart focused")
-    core.swipeRight()
+    core.swipeLeft()
     XCTAssertEqual(core.value as? String, "Collapsed")
     capture("Accordion scope cleared restores comparison lines")
   }
@@ -84,7 +84,7 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertEqual(filter.value as? String, "24h change: high to low")
     XCTAssertLessThan(sol.frame.minY, btc.frame.minY)
     XCTAssertLessThan(btc.frame.minY, eth.frame.minY)
-    btc.swipeRight()
+    btc.swipeLeft()
     XCTAssertTrue(app.buttons["Cancel selection"].waitForExistence(timeout: 5))
     filter.tap(); app.buttons["Price: low to high"].tap()
     XCTAssertLessThan(sol.frame.minY, eth.frame.minY)
@@ -108,12 +108,12 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertTrue(chart.waitForExistence(timeout: 10))
     let eth = app.buttons["watchlist-token-ethereum"]
     XCTAssertTrue(eth.waitForExistence(timeout: 5))
-    eth.swipeRight()
+    eth.swipeLeft()
     let cancel = app.buttons["Cancel selection"]
     XCTAssertTrue(cancel.waitForExistence(timeout: 5))
     XCTAssertEqual(app.staticTexts["watchlist-selection-title"].label, "1 Selected")
     capture("Ethereum selected in a forty-token watchlist")
-    app.buttons["watchlist-token-bitcoin"].swipeRight()
+    app.buttons["watchlist-token-bitcoin"].swipeLeft()
     XCTAssertEqual(app.staticTexts["watchlist-selection-title"].label, "2 Selected")
     eth.tap()
     XCTAssertEqual(app.staticTexts["watchlist-selection-title"].label, "1 Selected")
@@ -154,7 +154,7 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertFalse(app.buttons["comparison-series-bitcoin"].exists)
     let btc = app.buttons["watchlist-token-bitcoin"]
     XCTAssertTrue(btc.waitForExistence(timeout: 5))
-    btc.swipeRight()
+    btc.swipeLeft()
     let cancel = app.buttons["Cancel selection"]
     XCTAssertTrue(cancel.waitForExistence(timeout: 5))
     capture("Liveline selected Bitcoin with other lines dimmed")
@@ -268,17 +268,14 @@ final class WatchlistNavigationTests: XCTestCase {
     app.tabBars.buttons["Overview"].tap()
     let chart = app.descendants(matching: .any)["overview-performance-chart"].firstMatch
     XCTAssertTrue(chart.waitForExistence(timeout: 10))
-    let cap = app.staticTexts["overview-total-market-cap"]
-    XCTAssertTrue(cap.exists)
-    XCTAssertNotEqual(cap.label, "—")
-    capture("Overview Liveline and total market cap")
+    // The total market cap readout left the overview header; the chart card is the subject here.
+    capture("Overview Liveline")
     let start = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.5))
     start.press(forDuration: 0.3, thenDragTo: chart.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5)))
     XCTAssertTrue(chart.isHittable)
     for range in ["1W", "1M", "1D"] {
       app.buttons[range].tap()
       XCTAssertTrue(chart.waitForExistence(timeout: 5))
-      XCTAssertNotEqual(cap.label, "—")
     }
     let y = chart.frame.minY
     let scroll = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.8))
@@ -286,7 +283,7 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertLessThan(chart.frame.minY, y - 30)
     app.tabBars.buttons["Watchlists"].tap()
     app.tabBars.buttons["Overview"].tap()
-    XCTAssertTrue(cap.waitForExistence(timeout: 5))
+    XCTAssertTrue(chart.waitForExistence(timeout: 5))
   }
 
   @MainActor func testWatchlistSortMenuReordersCardsAndPreservesSelection() {
@@ -345,7 +342,7 @@ final class WatchlistNavigationTests: XCTestCase {
     let cancel = app.buttons["Cancel selection"]
 
     for _ in 0..<2 {
-      row.swipeRight()
+      row.swipeLeft()
       XCTAssertTrue(count.waitForExistence(timeout: 5))
       XCTAssertEqual(count.label, "1 Selected")
       XCTAssertFalse(title.isHittable)
@@ -364,7 +361,7 @@ final class WatchlistNavigationTests: XCTestCase {
       XCTAssertTrue(title.isHittable)
       XCTAssertEqual(title.frame.minX, originalTitleFrame.minX, accuracy: 1)
       XCTAssertEqual(title.frame.midY, originalTitleFrame.midY, accuracy: 1)
-      row.swipeRight()
+      row.swipeLeft()
       XCTAssertTrue(count.waitForExistence(timeout: 5))
       XCTAssertTrue(cancel.waitForExistence(timeout: 5))
       cancel.tap()
@@ -413,7 +410,7 @@ final class WatchlistNavigationTests: XCTestCase {
     let card = app.buttons["watchlist-card-preview-core"]
     XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
     let token = app.buttons["watchlist-token-bitcoin"]
-    XCTAssertTrue(token.waitForExistence(timeout: 5)); token.swipeRight()
+    XCTAssertTrue(token.waitForExistence(timeout: 5)); token.swipeLeft()
     app.buttons["Analyze selected"].tap()
     let report = app.staticTexts["Market overview"]
     let metrics = app.staticTexts["Market metrics"]
@@ -435,7 +432,7 @@ final class WatchlistNavigationTests: XCTestCase {
     app.buttons["watchlist-card-preview-core"].tap()
     let token = app.buttons["watchlist-token-bitcoin"]
     XCTAssertTrue(token.waitForExistence(timeout: 5))
-    token.swipeRight()
+    token.swipeLeft()
     app.buttons["Analyze selected"].tap()
     XCTAssertTrue(app.staticTexts["Market overview"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.staticTexts["Price · 7 days"].waitForExistence(timeout: 10))
@@ -478,7 +475,7 @@ final class WatchlistNavigationTests: XCTestCase {
     app.buttons["watchlist-card-preview-core"].tap()
     let btc = app.buttons["watchlist-token-bitcoin"]
     XCTAssertTrue(btc.waitForExistence(timeout: 5))
-    btc.swipeRight()
+    btc.swipeLeft()
     app.buttons["watchlist-token-ethereum"].tap()
     app.buttons["Analyze selected"].tap()
     XCTAssertTrue(app.staticTexts["Relative performance · 7 days"].waitForExistence(timeout: 15))
@@ -533,7 +530,7 @@ final class WatchlistNavigationTests: XCTestCase {
     app.buttons["Done"].tap()
     let token = app.buttons["watchlist-token-bitcoin"]
     XCTAssertTrue(token.waitForExistence(timeout: 5))
-    token.swipeRight()
+    token.swipeLeft()
     XCTAssertTrue(app.buttons["Analyze selected"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.buttons["Analyze selected"].isHittable)
     capture("Web Analyze icon in selection glass pill")
@@ -577,14 +574,16 @@ final class WatchlistNavigationTests: XCTestCase {
     let originalRowHeight = row.frame.height
     let originalFrames = [identity.frame, price.frame, holdings.frame]
     capture("Token identity and inline holdings")
-    identity.swipeRight()
+    identity.swipeLeft()
     let cancel = app.buttons["Cancel selection"]
     XCTAssertTrue(cancel.waitForExistence(timeout: 5))
     XCTAssertEqual(row.frame.height, originalRowHeight, accuracy: 1)
-    XCTAssertGreaterThan(identity.frame.minX, originalFrames[0].minX + 15)
-    XCTAssertGreaterThan(holdings.frame.minX, originalFrames[2].minX + 15)
+    // The selection circle sits on the trailing edge: identity and holdings stay put, the price moves in.
+    XCTAssertEqual(identity.frame.minX, originalFrames[0].minX, accuracy: 1)
+    XCTAssertEqual(holdings.frame.minX, originalFrames[2].minX, accuracy: 1)
+    XCTAssertLessThan(price.frame.maxX, originalFrames[1].maxX - 15)
     XCTAssertEqual(identity.frame.height, originalFrames[0].height, accuracy: 1)
-    XCTAssertEqual(price.frame, originalFrames[1])
+    XCTAssertEqual(price.frame.height, originalFrames[1].height, accuracy: 1)
     capture("Separate selection circle with unchanged row height")
     cancel.tap()
     XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
@@ -729,6 +728,7 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertFalse(app.staticTexts["CACHED"].exists)
     XCTAssertTrue(app.buttons["token-bookmark"].isHittable)
     capture("Simple token chart expanded")
+    XCTAssertTrue(app.staticTexts["token-header-period"].exists)
     let start = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.35))
     start.press(forDuration: 0.25, thenDragTo: chart.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.35)))
     XCTAssertTrue(close.exists)
@@ -745,6 +745,7 @@ final class WatchlistNavigationTests: XCTestCase {
     capture("Simple token chart compact header")
     XCTAssertFalse(app.staticTexts["token-header-name"].exists)
     XCTAssertTrue(app.staticTexts["token-header-price"].exists)
+    XCTAssertTrue(app.staticTexts["token-header-period"].exists)
     XCTAssertTrue(app.buttons["token-actions"].isHittable)
     XCTAssertTrue(app.buttons["token-bookmark"].isHittable)
     XCTAssertLessThanOrEqual(app.buttons["token-actions"].frame.maxX, app.frame.maxX)
@@ -796,13 +797,13 @@ final class WatchlistNavigationTests: XCTestCase {
     app.buttons["Add token"].tap()
     let bitcoin = app.buttons["search-token-bitcoin"]
     XCTAssertTrue(bitcoin.waitForExistence(timeout: 5))
-    bitcoin.swipeLeft()
+    bitcoin.swipeRight()
     // Adding should commit directly, whereas removing an existing bookmark confirms.
     // Offline fixtures reject writes; verify the action reaches the real mutation path
     // and reports its error rather than pretending to save the bookmark.
     XCTAssertTrue(app.staticTexts["Could not update watchlist"].waitForExistence(timeout: 5))
     XCTAssertFalse(app.alerts.firstMatch.exists)
-    bitcoin.swipeRight()
+    bitcoin.swipeLeft()
     let cancel = app.buttons["Cancel selection"]
     XCTAssertTrue(cancel.waitForExistence(timeout: 5))
     capture("Add token sheet selection")
@@ -810,7 +811,7 @@ final class WatchlistNavigationTests: XCTestCase {
     app.buttons["Done"].tap()
     let solana = app.buttons["watchlist-token-solana"]
     XCTAssertTrue(solana.waitForExistence(timeout: 5))
-    solana.swipeRight()
+    solana.swipeLeft()
     XCTAssertTrue(cancel.waitForExistence(timeout: 5))
     cancel.tap()
   }
@@ -829,7 +830,7 @@ final class WatchlistNavigationTests: XCTestCase {
     let row = app.buttons["search-token-bitcoin"]
     XCTAssertTrue(row.waitForExistence(timeout: 10))
     capture("Search token cards on black")
-    row.swipeRight()
+    row.swipeLeft()
     let cancel = app.buttons["Cancel selection"]
     XCTAssertTrue(cancel.waitForExistence(timeout: 5))
     XCTAssertTrue(app.buttons["Analyze selected"].exists)
@@ -837,7 +838,7 @@ final class WatchlistNavigationTests: XCTestCase {
     row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
     XCTAssertFalse(app.buttons["token-page-close"].exists)
-    row.swipeLeft()
+    row.swipeRight()
     XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: 5))
     app.alerts.buttons["Cancel"].tap()
     row.tap()
@@ -852,7 +853,7 @@ final class WatchlistNavigationTests: XCTestCase {
     let solana = app.buttons["search-token-solana"]
     XCTAssertTrue(row.waitForNonExistence(timeout: 5))
     XCTAssertTrue(solana.waitForExistence(timeout: 5))
-    solana.swipeRight()
+    solana.swipeLeft()
     XCTAssertTrue(cancel.waitForExistence(timeout: 5))
     cancel.tap()
     XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
@@ -949,7 +950,7 @@ final class WatchlistNavigationTests: XCTestCase {
       card.tap()
       let row = app.buttons["watchlist-token-\(coin)"]
       XCTAssertTrue(row.waitForExistence(timeout: 5))
-      row.swipeRight()
+      row.swipeLeft()
       let cancel = app.buttons["Cancel selection"]
       XCTAssertTrue(cancel.waitForExistence(timeout: 5))
       // Tap the physical row overlay: its content button is disabled in selection mode.
@@ -1019,7 +1020,7 @@ final class WatchlistNavigationTests: XCTestCase {
     close.tap()
     XCTAssertTrue(close.waitForNonExistence(timeout: 5))
     XCTAssertTrue(token.isHittable)
-    token.swipeRight()
+    token.swipeLeft()
     let cancel = app.buttons["Cancel selection"]
     XCTAssertTrue(cancel.waitForExistence(timeout: 5))
     XCTAssertFalse(close.exists)

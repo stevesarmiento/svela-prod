@@ -7,11 +7,11 @@ struct LoginView: View {
 
   var body: some View {
     ZStack {
-      Color.black.ignoresSafeArea()
+      Theme.background.ignoresSafeArea()
       VStack(spacing: 28) {
         Spacer()
         VStack(spacing: 10) {
-          (Text("aggr") + Text(".").foregroundStyle(.tint.opacity(0.6)) + Text("watch"))
+          Text("aggr\(Text(".").foregroundStyle(.tint.opacity(0.6)))watch")
             .font(.system(size: 40, weight: .semibold, design: .rounded))
           Text("Focused crypto market intelligence for watchlists, screening, and clearer decisions.")
             .font(.callout)
@@ -43,7 +43,7 @@ struct LoginView: View {
           }
         }
         .padding(20)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        .glassEffect(.regular, in: .rect(cornerRadius: Theme.Radius.lg))
         .padding(.horizontal, 24)
         .padding(.bottom, 32)
       }

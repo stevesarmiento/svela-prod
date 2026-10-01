@@ -31,6 +31,8 @@ final class TokenChartStore {
   private let cache: QueryCache
   private var pollTask: Task<Void, Never>?
   private var fastPollCount = 0
+  /// Bumped by every `start`, so a load that outlives a restart cannot write stale data.
+  private var loadGeneration = 0
 
   init(coinId: String, market: MarketAPI, cache: QueryCache, initialQuote: CoinQuote?) {
     self.coinId = coinId
@@ -64,6 +66,7 @@ final class TokenChartStore {
 
   func start(scale: TimeScale) {
     indicatorGeneration += 1
+    loadGeneration += 1
     self.scale = scale
     pollTask?.cancel()
     pollTask = Task { [weak self] in
@@ -101,67 +104,78 @@ final class TokenChartStore {
       let key = QueryCache.Key("coingecko-quote", coinId)
       let response = try await cache.fetch(key, policy: .quotes) { [market] in try await market.quotes(ids: ids, sparkline: true) }
       try Task.checkCancellation()
-      if let q = response.data[coinId] { quote = q }
-      quoteError = nil
+      if let q = response.data[coinId], q != quote { quote = q }
+      if quoteError != nil { quoteError = nil }
     } catch is CancellationError {
     } catch {
-      quoteError = error.localizedDescription
+      if quoteError != error.localizedDescription { quoteError = error.localizedDescription }
     }
   }
 
+  /// Loads the current scale. Polls refresh silently: nothing is written unless it changed, so
+  /// an unchanged payload costs the chart, header, metrics and indicators no re-render.
   func load(force: Bool) async {
     let scale = self.scale
+    let generation = loadGeneration
     let key = QueryCache.Key("token-chart", coinId, scale.rawValue)
     do {
       let response = try await cache.fetch(key, policy: .chart, force: force) { [market, coinId] in
         try await market.marketChart(coinId: coinId, days: scale.tokenChartDaysParam, vsCurrency: "usd")
       }
-      guard !Task.isCancelled, scale == self.scale else { return }
+      guard !Task.isCancelled, generation == loadGeneration, scale == self.scale else { return }
       let prices = response.data.prices.map { ChartSeries.RawPoint(time: $0.time, value: $0.value) }
       let volumes = response.data.volumes.map { ChartSeries.RawPoint(time: $0.time, value: $0.value) }
       let mcaps = response.data.market_caps.map { ChartSeries.RawPoint(time: $0.time, value: $0.value) }
       let observed = ChartSeries.parseMarketChart(prices: prices, volumes: volumes, marketCaps: mcaps, scale: scale)
       var parsed = observed ?? fallbackData()
-      hasObservedHistory = observed != nil
-      dataScale = scale
+      let observedNow = observed != nil
+      if hasObservedHistory != observedNow { hasObservedHistory = observedNow }
+      let scaleChanged = dataScale != scale
+      if scaleChanged { dataScale = scale }
       if let p = quote?.currentPrice, p > 0 {
+        // When the API omits `lastUpdatedDate` the synthetic point moves every poll and the
+        // write-on-change below degrades to a rewrite; harmless, just not silent.
         let t = Int((quote?.lastUpdatedDate ?? Date()).timeIntervalSince1970)
         if t >= (parsed.line.last?.epochSeconds ?? Int.min) {
           parsed = ChartSeries.upsertLatestPrice(parsed, latestPrice: p, atEpochSeconds: t)
         }
       }
-      data = parsed
-      hull = HullSuite.compute(parsed.ohlc, config: .tokenPage)
-      isStale = response.status?.stale ?? false
+      let dataChanged = parsed != data
+      if dataChanged { data = parsed }
+      let stale = response.status?.stale ?? false
+      if isStale != stale { isStale = stale }
       let points = response.status?.points.map { Int($0) } ?? parsed.line.count
-      isWarmingUp = (response.status?.warmupRequested ?? false) || points < 2 || !hasObservedHistory
-      error = nil
-      isLoading = false
-      isComputingIndicators = true
+      let warming = (response.status?.warmupRequested ?? false) || points < 2 || !observedNow
+      if isWarmingUp != warming { isWarmingUp = warming }
+      if error != nil { error = nil }
+      if isLoading { isLoading = false }
       // Short mobile ranges still need warmup history for indicators and daily metrics.
       // Reuse the cached 90-day request used by the 1M view; this does not expand the price window.
+      var history: ParsedChartData? = nil
       if scale == .d1 || scale == .d7 {
-        let history = try? await cache.fetch(QueryCache.Key("token-chart", coinId, TimeScale.d30.rawValue), policy: .chart, force: force) { [market, coinId] in
+        let response = try? await cache.fetch(QueryCache.Key("token-chart", coinId, TimeScale.d30.rawValue), policy: .chart, force: force) { [market, coinId] in
           try await market.marketChart(coinId: coinId, days: TimeScale.d30.tokenChartDaysParam, vsCurrency: "usd")
         }
-        guard !Task.isCancelled, scale == self.scale else { return }
-        indicatorHistory = history.flatMap { history in
+        guard !Task.isCancelled, generation == loadGeneration, scale == self.scale else { return }
+        history = response.flatMap { history in
           ChartSeries.parseMarketChart(
             prices: history.data.prices.map { .init(time: $0.time, value: $0.value) },
             volumes: history.data.volumes.map { .init(time: $0.time, value: $0.value) },
             marketCaps: [], scale: .d30)
         }
-      } else { indicatorHistory = nil }
-      recomputeOverlays()
+      }
+      let historyChanged = history != indicatorHistory
+      if historyChanged { indicatorHistory = history }
+      if dataChanged || historyChanged || scaleChanged || indicators == nil { recomputeOverlays() }
     } catch is CancellationError {
       return
     } catch {
-      guard !Task.isCancelled, scale == self.scale else { return }
-      self.error = error.localizedDescription
-      isComputingIndicators = false
+      guard !Task.isCancelled, generation == loadGeneration, scale == self.scale else { return }
+      if self.error != error.localizedDescription { self.error = error.localizedDescription }
+      if isComputingIndicators { isComputingIndicators = false }
       if data.line.isEmpty { data = fallbackData(); recomputeOverlays() }
     }
-    isLoading = false
+    if isLoading { isLoading = false }
   }
 
   /// `generateFallbackData`: flat daily line anchored at the quote price (no fake movement); empty without a price.
@@ -258,13 +272,6 @@ struct TokenPriceWindow {
   }
 
   func periodLabel(scale: TimeScale) -> String {
-    if isPartial { return "Available history" }
-    switch scale {
-    case .d1: return "Past day"
-    case .d7: return "Past week"
-    case .d30: return "Past month"
-    case .max: return "Past year"
-    case .y2: return "Past 2 years"
-    }
+    isPartial ? "Available history" : scale.periodLabel
   }
 }

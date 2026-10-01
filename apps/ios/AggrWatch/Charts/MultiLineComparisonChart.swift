@@ -19,7 +19,8 @@ struct MultiLineComparisonChart: View {
   var scale: TimeScale = .d1
   var isActive = true
   var accessibilityID = "comparison-chart"
-  @State private var selection: LivelineSelection?
+  /// Hosts route selections into a `ComparisonScrubStore` so their rows become the readout.
+  var onSelection: (LivelineSelection?) -> Void = { _ in }
   @State private var isVisible = true
   @Environment(\.scenePhase) private var scenePhase
 
@@ -40,66 +41,14 @@ struct MultiLineComparisonChart: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      NativeComparisonPlot(series: series, selectedIDs: selectedIDs, datasetID: datasetID,
-                           scale: scale, isActive: isActive && isVisible && scenePhase == .active,
-                           accessibilityID: accessibilityID, onSelection: { selection = $0 })
-        .equatable()
-        .overlay(alignment: .top) {
-          if let selection {
-            ComparisonScrubTooltip(selection: selection, series: series, selectedIDs: selectedIDs)
-          }
-        }
-    }
-    .onScrollVisibilityChange(threshold: 0.01) { isVisible = $0 }
-    .onChange(of: scale) { _, _ in selection = nil }
-    .onChange(of: selectedIDs) { _, _ in selection = nil }
-  }
-}
-
-/// The token page's rounded material tooltip, with a colored return per series.
-/// It follows the scrubber without reserving permanent space beside the plot.
-private struct ComparisonScrubTooltip: View {
-  let selection: LivelineSelection
-  let series: [MultiLineComparisonChart.Series]
-  let selectedIDs: Set<String>
-  @ScaledMetric(relativeTo: .caption) private var preferredWidth = 250.0
-
-  var body: some View {
-    GeometryReader { geometry in
-      let width = min(preferredWidth, geometry.size.width)
-      let start = series.compactMap { $0.points.first?.epochSeconds }.min() ?? 0
-      let end = series.compactMap { $0.points.last?.epochSeconds }.max() ?? 1
-      let fraction = min(1, max(0, (selection.time - Double(start)) / max(1, Double(end - start))))
-      let x = 8 + fraction * max(0, geometry.size.width - 20)
-      let focused = selectedIDs.intersection(series.map(\.id))
-      let ordered = series.filter { (focused.isEmpty || focused.contains($0.id)) && selection.values[$0.id]?.isFinite == true }
-      VStack(alignment: .leading, spacing: 6) {
-        Text(Date(timeIntervalSince1970: selection.time), format: .dateTime.month(.abbreviated).day().year().hour().minute())
-          .foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.7)
-          .accessibilityIdentifier("comparison-scrub-time")
-        ForEach(ordered.prefix(5)) { item in
-          HStack(spacing: 6) {
-            Circle().fill(Color(oklch: item.color)).frame(width: 6, height: 6)
-            Text(item.label).lineLimit(1)
-            Spacer(minLength: 8)
-            if let value = selection.values[item.id] {
-              Text(UsdFormat.signedPercent(value)).fixedSize()
-            }
-          }
-        }
-        if ordered.count > 5 {
-          Text("+\(ordered.count - 5) more · select rows to focus").foregroundStyle(.secondary)
-        }
-      }
-      .font(.system(.caption, design: .rounded, weight: .medium).monospacedDigit())
-      .padding(.horizontal, 12).padding(.vertical, 7)
-      .frame(width: width)
-      .background(.regularMaterial, in: .rect(cornerRadius: 16))
-      .offset(x: min(max(0, geometry.size.width - width), max(0, x - width / 2)), y: 4)
-      .accessibilityIdentifier("comparison-chart-inspection")
-    }
-    .allowsHitTesting(false)
+    NativeComparisonPlot(series: series, selectedIDs: selectedIDs, datasetID: datasetID,
+                         scale: scale, isActive: isActive && isVisible && scenePhase == .active,
+                         accessibilityID: accessibilityID, onSelection: onSelection)
+      .equatable()
+      .onScrollVisibilityChange(threshold: 0.01) { isVisible = $0 }
+      .onChange(of: scale) { _, _ in onSelection(nil) }
+      .onChange(of: selectedIDs) { _, _ in onSelection(nil) }
+      .onDisappear { onSelection(nil) }
   }
 }
 
@@ -149,6 +98,8 @@ private struct NativeComparisonPlot: View, Equatable {
     let _ = {
       config.fill = false; config.badge = false; config.dot = false
       config.pulse = false; config.extrema = false; config.referenceValue = 0
+      // The host's scrub store ticks per inspected point, like the token page.
+      config.scrubStartHaptic = false
       config.reduceMotion = reduceMotion
       config.seriesLabels = Dictionary(uniqueKeysWithValues: series.map { ($0.id, $0.label) })
     }()
@@ -225,11 +176,15 @@ struct AggrSparkline: View, Equatable {
 
 #if DEBUG
 #Preview("Liveline comparison · select and scrub") {
+  let scrub = ComparisonScrubStore()
   PreviewValue(Set<String>()) { selected in
-    MultiLineComparisonChart(series: [
-      .init(id: "btc", label: "BTC", color: ChartColors.pastel[0], points: PreviewFixtures.returns),
-      .init(id: "eth", label: "ETH", color: ChartColors.pastel[1], points: PreviewFixtures.returns.map { .init(epochSeconds: $0.epochSeconds, value: $0.value * 0.6 - 2) })
-    ], selectedIDs: selected.wrappedValue).frame(height: 300).padding().preferredColorScheme(.dark)
+    VStack(spacing: 16) {
+      MultiLineComparisonChart(series: [
+        .init(id: "btc", label: "BTC", color: ChartColors.pastel[0], points: PreviewFixtures.returns),
+        .init(id: "eth", label: "ETH", color: ChartColors.pastel[1], points: PreviewFixtures.returns.map { .init(epochSeconds: $0.epochSeconds, value: $0.value * 0.6 - 2) })
+      ], selectedIDs: selected.wrappedValue, onSelection: scrub.setSelection).frame(height: 300)
+      HStack { PercentBadge(pct: scrub.value(for: "btc")); PercentBadge(pct: scrub.value(for: "eth")) }
+    }.padding().preferredColorScheme(.dark)
   }
 }
 #Preview("Liveline comparison · many watchlists") {

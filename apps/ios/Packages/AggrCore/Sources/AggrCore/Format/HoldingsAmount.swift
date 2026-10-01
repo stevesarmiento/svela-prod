@@ -6,21 +6,24 @@ public enum HoldingsAmount {
   public enum ParseError: Error { case invalid }
 
   public static func format(_ value: Double, locale: Locale = .current) -> String {
-    let formatter = NumberFormatter()
-    formatter.locale = locale
-    formatter.numberStyle = .decimal
-    formatter.usesGroupingSeparator = false
-    formatter.usesSignificantDigits = true
-    formatter.maximumSignificantDigits = 17
+    let formatter = NumberFormatterCache.formatter("holdings-format|\(locale.identifier)") { formatter in
+      formatter.locale = locale
+      formatter.numberStyle = .decimal
+      formatter.usesGroupingSeparator = false
+      formatter.usesSignificantDigits = true
+      formatter.maximumSignificantDigits = 17
+    }
     return formatter.string(from: NSNumber(value: value)) ?? ""
   }
 
   public static func parse(_ text: String, locale: Locale = .current) throws -> Double? {
     let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return nil }
-    let formatter = NumberFormatter()
-    formatter.locale = locale
-    formatter.numberStyle = .decimal
+    // Only separators and grouping sizes are read, so the shared instance is never mutated.
+    let formatter = NumberFormatterCache.formatter("holdings-parse|\(locale.identifier)") { formatter in
+      formatter.locale = locale
+      formatter.numberStyle = .decimal
+    }
     let decimal = formatter.decimalSeparator ?? "."
     let grouping = formatter.groupingSeparator ?? ","
     let parts = text.components(separatedBy: decimal)

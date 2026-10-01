@@ -86,7 +86,7 @@ struct PreviewHost<Content: View>: View {
     .environment(env.toasts)
     .preferredColorScheme(.dark)
     .fontDesign(.rounded)
-    .tint(Color("AccentColor"))
+    .tint(Theme.accent)
     .task { env.watchlistData.start() }
     .onDisappear { env.watchlistData.pause(); env.realtime.stopAll() }
   }

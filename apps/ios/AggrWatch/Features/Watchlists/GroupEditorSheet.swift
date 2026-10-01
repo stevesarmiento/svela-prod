@@ -54,7 +54,7 @@ struct GroupEditorSheet: View {
         VStack(spacing: 20) {
           previewCard
           if showIconPicker {
-            IconGridPicker(selection: $icon) { withAnimation(.snappy) { showIconPicker = false } }
+            IconGridPicker(selection: $icon) { withAnimation(Motion.ui) { showIconPicker = false } }
               .frame(minHeight: 320)
           } else {
             details
@@ -67,7 +67,7 @@ struct GroupEditorSheet: View {
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           if showIconPicker {
-            Button("Back") { withAnimation(.snappy) { showIconPicker = false } }
+            Button("Back") { withAnimation(Motion.ui) { showIconPicker = false } }
           } else {
             Button("Cancel") { dismiss() }
           }
@@ -101,10 +101,10 @@ struct GroupEditorSheet: View {
   private var details: some View {
     VStack(spacing: 20) {
       HStack(spacing: 10) {
-        Button { withAnimation(.snappy) { showIconPicker = true } } label: {
+        Button { withAnimation(Motion.ui) { showIconPicker = true } } label: {
           WatchlistGroupIconView(icon: icon, size: 20)
             .frame(width: 48, height: 48)
-            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 12))
+            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: Theme.Radius.sm))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Choose icon")
@@ -112,8 +112,8 @@ struct GroupEditorSheet: View {
           TextField("Watchlist name", text: $name)
             .textFieldStyle(.plain)
             .padding(.horizontal, 14).frame(height: 48)
-            .background(.white.opacity(0.06), in: .rect(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(nameError == nil ? Color.white.opacity(0.08) : Color.lossRed.opacity(0.7)))
+            .background(Theme.surface, in: .rect(cornerRadius: Theme.Radius.sm))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.sm).strokeBorder(nameError == nil ? Theme.border : Color.lossRed.opacity(0.7)))
             .onChange(of: name) { _, v in if !v.trimmingCharacters(in: .whitespaces).isEmpty { nameError = nil } }
           if let nameError { Text(nameError).font(.caption).foregroundStyle(Color.lossRed) }
         }
@@ -131,9 +131,11 @@ struct GroupEditorSheet: View {
       switch mode {
       case .create:
         _ = try await env.watchlistData.createGroup(name: trimmed, icon: icon, color: color)
+        Haptics.success()
         env.toasts.success("Watchlist created successfully")
       case .edit(let g):
         try await env.watchlistData.updateGroup(g, name: trimmed, icon: icon, color: color)
+        Haptics.success()
         env.toasts.success("Watchlist updated")
       }
       dismiss()

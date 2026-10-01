@@ -15,14 +15,17 @@ struct MarketFeedSheet: View {
       Group {
         if let articles = store.articles {
           if articles.isEmpty {
-            EmptyState(systemImage: "newspaper", title: "No news yet", message: store.isRefreshing ? "Fetching the latest headlines…" : "Nothing indexed for \(displayName) yet.",
-                       actionTitle: env.isReadyForUserData ? "Refresh" : nil) { Task { await store.refresh() } }
+            FreshEmptyState(shape: .rows, title: "No news yet",
+                            message: store.isRefreshing ? "Fetching the latest headlines…" : "Nothing indexed for \(displayName) yet.",
+                            actionTitle: env.isReadyForUserData ? "Refresh" : nil) { Task { await store.refresh() } }
+              .padding(.horizontal, 24)
+              .frame(maxWidth: .infinity, maxHeight: .infinity)
           } else {
             List(articles) { article in row(article) }
               .listStyle(.plain)
           }
         } else {
-          ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+          RingLoader(size: .large).frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       }
       .navigationTitle("\(displayName) feed")
@@ -33,7 +36,7 @@ struct MarketFeedSheet: View {
           Button { store.cycleSize() } label: { Text("\(store.feedSize) items").font(.caption.weight(.semibold)) }
             .accessibilityLabel("Pull \(store.feedSize) items. Tap to choose the next amount.")
           Button { Task { await store.refresh() } } label: {
-            if store.isRefreshing { ProgressView().controlSize(.small) } else { Image(systemName: "arrow.trianglehead.clockwise") }
+            if store.isRefreshing { RingLoader(size: .small) } else { Image(systemName: "arrow.trianglehead.clockwise") }
           }
           .disabled(store.isRefreshing || !env.isReadyForUserData)
         }
@@ -60,7 +63,7 @@ struct MarketFeedSheet: View {
           Text(FeedHelpers.relativeTime(ms: a.postedAtMs, nowMs: Date().timeIntervalSince1970 * 1000)).font(.caption2).foregroundStyle(.secondary)
           sentimentBadge(a)
           if let src = a.sourceName, !src.isEmpty {
-            Text(src).font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 6).padding(.vertical, 2).background(.white.opacity(0.06), in: .capsule)
+            Text(src).font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 6).padding(.vertical, 2).background(Theme.surface, in: .capsule)
           }
           Spacer()
           Image(systemName: "arrow.up.right").font(.caption2).foregroundStyle(.tertiary)
@@ -81,10 +84,10 @@ struct MarketFeedSheet: View {
         .padding(.horizontal, 6).padding(.vertical, 2).background(Color.lossRed.opacity(0.12), in: .capsule)
     case .neutral?:
       Label("Neutral", systemImage: "thermometer.low").font(.caption2).foregroundStyle(.secondary)
-        .padding(.horizontal, 6).padding(.vertical, 2).background(.white.opacity(0.06), in: .capsule)
+        .padding(.horizontal, 6).padding(.vertical, 2).background(Theme.surface, in: .capsule)
     case nil:
       Label("Analyzing", systemImage: "arrow.turn.down.right").font(.caption2).foregroundStyle(.secondary).symbolEffect(.pulse)
-        .padding(.horizontal, 6).padding(.vertical, 2).background(.white.opacity(0.06), in: .capsule)
+        .padding(.horizontal, 6).padding(.vertical, 2).background(Theme.surface, in: .capsule)
     }
   }
 }

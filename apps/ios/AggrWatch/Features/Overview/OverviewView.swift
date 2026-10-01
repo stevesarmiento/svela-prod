@@ -19,7 +19,7 @@ struct OverviewView: View {
             if let error = store.error {
               VStack(spacing: 8) {
                 Text(error).font(.footnote).foregroundStyle(.secondary)
-                Button("Retry loading overview") { store.retry() }
+                Button("Retry loading overview") { store.retry() }.buttonStyle(.glass)
               }
             }
             if store.isEmptyDashboard {
@@ -35,7 +35,7 @@ struct OverviewView: View {
           .padding(.bottom, 32)
         }
       } else {
-        ProgressView().padding(.top, 80)
+        RingLoader(size: .large).padding(.top, 80)
       }
     }
     .navigationTitle(greeting)
@@ -73,7 +73,7 @@ struct PortfolioValueCard: View {
       HStack(alignment: .top) {
         VStack(alignment: .leading, spacing: 6) {
           Text("Your holdings").font(.subheadline).foregroundStyle(.secondary)
-          AnimatedNumber(value: store.displayValueUsd, font: .system(size: 30, weight: .medium, design: .rounded))
+          AnimatedNumber(value: store.displayValueUsd, font: .number(size: 30))
           if let note = store.coverageNote { Text(note).font(.caption).foregroundStyle(.secondary) }
           if store.hasHoldings, store.rangeChange.isAvailable {
             MoveWithBadge(usdMove: store.rangeChange.deltaUsd, pct: store.rangeChange.deltaPct)
@@ -90,12 +90,12 @@ struct PortfolioValueCard: View {
                                isActive: env.isSceneActive && env.router.tab == .overview)
           .frame(height: 260)
       } else if !store.hasLoaded || store.seriesLoading || store.marketLoading {
-        ProgressView("Loading chart…").frame(maxWidth: .infinity, minHeight: 260)
+        RingLoader("Loading chart…").frame(maxWidth: .infinity, minHeight: 260)
       } else {
         VStack(spacing: 10) {
           Text(store.seriesError ?? (store.marketWarming ? "Market data is warming up." : "Chart data is unavailable."))
             .font(.footnote).foregroundStyle(.secondary)
-          Button("Retry chart") { Task { await store.loadSeries(force: true) } }
+          Button("Retry chart") { Task { await store.loadSeries(force: true) } }.buttonStyle(.glass)
         }
         .frame(maxWidth: .infinity, minHeight: 260)
       }
@@ -103,11 +103,11 @@ struct PortfolioValueCard: View {
         VStack(alignment: .leading, spacing: 6) {
           Text("Couldn’t refresh total market cap: \(error)")
             .font(.caption).foregroundStyle(.secondary)
-          Button("Retry market data") { Task { await store.loadSeries(force: true) } }
+          Button("Retry market data") { Task { await store.loadSeries(force: true) } }.buttonStyle(.glass)
             .font(.caption)
         }
       } else if !store.marketLoading && store.marketSeries.isEmpty && !store.portfolioChartPoints.isEmpty {
-        Button("Retry market data") { Task { await store.loadSeries(force: true) } }
+        Button("Retry market data") { Task { await store.loadSeries(force: true) } }.buttonStyle(.glass)
           .font(.caption)
       }
       TimeScalePicker(scales: TimeScale.overviewScales, selection: $store.scale)
@@ -165,7 +165,7 @@ struct BreadthCard: View {
             Circle().fill(Color(oklch: ColorThemes.resolve(row.color).background)).frame(width: 8, height: 8)
             Text(row.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
             Spacer()
-            Text(UsdFormat.signedPercent(row.changePct)).font(.system(size: 12, design: .rounded).monospacedDigit()).foregroundStyle(tint(row.changePct))
+            Text(UsdFormat.signedPercent(row.changePct)).font(.number(size: 12, weight: .regular)).foregroundStyle(tint(row.changePct))
             TickMeter(value: row.changePct, min: -maxAbs, max: maxAbs, origin: .value(0), color: tint(row.changePct))
               .frame(width: 96, height: 8)
           }
@@ -255,10 +255,10 @@ struct EventCard: View {
           }
         }
       }
-      Text(event.aiSummary ?? event.title).font(.callout).foregroundStyle(.secondary).lineLimit(6)
+      ExpandableText(text: event.aiSummary ?? event.title, collapsedLines: 4, accessibilityIdentifier: "event-summary-toggle")
     }
     .padding(16)
-    .background(.white.opacity(0.05), in: .rect(cornerRadius: 16))
+    .background(Theme.surface, in: .rect(cornerRadius: Theme.Radius.md))
   }
 }
 
@@ -267,7 +267,7 @@ struct SentimentBadge: View {
   var body: some View {
     let color: Color = sentiment == .bullish ? .gainGreen : (sentiment == .bearish ? .lossRed : .yellow)
     Text(FeedHelpers.sentimentLabel(sentiment))
-      .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
+      .font(.number(size: 11, weight: .semibold))
       .padding(.horizontal, 7).frame(height: 22)
       .foregroundStyle(color).background(color.opacity(0.12), in: Capsule())
   }
@@ -276,7 +276,7 @@ struct SentimentBadge: View {
 struct CategoryBadge: View {
   let label: String
   var body: some View {
-    Text(label).font(.system(size: 11, design: .rounded).monospacedDigit()).foregroundStyle(.secondary)
+    Text(label).font(.number(size: 11, weight: .regular)).foregroundStyle(.secondary)
       .padding(.horizontal, 7).frame(height: 22)
       .overlay(Capsule().strokeBorder(.white.opacity(0.12)))
   }

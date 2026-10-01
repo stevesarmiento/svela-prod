@@ -135,10 +135,9 @@ final class LivelineRenderer {
           ctx.setLineWidth(series.width); ctx.setLineCap(.round); ctx.setLineJoin(.round)
           ctx.setLineDash(phase: 0, lengths: series.dash.map { CGFloat($0) }); ctx.strokePath()
         }
-        // While scrubbing a single-series chart, the line right of the finger dims so the
-        // inspected past reads as "now ends here" (wallet Liveline behavior).
-        if isPrimary, cfg.scrub, cfg.seriesLabels.isEmpty, engine.scrubAmount > 0.01,
-           let inspection = engine.inspectionTime {
+        // While scrubbing, every line right of the finger dims so the inspected past reads as
+        // "now ends here" (wallet Liveline behavior); comparison charts dim all their series.
+        if cfg.scrub, engine.scrubAmount > 0.01, let inspection = engine.inspectionTime {
           let scrubX = layout.toX(inspection)
           ctx.saveGState()
           ctx.clip(to: CGRect(x: plot.minX - 2, y: 0, width: max(0, scrubX - (plot.minX - 2)), height: size.height))

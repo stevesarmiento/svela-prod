@@ -7,19 +7,16 @@ import SwiftUI
 struct PriceChartCard: View {
   let store: TokenChartStore
   @Binding var scale: TimeScale
-  @Binding var selection: LivelineSelection?
-  /// When set, selections route here (the token page's scrub store) instead of the binding;
-  /// the binding stays the tooltip's read path.
-  var onSelection: ((LivelineSelection?) -> Void)?
+  /// The token page's scrub store: selections are published through it and the tooltip reads
+  /// the renderer x it recorded.
+  let chrome: TokenPageChrome
   @Environment(AppEnvironment.self) private var env
   @State private var lineColor: LivelineColor
 
-  init(store: TokenChartStore, scale: Binding<TimeScale>, selection: Binding<LivelineSelection?>,
-       onSelection: ((LivelineSelection?) -> Void)? = nil) {
+  init(store: TokenChartStore, scale: Binding<TimeScale>, chrome: TokenPageChrome) {
     self.store = store
     _scale = scale
-    _selection = selection
-    self.onSelection = onSelection
+    self.chrome = chrome
     // Seed from the cache so a revisited token never flashes a white first frame.
     _lineColor = State(initialValue: TokenLineColor.cached(symbol: store.quote?.symbol ?? store.coinId,
                                                            imageURL: store.quote?.image) ?? .white)
@@ -37,14 +34,12 @@ struct PriceChartCard: View {
                      isLoading: store.isLoading, isWarmingUp: store.isWarmingUp,
                      hasObservedHistory: store.hasObservedHistory, isActive: env.isSceneActive, simplified: true,
                      lineColor: lineColor,
-                     onSelection: { sel in
-                       if let onSelection { onSelection(sel) } else { selection = sel }
-                     })
+                     onSelection: { chrome.setSelection($0) })
         .equatable()
         .frame(height: 260)
         .overlay(alignment: .top) {
-          if let selection {
-            PriceScrubTooltip(selection: selection, points: store.priceWindow.points)
+          if let selection = chrome.selection {
+            PriceScrubTooltip(selection: selection, x: chrome.selectionX ?? 0, scale: store.dataScale)
           }
         }
       TimeScalePicker(scales: TimeScale.tokenScales, selection: $scale)
@@ -52,7 +47,8 @@ struct PriceChartCard: View {
         HStack(spacing: 8) {
           Text(store.hasObservedHistory ? "Couldn’t refresh chart" : "Price history unavailable")
             .font(.caption).foregroundStyle(.secondary)
-          Button("Retry") { Task { await store.load(force: true) } }.font(.caption.weight(.semibold))
+          Button("Retry") { Task { await store.load(force: true) } }
+            .font(.caption.weight(.semibold)).buttonStyle(.glass).controlSize(.small)
         }
       }
     }
@@ -63,34 +59,51 @@ struct PriceChartCard: View {
             !Task.isCancelled, store.quote?.image == imageURL else { return }
       lineColor = derived
     }
-    .onChange(of: scale) { _, _ in selection = nil; onSelection?(nil) }
-    .onDisappear { selection = nil; onSelection?(nil) }
+    .onChange(of: scale) { _, _ in chrome.setSelection(nil) }
+    .onDisappear { chrome.setSelection(nil) }
     .padding(.bottom, 12)
   }
 }
 
-/// Date/time stays beside the inspected chart, with its capsule kept inside both edges.
+/// Date/time stays beside the inspected chart, pinned to the renderer's crosshair x with its
+/// capsule kept inside both edges.
 private struct PriceScrubTooltip: View {
   let selection: LivelineSelection
-  let points: [TimePoint]
-  @ScaledMetric(relativeTo: .caption) private var preferredWidth = 210.0
+  let x: CGFloat
+  let scale: TimeScale
+  @ScaledMetric(relativeTo: .subheadline) private var shortWidth = 86.0
 
   var body: some View {
     GeometryReader { geometry in
       let width = min(preferredWidth, geometry.size.width)
-      let start = Double(points.first?.epochSeconds ?? 0)
-      let end = Double(points.last?.epochSeconds ?? 1)
-      let fraction = min(1, max(0, (selection.time - start) / max(1, end - start)))
-      Text(Date(timeIntervalSince1970: selection.time), format: .dateTime.month(.abbreviated).day().year().hour().minute())
-        .font(.system(.caption, design: .rounded, weight: .medium).monospacedDigit())
+      Text(timestamp)
+        .font(.number(.subheadline, weight: .medium))
+        .foregroundStyle(.secondary)
         .lineLimit(1).minimumScaleFactor(0.7)
         .padding(.vertical, 7)
         .frame(width: width)
-        .background(.regularMaterial, in: Capsule())
-        .position(x: min(geometry.size.width - width / 2, max(width / 2, geometry.size.width * fraction)), y: 18)
+        .background(Theme.elevated, in: Capsule())
+        .position(x: min(geometry.size.width - width / 2, max(width / 2, x)), y: 16)
         .accessibilityIdentifier("price-chart-inspection")
     }
     .allowsHitTesting(false)
+  }
+
+  private var preferredWidth: CGFloat {
+    switch scale {
+    case .d1: shortWidth
+    case .d7, .d30: shortWidth * 1.9
+    case .max, .y2: shortWidth * 1.5
+    }
+  }
+
+  private var timestamp: String {
+    let date = Date(timeIntervalSince1970: selection.time)
+    switch scale {
+    case .d1: return date.formatted(.dateTime.hour().minute())
+    case .d7, .d30: return date.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+    case .max, .y2: return date.formatted(.dateTime.month(.abbreviated).day().year())
+    }
   }
 }
 
@@ -127,12 +140,12 @@ enum LivePricing {
 #if DEBUG
 #Preview("Mobile price chart") {
   PreviewHost { env in
-    PriceChartCard(store: PreviewData.tokenStore(env), scale: .constant(.d30), selection: .constant(nil)).padding()
+    PriceChartCard(store: PreviewData.tokenStore(env), scale: .constant(.d30), chrome: TokenPageChrome()).padding()
   }
 }
 #Preview("Loading price chart") {
   PreviewHost { env in
-    PriceChartCard(store: PreviewData.tokenStore(env, loading: true), scale: .constant(.d30), selection: .constant(nil)).padding()
+    PriceChartCard(store: PreviewData.tokenStore(env, loading: true), scale: .constant(.d30), chrome: TokenPageChrome()).padding()
   }
 }
 #endif

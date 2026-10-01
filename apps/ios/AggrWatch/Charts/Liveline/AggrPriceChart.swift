@@ -181,7 +181,7 @@ private struct LivelineReplayPreview: View {
         Button(paused ? "Resume" : "Pause") { paused.toggle() }
         Button(loading ? "Show data" : "Loading") { loading.toggle() }
         Button("Restart") { step = 0 }
-      }.buttonStyle(.bordered)
+      }.buttonStyle(.glass)
     }
     .padding().background(.black).preferredColorScheme(.dark)
     .task {

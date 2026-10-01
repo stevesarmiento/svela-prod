@@ -10,7 +10,7 @@ struct WatchlistsView: View {
   @State private var groupToDelete: WatchlistGroup?
 
   private var choosing: Bool { env.router.showsWatchlistChooser || env.watchlistData.selectedGroup == nil }
-  private var transitionAnimation: Animation? { reduceMotion ? nil : .timingCurve(0.2, 0.8, 0.2, 1, duration: 0.24) }
+  private var transitionAnimation: Animation? { PageTransition.animation(reduceMotion: reduceMotion) }
 
   var body: some View {
     let router = env.router
@@ -21,7 +21,7 @@ struct WatchlistsView: View {
           EmptyState(systemImage: "exclamationmark.triangle", title: "Couldn’t load watchlists", message: error,
                      actionTitle: "Retry") { data.start() }
         } else if !data.hasLoadedBootstrap {
-          ProgressView()
+          RingLoader(size: .large)
         } else if data.groups.isEmpty {
           ScrollView {
             EmptyState(illustration: .watchlists, title: "Build your first watchlist",
@@ -41,20 +41,20 @@ struct WatchlistsView: View {
               .id(group.id)
             }
           }
-          .modifier(WatchlistPageMotion(visible: !choosing, hiddenScale: 0.98))
+          .modifier(PageMotion(visible: !choosing, hiddenScale: 0.98))
           ScrollView {
             WatchlistsGrid(onSelect: { group in
-              NavigationFeedback.pageChanged()
+              Haptics.pageChanged()
               env.selection.clear()
               withAnimation(transitionAnimation) {
                 data.selectedGroupSlug = group.slug
                 router.showsWatchlistChooser = false
               }
             }, onEdit: { router.sheet = .editGroup($0) }, onDelete: { groupToDelete = $0 })
-            .environment(\.watchlistCardLoadingVisible, choosing && router.tab == .watchlists)
+            .environment(\.cardLoadingVisible, choosing && router.tab == .watchlists)
             .padding(.top, 12).padding(.bottom, 24)
           }
-          .modifier(WatchlistPageMotion(visible: choosing, hiddenScale: 1.055))
+          .modifier(PageMotion(visible: choosing, hiddenScale: 1.055))
         }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -81,7 +81,7 @@ struct WatchlistsView: View {
   }
   private func showChooser() {
     guard !choosing else { return }
-    NavigationFeedback.pageChanged()
+    Haptics.pageChanged()
     env.selection.clear()
     withAnimation(transitionAnimation) { env.router.showsWatchlistChooser = true }
   }
@@ -112,44 +112,44 @@ private struct WatchlistNavigationHeader: View {
       } else {
         ZStack {
           comparisonHeader
-            .modifier(WatchlistPageMotion(visible: !choosing, hiddenScale: 0.98,
+            .modifier(PageMotion(visible: !choosing, hiddenScale: 0.98,
                                          distanceAboveCenter: (viewportSize.height + 44) / 2))
           chooserHeader
-            .modifier(WatchlistPageMotion(visible: choosing, hiddenScale: 1.055,
+            .modifier(PageMotion(visible: choosing, hiddenScale: 1.055,
                                          distanceAboveCenter: (viewportSize.height + 44) / 2))
         }
         .transition(reduceMotion ? .identity : AnyTransition(.blurReplace))
       }
     }
-    .frame(width: max(0, viewportSize.width - 40), height: 44)
-    .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: selecting)
-    .animation(reduceMotion ? nil : .timingCurve(0.2, 0.8, 0.2, 1, duration: 0.24), value: choosing)
+    .frame(width: max(0, viewportSize.width - 40), height: Theme.hitTarget)
+    .animation(Motion.animation(Motion.close, reduceMotion: reduceMotion), value: selecting)
+    .animation(PageTransition.animation(reduceMotion: reduceMotion), value: choosing)
   }
 
   private var selectionHeader: some View {
     HStack(spacing: 12) {
       Text("\(env.selection.selected.count) Selected")
-        .font(.system(.title2, design: .rounded, weight: .bold).monospacedDigit())
+        .font(.number(.title2, weight: .bold))
         .lineLimit(1)
         .contentTransition(reduceMotion ? .identity : .numericText())
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: env.selection.selected.count)
+        .animation(Motion.animation(Motion.close, reduceMotion: reduceMotion), value: env.selection.selected.count)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityAddTraits(.isHeader)
         .accessibilityIdentifier("watchlist-selection-title")
       Button(env.selection.allSelected ? "Deselect all" : "Select all") {
-        withAnimation(reduceMotion ? nil : SelectionMotion.open) {
+        withAnimation(Motion.animation(Motion.ui, reduceMotion: reduceMotion)) {
           env.selection.selectAll(!env.selection.allSelected)
         }
       }
       .font(.system(.body, design: .rounded, weight: .semibold))
       .padding(.horizontal, 16)
-      .frame(height: 44)
+      .frame(height: Theme.hitTarget)
       .buttonStyle(.plain)
       .foregroundStyle(.tint)
       .glassEffect(.regular.interactive(), in: .capsule)
       .disabled(env.selection.isRemoving)
     }
-    .frame(height: 44)
+    .frame(height: Theme.hitTarget)
   }
 
   private var chooserHeader: some View {
@@ -159,7 +159,7 @@ private struct WatchlistNavigationHeader: View {
       Button { env.router.sheet = .createGroup } label: {
         Image("ActionCreateWatchlist").renderingMode(.template)
           .foregroundStyle(.tint)
-          .frame(width: 44, height: 44)
+          .frame(width: Theme.hitTarget, height: Theme.hitTarget)
       }
       .buttonStyle(.plain)
       .glassEffect(.regular.interactive(), in: .circle)
@@ -181,7 +181,7 @@ private struct WatchlistNavigationHeader: View {
         Button(action: onShowChooser) {
           WatchlistGroupIconView(icon: group.icon, size: 20)
             .foregroundStyle(.tint)
-            .frame(width: 44, height: 44).compositingGroup()
+            .frame(width: Theme.hitTarget, height: Theme.hitTarget).compositingGroup()
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .circle)
@@ -202,7 +202,7 @@ private struct WatchlistNavigationHeader: View {
         HStack(spacing: 0) {
           Button { env.router.sheet = .coinSearch(targetGroupId: group.id) } label: {
             Image("ActionAddToken").renderingMode(.template)
-              .frame(width: 44, height: 44)
+              .frame(width: Theme.hitTarget, height: Theme.hitTarget)
           }
           .accessibilityLabel("Add token")
           Menu {
@@ -212,7 +212,7 @@ private struct WatchlistNavigationHeader: View {
             }
             Button { env.router.sheet = .createGroup } label: { Label("Create watchlist", image: "ActionCreateWatchlist") }
           } label: {
-            Image(systemName: "ellipsis").frame(width: 44, height: 44)
+            Image(systemName: "ellipsis").frame(width: Theme.hitTarget, height: Theme.hitTarget)
           }
           .accessibilityLabel("Watchlist actions")
         }
@@ -224,41 +224,6 @@ private struct WatchlistNavigationHeader: View {
     }
   }
 
-}
-
-/// Header and scroll content share a scale origin at the center of the page.
-/// The toolbar lives above the scroll view, so its translation accounts for that
-/// distance rather than shrinking each toolbar control around its own center.
-private struct WatchlistPageMotion: ViewModifier {
-  let visible: Bool
-  let hiddenScale: CGFloat
-  var distanceAboveCenter: CGFloat = 0
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-  func body(content: Content) -> some View {
-    let scale = visible || reduceMotion ? 1 : hiddenScale
-    content
-      .scaleEffect(scale)
-      .offset(y: -distanceAboveCenter * (scale - 1))
-      .opacity(visible ? 1 : 0)
-      .allowsHitTesting(visible)
-      .accessibilityHidden(!visible)
-  }
-}
-
-/// Native button tracking cancels when a press becomes a scroll or context menu.
-/// The card owns its centered content, glass, and halo transforms; the grid keeps its size.
-private struct WatchlistCardPressStyle: ButtonStyle {
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .compositingGroup()
-      .environment(\.watchlistCardPressScale, configuration.isPressed && !reduceMotion ? 0.975 : 1)
-      .opacity(configuration.isPressed && reduceMotion ? 0.9 : 1)
-      .animation(reduceMotion ? nil : .easeOut(duration: configuration.isPressed ? 0.06 : 0.12),
-                 value: configuration.isPressed)
-  }
 }
 
 /// Local display order only; never changes the saved watchlists or selected group.
@@ -363,7 +328,7 @@ struct ListFilterHeader<MenuContent: View>: View {
         Image(systemName: "line.3.horizontal.decrease")
           .font(.system(size: 18, weight: .semibold))
           .foregroundStyle(isActive ? Color.accentColor : Color.secondary)
-          .frame(width: 44, height: 44)
+          .frame(width: Theme.hitTarget, height: Theme.hitTarget)
           .contentShape(.rect)
       }
       .buttonStyle(.plain)
@@ -413,10 +378,10 @@ struct WatchlistsGrid: View {
           )
           Button { onSelect(group) } label: {
             card
-              .contentShape(.rect(cornerRadius: 24))
+              .contentShape(.rect(cornerRadius: Theme.Radius.lg))
           }
-          .buttonStyle(WatchlistCardPressStyle())
-          .contentShape(.contextMenuPreview, .rect(cornerRadius: 24))
+          .buttonStyle(CardPressStyle())
+          .contentShape(.contextMenuPreview, .rect(cornerRadius: Theme.Radius.lg))
           .accessibilityIdentifier("watchlist-card-\(group.id)")
           .accessibilityHint("Open watchlist comparison")
           .accessibilityAddTraits(data.selectedGroup?.id == group.id ? .isSelected : [])
@@ -428,14 +393,14 @@ struct WatchlistsGrid: View {
           } preview: {
             // A dedicated glass host lifts the complete card, not just its selection halo.
             GlassEffectContainer(spacing: 0) { card }
-              .modifier(WatchlistCardLoadingOverlay())
+              .modifier(CardLoadingOverlay())
               .frame(width: cardWidth > 0 ? cardWidth : nil)
               .fixedSize(horizontal: false, vertical: true)
           }
         }
       }
     }
-    .modifier(WatchlistCardLoadingOverlay())
+    .modifier(CardLoadingOverlay())
     .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
       cardWidth = max(0, (width - 8) / 2)
     }

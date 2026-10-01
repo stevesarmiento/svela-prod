@@ -65,8 +65,53 @@ import Testing
   #expect(resized !== first)
 }
 
+@Test func selectionEqualityIgnoresX() {
+  let a = LivelineSelection(time: 5, value: 1, values: ["price": 1], isProjection: false, nearestObservation: nil, x: 10)
+  let b = LivelineSelection(time: 5, value: 1, values: ["price": 1], isProjection: false, nearestObservation: nil, x: 42)
+  #expect(a == b)
+  var c = a; c.value = 2
+  #expect(a != c)
+}
+
 #if canImport(UIKit)
 import UIKit
+
+// MARK: - Selection geometry
+
+@Test @MainActor func selectionCarriesCrosshairX() {
+  let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 844))
+  let chart = LivelineChartView(tracksScrollVisibility: false)
+  chart.frame = CGRect(x: 0, y: 0, width: 390, height: 260)
+  window.addSubview(chart)
+  window.isHidden = false
+  window.layoutIfNeeded()
+  defer { chart.stop(); window.isHidden = true }
+  var config = LivelineConfiguration()
+  config.scrub = true
+  config.scrubStartHaptic = false
+  config.reduceMotion = true
+  config.pulse = false
+  let points = (0..<100).map { LivelinePoint(time: Double($0 + 1), value: 10 + sin(Double($0) / 7) * 3) }
+  let input = LivelineInput(id: "x", series: [.init(id: "price", points: points)], viewport: .historical(1...100))
+  nonisolated(unsafe) var captured: LivelineSelection?
+  chart.apply(input: input, configuration: config, isActive: true,
+              formatValue: { String($0) }, formatVolume: { String($0) }, formatTime: { String($0) },
+              onSelection: { captured = $0 })
+  chart.apply(.start(x: 120))
+  let first = try? #require(captured)
+  #expect(first?.x != nil)
+  if let first, let x = first.x {
+    #expect(abs(x - chart.currentLayout.toX(first.time)) < 0.001)
+    #expect(abs(x - 120) < 0.5)
+  }
+  chart.apply(.update(x: 120.4))
+  #expect(captured == first)
+  chart.apply(.update(x: 200))
+  #expect(captured != first)
+  #expect(captured?.x.map { abs($0 - 200) < 0.5 } == true)
+  chart.apply(.end)
+  #expect(captured == nil)
+}
 
 // MARK: - Pulse layers
 

@@ -4,6 +4,9 @@ import CoreGraphics
 /// in each direction, how the revealed panel and its icon grow, and what a
 /// release means. Kept SwiftUI/UIKit-free so the thresholds are testable the
 /// same way `TransportRules` is.
+///
+/// Positive travel is a RIGHT swipe (removal panel on the leading edge);
+/// negative travel is a LEFT swipe (selection panel on the trailing edge).
 enum TokenSwipeRules {
     enum Intent: Equatable { case pending, horizontal, scroll }
     static func intent(dx: CGFloat, dy: CGFloat) -> Intent {
@@ -26,11 +29,11 @@ enum TokenSwipeRules {
 
     /// Free in a direction that can act (up to the reveal, then rubber-banded
     /// /4 so the card never slides far), rubber-banded /4 outright otherwise.
-    /// A right drag from an OPEN removal row (`base < 0`) still rubber-bands
+    /// A left drag from an OPEN removal row (`base > 0`) still rubber-bands
     /// past zero so "close delete" and "select" can never happen in one gesture.
     static func offset(base: CGFloat, translation: CGFloat, canDelete: Bool, canSelect: Bool) -> CGFloat {
         let x = base + translation
-        if x > 0 {
+        if x < 0 {
             guard canSelect && base == 0 else { return x / 4 }
             return clampPastReveal(x)
         }
@@ -67,10 +70,10 @@ enum TokenSwipeRules {
         canSelect: Bool
     ) -> Outcome {
         let dragged = base + translation
-        if dragged > 0 {
-            return (canSelect && base == 0 && dragged >= revealWidth) ? .toggleSelect : .close
+        if dragged < 0 {
+            return (canSelect && base == 0 && dragged <= -revealWidth) ? .toggleSelect : .close
         }
         guard canDelete else { return .close }
-        return dragged <= -revealWidth ? .commitDelete : .close
+        return dragged >= revealWidth ? .commitDelete : .close
     }
 }

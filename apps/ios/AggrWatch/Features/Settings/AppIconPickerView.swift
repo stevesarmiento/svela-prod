@@ -39,7 +39,7 @@ struct AppIconPickerView: View {
           }
         }
         .padding(.vertical, 8)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.2), value: activeName)
+        .animation(Motion.animation(Motion.ui, reduceMotion: reduceMotion), value: activeName)
 
         if !UIApplication.shared.supportsAlternateIcons && !isCanvas {
           Text("App icon changes are unavailable on this device.")
@@ -53,7 +53,7 @@ struct AppIconPickerView: View {
       }
       .padding(24)
     }
-    .background(Color(uiColor: .systemGroupedBackground))
+    .background(Theme.background)
     .navigationTitle("App Icon")
     .navigationBarTitleDisplayMode(.inline)
     .fontDesign(.rounded)
@@ -80,7 +80,7 @@ struct AppIconPickerView: View {
           }
           .overlay {
             if changing == option {
-              ProgressView().padding(8).background(.regularMaterial, in: .circle)
+              RingLoader(size: .small).padding(8).background(.regularMaterial, in: .circle)
             }
           }
         Text(option.title)
@@ -124,6 +124,6 @@ struct AppIconPickerView: View {
 #Preview("App Icon") {
   NavigationStack { AppIconPickerView() }
     .preferredColorScheme(.dark)
-    .tint(Color("AccentColor"))
+    .tint(Theme.accent)
 }
 #endif

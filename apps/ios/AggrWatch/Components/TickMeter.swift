@@ -59,19 +59,6 @@ struct TickSplitBar: View {
   }
 }
 
-struct StatTile: View {
-  let value: String
-  let label: String
-  var tint: Color = .primary
-  var body: some View {
-    VStack(alignment: .leading, spacing: 2) {
-      Text(value).font(.system(.subheadline, design: .rounded).monospacedDigit().weight(.semibold)).foregroundStyle(tint).lineLimit(1)
-      Text(label.uppercased()).font(.system(size: 10)).tracking(0.6).foregroundStyle(.secondary).lineLimit(1)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
-  }
-}
-
 #if DEBUG
 #Preview("Meters and breadth") {
   VStack(spacing: 24) {

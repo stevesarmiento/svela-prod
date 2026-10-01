@@ -1,53 +1,5 @@
 import SwiftUI
 
-struct EmptyState: View {
-  var systemImage: String? = nil
-  var image: String? = nil
-  var illustration: EmptyStateIllustration.Kind? = nil
-  let title: String
-  let message: String
-  var actionTitle: String? = nil
-  var action: (() -> Void)? = nil
-
-  var body: some View {
-    VStack(spacing: 14) {
-      if let illustration {
-        EmptyStateIllustration(kind: illustration)
-          .padding(.bottom, 8)
-      } else {
-        Group {
-          if let image {
-            Image(image).renderingMode(.template).resizable().scaledToFit()
-              .frame(width: 36, height: 36)
-          } else if let systemImage {
-            Image(systemName: systemImage)
-          }
-        }
-        .font(.system(size: 36, weight: .light))
-        .foregroundStyle(.secondary)
-      }
-      Text(title)
-        .font(illustration == nil ? .headline : .system(.title2, design: .rounded, weight: .bold))
-        .multilineTextAlignment(.center)
-        .accessibilityAddTraits(.isHeader)
-      Text(message)
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-      if let actionTitle, let action {
-        Button(actionTitle, action: action)
-          .buttonStyle(.glass)
-          .foregroundStyle(.white)
-          .padding(.top, 4)
-      }
-    }
-    .fontDesign(.rounded)
-    .padding(.horizontal, 24)
-    .padding(.vertical, 28)
-    .frame(maxWidth: .infinity)
-  }
-}
-
 /// Native versions of the web's decorative UI illustrations. Fixed sample curves,
 /// bundled logos, and skeleton marks keep these separate from real account data.
 struct EmptyStateIllustration: View {
@@ -270,27 +222,6 @@ private nonisolated struct EmptyIllustrationLine: Shape {
     return path
   }
 }
-
-struct SkeletonBlock: View {
-  var height: CGFloat = 14
-  var width: CGFloat? = nil
-  var body: some View {
-    RoundedRectangle(cornerRadius: 6)
-      .fill(.quaternary)
-      .frame(width: width, height: height)
-      .redacted(reason: .placeholder)
-  }
-}
-
-#if DEBUG
-#Preview("Empty and retry states") {
-  VStack(spacing: 24) {
-    EmptyState(systemImage: "bookmark", title: "No tokens yet", message: "Add tokens to build your watchlist.", actionTitle: "Add token", action: {})
-    EmptyState(systemImage: "wifi.slash", title: "Couldn’t load data", message: "Try again in a moment.", actionTitle: "Retry", action: {})
-    SkeletonBlock(height: 18); SkeletonBlock(height: 12, width: 140)
-  }.padding().preferredColorScheme(.dark)
-}
-#endif
 
 #if DEBUG
 #Preview("Illustrated empty states · mobile") {

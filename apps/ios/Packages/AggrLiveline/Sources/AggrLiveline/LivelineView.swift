@@ -299,6 +299,10 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart {
     link.add(to: .main, forMode: .common); displayLink = link
   }
   public func stop() { displayLink?.invalidate(); displayLink = nil; lastTimestamp = nil; engine.resetClock() }
+  #if DEBUG
+  /// The layout the renderer is currently drawing with (tests pin readouts against it).
+  var currentLayout: LivelineLayout { renderer.layout(size: bounds.size, engine: engine) }
+  #endif
   func suspend() {
     // Clear a visible crosshair on the next frame when the chart returns.
     if engine.inspectionTime != nil { settleFrames = max(1, settleFrames) }
@@ -400,7 +404,11 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart {
     publishSelection(); settleFrames = 1; wake()
   }
   private func publishSelection() {
-    let selection = engine.inspectionTime.flatMap { engine.selection(at: $0) }
+    var selection = engine.inspectionTime.flatMap { engine.selection(at: $0) }
+    if let time = selection?.time {
+      // The exact x the crosshair is drawn at, so a host tooltip never disagrees with the line.
+      selection?.x = renderer.layout(size: bounds.size, engine: engine).toX(time)
+    }
     guard selection != lastSelection else { return }
     lastSelection = selection
     if let selection { accessibilityValue = "\(renderer.formatTime(selection.time)), \(renderer.formatValue(selection.value))" }
