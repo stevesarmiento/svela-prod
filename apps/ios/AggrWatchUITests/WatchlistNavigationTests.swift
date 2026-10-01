@@ -670,7 +670,7 @@ final class WatchlistNavigationTests: XCTestCase {
   @MainActor func testTokenPullDismissalRespectsContentScroll() {
     continueAfterFailure = false
     let app = XCUIApplication()
-    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid", "-charts.useLegacyPriceRenderer", "NO"]
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid"]
     app.launch()
     app.tabBars.buttons["Watchlists"].tap()
     let card = app.buttons["watchlist-card-preview-core"]
@@ -714,7 +714,7 @@ final class WatchlistNavigationTests: XCTestCase {
   @MainActor func testMinimalPriceChartRangesScrubScrollAndReopen() {
     continueAfterFailure = false
     let app = XCUIApplication()
-    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid", "-charts.useLegacyPriceRenderer", "NO"]
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid"]
     app.launch()
     app.tabBars.buttons["Watchlists"].tap()
     let card = app.buttons["watchlist-card-preview-core"]
@@ -760,10 +760,10 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertTrue(close.waitForNonExistence(timeout: 5))
   }
 
-  @MainActor func testMinimalLegacyChartWithLargeText() {
+  @MainActor func testMinimalPriceChartWithLargeText() {
     continueAfterFailure = false
     let app = XCUIApplication()
-    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid", "-charts.useLegacyPriceRenderer", "YES",
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid",
                            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryXXXL"]
     app.launch()
     app.tabBars.buttons["Watchlists"].tap()
@@ -771,15 +771,15 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
     let row = app.buttons["watchlist-token-bitcoin"]
     XCTAssertTrue(row.waitForExistence(timeout: 5)); row.tap()
-    let chart = app.descendants(matching: .any)["legacy-price-chart"].firstMatch
+    let chart = app.descendants(matching: .any)["native-price-chart"].firstMatch
     XCTAssertTrue(chart.waitForExistence(timeout: 5))
-    capture("Simple token legacy chart large text")
+    capture("Simple token chart large text")
     app.buttons["1W"].tap()
     chart.swipeUp()
     XCTAssertTrue(app.buttons["token-page-close"].isHittable)
     XCTAssertTrue(app.buttons["token-actions"].isHittable)
     XCTAssertTrue(app.buttons["token-bookmark"].isHittable)
-    capture("Simple token legacy compact large text")
+    capture("Simple token chart compact large text")
     app.buttons["token-page-close"].tap()
     XCTAssertTrue(chart.waitForNonExistence(timeout: 5))
   }

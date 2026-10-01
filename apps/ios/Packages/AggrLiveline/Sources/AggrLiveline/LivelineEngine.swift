@@ -162,9 +162,11 @@ public final class LivelineEngine {
     if !rangeMoving { yRange = targetY }
     let alphaMoving = input.series.contains { abs((alpha[$0.id] ?? 1) - $0.targetOpacity) > 0.001 }
     let liveWindow: Bool = { if case .liveWindow = input.viewport { return true }; return false }()
+    // The pulse ring lives on a CAShapeLayer the render server animates, so a settled
+    // live chart no longer needs display-link frames just to keep it breathing.
     isAnimating = firstFrame || (fromX != toX && t < 1) || rangeMoving || alphaMoving || displayedValue != value
       || reveal != revealTarget || scrubAmount != scrubTarget
-      || (!noMotion && ((configuration.pulse && input.observation != nil) || input.state == .loading || liveWindow))
+      || (!noMotion && (input.state == .loading || liveWindow))
     firstFrame = false
     return isAnimating
   }

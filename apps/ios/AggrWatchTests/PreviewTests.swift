@@ -302,8 +302,9 @@ private actor OverviewRequestGate {
   let starts = chart.displayLinkStartCount
   #expect(starts > 0)
   #expect(chart.scrollObserverCount == (!isDecorative && tracksScrollVisibility ? 1 : 0))
+  // Scrubbing is raw-touch driven (LivelineScrubGesture); only the pointer hover remains a recognizer.
   if isDecorative { #expect(chart.gestureRecognizers?.isEmpty != false) }
-  else { #expect((chart.gestureRecognizers?.count ?? 0) >= 2) }
+  else { #expect((chart.gestureRecognizers?.count ?? 0) >= 1) }
   for offset in stride(from: 0, through: 100, by: 5) {
     scroll.contentOffset.y = CGFloat(offset)
     chart.setNeedsLayout()
@@ -321,7 +322,7 @@ private actor OverviewRequestGate {
   apply()
   #expect(chart.displayLinkStartCount > starts)
   #expect(chart.hasActiveDisplayLink)
-  #expect((LivelineChartView().gestureRecognizers?.count ?? 0) >= 2)
+  #expect((LivelineChartView().gestureRecognizers?.count ?? 0) >= 1)
 }
 
 @Test @MainActor func globalMarketRequestMatchesWebCurrencyContract() async throws {

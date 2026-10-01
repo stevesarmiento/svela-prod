@@ -1,5 +1,6 @@
 import AggrCore
 import SwiftUI
+import Torph
 
 /// Price text with the web precision ladder and monospaced digits. `nil` → "—" (null ≠ 0).
 struct UsdText: View {
@@ -20,11 +21,9 @@ struct AnimatedNumber: View {
   var font: Font = .title
 
   var body: some View {
-    Text(value.map(format) ?? "—")
+    TorphText(value.map(format) ?? "—")
       .font(font)
       .monospacedDigit()
-      .contentTransition(.numericText(value: value ?? 0))
-      .animation(.snappy(duration: 0.4), value: value)
   }
 }
 

@@ -18,6 +18,8 @@ struct AggrPriceChart: View, Equatable {
   let hasObservedHistory: Bool
   let isActive: Bool
   var simplified = false
+  /// Line color for the simplified (token page) presentation, derived from the token logo.
+  var lineColor: LivelineColor = .white
   let onSelection: (LivelineSelection?) -> Void
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -26,12 +28,13 @@ struct AggrPriceChart: View, Equatable {
       && a.scale == b.scale && a.liveObservation == b.liveObservation && a.showPrice == b.showPrice
       && a.showMarketCap == b.showMarketCap && a.isLoading == b.isLoading && a.isWarmingUp == b.isWarmingUp
       && a.hasObservedHistory == b.hasObservedHistory && a.isActive == b.isActive && a.simplified == b.simplified
+      && a.lineColor == b.lineColor
   }
   var body: some View {
     let input = Self.input(coinId: coinId, data: data, hull: hull, projection: projection,
                            scale: scale, liveObservation: liveObservation, showPrice: showPrice,
                            showMarketCap: showMarketCap, isLoading: isLoading, hasObservedHistory: hasObservedHistory,
-                           simplified: simplified)
+                           simplified: simplified, lineColor: lineColor)
     var config = LivelineConfiguration()
     config.highlight = scale == .max || scale == .y2 ? .quarter : .month
     config.pulse = liveObservation != nil
@@ -44,6 +47,8 @@ struct AggrPriceChart: View, Equatable {
       config.badge = false
       config.extrema = false
       config.highlight = .none
+      // The token page runs per-point haptics through its own selection store.
+      config.scrubStartHaptic = false
     }
     return LivelineView(input: input, configuration: config, isActive: isActive,
                         formatValue: { UsdFormat.price($0) }, formatVolume: { UsdFormat.largeUsd($0) },
@@ -69,7 +74,8 @@ struct AggrPriceChart: View, Equatable {
 
   static func input(coinId: String, data: ParsedChartData, hull: HullSuite.Result, projection: PriceProjection.Result?,
                     scale: TimeScale, liveObservation: LivelineObservation?, showPrice: Bool, showMarketCap: Bool,
-                    isLoading: Bool, hasObservedHistory: Bool, simplified: Bool = false) -> LivelineInput {
+                    isLoading: Bool, hasObservedHistory: Bool, simplified: Bool = false,
+                    lineColor: LivelineColor = .white) -> LivelineInput {
     func points(_ input: [TimePoint]) -> [LivelinePoint] { input.map { .init(time: Double($0.epochSeconds), value: $0.value) } }
     if simplified {
       let history = TokenPriceWindow(history: data.line, scale: scale)
@@ -85,7 +91,8 @@ struct AggrPriceChart: View, Equatable {
       for index in series.indices {
         if series[index].id == "price" {
           series[index].points = line
-          series[index].width = 2.5
+          series[index].color = lineColor
+          series[index].width = 3.25
         } else {
           series[index].points = hasObservedHistory ? clipped(series[index].points, to: start...max(start, end)) : []
         }

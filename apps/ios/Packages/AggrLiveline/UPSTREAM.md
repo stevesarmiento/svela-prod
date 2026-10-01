@@ -6,6 +6,8 @@ The original MIT notice is copied without modification into `Sources/AggrLivelin
 
 The September 13 fidelity pass also adapts rendering behavior from `/Users/stevensarmi/Code/native/Sources/Liveline` at commit `08fff99ed1cf7d649319c3b0942a8d09de498542`: the screen-space reveal spline, retracting tip, curved badge tail, dark endpoint ring/shadow, and animated chevrons. Its MIT attribution is bundled in `Resources/Native-MIT.txt`. Aggr keeps original market timestamps and evaluates inspection against its rendered spline; it does not adopt that app's timestamp shifting or linear inspection interpolation.
 
+The September 30 runtime pass adapts that repo's chart runtime at commit `cba0ae54a348cf1a14f2ee3ba25915fce5c3169a` (covered by the same bundled attribution): the reused-bitmap render path (`LivelineRenderBuffer`, rendering into `layer.contents` from display-link ticks instead of `UIView.draw`), the 80–120 Hz frame-rate range, the touch-driven scrub policy (`LivelineScrubGesture`: 0.075 s hold or 15 pt horizontal commit, ancestor pans refused mid-scrub), CAShapeLayer pulse rings that keep animating while the display link is stopped (`LivelinePulseLayers`), scrub dimming right of the cursor, the crosshair fade near the live dot, the bounded text cache (`LivelineTextCache`), and the token-logo line color (`TokenIconColor`, in the app target). The loading morph needed no change: aggr's `revealedY`/`loadingBreath` were already numerically identical to that repo's `morphY`/breath.
+
 Regenerate the independent expected values from this directory:
 
 ```sh
@@ -17,7 +19,7 @@ The Swift source is a native adaptation using UIKit/Core Graphics and CADisplayL
 
 ## Current scope
 
-The token page is the first integrated screen. Debug builds use this renderer by default. Release builds retain the previous renderer until the physical-device motion, power, and regression gates in the main plan pass. The temporary UserDefaults key `charts.useLegacyPriceRenderer` can override either default. No two price renderers run concurrently.
+This renderer is the only price renderer in every configuration: the Swift Charts fallback (`MinimalLegacyPriceChart`) and its `charts.useLegacyPriceRenderer` UserDefaults key were removed in the September 30 runtime pass. Physical-device motion, power, and VoiceOver checks remain as post-flip monitoring items (see the release gate below), no longer as a shipping gate.
 
 | Capability | State |
 | --- | --- |
@@ -34,7 +36,7 @@ The token page is the first integrated screen. Debug builds use this renderer by
 
 `profile: .reference` currently selects reference numerical behavior, especially the fixed flat-series span. It does **not** certify complete visual or animation parity. Aggr uses a relative span for tiny prices, SF Rounded, custom formatting, a historical viewport extended for projections, shared price/volume insets, no automatic current-price guide, and a full dashed crosshair without cursor-side dimming. A provisional live point is separate from the immutable supplied history. The white price-line styling matches the existing app.
 
-The engine caches spline geometry and static range calculations. UIKit owns frame updates; SwiftUI receives inspection changes, not every animation tick. Display links stop when inactive, detached, clipped offscreen, or settled; active pulse/loading effects intentionally continue while visible. The initial display cadence is capped at 60 Hz. Hardware frame time, thermal behavior, Low Power Mode, and 120 Hz have not been certified.
+The engine caches spline geometry and static range calculations. UIKit owns frame updates; SwiftUI receives inspection changes, not every animation tick. Display links stop when inactive, detached, clipped offscreen, or settled — including on live charts, whose pulse ring now runs on a render-server CAShapeLayer animation rather than display-link frames. While anything moves, the link prefers 80–120 Hz (`CADisableMinimumFrameDurationOnPhone` is set in the app's Info.plist); the system clamps on 60 Hz hardware and in Low Power Mode. Hardware frame time and thermal behavior have not been certified on device.
 
 ## Verification
 

@@ -99,7 +99,9 @@ public struct LivelineConfiguration: Sendable, Equatable {
   public var pulse = true
   public var momentum = false
   public var scrub = true
-  public var dimAfterScrub = false
+  /// The engine's own scrub-start tick. Hosts that run per-point selection haptics
+  /// (the token page) turn this off to avoid doubling up.
+  public var scrubStartHaptic = true
   public var currentPriceGuide = false
   public var extrema = true
   public var referenceValue: Double?

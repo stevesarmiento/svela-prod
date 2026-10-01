@@ -36,9 +36,11 @@ public struct LivelineView: UIViewRepresentable {
 }
 
 @MainActor
-public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGestureRecognizerDelegate {
+public final class LivelineChartView: UIView, @preconcurrency AXChart {
   private let engine = LivelineEngine()
   private let renderer = LivelineRenderer()
+  private let renderBuffer = LivelineRenderBuffer()
+  private let pulseLayers = LivelinePulseLayers()
   private var displayLink: CADisplayLink?
   private var active = true
   private var frameDelta = 16.67
@@ -47,7 +49,9 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
   private var lastSelection: LivelineSelection?
   private var observations: [NSKeyValueObservation] = []
   private var inspectionX: CGFloat?
-  private var isHolding = false
+  private var scrubGesture = LivelineScrubGesture()
+  private var holdTask: Task<Void, Never>?
+  private var activeTouch: UITouch?
   private var settleFrames = 0
   private let isDecorative: Bool
   private let tracksScrollVisibility: Bool
@@ -63,10 +67,10 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
   private(set) var rasterDrawCount = 0
   var compositedSeriesCount: Int { comparisonLayers.count }
   func compositedOpacity(for id: String) -> Float? { comparisonLayers[id]?.opacity }
+  var pulseRingCount: Int { pulseLayers.ringCount }
+  func pulseRingAnimating(for id: String) -> Bool { pulseLayers.isAnimating(id: id) }
   #endif
   private let haptic = UISelectionFeedbackGenerator()
-  private lazy var pan = LivelinePanRecognizer(target: self, action: #selector(scrub(_:)))
-  private lazy var hold = UILongPressGestureRecognizer(target: self, action: #selector(hold(_:)))
   public var accessibilityChartDescriptor: AXChartDescriptor?
 
   /// Decorative card charts rely on their host's visibility updates and never
@@ -75,14 +79,14 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
     self.isDecorative = isDecorative
     self.tracksScrollVisibility = tracksScrollVisibility
     super.init(frame: .zero)
-    isOpaque = false; backgroundColor = .clear; contentMode = .redraw
+    isOpaque = false; backgroundColor = .clear
+    layer.contentsGravity = .resize
+    isMultipleTouchEnabled = false
     accessibilityIdentifier = "native-price-chart"
     isAccessibilityElement = true; accessibilityLabel = "Price chart"
     accessibilityHint = "Swipe up or down to inspect historical prices."
     accessibilityTraits = [.adjustable]
     if !isDecorative {
-      pan.maximumNumberOfTouches = 1; pan.delegate = self; addGestureRecognizer(pan)
-      hold.minimumPressDuration = 0.18; hold.allowableMovement = 8; hold.delegate = self; addGestureRecognizer(hold)
       let hover = UIHoverGestureRecognizer(target: self, action: #selector(hover(_:))); addGestureRecognizer(hover)
     } else {
       isUserInteractionEnabled = false
@@ -95,6 +99,7 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
   }
   required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
   isolated deinit {
+    holdTask?.cancel()
     displayLink?.invalidate()
     NotificationCenter.default.removeObserver(self)
   }
@@ -113,6 +118,7 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
     self.onSelection = onSelection
     renderer.formatValue = formatValue; renderer.formatVolume = formatVolume; renderer.formatTime = formatTime
     engine.update(input, configuration: config, marketTime: Date().timeIntervalSince1970)
+    if identityChanged { pulseLayers.removeAll() }
     if identityChanged && !isDecorative {
       inspectionX = nil; lastSelection = nil
       Task { @MainActor [weak self] in self?.onSelection(nil) }
@@ -128,11 +134,13 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
     super.didMoveToWindow()
     observations = []
     lastScrollVisibility = nil
-    if isDecorative { wake(); return }
+    if isDecorative {
+      if window != nil { renderToLayer() }
+      wake(); return
+    }
     var parent = superview
     while let view = parent {
       if let scroll = view as? UIScrollView {
-        scroll.panGestureRecognizer.require(toFail: pan)
         if tracksScrollVisibility {
           observations.append(scroll.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in
             // UIKit scroll offsets are delivered on the main thread. Only
@@ -143,6 +151,8 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
       }
       parent = view.superview
     }
+    // Synchronous first frame so entering a window never shows an empty layer.
+    if window != nil { renderToLayer() }
     wake()
   }
   private func scrollVisibilityChanged() {
@@ -157,23 +167,46 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
       clearComparisonLayers()
       lastLayoutSize = bounds.size
       settleFrames = 1
+      // Synchronous repaint so a resize never shows a stretched backing image.
+      if window != nil { renderToLayer() }
       wake()
     }
   }
-  public override func draw(_ rect: CGRect) {
-    guard let context = UIGraphicsGetCurrentContext() else { return }
+
+  /// Renders the chart into the reused bitmap and installs it as the layer's contents.
+  /// Replaces `draw(_:)`: rendering happens only on display-link ticks (plus the two
+  /// synchronous first-frame cases), never from UIKit's invalidation machinery.
+  private func renderToLayer() {
+    guard bounds.width > 1, bounds.height > 1 else { return }
+    let scale = max(1, window?.screen.scale ?? traitCollection.displayScale)
+    let pixelWidth = max(1, Int(ceil(bounds.width * scale)))
+    let pixelHeight = max(1, Int(ceil(bounds.height * scale)))
+    guard let ctx = renderBuffer.context(pixelWidth: pixelWidth, pixelHeight: pixelHeight) else { return }
     #if DEBUG
     rasterDrawCount += 1
     #endif
-    renderer.draw(context, size: bounds.size, engine: engine, frameMilliseconds: frameDelta,
+    // Reused buffer: clear last frame (device space, before any CTM changes).
+    ctx.clear(CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
+    ctx.saveGState()
+    UIGraphicsPushContext(ctx)
+    ctx.scaleBy(x: scale, y: scale)
+    ctx.translateBy(x: 0, y: bounds.height)
+    ctx.scaleBy(x: 1, y: -1)
+    renderer.draw(ctx, size: bounds.size, engine: engine, frameMilliseconds: frameDelta,
                   drawsSeries: comparisonContainer == nil)
+    UIGraphicsPopContext()
+    ctx.restoreGState()
+    layer.contentsScale = scale
+    layer.contents = ctx.makeImage()
+    // Sublayers (pulse rings, promoted comparison lines) composite above the bitmap.
+    pulseLayers.sync(renderer.pulses, in: layer, bounds: bounds, scale: scale, animating: window != nil)
   }
 
   private func clearComparisonLayers() {
     guard comparisonContainer != nil else { return }
     comparisonContainer?.removeFromSuperlayer()
     comparisonContainer = nil; comparisonLayers = [:]; comparisonLayout = nil
-    setNeedsDisplay()
+    settleFrames = max(1, settleFrames)
   }
 
   /// A settled comparison has static geometry. Keep its lines on individual
@@ -260,15 +293,19 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
     #endif
     engine.resetClock(); lastTimestamp = nil
     let link = CADisplayLink(target: DisplayTarget(self), selector: #selector(DisplayTarget.tick(_:)))
-    // 60 Hz reference cadence first; engine math is independent of display frequency.
-    link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+    // Engine math is frame-rate independent; prefer ProMotion rates while anything moves.
+    // The link stops whenever the chart settles, so this costs nothing at rest.
+    link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
     link.add(to: .main, forMode: .common); displayLink = link
   }
   public func stop() { displayLink?.invalidate(); displayLink = nil; lastTimestamp = nil; engine.resetClock() }
   func suspend() {
     // Clear a visible crosshair on the next frame when the chart returns.
     if engine.inspectionTime != nil { settleFrames = max(1, settleFrames) }
-    inspectionX = nil; isHolding = false; engine.clearInspection(); stop()
+    holdTask?.cancel(); holdTask = nil; activeTouch = nil
+    _ = scrubGesture.ended()
+    inspectionX = nil; engine.clearInspection(); stop()
+    pulseLayers.stopAnimating()
     // Visibility can change inside a SwiftUI update. Publish the cleared readout afterward.
     if lastSelection != nil {
       Task { @MainActor [weak self] in
@@ -284,22 +321,82 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
     if let x = inspectionX { engine.selectedTime = renderer.layout(size: bounds.size, engine: engine).time(x) }
     let animated = engine.advance(monotonicTime: link.timestamp, marketTime: Date().timeIntervalSince1970)
     publishSelection()
-    if !updateComparisonLayers(isAnimating: animated) { setNeedsDisplay() }
+    if !updateComparisonLayers(isAnimating: animated) { renderToLayer() }
     settleFrames -= 1
     if !animated && settleFrames <= 0 && inspectionX == nil { stop() }
   }
+
+  // MARK: Scrubbing
+  //
+  // A touch is only a scrub once the finger holds still or travels horizontally; until then the
+  // enclosing scroll view may claim it. See `LivelineScrubGesture` for the policy.
+
+  public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    guard !isDecorative, engine.configuration.scrub, let touch = touches.first,
+          renderer.layout(size: bounds.size, engine: engine).plot.contains(touch.location(in: self)) else { return }
+    activeTouch = touch
+    apply(scrubGesture.began(at: touch.location(in: self)))
+    holdTask?.cancel()
+    holdTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(for: .seconds(LivelineScrubGesture.holdDelay))
+      guard !Task.isCancelled, let self else { return }
+      self.apply(self.scrubGesture.holdTimerFired())
+    }
+  }
+  public override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+    guard let activeTouch, touches.contains(activeTouch) else { return }
+    apply(scrubGesture.moved(to: activeTouch.location(in: self)))
+  }
+  public override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) { finishTouch() }
+  public override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { finishTouch() }
+  private func finishTouch() {
+    holdTask?.cancel(); holdTask = nil
+    activeTouch = nil
+    apply(scrubGesture.ended())
+  }
+
+  /// UIKit asks the hit-test view before an ancestor's pan (the scroll view, pull-to-dismiss)
+  /// begins. Vertical motion scrolls; horizontal motion and an active scrub stay with the chart.
+  public override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    guard !isDecorative, engine.configuration.scrub, let pan = gestureRecognizer as? UIPanGestureRecognizer else {
+      return super.gestureRecognizerShouldBegin(gestureRecognizer)
+    }
+    return scrubGesture.shouldAllowPan(velocity: pan.velocity(in: self))
+  }
+
+  /// Applies a scrub decision. Internal so tests can drive the policy without
+  /// synthesizing `UITouch`es.
+  func apply(_ decision: LivelineScrubGesture.Decision) {
+    switch decision {
+    case .none:
+      return
+    case .start(let x):
+      inspect(CGPoint(x: clampToPlot(x), y: 0))
+    case .update(let x):
+      let clamped = clampToPlot(x)
+      // Sub-point moves land on the same column; skip the redundant frame and readout.
+      if let current = inspectionX, abs(clamped - current) < 1 { return }
+      inspect(CGPoint(x: clamped, y: 0))
+    case .end:
+      endInspection()
+    }
+  }
+  private func clampToPlot(_ x: CGFloat) -> CGFloat {
+    let plot = renderer.layout(size: bounds.size, engine: engine).plot
+    return min(max(x, plot.minX), plot.maxX)
+  }
   private func inspect(_ location: CGPoint) {
     guard engine.configuration.scrub else { return }
-    if inspectionX == nil { haptic.selectionChanged(); haptic.prepare() }
+    if inspectionX == nil && engine.configuration.scrubStartHaptic { haptic.selectionChanged(); haptic.prepare() }
     inspectionX = location.x
     engine.selectedTime = renderer.layout(size: bounds.size, engine: engine).time(location.x)
     publishSelection(); settleFrames = 1; wake()
   }
   private func endInspection() {
-    // A vertical scroll fails the scrub recognizer without starting inspection.
-    // It must not schedule chart frames just to clear an absent crosshair.
-    guard inspectionX != nil || engine.selectedTime != nil || isHolding else { return }
-    inspectionX = nil; engine.selectedTime = nil; isHolding = false
+    // A vertical scroll never starts inspection. It must not schedule chart
+    // frames just to clear an absent crosshair.
+    guard inspectionX != nil || engine.selectedTime != nil else { return }
+    inspectionX = nil; engine.selectedTime = nil
     publishSelection(); settleFrames = 1; wake()
   }
   private func publishSelection() {
@@ -310,31 +407,14 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart, UIGesture
     else { accessibilityValue = renderer.formatValue(engine.displayedValue) }
     onSelection(selection)
   }
-  @objc private func scrub(_ gesture: UIPanGestureRecognizer) {
-    switch gesture.state {
-    case .began, .changed: inspect(gesture.location(in: self))
-    case .ended, .cancelled, .failed: if !isHolding { endInspection() }
-    default: break
-    }
-  }
-  @objc private func hold(_ gesture: UILongPressGestureRecognizer) {
-    switch gesture.state {
-    case .began, .changed: isHolding = true; inspect(gesture.location(in: self))
-    case .ended, .cancelled, .failed: endInspection()
-    default: break
-    }
-  }
   @objc private func hover(_ gesture: UIHoverGestureRecognizer) {
     switch gesture.state {
-    case .began, .changed: inspect(gesture.location(in: self))
+    case .began, .changed:
+      guard engine.configuration.scrub,
+            renderer.layout(size: bounds.size, engine: engine).plot.contains(gesture.location(in: self)) else { return }
+      inspect(CGPoint(x: clampToPlot(gesture.location(in: self).x), y: 0))
     default: endInspection()
     }
-  }
-  public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-    engine.configuration.scrub && renderer.layout(size: bounds.size, engine: engine).plot.contains(touch.location(in: self))
-  }
-  public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-    (gestureRecognizer === pan && otherGestureRecognizer === hold) || (gestureRecognizer === hold && otherGestureRecognizer === pan)
   }
   public override func accessibilityIncrement() { adjustSelection(1) }
   public override func accessibilityDecrement() { adjustSelection(-1) }
@@ -381,26 +461,5 @@ private final class DisplayTarget: NSObject {
   weak var view: LivelineChartView?
   init(_ view: LivelineChartView) { self.view = view }
   @objc func tick(_ link: CADisplayLink) { view?.tick(link) }
-}
-
-/// Resolve direction before UIPanGestureRecognizer is allowed to begin.
-@MainActor
-private final class LivelinePanRecognizer: UIPanGestureRecognizer {
-  private var start: CGPoint?
-  private var decided = false
-  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-    start = touches.first?.location(in: view)
-    super.touchesBegan(touches, with: event)
-  }
-  override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
-    if !decided, let start, let current = touches.first?.location(in: view) {
-      let dx = current.x - start.x, dy = current.y - start.y
-      guard max(abs(dx), abs(dy)) >= 8 else { return }
-      decided = true
-      if abs(dx) < abs(dy) * 1.5 { state = .failed; return }
-    }
-    super.touchesMoved(touches, with: event)
-  }
-  override func reset() { super.reset(); start = nil; decided = false }
 }
 #endif

@@ -61,6 +61,10 @@
         "typescript": "^7.0.0",
       },
     },
+    "apps/ios": {
+      "name": "@v1/ios",
+      "version": "0.1.0",
+    },
     "apps/web": {
       "name": "@v1/web",
       "version": "0.1.0",
@@ -992,6 +996,8 @@
     "@v1/analytics": ["@v1/analytics@workspace:packages/analytics"],
 
     "@v1/app": ["@v1/app@workspace:apps/app"],
+
+    "@v1/ios": ["@v1/ios@workspace:apps/ios"],
 
     "@v1/kv": ["@v1/kv@workspace:packages/kv"],
 

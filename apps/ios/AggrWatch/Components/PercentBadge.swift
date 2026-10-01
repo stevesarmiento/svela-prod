@@ -1,25 +1,29 @@
 import AggrCore
 import SwiftUI
+import Torph
 
 /// Mirrors the web percent badge: ▲/▼ glyph + `abs.toFixed(2)%`, green/red/neutral tint; "N/A" for non-finite.
 struct PercentBadge: View {
   let pct: Double?
   var compact = false
 
+  static func label(for pct: Double?) -> String {
+    guard let pct, pct.isFinite else { return "N/A" }
+    return String(format: "%.2f%%", abs(UsdFormat.clampPercent(pct)))
+  }
+
   var body: some View {
     let value = pct.map(UsdFormat.clampPercent)
     HStack(spacing: 2) {
-      if let value, value.isFinite {
-        if value != 0 {
-          Image(systemName: "triangle.fill")
-            .font(.system(size: compact ? 6 : 7))
-            .rotationEffect(.degrees(value < 0 ? 180 : 0))
-        }
-        Text(String(format: "%.2f%%", abs(value)))
-      } else {
-        Text("N/A")
+      if let value, value.isFinite, value != 0 {
+        Image(systemName: "triangle.fill")
+          .font(.system(size: compact ? 6 : 7))
+          .rotationEffect(.degrees(value < 0 ? 180 : 0))
       }
+      TorphText(Self.label(for: pct))
+        .lineLimit(1)
     }
+    .fixedSize()
     .font(.system(size: compact ? 11 : 12, weight: .semibold, design: .rounded).monospacedDigit())
     .foregroundStyle(tint(value))
     .padding(.horizontal, compact ? 5 : 7)

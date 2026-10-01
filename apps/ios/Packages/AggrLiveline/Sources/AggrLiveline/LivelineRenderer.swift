@@ -1,4 +1,5 @@
 #if canImport(UIKit)
+import CoreText
 import UIKit
 
 struct LivelineLayout: Equatable {
@@ -40,6 +41,9 @@ final class LivelineRenderer {
     let path: CGPath
   }
   private var screenPaths: [String: ScreenPath] = [:]
+  /// Live-dot pulses wanted this frame; the view mirrors them onto CAShapeLayers
+  /// so the ring keeps pulsing while the display link is stopped.
+  private(set) var pulses: [LivelinePulse] = []
   #if DEBUG
   private(set) var screenPathBuildCount = 0
   #endif
@@ -79,6 +83,7 @@ final class LivelineRenderer {
     let layout = layout(size: size, engine: engine), cfg = engine.configuration
     let plot = layout.plot
     let reveal = engine.reveal
+    pulses = []
     cachedPaths = cachedPaths.filter { engine.splines[$0.key] != nil }
     screenPaths = screenPaths.filter { engine.splines[$0.key] != nil }
     ctx.saveGState()
@@ -111,7 +116,8 @@ final class LivelineRenderer {
                          reveal: isPrimary ? reveal : 1, elapsed: cfg.reduceMotion ? 0 : engine.elapsed)
         ctx.saveGState()
         let breath = loadingBreath(elapsed: cfg.reduceMotion ? 0 : engine.elapsed)
-        ctx.setAlpha(alpha * (isPrimary ? breath + (1 - breath) * reveal : reveal))
+        let baseAlpha = alpha * (isPrimary ? breath + (1 - breath) * reveal : reveal)
+        ctx.setAlpha(baseAlpha)
         if isPrimary && cfg.fill {
           let fill = path.mutableCopy()!
           fill.addLine(to: CGPoint(x: path.currentPoint.x, y: plot.maxY))
@@ -124,9 +130,29 @@ final class LivelineRenderer {
           ctx.restoreGState()
         }
         let stroke = isPrimary ? blend(.secondaryLabel, series.color.uiColor, fraction: min(1, reveal * 3)) : series.color.uiColor
-        ctx.addPath(path); ctx.setStrokeColor(stroke.cgColor)
-        ctx.setLineWidth(series.width); ctx.setLineCap(.round); ctx.setLineJoin(.round)
-        ctx.setLineDash(phase: 0, lengths: series.dash.map { CGFloat($0) }); ctx.strokePath(); ctx.restoreGState()
+        func strokeCurve() {
+          ctx.addPath(path); ctx.setStrokeColor(stroke.cgColor)
+          ctx.setLineWidth(series.width); ctx.setLineCap(.round); ctx.setLineJoin(.round)
+          ctx.setLineDash(phase: 0, lengths: series.dash.map { CGFloat($0) }); ctx.strokePath()
+        }
+        // While scrubbing a single-series chart, the line right of the finger dims so the
+        // inspected past reads as "now ends here" (wallet Liveline behavior).
+        if isPrimary, cfg.scrub, cfg.seriesLabels.isEmpty, engine.scrubAmount > 0.01,
+           let inspection = engine.inspectionTime {
+          let scrubX = layout.toX(inspection)
+          ctx.saveGState()
+          ctx.clip(to: CGRect(x: plot.minX - 2, y: 0, width: max(0, scrubX - (plot.minX - 2)), height: size.height))
+          strokeCurve()
+          ctx.restoreGState()
+          ctx.saveGState()
+          ctx.clip(to: CGRect(x: scrubX, y: 0, width: max(0, size.width - scrubX), height: size.height))
+          ctx.setAlpha(baseAlpha * (1 - engine.scrubAmount * 0.6))
+          strokeCurve()
+          ctx.restoreGState()
+        } else {
+          strokeCurve()
+        }
+        ctx.restoreGState()
       }
       if let p = engine.splines[input.primaryID]?.points.last, input.series.first(where: { $0.id == input.primaryID })?.visible == true {
         if cfg.currentPriceGuide {
@@ -371,12 +397,9 @@ final class LivelineRenderer {
     if cfg.dot && engine.reveal > 0.3 {
       ctx.saveGState(); ctx.setAlpha(visibility)
       if cfg.pulse && !cfg.reduceMotion && input.observation != nil && dim < 0.3 {
-        let t = engine.elapsed.truncatingRemainder(dividingBy: 1500) / 900
-        if t < 1 {
-          let r = 9 + t * 12
-          ctx.setStrokeColor(series.color.uiColor.withAlphaComponent(0.35 * (1 - t) * (1 - dim * 3)).cgColor)
-          ctx.setLineWidth(1.5); ctx.strokeEllipse(in: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2))
-        }
+        // Rendered as a CAShapeLayer so the ring keeps pulsing while the display link is stopped.
+        pulses.append(LivelinePulse(id: series.id, point: tip, color: series.color, growth: 12,
+                                    peakAlpha: 0.35, opacity: visibility * max(0, 1 - dim * 3)))
       }
       ctx.setShadow(offset: CGSize(width: 0, height: 1), blur: 6 * (1 - dim), color: UIColor.black.withAlphaComponent(0.3).cgColor)
       ctx.setFillColor(outer.cgColor)
@@ -430,12 +453,32 @@ final class LivelineRenderer {
     path.closeSubpath()
     return path
   }
+  static let crosshairFadeMinPX: CGFloat = 5
+
+  /// The crosshair fades out as it approaches the live dot, where the chart's own
+  /// endpoint readout takes over (wallet Liveline behavior).
+  func crosshairOpacity(x: CGFloat, liveDotX: CGFloat, plotWidth: CGFloat) -> Double {
+    let dist = liveDotX - x
+    let fadeStart = min(80, plotWidth * 0.3)
+    if dist < Self.crosshairFadeMinPX { return 0 }
+    if dist >= fadeStart { return 1 }
+    return Double((dist - Self.crosshairFadeMinPX) / (fadeStart - Self.crosshairFadeMinPX))
+  }
+
   private func drawCrosshair(_ ctx: CGContext, layout: LivelineLayout, engine: LivelineEngine) {
     guard let time = engine.inspectionTime, let selection = engine.selection(at: time) else { return }
+    let cfg = engine.configuration
     let x = layout.toX(time), y = min(layout.plot.maxY, max(layout.plot.minY, layout.toY(selection.value)))
-    let color = UIColor.white.withAlphaComponent(0.68 * engine.scrubAmount)
+    var fade = 1.0
+    if cfg.seriesLabels.isEmpty, cfg.dot, let input = engine.input, let spline = engine.splines[input.primaryID] {
+      let dot = endpoint(spline, layout: layout, reveal: engine.reveal, elapsed: cfg.reduceMotion ? 0 : engine.elapsed)
+      fade = crosshairOpacity(x: x, liveDotX: dot.x, plotWidth: layout.plot.width)
+    }
+    let opacity = engine.scrubAmount * fade
+    guard opacity > 0.01 else { return }
+    let color = UIColor.white.withAlphaComponent(0.68 * opacity)
     line(ctx, from: CGPoint(x: x, y: layout.plot.minY), to: CGPoint(x: x, y: layout.volume?.maxY ?? layout.plot.maxY), color: color, dash: [4, 4])
-    if !engine.configuration.seriesLabels.isEmpty {
+    if !cfg.seriesLabels.isEmpty {
       for series in engine.input?.series ?? [] where series.visible {
         guard let value = selection.values[series.id] else { continue }
         let y = layout.toY(value * series.multiplier)
@@ -446,12 +489,10 @@ final class LivelineRenderer {
       return
     }
     line(ctx, from: CGPoint(x: layout.plot.minX, y: y), to: CGPoint(x: layout.plot.maxX, y: y), color: color, dash: [4, 4])
-    if engine.configuration.dimAfterScrub {
-      ctx.setFillColor(UIColor.black.withAlphaComponent(0.35 * engine.scrubAmount).cgColor)
-      ctx.fill(CGRect(x: x, y: layout.plot.minY, width: max(0, layout.plot.maxX - x), height: layout.plot.height))
-    }
-    let radius = CGFloat(4 * min(1, engine.scrubAmount * 3))
+    let radius = CGFloat(4 * min(1, opacity * 3))
+    ctx.saveGState(); ctx.setAlpha(fade)
     ctx.setFillColor(UIColor.white.cgColor); ctx.fillEllipse(in: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2))
+    ctx.restoreGState()
   }
 
   private func line(_ ctx: CGContext, from: CGPoint, to: CGPoint, color: UIColor, dash: [CGFloat] = []) {
@@ -459,10 +500,23 @@ final class LivelineRenderer {
     ctx.move(to: from); ctx.addLine(to: to); ctx.strokePath(); ctx.restoreGState()
   }
   private enum Alignment { case leading, center }
-  private func measure(_ string: String, font: UIFont) -> CGSize { (string as NSString).size(withAttributes: [.font: font]) }
+  private func measure(_ string: String, font: UIFont) -> CGSize { LivelineTextCache.shared.size(string, font: font) }
   private func text(_ string: String, at point: CGPoint, color: UIColor, alignment: Alignment = .leading, font: UIFont? = nil) {
+    guard let ctx = UIGraphicsGetCurrentContext() else { return }
     let font = font ?? labelFont, size = measure(string, font: font)
-    (string as NSString).draw(at: CGPoint(x: point.x - (alignment == .center ? size.width / 2 : 0), y: point.y - size.height / 2), withAttributes: [.font: font, .foregroundColor: color])
+    // Cache the typeset line at full alpha; fading labels only vary the context alpha.
+    let resolved = color.cgColor
+    let alpha = resolved.alpha
+    let cached = LivelineTextCache.shared.line(string, font: font, color: alpha >= 1 ? resolved : resolved.copy(alpha: 1) ?? resolved)
+    let origin = CGPoint(x: point.x - (alignment == .center ? size.width / 2 : 0), y: point.y - size.height / 2)
+    ctx.saveGState()
+    ctx.setAlpha(alpha)
+    ctx.textMatrix = .identity
+    ctx.translateBy(x: origin.x, y: origin.y + size.height)
+    ctx.scaleBy(x: 1, y: -1)
+    ctx.textPosition = CGPoint(x: 0, y: cached.descent)
+    CTLineDraw(cached.line, ctx)
+    ctx.restoreGState()
   }
 }
 #endif

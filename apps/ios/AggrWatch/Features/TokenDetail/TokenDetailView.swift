@@ -3,6 +3,8 @@ import AggrCore
 import AggrLiveline
 import Observation
 import SwiftUI
+import Torph
+import UIKit
 
 /// `/watchlists/[id]` — price chart card, market metrics, (Phase 6: indicators, news, AI).
 struct TokenDetailView: View {
@@ -35,7 +37,8 @@ struct TokenDetailView: View {
         VStack(spacing: 20) {
           Color.clear.frame(height: headerHeight - 16)
           if let store {
-            PriceChartCard(store: store, scale: $scale, selection: $chrome.selection)
+            PriceChartCard(store: store, scale: $scale, selection: $chrome.selection,
+                           onSelection: chrome.setSelection)
             MarketMetricsGrid(quote: quote, alignedPrice: store.alignedPrice, dailyOhlcv: store.dailyOhlcv, isPending: store.isLoading)
             TokenIndicatorsSection(store: store, coinId: coinId, quote: quote)
           } else {
@@ -105,6 +108,34 @@ struct TokenDetailView: View {
 final class TokenPageChrome {
   var scrollOffset: CGFloat = 0
   var selection: LivelineSelection?
+
+  @ObservationIgnored private var pendingSelection: LivelineSelection?
+  @ObservationIgnored private var publishScheduled = false
+  @ObservationIgnored private var lastPointTime: Double?
+  @ObservationIgnored private let scrubTick = UISelectionFeedbackGenerator()
+
+  /// Wallet scrub policy: tick once per newly inspected data point (release is silent) and
+  /// defer the published write out of the chart's render pass, so one frame's worth of
+  /// selections costs one SwiftUI update.
+  func setSelection(_ next: LivelineSelection?) {
+    pendingSelection = next
+    if let time = next?.nearestObservation?.time {
+      if time != lastPointTime {
+        lastPointTime = time
+        scrubTick.selectionChanged()
+        scrubTick.prepare()
+      }
+    } else {
+      lastPointTime = nil
+    }
+    guard !publishScheduled else { return }
+    publishScheduled = true
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      publishScheduled = false
+      selection = pendingSelection
+    }
+  }
 }
 
 /// One artwork control and one readout, moving into a compact header as the page scrolls.
@@ -180,12 +211,13 @@ private struct TokenPageHeader: View {
             .allowsHitTesting(false)
         }
 
-        Text(styledPrice(price))
+        // Torph rolls digits by place value on live ticks; instant swaps while scrubbing
+        // (gesture-rate updates would otherwise live in a mid-roll smear).
+        TorphText(styledPrice(price), options: .init(duration: 0.25, disabled: chrome.selection != nil))
           .font(.system(size: priceSize, weight: .medium, design: .rounded).monospacedDigit())
-          .contentTransition(.numericText(value: price ?? 0))
-          .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: price)
-          .lineLimit(1).minimumScaleFactor(0.6)
+          .lineLimit(1)
           .frame(width: available / valueScale, alignment: .leading)
+          .clipped()
           .scaleEffect(valueScale, anchor: .topLeading)
           .offset(x: textX, y: (48 * (1 - p) + 8 * p) * textScale)
           .accessibilityLabel("\(LogoOverrides.cleanTokenName(quote?.name ?? coinId)) price")

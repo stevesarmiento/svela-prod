@@ -1,7 +1,6 @@
 import AggrAPI
 import AggrCore
 import AggrLiveline
-import Charts
 import SwiftUI
 
 /// The mobile price surface. The shared token header owns its readout.
@@ -9,57 +8,45 @@ struct PriceChartCard: View {
   let store: TokenChartStore
   @Binding var scale: TimeScale
   @Binding var selection: LivelineSelection?
+  /// When set, selections route here (the token page's scrub store) instead of the binding;
+  /// the binding stays the tooltip's read path.
+  var onSelection: ((LivelineSelection?) -> Void)?
   @Environment(AppEnvironment.self) private var env
-  @State private var selectedDate: Date?
-  #if DEBUG
-  @AppStorage("charts.useLegacyPriceRenderer") private var useLegacyRenderer = false
-  #else
-  @AppStorage("charts.useLegacyPriceRenderer") private var useLegacyRenderer = true
-  #endif
+  @State private var lineColor: LivelineColor
+
+  init(store: TokenChartStore, scale: Binding<TimeScale>, selection: Binding<LivelineSelection?>,
+       onSelection: ((LivelineSelection?) -> Void)? = nil) {
+    self.store = store
+    _scale = scale
+    _selection = selection
+    self.onSelection = onSelection
+    // Seed from the cache so a revisited token never flashes a white first frame.
+    _lineColor = State(initialValue: TokenLineColor.cached(symbol: store.quote?.symbol ?? store.coinId,
+                                                           imageURL: store.quote?.image) ?? .white)
+  }
 
   var body: some View {
     let spot = env.realtime.spot(store.coinId)
     let pricing = LivePricing.resolve(quote: store.quote, spot: spot, alignedPrice: store.alignedPrice,
                                      isWarmingUp: store.isWarmingUp, status: env.realtime.status(store.coinId))
     VStack(spacing: 20) {
-      Group {
-        if useLegacyRenderer {
-          MinimalLegacyPriceChart(input: AggrPriceChart.input(
-            coinId: store.coinId, data: store.data, hull: store.hull, projection: nil,
-            scale: store.dataScale, liveObservation: nil, showPrice: true, showMarketCap: true,
-            isLoading: store.isLoading, hasObservedHistory: store.hasObservedHistory, simplified: true),
-                                  livePrice: pricing.isLiveSpotTrusted ? pricing.livePrice : nil,
-                                  selectedDate: $selectedDate)
-            .onChange(of: selectedDate) { _, date in
-              guard let date, let point = store.priceWindow.points.min(by: {
-                abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date))
-              }) else { selection = nil; return }
-              selection = .init(time: Double(point.epochSeconds), value: point.value, values: ["price": point.value],
-                                isProjection: false, nearestObservation: nil)
-            }
-            .overlay {
-              if !store.hasObservedHistory {
-                if store.isLoading { ProgressView() }
-                else { Text("Price history unavailable").font(.footnote).foregroundStyle(.secondary) }
-              }
-            }
-        } else {
-          AggrPriceChart(coinId: store.coinId, data: store.data, hull: store.hull, projection: nil,
-                         scale: store.dataScale,
-                         liveObservation: pricing.isLiveSpotTrusted ? spot.map { .init(time: $0.updatedAtMs / 1000, value: $0.priceUsd) } : nil,
-                         showPrice: true, showMarketCap: true,
-                         isLoading: store.isLoading, isWarmingUp: store.isWarmingUp,
-                         hasObservedHistory: store.hasObservedHistory, isActive: env.isSceneActive, simplified: true,
-                         onSelection: { selection = $0 })
-            .equatable()
+      AggrPriceChart(coinId: store.coinId, data: store.data, hull: store.hull, projection: nil,
+                     scale: store.dataScale,
+                     liveObservation: pricing.isLiveSpotTrusted ? spot.map { .init(time: $0.updatedAtMs / 1000, value: $0.priceUsd) } : nil,
+                     showPrice: true, showMarketCap: true,
+                     isLoading: store.isLoading, isWarmingUp: store.isWarmingUp,
+                     hasObservedHistory: store.hasObservedHistory, isActive: env.isSceneActive, simplified: true,
+                     lineColor: lineColor,
+                     onSelection: { sel in
+                       if let onSelection { onSelection(sel) } else { selection = sel }
+                     })
+        .equatable()
+        .frame(height: 260)
+        .overlay(alignment: .top) {
+          if let selection {
+            PriceScrubTooltip(selection: selection, points: store.priceWindow.points)
+          }
         }
-      }
-      .frame(height: 260)
-      .overlay(alignment: .top) {
-        if let selection {
-          PriceScrubTooltip(selection: selection, points: store.priceWindow.points)
-        }
-      }
       TimeScalePicker(scales: TimeScale.tokenScales, selection: $scale)
       if store.error != nil {
         HStack(spacing: 8) {
@@ -69,73 +56,17 @@ struct PriceChartCard: View {
         }
       }
     }
-    .onChange(of: scale) { _, _ in selectedDate = nil; selection = nil }
-    .onDisappear { selection = nil }
+    .task(id: "\(store.quote?.symbol ?? store.coinId)|\(store.quote?.image ?? "")") {
+      let symbol = store.quote?.symbol ?? store.coinId
+      let imageURL = store.quote?.image
+      guard let derived = await TokenLineColor.derive(symbol: symbol, imageURL: imageURL),
+            !Task.isCancelled, store.quote?.image == imageURL else { return }
+      lineColor = derived
+    }
+    .onChange(of: scale) { _, _ in selection = nil; onSelection?(nil) }
+    .onDisappear { selection = nil; onSelection?(nil) }
     .padding(.bottom, 12)
   }
-}
-
-/// Keeps the release fallback visually consistent during the native renderer rollout.
-private struct MinimalLegacyPriceChart: View {
-  let input: LivelineInput
-  let livePrice: Double?
-  @Binding var selectedDate: Date?
-  private var line: [TimePoint] {
-    var result = (input.series.first { $0.id == "price" }?.points ?? []).map {
-      TimePoint(epochSeconds: Int($0.time), value: $0.value)
-    }
-    if let livePrice, let last = result.last { result[result.count - 1] = .init(epochSeconds: last.epochSeconds, value: livePrice) }
-    return result
-  }
-  var body: some View {
-    let values = line
-    let overlays = input.series.filter { $0.id != "price" && $0.visible }
-    let allValues = values.map(\.value) + overlays.flatMap { series in series.points.map { $0.value * series.multiplier } }
-    let low = allValues.min() ?? 0
-    let high = allValues.max() ?? 1
-    let padding = max((high - low) * 0.12, abs(high) * 0.001, 1e-20)
-    Chart {
-      ForEach(values, id: \.epochSeconds) { point in
-        LineMark(x: .value("Time", point.date), y: .value("Price", point.value), series: .value("Series", "price"))
-          .interpolationMethod(.monotone).foregroundStyle(.white)
-          .lineStyle(.init(lineWidth: 2.5, lineCap: .round))
-      }
-      overlayContent(overlays)
-      if let last = values.last {
-        PointMark(x: .value("Time", last.date), y: .value("Price", last.value)).foregroundStyle(.white).symbolSize(35)
-      }
-      if let selectedDate {
-        RuleMark(x: .value("Selected", selectedDate)).foregroundStyle(.white.opacity(0.3))
-      }
-    }
-    .chartXSelection(value: $selectedDate)
-    .chartYScale(domain: (low - padding)...(high + padding))
-    .chartXAxis(.hidden).chartYAxis(.hidden).chartLegend(.hidden)
-    .padding(.vertical, 14)
-    .accessibilityIdentifier("legacy-price-chart")
-  }
-
-  @ChartContentBuilder
-  private func overlayContent(_ overlays: [LivelineSeries]) -> some ChartContent {
-    ForEach(overlays, id: \.id) { series in
-      overlaySeries(series)
-    }
-  }
-
-  @ChartContentBuilder
-  private func overlaySeries(_ series: LivelineSeries) -> some ChartContent {
-    let color = Color(.sRGB, red: series.color.red, green: series.color.green,
-                      blue: series.color.blue, opacity: series.color.alpha)
-    let stroke = StrokeStyle(lineWidth: CGFloat(series.width), dash: series.dash.map { CGFloat($0) })
-    ForEach(series.points, id: \.time) { point in
-      LineMark(x: .value("Time", Date(timeIntervalSince1970: point.time)),
-               y: .value("Price", point.value * series.multiplier), series: .value("Series", series.id))
-        .interpolationMethod(.monotone)
-        .foregroundStyle(color)
-        .lineStyle(stroke)
-    }
-  }
-
 }
 
 /// Date/time stays beside the inspected chart, with its capsule kept inside both edges.

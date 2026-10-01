@@ -31,6 +31,8 @@ packages:
     path: Packages/AggrCore
   AggrAPI:
     path: Packages/AggrAPI
+  Torph:
+    path: Packages/Torph
 targets:
   AggrWatch:
     type: application
@@ -43,6 +45,7 @@ targets:
       - package: AggrLiveline
       - package: AggrCore
       - package: AggrAPI
+      - package: Torph
       - package: ClerkKit
         product: ClerkKit
       - package: ClerkKit
@@ -57,6 +60,7 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UIUserInterfaceStyle: Dark
+        CADisableMinimumFrameDurationOnPhone: true
         ITSAppUsesNonExemptEncryption: false
         CONVEX_URL: $(CONVEX_URL)
         CLERK_PUBLISHABLE_KEY: $(CLERK_PUBLISHABLE_KEY)
@@ -127,3 +131,4 @@ schemes:
         - package: AggrLiveline/AggrLivelineTests
         - package: AggrCore/AggrCoreTests
         - package: AggrAPI/AggrAPITests
+        - package: Torph/TorphTests

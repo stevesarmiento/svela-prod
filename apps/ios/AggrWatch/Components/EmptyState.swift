@@ -242,7 +242,7 @@ struct EmptyStateIllustration: View {
 
 /// The same seeded random-walk construction used by the web illustrations,
 /// rendered once as a vector path rather than running live charts for decoration.
-private struct EmptyIllustrationLine: Shape {
+private nonisolated struct EmptyIllustrationLine: Shape {
   let seed: UInt32
   func path(in rect: CGRect) -> Path {
     var state = seed
