@@ -34,3 +34,19 @@ import Testing
     #expect(AggregateSeries.returnSeries([TimePoint(epochSeconds: 1, value: 50), TimePoint(epochSeconds: 2, value: 75)]).last?.value == 50)
   }
 }
+
+@Test func tokenStatsEncodeMissingValuesAsExplicitNulls() throws {
+  let stats = ComparativeStats.TokenStats(
+    id: "x", symbol: "X", name: "X token", marketCap: nil, return7dPct: 1.5, return30dPct: nil,
+    excessReturn7dPct: nil, excessReturn30dPct: nil, volatility30dAnnualizedPct: nil, betaVsBenchmark: nil,
+    rsi: nil, bbPercentB: nil, bbwpPct: nil, waveTrend: nil, moneyFlow: nil, openInterestChangePct: nil, takerBuyRatio: nil)
+  let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(stats)) as? [String: Any]
+  let object = try #require(json)
+  // zod's `.nullable()` requires the key: a missing key is rejected as "Required".
+  for key in ["marketCap", "return30dPct", "excessReturn7dPct", "excessReturn30dPct", "volatility30dAnnualizedPct",
+              "betaVsBenchmark", "rsi", "bbPercentB", "bbwpPct", "waveTrend", "moneyFlow", "openInterestChangePct", "takerBuyRatio"] {
+    #expect(object.keys.contains(key), "\(key) must be present")
+    #expect(object[key] is NSNull, "\(key) must be null")
+  }
+  #expect(object["return7dPct"] as? Double == 1.5)
+}

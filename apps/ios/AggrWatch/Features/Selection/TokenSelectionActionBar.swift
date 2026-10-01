@@ -19,6 +19,7 @@ struct TokenSelectionActionBar: View {
                 segment("Analyze", icon: Image("ActionAnalyze"), tint: .accentColor, accessibilityLabel: "Analyze selected") {
                     onAnalyze()
                 }
+                    .tokenTransitionSource("selection-analyze", cornerRadius: Theme.Radius.lg)
                     .disabled(!canAnalyze)
                     .opacity(canAnalyze ? 1 : 0.4)
                 if canRemove {

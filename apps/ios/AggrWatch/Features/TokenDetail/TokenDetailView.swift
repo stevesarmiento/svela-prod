@@ -19,7 +19,6 @@ struct TokenDetailView: View {
   @Environment(\.dismiss) private var dismiss
   @State private var feed: MarketFeedStore?
   @State private var showFeed = false
-  @State private var showDeepAnalysis = false
 
   private var debugScrollBottom: Bool {
     #if DEBUG
@@ -55,7 +54,8 @@ struct TokenDetailView: View {
         TokenPageHeader(coinId: coinId, groupSlug: groupSlug, store: store, chrome: chrome, scale: scale,
                         expandedHeight: headerHeight, topInset: pageGeometry.safeAreaInsets.top, unseenNews: feed?.unseenCount ?? 0,
                         close: { if let onClose { onClose() } else { dismiss() } },
-                        showNews: { showFeed = true }, showAnalysis: { showDeepAnalysis = true })
+                        showNews: { showFeed = true },
+                        showAnalysis: { env.router.openAnalysis([coinId], sourceID: "token-actions|\(coinId)") })
           .frame(height: headerHeight)
       }
       .defaultScrollAnchor(debugScrollBottom ? .bottom : .top)
@@ -75,7 +75,6 @@ struct TokenDetailView: View {
         onArtworkChange?(artwork)
       }
       .toolbar(.hidden, for: .navigationBar)
-      .sheet(isPresented: $showDeepAnalysis) { DeepAnalysisSheet(coinId: coinId) }
       .sheet(isPresented: $showFeed) {
         if let feed { MarketFeedSheet(store: feed, displayName: LogoOverrides.cleanTokenName(quote?.name ?? coinId)) }
       }
@@ -234,6 +233,8 @@ private struct TokenPageHeader: View {
         }
         .padding(.horizontal, 4)
         .glassEffect(.regular.interactive(), in: .capsule)
+        // The analysis page zooms out of (and collapses back into) this capsule.
+        .tokenTransitionSource("token-actions|\(coinId)", cornerRadius: 22)
         .buttonStyle(.plain)
         .tint(.white)
         .foregroundStyle(.white)

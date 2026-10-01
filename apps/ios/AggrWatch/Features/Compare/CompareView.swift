@@ -156,7 +156,7 @@ struct WatchlistAccordionTable: View {
       }
       if failed > 0 { throw SelectionStore.BulkRemoveError(removedCount: removed, failedCount: failed) }
     }, onAnalyze: { keys in
-      env.router.sheet = .analyze(Array(Set(keys.map { String($0.split(separator: "|").last ?? "") })))
+      env.router.openAnalysis(Array(Set(keys.map { String($0.split(separator: "|").last ?? "") })), sourceID: "selection-analyze")
     })
   }
 

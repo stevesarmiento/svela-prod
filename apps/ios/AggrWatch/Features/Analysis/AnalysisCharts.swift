@@ -32,22 +32,18 @@ struct AnalysisPriceChart: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      HStack(alignment: .firstTextBaseline) {
-        Text(selectedDate == nil ? "Price · 7 days" : (selected?.date ?? .now).formatted(date: .abbreviated, time: .shortened))
-          .font(.caption).foregroundStyle(.secondary)
-        Spacer(minLength: 8)
-        if let value = selected?.value { Text(UsdFormat.price(value)).font(.subheadline.monospacedDigit().weight(.semibold)) }
+    VStack(alignment: .leading, spacing: 12) {
+      // The chart owns the price readout: the page header shows only the token.
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        if let value = selected?.value {
+          Text(UsdFormat.price(value)).font(.number(.title3, weight: .semibold))
+            .contentTransition(.numericText(value: value))
+        }
         PercentBadge(pct: change, compact: true)
+        Spacer(minLength: 0)
       }
       if prices.count >= 2 { plot }
-      else { Text("No price history available").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 160) }
-      HStack(spacing: 16) {
-        Label("Hull EHMA", systemImage: "line.diagonal").foregroundStyle(.blue)
-        Label("Volume", systemImage: "chart.bar.fill").foregroundStyle(.secondary)
-        Spacer()
-        Text("Touch to inspect").foregroundStyle(.tertiary)
-      }.font(.caption2)
+      else { Text("No price history available").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 220) }
     }
     .accessibilityIdentifier("analysis-price-chart")
   }
@@ -82,7 +78,7 @@ struct AnalysisPriceChart: View {
     .chartXSelection(value: $selectedDate)
     .chartXAxis(.hidden).chartYAxis(.hidden).chartLegend(.hidden)
     .chartPlotStyle { $0.clipped() }
-    .frame(height: 180)
+    .frame(height: 220)
   }
 }
 
@@ -97,16 +93,14 @@ struct AnalysisComparisonChart: View {
   private func color(_ index: Int) -> Color { Color(oklch: ChartColors.pastel[index % ChartColors.pastel.count]) }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Text(selectedDate.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? "Relative performance · 7 days")
-        .font(.caption).foregroundStyle(.secondary)
+    VStack(alignment: .leading, spacing: 12) {
       LazyVGrid(columns: [.init(.adaptive(minimum: 135), alignment: .leading)], alignment: .leading, spacing: 8) {
         ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
           HStack(spacing: 5) {
             Circle().fill(color(index)).frame(width: 6, height: 6)
             Text(line.symbol.uppercased()).fontWeight(.semibold)
             Text(AnalysisValueStyle.percent(point(line)?.value)).foregroundStyle(AnalysisValueStyle.color(point(line)?.value))
-          }.font(.caption.monospacedDigit())
+          }.font(.number(.subheadline, weight: .regular))
         }
       }
       if lines.count >= 2 {
@@ -129,13 +123,11 @@ struct AnalysisComparisonChart: View {
         .chartYScale(domain: .automatic(includesZero: true))
         .chartXAxis(.hidden).chartYAxis(.hidden).chartLegend(.hidden)
         .chartPlotStyle { $0.clipped() }
-        .frame(height: 180)
+        .frame(height: 220)
       } else {
         Text("Not enough overlapping history to chart these tokens.")
           .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
       }
-      Text("Each token starts at 0% at the first shared time. Touch to compare values.")
-        .font(.caption2).foregroundStyle(.secondary)
     }
     .accessibilityIdentifier("analysis-comparison-chart")
   }

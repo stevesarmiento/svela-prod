@@ -44,22 +44,22 @@ struct StreamingMarkdownText: View {
   let text: String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
+    VStack(alignment: .leading, spacing: 12) {
       ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
         switch block {
         case .heading(let level, let s):
-          Text(inline(s)).font(level <= 2 ? .headline : .subheadline.weight(.semibold)).padding(.top, 4)
+          Text(inline(s)).font(level <= 2 ? .title3.weight(.semibold) : .headline).padding(.top, 8)
         case .bullet(let items):
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
               HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("•").foregroundStyle(.secondary)
-                Text(inline(item))
+                Text(inline(item)).lineSpacing(5)
               }
             }
           }
         case .paragraph(let s):
-          Text(inline(s))
+          Text(inline(s)).lineSpacing(5)
         }
       }
     }
@@ -102,7 +102,7 @@ struct StreamingMarkdownText: View {
 
 #if DEBUG
 #Preview("Analysis progress") {
-  MultiStepLoader(steps: DeepAnalysisSheet.steps).padding().preferredColorScheme(.dark)
+  MultiStepLoader(steps: AnalysisSession.singleSteps).padding().preferredColorScheme(.dark)
 }
 #Preview("Markdown report") {
   ScrollView { StreamingMarkdownText(text: PreviewData.analysisText).padding() }.preferredColorScheme(.dark)

@@ -53,6 +53,12 @@ public struct IndicatorData: Codable, Sendable, Hashable {
   public struct ReverseLevel: Codable, Sendable, Hashable {
     public var target: Double; public var price: Double?
     public init(target: Double, price: Double?) { self.target = target; self.price = price }
+    /// The schema's `price` is `nullable`, so an unreachable level encodes as an explicit `null`.
+    public func encode(to encoder: Encoder) throws {
+      var c = encoder.container(keyedBy: CodingKeys.self)
+      try c.encode(target, forKey: .target)
+      try c.encode(price, forKey: .price)
+    }
   }
   public struct RsiInfo: Codable, Sendable, Hashable {
     public var value: Double

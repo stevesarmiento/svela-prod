@@ -4,16 +4,17 @@ import SwiftUI
 
 /// Port of `indicator-explain-dialog.tsx`: quote header, the same indicator chart, live stat chips, and the
 /// streamed `/api/analyze-indicator` explanation with the multi-step loader while nothing has arrived.
-struct IndicatorExplainSheet<ChartView: View, Badges: View>: View {
+/// Presented as a full-screen page over the token page, with its close control and pull-to-dismiss.
+struct IndicatorExplainPage<ChartView: View, Badges: View>: View {
   let title: String
   let request: IndicatorExplainRequest
   let quote: CoinQuote?
   let coinId: String
+  let close: () -> Void
   @ViewBuilder let chart: () -> ChartView
   @ViewBuilder let badges: () -> Badges
 
   @Environment(AppEnvironment.self) private var env
-  @Environment(\.dismiss) private var dismiss
   @State private var text = ""
   @State private var isLoading = false
   @State private var error: String?
@@ -25,41 +26,80 @@ struct IndicatorExplainSheet<ChartView: View, Badges: View>: View {
   }
 
   var body: some View {
-    NavigationStack {
-      ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
-          header
-          Text("\(title) · \(request.timeframe) timeframe")
-            .font(.caption).foregroundStyle(.secondary)
-          chart().clipShape(.rect(cornerRadius: Theme.Radius.sm))
-          ScrollView(.horizontal, showsIndicators: false) { HStack { badges() }.font(.caption).padding(.horizontal, 16) }
-            .padding(.horizontal, -16)
-            .horizontalEdgeFade(16)
-          Divider()
-          if let error {
-            ContentUnavailableView("Couldn't explain", systemImage: "exclamationmark.triangle", description: Text(error))
-          } else if isLoading && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            MultiStepLoader(steps: Self.steps)
-          } else {
-            StreamingMarkdownText(text: text)
-          }
-        }
-        .padding(16)
-        .padding(.bottom, 24)
-      }
-      .navigationTitle(title)
-      .navigationBarTitleDisplayMode(.inline)
-      .toolbar {
-        ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
-        ToolbarItem(placement: .primaryAction) {
-          Button { run() } label: { Label("Regenerate", image: "ActionAnalyze") }.disabled(isLoading)
+    ScrollView {
+      VStack(alignment: .leading, spacing: 16) {
+        header
+        Text("\(title) · \(request.timeframe) timeframe")
+          .font(.caption).foregroundStyle(.secondary)
+        chart().clipShape(.rect(cornerRadius: Theme.Radius.sm))
+        ScrollView(.horizontal, showsIndicators: false) { HStack { badges() }.font(.caption).padding(.horizontal, 16) }
+          .padding(.horizontal, -16)
+          .horizontalEdgeFade(16)
+        Divider()
+        if let error {
+          ContentUnavailableView("Couldn't explain", systemImage: "exclamationmark.triangle", description: Text(error))
+        } else if isLoading && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          MultiStepLoader(steps: Self.steps)
+        } else {
+          StreamingMarkdownText(text: text)
         }
       }
+      .padding(16)
+      .padding(.bottom, 32)
     }
-    .presentationDetents([.large])
-    .presentationBackground(.thinMaterial)
+    .scrollEdgeEffectStyle(.soft, for: .top)
+    .safeAreaInset(edge: .top, spacing: 0) { pageBar }
+    .overlay(alignment: .top) {
+      Capsule().fill(.secondary.opacity(0.5)).frame(width: 36, height: 4)
+        .frame(height: 16).frame(maxWidth: .infinity)
+        .offset(y: -8)
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
+    }
+    .background { PageArtworkBackground(symbol: quote?.symbol ?? coinId, imageURL: quote?.image) }
+    .overlay { ToastOverlay() }
+    .fontDesign(.rounded)
+    .tint(Theme.accent)
+    .accessibilityAction(.escape) { close() }
     .onAppear { run() }
     .onDisappear { streamTask?.cancel() }
+  }
+
+  /// Logo close control, the indicator name, and the Regenerate capsule, in the token page's chrome.
+  private var pageBar: some View {
+    HStack(spacing: 12) {
+      Button(action: close) {
+        TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 20)
+          .glassEffect(.regular.interactive(), in: .circle)
+          .frame(width: Theme.hitTarget, height: Theme.hitTarget, alignment: .leading)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Close explanation")
+      .accessibilityIdentifier("indicator-page-close")
+      Text(title)
+        .font(.system(.headline, design: .rounded, weight: .semibold))
+        .lineLimit(1).minimumScaleFactor(0.7)
+        .accessibilityAddTraits(.isHeader)
+      Spacer(minLength: 8)
+      Button { run() } label: {
+        Image("ActionAnalyze").renderingMode(.template).resizable().scaledToFit()
+          .frame(width: 16, height: 16)
+          .frame(width: Theme.hitTarget, height: Theme.hitTarget)
+          .contentShape(Rectangle())
+      }
+      .disabled(isLoading)
+      .accessibilityLabel("Regenerate")
+      .accessibilityIdentifier("indicator-regenerate")
+      .padding(.horizontal, 4)
+      .glassEffect(.regular.interactive(), in: .capsule)
+      .buttonStyle(.plain)
+      .tint(.white)
+      .foregroundStyle(.white)
+    }
+    .padding(.horizontal, 20)
+    .padding(.top, 8)
+    .padding(.bottom, 12)
   }
 
   private var header: some View {
@@ -121,11 +161,11 @@ struct IndicatorExplainSheet<ChartView: View, Badges: View>: View {
 #if DEBUG
 #Preview("Indicator explanation") {
   PreviewHost(navigation: false) { _ in
-    IndicatorExplainSheet(title: "Volatility", request: .init(
+    IndicatorExplainPage(title: "Volatility", request: .init(
       token: .init(coinId: "bitcoin", name: "Bitcoin", symbol: "BTC"), timeframe: "30",
       marketContext: .init(priceUsd: 67_420, change24hPct: 2.84, volume24hUsd: 28_600_000_000, marketCapUsd: 1_330_000_000_000, closeHistory: PreviewFixtures.line.map(\.value), closeTimesUtc: PreviewFixtures.line.map(\.epochSeconds)),
       snapshot: .bbwp(bbwpCurrent: 42, bbwpHistory: [30, 35, 42], lookback: BBWP.Config.default.lookback)
-    ), quote: PreviewFixtures.quotes[0], coinId: "bitcoin") {
+    ), quote: PreviewFixtures.quotes[0], coinId: "bitcoin", close: {}) {
       PreviewValue(Date?.none) { BBWPChart(result: PreviewFixtures.indicators.bbwp, windowDays: 14, selectedDate: $0) }
     } badges: { IndicatorStat(label: "BBWP", value: "42%") }
   }

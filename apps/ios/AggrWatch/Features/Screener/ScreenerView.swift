@@ -80,7 +80,7 @@ private struct ScreenerContent: View {
   private func registerSelection(_ rows: [ScreenerMarketRow]) {
     guard env.router.tab == .screener, env.router.screenerPath.isEmpty, env.router.sheet == nil else { return }
     // Read-only table: no Remove (screener passes nil), Analyze only.
-    env.selection.register(owner: "screener", selectableIds: rows.map(\.coingeckoId), onRemove: nil, onAnalyze: { ids in env.router.sheet = .analyze(ids) })
+    env.selection.register(owner: "screener", selectableIds: rows.map(\.coingeckoId), onRemove: nil, onAnalyze: { ids in env.router.openAnalysis(ids, sourceID: "selection-analyze") })
   }
 
   var body: some View {

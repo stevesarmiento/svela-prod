@@ -56,8 +56,8 @@ struct MainTabView: View {
     .environment(\.tokenTransitionSources, tokenSources)
     .tabBarMinimizeBehavior(.onScrollDown)
     .background {
-      TokenPagePresenter(token: $router.tokenPresentation, env: env, sources: tokenSources,
-                         otherSheetPresented: router.sheet != nil)
+      PagePresenter(token: $router.tokenPresentation, analysis: $router.analysisPresentation, env: env, sources: tokenSources,
+                    otherSheetPresented: router.sheet != nil)
         .frame(width: 0, height: 0)
     }
     .onChange(of: router.tab) { _, _ in
@@ -73,8 +73,6 @@ struct MainTabView: View {
           CoinSearchView(mode: .addToWatchlist, initialTargetGroupId: targetGroupId)
         }
           .presentationDetents([.large])
-      case .analyze(let ids):
-        if ids.count == 1, let id = ids.first { DeepAnalysisSheet(coinId: id) } else { MultiAnalysisSheet(coinIds: ids) }
       case .settings: SettingsView()
       }
     }

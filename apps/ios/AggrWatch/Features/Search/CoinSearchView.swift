@@ -20,7 +20,7 @@ struct CoinSearchView: View {
   @State private var error: String?
   @State private var targetGroupId: String?
   @State private var pendingIds: Set<String> = []
-  @State private var analysisSheet: SheetRoute?
+  @State private var analysisSheet: AnalysisPresentation?
 
   private var visibleCoins: [CoinQuote] { debounced.isEmpty ? topCoins : results }
   private var selectionOwner: String { mode == .navigate ? "search" : "search-add" }
@@ -103,11 +103,10 @@ struct CoinSearchView: View {
       if active && env.selection.ownerId == selectionOwner { dismissSearchKeyboard() }
     }
     .onDisappear { env.selection.release(owner: selectionOwner) }
-    .sheet(item: $analysisSheet) { sheet in
-      if case .analyze(let ids) = sheet {
-        if ids.count == 1, let id = ids.first { DeepAnalysisSheet(coinId: id) }
-        else { MultiAnalysisSheet(coinIds: ids) }
-      }
+    .sheet(item: $analysisSheet) { presentation in
+      // The add sheet is itself a sheet, so the page rides inside one here.
+      AnalysisPageView(presentation: presentation, close: { analysisSheet = nil })
+        .presentationDetents([.large])
     }
     .task { await loadTop() }
     .task(id: query) {
@@ -173,8 +172,8 @@ struct CoinSearchView: View {
     // The add sheet owns its selection while covering the tab beneath it.
     guard mode == .addToWatchlist || env.router.sheet == nil else { return }
     env.selection.register(owner: selectionOwner, selectableIds: visibleCoins.map(\.id), onRemove: nil, onAnalyze: { ids in
-      if mode == .addToWatchlist { analysisSheet = .analyze(ids) }
-      else { env.router.sheet = .analyze(ids) }
+      if mode == .addToWatchlist { analysisSheet = AnalysisPresentation(coinIds: ids, sourceID: nil) }
+      else { env.router.openAnalysis(ids, sourceID: "selection-analyze") }
     })
   }
 

@@ -13,7 +13,9 @@ struct TokenIndicatorsSection: View {
   @State private var explainScrub: Date?
   @State private var explain: ExplainTarget?
 
-  private enum ExplainTarget: Identifiable { case marketVision, bollinger, bbwp, rsi; var id: Self { self } }
+  private enum ExplainTarget: String, Identifiable { case marketVision, bollinger, bbwp, rsi; var id: String { rawValue } }
+
+  private func explainSourceID(_ target: ExplainTarget) -> String { "indicator-explain|\(coinId)|\(target.rawValue)" }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
@@ -29,8 +31,10 @@ struct TokenIndicatorsSection: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .onChange(of: explain) { _, _ in explainScrub = nil }
-    .sheet(item: $explain) { target in
-      if let b = store.indicators { explainSheet(target, b) }
+    // The explanation is a page over the token page: it zooms out of the card's Explain button
+    // and collapses back into it on pull or close.
+    .fullScreenPage(item: $explain, sourceID: { explainSourceID($0) }) { target, close in
+      if let b = store.indicators { explainPage(target, b, close: close) }
     }
   }
 
@@ -46,7 +50,7 @@ struct TokenIndicatorsSection: View {
 
   private func momentumCard(_ b: IndicatorBundle) -> some View {
     IndicatorCardFrame(title: "Momentum & Money Flow", description: "Tracks momentum shifts using WaveTrend + money flow.",
-                       isPending: store.isIndicatorPending, onExplain: { explain = .marketVision }) {
+                       isPending: store.isIndicatorPending, explainSourceID: explainSourceID(.marketVision), onExplain: { explain = .marketVision }) {
       MarketVisionChart(result: b.marketVision, windowDays: store.indicatorWindowDays, selectedDate: $scrub)
     } badges: { momentumBadges(b.marketVision) }
   }
@@ -70,7 +74,7 @@ struct TokenIndicatorsSection: View {
 
   private func bollingerCard(_ b: IndicatorBundle) -> some View {
     IndicatorCardFrame(title: "Bollinger Bands", description: "Shows RSI relative to its own bands (overextension vs mean).",
-                       isPending: store.isIndicatorPending, onExplain: { explain = .bollinger }) {
+                       isPending: store.isIndicatorPending, explainSourceID: explainSourceID(.bollinger), onExplain: { explain = .bollinger }) {
       BollingerBandsChart(result: b.bollinger, windowDays: store.indicatorWindowDays, selectedDate: $scrub)
     } badges: { bollingerBadges(b.bollinger) }
   }
@@ -86,7 +90,7 @@ struct TokenIndicatorsSection: View {
 
   private func volatilityCard(_ b: IndicatorBundle) -> some View {
     IndicatorCardFrame(title: "Volatility", description: "Percentile rank of bandwidth (detects compression vs expansion).",
-                       isPending: store.isIndicatorPending, onExplain: { explain = .bbwp }) {
+                       isPending: store.isIndicatorPending, explainSourceID: explainSourceID(.bbwp), onExplain: { explain = .bbwp }) {
       BBWPChart(result: b.bbwp, windowDays: store.indicatorWindowDays, selectedDate: $scrub)
     } badges: { bbwpBadges(b.bbwp) }
   }
@@ -102,7 +106,7 @@ struct TokenIndicatorsSection: View {
 
   private func divergencesCard(_ b: IndicatorBundle) -> some View {
     IndicatorCardFrame(title: "Divergences", description: "Compares RSI pivots against price pivots to flag bullish and bearish divergence.",
-                       isPending: store.isIndicatorPending, onExplain: { explain = .rsi }) {
+                       isPending: store.isIndicatorPending, explainSourceID: explainSourceID(.rsi), onExplain: { explain = .rsi }) {
       RsiDivergencesChart(result: b.rsiDivergences, windowDays: store.indicatorWindowDays, selectedDate: $scrub)
     } badges: { divergenceBadges(b.rsiDivergences) }
   }
@@ -164,24 +168,24 @@ struct TokenIndicatorsSection: View {
     return IndicatorExplainRequest(token: tokenRef, timeframe: store.indicatorScale.rawValue, marketContext: marketContext, snapshot: snapshot)
   }
 
-  @ViewBuilder private func explainSheet(_ target: ExplainTarget, _ b: IndicatorBundle) -> some View {
+  @ViewBuilder private func explainPage(_ target: ExplainTarget, _ b: IndicatorBundle, close: @escaping () -> Void) -> some View {
     let req = request(target, b)
     let days = store.indicatorWindowDays
     switch target {
     case .marketVision:
-      IndicatorExplainSheet(title: "Momentum & Money Flow", request: req, quote: quote, coinId: coinId) {
+      IndicatorExplainPage(title: "Momentum & Money Flow", request: req, quote: quote, coinId: coinId, close: close) {
         MarketVisionChart(result: b.marketVision, windowDays: days, selectedDate: $explainScrub, height: 220)
       } badges: { momentumBadges(b.marketVision) }
     case .bollinger:
-      IndicatorExplainSheet(title: "Bollinger Bands", request: req, quote: quote, coinId: coinId) {
+      IndicatorExplainPage(title: "Bollinger Bands", request: req, quote: quote, coinId: coinId, close: close) {
         BollingerBandsChart(result: b.bollinger, windowDays: days, selectedDate: $explainScrub, height: 220)
       } badges: { bollingerBadges(b.bollinger) }
     case .bbwp:
-      IndicatorExplainSheet(title: "Volatility", request: req, quote: quote, coinId: coinId) {
+      IndicatorExplainPage(title: "Volatility", request: req, quote: quote, coinId: coinId, close: close) {
         BBWPChart(result: b.bbwp, windowDays: days, selectedDate: $explainScrub, height: 220)
       } badges: { bbwpBadges(b.bbwp) }
     case .rsi:
-      IndicatorExplainSheet(title: "RSI Divergences", request: req, quote: quote, coinId: coinId) {
+      IndicatorExplainPage(title: "RSI Divergences", request: req, quote: quote, coinId: coinId, close: close) {
         RsiDivergencesChart(result: b.rsiDivergences, windowDays: days, selectedDate: $explainScrub, height: 220)
       } badges: { divergenceBadges(b.rsiDivergences) }
     }
@@ -195,6 +199,8 @@ struct IndicatorCardFrame<ChartView: View, Badges: View>: View {
   let title: String
   let description: String
   let isPending: Bool
+  /// Registers the Explain button as the zoom / collapse anchor for its explanation page.
+  var explainSourceID: String? = nil
   let onExplain: () -> Void
   @ViewBuilder let chart: () -> ChartView
   @ViewBuilder let badges: () -> Badges
@@ -213,6 +219,7 @@ struct IndicatorCardFrame<ChartView: View, Badges: View>: View {
         }
           .buttonStyle(.glass)
           .buttonBorderShape(.circle)
+          .tokenTransitionSource(explainSourceID ?? "indicator-explain|\(title)", cornerRadius: 15)
           .accessibilityLabel("Explain \(title)")
           .disabled(isPending)
       }

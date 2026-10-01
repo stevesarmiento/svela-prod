@@ -182,7 +182,13 @@ import AggrAPI
     ScrollView {
       VStack(spacing: 10) {
         ForEach(PreviewFixtures.quotes) { quote in
-          SelectableRow(id: quote.id) { AnalysisTokenHeader(coinId: quote.id, quote: quote) }
+          SelectableRow(id: quote.id) {
+            HStack(spacing: 10) {
+              GlassTokenLogo(symbol: quote.symbol, imageURL: quote.image, size: 36)
+              Text(LogoOverrides.cleanTokenName(quote.name)).font(.headline)
+              Spacer()
+            }
+          }
         }
       }.padding()
     }

@@ -74,3 +74,12 @@ import Testing
     #expect(try AnalysisDataService.validatedMarketInput(row).volume24h == 0)
   }
 }
+
+@Test func reverseLevelsEncodeUnreachablePricesAsNull() throws {
+  let level = IndicatorData.ReverseLevel(target: 70, price: nil)
+  let json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(level)) as? [String: Any])
+  // `price` is `nullable` in `IndicatorDataSchema`: the key must be present.
+  #expect(json["target"] as? Double == 70)
+  #expect(json.keys.contains("price"))
+  #expect(json["price"] is NSNull)
+}

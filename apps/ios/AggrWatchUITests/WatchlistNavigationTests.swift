@@ -420,7 +420,7 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertLessThan(metrics.frame.maxX, report.frame.minX)
     XCTAssertFalse(app.segmentedControls["analysis-content-picker"].exists)
     capture("Wide analysis sidebar and report")
-    app.buttons["Done"].tap()
+    app.buttons["analysis-page-close"].tap()
   }
 
   @MainActor func testSingleAnalysisIncludesChartAndMarketSidebar() {
@@ -435,9 +435,14 @@ final class WatchlistNavigationTests: XCTestCase {
     token.swipeLeft()
     app.buttons["Analyze selected"].tap()
     XCTAssertTrue(app.staticTexts["Market overview"].waitForExistence(timeout: 10))
-    XCTAssertTrue(app.staticTexts["Price · 7 days"].waitForExistence(timeout: 10))
+    let chart = app.descendants(matching: .any)["analysis-price-chart"].firstMatch
+    XCTAssertTrue(chart.waitForExistence(timeout: 10))
+    XCTAssertFalse(app.staticTexts["Deep Analysis"].exists)
+    XCTAssertTrue(app.buttons["analysis-page-close"].exists)
     capture("Single analysis report and price-volume-Hull chart")
     let picker = app.segmentedControls["analysis-content-picker"]
+    XCTAssertTrue(picker.waitForExistence(timeout: 5))
+    XCTAssertGreaterThan(picker.frame.minY, chart.frame.maxY - 1, "The content switch sits under the chart")
     picker.buttons["Market data"].tap()
     XCTAssertTrue(app.staticTexts["Market metrics"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.staticTexts["Current price"].exists)
@@ -462,7 +467,7 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertFalse(app.staticTexts["Analysis unavailable"].exists)
     app.buttons["Regenerate"].tap()
     XCTAssertTrue(app.staticTexts["Market overview"].waitForExistence(timeout: 10))
-    app.buttons["Done"].tap()
+    app.buttons["analysis-page-close"].tap()
     XCTAssertTrue(token.waitForExistence(timeout: 5))
   }
 
@@ -478,7 +483,7 @@ final class WatchlistNavigationTests: XCTestCase {
     btc.swipeLeft()
     app.buttons["watchlist-token-ethereum"].tap()
     app.buttons["Analyze selected"].tap()
-    XCTAssertTrue(app.staticTexts["Relative performance · 7 days"].waitForExistence(timeout: 15))
+    XCTAssertTrue(app.descendants(matching: .any)["analysis-comparison-chart"].firstMatch.waitForExistence(timeout: 15))
     XCTAssertFalse(app.staticTexts["Not enough overlapping history to chart these tokens."].exists)
     capture("Comparison analysis report and aligned chart")
     let picker = app.segmentedControls["analysis-content-picker"]
@@ -507,7 +512,7 @@ final class WatchlistNavigationTests: XCTestCase {
     capture("Comparison analysis momentum flow and excess returns")
     picker.buttons["Report"].tap()
     XCTAssertTrue(app.staticTexts["Market overview"].exists)
-    app.buttons["Done"].tap()
+    app.buttons["analysis-page-close"].tap()
     XCTAssertTrue(btc.waitForExistence(timeout: 5))
   }
 
@@ -542,6 +547,7 @@ final class WatchlistNavigationTests: XCTestCase {
     capture("Web Analyze icon in token menu")
     app.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.65)).tap()
     app.buttons["token-page-close"].tap()
+    XCTAssertTrue(app.buttons["token-page-close"].waitForNonExistence(timeout: 5))
     app.tabBars.buttons["Compare"].tap()
     let initiallyExpand = app.buttons["Expand all"]
     XCTAssertTrue(initiallyExpand.waitForExistence(timeout: 5))
@@ -883,6 +889,17 @@ final class WatchlistNavigationTests: XCTestCase {
       point.press(forDuration: 0.5, thenDragTo: chart.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.45)))
       XCTAssertTrue(app.buttons["token-page-close"].exists)
     }
+    // The explanation opens as a page over the token page and collapses back onto it.
+    let explain = app.buttons["Explain RSI Divergences"]
+    XCTAssertTrue(explain.waitForExistence(timeout: 5))
+    explain.tap()
+    let closeExplanation = app.buttons["indicator-page-close"]
+    XCTAssertTrue(closeExplanation.waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["indicator-regenerate"].exists)
+    capture("Indicator explanation page")
+    closeExplanation.tap()
+    XCTAssertTrue(closeExplanation.waitForNonExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["token-page-close"].waitForExistence(timeout: 5))
   }
 
   @MainActor func testTokenStatsPreserveMetricsAndExplainValues() {
@@ -995,9 +1012,10 @@ final class WatchlistNavigationTests: XCTestCase {
     // Child presentations must return to the token, without clearing its UIKit route.
     app.buttons["token-actions"].tap()
     app.buttons["Deep analysis"].tap()
-    let done = app.buttons["Done"]
-    XCTAssertTrue(done.waitForExistence(timeout: 5))
-    done.tap()
+    let closeAnalysis = app.buttons["analysis-page-close"]
+    XCTAssertTrue(closeAnalysis.waitForExistence(timeout: 5))
+    closeAnalysis.tap()
+    XCTAssertTrue(closeAnalysis.waitForNonExistence(timeout: 5))
     XCTAssertTrue(close.waitForExistence(timeout: 5))
     // Pull from the page header rather than scrolling its chart/content.
     let start = close.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))

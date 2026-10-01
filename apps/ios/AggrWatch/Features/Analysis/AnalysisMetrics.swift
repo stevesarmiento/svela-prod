@@ -6,8 +6,8 @@ struct AnalysisMetricSection<Content: View>: View {
   let title: String
   @ViewBuilder var content: () -> Content
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      Text(title).font(.headline).accessibilityAddTraits(.isHeader)
+    VStack(alignment: .leading, spacing: 16) {
+      Text(title).font(.title3.weight(.semibold)).accessibilityAddTraits(.isHeader)
       content()
     }.frame(maxWidth: .infinity, alignment: .leading)
   }
@@ -28,13 +28,12 @@ struct AnalysisMetricRow: View {
       HStack(spacing: 12) { label; Spacer(minLength: 8); readout }
       VStack(alignment: .leading, spacing: 6) { label; readout }
     }
-    .font(.subheadline)
     .accessibilityElement(children: .combine)
   }
   private var label: some View {
     HStack(spacing: 6) {
       if let icon { Image(systemName: icon).font(.caption).frame(width: 18).accessibilityHidden(true) }
-      Text(title)
+      Text(title).font(.subheadline)
     }.foregroundStyle(.secondary).fixedSize(horizontal: true, vertical: false)
   }
   private var readout: some View {
@@ -43,7 +42,7 @@ struct AnalysisMetricRow: View {
         TickMeter(value: meter, min: domain.lowerBound, max: domain.upperBound,
                   origin: origin.map { .value($0) } ?? .min, color: tint)
       }
-      if !value.isEmpty { Text(value).monospacedDigit().foregroundStyle(tint) }
+      if !value.isEmpty { Text(value).font(.number(.subheadline, weight: .semibold)).foregroundStyle(tint) }
       if let badge { AnalysisStatusBadge(text: badge, tint: tint) }
     }.fixedSize(horizontal: true, vertical: false)
   }
@@ -73,7 +72,7 @@ struct AnalysisMarketMetrics: View {
         AnalysisMetricRow(title: "24h volume", value: UsdFormat.largeUsd(quote.volume_24h), icon: "chart.bar.xaxis",
                           badge: data.volumeAnalysis?.volumeTrend.capitalized)
       }
-      Divider()
+      Hairline()
       AnalysisMetricSection(title: "Price levels") {
         // The web takes the last 21 observations, despite labeling them '21d'. Keep the calculation,
         // but state the actual window instead of describing intraday observations as daily bars.
@@ -83,9 +82,9 @@ struct AnalysisMarketMetrics: View {
                           icon: "tengesign", tint: .gainGreen)
         Text("Range of the latest 21 price observations.").font(.caption).foregroundStyle(.secondary)
       }
-      Divider()
+      Hairline()
       technical
-      Divider()
+      Hairline()
       structure
     }
     .accessibilityIdentifier("analysis-market-metrics")
@@ -170,7 +169,7 @@ struct ComparativeStatsPanel: View {
           meterCell(t.return30dPct, domain: -maxReturn...maxReturn, origin: 0)
         }
       }
-      Divider()
+      Hairline()
       AnalysisMetricSection(title: "Risk vs \(stats.benchmarkSymbol.uppercased())") {
         comparisonTable(first: "Volatility", second: "Beta") { t in
           meterCell(t.volatility30dAnnualizedPct, domain: 0...maxVol, tint: .orange, signed: false)
@@ -180,11 +179,11 @@ struct ComparativeStatsPanel: View {
         Text("Beta: recent move per 1% benchmark move. Volatility is annualized from 30 days of daily returns.")
           .font(.caption).foregroundStyle(.secondary)
       }
-      Divider()
+      Hairline()
       correlation
-      Divider()
+      Hairline()
       indicators
-      Divider()
+      Hairline()
       momentum
     }.accessibilityIdentifier("analysis-comparative-metrics")
   }
@@ -267,7 +266,7 @@ struct ComparativeStatsPanel: View {
           AnalysisMetricRow(title: "RSI bands %B", value: AnalysisValueStyle.number(t.bbPercentB, digits: 2))
           AnalysisMetricRow(title: "BBWP", value: AnalysisValueStyle.number(t.bbwpPct, digits: 0, suffix: "%"), meter: t.bbwpPct)
         }
-        if t.id != stats.tokens.last?.id { Divider() }
+        if t.id != stats.tokens.last?.id { Hairline() }
       }
       Text("%B is RSI’s position within its Bollinger bands. BBWP ≤20 indicates a squeeze; ≥80 indicates expansion.")
         .font(.caption).foregroundStyle(.secondary)
@@ -297,8 +296,17 @@ struct ComparativeStatsPanel: View {
             AnalysisMetricRow(title: "Excess return · 30d", value: AnalysisValueStyle.percent(t.excessReturn30dPct, suffix: "pp"), tint: AnalysisValueStyle.color(t.excessReturn30dPct))
           }
         }
-        if t.id != stats.tokens.last?.id { Divider() }
+        if t.id != stats.tokens.last?.id { Hairline() }
       }
     }
   }
 }
+
+#if DEBUG
+#Preview("Comparative statistics") {
+  ComparativeStatsPanel(stats: ComparativeStats.compute(PreviewFixtures.quotes.map { quote in
+    .init(id: quote.id, symbol: quote.symbol, name: quote.name, marketCap: quote.marketCap,
+          series: PreviewFixtures.line, rsi: 56, bbwpPct: 42)
+  })!).padding().preferredColorScheme(.dark)
+}
+#endif

@@ -1,3 +1,5 @@
+import AggrAPI
+import AggrCore
 import SwiftUI
 
 /// Two-directional swipe row for cards hosted in a ScrollView (no List, so no
@@ -270,7 +272,11 @@ struct TokenSwipeCard<Content: View>: View {
         TokenSwipeCard(id: "bitcoin", openRowID: openRow, isSelected: selected.wrappedValue,
                        inSelectionMode: selected.wrappedValue, onToggleSelection: { selected.wrappedValue.toggle() },
                        deleteTitle: "Remove Bitcoin?", onDelete: {}) {
-          AnalysisTokenHeader(coinId: "bitcoin", quote: PreviewFixtures.quotes[0])
+          HStack(spacing: 10) {
+            GlassTokenLogo(symbol: PreviewFixtures.quotes[0].symbol, imageURL: PreviewFixtures.quotes[0].image, size: 36)
+            Text(LogoOverrides.cleanTokenName(PreviewFixtures.quotes[0].name)).font(.headline)
+            Spacer()
+          }
         }.padding()
       }
     }

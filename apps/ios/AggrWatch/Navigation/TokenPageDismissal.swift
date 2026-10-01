@@ -259,6 +259,8 @@ extension UIViewController {
       // comparison is reattached. The native source zoom remains the opening transition.
       page.preferredTransition = .crossDissolve
       page.dismiss(animated: false) {
+        // The page is gone; the overlay only fades now, so taps must reach the restored root.
+        self.overlay.isUserInteractionEnabled = false
         UIView.animate(withDuration: self.reduceMotion ? 0 : 0.1) {
           self.overlay.alpha = 0
         } completion: { _ in

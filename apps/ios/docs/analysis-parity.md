@@ -20,7 +20,7 @@ Audited September 14, 2026 against the current local web source. Scope: single-t
 | Indicators | RSI/BBWP numbers only | Wave trend, money flow, RSI-band %B, BBWP, squeeze/expansion states and definitions |
 | Momentum & flow | Missing | RSI meter and hot/oversold state, optional OI change/taker buy, excess 7d/30d return vs benchmark |
 | `indicator-explain-dialog.tsx` | Existing native chart, badges, report | Retained all four charts (Market Vision, RSI bands, BBWP, RSI divergences); added timeframe context, horizontally scrollable badges, request-aligned quote, matching regenerate icon |
-| Streaming lifecycle | Existing requests and cancellation | Same endpoints/protocols; data remains available while streaming or on report failure; generation guards prevent cancelled runs updating reopened sheets |
+| Streaming lifecycle | Existing requests and cancellation | Same endpoints/protocols; data remains available while streaming or on report failure; generation guards prevent cancelled runs updating reopened pages |
 | History readiness | Native could send undersized history | Requires at least 30 valid price and volume observations, matching the web readiness rule |
 
 ## Mobile adaptations and deliberate corrections
@@ -36,7 +36,7 @@ Audited September 14, 2026 against the current local web source. Scope: single-t
 
 Single-token metrics use the retained `AnalysisDataService.Bundle`; comparative panels use the exact `ComparativeStats.Result` encoded into the comparison request. Price-chart history is fetched independently so chart availability does not depend on an AI response. Hull preparation is performed once when chart data arrives, not for every text chunk.
 
-Tests cover shared timeline/baseline/end, daily fallback, no overlap, invalid/duplicate observations, actual preview data flowing through the analysis service, optional derivatives, and the two sheet flows including all metrics sections and panel switching. Offline previews use real analysis-data preparation, with only the AI report replaced by fixture text. Production AI network responses are not exercised by preview tests.
+Tests cover shared timeline/baseline/end, daily fallback, no overlap, invalid/duplicate observations, actual preview data flowing through the analysis service, optional derivatives, and the single and comparison page flows (full-screen pages with the token page's zoom and pull-to-dismiss) including all metrics sections and panel switching. Offline previews use real analysis-data preparation, with only the AI report replaced by fixture text. Production AI network responses are not exercised by preview tests.
 
 Verified results: 149 unit tests (AggrWatch, AggrCore, AggrAPI), two iPhone UI flows and the iPad sidebar UI flow passed. Simulator screenshots were reviewed for price/volume/Hull, comparative lines, returns/risk, correlation, indicator meters and populated derivatives. Result bundles: `/tmp/aggr-analysis-wide.xcresult` and `/tmp/aggr-analysis-phone-verified.xcresult`.
 

@@ -239,7 +239,7 @@ struct CoinRowsList: View {
     guard data.selectedGroup?.id == group.id else { return }
     env.selection.register(owner: "watchlist-\(group.id)", selectableIds: items.map(\.coinId), onRemove: { ids in
       _ = try await data.removeBulk(coinIds: ids, from: group.id)
-    }, onAnalyze: { ids in env.router.sheet = .analyze(ids) })
+    }, onAnalyze: { ids in env.router.openAnalysis(ids, sourceID: "selection-analyze") })
   }
 }
 

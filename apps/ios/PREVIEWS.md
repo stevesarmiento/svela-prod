@@ -16,7 +16,8 @@ If the project is missing a newly added file, run `xcodegen generate` from `apps
 - `Features/TokenDetail/TokenDetailView.swift`: full token screen; adjacent files preview chart cards, metrics, and indicators individually.
 - `Features/Screener/ScreenerView.swift`: results, loading, empty, error, filter editor, prompt sheet, and row controls.
 - `Features/Settings/SettingsView.swift`: settings and profile cards.
-- `Features/Analysis`, `Features/NewsFeed`, `Features/Search`, and `Features/Login`: sheets and screens.
+- `Features/Analysis/AnalysisPageView.swift`: the full-screen analysis page (single token and comparison), its compact header, and an interactive presentation stacked over the watchlist.
+- `Features/NewsFeed`, `Features/Search`, and `Features/Login`: sheets and screens.
 - `Charts` and `Components`: individual reusable views with sample values and stateful controls.
 
 Change the canvas device and Dynamic Type settings to check smaller phones, iPad, and larger text. Previews use the app's dark appearance.

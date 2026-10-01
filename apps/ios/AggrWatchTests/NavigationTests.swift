@@ -90,3 +90,33 @@ import UIKit
   root.present(page, animated: false)
   #expect(root.pageBackdropView === page.view)
 }
+
+@Test @MainActor func analysisPresentationOpensAndResets() {
+  let router = AppRouter()
+  router.openAnalysis(["bitcoin", "ethereum"], sourceID: "selection-analyze")
+  #expect(router.analysisPresentation?.coinIds == ["bitcoin", "ethereum"])
+  #expect(router.analysisPresentation?.sourceID == "selection-analyze")
+  router.openAnalysis([])
+  #expect(router.analysisPresentation != nil, "An empty selection never replaces an open analysis")
+  router.resetAll()
+  #expect(router.analysisPresentation == nil)
+}
+
+#if DEBUG
+@Test @MainActor func settingsLinkWaitsForTheAnalysisPage() {
+  let env = PreviewData.environment()
+  let router = env.router
+  let data = env.watchlistData
+  router.openAnalysis(["bitcoin"])
+  router.handle(.settings, watchlistData: data)
+  #expect(router.analysisPresentation == nil)
+  #expect(router.sheet == nil)
+  router.tokenDidDismiss()
+  #expect(router.sheet == nil, "Only the analysis page's dismissal releases its pending sheet")
+  router.analysisDidDismiss()
+  #expect(router.sheet == .settings)
+  router.openAnalysis(["bitcoin"])
+  router.handle(.tab(.overview), watchlistData: data)
+  #expect(router.analysisPresentation == nil)
+}
+#endif

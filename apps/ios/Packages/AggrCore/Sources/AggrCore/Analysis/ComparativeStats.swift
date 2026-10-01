@@ -49,6 +49,30 @@ public enum ComparativeStats {
     public var moneyFlow: String?
     public var openInterestChangePct: Double?
     public var takerBuyRatio: Double?
+
+    /// `ComparativeTokenStatsSchema` declares every optional as `nullable`, not `optional`: the
+    /// key must be present. Swift's synthesized encoder omits nil keys, which zod rejects as
+    /// "Required", so nils are written as explicit `null`s.
+    public func encode(to encoder: Encoder) throws {
+      var c = encoder.container(keyedBy: CodingKeys.self)
+      try c.encode(id, forKey: .id)
+      try c.encode(symbol, forKey: .symbol)
+      try c.encode(name, forKey: .name)
+      try c.encode(marketCap, forKey: .marketCap)
+      try c.encode(return7dPct, forKey: .return7dPct)
+      try c.encode(return30dPct, forKey: .return30dPct)
+      try c.encode(excessReturn7dPct, forKey: .excessReturn7dPct)
+      try c.encode(excessReturn30dPct, forKey: .excessReturn30dPct)
+      try c.encode(volatility30dAnnualizedPct, forKey: .volatility30dAnnualizedPct)
+      try c.encode(betaVsBenchmark, forKey: .betaVsBenchmark)
+      try c.encode(rsi, forKey: .rsi)
+      try c.encode(bbPercentB, forKey: .bbPercentB)
+      try c.encode(bbwpPct, forKey: .bbwpPct)
+      try c.encode(waveTrend, forKey: .waveTrend)
+      try c.encode(moneyFlow, forKey: .moneyFlow)
+      try c.encode(openInterestChangePct, forKey: .openInterestChangePct)
+      try c.encode(takerBuyRatio, forKey: .takerBuyRatio)
+    }
   }
 
   public struct Result: Sendable, Hashable, Codable {
