@@ -9,8 +9,9 @@ struct TokenIndicatorsSection: View {
   let coinId: String
   let quote: CoinQuote?
 
-  @State private var scrub: Date?
-  @State private var explainScrub: Date?
+  /// One crosshair shared by the four panes; only their rule/readout overlays observe it.
+  @State private var scrub = IndicatorScrubStore()
+  @State private var explainScrub = IndicatorScrubStore()
   @State private var explain: ExplainTarget?
 
   private enum ExplainTarget: String, Identifiable { case marketVision, bollinger, bbwp, rsi; var id: String { rawValue } }
@@ -20,21 +21,21 @@ struct TokenIndicatorsSection: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
       Text("Technical Indicators").font(.title2.weight(.semibold))
-      if let b = store.indicators {
-        momentumCard(b)
-        bollingerCard(b)
-        volatilityCard(b)
-        divergencesCard(b)
+      if let b = store.indicators, let charts = store.indicatorCharts {
+        momentumCard(b, charts)
+        bollingerCard(b, charts)
+        volatilityCard(b, charts)
+        divergencesCard(b, charts)
       } else {
         ForEach(0..<4, id: \.self) { _ in loadingCard }
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .onChange(of: explain) { _, _ in explainScrub = nil }
+    .onChange(of: explain) { _, _ in explainScrub.set(nil) }
     // The explanation is a page over the token page: it zooms out of the card's Explain button
     // and collapses back into it on pull or close.
     .fullScreenPage(item: $explain, sourceID: { explainSourceID($0) }) { target, close in
-      if let b = store.indicators { explainPage(target, b, close: close) }
+      if let b = store.indicators, let charts = store.indicatorCharts { explainPage(target, b, charts, close: close) }
     }
   }
 
@@ -48,10 +49,10 @@ struct TokenIndicatorsSection: View {
 
   // MARK: Cards
 
-  private func momentumCard(_ b: IndicatorBundle) -> some View {
+  private func momentumCard(_ b: IndicatorBundle, _ charts: IndicatorChartData) -> some View {
     IndicatorCardFrame(title: "Momentum & Money Flow", description: "Tracks momentum shifts using WaveTrend + money flow.",
                        isPending: store.isIndicatorPending, explainSourceID: explainSourceID(.marketVision), onExplain: { explain = .marketVision }) {
-      MarketVisionChart(result: b.marketVision, windowDays: store.indicatorWindowDays, selectedDate: $scrub)
+      MarketVisionChart(data: charts.marketVision, windowDays: store.indicatorWindowDays, scrub: scrub)
     } badges: { momentumBadges(b.marketVision) }
   }
 
@@ -72,10 +73,10 @@ struct TokenIndicatorsSection: View {
     } else { IndicatorStat(label: "MF", value: "—", tint: .secondary) }
   }
 
-  private func bollingerCard(_ b: IndicatorBundle) -> some View {
+  private func bollingerCard(_ b: IndicatorBundle, _ charts: IndicatorChartData) -> some View {
     IndicatorCardFrame(title: "Bollinger Bands", description: "Shows RSI relative to its own bands (overextension vs mean).",
                        isPending: store.isIndicatorPending, explainSourceID: explainSourceID(.bollinger), onExplain: { explain = .bollinger }) {
-      BollingerBandsChart(result: b.bollinger, windowDays: store.indicatorWindowDays, selectedDate: $scrub)
+      BollingerBandsChart(data: charts.bollinger, windowDays: store.indicatorWindowDays, scrub: scrub)
     } badges: { bollingerBadges(b.bollinger) }
   }
 
@@ -88,10 +89,10 @@ struct TokenIndicatorsSection: View {
     } else { IndicatorStat(label: "%B", value: "—", tint: .secondary) }
   }
 
-  private func volatilityCard(_ b: IndicatorBundle) -> some View {
+  private func volatilityCard(_ b: IndicatorBundle, _ charts: IndicatorChartData) -> some View {
     IndicatorCardFrame(title: "Volatility", description: "Percentile rank of bandwidth (detects compression vs expansion).",
                        isPending: store.isIndicatorPending, explainSourceID: explainSourceID(.bbwp), onExplain: { explain = .bbwp }) {
-      BBWPChart(result: b.bbwp, windowDays: store.indicatorWindowDays, selectedDate: $scrub)
+      BBWPChart(data: charts.bbwp, windowDays: store.indicatorWindowDays, scrub: scrub)
     } badges: { bbwpBadges(b.bbwp) }
   }
 
@@ -104,10 +105,10 @@ struct TokenIndicatorsSection: View {
     } else { IndicatorStat(label: "BBWP", value: "—", tint: .secondary) }
   }
 
-  private func divergencesCard(_ b: IndicatorBundle) -> some View {
+  private func divergencesCard(_ b: IndicatorBundle, _ charts: IndicatorChartData) -> some View {
     IndicatorCardFrame(title: "Divergences", description: "Compares RSI pivots against price pivots to flag bullish and bearish divergence.",
                        isPending: store.isIndicatorPending, explainSourceID: explainSourceID(.rsi), onExplain: { explain = .rsi }) {
-      RsiDivergencesChart(result: b.rsiDivergences, windowDays: store.indicatorWindowDays, selectedDate: $scrub)
+      RsiDivergencesChart(data: charts.rsi, windowDays: store.indicatorWindowDays, scrub: scrub)
     } badges: { divergenceBadges(b.rsiDivergences) }
   }
 
@@ -168,25 +169,25 @@ struct TokenIndicatorsSection: View {
     return IndicatorExplainRequest(token: tokenRef, timeframe: store.indicatorScale.rawValue, marketContext: marketContext, snapshot: snapshot)
   }
 
-  @ViewBuilder private func explainPage(_ target: ExplainTarget, _ b: IndicatorBundle, close: @escaping () -> Void) -> some View {
+  @ViewBuilder private func explainPage(_ target: ExplainTarget, _ b: IndicatorBundle, _ charts: IndicatorChartData, close: @escaping () -> Void) -> some View {
     let req = request(target, b)
     let days = store.indicatorWindowDays
     switch target {
     case .marketVision:
       IndicatorExplainPage(title: "Momentum & Money Flow", request: req, quote: quote, coinId: coinId, close: close) {
-        MarketVisionChart(result: b.marketVision, windowDays: days, selectedDate: $explainScrub, height: 220)
+        MarketVisionChart(data: charts.marketVision, windowDays: days, scrub: explainScrub, height: 220)
       } badges: { momentumBadges(b.marketVision) }
     case .bollinger:
       IndicatorExplainPage(title: "Bollinger Bands", request: req, quote: quote, coinId: coinId, close: close) {
-        BollingerBandsChart(result: b.bollinger, windowDays: days, selectedDate: $explainScrub, height: 220)
+        BollingerBandsChart(data: charts.bollinger, windowDays: days, scrub: explainScrub, height: 220)
       } badges: { bollingerBadges(b.bollinger) }
     case .bbwp:
       IndicatorExplainPage(title: "Volatility", request: req, quote: quote, coinId: coinId, close: close) {
-        BBWPChart(result: b.bbwp, windowDays: days, selectedDate: $explainScrub, height: 220)
+        BBWPChart(data: charts.bbwp, windowDays: days, scrub: explainScrub, height: 220)
       } badges: { bbwpBadges(b.bbwp) }
     case .rsi:
       IndicatorExplainPage(title: "RSI Divergences", request: req, quote: quote, coinId: coinId, close: close) {
-        RsiDivergencesChart(result: b.rsiDivergences, windowDays: days, selectedDate: $explainScrub, height: 220)
+        RsiDivergencesChart(data: charts.rsi, windowDays: days, scrub: explainScrub, height: 220)
       } badges: { divergenceBadges(b.rsiDivergences) }
     }
   }
@@ -234,34 +235,47 @@ struct IndicatorCardFrame<ChartView: View, Badges: View>: View {
   }
 }
 
-/// Web's wrapping stats strip: all readouts stay discoverable on a narrow screen.
+/// Web's wrapping stats strip: all readouts stay discoverable on a narrow screen. Subview sizes
+/// and the last wrap are kept in the layout cache, so size and place passes measure nothing twice.
 private struct IndicatorStatsLayout: Layout {
   let spacing: CGFloat
   let rowSpacing: CGFloat
 
-  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let width = proposal.width ?? 350
-    return CGSize(width: width, height: positions(subviews, width: width).height)
+  struct Cache {
+    var sizes: [CGSize]
+    var width: CGFloat = -1
+    var origins: [CGPoint] = []
+    var height: CGFloat = 0
   }
 
-  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-    let layout = positions(subviews, width: bounds.width)
-    for (view, origin) in zip(subviews, layout.origins) {
+  func makeCache(subviews: Subviews) -> Cache { Cache(sizes: subviews.map { $0.sizeThatFits(.unspecified) }) }
+  func updateCache(_ cache: inout Cache, subviews: Subviews) { cache = makeCache(subviews: subviews) }
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
+    let width = proposal.width ?? 350
+    wrap(&cache, width: width)
+    return CGSize(width: width, height: cache.height)
+  }
+
+  func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+    wrap(&cache, width: bounds.width)
+    for (view, origin) in zip(subviews, cache.origins) {
       view.place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y), anchor: .topLeading, proposal: .unspecified)
     }
   }
 
-  private func positions(_ subviews: Subviews, width: CGFloat) -> (origins: [CGPoint], height: CGFloat) {
+  private func wrap(_ cache: inout Cache, width: CGFloat) {
+    guard cache.width != width || cache.origins.count != cache.sizes.count else { return }
     var origins: [CGPoint] = []
+    origins.reserveCapacity(cache.sizes.count)
     var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
-    for view in subviews {
-      let size = view.sizeThatFits(.unspecified)
+    for size in cache.sizes {
       if x > 0 && x + size.width > width { x = 0; y += rowHeight + rowSpacing; rowHeight = 0 }
       origins.append(CGPoint(x: x, y: y))
       x += size.width + spacing
       rowHeight = max(rowHeight, size.height)
     }
-    return (origins, y + rowHeight)
+    cache.width = width; cache.origins = origins; cache.height = y + rowHeight
   }
 }
 

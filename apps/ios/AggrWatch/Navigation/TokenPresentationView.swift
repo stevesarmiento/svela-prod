@@ -408,7 +408,7 @@ extension View {
 
 /// The page backdrop shared by full-screen pages: the theme background with a blurred token logo
 /// glow that extends above the navigation container, through the handle and status-bar safe area.
-struct PageArtworkBackground: View {
+struct PageArtworkBackground: View, Equatable {
   let symbol: String
   let imageURL: String?
 
@@ -416,14 +416,26 @@ struct PageArtworkBackground: View {
     GeometryReader { geometry in
       ZStack(alignment: .top) {
         Theme.background
-        TokenLogo(symbol: symbol, imageURL: imageURL, size: 260)
-          .blur(radius: 90).opacity(0.35)
+        BlurredArtwork(symbol: symbol, imageURL: imageURL)
+          .equatable()
           .offset(y: geometry.safeAreaInsets.top - 180)
           .frame(maxWidth: .infinity, alignment: .top)
       }
     }
     .ignoresSafeArea()
     .allowsHitTesting(false)
+  }
+}
+
+/// The 90pt blur is `Equatable` on its artwork only, so parents re-evaluating (quote polls,
+/// scrolls) never rebuild it. (No `drawingGroup`: its offscreen texture would clip the blur.)
+private struct BlurredArtwork: View, Equatable {
+  let symbol: String
+  let imageURL: String?
+
+  var body: some View {
+    TokenLogo(symbol: symbol, imageURL: imageURL, size: 260)
+      .blur(radius: 90).opacity(0.35)
   }
 }
 
@@ -451,15 +463,28 @@ struct TokenPresentationView: View {
         .accessibilityHidden(true)
         .allowsHitTesting(false)
     }
-    .background {
-      let quote = env.watchlistData.quote(token.coinId)
-      let logo = artwork ?? TokenPageArtwork(symbol: quote?.symbol ?? token.coinId, imageURL: quote?.image)
-      PageArtworkBackground(symbol: logo.symbol, imageURL: logo.imageURL)
-    }
+    .background { TokenPageBackdrop(coinId: token.coinId, artwork: artwork) }
     .overlay { ToastOverlay() }
     .fontDesign(.rounded)
     .tint(Theme.accent)
     .accessibilityAction(.escape) { close() }
+  }
+}
+
+/// Reads the quote only until the detail view reports its artwork, and keeps that read out of
+/// the page body so a quotes poll never re-evaluates the navigation stack above it.
+private struct TokenPageBackdrop: View {
+  let coinId: String
+  let artwork: TokenPageArtwork?
+  @Environment(AppEnvironment.self) private var env
+
+  var body: some View {
+    let logo = artwork ?? {
+      let quote = env.watchlistData.quote(coinId)
+      return TokenPageArtwork(symbol: quote?.symbol ?? coinId, imageURL: quote?.image)
+    }()
+    PageArtworkBackground(symbol: logo.symbol, imageURL: logo.imageURL)
+      .equatable()
   }
 }
 

@@ -346,6 +346,7 @@ struct WatchlistsGrid: View {
   @Environment(AppEnvironment.self) private var env
   @State private var cardWidth: CGFloat = 0
   @AppStorage("watchlists.cardSort") private var sort: WatchlistCardSort = .original
+  @State private var sparklines = CardSparklinePreparation()
   let onSelect: (WatchlistGroup) -> Void
   let onEdit: (WatchlistGroup) -> Void
   let onDelete: (WatchlistGroup) -> Void
@@ -359,21 +360,44 @@ struct WatchlistsGrid: View {
     }
   }
 
+  /// Per-card inputs, resolved once per body (not once in the sort comparator and again per card).
+  private struct CardModel: Identifiable {
+    let group: WatchlistGroup
+    let coins: [CoinQuote]
+    let coinsCount: Int
+    let aggregate: [TimePoint]
+    let aggregateChange: (value: Double, isEstimate: Bool)?
+    var id: String { group.id }
+  }
+
+  private func cardModels(data: WatchlistDataStore) -> [CardModel] {
+    var byGroup: [String: CardModel] = [:]
+    for group in data.groups {
+      let ids = data.coinIds(in: group)
+      byGroup[group.id] = CardModel(group: group, coins: ids.compactMap { data.quote($0) }, coinsCount: ids.count,
+                                    aggregate: sparklines.downsampled(data.aggregate1dByGroup[group.id] ?? [], for: group.id),
+                                    aggregateChange: data.aggregateChange1d(for: group))
+    }
+    return sort.ordered(data.groups, change: { byGroup[$0.id]?.aggregateChange?.value },
+                        tokenCount: { byGroup[$0.id]?.coinsCount ?? 0 }).compactMap { byGroup[$0.id] }
+  }
+
   private func cards(data: WatchlistDataStore) -> some View {
+    let models = cardModels(data: data)
+    let selectedID = data.selectedGroup?.id
+    let quotesLoading = data.isQuotesLoading
     // Share glass rendering without blending neighboring cards together.
-    GlassEffectContainer(spacing: 0) {
+    return GlassEffectContainer(spacing: 0) {
       LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 8), count: 2), spacing: 8) {
-        ForEach(sort.ordered(data.groups, change: { data.aggregateChange1d(for: $0)?.value },
-                             tokenCount: { data.coinIds(in: $0).count })) { group in
-          let ids = data.coinIds(in: group)
-          let coins = ids.compactMap { data.quote($0) }
+        ForEach(models) { model in
+          let group = model.group
           let card = WatchlistCardView(
             name: group.name, icon: group.icon, color: group.color,
-            coins: coins, coinsCount: ids.count,
-            aggregate: data.aggregate1dByGroup[group.id] ?? [],
-            aggregateChange: data.aggregateChange1d(for: group),
-            isLoading: data.isQuotesLoading || data.aggregatePendingGroupIDs.contains(group.id),
-            selected: data.selectedGroup?.id == group.id,
+            coins: model.coins, coinsCount: model.coinsCount,
+            aggregate: model.aggregate,
+            aggregateChange: model.aggregateChange,
+            isLoading: quotesLoading || data.aggregatePendingGroupIDs.contains(group.id),
+            selected: selectedID == group.id,
             loadingIdentity: group.id
           )
           Button { onSelect(group) } label: {
@@ -384,7 +408,7 @@ struct WatchlistsGrid: View {
           .contentShape(.contextMenuPreview, .rect(cornerRadius: Theme.Radius.lg))
           .accessibilityIdentifier("watchlist-card-\(group.id)")
           .accessibilityHint("Open watchlist comparison")
-          .accessibilityAddTraits(data.selectedGroup?.id == group.id ? .isSelected : [])
+          .accessibilityAddTraits(selectedID == group.id ? .isSelected : [])
           .contextMenu {
             Button { onEdit(group) } label: { Label("Edit", systemImage: "pencil.tip.crop.circle") }
             if !group.isDefault {
@@ -406,6 +430,23 @@ struct WatchlistsGrid: View {
     }
     .padding(.horizontal, 12)
     .background { WatchlistTouchResponse().frame(width: 0, height: 0) }
+  }
+}
+
+/// Unobserved memo: a 16pt-high card sparkline needs ~120 points, not the full 1D series.
+/// Downsampling runs once per data change; unchanged series return the same array instance so
+/// `AggrSparkline`'s equality check short-circuits.
+@MainActor final class CardSparklinePreparation {
+  private var sources: [String: [TimePoint]] = [:]
+  private var results: [String: [TimePoint]] = [:]
+  static let maxPoints = 120
+
+  func downsampled(_ points: [TimePoint], for groupID: String) -> [TimePoint] {
+    if let cached = results[groupID], sources[groupID] == points { return cached }
+    let next = ChartSeries.downsample(points, max: Self.maxPoints)
+    sources[groupID] = points
+    results[groupID] = next
+    return next
   }
 }
 

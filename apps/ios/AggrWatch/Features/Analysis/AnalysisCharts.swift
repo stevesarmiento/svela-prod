@@ -3,33 +3,47 @@ import Charts
 import SwiftUI
 
 /// Borderless seven-day chart: price, volume and dotted EHMA Hull, like the web analysis sidebar.
-struct AnalysisPriceChart: View {
-  struct Model {
+struct AnalysisPriceChart: View, Equatable {
+  /// Series are downsampled for a 220pt plot and the axis bounds are fixed here, so the chart body
+  /// (which re-runs per selection) only draws.
+  struct Model: Equatable {
+    static let maxPoints = 300
     let prices: [TimePoint]
     let volume: [TimePoint]
     let hull: [TimePoint]
+    let floor: Double
+    let ceiling: Double
+    let maxVolume: Double
+    let lineColor: Color
     init(data: ParsedChartData) {
       let cleanPrices = AnalysisChartSeries.clean(data.line)
       let start = (cleanPrices.last?.epochSeconds ?? 0) - 7 * 86_400
-      prices = cleanPrices.filter { $0.epochSeconds >= start }
-      volume = AnalysisChartSeries.clean(data.volume, allowsZero: true).filter { $0.epochSeconds >= start }
-      hull = AnalysisChartSeries.clean(HullSuite.compute(data.ohlc, config: .tokenPage).mhull).filter { $0.epochSeconds >= start }
+      prices = ChartSeries.downsample(cleanPrices.filter { $0.epochSeconds >= start }, max: Self.maxPoints)
+      volume = ChartSeries.downsample(AnalysisChartSeries.clean(data.volume, allowsZero: true).filter { $0.epochSeconds >= start }, max: Self.maxPoints)
+      hull = ChartSeries.downsample(AnalysisChartSeries.clean(HullSuite.compute(data.ohlc, config: .tokenPage).mhull).filter { $0.epochSeconds >= start }, max: Self.maxPoints)
+      let values = (prices + hull).map(\.value)
+      let low = values.min() ?? 0, high = values.max() ?? 1
+      let padding = max((high - low) * 0.1, abs(high) * 0.005, 0.001)
+      floor = low - padding; ceiling = high + padding
+      maxVolume = max(volume.map(\.value).max() ?? 1, 1)
+      lineColor = AnalysisValueStyle.color((prices.last?.value ?? 0) - (prices.first?.value ?? 0))
     }
   }
   let model: Model
   @State private var selectedDate: Date?
   private var prices: [TimePoint] { model.prices }
-  private var volume: [TimePoint] { model.volume }
-  private var hull: [TimePoint] { model.hull }
 
+  /// `clean` sorts by time, so the nearest point is a binary search.
   private var selected: TimePoint? {
     guard let selectedDate else { return prices.last }
-    return prices.min { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }
+    return SeriesLookup.nearest(prices, time: Int(selectedDate.timeIntervalSince1970.rounded()))
   }
   private var change: Double? {
     guard let value = selected?.value, let base = prices.first?.value, base > 0 else { return nil }
     return (value / base - 1) * 100
   }
+
+  static func == (a: Self, b: Self) -> Bool { a.model == b.model }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -49,13 +63,9 @@ struct AnalysisPriceChart: View {
   }
 
   private var plot: some View {
-    let values = (prices + hull).map(\.value)
-    let low = values.min() ?? 0, high = values.max() ?? 1
-    let padding = max((high - low) * 0.1, abs(high) * 0.005, 0.001)
-    let floor = low - padding, ceiling = high + padding
-    let maxVolume = max(volume.map(\.value).max() ?? 1, 1)
+    let floor = model.floor, ceiling = model.ceiling, maxVolume = model.maxVolume
     return Chart {
-      ForEach(volume, id: \.epochSeconds) { point in
+      ForEach(model.volume, id: \.epochSeconds) { point in
         BarMark(x: .value("Time", point.date), yStart: .value("Base", floor),
                 yEnd: .value("Volume", floor + point.value / maxVolume * (ceiling - floor) * 0.2), width: .fixed(2))
           .foregroundStyle(Color.white.opacity(0.15))
@@ -63,9 +73,9 @@ struct AnalysisPriceChart: View {
       }
       ForEach(prices, id: \.epochSeconds) { point in
         LineMark(x: .value("Time", point.date), y: .value("Price", point.value), series: .value("Line", "Price"))
-          .foregroundStyle(AnalysisValueStyle.color((prices.last?.value ?? 0) - (prices.first?.value ?? 0))).lineStyle(.init(lineWidth: 1.8))
+          .foregroundStyle(model.lineColor).lineStyle(.init(lineWidth: 1.8))
       }
-      ForEach(hull, id: \.epochSeconds) { point in
+      ForEach(model.hull, id: \.epochSeconds) { point in
         LineMark(x: .value("Time", point.date), y: .value("Hull", point.value), series: .value("Line", "Hull"))
           .foregroundStyle(Color.blue.opacity(0.75)).lineStyle(.init(lineWidth: 1, dash: [2, 3]))
       }
@@ -82,24 +92,30 @@ struct AnalysisPriceChart: View {
   }
 }
 
-struct AnalysisComparisonChart: View {
+struct AnalysisComparisonChart: View, Equatable {
   let lines: [AnalysisChartSeries.Line]
   @State private var selectedDate: Date?
 
+  /// Lines are time-aligned and sorted, so the inspected point is a binary search per line.
   private func point(_ line: AnalysisChartSeries.Line) -> TimePoint? {
     guard let selectedDate else { return line.points.last }
-    return line.points.min { abs($0.date.timeIntervalSince(selectedDate)) < abs($1.date.timeIntervalSince(selectedDate)) }
+    return SeriesLookup.nearest(line.points, time: Int(selectedDate.timeIntervalSince1970.rounded()))
   }
-  private func color(_ index: Int) -> Color { Color(oklch: ChartColors.pastel[index % ChartColors.pastel.count]) }
+  private static let colors = ChartColors.pastel.map { Color(oklch: $0) }
+  private func color(_ index: Int) -> Color { Self.colors[index % Self.colors.count] }
+
+  static func == (a: Self, b: Self) -> Bool { a.lines == b.lines }
 
   var body: some View {
+    // One lookup per line per body, shared by the legend and the selection marks.
+    let inspected = lines.map { point($0) }
     VStack(alignment: .leading, spacing: 12) {
       LazyVGrid(columns: [.init(.adaptive(minimum: 135), alignment: .leading)], alignment: .leading, spacing: 8) {
         ForEach(Array(lines.enumerated()), id: \.element.id) { index, line in
           HStack(spacing: 5) {
             Circle().fill(color(index)).frame(width: 6, height: 6)
             Text(line.symbol.uppercased()).fontWeight(.semibold)
-            Text(AnalysisValueStyle.percent(point(line)?.value)).foregroundStyle(AnalysisValueStyle.color(point(line)?.value))
+            Text(AnalysisValueStyle.percent(inspected[index]?.value)).foregroundStyle(AnalysisValueStyle.color(inspected[index]?.value))
           }.font(.number(.subheadline, weight: .regular))
         }
       }
@@ -111,7 +127,7 @@ struct AnalysisComparisonChart: View {
               LineMark(x: .value("Time", p.date), y: .value("Change %", p.value), series: .value("Token", line.id))
                 .foregroundStyle(color(index)).lineStyle(.init(lineWidth: 1.8))
             }
-            if selectedDate != nil, let p = point(line) {
+            if selectedDate != nil, let p = inspected[index] {
               PointMark(x: .value("Time", p.date), y: .value("Change %", p.value)).foregroundStyle(color(index)).symbolSize(24)
             }
           }

@@ -45,13 +45,28 @@ struct OverviewView: View {
       }
       .sharedBackgroundVisibility(.hidden)
     }
-    .task(id: "\(env.isReadyForUserData)|\(env.isSceneActive)|\(env.foregroundRevision)") {
+    .task(id: LifecycleKey(ready: env.isReadyForUserData, active: env.isSceneActive, userId: env.clerkSession.user?.id)) {
       if store == nil { store = OverviewStore(repo: env.overview, watchlistData: env.watchlistData, market: env.market, cache: env.queryCache) }
-      store?.stop()
-      if env.isReadyForUserData && env.isSceneActive { store?.start() }
+      guard let store else { return }
+      // Subscriptions outlive tab switches: `start()` is a no-op while they are running, and the
+      // positions key survives `stop()` so resuming never fans the chart fetches out again.
+      if let userId = env.clerkSession.user?.id, let previous = startedUserId, previous != userId { store.reset() }
+      if env.isReadyForUserData && env.isSceneActive {
+        startedUserId = env.clerkSession.user?.id
+        store.start()
+      } else {
+        store.stop()
+      }
     }
-    .onDisappear { store?.stop() }
     .refreshable { store?.retry() }
+  }
+
+  @State private var startedUserId: String?
+
+  private struct LifecycleKey: Equatable {
+    var ready: Bool
+    var active: Bool
+    var userId: String?
   }
 
   /// Web top-nav greeting on /overview: time-of-day + first name.
@@ -69,23 +84,16 @@ struct PortfolioValueCard: View {
   @Environment(AppEnvironment.self) private var env
 
   var body: some View {
+    let portfolio = store.portfolioChartPoints
+    let market = store.marketChartPoints
     VStack(alignment: .leading, spacing: 10) {
       HStack(alignment: .top) {
-        VStack(alignment: .leading, spacing: 6) {
-          Text("Your holdings").font(.subheadline).foregroundStyle(.secondary)
-          AnimatedNumber(value: store.displayValueUsd, font: .number(size: 30))
-          if let note = store.coverageNote { Text(note).font(.caption).foregroundStyle(.secondary) }
-          if store.hasHoldings, store.rangeChange.isAvailable {
-            MoveWithBadge(usdMove: store.rangeChange.deltaUsd, pct: store.rangeChange.deltaPct)
-          }
-          if store.hasHoldings, let note = store.chartNote {
-            Text(note).font(.caption2).foregroundStyle(.secondary)
-          }
-        }
+        // The readout is the only view observing the scrub position.
+        PortfolioValueReadout(store: store)
         Spacer()
       }
-      if store.portfolioChartPoints.count >= 2 || store.marketChartPoints.count >= 2 {
-        RebasedComparisonChart(portfolio: store.portfolioChartPoints, market: store.marketChartPoints,
+      if portfolio.count >= 2 || market.count >= 2 {
+        RebasedComparisonChart(portfolio: portfolio, market: market,
                                scrubTime: $store.scrubTime, scale: store.scale,
                                isActive: env.isSceneActive && env.router.tab == .overview)
           .frame(height: 260)
@@ -106,7 +114,7 @@ struct PortfolioValueCard: View {
           Button("Retry market data") { Task { await store.loadSeries(force: true) } }.buttonStyle(.glass)
             .font(.caption)
         }
-      } else if !store.marketLoading && store.marketSeries.isEmpty && !store.portfolioChartPoints.isEmpty {
+      } else if !store.marketLoading && store.marketSeries.isEmpty && !portfolio.isEmpty {
         Button("Retry market data") { Task { await store.loadSeries(force: true) } }.buttonStyle(.glass)
           .font(.caption)
       }
@@ -114,6 +122,26 @@ struct PortfolioValueCard: View {
         .padding(.top, 4)
     }
     .padding(.vertical, 14)
+  }
+}
+
+/// Holdings total, coverage and range change at the scrubbed time (or live when not scrubbing).
+private struct PortfolioValueReadout: View {
+  let store: OverviewStore
+
+  var body: some View {
+    let range = store.rangeChange
+    VStack(alignment: .leading, spacing: 6) {
+      Text("Your holdings").font(.subheadline).foregroundStyle(.secondary)
+      AnimatedNumber(value: store.displayValueUsd, font: .number(size: 30))
+      if let note = store.coverageNote { Text(note).font(.caption).foregroundStyle(.secondary) }
+      if store.hasHoldings, range.isAvailable {
+        MoveWithBadge(usdMove: range.deltaUsd, pct: range.deltaPct)
+      }
+      if store.hasHoldings, let note = store.chartNote {
+        Text(note).font(.caption2).foregroundStyle(.secondary)
+      }
+    }
   }
 }
 
@@ -194,38 +222,36 @@ struct BreadthCard: View {
 /// `events-feed-list.tsx` + `event-card.tsx` (news-only, date-grouped).
 struct EventsFeedList: View {
   let store: OverviewStore
-  @Environment(AppEnvironment.self) private var env
-  @State private var now = Date()
 
   var body: some View {
-    let events = store.newsEvents
-    VStack(alignment: .leading, spacing: 12) {
-      if events.isEmpty {
+    // Date groups are precomputed by the store when the news changes, not per body.
+    let groups = store.newsGroups
+    LazyVStack(alignment: .leading, spacing: 12) {
+      if groups.isEmpty {
         Text("No recent news yet.").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 4)
       } else {
-        let groups = groupByDate(events)
-        ForEach(groups, id: \.label) { group in
+        ForEach(groups) { group in
           Text(group.label).font(.title3.weight(.bold)).padding(.top, 6)
-          ForEach(group.events) { event in EventCard(event: event, nowMs: now.timeIntervalSince1970 * 1000) }
+          ForEach(group.events) { event in EventCard(event: event) }
         }
       }
     }
-    .task { while !Task.isCancelled { try? await Task.sleep(for: .seconds(60)); now = Date() } }
   }
+}
 
-  private func groupByDate(_ events: [OverviewEvent]) -> [(label: String, events: [OverviewEvent])] {
-    var out: [(label: String, events: [OverviewEvent])] = []
-    for e in events {
-      let label = FeedHelpers.dateBucket(ms: e.occurredAtMs)
-      if out.last?.label == label { out[out.count - 1].events.append(e) } else { out.append((label, [e])) }
+/// "3m ago" that re-renders itself each minute, so the tick never re-runs the cards around it.
+struct RelativeTimeText: View {
+  let ms: Double
+
+  var body: some View {
+    TimelineView(.periodic(from: .now, by: 60)) { context in
+      Text(FeedHelpers.relativeTime(ms: ms, nowMs: context.date.timeIntervalSince1970 * 1000))
     }
-    return out
   }
 }
 
 struct EventCard: View {
   let event: OverviewEvent
-  let nowMs: Double
   @Environment(AppEnvironment.self) private var env
   @Environment(\.openURL) private var openURL
 
@@ -249,7 +275,7 @@ struct EventCard: View {
         }
         Spacer()
         HStack(spacing: 6) {
-          Text(FeedHelpers.relativeTime(ms: event.occurredAtMs, nowMs: nowMs)).font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
+          RelativeTimeText(ms: event.occurredAtMs).font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
           if let href = event.externalHref, let url = URL(string: href) {
             Button { openURL(url) } label: { Image(systemName: "eyeglasses").font(.caption) }.buttonStyle(.plain).foregroundStyle(.secondary)
           }
@@ -316,7 +342,7 @@ struct OverviewEmptyState: View {
 #Preview("News event and badges") {
   PreviewHost { _ in
     VStack(spacing: 20) {
-      EventCard(event: PreviewFixtures.event, nowMs: Double(PreviewFixtures.now) * 1000)
+      EventCard(event: PreviewFixtures.event)
       HStack { SentimentBadge(sentiment: .bullish); SentimentBadge(sentiment: .bearish); SentimentBadge(sentiment: .neutral) }
       CategoryBadge(label: "Markets")
     }.padding()

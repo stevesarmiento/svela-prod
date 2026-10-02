@@ -2,21 +2,42 @@ import AggrAPI
 import AggrCore
 import SwiftUI
 
-/// All market metrics share one list of icon-led rows.
-struct MarketMetricsGrid: View {
+/// All market metrics share one list of icon-led rows. Equatable on its inputs so quote polls
+/// and realtime ticks elsewhere on the page never re-run the metric formatting.
+struct MarketMetricsGrid: View, Equatable {
   let quote: CoinQuote?
   let alignedPrice: Double?
   let dailyOhlcv: [OHLCVBar]
   var isPending = false
   @State private var help: Metric?
+  @State private var memo = MetricsMemo()
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-  private struct Metric: Identifiable {
+  static func == (a: Self, b: Self) -> Bool {
+    a.quote == b.quote && a.alignedPrice == b.alignedPrice && a.dailyOhlcv == b.dailyOhlcv && a.isPending == b.isPending
+  }
+
+  fileprivate struct Metric: Identifiable, Equatable {
     let id: String
     let label: String
     let icon: String
     let help: String
     let value: String
+  }
+
+  /// Unobserved memo: the eight formatted rows are rebuilt only when quote / price / candles change.
+  @MainActor fileprivate final class MetricsMemo {
+    private var quote: CoinQuote?
+    private var alignedPrice: Double?
+    private var dailyOhlcv: [OHLCVBar] = []
+    private var rows: [Metric]?
+
+    func metrics(quote: CoinQuote?, alignedPrice: Double?, dailyOhlcv: [OHLCVBar], build: () -> [Metric]) -> [Metric] {
+      if let rows, self.quote == quote, self.alignedPrice == alignedPrice, self.dailyOhlcv == dailyOhlcv { return rows }
+      let built = build()
+      self.quote = quote; self.alignedPrice = alignedPrice; self.dailyOhlcv = dailyOhlcv; rows = built
+      return built
+    }
   }
 
   private func usdAmount(_ value: Double?) -> String {
@@ -37,6 +58,10 @@ struct MarketMetricsGrid: View {
   }
 
   private var metrics: [Metric] {
+    memo.metrics(quote: quote, alignedPrice: alignedPrice, dailyOhlcv: dailyOhlcv) { buildMetrics() }
+  }
+
+  private func buildMetrics() -> [Metric] {
     let floatPct = MarketMetrics.floatPct(circulatingSupply: quote?.circulatingSupply, maxSupply: quote?.maxSupply)
     let turnover = MarketMetrics.turnoverPct(volume24hUsd: quote?.totalVolume, marketCapUsd: quote?.marketCap)
     let range = MarketMetrics.rangePositionPct(dailyOhlcv: dailyOhlcv, days: 30)

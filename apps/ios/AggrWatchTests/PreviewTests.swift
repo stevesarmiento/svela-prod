@@ -411,10 +411,12 @@ private actor OverviewRequestGate {
   await started.wait()
   let refresh = Task { await store.refreshAggregates(force: false) }
   for _ in 0..<200 {
-    if store.isAggregateLoading && store.aggregatePendingGroupIDs == [PreviewFixtures.group.id] { break }
+    if store.isAggregateLoading { break }
     try await Task.sleep(for: .milliseconds(10))
   }
-  #expect(store.aggregatePendingGroupIDs == [PreviewFixtures.group.id])
+  #expect(store.isAggregateLoading)
+  // A group that already has a usable series is never marked pending: its card keeps its chart.
+  #expect(!store.aggregatePendingGroupIDs.contains(PreviewFixtures.group.id))
   await release.open()
   _ = try? await pending.value
   await refresh.value
@@ -775,3 +777,25 @@ private actor OverviewRequestGate {
 }
 
 #endif
+
+@Test @MainActor func batchedChartFetchSeedsPerCoinEntriesAndServesMonthFromQuarter() async throws {
+  let env = PreviewData.environment()
+  let store = env.watchlistData, cache = env.queryCache
+  let ids = ["bitcoin", "ethereum", "solana"]
+  // One batch round trip must leave each coin readable under the shared per-coin key.
+  let fetched = await WatchlistDataStore.fetchMarketChartSeries(ids: ids, days: "1", market: env.market, cache: cache, force: true)
+  #expect(Set(fetched.keys) == Set(ids))
+  for id in ids {
+    let seeded: MarketChartResponse? = await cache.peek(WatchlistDataStore.chartKey(id, days: "1"), policy: .aggregateChart)
+    #expect(seeded != nil, Comment(rawValue: id))
+  }
+  // A cached 90-day (token page 1M) response answers a 30-day request by clipping, not fetching.
+  let quarter = try await env.market.marketChart(coinId: "bitcoin", days: "90")
+  await cache.set(WatchlistDataStore.chartKey("bitcoin", days: "90"), value: quarter, policy: .chart)
+  let month = await WatchlistDataStore.fetchMarketChartSeries(ids: ["bitcoin"], days: "30", market: env.market, cache: cache, force: false)
+  let expected = quarter.clipped(toLastDays: 30).data.prices.map { TimePoint(epochSeconds: TimePoint.normalizeEpochSeconds($0.time), value: $0.value) }
+  #expect(month["bitcoin"]?.points == expected)
+  let monthEntry: MarketChartResponse? = await cache.peek(WatchlistDataStore.chartKey("bitcoin", days: "30"), policy: .aggregateChart)
+  #expect(monthEntry == nil, "served from the 90-day entry without a request")
+  _ = store
+}

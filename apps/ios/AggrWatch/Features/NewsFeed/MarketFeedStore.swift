@@ -48,7 +48,8 @@ final class MarketFeedStore {
       guard let self else { return }
       do {
         for try await list in news.articles(coinId: coinId, limit: feedSize) {
-          articles = list
+          // Convex re-sends the full list on any change; only a different list re-renders the feed.
+          if articles != list { articles = list }
           await onArticles(list)
         }
       } catch {

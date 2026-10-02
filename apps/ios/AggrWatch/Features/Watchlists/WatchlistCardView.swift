@@ -21,7 +21,18 @@ struct WatchlistCardView: View {
   @Environment(\.scenePhase) private var scenePhase
   @State private var isVisibleInScroll = true
 
-  private var theme: ColorTheme { ColorThemes.resolve(color) }
+  /// Theme colours are parsed from oklch strings; cache them per theme key instead of per body.
+  private struct Palette { let background: Color; let accentText: Color }
+  private static var palettes: [String: Palette] = [:]
+  private static let iconTint = Color(oklch: "oklch(0.871 0.006 286.286)")
+  private var palette: Palette {
+    let key = color ?? "default"
+    if let cached = Self.palettes[key] { return cached }
+    let theme = ColorThemes.resolve(color)
+    let resolved = Palette(background: Color(oklch: theme.background), accentText: Color(oklch: theme.accentText))
+    Self.palettes[key] = resolved
+    return resolved
+  }
   // Keep cached charts visible during refreshes. Empty watchlists never shimmer.
   private var showsLoadingShine: Bool { coinsCount > 0 && isLoading && aggregate.count < 2 }
 
@@ -32,8 +43,8 @@ struct WatchlistCardView: View {
       CardScaleLayout(scale: pressScale) {
         content.scaleEffect(pressScale, anchor: .center)
       }
-      .background(Color(oklch: theme.background), in: .rect(cornerRadius: Theme.Radius.card * pressScale))
-      .glassEffect(.regular.tint(Color(oklch: theme.background).opacity(0.55)),
+      .background(palette.background, in: .rect(cornerRadius: Theme.Radius.card * pressScale))
+      .glassEffect(.regular.tint(palette.background.opacity(0.55)),
                    in: .rect(cornerRadius: Theme.Radius.card * pressScale))
     }
     .padding(4)
@@ -59,7 +70,7 @@ struct WatchlistCardView: View {
     VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 8) {
         WatchlistGroupIconView(icon: icon, size: 20)
-          .foregroundStyle(Color(oklch: "oklch(0.871 0.006 286.286)"))
+          .foregroundStyle(Self.iconTint)
           .frame(width: 28, height: 28)
         VStack(alignment: .leading, spacing: 2) {
           Text(name).font(.headline).foregroundStyle(.white).lineLimit(1)
@@ -72,7 +83,7 @@ struct WatchlistCardView: View {
               Text(UsdFormat.signedPercent(change.value))
             }
             .font(.number(.caption, weight: .semibold))
-            .foregroundStyle(Color(oklch: theme.accentText))
+            .foregroundStyle(palette.accentText)
             .contentTransition(.numericText())
           } else {
             Text("—").font(.caption.weight(.semibold)).foregroundStyle(.white.opacity(0.6))

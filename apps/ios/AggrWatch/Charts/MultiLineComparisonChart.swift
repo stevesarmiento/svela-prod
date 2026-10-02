@@ -144,11 +144,13 @@ struct AggrSparkline: View, Equatable {
   var lineWidth: Double = 1.4
   var fadeLeading = true
   @State private var isVisible = true
+  @State private var preparation = SparklinePreparation()
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.scenePhase) private var scenePhase
 
   var body: some View {
-    let series = LivelineMath.clean(points.map { .init(time: Double($0.epochSeconds), value: $0.value) })
+    // Cleaning is memoised on the points: visibility and scene toggles reuse the last result.
+    let series = preparation.cleaned(points)
     let start = series.first?.time ?? 0
     let end = max(start + 1, series.last?.time ?? start + 1)
     let input = LivelineInput(id: "sparkline", series: [
@@ -171,6 +173,20 @@ struct AggrSparkline: View, Equatable {
   static func == (a: Self, b: Self) -> Bool {
     a.points == b.points && a.isActive == b.isActive && a.color == b.color
       && a.lineWidth == b.lineWidth && a.fadeLeading == b.fadeLeading
+  }
+}
+
+/// Unobserved memo of `LivelineMath.clean` keyed on the source points.
+@MainActor final class SparklinePreparation {
+  private var points: [TimePoint]?
+  private var cleaned: [LivelinePoint] = []
+
+  func cleaned(_ points: [TimePoint]) -> [LivelinePoint] {
+    if self.points != points {
+      cleaned = LivelineMath.clean(points.map { .init(time: Double($0.epochSeconds), value: $0.value) })
+      self.points = points
+    }
+    return cleaned
   }
 }
 

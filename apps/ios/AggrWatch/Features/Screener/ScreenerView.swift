@@ -132,7 +132,7 @@ private struct ScreenerContent: View {
     .searchable(text: Binding(get: { store.q }, set: { store.setQ($0) }), placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search tokens")
     .refreshable { store.refetch() }
     .onAppear { registerSelection(rows) }
-    .onChange(of: rows.map(\.id)) { _, _ in registerSelection(store.sortedRows) }
+    .onChange(of: store.rowsRevision) { _, _ in registerSelection(store.sortedRows) }
     .onChange(of: env.router.sheet) { _, sheet in
       if sheet == nil { registerSelection(store.sortedRows) }
     }
@@ -150,7 +150,9 @@ struct ScreenerRowView: View {
     let loading = row.isLoadingQuote
     VStack(spacing: 8) {
       HStack(spacing: 10) {
-        GlassTokenLogo(symbol: row.symbol, imageURL: row.image, size: 22)
+        // A flat logo with a hairline ring: glass per row is an offscreen pass on an opaque list row.
+        TokenLogo(symbol: row.symbol, imageURL: row.image, size: 22)
+          .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1))
         Text(row.symbol.uppercased()).font(.subheadline.weight(.bold))
         Text(LogoOverrides.cleanTokenName(row.name)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
         Spacer()
@@ -165,7 +167,7 @@ struct ScreenerRowView: View {
         }
         Spacer()
         if !loading, let pct = row.priceChangePercentage24h {
-          MoveWithBadge(usdMove: row.currentPrice.flatMap { MarketMetrics.usdMove(priceUsd: $0, percentChange: pct) }, pct: pct)
+          MoveWithBadge(usdMove: row.currentPrice.flatMap { MarketMetrics.usdMove(priceUsd: $0, percentChange: pct) }, pct: pct, animated: false)
         } else if !loading {
           Text("—").font(.caption).foregroundStyle(.secondary)
         }
@@ -184,6 +186,7 @@ struct ScreenerRowView: View {
     HStack(spacing: 4) {
       Text(label).font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
       Text(value).font(.number(size: 11, weight: .regular)).foregroundStyle(.secondary)
+        .lineLimit(1).minimumScaleFactor(0.8)
     }
   }
 }
@@ -244,18 +247,29 @@ struct TrailCell: View {
   let coinId: String
   let percentChange24h: Double?
   @Environment(AppEnvironment.self) private var env
-  @State private var points: [TimePoint] = []
+  @State private var trail: Trail?
   @State private var unavailable = false
+  private nonisolated struct Unavailable: Error {}
+
+  /// Ready-to-draw trail: filtered and downsampled once in `.task`, never per body.
+  nonisolated struct Trail: Sendable, Hashable {
+    var points: [TimePoint]
+    var tailStart: Int
+    var up: Bool
+  }
+
+  /// Trails live beside the shared cache: 500 visible rows would otherwise evict the bulk quotes
+  /// and token charts from its 256 slots, and a full `MarketChartResponse` per row is far larger
+  /// than the 128 points a 120pt sparkline can show.
+  static let trailCache = QueryCache(maxEntries: 600)
+  static let trailPolicy = QueryPolicy(staleTime: .seconds(600), gcTime: .seconds(600))
+  private static let upColor = Color(oklch: "oklch(0.7688 0.1687 161.95)")
+  private static let downColor = Color(oklch: "oklch(0.7022 0.1892 22.23)")
 
   var body: some View {
     Group {
-      if points.count >= 2 {
-        let end = points.last!.epochSeconds
-        let weekAgo = end - 7 * 86_400
-        let last7 = points.filter { $0.epochSeconds >= weekAgo }
-        let up = (last7.last?.value ?? 0) >= (last7.first?.value ?? 0)
-        Sparkline(points: ChartSeries.downsample(points, max: 128), lineWidth: 1.2, tailStart: weekAgo,
-                  tailColor: up ? Color(oklch: "oklch(0.7688 0.1687 161.95)") : Color(oklch: "oklch(0.7022 0.1892 22.23)"))
+      if let trail {
+        Sparkline(points: trail.points, lineWidth: 1.2, tailStart: trail.tailStart, tailColor: trail.up ? Self.upColor : Self.downColor)
       } else if unavailable {
         Text("—").foregroundStyle(.secondary).accessibilityLabel("Price history unavailable")
       } else {
@@ -264,15 +278,25 @@ struct TrailCell: View {
     }
     .task(id: "\(coinId)|\(env.isSceneActive)|\(env.foregroundRevision)") {
       guard env.isSceneActive else { return }
-      unavailable = false
-      let key = QueryCache.Key("market-chart", coinId, "14")
+      if unavailable { unavailable = false }
       do {
-        let response = try await env.queryCache.fetch(key, policy: .screenerTop) { [market = env.market] in try await market.marketChart(coinId: coinId, days: "14") }
+        let next = try await Self.trailCache.fetch(QueryCache.Key("trail", coinId), policy: Self.trailPolicy) { [market = env.market, coinId] in
+          let response = try await market.marketChart(coinId: coinId, days: "14")
+          guard let trail = Self.makeTrail(response.data.prices.map { TimePoint(epochSeconds: TimePoint.normalizeEpochSeconds($0.time), value: $0.value) }) else { throw Unavailable() }
+          return trail
+        }
         try Task.checkCancellation()
-        points = response.data.prices.map { TimePoint(epochSeconds: TimePoint.normalizeEpochSeconds($0.time), value: $0.value) }
-        unavailable = points.count < 2
-      } catch { if !Task.isCancelled { unavailable = true } }
+        if trail != next { trail = next }
+      } catch { if !Task.isCancelled, !unavailable { unavailable = true } }
     }
+  }
+
+  nonisolated static func makeTrail(_ points: [TimePoint]) -> Trail? {
+    guard points.count >= 2, let end = points.last?.epochSeconds else { return nil }
+    let weekAgo = end - 7 * 86_400
+    let last7 = points.filter { $0.epochSeconds >= weekAgo }
+    let up = (last7.last?.value ?? 0) >= (last7.first?.value ?? 0)
+    return Trail(points: ChartSeries.downsample(points, max: 128), tailStart: weekAgo, up: up)
   }
 }
 
@@ -282,8 +306,13 @@ struct FreshnessIndicator: View {
   let isRefreshing: Bool
   var body: some View {
     HStack(spacing: 6) {
-      Circle().fill(isRefreshing ? Color.blue : Color.gainGreen).frame(width: 6, height: 6)
-        .phaseAnimator([0.3, 1]) { v, p in v.opacity(isRefreshing ? p : 1) } animation: { _ in .easeInOut(duration: 0.8) }
+      // The pulse only runs while refreshing; an untriggered phase animator cycles forever.
+      let dot = Circle().fill(isRefreshing ? Color.blue : Color.gainGreen).frame(width: 6, height: 6)
+      if isRefreshing {
+        dot.phaseAnimator([0.3, 1]) { v, p in v.opacity(p) } animation: { _ in .easeInOut(duration: 0.8) }
+      } else {
+        dot
+      }
       Text(isRefreshing ? "Refreshing…" : "Updated:").font(.system(size: 10)).foregroundStyle(.tertiary)
       Text(lastUpdatedAtMs.map { Date(timeIntervalSince1970: $0 / 1000).formatted(.dateTime.month(.abbreviated).day().hour().minute()) } ?? "—")
         .font(.number(size: 10, weight: .regular)).foregroundStyle(.secondary)

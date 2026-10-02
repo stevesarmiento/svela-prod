@@ -37,6 +37,7 @@ struct TokenDetailView: View {
           if let store {
             PriceChartCard(store: store, scale: $scale, chrome: chrome)
             MarketMetricsGrid(quote: quote, alignedPrice: store.alignedPrice, dailyOhlcv: store.dailyOhlcv, isPending: store.isLoading)
+              .equatable()
             TokenIndicatorsSection(store: store, coinId: coinId, quote: quote)
           } else {
             RingLoader(size: .large).padding(.top, 80)
@@ -48,7 +49,11 @@ struct TokenDetailView: View {
       .onScrollGeometryChange(for: CGFloat.self) { geometry in
         max(0, geometry.contentOffset.y + geometry.contentInsets.top)
       } action: { _, offset in
-        chrome.scrollOffset = offset
+        // Quantized: once the header has collapsed, further scrolling writes nothing.
+        let textScale = headerHeight / 154
+        let progress = min(1, max(0, offset / max(1, headerHeight - 84 * textScale)))
+        let quantized = (progress * 100).rounded() / 100
+        if chrome.headerProgress != quantized { chrome.headerProgress = quantized }
       }
       .overlay(alignment: .top) {
         TokenPageHeader(coinId: coinId, groupSlug: groupSlug, store: store, chrome: chrome, scale: scale,
@@ -63,11 +68,7 @@ struct TokenDetailView: View {
       .background {
         // Blurred token-logo glow like the web token page.
         if onClose == nil, let quote {
-          TokenLogo(symbol: quote.symbol, imageURL: quote.image, size: 260)
-            .blur(radius: 90).opacity(0.35).offset(y: -180)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
+          TokenLogoBackdrop(symbol: quote.symbol, imageURL: quote.image).equatable()
         }
       }
       .containerBackground(onClose == nil ? Theme.background : Color.clear, for: .navigation)
@@ -90,8 +91,11 @@ struct TokenDetailView: View {
         f.start()
       }
       .onChange(of: scale) { _, next in store?.setScale(next) }
-      .onChange(of: store?.quote?.symbol) { _, sym in
-        if env.isSceneActive, let sym { env.realtime.unsubscribe(coingeckoId: coinId); env.realtime.subscribe(coingeckoId: coinId, symbol: sym) }
+      .onChange(of: store?.quote?.symbol) { previous, sym in
+        // Curated coins stream by feed id and never need the symbol; everyone else resubscribes
+        // only once, when the symbol first arrives, so an established stream is not torn down.
+        guard env.isSceneActive, previous == nil, let sym, PythHermes.feedId(forCoingeckoId: coinId) == nil else { return }
+        env.realtime.unsubscribe(coingeckoId: coinId); env.realtime.subscribe(coingeckoId: coinId, symbol: sym)
       }
       .onDisappear {
         store?.stop()
@@ -102,13 +106,30 @@ struct TokenDetailView: View {
   }
 }
 
-/// The token page's scrub store plus the header's scroll progress.
+/// The 260pt blurred logo glow, keyed by artwork so quote polls never re-evaluate the blur.
+private struct TokenLogoBackdrop: View, Equatable {
+  let symbol: String
+  let imageURL: String?
+
+  var body: some View {
+    TokenLogo(symbol: symbol, imageURL: imageURL, size: 260)
+      .blur(radius: 90).opacity(0.35).offset(y: -180)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+      .ignoresSafeArea()
+      .allowsHitTesting(false)
+  }
+}
+
+/// The token page's scrub store plus the header's collapse progress (0 expanded … 1 compact),
+/// quantized to 1/100 by the scroll observer.
 @Observable
 final class TokenPageChrome: ChartScrubStore {
-  var scrollOffset: CGFloat = 0
+  var headerProgress: Double = 0
 }
 
 /// One artwork control and one readout, moving into a compact header as the page scrolls.
+/// This wrapper is the only view that reads the scroll progress; the readouts below observe
+/// realtime ticks and scrub selections on their own.
 private struct TokenPageHeader: View {
   let coinId: String
   let groupSlug: String?
@@ -121,24 +142,11 @@ private struct TokenPageHeader: View {
   let close: () -> Void
   let showNews: () -> Void
   let showAnalysis: () -> Void
-  @Environment(AppEnvironment.self) private var env
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @ScaledMetric(relativeTo: .title) private var titleSize = 20.0
-  @ScaledMetric(relativeTo: .title) private var priceSize = 36.0
 
   var body: some View {
-    let quote = store?.quote ?? env.watchlistData.quote(coinId)
-    let spot = env.realtime.spot(coinId)
-    let pricing = LivePricing.resolve(quote: quote, spot: spot, alignedPrice: store?.alignedPrice,
-                                     isWarmingUp: store?.isWarmingUp ?? true, status: env.realtime.status(coinId))
-    let price = chrome.selection?.value ?? pricing.livePrice
-    let window = store?.priceWindow
-    let change = window?.percentChange(to: price)
-    let dollarChange = window?.dollarChange(to: price)
-    // An empty window reports partial history; fall back to the requested range like the wallet.
-    let periodLabel = (window?.points.count ?? 0) >= 2 ? window!.periodLabel(scale: store?.dataScale ?? scale) : scale.periodLabel
     let textScale = expandedHeight / 154
-    let progress = min(1, max(0, chrome.scrollOffset / max(1, expandedHeight - 84 * textScale)))
+    let progress = chrome.headerProgress
     // Direct manipulation has no trailing spring. Reduce Motion switches between the two layouts.
     let p = reduceMotion ? (progress < 0.5 ? 0.0 : 1.0) : progress
     GeometryReader { geometry in
@@ -161,8 +169,7 @@ private struct TokenPageHeader: View {
           .opacity(progress)
           .allowsHitTesting(false)
         Button(action: close) {
-          TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 20)
-            .glassEffect(.regular.interactive(), in: .circle)
+          TokenHeaderLogo(coinId: coinId, store: store)
             .scaleEffect(1 + 1.2 * p, anchor: .leading)
             .frame(width: 44, height: 44, alignment: .leading)
             .contentShape(Rectangle())
@@ -173,50 +180,26 @@ private struct TokenPageHeader: View {
         .accessibilityIdentifier("token-page-close")
 
         if p < 0.5 {
-          Text("\(Text(LogoOverrides.cleanTokenName(quote?.name ?? coinId)).fontWeight(.medium)) \(Text(chrome.selection == nil ? "is currently" : "was").foregroundStyle(.secondary))")
-            .font(.system(size: titleSize, weight: .regular, design: .rounded))
-            .lineLimit(1).minimumScaleFactor(0.65)
+          TokenHeaderNameLine(coinId: coinId, store: store, chrome: chrome)
             .frame(width: nameAvailable / nameScale, alignment: .leading)
             .scaleEffect(nameScale, anchor: .topLeading)
             .offset(x: nameX, y: (18 * (1 - p) + 7 * p) * textScale)
             .opacity(max(0, 1 - Double(p) * 2))
-            .accessibilityIdentifier("token-header-name")
             .allowsHitTesting(false)
         }
 
-        // Digits roll on live ticks; instant swaps while scrubbing (gesture-rate updates would
-        // otherwise live in a mid-roll smear).
-        Text(StyledUsd.price(price))
-          .font(.number(size: priceSize))
-          .contentTransition(.numericText(value: price ?? 0))
-          .animation(chrome.selection == nil ? Motion.animation(Motion.numeric, reduceMotion: reduceMotion) : nil, value: price)
-          .lineLimit(1)
+        TokenHeaderPrice(coinId: coinId, store: store, chrome: chrome, scale: scale)
           .frame(width: available / valueScale, alignment: .leading)
           .clipped()
           .scaleEffect(valueScale, anchor: .topLeading)
           .offset(x: textX, y: (48 * (1 - p) + 8 * p) * textScale)
-          .accessibilityLabel("\(LogoOverrides.cleanTokenName(quote?.name ?? coinId)) price")
-          .accessibilityValue(price.map { UsdFormat.price($0) } ?? "Unavailable")
-          .accessibilityIdentifier("token-header-price")
           .allowsHitTesting(false)
 
-        HStack(spacing: 8) {
-          Text(dollarChange.map { UsdFormat.signedPrice($0) } ?? "—")
-            .font(.number(.subheadline, weight: .medium))
-            .foregroundStyle(Color.change(dollarChange))
-            .lineLimit(1).minimumScaleFactor(0.7)
-            .accessibilityIdentifier("token-header-dollar-change")
-          PercentBadge(pct: change)
-          Text(periodLabel)
-            .font(.system(.caption, design: .rounded))
-            .foregroundStyle(.secondary)
-            .lineLimit(1).minimumScaleFactor(0.6).layoutPriority(-1)
-            .accessibilityIdentifier("token-header-period")
-        }
-        .frame(width: available / detailScale, alignment: .leading)
-        .scaleEffect(detailScale, anchor: .topLeading)
-        .offset(x: textX, y: (100 * (1 - p) + 48 * p) * textScale)
-        .allowsHitTesting(false)
+        TokenHeaderChangeRow(coinId: coinId, store: store, chrome: chrome, scale: scale)
+          .frame(width: available / detailScale, alignment: .leading)
+          .scaleEffect(detailScale, anchor: .topLeading)
+          .offset(x: textX, y: (100 * (1 - p) + 48 * p) * textScale)
+          .allowsHitTesting(false)
 
         HStack(spacing: 0) {
           WatchlistToggleButton(coinId: coinId, groupSlug: groupSlug)
@@ -242,6 +225,110 @@ private struct TokenPageHeader: View {
         .offset(x: 16, y: 8)
       }
       .frame(width: width, height: geometry.size.height, alignment: .topLeading)
+    }
+  }
+}
+
+/// `resolveLivePricing` for the header: the scrubbed value wins over the live price, and the
+/// change is measured from the start of the visible window.
+private struct TokenHeaderReadout {
+  var name: String
+  var price: Double?
+  var change: Double?
+  var dollarChange: Double?
+  var periodLabel: String
+  var isScrubbing: Bool
+
+  static func resolve(coinId: String, store: TokenChartStore?, chrome: TokenPageChrome, scale: TimeScale, env: AppEnvironment) -> TokenHeaderReadout {
+    let quote = store?.quote ?? env.watchlistData.quote(coinId)
+    let spot = env.realtime.spot(coinId)
+    let pricing = LivePricing.resolve(quote: quote, spot: spot, alignedPrice: store?.alignedPrice,
+                                     isWarmingUp: store?.isWarmingUp ?? true, status: env.realtime.status(coinId))
+    let selection = chrome.selection
+    let price = selection?.value ?? pricing.livePrice
+    let window = store?.priceWindow
+    // An empty window reports partial history; fall back to the requested range like the wallet.
+    let periodLabel = (window?.points.count ?? 0) >= 2 ? window!.periodLabel(scale: store?.dataScale ?? scale) : scale.periodLabel
+    return TokenHeaderReadout(name: LogoOverrides.cleanTokenName(quote?.name ?? coinId), price: price,
+                              change: window?.percentChange(to: price), dollarChange: window?.dollarChange(to: price),
+                              periodLabel: periodLabel, isScrubbing: selection != nil)
+  }
+}
+
+private struct TokenHeaderLogo: View {
+  let coinId: String
+  let store: TokenChartStore?
+  @Environment(AppEnvironment.self) private var env
+
+  var body: some View {
+    let quote = store?.quote ?? env.watchlistData.quote(coinId)
+    TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 20)
+      .glassEffect(.regular.interactive(), in: .circle)
+  }
+}
+
+private struct TokenHeaderNameLine: View {
+  let coinId: String
+  let store: TokenChartStore?
+  let chrome: TokenPageChrome
+  @Environment(AppEnvironment.self) private var env
+  @ScaledMetric(relativeTo: .title) private var titleSize = 20.0
+
+  var body: some View {
+    let quote = store?.quote ?? env.watchlistData.quote(coinId)
+    Text("\(Text(LogoOverrides.cleanTokenName(quote?.name ?? coinId)).fontWeight(.medium)) \(Text(chrome.selection == nil ? "is currently" : "was").foregroundStyle(.secondary))")
+      .font(.system(size: titleSize, weight: .regular, design: .rounded))
+      .lineLimit(1).minimumScaleFactor(0.65)
+      .accessibilityIdentifier("token-header-name")
+  }
+}
+
+private struct TokenHeaderPrice: View {
+  let coinId: String
+  let store: TokenChartStore?
+  let chrome: TokenPageChrome
+  let scale: TimeScale
+  @Environment(AppEnvironment.self) private var env
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @ScaledMetric(relativeTo: .title) private var priceSize = 36.0
+
+  var body: some View {
+    let readout = TokenHeaderReadout.resolve(coinId: coinId, store: store, chrome: chrome, scale: scale, env: env)
+    let price = readout.price
+    // Digits roll on live ticks; instant swaps while scrubbing (gesture-rate updates would
+    // otherwise live in a mid-roll smear).
+    Text(StyledUsd.price(price))
+      .font(.number(size: priceSize))
+      .contentTransition(.numericText(value: price ?? 0))
+      .animation(readout.isScrubbing ? nil : Motion.animation(Motion.numeric, reduceMotion: reduceMotion), value: price)
+      .lineLimit(1)
+      .accessibilityLabel("\(readout.name) price")
+      .accessibilityValue(price.map { UsdFormat.price($0) } ?? "Unavailable")
+      .accessibilityIdentifier("token-header-price")
+  }
+}
+
+private struct TokenHeaderChangeRow: View {
+  let coinId: String
+  let store: TokenChartStore?
+  let chrome: TokenPageChrome
+  let scale: TimeScale
+  @Environment(AppEnvironment.self) private var env
+
+  var body: some View {
+    let readout = TokenHeaderReadout.resolve(coinId: coinId, store: store, chrome: chrome, scale: scale, env: env)
+    HStack(spacing: 8) {
+      Text(readout.dollarChange.map { UsdFormat.signedPrice($0) } ?? "—")
+        .font(.number(.subheadline, weight: .medium))
+        .foregroundStyle(Color.change(readout.dollarChange))
+        .lineLimit(1).minimumScaleFactor(0.7)
+        .accessibilityIdentifier("token-header-dollar-change")
+      PercentBadge(pct: readout.change)
+      Text(readout.periodLabel)
+        .font(.system(.caption, design: .rounded))
+        .foregroundStyle(.secondary)
+        .lineLimit(1).minimumScaleFactor(0.6).layoutPriority(-1)
+        .accessibilityIdentifier("token-header-period")
     }
   }
 }
@@ -295,7 +382,7 @@ struct WatchlistToggleButton: View {
 #Preview("Compact token header") {
   PreviewHost(navigation: false) { env in
     let chrome = TokenPageChrome()
-    let _ = { chrome.scrollOffset = 160 }()
+    let _ = { chrome.headerProgress = 1 }()
     TokenPageHeader(coinId: "bitcoin", groupSlug: PreviewFixtures.group.slug, store: PreviewData.tokenStore(env), chrome: chrome, scale: .d1,
                     expandedHeight: 154, topInset: 0, unseenNews: 2, close: {}, showNews: {}, showAnalysis: {})
       .frame(height: 154)

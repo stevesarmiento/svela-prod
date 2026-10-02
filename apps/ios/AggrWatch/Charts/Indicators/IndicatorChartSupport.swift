@@ -1,5 +1,6 @@
 import AggrCore
 import Charts
+import Observation
 import SwiftUI
 
 /// Each pane pans/zooms independently; the selected candle is shared across panes.
@@ -20,12 +21,21 @@ struct IndicatorViewport {
   }
 }
 
-struct IndicatorWindow {
+struct IndicatorWindow: Equatable {
   let domain: ClosedRange<Date>
   let start: Date
   let length: TimeInterval
   let initial: Date
   var epochs: ClosedRange<Int> { Int(start.timeIntervalSince1970)...Int(start.addingTimeInterval(length).timeIntervalSince1970) }
+}
+
+/// The crosshair date shared by the four indicator panes (and their readouts). Charts write it
+/// from their own selection state; only the rule/readout overlays observe it, so a scrub step
+/// never re-diffs another pane's mark tree.
+@Observable
+final class IndicatorScrubStore {
+  var date: Date?
+  func set(_ next: Date?) { if next != date { date = next } }
 }
 
 struct IndicatorPaneModifier: ViewModifier {
@@ -74,71 +84,185 @@ extension View {
   func indicatorPane(window: IndicatorWindow, windowDays: Int, viewport: Binding<IndicatorViewport>, yDomain: ClosedRange<Double>, height: CGFloat = 250, horizontalGrid: Bool = true) -> some View {
     modifier(IndicatorPaneModifier(window: window, windowDays: windowDays, viewport: viewport, yDomain: yDomain, height: height, horizontalGrid: horizontalGrid))
   }
+
+  /// Shared crosshair + selection plumbing for one indicator pane. `selection` is the pane's own
+  /// Swift Charts selection; it is snapped to `anchor` and published through `scrub`.
+  func indicatorScrub(selection: Binding<Date?>, scrub: IndicatorScrubStore, anchor: [IPt], external: Binding<Date?>? = nil) -> some View {
+    self
+      .chartXSelection(value: selection)
+      .chartOverlay { proxy in IndicatorScrubRule(scrub: scrub, proxy: proxy) }
+      .onChange(of: selection.wrappedValue) { _, next in
+        scrub.set(next.flatMap { anchor.nearest(to: $0)?.date })
+        external?.wrappedValue = next
+      }
+  }
 }
 
-/// Finite-only points for Swift Charts (Pine `na` = NaN would break paths).
-struct IPt: Identifiable, Hashable {
+/// Finite-only points for Swift Charts (Pine `na` = NaN would break paths). Built off-main when
+/// an `IndicatorBundle` lands, so chart bodies only slice.
+nonisolated struct IPt: Identifiable, Hashable, Sendable {
   let id: Int
   let date: Date
   let value: Double
   var color: String? = nil
   init(_ p: TimePoint) { id = p.epochSeconds; date = p.date; value = p.value }
   init(_ p: ColoredPoint) { id = p.time; date = Date(timeIntervalSince1970: TimeInterval(p.time)); value = p.value; color = p.color }
-  init(time: Int, value: Double) { id = time; date = Date(timeIntervalSince1970: TimeInterval(time)); self.value = value }
+  init(time: Int, value: Double, color: String? = nil) { id = time; date = Date(timeIntervalSince1970: TimeInterval(time)); self.value = value; self.color = color }
 }
 
-extension Array where Element == TimePoint {
-  var chartPoints: [IPt] { compactMap { $0.value.isFinite ? IPt($0) : nil } }
-}
-extension Array where Element == ColoredPoint {
-  var chartPoints: [IPt] { compactMap { $0.value.isFinite ? IPt($0) : nil } }
-}
-
-/// Crosshair rule shared by every pane (`ChartScrubStore`).
-struct ScrubRule: ChartContent {
-  let date: Date?
-  var body: some ChartContent {
-    if let date {
-      RuleMark(x: .value("Selected", date))
-        .foregroundStyle(Color.white.opacity(0.35))
-        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-    }
+/// A mark whose color is already resolved (bars, flags, diamonds).
+nonisolated struct TintedPt: Identifiable, Hashable, Sendable {
+  let id: Int
+  let date: Date
+  let value: Double
+  let tint: Color
+  init(_ p: ColoredPoint, fallback: String, alpha: Double? = nil) {
+    id = p.time; date = Date(timeIntervalSince1970: TimeInterval(p.time)); value = p.value
+    let base = p.color ?? fallback
+    tint = Color(oklch: alpha.map { OklchColor.withAlpha(base, $0) } ?? base)
   }
 }
 
-extension Array where Element == IPt {
-  /// Nearest point to a scrubbed date (for annotations / readouts).
+nonisolated extension Array where Element == TimePoint {
+  var chartPoints: [IPt] { compactMap { $0.value.isFinite ? IPt($0) : nil } }
+}
+nonisolated extension Array where Element == ColoredPoint {
+  var chartPoints: [IPt] { compactMap { $0.value.isFinite ? IPt($0) : nil } }
+}
+
+/// A time-ordered chart mark; `id` is its epoch second.
+nonisolated protocol TimedMark { var id: Int { get }; var date: Date { get } }
+extension IPt: TimedMark {}
+extension TintedPt: TimedMark {}
+extension BandPt: TimedMark {}
+
+nonisolated extension Array where Element: TimedMark {
+  /// Window plus one neighbor on each side, for continuous paths; see `[IPt].visible(in:)`.
+  func visibleSlice(in window: IndicatorWindow) -> ArraySlice<Element> {
+    let first = partitionIndex { $0.date >= window.start }
+    guard first < count else { return suffix(1) }
+    let past = partitionIndex { $0.date > window.start.addingTimeInterval(window.length) }
+    let end = past < count ? past : count - 1
+    return self[Swift.max(0, first - 1)...Swift.max(first, end)]
+  }
+
+  /// Marks strictly inside the visible epochs (markers that must not leak past the edge).
+  func within(_ epochs: ClosedRange<Int>) -> ArraySlice<Element> {
+    let lower = partitionIndex { $0.id >= epochs.lowerBound }
+    let upper = partitionIndex { $0.id > epochs.upperBound }
+    return lower < upper ? self[lower..<upper] : []
+  }
+}
+
+nonisolated extension RandomAccessCollection {
+  /// First index whose element satisfies `predicate`, which must be monotone over the collection
+  /// (false…false, true…true). `endIndex` when none does.
+  func partitionIndex(where predicate: (Element) -> Bool) -> Index {
+    var low = startIndex, high = endIndex
+    while low < high {
+      let mid = index(low, offsetBy: distance(from: low, to: high) / 2)
+      if predicate(self[mid]) { high = mid } else { low = index(after: mid) }
+    }
+    return low
+  }
+}
+
+nonisolated extension Array where Element == IPt {
+  /// Nearest point to a scrubbed date (for annotations / readouts). Points are time-ordered.
   func nearest(to date: Date?) -> IPt? {
     guard let date, !isEmpty else { return nil }
-    return self.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) }
+    let upper = partitionIndex { $0.date >= date }
+    guard upper < count else { return self[count - 1] }
+    guard upper > 0 else { return self[0] }
+    let before = self[upper - 1], after = self[upper]
+    return date.timeIntervalSince(before.date) <= after.date.timeIntervalSince(date) ? before : after
+  }
+
+  /// Retain boundary neighbors for continuous paths, but avoid thousands of offscreen marks.
+  func visible(in window: IndicatorWindow) -> [IPt] {
+    let first = partitionIndex { $0.date >= window.start }
+    guard first < count else { return Array(suffix(1)) }
+    let past = partitionIndex { $0.date > window.start.addingTimeInterval(window.length) }
+    let end = past < count ? past : count - 1
+    return Array(self[Swift.max(0, first - 1)...Swift.max(first, end)])
+  }
+
+  /// Several sparse marker series merged into one time-ordered array.
+  static func merged(_ parts: [ColoredPoint]...) -> [IPt] {
+    parts.flatMap { $0 }.sorted { $0.time < $1.time }.chartPoints
+  }
+
+  var timePoints: [TimePoint] { map { .init(epochSeconds: $0.id, value: $0.value) } }
+}
+
+nonisolated enum IndicatorYDomain {
+  /// `IndicatorPlotScale.domain` over several time-ordered series, visiting only visible samples.
+  static func compute(series: [[IPt]], visible: ClosedRange<Int>, anchors: [Double] = [], margin: Double = 0.1) -> ClosedRange<Double> {
+    var low = Double.infinity, high = -Double.infinity
+    for points in series {
+      for p in points.within(visible) { low = Swift.min(low, p.value); high = Swift.max(high, p.value) }
+    }
+    // Two synthetic in-window samples carry the extremes so the scale math stays in AggrCore.
+    let extremes: [TimePoint] = low.isFinite ? [.init(epochSeconds: visible.lowerBound, value: low), .init(epochSeconds: visible.lowerBound, value: high)] : []
+    return IndicatorPlotScale.domain(points: extremes, visible: visible, anchors: anchors, margin: margin)
   }
 }
 
 /// Two series paired by timestamp (band fills).
-struct BandPt: Identifiable, Hashable {
+nonisolated struct BandPt: Identifiable, Hashable, Sendable {
   let id: Int
   let date: Date
   let lower: Double
   let upper: Double
 }
 
-func pairBands(_ a: [IPt], _ b: [IPt]) -> [BandPt] {
+nonisolated func pairBands(_ a: [IPt], _ b: [IPt]) -> [BandPt] {
   let byId = Dictionary(b.map { ($0.id, $0.value) }, uniquingKeysWith: { x, _ in x })
   return a.compactMap { p in byId[p.id].map { BandPt(id: p.id, date: p.date, lower: min(p.value, $0), upper: max(p.value, $0)) } }
 }
 
+/// Everything the four indicator panes draw, converted once per `IndicatorBundle` off the main
+/// actor. Equality is identity: a prepared value never changes after construction.
+nonisolated struct IndicatorChartData: Sendable, Equatable {
+  let marketVision: MarketVisionChartData
+  let bollinger: BollingerChartData
+  let bbwp: BBWPChartData
+  let rsi: RsiChartData
 
-extension Array where Element == IPt {
-  /// Retain boundary neighbors for continuous paths, but avoid thousands of offscreen marks.
-  func visible(in window: IndicatorWindow) -> [IPt] {
-    guard let first = firstIndex(where: { $0.date >= window.start }) else { return Array(suffix(1)) }
-    let end = firstIndex(where: { $0.date > window.start.addingTimeInterval(window.length) }) ?? count - 1
-    return Array(self[Swift.max(0, first - 1)...Swift.max(first, end)])
+  init(_ bundle: IndicatorBundle) {
+    marketVision = MarketVisionChartData(bundle.marketVision)
+    bollinger = BollingerChartData(bundle.bollinger)
+    bbwp = BBWPChartData(bundle.bbwp)
+    rsi = RsiChartData(bundle.rsiDivergences)
   }
-  var timePoints: [TimePoint] { map { .init(epochSeconds: $0.id, value: $0.value) } }
+}
+
+/// Dashed crosshair drawn over the plot area from the shared scrub date; only this view
+/// observes the store, so the chart's marks are left alone while another pane is scrubbed.
+struct IndicatorScrubRule: View {
+  let scrub: IndicatorScrubStore
+  let proxy: ChartProxy
+
+  var body: some View {
+    GeometryReader { geometry in
+      if let date = scrub.date, let anchor = proxy.plotFrame, let x = proxy.position(forX: date) {
+        let frame = geometry[anchor]
+        if x >= 0, x <= frame.width {
+          Path { path in
+            path.move(to: CGPoint(x: frame.minX + x, y: frame.minY))
+            path.addLine(to: CGPoint(x: frame.minX + x, y: frame.maxY))
+          }
+          .stroke(Color.white.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+          .accessibilityIdentifier("indicator-scrub-rule")
+        }
+      }
+    }
+    .allowsHitTesting(false)
+  }
 }
 
 /// Contiguous color runs preserve the web's per-point coloring without joining unrelated colors.
+/// Runs (and their series keys / resolved colors) are built once per construction, not per mark.
 struct IndicatorLine: ChartContent {
   let id: String
   let points: [IPt]
@@ -146,24 +270,41 @@ struct IndicatorLine: ChartContent {
   var width: CGFloat = 1
   var opacity = 1.0
   var dash: [CGFloat] = []
-  private struct Run: Identifiable { let id: Int; let color: String?; var points: [IPt] }
-  private var runs: [Run] {
+  private let runs: [Run]
+
+  private struct Run: Identifiable {
+    let id: Int
+    let series: String
+    let stroke: Color
+    var points: [IPt]
+  }
+
+  init(id: String, points: [IPt], color: Color = .white, width: CGFloat = 1, opacity: Double = 1.0, dash: [CGFloat] = []) {
+    self.id = id; self.points = points; self.color = color; self.width = width; self.opacity = opacity; self.dash = dash
+    runs = Self.runs(points, id: id, base: color, opacity: opacity)
+  }
+
+  private static func runs(_ points: [IPt], id: String, base: Color, opacity: Double) -> [Run] {
     guard let first = points.first else { return [] }
-    var result = [Run(id: 0, color: first.color, points: [first])]
+    func stroke(_ color: String?) -> Color { (color.map { Color(oklch: $0) } ?? base).opacity(opacity) }
+    var result = [Run(id: 0, series: "\(id)-0", stroke: stroke(first.color), points: [first])]
+    var currentColor = first.color
     for point in points.dropFirst() {
       let last = result.count - 1
-      if point.color != result[last].color {
+      if point.color != currentColor {
         let previous = result[last].points.last!
-        result.append(Run(id: result.count, color: point.color, points: [previous, point]))
+        currentColor = point.color
+        result.append(Run(id: result.count, series: "\(id)-\(result.count)", stroke: stroke(point.color), points: [previous, point]))
       } else { result[last].points.append(point) }
     }
     return result
   }
+
   var body: some ChartContent {
     ForEach(runs) { run in
       ForEach(run.points) { point in
-        LineMark(x: .value("Time", point.date), y: .value(id, point.value), series: .value("Series", "\(id)-\(run.id)"))
-          .foregroundStyle((run.color.map { Color(oklch: $0) } ?? color).opacity(opacity))
+        LineMark(x: .value("Time", point.date), y: .value(id, point.value), series: .value("Series", run.series))
+          .foregroundStyle(run.stroke)
           .lineStyle(StrokeStyle(lineWidth: width, dash: dash))
           .interpolationMethod(.linear)
       }
@@ -199,10 +340,10 @@ struct IndicatorDots: ChartContent {
 
 /// Same compact material readout used elsewhere on the token page; no permanent labels over the plot.
 struct IndicatorReadout: View {
-  let date: Date?
+  let scrub: IndicatorScrubStore
   let series: [(String, [IPt])]
   var body: some View {
-    if let date {
+    if let date = scrub.date {
       VStack(alignment: .leading, spacing: 4) {
         Text(date, format: .dateTime.month(.abbreviated).day().hour().minute()).foregroundStyle(.secondary)
         ForEach(Array(series.enumerated()), id: \.offset) { _, item in

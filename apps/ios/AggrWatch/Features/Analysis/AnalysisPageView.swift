@@ -11,7 +11,9 @@ struct AnalysisPageView: View {
   @Environment(AppEnvironment.self) private var env
   @State private var session: AnalysisSession
   @State private var showMetrics = false
-  @State private var scrollOffset: CGFloat = 0
+  /// Scroll offset lives on an observable object read only by the header, so a scroll frame never
+  /// re-runs the page (and its Swift Charts). Mirrors `TokenPageChrome`.
+  @State private var chrome = AnalysisPageChrome()
   @ScaledMetric(relativeTo: .title) private var headerHeight = 120.0
 
   init(presentation: AnalysisPresentation, close: @escaping () -> Void) {
@@ -21,14 +23,12 @@ struct AnalysisPageView: View {
   }
 
   var body: some View {
-    let firstId = session.requestedIds.first ?? ""
-    let firstQuote = env.watchlistData.quote(firstId)
     GeometryReader { geometry in
       Group {
         if geometry.size.width >= 760 { wide } else { phone }
       }
       .overlay(alignment: .top) {
-        AnalysisPageHeader(session: session, scrollOffset: scrollOffset, expandedHeight: headerHeight,
+        AnalysisPageHeader(session: session, chrome: chrome, expandedHeight: headerHeight,
                            topInset: geometry.safeAreaInsets.top, close: close)
           .frame(height: headerHeight)
       }
@@ -41,7 +41,7 @@ struct AnalysisPageView: View {
         .accessibilityHidden(true)
         .allowsHitTesting(false)
     }
-    .background { PageArtworkBackground(symbol: firstQuote?.symbol ?? firstId, imageURL: firstQuote?.image) }
+    .background { AnalysisBackdrop(coinId: session.requestedIds.first ?? "") }
     .overlay { ToastOverlay() }
     .fontDesign(.rounded)
     .tint(Theme.accent)
@@ -66,7 +66,7 @@ struct AnalysisPageView: View {
     .onScrollGeometryChange(for: CGFloat.self) { geometry in
       max(0, geometry.contentOffset.y + geometry.contentInsets.top)
     } action: { _, offset in
-      scrollOffset = offset
+      chrome.update(scrollOffset: offset)
     }
     .accessibilityIdentifier(showMetrics ? "analysis-data-scroll" : "analysis-report-scroll")
   }
@@ -96,7 +96,7 @@ struct AnalysisPageView: View {
       .onScrollGeometryChange(for: CGFloat.self) { geometry in
         max(0, geometry.contentOffset.y + geometry.contentInsets.top)
       } action: { _, offset in
-        scrollOffset = offset
+        chrome.update(scrollOffset: offset)
       }
       .accessibilityIdentifier("analysis-report-scroll")
     }
@@ -107,7 +107,7 @@ struct AnalysisPageView: View {
       VStack(alignment: .leading, spacing: 12) {
         if session.isComparison {
           if session.stats != nil {
-            AnalysisComparisonChart(lines: session.chartLines)
+            AnalysisComparisonChart(lines: session.chartLines).equatable()
           } else if session.isLoading {
             RingLoader("\(session.readyCount) of \(session.requestedIds.count) tokens ready").frame(maxWidth: .infinity, minHeight: 220)
           } else {
@@ -118,7 +118,7 @@ struct AnalysisPageView: View {
               .font(.caption).foregroundStyle(.orange)
           }
         } else if let priceData = session.priceData {
-          AnalysisPriceChart(model: priceData)
+          AnalysisPriceChart(model: priceData).equatable()
         } else if session.chartFailed {
           Text("Price chart unavailable").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
         } else {
@@ -139,6 +139,28 @@ struct AnalysisPageView: View {
       else if session.isLoading { RingLoader("Preparing market data").frame(maxWidth: .infinity, minHeight: 160) }
       else { Text("Market data unavailable. Try regenerating the analysis.").foregroundStyle(.secondary) }
     }
+  }
+}
+
+/// Header chrome state, written per scroll frame and observed only by `AnalysisPageHeader`.
+@Observable
+final class AnalysisPageChrome {
+  var scrollOffset: CGFloat = 0
+
+  func update(scrollOffset offset: CGFloat) {
+    if scrollOffset != offset { scrollOffset = offset }
+  }
+}
+
+/// Keeps the quote read for the blurred backdrop out of the page body.
+private struct AnalysisBackdrop: View {
+  let coinId: String
+  @Environment(AppEnvironment.self) private var env
+
+  var body: some View {
+    let quote = env.watchlistData.quote(coinId)
+    PageArtworkBackground(symbol: quote?.symbol ?? coinId, imageURL: quote?.image)
+      .equatable()
   }
 }
 
@@ -168,7 +190,7 @@ struct AnalysisReport: View {
 /// One token shows its logo and name; a comparison shows the stacked logos and the symbols.
 struct AnalysisPageHeader: View {
   let session: AnalysisSession
-  let scrollOffset: CGFloat
+  let chrome: AnalysisPageChrome
   let expandedHeight: CGFloat
   let topInset: CGFloat
   let close: () -> Void
@@ -180,7 +202,7 @@ struct AnalysisPageHeader: View {
     let quotes = session.requestedIds.map { env.watchlistData.quote($0) }
     let items = zip(session.requestedIds, quotes).map { TokenAvatarStack.Item(symbol: $1?.symbol ?? $0, imageURL: $1?.image) }
     let textScale = expandedHeight / 120
-    let progress = min(1, max(0, scrollOffset / max(1, expandedHeight - 64 * textScale)))
+    let progress = min(1, max(0, chrome.scrollOffset / max(1, expandedHeight - 64 * textScale)))
     // Direct manipulation has no trailing spring. Reduce Motion switches between the two layouts.
     let p = reduceMotion ? (progress < 0.5 ? 0.0 : 1.0) : progress
     let title = session.isComparison
@@ -280,7 +302,9 @@ struct AnalysisPageHeader: View {
 }
 #Preview("Compact analysis header") {
   PreviewHost(navigation: false) { _ in
-    AnalysisPageHeader(session: AnalysisSession(coinIds: ["bitcoin"]), scrollOffset: 160, expandedHeight: 120, topInset: 0, close: {})
+    let chrome = AnalysisPageChrome()
+    let _ = { chrome.scrollOffset = 160 }()
+    AnalysisPageHeader(session: AnalysisSession(coinIds: ["bitcoin"]), chrome: chrome, expandedHeight: 120, topInset: 0, close: {})
       .frame(height: 120)
   }
 }

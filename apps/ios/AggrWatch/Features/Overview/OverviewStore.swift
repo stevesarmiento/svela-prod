@@ -4,6 +4,11 @@ import Foundation
 import Observation
 
 /// Port of `overview-holdings-section.tsx` data wiring.
+///
+/// Derived values are stored and rebuilt when their inputs change, not recomputed per view body:
+/// `positions` when the holdings breakdown changes, the rebased chart series when either series
+/// changes, and the news groups when the events or their sentiment overlay change. Scrub lookups
+/// are binary searches over the already-sorted series.
 @Observable
 final class OverviewStore {
   private(set) var bootstrapError: String?
@@ -13,10 +18,11 @@ final class OverviewStore {
   private(set) var marketError: String?
   var error: String? { bootstrapError ?? holdingsError ?? refreshError }
   var hasLoaded: Bool { bootstrap != nil && breakdown != nil }
-  private var generation = 0
-  private var seriesRequest = UUID()
-  private var snapshotTask: Task<Void, Never>?
-  private var scaleTask: Task<Void, Never>?
+  @ObservationIgnored private var generation = 0
+  @ObservationIgnored private var seriesRequest = UUID()
+  @ObservationIgnored private var snapshotTask: Task<Void, Never>?
+  @ObservationIgnored private var scaleTask: Task<Void, Never>?
+  @ObservationIgnored private var positionsTask: Task<Void, Never>?
   private(set) var bootstrap: OverviewBootstrap?
   private(set) var breakdown: [OverviewHoldingsGroup]?
   private(set) var valueSeries: [TimePoint] = []
@@ -30,6 +36,8 @@ final class OverviewStore {
       guard scale != oldValue else { return }
       scrubTime = nil
       valueSeries = []; marketSeries = []
+      seriesLoadedAt = nil
+      rebuildSeriesDerived()
       guard !tasks.isEmpty else { return }
       scaleTask?.cancel()
       scaleTask = Task { await loadSeries(force: false) }
@@ -41,11 +49,14 @@ final class OverviewStore {
   private let watchlistData: WatchlistDataStore
   private let market: MarketAPI
   private let cache: QueryCache
-  private var tasks: [Task<Void, Never>] = []
-  private var snapshotRequestKey = ""
-  private var overlayTask: Task<Void, Never>?
-  private var overlayKey = ""
-  private var lastPositionsKey: String?
+  @ObservationIgnored private var tasks: [Task<Void, Never>] = []
+  @ObservationIgnored private var snapshotRequestKey = ""
+  @ObservationIgnored private var overlayTask: Task<Void, Never>?
+  @ObservationIgnored private var overlayKey = ""
+  @ObservationIgnored private var lastPositionsKey: String?
+  @ObservationIgnored private var seriesLoadedAt: Date?
+  /// Series older than this are refreshed when subscriptions resume after a background stop.
+  private let resumeStaleness: TimeInterval = 300
 
   init(repo: OverviewRepository, watchlistData: WatchlistDataStore, market: MarketAPI, cache: QueryCache) {
     self.repo = repo; self.watchlistData = watchlistData; self.market = market; self.cache = cache
@@ -55,13 +66,21 @@ final class OverviewStore {
 
   var groupsBreakdown: [OverviewHoldingsGroup] { breakdown ?? bootstrap?.holdingsBreakdown ?? [] }
 
-  var positions: [AggregateSeries.Position] {
-    var byCoin: [String: Double] = [:]
-    for row in groupsBreakdown { for p in row.positions where p.holdings.isFinite && p.holdings > 0 { byCoin[p.coinId, default: 0] += p.holdings } }
-    return byCoin.keys.sorted().map { AggregateSeries.Position(coinId: $0, holdings: byCoin[$0]!) }
-  }
+  /// Aggregated holdings per coin, sorted by coin id. Rebuilt when the breakdown changes.
+  private(set) var positions: [AggregateSeries.Position] = []
+  @ObservationIgnored private var positionsKey = ""
 
   var hasHoldings: Bool { !positions.isEmpty }
+
+  private func rebuildPositions() {
+    var byCoin: [String: Double] = [:]
+    for row in groupsBreakdown { for p in row.positions where p.holdings.isFinite && p.holdings > 0 { byCoin[p.coinId, default: 0] += p.holdings } }
+    let next = byCoin.keys.sorted().map { AggregateSeries.Position(coinId: $0, holdings: byCoin[$0]!) }
+    guard next != positions else { return }
+    positions = next
+    positionsKey = next.map { "\($0.coinId):\($0.holdings)" }.joined(separator: ",")
+    rebuildSeriesDerived()
+  }
 
   var pricedPositionCount: Int {
     positions.filter { position in
@@ -100,24 +119,39 @@ final class OverviewStore {
     return rows.sorted { $0.changePct > $1.changePct }
   }
 
-  var scrubbedValue: Double? { scrubTime.flatMap { OverviewPerformance.valueAt(valueSeries, time: $0) } }
-  var displayValueUsd: Double? { scrubbedValue ?? totalValueUsd }
+  // MARK: Series-derived (rebuilt when `valueSeries` / `marketSeries` / positions change)
 
-  var rebased: OverviewPerformance.RebasedComparison { OverviewPerformance.buildRebasedComparison(portfolio: valueSeries, market: marketSeries) }
-  var portfolioChartPoints: [TimePoint] { rebased.portfolioPoints.isEmpty ? OverviewPerformance.rebaseFromFirstPoint(valueSeries) : rebased.portfolioPoints }
+  private(set) var rebased: OverviewPerformance.RebasedComparison = .empty
+  private(set) var portfolioChartPoints: [TimePoint] = []
+  private(set) var marketChartPoints: [TimePoint] = []
+  /// Sorted, time-unique copies of the raw series for O(log n) scrub lookups.
+  @ObservationIgnored private var sortedValueSeries: [TimePoint] = []
+  @ObservationIgnored private var sortedMarketSeries: [TimePoint] = []
 
-  var displayMarketCapUsd: Double? {
-    scrubTime.flatMap { OverviewPerformance.valueAt(marketSeries, time: $0) } ?? marketSeries.last?.value
-  }
-
-  var marketChartPoints: [TimePoint] {
+  private func rebuildSeriesDerived() {
+    sortedValueSeries = SeriesLookup.sortedUnique(valueSeries)
+    sortedMarketSeries = SeriesLookup.sortedUnique(marketSeries)
+    let next = OverviewPerformance.buildRebasedComparison(portfolio: valueSeries, market: marketSeries)
+    let portfolio = next.portfolioPoints.isEmpty ? OverviewPerformance.rebaseFromFirstPoint(valueSeries) : next.portfolioPoints
     // Use a shared baseline when comparing holdings; a market-only chart can stand alone.
-    portfolioChartPoints.isEmpty ? OverviewPerformance.rebaseFromFirstPoint(marketSeries) : rebased.marketPoints
+    let market = portfolio.isEmpty ? OverviewPerformance.rebaseFromFirstPoint(marketSeries) : next.marketPoints
+    if next != rebased { rebased = next }
+    if portfolio != portfolioChartPoints { portfolioChartPoints = portfolio }
+    if market != marketChartPoints { marketChartPoints = market }
   }
 
   var chartNote: String? {
     guard hasHoldings, rebased.marketPoints.isEmpty else { return nil }
     return (marketLoading || marketWarming) ? "Market benchmark warming" : "Market benchmark unavailable"
+  }
+
+  // MARK: Scrub-dependent (O(log n); only the readout views observe `scrubTime`)
+
+  var scrubbedValue: Double? { scrubTime.flatMap { SeriesLookup.nearestValue(sortedValueSeries, time: $0) } }
+  var displayValueUsd: Double? { scrubbedValue ?? totalValueUsd }
+
+  var displayMarketCapUsd: Double? {
+    scrubTime.flatMap { SeriesLookup.nearestValue(sortedMarketSeries, time: $0) } ?? marketSeries.last?.value
   }
 
   struct RangeChange { var deltaUsd: Double; var deltaPct: Double; var isAvailable: Bool }
@@ -129,8 +163,15 @@ final class OverviewStore {
     return RangeChange(deltaUsd: d, deltaPct: d / start * 100, isAvailable: true)
   }
 
-  var newsEvents: [OverviewEvent] {
-    (bootstrap?.events?.events ?? []).filter { $0.kind == .news }.map { e in
+  // MARK: News (rebuilt when the events or their sentiment overlay change)
+
+  struct NewsGroup: Identifiable { var label: String; var events: [OverviewEvent]; var id: String { label } }
+  private(set) var newsEvents: [OverviewEvent] = []
+  private(set) var newsGroups: [NewsGroup] = []
+  @ObservationIgnored private var newsGroupsDay: Date?
+
+  private func rebuildNews() {
+    let events = (bootstrap?.events?.events ?? []).filter { $0.kind == .news }.map { e in
       guard let a = e.articleId, let o = sentimentOverlay[a] else { return e }
       var m = e
       m.sentiment = o.sentiment ?? e.sentiment
@@ -138,12 +179,38 @@ final class OverviewStore {
       m.aiCategory = o.aiCategory ?? e.aiCategory
       return m
     }
+    let day = Calendar.current.startOfDay(for: Date())
+    guard events != newsEvents || day != newsGroupsDay else { return }
+    newsEvents = events
+    newsGroupsDay = day
+    var groups: [NewsGroup] = []
+    let now = Date()
+    for e in events {
+      let label = FeedHelpers.dateBucket(ms: e.occurredAtMs, now: now)
+      if groups.last?.label == label { groups[groups.count - 1].events.append(e) } else { groups.append(NewsGroup(label: label, events: [e])) }
+    }
+    newsGroups = groups
+  }
+
+  /// "Today"/"Yesterday" labels depend on the calendar day; sleep until the next midnight and regroup.
+  private func scheduleNewsDayRollover() {
+    tasks.append(Task { [weak self] in
+      while !Task.isCancelled {
+        let calendar = Calendar.current
+        let now = Date()
+        guard let next = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) else { return }
+        do { try await Task.sleep(for: .seconds(max(1, next.timeIntervalSince(now) + 1))) } catch { return }
+        self?.rebuildNews()
+      }
+    })
   }
 
   var isEmptyDashboard: Bool { bootstrap != nil && (bootstrap?.watchlistCoinCount ?? 0) == 0 }
 
   // MARK: Lifecycle
 
+  /// Opens the Convex subscriptions; a no-op while they are already running. Subscriptions stay
+  /// open across tab switches and only stop on background (`stop()`) or user change (`reset()`).
   func start() {
     guard tasks.isEmpty else { return }
     let generation = self.generation
@@ -153,7 +220,12 @@ final class OverviewStore {
       do {
         for try await b in repo.bootstrap() {
           guard !Task.isCancelled, self.generation == generation else { return }
-          self.bootstrap = b; self.bootstrapError = nil
+          if self.bootstrap != b {
+            self.bootstrap = b
+            self.rebuildPositions()
+            self.rebuildNews()
+          }
+          self.bootstrapError = nil
           self.requestSnapshotRefreshIfStale(b)
           self.refreshOverlay()
         }
@@ -164,8 +236,13 @@ final class OverviewStore {
       do {
         for try await rows in repo.holdingsBreakdown() {
           guard !Task.isCancelled, self.generation == generation else { return }
-          self.breakdown = rows; self.holdingsError = nil
-          await self.loadSeriesIfPositionsChanged()
+          if self.breakdown != rows {
+            self.breakdown = rows
+            self.rebuildPositions()
+          }
+          self.holdingsError = nil
+          // Fan out off the subscription loop so a slow chart fetch never delays the next row update.
+          self.positionsTask = Task { [weak self] in await self?.loadSeriesIfPositionsChanged() }
         }
       } catch { if !Task.isCancelled { self.holdingsError = error.localizedDescription } }
     })
@@ -176,20 +253,45 @@ final class OverviewStore {
         await self?.loadSeries(force: true)
       }
     })
+    scheduleNewsDayRollover()
+    // Resuming after a background stop keeps the loaded series; refresh them when stale or when a
+    // load never finished (cancelled mid-flight, or the scale changed and nothing arrived yet).
+    if lastPositionsKey != nil {
+      let stale = seriesLoadedAt.map { Date().timeIntervalSince($0) > resumeStaleness } ?? true
+      if stale { positionsTask = Task { [weak self] in await self?.loadSeries(force: false) } }
+    }
   }
 
+  /// Cancels every subscription and in-flight request, keeping loaded data and the positions key
+  /// so the next `start()` does not fan out the chart fetches again for unchanged holdings.
   func stop() {
+    // A fan-out cancelled mid-flight has not produced series: let the next emission reload them.
+    if seriesLoadedAt == nil || seriesLoading || marketLoading { lastPositionsKey = nil }
     generation += 1; seriesRequest = UUID()
     seriesLoading = false; marketLoading = false
-    lastPositionsKey = nil; overlayKey = ""
+    overlayKey = ""
     snapshotTask?.cancel(); snapshotTask = nil; snapshotRequestKey = ""
     scaleTask?.cancel(); scaleTask = nil
+    positionsTask?.cancel(); positionsTask = nil
     tasks.forEach { $0.cancel() }; tasks = []
     overlayTask?.cancel(); overlayTask = nil
   }
 
+  /// `stop()` plus forgetting the positions key, for a different user or an explicit retry.
+  func reset() {
+    stop()
+    lastPositionsKey = nil; seriesLoadedAt = nil
+    bootstrap = nil; breakdown = nil
+    positions = []; positionsKey = ""
+    valueSeries = []; marketSeries = []
+    sentimentOverlay = [:]
+    newsEvents = []; newsGroups = []; newsGroupsDay = nil
+    seriesError = nil; marketError = nil
+    rebuildSeriesDerived()
+  }
+
   func retry() {
-    stop(); snapshotRequestKey = ""; refreshError = nil; start()
+    reset(); snapshotRequestKey = ""; refreshError = nil; start()
   }
 
   private func requestSnapshotRefreshIfStale(_ b: OverviewBootstrap) {
@@ -212,15 +314,25 @@ final class OverviewStore {
     guard key != overlayKey else { return }
     overlayKey = key
     overlayTask?.cancel()
-    guard !ids.isEmpty else { sentimentOverlay = [:]; return }
+    guard !ids.isEmpty else {
+      if !sentimentOverlay.isEmpty { sentimentOverlay = [:]; rebuildNews() }
+      return
+    }
     overlayTask = Task { [weak self] in
       guard let self else { return }
-      do { for try await rows in repo.sentimentOverlay(articleIds: ids) { self.sentimentOverlay = Dictionary(rows.map { ($0.articleId, $0) }, uniquingKeysWith: { a, _ in a }) } } catch {}
+      do {
+        for try await rows in repo.sentimentOverlay(articleIds: ids) {
+          let next = Dictionary(rows.map { ($0.articleId, $0) }, uniquingKeysWith: { a, _ in a })
+          guard next != self.sentimentOverlay else { continue }
+          self.sentimentOverlay = next
+          self.rebuildNews()
+        }
+      } catch {}
     }
   }
 
   private func loadSeriesIfPositionsChanged() async {
-    let key = positions.map { "\($0.coinId):\($0.holdings)" }.joined(separator: ",")
+    let key = positionsKey
     guard key != lastPositionsKey else { return }
     lastPositionsKey = key
     await loadSeries(force: false)
@@ -273,11 +385,12 @@ final class OverviewStore {
         switch result {
         case .portfolio(let points):
           seriesError = !positions.isEmpty && points.count < 2 ? "Price history is unavailable for one or more positions. Try refreshing." : nil
-          valueSeries = points
+          if valueSeries != points { valueSeries = points; rebuildSeriesDerived() }
           seriesLoading = false
+          seriesLoadedAt = Date()
         case .market(let points, let warming, let error):
           // Keep previously loaded data on a failed refresh, and make the error visible.
-          if error == nil { marketSeries = points }
+          if error == nil, marketSeries != points { marketSeries = points; rebuildSeriesDerived() }
           marketError = error
           marketWarming = warming
           marketLoading = false
@@ -295,6 +408,9 @@ extension OverviewStore {
     breakdown = PreviewFixtures.overview.holdingsBreakdown
     valueSeries = PreviewFixtures.line
     marketSeries = PreviewFixtures.chart.marketCap
+    rebuildPositions()
+    rebuildNews()
+    rebuildSeriesDerived()
   }
 }
 #endif

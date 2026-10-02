@@ -21,6 +21,9 @@ struct CoinSearchView: View {
   @State private var targetGroupId: String?
   @State private var pendingIds: Set<String> = []
   @State private var analysisSheet: AnalysisPresentation?
+  /// Bumped whenever the visible ids can change; `onChange` keys on it instead of mapping the
+  /// visible coins to an array of ids on every body.
+  @State private var visibleRevision = 0
 
   private var visibleCoins: [CoinQuote] { debounced.isEmpty ? topCoins : results }
   private var selectionOwner: String { mode == .navigate ? "search" : "search-add" }
@@ -31,6 +34,9 @@ struct CoinSearchView: View {
 
   var body: some View {
     let data = env.watchlistData
+    let target = self.target
+    // One pass over the target's items per body, not one scan per row.
+    let targetCoinIds: Set<String> = target.map { Set(data.coinIds(in: $0)) } ?? []
     List {
       if mode == .addToWatchlist || !data.groups.isEmpty {
         Section {
@@ -55,14 +61,14 @@ struct CoinSearchView: View {
 
       if debounced.isEmpty {
         Section(mode == .navigate ? "Popular tokens" : "Top tokens") {
-          ForEach(topCoins) { coin in row(coin, target: target) }
+          ForEach(topCoins) { coin in row(coin, target: target, targetCoinIds: targetCoinIds) }
         }
       } else {
         Section(isLoading && results.isEmpty ? "Searching…" : "Results (\(results.count))") {
           if results.isEmpty && !isLoading {
             Text("No tokens match \"\(debounced)\"").foregroundStyle(.secondary)
           }
-          ForEach(results) { coin in row(coin, target: target) }
+          ForEach(results) { coin in row(coin, target: target, targetCoinIds: targetCoinIds) }
         }
       }
       if let error { Section { Text(error).font(.footnote).foregroundStyle(Color.lossRed) } }
@@ -88,7 +94,7 @@ struct CoinSearchView: View {
       }
     }
     .onAppear { registerSelection() }
-    .onChange(of: visibleCoins.map(\.id)) { _, _ in registerSelection() }
+    .onChange(of: visibleRevision) { _, _ in registerSelection() }
     .onChange(of: target?.id) { _, _ in
       env.selection.release(owner: selectionOwner)
       registerSelection()
@@ -113,15 +119,16 @@ struct CoinSearchView: View {
       // 250ms debounce like the screener search; the debounced value is the query key.
       try? await Task.sleep(for: .milliseconds(250))
       guard !Task.isCancelled else { return }
-      debounced = query.trimmingCharacters(in: .whitespaces)
+      let trimmed = query.trimmingCharacters(in: .whitespaces)
+      if trimmed.isEmpty != debounced.isEmpty { visibleRevision += 1 }
+      debounced = trimmed
       await search(debounced)
     }
   }
 
   @ViewBuilder
-  private func row(_ coin: CoinQuote, target: WatchlistGroup?) -> some View {
-    let data = env.watchlistData
-    let inTarget = target.map { data.isInGroup(coin.id, groupId: $0.id) } ?? false
+  private func row(_ coin: CoinQuote, target: WatchlistGroup?, targetCoinIds: Set<String>) -> some View {
+    let inTarget = targetCoinIds.contains(coin.id)
     let bookmark: (() async -> Void)? = target.map { group in
       { await toggle(coin, target: group, currentlyIn: inTarget) }
     }
@@ -138,7 +145,8 @@ struct CoinSearchView: View {
         }
       } label: {
         HStack(spacing: 12) {
-          GlassTokenLogo(symbol: coin.symbol, imageURL: coin.image, size: 34)
+          TokenLogo(symbol: coin.symbol, imageURL: coin.image, size: 34)
+            .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1))
           VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
               Text(coin.symbol.uppercased()).font(.subheadline.weight(.semibold))
@@ -152,7 +160,7 @@ struct CoinSearchView: View {
           Spacer()
           VStack(alignment: .trailing, spacing: 3) {
             UsdText(value: coin.currentPrice, font: .subheadline.weight(.medium))
-            MoveWithBadge(usdMove: coin.usdMove24h, pct: coin.priceChangePercentage24h)
+            MoveWithBadge(usdMove: coin.usdMove24h, pct: coin.priceChangePercentage24h, animated: false)
           }
         }
         .contentShape(.rect)
@@ -207,13 +215,14 @@ struct CoinSearchView: View {
       topCoins = response.data.values
         .filter { ($0.currentPrice ?? 0) > 0 && ($0.marketCapRank ?? 0) > 0 }
         .sorted { ($0.marketCapRank ?? .max) < ($1.marketCapRank ?? .max) }
+      visibleRevision += 1
     } catch {
       self.error = error.localizedDescription
     }
   }
 
   private func search(_ q: String) async {
-    guard !q.isEmpty else { results = []; return }
+    guard !q.isEmpty else { results = []; visibleRevision += 1; return }
     isLoading = true
     defer { isLoading = false }
     do {
@@ -235,6 +244,7 @@ struct CoinSearchView: View {
         let s = summaries.first { $0.coingeckoId == c.id }
         return CoinQuote(id: c.id, name: c.name, symbol: c.symbol, image: s?.logoUrl ?? "")
       }
+      visibleRevision += 1
       error = nil
     } catch is CancellationError {
     } catch {

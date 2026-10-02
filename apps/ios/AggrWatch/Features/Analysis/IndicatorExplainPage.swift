@@ -19,6 +19,7 @@ struct IndicatorExplainPage<ChartView: View, Badges: View>: View {
   @State private var isLoading = false
   @State private var error: String?
   @State private var streamTask: Task<Void, Never>?
+  @State private var chunks: StreamTextCoalescer?
 
   static var steps: [String] {
     ["Reading indicator values", "Comparing to recent price action", "Checking trend and volatility context",
@@ -56,13 +57,13 @@ struct IndicatorExplainPage<ChartView: View, Badges: View>: View {
         .accessibilityHidden(true)
         .allowsHitTesting(false)
     }
-    .background { PageArtworkBackground(symbol: quote?.symbol ?? coinId, imageURL: quote?.image) }
+    .background { PageArtworkBackground(symbol: quote?.symbol ?? coinId, imageURL: quote?.image).equatable() }
     .overlay { ToastOverlay() }
     .fontDesign(.rounded)
     .tint(Theme.accent)
     .accessibilityAction(.escape) { close() }
     .onAppear { run() }
-    .onDisappear { streamTask?.cancel() }
+    .onDisappear { streamTask?.cancel(); chunks?.discard() }
   }
 
   /// Logo close control, the indicator name, and the Regenerate capsule, in the token page's chrome.
@@ -140,17 +141,24 @@ struct IndicatorExplainPage<ChartView: View, Badges: View>: View {
     if env.convex.isPreview { text = PreviewData.analysisText; isLoading = false; return }
     #endif
     streamTask?.cancel()
+    chunks?.discard()
     text = ""; error = nil; isLoading = true
     let ai = AIStreamClient(client: env.apiClient)
     let request = request
+    // Batch streamed chunks into the view state at ~30 Hz instead of one body per token.
+    let coalescer = StreamTextCoalescer { batch in text += batch }
+    chunks = coalescer
     streamTask = Task {
       do {
         let body = try JSONEncoder().encode(request)
         for try await chunk in ai.stream(path: "/api/analyze-indicator", body: body, protocol: .uiMessageSSE) {
-          text += chunk
+          coalescer.append(chunk)
         }
+        coalescer.flush()
       } catch is CancellationError {
+        coalescer.discard()
       } catch {
+        coalescer.flush()
         if !Task.isCancelled { self.error = error.localizedDescription }
       }
       isLoading = false

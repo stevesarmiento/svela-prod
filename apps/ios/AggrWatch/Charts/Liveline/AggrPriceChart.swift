@@ -22,6 +22,8 @@ struct AggrPriceChart: View, Equatable {
   var lineColor: LivelineColor = .white
   let onSelection: (LivelineSelection?) -> Void
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  /// Unobserved memo of the base input; a realtime tick only swaps the observation.
+  @State private var preparation = PriceChartPreparation()
 
   static func == (a: Self, b: Self) -> Bool {
     a.coinId == b.coinId && a.data == b.data && a.hull == b.hull && a.projection == b.projection
@@ -31,10 +33,10 @@ struct AggrPriceChart: View, Equatable {
       && a.lineColor == b.lineColor
   }
   var body: some View {
-    let input = Self.input(coinId: coinId, data: data, hull: hull, projection: projection,
-                           scale: scale, liveObservation: liveObservation, showPrice: showPrice,
-                           showMarketCap: showMarketCap, isLoading: isLoading, hasObservedHistory: hasObservedHistory,
-                           simplified: simplified, lineColor: lineColor)
+    let input = preparation.input(coinId: coinId, data: data, hull: hull, projection: projection,
+                                  scale: scale, liveObservation: liveObservation, showPrice: showPrice,
+                                  showMarketCap: showMarketCap, isLoading: isLoading, hasObservedHistory: hasObservedHistory,
+                                  simplified: simplified, lineColor: lineColor)
     var config = LivelineConfiguration()
     config.highlight = scale == .max || scale == .y2 ? .quarter : .month
     config.pulse = liveObservation != nil
@@ -59,18 +61,42 @@ struct AggrPriceChart: View, Equatable {
                         }, onSelection: onSelection)
   }
 
-  /// Interpolate window edges only when bracketed by actual observations.
+  /// Interpolate window edges only when bracketed by actual observations. One finite pass
+  /// (series arrive time-ordered; a sort runs only if that ever fails), then two binary searches.
   private static func clipped(_ points: [LivelinePoint], to range: ClosedRange<Double>) -> [LivelinePoint] {
-    let valid = points.filter { $0.time.isFinite && $0.value.isFinite }.sorted { $0.time < $1.time }
-    var result = valid.filter { range.contains($0.time) }
-    for edge in [range.lowerBound, range.upperBound] where !result.contains(where: { $0.time == edge }) {
-      if let before = valid.last(where: { $0.time < edge }), let after = valid.first(where: { $0.time > edge }) {
-        let fraction = (edge - before.time) / (after.time - before.time)
-        result.append(.init(time: edge, value: before.value + (after.value - before.value) * fraction))
-      }
+    var valid: [LivelinePoint] = []
+    valid.reserveCapacity(points.count)
+    var ordered = true
+    for p in points where p.time.isFinite && p.value.isFinite {
+      if let last = valid.last, p.time < last.time { ordered = false }
+      valid.append(p)
     }
-    return result.sorted { $0.time < $1.time }
+    if !ordered { valid.sort { $0.time < $1.time } }
+    guard !valid.isEmpty else { return [] }
+    func interpolated(_ before: LivelinePoint, _ after: LivelinePoint, at edge: Double) -> LivelinePoint {
+      let fraction = (edge - before.time) / (after.time - before.time)
+      return .init(time: edge, value: before.value + (after.value - before.value) * fraction)
+    }
+    let low = valid.partitionIndex { $0.time >= range.lowerBound }
+    let high = valid.partitionIndex { $0.time > range.upperBound }
+    var result: [LivelinePoint] = []
+    result.reserveCapacity(high - low + 2)
+    if low > 0, low < valid.count, valid[low].time != range.lowerBound {
+      result.append(interpolated(valid[low - 1], valid[low], at: range.lowerBound))
+    }
+    result.append(contentsOf: valid[low..<high])
+    if high > 0, high < valid.count, valid[high - 1].time != range.upperBound {
+      result.append(interpolated(valid[high - 1], valid[high], at: range.upperBound))
+    }
+    return result
   }
+
+  private static func color(_ value: String) -> LivelineColor { Color(oklch: value).livelineColor }
+  private static let marketCapColor = color("oklch(0.85 0.16 95 / 0.5)")
+  private static let mhullColor = color(OklchColor.withAlpha(ChartColors.pastel[0], 0.7))
+  private static let shullColor = color(OklchColor.withAlpha(ChartColors.pastel[0], 0.45))
+  private static let bullColor = color(OklchColor.withAlpha(ChartColors.candleUp, 0.55))
+  private static let bearColor = color(OklchColor.withAlpha(ChartColors.candleDown, 0.55))
 
   static func input(coinId: String, data: ParsedChartData, hull: HullSuite.Result, projection: PriceProjection.Result?,
                     scale: TimeScale, liveObservation: LivelineObservation?, showPrice: Bool, showMarketCap: Bool,
@@ -102,11 +128,6 @@ struct AggrPriceChart: View, Equatable {
                    observation: hasObservedHistory ? liveObservation : nil,
                    state: hasObservedHistory ? .ready : isLoading ? .loading : .empty)
     }
-    func color(_ value: String) -> LivelineColor {
-      var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 1
-      UIColor(Color(oklch: value)).getRed(&r, green: &g, blue: &b, alpha: &a)
-      return .init(r, g, b, a)
-    }
     let closes = Dictionary(data.ohlc.map { ($0.time, $0.close) }, uniquingKeysWith: { a, _ in a })
     let shared = data.marketCap.first { $0.value > 0 && (closes[$0.epochSeconds] ?? 0) > 0 }
     let anchorPrice = shared.flatMap { closes[$0.epochSeconds] } ?? data.ohlc.first(where: { $0.close > 0 })?.close
@@ -114,16 +135,16 @@ struct AggrPriceChart: View, Equatable {
     let multiplier = anchorPrice.flatMap { p in anchorCap.map { p / $0 } }
     var series: [LivelineSeries] = [
       .init(id: "price", points: hasObservedHistory ? points(data.line) : [], width: 2, visible: showPrice),
-      .init(id: "marketCap", points: points(data.marketCap), color: color("oklch(0.85 0.16 95 / 0.5)"),
+      .init(id: "marketCap", points: points(data.marketCap), color: marketCapColor,
             width: 1, dash: [2, 3], visible: showMarketCap && multiplier != nil, multiplier: multiplier ?? 1),
-      .init(id: "mhull", points: points(hull.mhull), color: color(OklchColor.withAlpha(ChartColors.pastel[0], 0.7)), width: 1, dash: [1, 3]),
-      .init(id: "shull", points: points(hull.shull), color: color(OklchColor.withAlpha(ChartColors.pastel[0], 0.45)), width: 1, dash: [1, 3])
+      .init(id: "mhull", points: points(hull.mhull), color: mhullColor, width: 1, dash: [1, 3]),
+      .init(id: "shull", points: points(hull.shull), color: shullColor, width: 1, dash: [1, 3])
     ]
     if let projection, hasObservedHistory {
       series += [
         .init(id: "projection", points: points(projection.base), color: .init(1, 1, 1, 0.55), width: 1, dash: [4, 4]),
-        .init(id: "bull", points: points(projection.bull), color: color(OklchColor.withAlpha(ChartColors.candleUp, 0.55)), width: 1, dash: [4, 4]),
-        .init(id: "bear", points: points(projection.bear), color: color(OklchColor.withAlpha(ChartColors.candleDown, 0.55)), width: 1, dash: [4, 4])
+        .init(id: "bull", points: points(projection.bull), color: bullColor, width: 1, dash: [4, 4]),
+        .init(id: "bear", points: points(projection.bear), color: bearColor, width: 1, dash: [4, 4])
       ]
     }
     let first = Double(data.line.first?.epochSeconds ?? 0)
@@ -133,6 +154,49 @@ struct AggrPriceChart: View, Equatable {
                  band: projection != nil && hasObservedHistory ? ("bear", "bull") : nil,
                  projectionID: projection != nil && hasObservedHistory ? "projection" : nil,
                  state: hasObservedHistory ? .ready : isLoading ? .loading : data.line.isEmpty ? .empty : .placeholder)
+  }
+}
+
+/// Preparation is keyed by data, not the live observation. Updating it never schedules a render.
+@MainActor final class PriceChartPreparation {
+  private struct Key: Equatable {
+    let coinId: String
+    let data: ParsedChartData
+    let hull: HullSuite.Result
+    let projection: PriceProjection.Result?
+    let scale: TimeScale
+    let showPrice: Bool
+    let showMarketCap: Bool
+    let isLoading: Bool
+    let hasObservedHistory: Bool
+    let simplified: Bool
+    let lineColor: LivelineColor
+  }
+  private var key: Key?
+  private var prepared: LivelineInput?
+  #if DEBUG
+  private(set) var preparationCount = 0
+  #endif
+
+  func input(coinId: String, data: ParsedChartData, hull: HullSuite.Result, projection: PriceProjection.Result?,
+             scale: TimeScale, liveObservation: LivelineObservation?, showPrice: Bool, showMarketCap: Bool,
+             isLoading: Bool, hasObservedHistory: Bool, simplified: Bool, lineColor: LivelineColor) -> LivelineInput {
+    let next = Key(coinId: coinId, data: data, hull: hull, projection: projection, scale: scale, showPrice: showPrice,
+                   showMarketCap: showMarketCap, isLoading: isLoading, hasObservedHistory: hasObservedHistory,
+                   simplified: simplified, lineColor: lineColor)
+    if prepared == nil || key != next {
+      prepared = AggrPriceChart.input(coinId: coinId, data: data, hull: hull, projection: projection, scale: scale,
+                                      liveObservation: nil, showPrice: showPrice, showMarketCap: showMarketCap,
+                                      isLoading: isLoading, hasObservedHistory: hasObservedHistory,
+                                      simplified: simplified, lineColor: lineColor)
+      key = next
+      #if DEBUG
+      preparationCount += 1
+      #endif
+    }
+    var input = prepared!
+    input.observation = hasObservedHistory ? liveObservation : nil
+    return input
   }
 }
 

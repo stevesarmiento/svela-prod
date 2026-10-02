@@ -143,6 +143,20 @@ nonisolated enum PreviewFixtures {
     switch url.path {
     case "/api/coingecko/quotes": return data(["data": object(Dictionary(uniqueKeysWithValues: quotes.map { ($0.id, $0) }))])
     case "/api/coingecko/market-chart": return data(["data": ["prices": points(factor, variesByAsset: true), "volumes": points(1_500), "market_caps": points(19_700_000 * factor)]])
+    case "/api/coingecko/market-chart/batch":
+      // The timing fixtures stagger per-coin requests; answering 400 here makes the client fall
+      // back to those single-coin requests so progressive/delayed card loading still reproduces.
+      let args = ProcessInfo.processInfo.arguments
+      if args.contains("--preview-progressive-charts") || args.contains("--preview-delayed-charts") { return nil }
+      let ids = (query.first { $0.name == "ids" }?.value ?? "").split(separator: ",").map(String.init)
+      var results: [String: Any] = [:]
+      for coin in ids {
+        guard var comps = URLComponents(url: url, resolvingAgainstBaseURL: false) else { continue }
+        comps.path = "/api/coingecko/market-chart"
+        comps.queryItems = [URLQueryItem(name: "id", value: coin), URLQueryItem(name: "days", value: query.first { $0.name == "days" }?.value)]
+        if let single = comps.url.flatMap(response(for:)), let object = try? JSONSerialization.jsonObject(with: single) { results[coin] = object }
+      }
+      return data(["results": results, "failed": [String]()])
     case "/api/coingecko/global-market-cap":
       // Match the route's actual contract: omitted currency becomes null and fails validation.
       guard query.contains(where: { $0.name == "vs_currency" && $0.value == "usd" }),

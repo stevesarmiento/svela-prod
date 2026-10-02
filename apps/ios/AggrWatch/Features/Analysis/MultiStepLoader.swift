@@ -40,26 +40,31 @@ struct MultiStepLoader: View {
 }
 
 /// Lightweight streaming Markdown: paragraphs, headings, bullet lists, inline emphasis/code.
+///
+/// Parsing is incremental: blocks before the last blank line are final (every block flushes at a
+/// blank line) and are kept; only the unfinished tail is re-parsed as chunks stream in.
 struct StreamingMarkdownText: View {
   let text: String
+  @State private var parser = StreamingMarkdownParser()
 
   var body: some View {
+    let blocks = parser.blocks(for: text)
     VStack(alignment: .leading, spacing: 12) {
       ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
         switch block {
         case .heading(let level, let s):
-          Text(inline(s)).font(level <= 2 ? .title3.weight(.semibold) : .headline).padding(.top, 8)
+          Text(s).font(level <= 2 ? .title3.weight(.semibold) : .headline).padding(.top, 8)
         case .bullet(let items):
           VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
               HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("•").foregroundStyle(.secondary)
-                Text(inline(item)).lineSpacing(5)
+                Text(item).lineSpacing(5)
               }
             }
           }
         case .paragraph(let s):
-          Text(inline(s)).lineSpacing(5)
+          Text(s).lineSpacing(5)
         }
       }
     }
@@ -67,23 +72,50 @@ struct StreamingMarkdownText: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .textSelection(.enabled)
   }
+}
 
-  private enum Block { case heading(Int, String), bullet([String]), paragraph(String) }
+/// Unobserved memo of the parsed report. Inline Markdown is rendered to `AttributedString` once per block.
+@MainActor final class StreamingMarkdownParser {
+  enum Block { case heading(Int, AttributedString), bullet([AttributedString]), paragraph(AttributedString) }
 
-  private var blocks: [Block] {
+  private var lastText = ""
+  private var lastBlocks: [Block] = []
+  /// Text up to and including the last blank line; its blocks are final.
+  private var stableText = ""
+  private var stableBlocks: [Block] = []
+
+  func blocks(for text: String) -> [Block] {
+    if text == lastText { return lastBlocks }
+    if !text.hasPrefix(stableText) {
+      // A regenerated or replaced report: start over.
+      stableText = ""; stableBlocks = []
+    }
+    let boundary = text.range(of: "\n\n", options: .backwards)?.upperBound ?? text.startIndex
+    let stableEnd = text.index(text.startIndex, offsetBy: stableText.count)
+    if boundary > stableEnd {
+      // Blocks between the old and new boundary are complete; append them once.
+      stableBlocks += Self.parse(text[stableEnd..<boundary])
+      stableText = String(text[..<boundary])
+    }
+    lastBlocks = stableBlocks + Self.parse(text[boundary...])
+    lastText = text
+    return lastBlocks
+  }
+
+  nonisolated static func parse(_ text: Substring) -> [Block] {
     var out: [Block] = []
     var bullets: [String] = []
     var para: [String] = []
-    func flushPara() { if !para.isEmpty { out.append(.paragraph(para.joined(separator: " "))); para = [] } }
-    func flushBullets() { if !bullets.isEmpty { out.append(.bullet(bullets)); bullets = [] } }
-    for raw in text.components(separatedBy: "\n") {
+    func flushPara() { if !para.isEmpty { out.append(.paragraph(inline(para.joined(separator: " ")))); para = [] } }
+    func flushBullets() { if !bullets.isEmpty { out.append(.bullet(bullets.map(inline))); bullets = [] } }
+    for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
       let line = raw.trimmingCharacters(in: .whitespaces)
       if line.isEmpty { flushPara(); flushBullets(); continue }
       if line.hasPrefix("#") {
         flushPara(); flushBullets()
         let level = line.prefix(while: { $0 == "#" }).count
-        out.append(.heading(level, String(line.drop(while: { $0 == "#" || $0 == " " }))))
-      } else if line.hasPrefix("- ") || line.hasPrefix("* ") || line.range(of: #"^\d+\.\s"#, options: .regularExpression) != nil {
+        out.append(.heading(level, inline(String(line.drop(while: { $0 == "#" || $0 == " " })))))
+      } else if line.hasPrefix("- ") || line.hasPrefix("* ") || isOrderedItem(line) {
         flushPara()
         bullets.append(String(line.drop(while: { $0 == "-" || $0 == "*" || $0.isNumber || $0 == "." || $0 == " " })))
       } else {
@@ -95,7 +127,16 @@ struct StreamingMarkdownText: View {
     return out
   }
 
-  private func inline(_ s: String) -> AttributedString {
+  /// `^\d+\.\s` without a regular expression per line.
+  private nonisolated static func isOrderedItem(_ line: String) -> Bool {
+    var index = line.startIndex
+    while index < line.endIndex, line[index].isNumber { index = line.index(after: index) }
+    guard index > line.startIndex, index < line.endIndex, line[index] == "." else { return false }
+    let next = line.index(after: index)
+    return next < line.endIndex && line[next].isWhitespace
+  }
+
+  private nonisolated static func inline(_ s: String) -> AttributedString {
     (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
   }
 }

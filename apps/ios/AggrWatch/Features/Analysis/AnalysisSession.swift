@@ -29,6 +29,8 @@ final class AnalysisSession {
   var readyCount = 0
 
   @ObservationIgnored private var env: AppEnvironment?
+  /// Streamed chunks are batched into `text` at ~30 Hz instead of republishing per token.
+  @ObservationIgnored private lazy var chunks = StreamTextCoalescer { [weak self] batch in self?.text += batch }
   @ObservationIgnored private var streamTask: Task<Void, Never>?
   @ObservationIgnored private var chartTask: Task<Void, Never>?
   @ObservationIgnored private var generation = UUID()
@@ -59,6 +61,7 @@ final class AnalysisSession {
   func cancel() {
     streamTask?.cancel(); streamTask = nil
     chartTask?.cancel(); chartTask = nil
+    chunks.discard()
     generation = UUID()
   }
 
@@ -94,15 +97,17 @@ final class AnalysisSession {
         let body = try JSONEncoder().encode(bundle.data)
         for try await chunk in ai.stream(path: "/api/analyze", body: body, protocol: .text) {
           guard !Task.isCancelled, generation == runID else { return }
-          text += chunk
+          chunks.append(chunk)
         }
+        chunks.flush()
       } catch is CancellationError {
       } catch {
         if !Task.isCancelled, generation == runID {
+          chunks.discard()
           text = "Failed to generate analysis. Please try again.\n\n\(error.localizedDescription)"; failed = true
         }
       }
-      if !Task.isCancelled, generation == runID { isLoading = false }
+      if !Task.isCancelled, generation == runID { chunks.flush(); isLoading = false }
     }
   }
 
@@ -161,13 +166,17 @@ final class AnalysisSession {
         let body = try JSONEncoder().encode(CompareRequest(tokens: ready.map(\.data), comparative: comparative))
         for try await chunk in ai.stream(path: "/api/analyze/compare", body: body, protocol: .text) {
           guard !Task.isCancelled, generation == runID else { return }
-          text += chunk
+          chunks.append(chunk)
         }
+        chunks.flush()
       } catch is CancellationError {
       } catch {
-        if !Task.isCancelled, generation == runID { text = "Failed to generate comparison. Please try again.\n\n\(error.localizedDescription)"; failed = true }
+        if !Task.isCancelled, generation == runID {
+          chunks.discard()
+          text = "Failed to generate comparison. Please try again.\n\n\(error.localizedDescription)"; failed = true
+        }
       }
-      if !Task.isCancelled, generation == runID { isLoading = false }
+      if !Task.isCancelled, generation == runID { chunks.flush(); isLoading = false }
     }
   }
 
@@ -176,5 +185,42 @@ final class AnalysisSession {
     var count: Int { bundles.count }
     func add(id: String, bundle: AnalysisDataService.Bundle) { bundles[id] = bundle }
     func ordered(_ ids: [String]) -> [AnalysisDataService.Bundle] { ids.compactMap { bundles[$0] } }
+  }
+}
+
+/// Batches streamed text into one publish per ~30 Hz tick. A chunk that arrives while a tick is
+/// pending joins it; `flush()` delivers immediately at the end of a stream.
+@MainActor final class StreamTextCoalescer {
+  static let interval: Duration = .milliseconds(33)
+  private var pending = ""
+  private var tick: Task<Void, Never>?
+  private let deliver: (String) -> Void
+
+  init(deliver: @escaping (String) -> Void) { self.deliver = deliver }
+
+  func append(_ chunk: String) {
+    pending += chunk
+    guard tick == nil else { return }
+    tick = Task { [weak self] in
+      try? await Task.sleep(for: Self.interval)
+      guard let self, !Task.isCancelled else { return }
+      self.tick = nil
+      self.flush()
+    }
+  }
+
+  /// Delivers whatever is buffered now.
+  func flush() {
+    tick?.cancel(); tick = nil
+    guard !pending.isEmpty else { return }
+    let batch = pending
+    pending = ""
+    deliver(batch)
+  }
+
+  /// Drops the buffer without delivering (cancelled or failed stream).
+  func discard() {
+    tick?.cancel(); tick = nil
+    pending = ""
   }
 }

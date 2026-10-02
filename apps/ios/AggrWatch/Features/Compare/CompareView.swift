@@ -15,6 +15,7 @@ struct CompareView: View {
   @State private var loading = false
   /// Scrubbing the comparison chart turns the accordion rows into its readout.
   @State private var scrub = ComparisonScrubStore()
+  @State private var membershipKey = ""
 
   var body: some View {
     let data = env.watchlistData
@@ -52,8 +53,13 @@ struct CompareView: View {
         }
       }
     }
-    .task(id: "\(scale.rawValue)|\(data.bootstrap.membershipKey)|\(env.isSceneActive)|\(env.foregroundRevision)") {
-      guard env.isSceneActive else { return }
+    .onChange(of: data.bootstrap, initial: true) { _, bootstrap in
+      // The membership key sorts and joins every group; derive it when the bootstrap changes, not per body.
+      let next = bootstrap.membershipKey
+      if next != membershipKey { membershipKey = next }
+    }
+    .task(id: "\(scale.rawValue)|\(membershipKey)|\(env.isSceneActive)|\(env.foregroundRevision)") {
+      guard env.isSceneActive, !membershipKey.isEmpty else { return }
       while !Task.isCancelled {
         await loadSeries()
         do { try await Task.sleep(for: QueryPolicy.aggregateChart.refetchInterval ?? .seconds(300)) } catch { return }
@@ -109,6 +115,10 @@ struct CompareView: View {
 }
 
 /// `watchlist-table.tsx`: accordion rows per watchlist with sparkline, aggregate %, coin rows (selection-enabled).
+///
+/// Group order, per-group aggregate change and the market-cap-sorted items are memoised on the
+/// data they depend on; headers and rows are leaf views, so a scrub step only re-evaluates the
+/// readouts that display the inspected value.
 struct WatchlistAccordionTable: View {
   let scale: TimeScale
   @Binding var expanded: Set<String>
@@ -120,15 +130,33 @@ struct WatchlistAccordionTable: View {
   /// Chart scrub state; rows read the inspected return and price from it.
   var scrub = ComparisonScrubStore()
   @Environment(AppEnvironment.self) private var env
-
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var preparation = AccordionPreparation()
 
   var body: some View {
     let data = env.watchlistData
+    let models = preparation.models(data: data, scale: scale, sort: sort, seriesByGroup: seriesByGroup)
+    let isActive = env.isSceneActive && env.router.tab == .compare
     VStack(spacing: 12) {
-      ForEach(sort.ordered(data.groups, change: aggregateChange, tokenCount: { data.coinIds(in: $0).count })) { group in
-        groupHeader(group)
-        if expanded.contains(group.id) { coinsPanel(group) }
+      ForEach(models) { model in
+        GroupHeaderRow(model: model, scale: scale, loading: loading, isActive: isActive,
+                       isExpanded: expanded.contains(model.id), isFocused: focusedGroupIDs.contains(model.id),
+                       scrub: scrub, reduceMotion: reduceMotion,
+                       toggleExpanded: {
+                         withAnimation(Motion.animation(Motion.ui, reduceMotion: reduceMotion)) {
+                           if expanded.contains(model.id) { expanded.remove(model.id) } else { expanded.insert(model.id) }
+                         }
+                       },
+                       toggleFocused: {
+                         if focusedGroupIDs.contains(model.id) { focusedGroupIDs.remove(model.id) } else { focusedGroupIDs.insert(model.id) }
+                       })
+        if expanded.contains(model.id) {
+          VStack(spacing: 10) {
+            ForEach(model.rows) { row in
+              CoinPanelRow(row: row, group: model.group, scale: scale, changeByCoin: changeByCoin, scrub: scrub)
+            }
+          }
+        }
       }
     }
     .padding(.horizontal, 16)
@@ -159,50 +187,120 @@ struct WatchlistAccordionTable: View {
       env.router.openAnalysis(Array(Set(keys.map { String($0.split(separator: "|").last ?? "") })), sourceID: "selection-analyze")
     })
   }
+}
 
-  private func aggregateChange(_ group: WatchlistGroup) -> Double? {
-    guard !scale.isAggregateChangeUnavailable else { return nil }
-    if let value = seriesByGroup[group.id]?.last?.value { return value }
-    let data = env.watchlistData
-    return AggregateSeries.equalWeightFromQuotes(data.items(in: group).map { item in
-      data.quote(item.coinId).flatMap { quote in
-        AggregateSeries.quoteIntervalChange(scale: scale, change24h: quote.priceChangePercentage24h,
-          change7d: quote.priceChangePercentage7d, change30d: quote.priceChangePercentage30d)
-      }
-    })
+/// Everything a header or panel needs, resolved once per data change.
+struct AccordionGroupModel: Identifiable {
+  struct Row: Identifiable {
+    let item: WatchlistItem
+    let symbol: String
+    let name: String
+    let imageURL: String?
+    let currentPrice: Double?
+    /// Quote-based change for the scale, used when the chart has no per-coin series.
+    let quoteChange: Double?
+    var id: String { item.id }
   }
+  let group: WatchlistGroup
+  let background: Color
+  let border: Color
+  let avatars: [TokenAvatarStack.Item]
+  let series: [TimePoint]
+  /// Latest charted return, else the quote-based estimate.
+  let aggregateChange: Double?
+  let isEstimate: Bool
+  /// Items sorted by market cap, with their quote fields.
+  let rows: [Row]
+  var id: String { group.id }
+}
 
-  @ViewBuilder
-  private func groupHeader(_ g: WatchlistGroup) -> some View {
-    let data = env.watchlistData
-    let theme = ColorThemes.resolve(g.color)
-    let items = data.items(in: g)
-    let series = seriesByGroup[g.id] ?? []
-    let chartChange = series.last?.value
-    // While the chart is scrubbed the header reads the inspected return instead of the latest.
-    let inspected = scrub.isScrubbing ? scrub.value(for: g.id) : nil
-    let change = inspected ?? aggregateChange(g)
-    let isEstimate = inspected == nil && chartChange == nil && change != nil
-    let focused = focusedGroupIDs.contains(g.id)
-    let cardBackground = focused ? Theme.elevated : Theme.surface
-    TokenSwipeCard(id: "scope-\(g.id)", openRowID: .constant(nil), isSelected: focused,
-                   onToggleSelection: {
-                     if focusedGroupIDs.contains(g.id) { focusedGroupIDs.remove(g.id) }
-                     else { focusedGroupIDs.insert(g.id) }
-                   },
+/// Unobserved memo keyed on (bootstrap, quotes refresh, scale, sort, series). Building it inside
+/// the table body still registers those reads with Observation, which is what the table needs.
+@MainActor final class AccordionPreparation {
+  private var bootstrap: WatchlistsPageBootstrap?
+  private var quotesRevision: Int?
+  private var scale: TimeScale?
+  private var sort: WatchlistCardSort?
+  private var seriesByGroup: [String: [TimePoint]] = [:]
+  private var models: [AccordionGroupModel] = []
+  private var colors: [String: (background: Color, border: Color)] = [:]
+
+  func models(data: WatchlistDataStore, scale: TimeScale, sort: WatchlistCardSort, seriesByGroup: [String: [TimePoint]]) -> [AccordionGroupModel] {
+    let bootstrap = data.bootstrap, quotesRevision = data.quotesRevision
+    if self.bootstrap == bootstrap, self.quotesRevision == quotesRevision, self.scale == scale, self.sort == sort,
+       self.seriesByGroup == seriesByGroup {
+      return models
+    }
+    self.bootstrap = bootstrap; self.quotesRevision = quotesRevision; self.scale = scale; self.sort = sort
+    self.seriesByGroup = seriesByGroup
+    var byGroup: [String: AccordionGroupModel] = [:]
+    for group in data.groups {
+      let items = data.items(in: group)
+      let quotes = items.map { data.quote($0.coinId) }
+      let chartChange = scale.isAggregateChangeUnavailable ? nil : seriesByGroup[group.id]?.last?.value
+      let estimate: Double? = (chartChange == nil && !scale.isAggregateChangeUnavailable)
+        ? AggregateSeries.equalWeightFromQuotes(quotes.map { quote in
+            quote.flatMap { AggregateSeries.quoteIntervalChange(scale: scale, change24h: $0.priceChangePercentage24h,
+                                                                change7d: $0.priceChangePercentage7d, change30d: $0.priceChangePercentage30d) }
+          })
+        : nil
+      let rows = zip(items, quotes).map { item, quote in
+        (marketCap: quote?.marketCap ?? 0,
+         row: AccordionGroupModel.Row(item: item, symbol: quote?.symbol ?? item.coinId, name: quote?.name ?? item.coinId,
+                                      imageURL: quote?.image, currentPrice: quote?.currentPrice,
+                                      quoteChange: quote.flatMap { AggregateSeries.quoteIntervalChange(scale: scale, change24h: $0.priceChangePercentage24h,
+                                                                                                      change7d: $0.priceChangePercentage7d, change30d: $0.priceChangePercentage30d) }))
+      }
+      .sorted { $0.marketCap > $1.marketCap }
+      .map(\.row)
+      let themeKey = group.color ?? "default"
+      let palette = colors[themeKey] ?? {
+        let theme = ColorThemes.resolve(group.color)
+        let resolved = (background: Color(oklch: theme.background), border: Color(oklch: theme.border))
+        colors[themeKey] = resolved
+        return resolved
+      }()
+      byGroup[group.id] = AccordionGroupModel(
+        group: group, background: palette.background, border: palette.border,
+        avatars: zip(items, quotes).map { .init(symbol: $1?.symbol ?? $0.coinId, imageURL: $1?.image) },
+        series: seriesByGroup[group.id] ?? [], aggregateChange: chartChange ?? estimate,
+        isEstimate: chartChange == nil && estimate != nil, rows: rows)
+    }
+    models = sort.ordered(data.groups, change: { byGroup[$0.id]?.aggregateChange }, tokenCount: { data.coinIds(in: $0).count })
+      .compactMap { byGroup[$0.id] }
+    return models
+  }
+}
+
+
+/// One watchlist header: icon, name, avatars, aggregate badge, sparkline and disclosure. Only the
+/// badge observes the scrub store.
+private struct GroupHeaderRow: View {
+  let model: AccordionGroupModel
+  let scale: TimeScale
+  let loading: Bool
+  let isActive: Bool
+  let isExpanded: Bool
+  let isFocused: Bool
+  let scrub: ComparisonScrubStore
+  let reduceMotion: Bool
+  let toggleExpanded: () -> Void
+  let toggleFocused: () -> Void
+
+  var body: some View {
+    let g = model.group
+    let cardBackground = isFocused ? Theme.elevated : Theme.surface
+    TokenSwipeCard(id: "scope-\(g.id)", openRowID: .constant(nil), isSelected: isFocused,
+                   onToggleSelection: toggleFocused,
                    selectionIcon: "scope", selectionAccessibilityLabel: "Focus watchlist chart",
                    deselectionAccessibilityLabel: "Remove watchlist from chart focus", deleteTitle: "") {
-      Button {
-        withAnimation(Motion.animation(Motion.ui, reduceMotion: reduceMotion)) {
-          if expanded.contains(g.id) { expanded.remove(g.id) } else { expanded.insert(g.id) }
-        }
-      } label: {
+      Button(action: toggleExpanded) {
         HStack(spacing: 10) {
           WatchlistGroupIconView(icon: g.icon, size: 22)
             .foregroundStyle(.white.opacity(0.9))
             .frame(width: 40, height: 40)
-            .background(Color(oklch: theme.background), in: .rect(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(oklch: theme.border)))
+            .background(model.background, in: .rect(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(model.border))
             .overlay(alignment: .bottomTrailing) {
               Image(systemName: "scope")
                 .resizable()
@@ -213,9 +311,9 @@ struct WatchlistAccordionTable: View {
                 .frame(width: 22, height: 22)
                 .background(.blue, in: Circle())
                 .overlay(Circle().strokeBorder(cardBackground, lineWidth: 3))
-                .scaleEffect(focused || reduceMotion ? 1 : 0, anchor: .center)
-                .opacity(focused ? 1 : 0)
-                .animation(reduceMotion ? nil : .snappy(duration: 0.25, extraBounce: 0.1), value: focused)
+                .scaleEffect(isFocused || reduceMotion ? 1 : 0, anchor: .center)
+                .opacity(isFocused ? 1 : 0)
+                .animation(reduceMotion ? nil : .snappy(duration: 0.25, extraBounce: 0.1), value: isFocused)
                 .offset(x: 4, y: 4)
             }
             .accessibilityHidden(true)
@@ -225,33 +323,18 @@ struct WatchlistAccordionTable: View {
               Text(g.name)
                 .font(.system(.subheadline, design: .rounded, weight: .semibold))
                 .foregroundStyle(.primary).lineLimit(1)
-              TokenAvatarStack(items: items.map { item in
-                let quote = data.quote(item.coinId)
-                return .init(symbol: quote?.symbol ?? item.coinId, imageURL: quote?.image)
-              }, maxVisible: 3, size: 16, usesGlass: true)
+              TokenAvatarStack(items: model.avatars, maxVisible: 3, size: 16, usesGlass: false)
                 .fixedSize().accessibilityHidden(true)
             }
-            HStack(spacing: 5) {
-              if scale.isAggregateChangeUnavailable {
-                PercentBadge(pct: nil)
-              } else if let change {
-                PercentBadge(pct: change)
-                if isEstimate {
-                  Text("est.").font(.system(.caption2, design: .rounded)).foregroundStyle(.secondary)
-                }
-              } else if loading {
-                SkeletonBlock(height: 18, width: 56)
-              } else {
-                PercentBadge(pct: nil)
-              }
-            }
+            GroupHeaderBadge(groupID: g.id, scale: scale, loading: loading,
+                             aggregateChange: model.aggregateChange, isEstimate: model.isEstimate, scrub: scrub)
           }
           .frame(maxWidth: .infinity, alignment: .leading)
 
           ZStack {
-            if series.count >= 2 {
-              AggrSparkline(points: series, isActive: env.isSceneActive && env.router.tab == .compare,
-                            color: Color.change(change), lineWidth: 1.5, fadeLeading: false)
+            if model.series.count >= 2 {
+              AggrSparkline(points: model.series, isActive: isActive,
+                            color: Color.change(model.aggregateChange), lineWidth: 1.5, fadeLeading: false)
                 .equatable()
             } else if loading && !scale.isAggregateChangeUnavailable {
               SkeletonBlock(height: 22, width: 88)
@@ -261,7 +344,7 @@ struct WatchlistAccordionTable: View {
 
           Image(systemName: "chevron.down")
             .font(.system(size: 9, weight: .semibold)).foregroundStyle(.secondary)
-            .rotationEffect(.degrees(expanded.contains(g.id) ? 0 : -90))
+            .rotationEffect(.degrees(isExpanded ? 0 : -90))
             .accessibilityHidden(true)
         }
         .padding(14)
@@ -272,54 +355,102 @@ struct WatchlistAccordionTable: View {
       .buttonStyle(.plain)
     }
     .accessibilityIdentifier("comparison-watchlist-\(g.id)")
-    .accessibilityValue("\(expanded.contains(g.id) ? "Expanded" : "Collapsed")\(focused ? ", Chart focused" : "")")
-    .accessibilityHint("Tap to \(expanded.contains(g.id) ? "hide" : "show") tokens. Swipe left to \(focused ? "remove this watchlist from chart focus" : "focus this watchlist’s chart").")
+    .accessibilityValue("\(isExpanded ? "Expanded" : "Collapsed")\(isFocused ? ", Chart focused" : "")")
+    .accessibilityHint("Tap to \(isExpanded ? "hide" : "show") tokens. Swipe left to \(isFocused ? "remove this watchlist from chart focus" : "focus this watchlist’s chart").")
   }
+}
 
-  @ViewBuilder
-  private func coinsPanel(_ g: WatchlistGroup) -> some View {
-    let data = env.watchlistData
-    let items = data.items(in: g).sorted { (data.quote($0.coinId)?.marketCap ?? 0) > (data.quote($1.coinId)?.marketCap ?? 0) }
-    VStack(spacing: 10) {
-      ForEach(items) { item in
-        let q = data.quote(item.coinId)
-        let key = "\(g.id)|\(item.coinId)"
-        let liveChange = changeByCoin[item.coinId] ?? q.flatMap { AggregateSeries.quoteIntervalChange(scale: scale, change24h: $0.priceChangePercentage24h, change7d: $0.priceChangePercentage7d, change30d: $0.priceChangePercentage30d) }
-        let inspecting = scrub.isScrubbing
-        let price = inspecting ? (scrub.price(for: item.coinId) ?? q?.currentPrice) : q?.currentPrice
-        let change = inspecting ? (scrub.change(for: item.coinId) ?? liveChange) : liveChange
-        SelectableRow(id: key, removalTitle: "Remove from \(g.name)?", onRemove: {
-          try await data.remove(coinId: item.coinId, from: g.id)
-        }) {
-          Button {
-            if env.selection.isActive { env.selection.toggle(key) } else { env.router.openToken(item.coinId, groupSlug: g.slug, sourceID: "compare|\(key)") }
-          } label: {
-            HStack(spacing: 12) {
-              GlassTokenLogo(symbol: q?.symbol ?? item.coinId, imageURL: q?.image, size: 34)
-              VStack(alignment: .leading, spacing: 2) {
-                Text((q?.symbol ?? "N/A").uppercased()).font(.subheadline.weight(.semibold))
-                Text(LogoOverrides.cleanTokenName(q?.name ?? item.coinId))
-                  .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-              }
-              Spacer()
-              VStack(alignment: .trailing, spacing: 3) {
-                UsdText(value: price, font: .subheadline.weight(.medium))
-                  .contentTransition(.numericText(value: price ?? 0))
-                if let change, !scale.isAggregateChangeUnavailable {
-                  MoveWithBadge(usdMove: price.flatMap { MarketMetrics.usdMove(priceUsd: $0, percentChange: change) }, pct: change)
-                } else {
-                  Text("N/A").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
-                }
-              }
-            }
-            .contentShape(.rect)
-          }
-          .buttonStyle(.plain)
+/// The header's percent badge; while the chart is scrubbed it reads the inspected return.
+private struct GroupHeaderBadge: View {
+  let groupID: String
+  let scale: TimeScale
+  let loading: Bool
+  let aggregateChange: Double?
+  let isEstimate: Bool
+  let scrub: ComparisonScrubStore
+
+  var body: some View {
+    let inspected = scrub.isScrubbing ? scrub.value(for: groupID) : nil
+    let change = inspected ?? aggregateChange
+    HStack(spacing: 5) {
+      if scale.isAggregateChangeUnavailable {
+        PercentBadge(pct: nil)
+      } else if let change {
+        PercentBadge(pct: change)
+        if isEstimate && inspected == nil {
+          Text("est.").font(.system(.caption2, design: .rounded)).foregroundStyle(.secondary)
         }
-        .accessibilityIdentifier("comparison-token-\(key)")
-        .tokenTransitionSource("compare|\(key)")
+      } else if loading {
+        SkeletonBlock(height: 18, width: 56)
+      } else {
+        PercentBadge(pct: nil)
       }
     }
+  }
+}
+
+/// One token row inside an expanded watchlist. Only its readout observes the scrub store.
+private struct CoinPanelRow: View {
+  let row: AccordionGroupModel.Row
+  let group: WatchlistGroup
+  let scale: TimeScale
+  let changeByCoin: [String: Double]
+  let scrub: ComparisonScrubStore
+  @Environment(AppEnvironment.self) private var env
+
+  var body: some View {
+    let data = env.watchlistData
+    let key = "\(group.id)|\(row.item.coinId)"
+    let liveChange = changeByCoin[row.item.coinId] ?? row.quoteChange
+    SelectableRow(id: key, removalTitle: "Remove from \(group.name)?", onRemove: {
+      try await data.remove(coinId: row.item.coinId, from: group.id)
+    }) {
+      Button {
+        if env.selection.isActive { env.selection.toggle(key) } else { env.router.openToken(row.item.coinId, groupSlug: group.slug, sourceID: "compare|\(key)") }
+      } label: {
+        HStack(spacing: 12) {
+          TokenLogo(symbol: row.symbol, imageURL: row.imageURL, size: 34)
+            .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1))
+          VStack(alignment: .leading, spacing: 2) {
+            Text(row.symbol.uppercased()).font(.subheadline.weight(.semibold))
+            Text(LogoOverrides.cleanTokenName(row.name))
+              .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+          }
+          Spacer()
+          CoinPanelReadout(coinId: row.item.coinId, currentPrice: row.currentPrice, liveChange: liveChange,
+                           changeUnavailable: scale.isAggregateChangeUnavailable, scrub: scrub)
+        }
+        .contentShape(.rect)
+      }
+      .buttonStyle(.plain)
+    }
+    .accessibilityIdentifier("comparison-token-\(key)")
+    .tokenTransitionSource("compare|\(key)")
+  }
+}
+
+/// Price and change for a row, inspected while scrubbing, live otherwise.
+private struct CoinPanelReadout: View {
+  let coinId: String
+  let currentPrice: Double?
+  let liveChange: Double?
+  let changeUnavailable: Bool
+  let scrub: ComparisonScrubStore
+
+  var body: some View {
+    let inspecting = scrub.isScrubbing
+    let price = inspecting ? (scrub.price(for: coinId) ?? currentPrice) : currentPrice
+    let change = inspecting ? (scrub.change(for: coinId) ?? liveChange) : liveChange
+    VStack(alignment: .trailing, spacing: 3) {
+      UsdText(value: price, font: .subheadline.weight(.medium))
+        .contentTransition(inspecting ? .identity : .numericText(value: price ?? 0))
+      if let change, !changeUnavailable {
+        MoveWithBadge(usdMove: price.flatMap { MarketMetrics.usdMove(priceUsd: $0, percentChange: change) }, pct: change, animated: false)
+      } else {
+        Text("N/A").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+      }
+    }
+    .transaction { if inspecting { $0.animation = nil } }
   }
 }
 

@@ -12,12 +12,14 @@ struct WatchlistDetailSection: View {
   @State private var scrub = ComparisonScrubStore()
 
   var body: some View {
+    // The section stays mounted (invisible) under the chooser; hidden content skips polling and animation.
+    let isVisible = !env.router.showsWatchlistChooser
     VStack(spacing: 16) {
-      GroupCoinsChart(group: group, scale: scale, scrub: scrub)
+      GroupCoinsChart(group: group, scale: scale, scrub: scrub, isVisible: isVisible)
         .padding(.horizontal, 16)
       TimeScalePicker(scales: TimeScale.overviewScales, selection: $scale)
         .padding(.horizontal, 16)
-      CoinRowsList(group: group, scrub: scrub)
+      CoinRowsList(group: group, scrub: scrub, isVisible: isVisible)
     }
     .onChange(of: group.id) { _, _ in scrub.setSelection(nil) }
   }
@@ -73,6 +75,8 @@ struct GroupCoinsChart: View {
   let group: WatchlistGroup
   let scale: TimeScale
   var scrub: ComparisonScrubStore? = nil
+  /// False while the section sits hidden under the watchlist chooser: the refetch loop pauses.
+  var isVisible = true
   @State private var byCoin: [String: [TimePoint]] = [:]
   @State private var loading = false
 
@@ -96,8 +100,8 @@ struct GroupCoinsChart: View {
       }
     }
     .padding(.vertical, 14)
-    .task(id: "\(group.id)|\(scale.rawValue)|\(ids.joined(separator: ","))|\(env.isSceneActive)|\(env.foregroundRevision)") {
-      guard env.isSceneActive else { return }
+    .task(id: "\(group.id)|\(scale.rawValue)|\(ids.joined(separator: ","))|\(env.isSceneActive)|\(isVisible)|\(env.foregroundRevision)") {
+      guard env.isSceneActive, isVisible else { return }
       guard !ids.isEmpty else { byCoin = [:]; return }
       while !Task.isCancelled {
         loading = byCoin.isEmpty
@@ -190,6 +194,7 @@ struct CoinRowsList: View {
   @AppStorage("watchlists.tokenSort") private var sort: WatchlistTokenSort = .original
   let group: WatchlistGroup
   var scrub: ComparisonScrubStore? = nil
+  var isVisible = true
 
   var body: some View {
     let data = env.watchlistData
@@ -209,7 +214,7 @@ struct CoinRowsList: View {
                      actionTitle: "Add token") { env.router.sheet = .coinSearch(targetGroupId: group.id) }
         } else {
           ForEach(sort.ordered(items, quote: data.quote)) { item in
-            CoinRow(item: item, group: group, scrub: scrub)
+            CoinRow(item: item, group: group, scrub: scrub, isVisible: isVisible)
           }
         }
       }
@@ -248,20 +253,19 @@ struct CoinRow: View {
   let item: WatchlistItem
   let group: WatchlistGroup
   var scrub: ComparisonScrubStore? = nil
+  /// Hidden rows (under the chooser) skip numeric transitions.
+  var isVisible = true
 
   var body: some View {
     let data = env.watchlistData
     let quote = data.quote(item.coinId)
-    // While the chart is scrubbed, the row reads the inspected price and return instead of live.
-    let inspecting = scrub?.isScrubbing == true
-    let price = inspecting ? (scrub?.price(for: item.coinId) ?? quote?.currentPrice) : quote?.currentPrice
-    let change = inspecting ? (scrub?.value(for: item.coinId) ?? scrub?.change(for: item.coinId) ?? quote?.priceChangePercentage24h) : quote?.priceChangePercentage24h
     SelectableRow(id: item.coinId, removalTitle: "Remove from \(group.name)?", onRemove: {
       try await data.remove(coinId: item.coinId, from: group.id)
     }) {
       HStack(spacing: 10) {
         Button(action: openToken) {
-          GlassTokenLogo(symbol: quote?.symbol ?? item.coinId, imageURL: quote?.image, size: 34)
+          TokenLogo(symbol: quote?.symbol ?? item.coinId, imageURL: quote?.image, size: 34)
+            .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1))
             .frame(width: 34, height: 34)
             .contentShape(.rect)
         }
@@ -281,19 +285,10 @@ struct CoinRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
 
         Button(action: openToken) {
-          VStack(alignment: .trailing, spacing: 3) {
-            if let price, price > 0 {
-              UsdText(value: price, font: .subheadline.weight(.medium))
-                .contentTransition(.numericText(value: price))
-              PercentBadge(pct: change, compact: true)
-                .fixedSize(horizontal: true, vertical: false)
-            } else {
-              SkeletonBlock(height: 12, width: 70)
-              SkeletonBlock(height: 10, width: 50)
-            }
-          }
-          .fixedSize(horizontal: true, vertical: false)
-          .contentShape(.rect)
+          // Only the readout observes the scrub store, so a scrub step leaves the rest of the row alone.
+          CoinRowReadout(coinId: item.coinId, currentPrice: quote?.currentPrice, change24h: quote?.priceChangePercentage24h,
+                         scrub: scrub, isVisible: isVisible)
+            .contentShape(.rect)
         }
         .accessibilityIdentifier("watchlist-price-\(item.coinId)")
         .fixedSize(horizontal: true, vertical: false)
@@ -308,6 +303,36 @@ struct CoinRow: View {
   private func openToken() {
     if env.selection.isActive { env.selection.toggle(item.coinId) }
     else { env.router.openToken(item.coinId, groupSlug: group.slug, sourceID: "watchlist|\(group.id)|\(item.coinId)") }
+  }
+}
+
+/// Price and change for a row: inspected while the chart is scrubbed, live otherwise. Rolling
+/// digits are reserved for live updates; scrubbing and hidden rows swap values directly.
+private struct CoinRowReadout: View {
+  let coinId: String
+  let currentPrice: Double?
+  let change24h: Double?
+  let scrub: ComparisonScrubStore?
+  let isVisible: Bool
+
+  var body: some View {
+    let inspecting = scrub?.isScrubbing == true
+    let price = inspecting ? (scrub?.price(for: coinId) ?? currentPrice) : currentPrice
+    let change = inspecting ? (scrub?.value(for: coinId) ?? scrub?.change(for: coinId) ?? change24h) : change24h
+    let animates = isVisible && !inspecting
+    VStack(alignment: .trailing, spacing: 3) {
+      if let price, price > 0 {
+        UsdText(value: price, font: .subheadline.weight(.medium))
+          .contentTransition(animates ? .numericText(value: price) : .identity)
+        PercentBadge(pct: change, compact: true, animated: false)
+          .fixedSize(horizontal: true, vertical: false)
+      } else {
+        SkeletonBlock(height: 12, width: 70)
+        SkeletonBlock(height: 10, width: 50)
+      }
+    }
+    .fixedSize(horizontal: true, vertical: false)
+    .transaction { if !animates { $0.animation = nil } }
   }
 }
 
