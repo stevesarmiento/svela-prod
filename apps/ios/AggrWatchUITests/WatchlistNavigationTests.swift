@@ -865,6 +865,39 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertTrue(cancel.waitForNonExistence(timeout: 5))
   }
 
+  /// Pans a pane into the past, then scrubs it: the crosshair overlay must sit under the finger
+  /// (the chart proxy must be visible-plot-relative under scrollable axes). Captures document it.
+  @MainActor func testIndicatorCrosshairTracksFingerAfterPan() {
+    continueAfterFailure = false
+    let app = XCUIApplication()
+    app.launchArguments = ["--preview-fixtures", "-watchlists.wt", "grid"]
+    app.launch()
+    app.tabBars.buttons["Watchlists"].tap()
+    let card = app.buttons["watchlist-card-preview-core"]
+    XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+    let token = app.buttons["watchlist-token-bitcoin"]
+    XCTAssertTrue(token.waitForExistence(timeout: 5)); token.tap()
+    XCTAssertTrue(app.buttons["token-page-close"].waitForExistence(timeout: 5))
+    let chart = app.descendants(matching: .any)["indicator-market-vision"].firstMatch
+    for _ in 0..<12 {
+      if chart.exists && chart.frame.minY > 120 && chart.frame.maxY < app.frame.maxY - 70 { break }
+      let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.80))
+      start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -180)))
+    }
+    XCTAssertTrue(chart.isHittable)
+    capture("Crosshair: before pan")
+    // Pan into the past by most of a pane width.
+    let from = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5))
+    from.press(forDuration: 0.05, thenDragTo: chart.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)))
+    capture("Crosshair: after pan")
+    // Scrub and hold at 45% of the pane; the capture happens while the finger is still down.
+    let press = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.65, dy: 0.45))
+    let hold = chart.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.45))
+    press.press(forDuration: 0.5, thenDragTo: hold, withVelocity: .slow, thenHoldForDuration: 2.5)
+    capture("Crosshair: after scrub release")
+    XCTAssertTrue(app.buttons["token-page-close"].exists)
+  }
+
   @MainActor func testTokenIndicatorsRenderPanAndScrub() {
     continueAfterFailure = false
     let app = XCUIApplication()

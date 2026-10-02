@@ -246,11 +246,14 @@ struct IndicatorScrubRule: View {
   var body: some View {
     GeometryReader { geometry in
       if let date = scrub.date, let anchor = proxy.plotFrame, let x = proxy.position(forX: date) {
+        // Under scrollable axes the proxy reports content-relative x and the plot anchor carries
+        // the scroll offset (negative minX), so their sum is the position in this overlay.
         let frame = geometry[anchor]
-        if x >= 0, x <= frame.width {
+        let visibleX = frame.minX + x
+        if visibleX >= 0, visibleX <= geometry.size.width {
           Path { path in
-            path.move(to: CGPoint(x: frame.minX + x, y: frame.minY))
-            path.addLine(to: CGPoint(x: frame.minX + x, y: frame.maxY))
+            path.move(to: CGPoint(x: visibleX, y: frame.minY))
+            path.addLine(to: CGPoint(x: visibleX, y: frame.maxY))
           }
           .stroke(Color.white.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
           .accessibilityIdentifier("indicator-scrub-rule")
