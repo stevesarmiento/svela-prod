@@ -7,6 +7,8 @@ struct PercentBadge: View {
   let pct: Double?
   var compact = false
   var textSize: CGFloat? = nil
+  /// Torph morphs cost a masked layer per glyph; dense list rows pass `false` for a plain `Text`.
+  var animated = true
 
   static func label(for pct: Double?) -> String {
     guard let pct, pct.isFinite else { return "N/A" }
@@ -21,8 +23,13 @@ struct PercentBadge: View {
           .font(.system(size: compact ? 6 : 7))
           .rotationEffect(.degrees(value < 0 ? 180 : 0))
       }
-      TorphText(Self.label(for: pct))
-        .lineLimit(1)
+      if animated {
+        TorphText(Self.label(for: pct))
+          .lineLimit(1)
+      } else {
+        Text(Self.label(for: pct))
+          .lineLimit(1)
+      }
     }
     .fixedSize()
     .font(.number(size: textSize ?? (compact ? 11 : 12), weight: .semibold))

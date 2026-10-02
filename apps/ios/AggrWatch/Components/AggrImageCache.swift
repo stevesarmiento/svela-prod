@@ -39,9 +39,23 @@ final class AggrImageCache {
     var cacheKey: NSString { "\(variant)|\(url.absoluteString)" as NSString }
   }
 
+  /// Decoded bitmaps budgeted by bytes, not just count: 600 logo thumbnails are ~60 MB uncompressed.
+  nonisolated static let memoryBudget = 48 * 1024 * 1024
+  /// `failed` is pruned of expired entries once it grows past this, so it cannot grow unbounded.
+  nonisolated static let failedSoftLimit = 500
+
+  private struct Loaded: Sendable {
+    var image: UIImage?
+    /// The image came from the on-disk thumbnail rather than the loader.
+    var fromThumbnail = false
+  }
+
   private let cache = NSCache<NSString, UIImage>()
-  private var inflight: [Key: Task<UIImage?, Never>] = [:]
+  private var inflight: [Key: Task<Loaded, Never>] = [:]
   private var failed: [Key: Date] = [:]
+  /// Keys known to have no fresh thumbnail on disk, so a row that scrolls in and out again never
+  /// repeats the file stat. Cleared for a key when its thumbnail is written.
+  private var missingThumbnails: Set<Key> = []
   private let loader: Loader
   private let now: () -> Date
   /// Where decoded logo thumbnails persist across launches; nil keeps them in memory only (tests).
@@ -60,56 +74,78 @@ final class AggrImageCache {
     self.now = now
     self.thumbnailDirectory = thumbnailDirectory
     cache.countLimit = 600
+    cache.totalCostLimit = Self.memoryBudget
     if let thumbnailDirectory {
       try? FileManager.default.createDirectory(at: thumbnailDirectory, withIntermediateDirectories: true)
     }
   }
 
-  /// Memory first, then the on-disk thumbnail, so an icon seen on a previous launch paints in
-  /// the first frame. Thumbnails are ~160 px PNGs, a sub-millisecond read.
+  /// The decoded image if it is in memory. Memory only, so a body evaluation can peek at every
+  /// candidate URL for free; the on-disk thumbnail is read by `image(for:)`, off the main thread.
   func cachedImage(for url: URL, variant: Variant = .logo) -> UIImage? {
-    let key = Key(url: url, variant: variant)
-    if let cached = cache.object(forKey: key.cacheKey) { return cached }
-    guard let image = readThumbnail(key) else { return nil }
-    cache.setObject(image, forKey: key.cacheKey)
-    return image
+    cache.object(forKey: Key(url: url, variant: variant).cacheKey)
   }
 
   func image(for url: URL, variant: Variant = .logo) async -> UIImage? {
     let key = Key(url: url, variant: variant)
-    if let cached = cachedImage(for: url, variant: variant) { return cached }
-    if let task = inflight[key] { return await task.value }
+    if let cached = cache.object(forKey: key.cacheKey) { return cached }
+    if let task = inflight[key] { return await task.value.image }
     if let failedAt = failed[key], now() < failedAt.addingTimeInterval(Self.failureBackoff) { return nil }
 
     let loader = self.loader
     let thumbnailFile = thumbnailFile(key)
-    #if DEBUG
-    loadCount += 1
-    #endif
+    let readsThumbnail = thumbnailFile != nil && !missingThumbnails.contains(key)
+    let freshAfter = now().addingTimeInterval(-Self.thumbnailLifetime)
     // Detached on purpose: an unstructured `Task` here would inherit the main actor and decode
-    // on the main thread at first draw. The thumbnail is written in the same job, before the
-    // image is handed back, so it is on disk by the time the icon shows.
-    let task = Task.detached(priority: .utility) { () -> UIImage? in
-      guard let data = try? await loader(url), let image = Self.decode(data, variant: variant) else { return nil }
+    // on the main thread at first draw. The thumbnail is checked first in the same job, so an
+    // icon seen on a previous launch paints without the network, and is written in it after a
+    // download, before the image is handed back, so it is on disk by the time the icon shows.
+    let task = Task.detached(priority: .utility) { () -> Loaded in
+      if readsThumbnail, let thumbnailFile, let image = Self.readThumbnail(at: thumbnailFile, freshAfter: freshAfter) {
+        return Loaded(image: image, fromThumbnail: true)
+      }
+      guard let data = try? await loader(url), let image = Self.decode(data, variant: variant) else { return Loaded() }
       if let thumbnailFile, let png = image.pngData() {
         try? png.write(to: thumbnailFile, options: .atomic)
       }
-      return image
+      return Loaded(image: image)
     }
     inflight[key] = task
-    let image = await task.value
+    let loaded = await task.value
     inflight[key] = nil
-    if let image {
-      cache.setObject(image, forKey: key.cacheKey)
+    #if DEBUG
+    if !loaded.fromThumbnail { loadCount += 1 }
+    #endif
+    if let image = loaded.image {
+      cache.setObject(image, forKey: key.cacheKey, cost: Self.cost(of: image))
       failed[key] = nil
+      // Either it was just read from disk or just written there.
+      missingThumbnails.remove(key)
     } else {
+      if readsThumbnail { missingThumbnails.insert(key) }
       failed[key] = now()
+      pruneFailedIfNeeded()
     }
-    return image
+    if missingThumbnails.count > 2_000 { missingThumbnails.removeAll(keepingCapacity: true) }
+    return loaded.image
   }
 
   func store(_ image: UIImage, for url: URL, variant: Variant = .logo) {
-    cache.setObject(image, forKey: Key(url: url, variant: variant).cacheKey)
+    cache.setObject(image, forKey: Key(url: url, variant: variant).cacheKey, cost: Self.cost(of: image))
+  }
+
+  /// Bytes the decoded bitmap occupies, for the cache's memory budget.
+  nonisolated static func cost(of image: UIImage) -> Int {
+    if let cgImage = image.cgImage { return cgImage.bytesPerRow * cgImage.height }
+    let pixels = image.size.width * image.scale * image.size.height * image.scale
+    return Int(pixels) * 4
+  }
+
+  /// Drops failures whose backoff has passed once the table is large; the rest still gate retries.
+  private func pruneFailedIfNeeded() {
+    guard failed.count > Self.failedSoftLimit else { return }
+    let cutoff = now().addingTimeInterval(-Self.failureBackoff)
+    failed = failed.filter { $0.value > cutoff }
   }
 
   // MARK: Thumbnails on disk
@@ -121,10 +157,10 @@ final class AggrImageCache {
     return thumbnailDirectory.appendingPathComponent(name).appendingPathExtension("png")
   }
 
-  private func readThumbnail(_ key: Key) -> UIImage? {
-    guard let file = thumbnailFile(key),
-          let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
-          now().timeIntervalSince(modified) < Self.thumbnailLifetime,
+  /// Runs on the loader's background job. Thumbnails are ~160 px PNGs, a sub-millisecond read.
+  nonisolated static func readThumbnail(at file: URL, freshAfter: Date) -> UIImage? {
+    guard let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
+          modified > freshAfter,
           let data = try? Data(contentsOf: file) else { return nil }
     return UIImage(data: data, scale: 1)
   }
@@ -195,10 +231,7 @@ struct CachedRemoteImage<Placeholder: View>: View {
     }
     .task(id: url) {
       guard let url, loaded?.url != url else { return }
-      if let cached = AggrImageCache.shared.cachedImage(for: url, variant: variant) {
-        loaded = (url, cached)
-        return
-      }
+      // Memory hits resolve without a suspension; disk thumbnails and downloads come back async.
       let image = await AggrImageCache.shared.image(for: url, variant: variant)
       guard !Task.isCancelled else { return }
       if let image { loaded = (url, image) }

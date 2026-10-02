@@ -68,8 +68,10 @@ struct AggrImageCacheTests {
     let warm = AggrImageCache(loader: { _ in data }, thumbnailDirectory: directory)
     #expect(await warm.image(for: url) != nil)
     let cold = AggrImageCache(loader: { _ in throw URLError(.notConnectedToInternet) }, thumbnailDirectory: directory)
-    #expect(cold.cachedImage(for: url) != nil)
+    // The synchronous peek is memory-only (no disk I/O in view bodies); the async path reads the thumbnail.
+    #expect(cold.cachedImage(for: url) == nil)
     #expect(await cold.image(for: url) != nil)
+    #expect(cold.cachedImage(for: url) != nil)
   }
 
   @Test func variantsAreCachedSeparately() async {

@@ -2,7 +2,8 @@ import AggrCore
 import SwiftUI
 
 /// Canvas sparkline mirroring liveline (patched): monotone-cubic path, optional colored tail segment,
-/// 12% vertical margin, left fade mask, no axis, no dot.
+/// 12% vertical margin, left fade, no axis, no dot. The fade is a gradient in the stroke's shading,
+/// not a mask on the canvas, so a row of sparklines costs no offscreen passes.
 struct Sparkline: View {
   let points: [TimePoint]
   var lineWidth: CGFloat = 1.5
@@ -31,24 +32,25 @@ struct Sparkline: View {
       let cg = (0..<points.count).map(pt)
       let full = MonotoneCubic.path(through: cg)
       let style = StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
+      // Transparent at the leading edge, solid from 12% of the width on, the same ramp the mask drew.
+      func shading(_ color: Color) -> GraphicsContext.Shading {
+        guard fadeLeading else { return .color(color) }
+        return .linearGradient(
+          Gradient(stops: [.init(color: color.opacity(0), location: 0), .init(color: color, location: 0.12), .init(color: color, location: 1)]),
+          startPoint: .zero,
+          endPoint: CGPoint(x: size.width, y: 0)
+        )
+      }
       if let monoColor {
-        ctx.stroke(full, with: .color(monoColor), style: style)
+        ctx.stroke(full, with: shading(monoColor), style: style)
         return
       }
-      ctx.stroke(full, with: .color(neutral), style: style)
+      ctx.stroke(full, with: shading(neutral), style: style)
       if let tailStart, let tailColor {
         let tail = cg.enumerated().filter { points[$0.offset].epochSeconds >= tailStart }.map(\.element)
         if tail.count >= 2 {
-          ctx.stroke(MonotoneCubic.path(through: tail), with: .color(tailColor), style: style)
+          ctx.stroke(MonotoneCubic.path(through: tail), with: shading(tailColor), style: style)
         }
-      }
-    }
-    .mask {
-      if fadeLeading {
-        LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.12), .init(color: .black, location: 1)],
-                       startPoint: .leading, endPoint: .trailing)
-      } else {
-        Color.black
       }
     }
     .allowsHitTesting(false)

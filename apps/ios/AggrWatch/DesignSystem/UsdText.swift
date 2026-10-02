@@ -51,13 +51,16 @@ struct AnimatedNumber: View {
 struct MoveWithBadge: View {
   let usdMove: Double?
   let pct: Double?
+  var animated = true
 
   var body: some View {
     HStack(spacing: 6) {
       Text(usdMove.map { UsdFormat.signedPrice($0) } ?? "—")
         .font(.footnote.monospacedDigit())
         .foregroundStyle(Color.change(usdMove))
-      PercentBadge(pct: pct, compact: true)
+        .lineLimit(1)
+        .fixedSize()
+      PercentBadge(pct: pct, compact: true, animated: animated)
     }
   }
 }

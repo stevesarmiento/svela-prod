@@ -8,11 +8,29 @@ struct TokenLogo: View {
   let symbol: String
   let imageURL: String?
   var size: CGFloat = 28
-  @State private var loaded: (url: URL, image: UIImage)?
+  /// What `.task` settled on for an identity (possibly no artwork), so later bodies do no lookups.
+  @State private var resolved: Resolved?
+
+  private struct Identity: Hashable {
+    let symbol: String
+    let imageURL: String?
+  }
+
+  private struct Resolved {
+    let identity: Identity
+    let image: UIImage?
+  }
+
+  /// `UIImage(named:)` walks the asset catalog each call; one lookup per symbol is plenty.
+  private static var bundledImages: [String: UIImage?] = [:]
 
   static func bundledImage(symbol: String) -> UIImage? {
-    guard let name = LogoOverrides.bundledAssetName(symbol: symbol) else { return nil }
-    return UIImage(named: "TokenLogo-" + name.replacingOccurrences(of: "/", with: "-"))
+    if let known = bundledImages[symbol] { return known }
+    let image = LogoOverrides.bundledAssetName(symbol: symbol)
+      .flatMap { UIImage(named: "TokenLogo-" + $0.replacingOccurrences(of: "/", with: "-")) }
+    if bundledImages.count >= 512 { bundledImages.removeAll(keepingCapacity: true) }
+    bundledImages[symbol] = .some(image)
+    return image
   }
 
   /// Remote candidates in the order they are tried: the curated override (unless it is an SVG,
@@ -33,13 +51,13 @@ struct TokenLogo: View {
     return candidates
   }
 
-  private var candidates: [URL] { Self.logoCandidates(symbol: symbol, imageURL: imageURL) }
-
   var body: some View {
+    let identity = Identity(symbol: symbol, imageURL: imageURL)
+    let bundled = Self.bundledImage(symbol: symbol)
     Group {
-      if let image = Self.bundledImage(symbol: symbol) {
+      if let image = bundled {
         Image(uiImage: image).resizable().scaledToFill()
-      } else if let image = displayedImage {
+      } else if let image = displayedImage(for: identity) {
         Image(uiImage: image).resizable().scaledToFill()
       } else {
         TokenLogoFallback(symbol: symbol, size: size)
@@ -47,33 +65,45 @@ struct TokenLogo: View {
     }
     .frame(width: size, height: size)
     .clipShape(Circle())
-    .task(id: "\(symbol)|\(imageURL ?? "")") {
-      let candidates = candidates
-      guard !candidates.isEmpty, loaded.map({ !candidates.contains($0.url) }) ?? true else { return }
+    .task(id: identity) {
+      // Bundled art needs no download; a settled identity with art needs no second look. One
+      // that settled without art is retried on each appearance, gated by the cache's backoff.
+      guard bundled == nil else { return }
+      if let resolved, resolved.identity == identity, resolved.image != nil { return }
+      let candidates = Self.logoCandidates(symbol: symbol, imageURL: imageURL)
       for url in candidates {
         if let cached = AggrImageCache.shared.cachedImage(for: url) {
-          loaded = (url, cached)
+          settle(cached, for: identity)
           return
         }
       }
       for url in candidates {
         let image = await AggrImageCache.shared.image(for: url)
         guard !Task.isCancelled else { return }
-        // A URL that fails to load must not blank artwork that is already showing.
-        if let image { loaded = (url, image); return }
+        if let image {
+          settle(image, for: identity)
+          return
+        }
       }
+      // A URL that fails to load must not blank artwork that is already showing.
+      settle(resolved?.image, for: identity)
     }
   }
 
-  /// Peeks the memory cache during the first render, so cached artwork never flashes the letter
-  /// fallback for a frame while `.task` catches up (rows scrolling in, pages being pushed).
-  private var displayedImage: UIImage? {
-    let candidates = candidates
-    if let loaded, candidates.contains(loaded.url) { return loaded.image }
-    for url in candidates {
+  private func settle(_ image: UIImage?, for identity: Identity) {
+    guard resolved?.identity != identity || resolved?.image !== image else { return }
+    resolved = Resolved(identity: identity, image: image)
+  }
+
+  /// Until `.task` has settled this identity, peeks the memory cache so artwork decoded earlier
+  /// never flashes the letter fallback for a frame (rows scrolling in, pages being pushed).
+  /// Memory only: the disk thumbnail is read by the task, off the main thread.
+  private func displayedImage(for identity: Identity) -> UIImage? {
+    if let resolved, resolved.identity == identity { return resolved.image }
+    for url in Self.logoCandidates(symbol: symbol, imageURL: imageURL) {
       if let cached = AggrImageCache.shared.cachedImage(for: url) { return cached }
     }
-    return loaded?.image
+    return resolved?.image
   }
 }
 
