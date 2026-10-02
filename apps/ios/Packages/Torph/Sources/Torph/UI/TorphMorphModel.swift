@@ -18,32 +18,20 @@ final class TorphMorphModel {
     @ObservationIgnored private var state = TorphMorphState()
     @ObservationIgnored private var lastPlain: String?
     @ObservationIgnored private var inFlight = false
-    @ObservationIgnored private var seed: (value: AttributedString, cursorIndex: Int?, options: TorphOptions)?
 
     init() {}
 
     /// The first value, applied on the first render instead of from `onChange`. Setting observed
     /// state from `onChange` after the stage has drawn its empty self forces a second synchronous
     /// SwiftUI pass per text; with many texts appearing at once that added up to a sixth of the
-    /// main-thread time of an account switch. The plan is only built when the stage first asks,
-    /// so a parent re-rendering (and re-initialising its `TorphText`) pays nothing here.
-    init(seed value: AttributedString, cursorIndex: Int?, options: TorphOptions) {
-        seed = (value, cursorIndex, options)
-    }
-
-    /// Applies the seed if it is still pending. Safe inside the stage's body: nothing observes the
-    /// rendered items before their first read.
-    func seedIfNeeded() {
-        guard let seed else { return }
-        self.seed = nil
-        let plain = String(seed.value.characters)
-        lastPlain = plain
-        let plan = state.update(plain, cursorIndex: seed.cursorIndex, locale: seed.options.locale, numbers: seed.options.numbers)
-        apply(plan, slices: Self.slice(seed.value, for: plan.live))
+    /// main-thread time of an account switch. Safe inside the stage's body: nothing observes the
+    /// rendered items before their first read. A no-op once a value has been applied.
+    func seedIfNeeded(_ value: AttributedString, cursorIndex: Int?, options: TorphOptions) {
+        guard lastPlain == nil else { return }
+        update(value, cursorIndex: cursorIndex, options: options)
     }
 
     func update(_ value: AttributedString, cursorIndex: Int?, options: TorphOptions) {
-        seedIfNeeded()
         let plain = String(value.characters)
         if plain == lastPlain { return }
         lastPlain = plain
@@ -78,7 +66,6 @@ final class TorphMorphModel {
 
     /// The value is shown as plain text now; the next update starts from scratch.
     func reset() {
-        seed = nil
         state.reset()
         lastPlain = nil
         inFlight = false

@@ -33,12 +33,25 @@ struct TorphLayout: Layout {
         var exitRunCentres: [Int: CGPoint] = [:]
         var enterRunCentres: [Int: CGPoint] = [:]
         var lineHeight: CGFloat = 0
+        /// The nowrap flow of the current subviews, shared by `sizeThatFits` and `placeSubviews`.
+        /// Measuring every segment twice per animated frame was most of the layout's cost.
+        var flow: Flow?
+        var flowGeneration = -1
+    }
+
+    struct Flow: Equatable {
+        var frames: [String: CGRect]
+        var size: CGSize
+        var lineHeight: CGFloat
     }
 
     func makeCache(subviews: Subviews) -> Cache { Cache() }
 
     // The default re-creates the cache whenever the subviews change, which would drop the frames.
-    func updateCache(_ cache: inout Cache, subviews: Subviews) {}
+    // Only the flow is stale: a subview's natural size may have moved.
+    func updateCache(_ cache: inout Cache, subviews: Subviews) {
+        cache.flow = nil
+    }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
         sync(cache, subviews)
@@ -124,9 +137,19 @@ struct TorphLayout: Layout {
     // MARK: Sync
 
     /// Runs at the top of both passes. A new generation snapshots the on-screen frames as `from` and
-    /// lays out the new row as `to`; otherwise `to` is refreshed in case a subview's natural size moved.
+    /// lays out the new row as `to`; otherwise `to` is refreshed when the flow was re-measured
+    /// (the subviews changed) in case a subview's natural size moved. Between those events the
+    /// cached flow is reused, so the frames of an animation measure nothing.
     private func sync(_ cache: Cache, _ subviews: Subviews) {
-        let (to, size, lineHeight) = flow(subviews)
+        let remeasured = cache.flow == nil || cache.flowGeneration != generation
+        if remeasured {
+            cache.flow = flow(subviews)
+            cache.flowGeneration = generation
+        }
+        guard let flow = cache.flow else { return }
+        let to = flow.frames
+        let size = flow.size
+        let lineHeight = flow.lineHeight
 
         if cache.generation != generation {
             cache.from = cache.current
@@ -151,7 +174,7 @@ struct TorphLayout: Layout {
                 cache.from = to
                 cache.fromSize = size
             }
-        } else if cache.to != to {
+        } else if remeasured, cache.to != to {
             cache.to = to
             cache.toSize = size
             cache.lineHeight = lineHeight
@@ -159,7 +182,7 @@ struct TorphLayout: Layout {
     }
 
     /// The nowrap flow of the live (non-exiting) subviews, one line per newline segment.
-    private func flow(_ subviews: Subviews) -> (frames: [String: CGRect], size: CGSize, lineHeight: CGFloat) {
+    private func flow(_ subviews: Subviews) -> Flow {
         var frames: [String: CGRect] = [:]
         var lineKeys: [(key: String, size: CGSize)] = []
         var lineTop: CGFloat = 0
@@ -194,7 +217,7 @@ struct TorphLayout: Layout {
         finishLine()
 
         let total = CGSize(width: maxWidth, height: lineTop)
-        return (frames, total, lineCount > 0 ? lineTop / CGFloat(lineCount) : 0)
+        return Flow(frames: frames, size: total, lineHeight: lineCount > 0 ? lineTop / CGFloat(lineCount) : 0)
     }
 
     private func union(of keys: [String], in frames: [String: CGRect]) -> CGPoint? {

@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// The curve a morph runs on. Bezier curves take the caller's duration; a spring settles on its own physics.
 public enum TorphEase: Hashable, Sendable {
@@ -19,7 +20,7 @@ public enum TorphEase: Hashable, Sendable {
         case .cubicBezier, .linear:
             return fallback
         case .spring(let stiffness, let damping, let mass):
-            return SpringMath.settlingDuration(stiffness: stiffness, damping: damping, mass: mass)
+            return SpringMath.curve(stiffness: stiffness, damping: damping, mass: mass).duration
         }
     }
 
@@ -31,10 +32,7 @@ public enum TorphEase: Hashable, Sendable {
         case .cubicBezier(let x1, let y1, let x2, let y2):
             return CubicBezier(x1: x1, y1: y1, x2: x2, y2: y2).value(f)
         case .spring(let stiffness, let damping, let mass):
-            let duration = SpringMath.settlingDuration(stiffness: stiffness, damping: damping, mass: mass)
-            let omega0 = (stiffness / mass).squareRoot()
-            let zeta = damping / (2 * (stiffness * mass).squareRoot())
-            return f >= 1 ? 1 : SpringMath.position(t: f * duration, omega0: omega0, zeta: zeta)
+            return SpringMath.curve(stiffness: stiffness, damping: damping, mass: mass).progress(atTimeFraction: f)
         }
     }
 
@@ -54,7 +52,10 @@ public enum TorphEase: Hashable, Sendable {
             // inverts in one search along t. The renderer asks this once per segment per frame; the
             // search-around-a-search below cost 768 curve evaluations each time.
             return CubicBezier(x1: x1, y1: y1, x2: x2, y2: y2).time(atValue: p)
-        case .cubicBezier, .spring:
+        case .spring(let stiffness, let damping, let mass):
+            // The spring's inversion is tabulated once per parameter set (see `SpringCurve`).
+            return SpringMath.curve(stiffness: stiffness, damping: damping, mass: mass).timeFraction(atProgress: p)
+        case .cubicBezier:
             var lo = 0.0
             var hi = 1.0
             for _ in 0..<32 {
@@ -102,7 +103,78 @@ struct CubicBezier {
     }
 }
 
+/// A spring's settle time and first-crossing table, computed once per parameter set. The renderer
+/// asks for the eased progress and its inverse once per segment per frame; settling alone walks
+/// up to 10 000 steps, and inverting it bisected 32 times over that.
+struct SpringCurve: Sendable {
+    let duration: TimeInterval
+    let omega0: Double
+    let zeta: Double
+    /// The running maximum of the position at evenly spaced time fractions: the first time the
+    /// spring reaches each progress, so an overshoot inverts to its first crossing.
+    let envelope: [Double]
+
+    static let samples = 512
+
+    init(stiffness: Double, damping: Double, mass: Double, precision: Double) {
+        omega0 = (stiffness / mass).squareRoot()
+        zeta = damping / (2 * (stiffness * mass).squareRoot())
+        duration = SpringMath.computeSettlingDuration(omega0: omega0, zeta: zeta, precision: precision)
+        var envelope = [Double]()
+        envelope.reserveCapacity(Self.samples + 1)
+        var peak = 0.0
+        for i in 0...Self.samples {
+            let f = Double(i) / Double(Self.samples)
+            let value = f >= 1 ? 1 : SpringMath.position(t: f * duration, omega0: omega0, zeta: zeta)
+            peak = max(peak, value)
+            envelope.append(peak)
+        }
+        self.envelope = envelope
+    }
+
+    func progress(atTimeFraction f: Double) -> Double {
+        f >= 1 ? 1 : SpringMath.position(t: f * duration, omega0: omega0, zeta: zeta)
+    }
+
+    /// The time fraction at which the spring first reaches `p` (0 < p < 1), interpolated in the table.
+    func timeFraction(atProgress p: Double) -> Double {
+        var lo = 0
+        var hi = envelope.count - 1
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if envelope[mid] < p { lo = mid + 1 } else { hi = mid }
+        }
+        guard lo > 0 else { return 0 }
+        let a = envelope[lo - 1]
+        let b = envelope[lo]
+        let within = b > a ? (p - a) / (b - a) : 1
+        return (Double(lo - 1) + within) / Double(Self.samples)
+    }
+}
+
 enum SpringMath {
+    private struct Key: Hashable {
+        let stiffness: Double
+        let damping: Double
+        let mass: Double
+        let precision: Double
+    }
+
+    private static let curves = Mutex<[Key: SpringCurve]>([:])
+
+    /// The memoised curve for a parameter set. An app uses a handful of springs; the table is
+    /// emptied rather than evicted if it ever grows past that.
+    static func curve(stiffness: Double, damping: Double, mass: Double, precision: Double = 0.001) -> SpringCurve {
+        let key = Key(stiffness: stiffness, damping: damping, mass: mass, precision: precision)
+        if let hit = curves.withLock({ $0[key] }) { return hit }
+        let curve = SpringCurve(stiffness: stiffness, damping: damping, mass: mass, precision: precision)
+        curves.withLock {
+            if $0.count >= 64 { $0.removeAll(keepingCapacity: true) }
+            $0[key] = curve
+        }
+        return curve
+    }
+
     static func position(t: Double, omega0: Double, zeta: Double) -> Double {
         if zeta < 1 {
             let omegaD = omega0 * (1 - zeta * zeta).squareRoot()
@@ -119,8 +191,10 @@ enum SpringMath {
 
     /// Seconds until the spring stays within `precision` of rest for 100 ms — torph's `computeDuration`.
     static func settlingDuration(stiffness: Double, damping: Double, mass: Double, precision: Double = 0.001) -> TimeInterval {
-        let omega0 = (stiffness / mass).squareRoot()
-        let zeta = damping / (2 * (stiffness * mass).squareRoot())
+        curve(stiffness: stiffness, damping: damping, mass: mass, precision: precision).duration
+    }
+
+    static func computeSettlingDuration(omega0: Double, zeta: Double, precision: Double) -> TimeInterval {
         let step = 0.001
         let maxDuration = 10.0
         var settledSince = 0.0

@@ -28,7 +28,6 @@ struct SegmentEffects: ViewModifier {
     let generation: Int
     let ease: TorphEase
     let scaleEnabled: Bool
-    let slotFadeEm: CGFloat
 
     @Environment(\.torphProgress) private var progress
     @State private var carry = SegmentCarry()
@@ -44,7 +43,6 @@ struct SegmentEffects: ViewModifier {
             }
             .scaleEffect(visual.scale)
             .opacity(visual.opacity)
-            .modifier(SlotClip(enabled: info.kind != nil, fadeEm: slotFadeEm))
     }
 
     private func currentVisual() -> SegmentVisual {
@@ -141,37 +139,36 @@ struct SegmentEffects: ViewModifier {
     }
 }
 
-/// A digit slides a whole line box to arrive, so it needs its own box to hide behind. The clip is
-/// on the block axis only — the inline axis stays open so glyph overhang is not shaved — and its
-/// edges are softened into a short gradient, as torph's mask does. The gradient sits just outside
-/// the slot rather than eating into it, so a comma's tail is never dimmed at rest.
+/// A digit slides a whole line box to arrive, so it needs a box to hide behind. The clip is on the
+/// block axis only — the inline axis stays open so glyph overhang is not shaved — and its edges
+/// are softened into a short gradient, as torph's mask does. The gradient sits just outside the
+/// row rather than eating into it, so a comma's tail is never dimmed at rest.
 ///
-/// Always applied, even to plain text (as an open mask): swapping a mask in and out when a segment
-/// changes kind would be a structural change inside the morph's transaction, and SwiftUI would
-/// crossfade the glyph with itself.
+/// One mask on the row, not one per segment: every slot shares the line box, so the row's top and
+/// bottom edges fall exactly where each slot's would, and a six-glyph number costs one offscreen
+/// pass instead of six. Always applied, even to plain text (which never leaves the line box — it
+/// only scales down and fades): swapping a mask in and out as a value changes kind would be a
+/// structural change inside the morph's transaction, and SwiftUI would crossfade the text with itself.
 struct SlotClip: ViewModifier {
-    let enabled: Bool
     let fadeEm: CGFloat
 
     func body(content: Content) -> some View {
-        content.mask(alignment: .center) { SlotMask(enabled: enabled, fadeEm: fadeEm) }
+        content.mask(alignment: .center) { SlotMask(fadeEm: fadeEm) }
     }
 }
 
 private struct SlotMask: View {
-    let enabled: Bool
     let fadeEm: CGFloat
 
-    /// Far enough that an open mask never meets a glyph. One view either way: a branch here would
-    /// crossfade the mask itself when a segment changes kind.
+    /// Far enough that the open inline axis never meets a glyph.
     private static let openMargin: CGFloat = 4_000
 
     var body: some View {
         GeometryReader { geometry in
             let height = max(geometry.size.height, 1)
             let width = geometry.size.width
-            // The slot is one line box; the font's em is close to its height over the line spacing.
-            let fade = enabled ? fadeEm * height / 1.2 : Self.openMargin / 2
+            // The row is one line box; the font's em is close to its height over the line spacing.
+            let fade = fadeEm * height / 1.2
             let total = height + 2 * fade
             LinearGradient(
                 stops: [

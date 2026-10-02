@@ -23,8 +23,7 @@ struct SegmentView: View {
                         info: info,
                         generation: generation,
                         ease: options.ease,
-                        scaleEnabled: options.scale,
-                        slotFadeEm: options.slotFadeEm
+                        scaleEnabled: options.scale
                     ))
             }
         }
@@ -36,10 +35,12 @@ struct SegmentView: View {
 /// The layout plus its segments, rebuilt each frame by the clock above it.
 struct TorphStage: View {
     let model: TorphMorphModel
+    let value: AttributedString
+    let cursorIndex: Int?
     let options: TorphOptions
 
     var body: some View {
-        model.seedIfNeeded()
+        model.seedIfNeeded(value, cursorIndex: cursorIndex, options: options)
         return TorphLayout(
             generation: model.generation,
             progress: Double(model.generation),
@@ -56,6 +57,7 @@ struct TorphStage: View {
                 )
             }
         }
+        .modifier(SlotClip(fadeEm: options.slotFadeEm))
     }
 }
 #endif

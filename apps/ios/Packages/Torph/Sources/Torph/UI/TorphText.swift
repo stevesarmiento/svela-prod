@@ -16,14 +16,16 @@ public struct TorphText: View {
     private let cursorIndex: Int?
     private let options: TorphOptions
 
-    @State private var model: TorphMorphModel
+    // `StateObject` takes its initial value lazily, so a parent re-rendering (and re-initialising
+    // its `TorphText`) allocates nothing here; the model is built once per view identity and
+    // seeded by the stage on its first render.
+    @StateObject private var holder = TorphModelHolder()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(_ text: AttributedString, cursorIndex: Int? = nil, options: TorphOptions = TorphOptions()) {
         value = text
         self.cursorIndex = cursorIndex
         self.options = options
-        _model = State(initialValue: TorphMorphModel(seed: text, cursorIndex: cursorIndex, options: options))
     }
 
     public init(_ text: String, cursorIndex: Int? = nil, options: TorphOptions = TorphOptions()) {
@@ -36,19 +38,19 @@ public struct TorphText: View {
         self.init(AttributedString(formatted), cursorIndex: nil, options: options)
     }
 
-    private var plain: String { String(value.characters) }
-
     private var isDisabled: Bool {
         options.disabled || (options.respectReducedMotion && reduceMotion)
     }
 
     public var body: some View {
-        Group {
+        let plain = String(value.characters)
+        let model = holder.model
+        return Group {
             if isDisabled {
                 Text(value)
                     .lineLimit(1)
             } else {
-                TorphStage(model: model, options: options)
+                TorphStage(model: model, value: value, cursorIndex: cursorIndex, options: options)
                     .modifier(TorphClock(animatableData: Double(model.generation)))
                     .onChange(of: plain, initial: true) { _, _ in
                         model.update(value, cursorIndex: cursorIndex, options: options)
@@ -66,5 +68,12 @@ public struct TorphText: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(plain))
     }
+}
+
+/// Owns a `TorphMorphModel` for one `TorphText` identity. The model itself is `@Observable`; this
+/// wrapper only exists for `StateObject`'s lazy initial value.
+@MainActor
+private final class TorphModelHolder: ObservableObject {
+    let model = TorphMorphModel()
 }
 #endif
