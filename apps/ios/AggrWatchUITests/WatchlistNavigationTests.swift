@@ -890,7 +890,7 @@ final class WatchlistNavigationTests: XCTestCase {
       XCTAssertTrue(app.buttons["token-page-close"].exists)
     }
     // The explanation opens as a page over the token page and collapses back onto it.
-    let explain = app.buttons["Explain RSI Divergences"]
+    let explain = app.buttons["Explain Divergences"]
     XCTAssertTrue(explain.waitForExistence(timeout: 5))
     explain.tap()
     let closeExplanation = app.buttons["indicator-page-close"]
