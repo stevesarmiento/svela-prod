@@ -232,6 +232,15 @@ const MarketChartApiResponseSchema = Schema.Struct({
   ),
 });
 
+/** `/api/coingecko/market-chart/batch` — each coin under its id in the single-coin shape. */
+const MarketChartBatchApiResponseSchema = Schema.Struct({
+  results: Schema.Record(Schema.String, MarketChartApiResponseSchema),
+  failed: Schema.Array(Schema.String),
+});
+
+/** Mirrors `MAX_BATCH_IDS` on the batch route. */
+export const MARKET_CHART_BATCH_LIMIT = 50;
+
 const GlobalMarketCapChartApiResponseSchema = Schema.Struct({
   data: Schema.Struct({
     market_cap: Schema.Array(MarketChartPointSchema),
@@ -430,6 +439,54 @@ export class CoinGeckoApi extends Context.Service<CoinGeckoApi>()(
         },
       );
 
+      const getMarketChartBatch = Effect.fn("CoinGeckoApi.getMarketChartBatch")(
+        function* (args: { coinIds: ReadonlyArray<string>; days?: string }) {
+          const searchParams = new URLSearchParams();
+          searchParams.set("ids", args.coinIds.join(","));
+          if (args.days) searchParams.set("days", args.days);
+          return yield* requestJson({
+            endpoint: `/api/coingecko/market-chart/batch?${searchParams.toString()}`,
+            decode: (data) =>
+              Schema.decodeUnknownSync(MarketChartBatchApiResponseSchema)(data),
+          });
+        },
+      );
+
+      /**
+       * Every requested coin, in input order, fetched in batches of
+       * `MARKET_CHART_BATCH_LIMIT` (one round trip per chunk instead of one per
+       * coin). A coin the server could not read, or whose whole chunk failed, is
+       * `null` — the same swallow-to-null policy the per-coin callers used.
+       */
+      const getMarketCharts = Effect.fn("CoinGeckoApi.getMarketCharts")(
+        function* (args: { coinIds: ReadonlyArray<string>; days?: string }) {
+          const unique = Array.from(new Set(args.coinIds));
+          const chunks: string[][] = [];
+          for (let i = 0; i < unique.length; i += MARKET_CHART_BATCH_LIMIT) {
+            chunks.push(unique.slice(i, i + MARKET_CHART_BATCH_LIMIT));
+          }
+          const settled = yield* Effect.all(
+            chunks.map((chunk) =>
+              getMarketChartBatch({ coinIds: chunk, days: args.days }).pipe(
+                Effect.map((batch) => ({ chunk, results: batch.results })),
+                Effect.catch((error) =>
+                  Effect.sync(() => {
+                    console.warn(`[coingecko] market-chart batch failed: ${error._tag}`);
+                    return { chunk, results: {} as typeof MarketChartBatchApiResponseSchema.Type["results"] };
+                  }),
+                ),
+              ),
+            ),
+            { concurrency: 2 },
+          );
+          const byId = new Map<string, typeof MarketChartApiResponseSchema.Type | null>();
+          for (const { chunk, results } of settled) {
+            for (const id of chunk) byId.set(id, results[id] ?? null);
+          }
+          return args.coinIds.map((coinId) => ({ coinId, response: byId.get(coinId) ?? null }));
+        },
+      );
+
       const getGlobalMarketCapChart = Effect.fn(
         "CoinGeckoApi.getGlobalMarketCapChart",
       )(function* (args: {
@@ -542,6 +599,8 @@ export class CoinGeckoApi extends Context.Service<CoinGeckoApi>()(
 
       return {
         getMarketChart,
+        getMarketChartBatch,
+        getMarketCharts,
         getGlobalMarketCapChart,
         getOHLC,
         getQuotes,

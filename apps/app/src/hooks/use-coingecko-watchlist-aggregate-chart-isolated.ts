@@ -3,7 +3,6 @@
 import { useCallback, useState, useLayoutEffect, useMemo, useRef } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import type { Time } from 'lightweight-charts'
-import { Effect } from "effect"
 import { CoinGeckoApi } from "@/lib/effect/coingecko-api"
 import { runPromise } from "@/lib/effect/runtime-coingecko"
 
@@ -209,39 +208,27 @@ export function useCoinGeckoWatchlistAggregateChartIsolated({
       if (!coinIds.length) return { data: emptyData, performance: { cacheHits: 0, cacheMisses: 0, totalQueries: 0 } }
 
       try {
-        const swallowToNull = (_: unknown) =>
-          Effect.succeed({ data: null, cached: false, needsWarmup: false })
-
-        const fetchEffects = coinIds.map((coinId) =>
-          CoinGeckoApi.use((api) => api.getMarketChart({ coinId, days })).pipe(
-            Effect.map((response) => ({
-              data: response.data,
-              cached: response.status?.cached ?? false,
-              // Server schedules a background refresh for stale/thin series;
-              // surface it so we can poll until fresh data lands.
-              needsWarmup:
-                (response.status?.warmupRequested ?? false) ||
-                (response.status?.warming ?? false) ||
-                (response.status?.stale ?? false),
-            })),
-            Effect.catchTags({
-              CoinGeckoInvalidParamsError: swallowToNull,
-              CoinGeckoUnauthorizedError: swallowToNull,
-              CoinGeckoNotFoundError: swallowToNull,
-              CoinGeckoRateLimitedError: swallowToNull,
-              CoinGeckoApiError: swallowToNull,
-              CoinGeckoDecodeError: swallowToNull,
-            }),
-            Effect.map((result) => ({ coinId, ...result })),
-          ),
+        // One batched request per 50 coins; a coin the server could not read is null,
+        // matching the previous per-coin swallow-to-null policy.
+        const charts = await runPromise(
+          CoinGeckoApi.use((api) => api.getMarketCharts({ coinIds, days })),
+        )
+        const results = charts.map(({ coinId, response }) =>
+          response
+            ? {
+                coinId,
+                data: response.data,
+                cached: response.status?.cached ?? false,
+                // Server schedules a background refresh for stale/thin series;
+                // surface it so we can poll until fresh data lands.
+                needsWarmup:
+                  (response.status?.warmupRequested ?? false) ||
+                  (response.status?.warming ?? false) ||
+                  (response.status?.stale ?? false),
+              }
+            : { coinId, data: null, cached: false, needsWarmup: false },
         )
 
-        const results = await runPromise(
-          Effect.all(fetchEffects, {
-            concurrency: 5, // Max 5 concurrent requests
-          }),
-        )
-        
         // Process results into a map of historical data
         const historicalDataMap: Record<string, CoinHistoricalData[]> = {}
         const warmingByCoin: Record<string, boolean> = {}

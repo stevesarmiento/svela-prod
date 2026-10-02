@@ -4,8 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo, useRef } from "react"
 import type { Time } from 'lightweight-charts'
 import type { CoinMarketData } from '@/types/coins'
-import { Effect } from "effect"
-import { CoinGeckoApi } from "@/lib/effect/coingecko-api"
+import { CoinGeckoApi, MARKET_CHART_BATCH_LIMIT } from "@/lib/effect/coingecko-api"
 import { runPromise } from "@/lib/effect/runtime-coingecko"
 
 // Map time scales to CoinGecko days parameter
@@ -148,63 +147,49 @@ export function useCoinGeckoBulkChartData(
       if (coinIds.length === 0) return { series: [], cacheHitRate: 0, needsWarmup: false }
 
       type SeriesWithCache = { series: CoinSeries; cached: boolean; needsWarmup: boolean }
-      const swallowToNull = (_: unknown) => Effect.succeed(null)
-
-      const fetchEffects = coinIds.map((coinId) =>
-        CoinGeckoApi.use((api) => api.getMarketChart({ coinId, days })).pipe(
-          Effect.map((response): SeriesWithCache => {
-            const coinMeta = coinMetaById.get(coinId)
-            const prices = response.data.prices
-            // Remove duplicates and ensure strict ascending order.
-            // NOTE: `time` is already seconds (UTCTimestamp) from our `/api/coingecko/market-chart` route.
-            const uniquePrices = new Map<number, number>()
-            for (const point of prices) {
-              uniquePrices.set(point.time, point.value)
-            }
-
-            const sortedUniquePrices = Array.from(uniquePrices.entries()).sort(([a], [b]) => a - b)
-            const basePrice = sortedUniquePrices[0]?.[1] ?? 1
-
-            const finalData: Array<{ time: Time; value: number }> = sortedUniquePrices.map(([time, value]) => ({
-              time: time as Time,
-              value: basePrice > 0 ? ((value - basePrice) / basePrice) * 100 : 0,
-            }))
-
-            const needsWarmup =
-              (response.status?.warmupRequested ?? false) ||
-              (response.status?.warming ?? false) ||
-              (response.status?.stale ?? false)
-
-            return {
-              cached: response.status?.cached ?? false,
-              // Server schedules a background refresh when the stored series is
-              // stale or thin; keep polling until it lands instead of waiting 5min.
-              needsWarmup,
-              series: {
-                id: coinId,
-                name: coinMeta?.name || "Unknown",
-                symbol: coinMeta?.symbol || "UNK",
-                data: finalData,
-                warming: needsWarmup,
-              },
-            }
-          }),
-          Effect.catchTags({
-            CoinGeckoInvalidParamsError: swallowToNull,
-            CoinGeckoUnauthorizedError: swallowToNull,
-            CoinGeckoNotFoundError: swallowToNull,
-            CoinGeckoRateLimitedError: swallowToNull,
-            CoinGeckoApiError: swallowToNull,
-            CoinGeckoDecodeError: swallowToNull,
-          }),
-        ),
+      // One batched request per 50 coins; a coin the server could not read is null,
+      // matching the previous per-coin swallow-to-null policy.
+      const charts = await runPromise(
+        CoinGeckoApi.use((api) => api.getMarketCharts({ coinIds, days })),
       )
+      const results: Array<SeriesWithCache | null> = charts.map(({ coinId, response }) => {
+        if (!response) return null
+        const coinMeta = coinMetaById.get(coinId)
+        const prices = response.data.prices
+        // Remove duplicates and ensure strict ascending order.
+        // NOTE: `time` is already seconds (UTCTimestamp) from our `/api/coingecko/market-chart` route.
+        const uniquePrices = new Map<number, number>()
+        for (const point of prices) {
+          uniquePrices.set(point.time, point.value)
+        }
 
-      const results = await runPromise(
-        Effect.all(fetchEffects, {
-          concurrency: 5,
-        }),
-      )
+        const sortedUniquePrices = Array.from(uniquePrices.entries()).sort(([a], [b]) => a - b)
+        const basePrice = sortedUniquePrices[0]?.[1] ?? 1
+
+        const finalData: Array<{ time: Time; value: number }> = sortedUniquePrices.map(([time, value]) => ({
+          time: time as Time,
+          value: basePrice > 0 ? ((value - basePrice) / basePrice) * 100 : 0,
+        }))
+
+        const needsWarmup =
+          (response.status?.warmupRequested ?? false) ||
+          (response.status?.warming ?? false) ||
+          (response.status?.stale ?? false)
+
+        return {
+          cached: response.status?.cached ?? false,
+          // Server schedules a background refresh when the stored series is
+          // stale or thin; keep polling until it lands instead of waiting 5min.
+          needsWarmup,
+          series: {
+            id: coinId,
+            name: coinMeta?.name || "Unknown",
+            symbol: coinMeta?.symbol || "UNK",
+            data: finalData,
+            warming: needsWarmup,
+          },
+        }
+      })
 
       const validResults = results.filter((result): result is SeriesWithCache => result !== null)
       const cacheHits = validResults.filter((r) => r.cached).length
@@ -251,7 +236,7 @@ export function useCoinGeckoBulkChartData(
     series: seriesData,
     isLoading,
     performance: {
-      bulkApiCalls: coinIds.length,
+      bulkApiCalls: Math.ceil(coinIds.length / MARKET_CHART_BATCH_LIMIT),
       cacheHitRate
     }
   }
