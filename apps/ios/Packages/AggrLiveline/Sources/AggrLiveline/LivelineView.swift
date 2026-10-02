@@ -70,8 +70,21 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart {
   var pulseRingCount: Int { pulseLayers.ringCount }
   func pulseRingAnimating(for id: String) -> Bool { pulseLayers.isAnimating(id: id) }
   #endif
-  private let haptic = UISelectionFeedbackGenerator()
-  public var accessibilityChartDescriptor: AXChartDescriptor?
+  /// Created on the first scrub; decorative and non-interactive charts never pay for it.
+  private lazy var haptic = UISelectionFeedbackGenerator()
+  private var accessibilityDescriptorCache: AXChartDescriptor?
+  private var accessibilityDescriptorStale = true
+  /// Built lazily when the accessibility system asks, and only rebuilt after a data change.
+  public var accessibilityChartDescriptor: AXChartDescriptor? {
+    get {
+      if accessibilityDescriptorStale {
+        accessibilityDescriptorCache = isDecorative ? nil : makeAccessibilityDescriptor()
+        accessibilityDescriptorStale = false
+      }
+      return accessibilityDescriptorCache
+    }
+    set { accessibilityDescriptorCache = newValue; accessibilityDescriptorStale = false }
+  }
 
   /// Decorative card charts rely on their host's visibility updates and never
   /// participate in scroll gestures or observe every content-offset change.
@@ -107,23 +120,24 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart {
   func apply(input: LivelineInput, configuration: LivelineConfiguration, isActive: Bool,
              formatValue: @escaping (Double) -> String, formatVolume: @escaping (Double) -> String,
              formatTime: @escaping (Double) -> String, onSelection: @escaping (LivelineSelection?) -> Void) {
-    let changed = engine.input != input
-    let emphasisOnly = engine.input.map { input.matchesExceptOpacity($0) } ?? false
     let identityChanged = engine.input?.id != input.id
     var config = configuration
     config.reduceMotion = config.reduceMotion || UIAccessibility.isReduceMotionEnabled
     let configurationChanged = engine.configuration != config
-    if (changed && !emphasisOnly) || configurationChanged { clearComparisonLayers() }
     active = isActive
     self.onSelection = onSelection
     renderer.formatValue = formatValue; renderer.formatVolume = formatVolume; renderer.formatTime = formatTime
-    engine.update(input, configuration: config, marketTime: Date().timeIntervalSince1970)
+    // One pass over the series inside the engine classifies the change against the raw input the
+    // host last sent, so observation ticks never re-clean or re-spline history.
+    let change = engine.update(input, configuration: config, marketTime: Date().timeIntervalSince1970)
+    let changed = change != .none
+    if (changed && change != .emphasis) || configurationChanged { clearComparisonLayers() }
     if identityChanged { pulseLayers.removeAll() }
     if identityChanged && !isDecorative {
       inspectionX = nil; lastSelection = nil
       Task { @MainActor [weak self] in self?.onSelection(nil) }
     }
-    if changed && !isDecorative && !emphasisOnly { updateAccessibility(input) }
+    if change == .data && !isDecorative { updateAccessibility() }
     if changed || configurationChanged {
       settleFrames = 1
     }
@@ -192,12 +206,15 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart {
     ctx.scaleBy(x: scale, y: scale)
     ctx.translateBy(x: 0, y: bounds.height)
     ctx.scaleBy(x: 1, y: -1)
+    // The buffer was cleared, so the left fade's destination-out can apply directly.
     renderer.draw(ctx, size: bounds.size, engine: engine, frameMilliseconds: frameDelta,
-                  drawsSeries: comparisonContainer == nil)
+                  drawsSeries: comparisonContainer == nil, transparencyLayer: false)
     UIGraphicsPopContext()
     ctx.restoreGState()
     layer.contentsScale = scale
     layer.contents = ctx.makeImage()
+    // Next frame draws into the other buffer so this image is never copied out from under the layer.
+    renderBuffer.swap()
     // Sublayers (pulse rings, promoted comparison lines) composite above the bitmap.
     pulseLayers.sync(renderer.pulses, in: layer, bounds: bounds, scale: scale, animating: window != nil)
   }
@@ -293,11 +310,17 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart {
     #endif
     engine.resetClock(); lastTimestamp = nil
     let link = CADisplayLink(target: DisplayTarget(self), selector: #selector(DisplayTarget.tick(_:)))
-    // Engine math is frame-rate independent; prefer ProMotion rates while anything moves.
-    // The link stops whenever the chart settles, so this costs nothing at rest.
-    link.preferredFrameRateRange = CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120)
+    link.preferredFrameRateRange = preferredFrameRateRange
     link.add(to: .main, forMode: .common); displayLink = link
   }
+  /// Engine math is frame-rate independent. Lerps and live ticks run at 60 Hz; only a finger on the
+  /// chart earns ProMotion rates, and decorative sparklines never exceed 60.
+  private var preferredFrameRateRange: CAFrameRateRange {
+    if isDecorative || engine.configuration.compact { return CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60) }
+    if inspectionX != nil { return CAFrameRateRange(minimum: 80, maximum: 120, preferred: 120) }
+    return CAFrameRateRange(minimum: 30, maximum: 120, preferred: 60)
+  }
+  private func updateFrameRate() { displayLink?.preferredFrameRateRange = preferredFrameRateRange }
   public func stop() { displayLink?.invalidate(); displayLink = nil; lastTimestamp = nil; engine.resetClock() }
   #if DEBUG
   /// The layout the renderer is currently drawing with (tests pin readouts against it).
@@ -394,14 +417,14 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart {
     if inspectionX == nil && engine.configuration.scrubStartHaptic { haptic.selectionChanged(); haptic.prepare() }
     inspectionX = location.x
     engine.selectedTime = renderer.layout(size: bounds.size, engine: engine).time(location.x)
-    publishSelection(); settleFrames = 1; wake()
+    publishSelection(); settleFrames = 1; wake(); updateFrameRate()
   }
   private func endInspection() {
     // A vertical scroll never starts inspection. It must not schedule chart
     // frames just to clear an absent crosshair.
     guard inspectionX != nil || engine.selectedTime != nil else { return }
     inspectionX = nil; engine.selectedTime = nil
-    publishSelection(); settleFrames = 1; wake()
+    publishSelection(); settleFrames = 1; wake(); updateFrameRate()
   }
   private func publishSelection() {
     var selection = engine.inspectionTime.flatMap { engine.selection(at: $0) }
@@ -433,16 +456,26 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart {
     engine.selectedTime = points[min(points.count - 1, max(0, index + direction))].time
     inspectionX = nil; publishSelection(); settleFrames = 1; wake()
   }
-  private func updateAccessibility(_ input: LivelineInput) {
-    guard let primary = input.series.first(where: { $0.id == input.primaryID }),
-          let first = primary.points.first, let last = primary.points.last, first.time < last.time else { accessibilityChartDescriptor = nil; return }
+  /// Refreshes the spoken value after a data change and marks the chart descriptor stale; the
+  /// descriptor's per-point `AXDataPoint`s are only built when `accessibilityChartDescriptor` is read.
+  private func updateAccessibility() {
+    accessibilityDescriptorStale = true
+    guard let input = engine.input,
+          let primary = input.series.first(where: { $0.id == input.primaryID }), let last = primary.points.last else { return }
+    if !engine.configuration.seriesLabels.isEmpty {
+      accessibilityValue = "\(input.series.filter { $0.visible && !$0.points.isEmpty }.count) visible series"
+    } else if engine.selectedTime == nil {
+      accessibilityValue = renderer.formatValue(last.value)
+    }
+  }
+  private func makeAccessibilityDescriptor() -> AXChartDescriptor? {
+    guard let input = engine.input, let primary = input.series.first(where: { $0.id == input.primaryID }),
+          let first = primary.points.first, let last = primary.points.last, first.time < last.time else { return nil }
     let timeFormatter = renderer.formatTime, valueFormatter = renderer.formatValue
     if !engine.configuration.seriesLabels.isEmpty {
       let visible = input.series.filter { $0.visible && !$0.points.isEmpty }
       let points = visible.flatMap(\.points)
-      guard let start = points.map(\.time).min(), let end = points.map(\.time).max(), start < end else {
-        accessibilityChartDescriptor = nil; return
-      }
+      guard let start = points.map(\.time).min(), let end = points.map(\.time).max(), start < end else { return nil }
       let x = AXNumericDataAxisDescriptor(title: "Time", range: start...end, gridlinePositions: [], valueDescriptionProvider: timeFormatter)
       let range = LivelineMath.range(visible.flatMap { s in s.points.map { $0.value * s.multiplier } })
       let y = AXNumericDataAxisDescriptor(title: "Return", range: range, gridlinePositions: [], valueDescriptionProvider: valueFormatter)
@@ -450,17 +483,14 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart {
         AXDataSeriesDescriptor(name: engine.configuration.seriesLabels[s.id] ?? s.id, isContinuous: true,
                                dataPoints: s.points.map { AXDataPoint(x: $0.time, y: $0.value * s.multiplier) })
       }
-      accessibilityChartDescriptor = AXChartDescriptor(title: "Comparison performance", summary: "\(series.count) visible series.",
-                                                       xAxis: x, yAxis: y, series: series)
-      accessibilityValue = "\(series.count) visible series"
-      return
+      return AXChartDescriptor(title: "Comparison performance", summary: "\(series.count) visible series.",
+                               xAxis: x, yAxis: y, series: series)
     }
     let x = AXNumericDataAxisDescriptor(title: "Time", range: first.time...last.time, gridlinePositions: [], valueDescriptionProvider: timeFormatter)
     let range = LivelineMath.range(primary.points.map(\.value))
     let y = AXNumericDataAxisDescriptor(title: "Price", range: range, gridlinePositions: [], valueDescriptionProvider: valueFormatter)
     let series = AXDataSeriesDescriptor(name: "Price", isContinuous: true, dataPoints: primary.points.map { AXDataPoint(x: $0.time, y: $0.value) })
-    accessibilityChartDescriptor = AXChartDescriptor(title: "Price history", summary: "\(primary.points.count) observations. Latest \(valueFormatter(last.value)).", xAxis: x, yAxis: y, series: [series])
-    if engine.selectedTime == nil { accessibilityValue = valueFormatter(last.value) }
+    return AXChartDescriptor(title: "Price history", summary: "\(primary.points.count) observations. Latest \(valueFormatter(last.value)).", xAxis: x, yAxis: y, series: [series])
   }
 }
 

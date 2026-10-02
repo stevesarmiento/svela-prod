@@ -73,16 +73,31 @@ public struct LivelineInput: Sendable, Equatable {
       && a.band?.upper == b.band?.upper && a.projectionID == b.projectionID && a.state == b.state
   }
 
-  /// Opacity does not change chart geometry or the accessible data series.
-  func matchesExceptOpacity(_ other: Self) -> Bool {
-    guard series.count == other.series.count else { return false }
-    var comparable = self
-    comparable.series = zip(series, other.series).map { incoming, existing in
-      var series = incoming
-      series.opacity = existing.opacity
-      return series
+  /// How one input differs from another, classified in a single pass over the series so hosts that
+  /// re-send a snapshot every observation tick never pay for more than one point-array comparison.
+  public enum Change: Sendable, Equatable {
+    case none
+    /// Only the live observation moved; history, overlays and viewport are unchanged.
+    case observation
+    /// Only series opacity (comparison emphasis) changed; geometry and the accessible data are unchanged.
+    case emphasis
+    case data
+  }
+
+  public func change(from other: Self) -> Change {
+    guard id == other.id, primaryID == other.primaryID, viewport == other.viewport, state == other.state,
+          projectionID == other.projectionID, band?.lower == other.band?.lower, band?.upper == other.band?.upper,
+          series.count == other.series.count else { return .data }
+    var opacityDiffers = false
+    for (a, b) in zip(series, other.series) {
+      guard a.id == b.id, a.color == b.color, a.width == b.width, a.dash == b.dash, a.visible == b.visible,
+            a.multiplier == b.multiplier, a.points == b.points else { return .data }
+      if a.opacity != b.opacity { opacityDiffers = true }
     }
-    return comparable == other
+    guard volume == other.volume else { return .data }
+    let observationDiffers = observation != other.observation
+    if opacityDiffers { return observationDiffers ? .data : .emphasis }
+    return observationDiffers ? .observation : .none
   }
 }
 

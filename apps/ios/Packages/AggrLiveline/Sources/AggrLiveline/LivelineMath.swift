@@ -63,31 +63,95 @@ public enum LivelineMath {
 }
 
 /// Fritsch–Carlson monotone cubic: the renderer and inspection evaluate these same coefficients.
+///
+/// The last point can be replaced or a point appended in O(1) (`replaceLast` / `append`): only the
+/// final three tangents depend on the endpoint, and the limiter state entering those steps is kept so
+/// the patched tangents are bit-identical to a full rebuild. The renderer relies on this: segments
+/// before the last three never change while the live endpoint animates.
 public struct LivelineSpline: Sendable {
-  public let points: [LivelinePoint]
-  public let tangents: [Double]
+  public private(set) var points: [LivelinePoint]
+  public private(set) var tangents: [Double]
+  /// Number of trailing tangents (and segments) that `replaceLast`/`append` may change.
+  public static let patchedTail = 3
+  /// m[n-3] entering limiter step n-3 and m[n-2] entering step n-2 (see `init`).
+  private var enteringSeed: (Double, Double) = (0, 0)
+
   public init(_ points: [LivelinePoint]) {
     self.points = points
-    let n = points.count
-    guard n > 1 else { tangents = Array(repeating: 0, count: n); return }
-    let delta = (0..<(n - 1)).map { i -> Double in
-      let h = points[i + 1].time - points[i].time
-      return h > 0 ? (points[i + 1].value - points[i].value) / h : 0
+    self.tangents = []
+    rebuild()
+  }
+
+  private static func delta(_ a: LivelinePoint, _ b: LivelinePoint) -> Double {
+    let h = b.time - a.time
+    return h > 0 ? (b.value - a.value) / h : 0
+  }
+  private static func interior(_ left: Double, _ right: Double) -> Double {
+    left * right <= 0 ? 0 : (left + right) / 2
+  }
+  /// One limiter step over interval `i`: may rewrite m[i] and m[i+1].
+  private static func limit(_ m: inout [Double], _ i: Int, _ delta: Double) {
+    if delta == 0 { m[i] = 0; m[i + 1] = 0 }
+    else {
+      let a = m[i] / delta, b = m[i + 1] / delta, s2 = a * a + b * b
+      if s2 > 9 { let s = 3 / sqrt(s2); m[i] = s * a * delta; m[i + 1] = s * b * delta }
     }
+  }
+
+  private mutating func rebuild() {
+    let n = points.count
+    guard n > 1 else { tangents = Array(repeating: 0, count: n); enteringSeed = (0, 0); return }
+    let delta = (0..<(n - 1)).map { Self.delta(points[$0], points[$0 + 1]) }
     var m = Array(repeating: 0.0, count: n)
     m[0] = delta[0]; m[n - 1] = delta[n - 2]
     if n > 2 {
-      for i in 1..<(n - 1) { m[i] = delta[i - 1] * delta[i] <= 0 ? 0 : (delta[i - 1] + delta[i]) / 2 }
+      for i in 1..<(n - 1) { m[i] = Self.interior(delta[i - 1], delta[i]) }
     }
+    var seed = (0.0, 0.0)
     for i in 0..<(n - 1) {
-      if delta[i] == 0 { m[i] = 0; m[i + 1] = 0 }
-      else {
-        let a = m[i] / delta[i], b = m[i + 1] / delta[i], s2 = a * a + b * b
-        if s2 > 9 { let s = 3 / sqrt(s2); m[i] = s * a * delta[i]; m[i + 1] = s * b * delta[i] }
-      }
+      if i == n - 3 { seed.0 = m[i] }
+      if i == n - 2 { seed.1 = m[i] }
+      Self.limit(&m, i, delta[i])
     }
     tangents = m
+    enteringSeed = seed
   }
+
+  /// Replaces the last point, recomputing only the last three tangents. Exact.
+  public mutating func replaceLast(_ point: LivelinePoint) {
+    let n = points.count
+    guard n >= 4 else {
+      if n > 0 { points[n - 1] = point } else { points.append(point) }
+      rebuild(); return
+    }
+    points[n - 1] = point
+    let d3 = Self.delta(points[n - 3], points[n - 2])
+    let d2 = Self.delta(points[n - 2], points[n - 1])
+    var m = [enteringSeed.0, Self.interior(d3, d2), d2]
+    Self.limit(&m, 0, d3)
+    let entering2 = m[1]
+    Self.limit(&m, 1, d2)
+    tangents[n - 3] = m[0]; tangents[n - 2] = m[1]; tangents[n - 1] = m[2]
+    enteringSeed = (enteringSeed.0, entering2)
+  }
+
+  /// Appends a point (whose time should follow the last), recomputing only the trailing tangents. Exact.
+  public mutating func append(_ point: LivelinePoint) {
+    let n = points.count
+    guard n >= 3 else { points.append(point); rebuild(); return }
+    points.append(point)
+    tangents.append(0)
+    // Indices after append: old last is n-1, new point is n.
+    let d2 = Self.delta(points[n - 2], points[n - 1])
+    let d1 = Self.delta(points[n - 1], points[n])
+    var m = [enteringSeed.1, Self.interior(d2, d1), d1]
+    Self.limit(&m, 0, d2)
+    let entering = m[1]
+    Self.limit(&m, 1, d1)
+    tangents[n - 2] = m[0]; tangents[n - 1] = m[1]; tangents[n] = m[2]
+    enteringSeed = (enteringSeed.1, entering)
+  }
+
   public func interval(at time: Double) -> Int? {
     guard points.count > 1 else { return nil }
     var lo = 0, hi = points.count - 1

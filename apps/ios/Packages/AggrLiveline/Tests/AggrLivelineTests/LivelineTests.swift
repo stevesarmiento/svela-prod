@@ -229,3 +229,128 @@ private func settle(_ engine: LivelineEngine, from start: Double = 0, frames: In
   #expect(engine.inspectionTime == nil)
   #expect(engine.scrubAmount == 0)
 }
+
+// MARK: - Endpoint patching and incremental updates
+
+private func sameTangents(_ a: LivelineSpline, _ b: LivelineSpline) -> Bool {
+  a.points == b.points && a.tangents.count == b.tangents.count
+    && zip(a.tangents, b.tangents).allSatisfy { $0 == $1 || close($0, $1) }
+}
+
+@Test func patchingTheEndpointMatchesAFullSplineRebuild() {
+  var generator = SystemRandomNumberGenerator()
+  for n in [2, 3, 4, 5, 8, 50] {
+    for _ in 0..<40 {
+      // Mixed monotone runs and reversals exercise every limiter branch, including zero deltas.
+      var points: [LivelinePoint] = []
+      var value = 100.0
+      for i in 0..<n {
+        let step = Double.random(in: -5...5, using: &generator)
+        value += Int.random(in: 0..<6, using: &generator) == 0 ? 0 : step
+        points.append(.init(time: Double(i) * Double.random(in: 0.5...2, using: &generator) + Double(i), value: value))
+      }
+      let original = LivelineSpline(points)
+      var replaced = original
+      var replacedPoints = points
+      replacedPoints[n - 1] = .init(time: points[n - 1].time + Double.random(in: 0...1, using: &generator),
+                                    value: value + Double.random(in: -20...20, using: &generator))
+      replaced.replaceLast(replacedPoints[n - 1])
+      #expect(sameTangents(replaced, LivelineSpline(replacedPoints)))
+      // A second patch on an already patched spline must still be exact.
+      replacedPoints[n - 1].value -= 7
+      replaced.replaceLast(replacedPoints[n - 1])
+      #expect(sameTangents(replaced, LivelineSpline(replacedPoints)))
+
+      var appended = original
+      let extra = LivelinePoint(time: points[n - 1].time + 1, value: value + Double.random(in: -20...20, using: &generator))
+      appended.append(extra)
+      #expect(sameTangents(appended, LivelineSpline(points + [extra])))
+      appended.replaceLast(.init(time: extra.time, value: extra.value + 3))
+      #expect(sameTangents(appended, LivelineSpline(points + [.init(time: extra.time, value: extra.value + 3)])))
+      let second = LivelinePoint(time: extra.time + 2, value: extra.value - 4)
+      appended.append(second)
+      #expect(sameTangents(appended, LivelineSpline(points + [.init(time: extra.time, value: extra.value + 3), second])))
+    }
+  }
+}
+
+@Test func animatedEndpointNeverBumpsTheRevisionOrRebuildsHistory() {
+  let engine = LivelineEngine()
+  var cfg = LivelineConfiguration(); cfg.pulse = false
+  let points = (0..<200).map { LivelinePoint(time: Double($0), value: 100 + sin(Double($0) / 9) * 4) }
+  let base = LivelineInput(id: "btc|30d", series: [.init(id: "price", points: points)], viewport: .historical(0...220))
+  #expect(engine.update(base, configuration: cfg, marketTime: 220) == .data)
+  settle(engine, frames: 30)
+  let revision = engine.revision, builds = engine.splineBuildCount
+  #expect(engine.update(base, configuration: cfg, marketTime: 220) == .none)
+  var live = base; live.observation = .init(time: 210, value: 112)
+  #expect(engine.update(live, configuration: cfg, marketTime: 220) == .observation)
+  #expect(engine.splines["price"]?.points.count == 201)
+  #expect(engine.endpointAppended)
+  for frame in 0..<120 {
+    engine.advance(monotonicTime: 1 + Double(frame) / 60, marketTime: 220)
+    #expect(engine.revision == revision)
+  }
+  #expect(engine.splineBuildCount == builds)
+  #expect(engine.displayedValue == 112)
+  #expect(engine.splines["price"]?.points.last == .init(time: 210, value: 112))
+  #expect(engine.input?.series[0].points == points)
+  // A later tick that normalization rejects compares equal to the raw input the host keeps sending.
+  var stale = base; stale.observation = .init(time: 150, value: 1)
+  #expect(engine.update(stale, configuration: cfg, marketTime: 220) == .observation)
+  #expect(engine.update(stale, configuration: cfg, marketTime: 220) == .none)
+  #expect(engine.revision == revision)
+}
+
+@Test func incrementalRangeMatchesAFullScanWhileTheEndpointAnimates() {
+  let points = (0..<300).map { LivelinePoint(time: Double($0), value: 50 + cos(Double($0) / 15) * 10) }
+  var cfg = LivelineConfiguration(); cfg.pulse = false
+  let live = LivelineInput(id: "eth|7d", series: [.init(id: "price", points: points),
+                                                  .init(id: "shull", points: points.map { .init(time: $0.time, value: $0.value * 1.1) })],
+                           viewport: .historical(0...330), observation: .init(time: 320, value: 95))
+  let incremental = LivelineEngine()
+  incremental.update(live, configuration: cfg, marketTime: 330)
+  let scans = incremental.rangeScanCount
+  for frame in 0..<90 {
+    incremental.advance(monotonicTime: Double(frame) / 60, marketTime: 330)
+    #expect(incremental.splines["price"]?.points.last?.value == incremental.displayedValue)
+    // A fresh engine starts at the same endpoint and scans every point for its initial range.
+    let fresh = LivelineEngine()
+    var snapshot = live; snapshot.observation = .init(time: 320, value: incremental.displayedValue)
+    fresh.update(snapshot, configuration: cfg, marketTime: 330)
+    let target = incremental.debugTargetY
+    #expect(close(fresh.yRange.lowerBound, target.lowerBound) && close(fresh.yRange.upperBound, target.upperBound))
+  }
+  #expect(incremental.rangeScanCount == scans)
+}
+
+@Test func emphasisChangesKeepSplinesAndObservationChangesSkipCleaning() {
+  let engine = LivelineEngine()
+  var cfg = LivelineConfiguration(); cfg.seriesLabels = ["a": "A", "b": "B"]
+  var data = LivelineInput(id: "cmp|1d", series: [.init(id: "a", points: [.init(time: 0, value: 1), .init(time: 10, value: 2)]),
+                                                  .init(id: "b", points: [.init(time: 0, value: 3), .init(time: 10, value: 1)])],
+                           primaryID: "a", viewport: .historical(0...10))
+  engine.update(data, configuration: cfg, marketTime: 10)
+  let builds = engine.splineBuildCount
+  data.series[1].opacity = 0.18
+  #expect(engine.update(data, configuration: cfg, marketTime: 10) == .emphasis)
+  #expect(engine.input?.series[1].opacity == 0.18)
+  #expect(engine.splineBuildCount == builds)
+  data.series[0].points.append(.init(time: 20, value: 5))
+  #expect(engine.update(data, configuration: cfg, marketTime: 20) == .data)
+  #expect(engine.splineBuildCount == builds + 2)
+}
+
+@Test func emptyAndSinglePointPrimarySeriesDoNotTrapWhileLoading() {
+  let engine = LivelineEngine()
+  var cfg = LivelineConfiguration(); cfg.reduceMotion = true
+  let viewport = input().viewport
+  // Loading state before any history arrives: the primary series is empty.
+  let empty = LivelineInput(id: "t", series: [LivelineSeries(id: "price", points: [])], viewport: viewport, state: .loading)
+  engine.update(empty, configuration: cfg, marketTime: 120); settle(engine, frames: 10)
+  #expect(engine.splines["price"]?.points.isEmpty ?? true)
+  // A single observed point must also be representable.
+  let one = LivelineInput(id: "t", series: [LivelineSeries(id: "price", points: [.init(time: 100, value: 10)])], viewport: viewport)
+  engine.update(one, configuration: cfg, marketTime: 120); settle(engine, frames: 10)
+  #expect(engine.selection(at: 100)?.value == 10)
+}

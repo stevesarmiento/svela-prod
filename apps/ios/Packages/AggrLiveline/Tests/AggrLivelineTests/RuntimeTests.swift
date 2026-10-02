@@ -140,3 +140,17 @@ import UIKit
   #expect(pulses.ringCount == 0)
 }
 #endif
+
+@MainActor
+@Test func renderBufferAlternatesBetweenTwoContextsAfterSwap() {
+  let buffer = LivelineRenderBuffer()
+  let first = buffer.context(pixelWidth: 300, pixelHeight: 200)
+  buffer.swap()
+  let second = buffer.context(pixelWidth: 300, pixelHeight: 200)
+  #expect(first != nil && second != nil)
+  #expect(first !== second)
+  buffer.swap()
+  #expect(buffer.context(pixelWidth: 300, pixelHeight: 200) === first)
+  buffer.swap()
+  #expect(buffer.context(pixelWidth: 300, pixelHeight: 200) === second)
+}
