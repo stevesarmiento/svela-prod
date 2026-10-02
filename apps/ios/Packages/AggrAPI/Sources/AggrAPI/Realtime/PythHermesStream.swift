@@ -6,6 +6,8 @@ import Foundation
 /// resubscribe after 3s. A single frame may carry multiple feeds — all are emitted.
 public actor PythHermesStream {
   public static let defaultBaseURL = URL(string: "https://hermes.pyth.network")!
+  /// One decoder for the whole stream (`PythHermes.parseSseDataLine` allocates one per frame).
+  static let decoder = JSONDecoder()
   private let baseURL: URL
   private let session: URLSession
 
@@ -37,7 +39,7 @@ public actor PythHermesStream {
             backoff = .seconds(1)
             for try await line in bytes.lines {
               if Task.isCancelled { break }
-              guard let entries = PythHermes.parseSseDataLine(line) else { continue }
+              guard let entries = Self.parseDataLine(line) else { continue }
               for entry in entries {
                 if let tick = PythHermes.normalize(entry) { continuation.yield(tick) }
               }
@@ -59,6 +61,15 @@ public actor PythHermesStream {
       }
       continuation.onTermination = { _ in task.cancel() }
     }
+  }
+
+  /// `PythHermes.parseSseDataLine` with the shared decoder.
+  static func parseDataLine(_ line: String) -> [PythHermes.ParsedPrice]? {
+    guard line.hasPrefix("data:") else { return nil }
+    let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+    guard !payload.isEmpty, let data = payload.data(using: .utf8) else { return nil }
+    guard let message = try? decoder.decode(PythHermes.SseMessage.self, from: data) else { return nil }
+    return message.parsed ?? []
   }
 }
 
@@ -88,7 +99,7 @@ public actor PythFeedResolver {
     let upper = symbol.trimmingCharacters(in: .whitespaces).uppercased()
     guard !upper.isEmpty else { return nil }
     let key = cacheKeyPrefix + upper
-    if let data = UserDefaults.standard.data(forKey: key), let cached = try? JSONDecoder().decode(Cached.self, from: data),
+    if let data = UserDefaults.standard.data(forKey: key), let cached = try? PythHermesStream.decoder.decode(Cached.self, from: data),
        Date().timeIntervalSince1970 * 1000 - cached.cachedAtMs < cacheTTL * 1000, !cached.feedId.isEmpty {
       return cached.feedId
     }
@@ -100,7 +111,7 @@ public actor PythFeedResolver {
     request.timeoutInterval = 10
     guard let (data, response) = try? await session.data(for: request),
           let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-          let rows = try? JSONDecoder().decode([FeedRow].self, from: data) else { return nil }
+          let rows = try? PythHermesStream.decoder.decode([FeedRow].self, from: data) else { return nil }
     let cryptoUsd = rows.filter { $0.attributes?.asset_type == "Crypto" && $0.attributes?.quote_currency == "USD" && ($0.attributes?.base?.isEmpty == false) }
     let exact = cryptoUsd.first { $0.attributes?.base == upper && $0.attributes?.display_symbol == "\(upper)/USD" }
       ?? cryptoUsd.first { $0.attributes?.base == upper }

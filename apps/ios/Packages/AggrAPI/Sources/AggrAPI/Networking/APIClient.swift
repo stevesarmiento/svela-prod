@@ -12,11 +12,22 @@ public actor APIClient {
   private let decoder: JSONDecoder
   private let marketBudget = RequestBudget()
 
-  public init(baseURL: URL, tokenProvider: (any BearerTokenProvider)?, session: URLSession = .shared) {
+  public init(baseURL: URL, tokenProvider: (any BearerTokenProvider)?, session: URLSession = APIClient.makeSession()) {
     self.baseURL = baseURL
     self.tokenProvider = tokenProvider
     self.session = session
     self.decoder = JSONDecoder()
+  }
+
+  /// Dedicated session: waits for connectivity instead of failing fast, bounds the whole transfer
+  /// (streams run up to 90s), and caps parallel connections per host so bursts queue in URLSession.
+  public static func makeSession() -> URLSession {
+    let configuration = URLSessionConfiguration.default
+    configuration.waitsForConnectivity = true
+    configuration.timeoutIntervalForRequest = 30
+    configuration.timeoutIntervalForResource = 180
+    configuration.httpMaximumConnectionsPerHost = 6
+    return URLSession(configuration: configuration)
   }
 
   public struct Request: Sendable {
@@ -60,7 +71,9 @@ public actor APIClient {
 
   // MARK: Internals
 
-  func send<T: Decodable & Sendable>(_ request: Request) async throws -> T {
+  // The request path touches only immutable state; `nonisolated` keeps JSON decoding and
+  // transport off the actor so requests do not serialize behind each other.
+  nonisolated func send<T: Decodable & Sendable>(_ request: Request) async throws -> T {
     let (data, _) = try await perform(request)
     do {
       return try decoder.decode(T.self, from: data)
@@ -69,7 +82,7 @@ public actor APIClient {
     }
   }
 
-  func perform(_ request: Request) async throws -> (Data, HTTPURLResponse) {
+  nonisolated func perform(_ request: Request) async throws -> (Data, HTTPURLResponse) {
     var attempt = 0
     var delay: Duration = .milliseconds(500)
     var didRetryAuth = false
@@ -90,7 +103,7 @@ public actor APIClient {
     }
   }
 
-  func buildURLRequest(_ request: Request, skipTokenCache: Bool) async throws -> (URLRequest, URLSession) {
+  nonisolated func buildURLRequest(_ request: Request, skipTokenCache: Bool) async throws -> (URLRequest, URLSession) {
     guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
       throw APIError.transport(endpoint: request.endpoint, message: "Bad base URL")
     }
@@ -113,31 +126,23 @@ public actor APIClient {
     return (req, session)
   }
 
-  private func performOnce(_ request: Request, skipTokenCache: Bool) async throws -> (Data, HTTPURLResponse) {
-    let budget = request.path.hasPrefix("/api/coingecko/") || request.path.hasPrefix("/api/coinglass/") ? marketBudget : nil
-    if let budget { try await budget.acquire() }
-    defer { if let budget { Task { await budget.release() } } }
-    try Task.checkCancellation()
-    guard var comps = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-      throw APIError.transport(endpoint: request.endpoint, message: "Bad base URL")
+  private nonisolated func performOnce(_ request: Request, skipTokenCache: Bool) async throws -> (Data, HTTPURLResponse) {
+    let budgeted = request.path.hasPrefix("/api/coingecko/") || request.path.hasPrefix("/api/coinglass/")
+    guard budgeted else { return try await execute(request, skipTokenCache: skipTokenCache) }
+    try await marketBudget.acquire()
+    do {
+      let result = try await execute(request, skipTokenCache: skipTokenCache)
+      await marketBudget.release()
+      return result
+    } catch {
+      await marketBudget.release()
+      throw error
     }
-    comps.path = (comps.path.hasSuffix("/") ? String(comps.path.dropLast()) : comps.path) + request.path
-    comps.queryItems = request.query.isEmpty ? nil : request.query
-    guard let url = comps.url else { throw APIError.transport(endpoint: request.endpoint, message: "Bad URL") }
+  }
 
-    var req = URLRequest(url: url)
-    req.httpMethod = request.method
-    req.timeoutInterval = request.timeout
-    req.setValue("application/json", forHTTPHeaderField: "Accept")
-    if let body = request.body {
-      req.httpBody = body
-      req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    }
-    if request.requiresAuth, let tokenProvider {
-      if let token = try? await tokenProvider.token(skipCache: skipTokenCache) {
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-      }
-    }
+  private nonisolated func execute(_ request: Request, skipTokenCache: Bool) async throws -> (Data, HTTPURLResponse) {
+    try Task.checkCancellation()
+    let (req, session) = try await buildURLRequest(request, skipTokenCache: skipTokenCache)
 
     let data: Data
     let response: URLResponse
@@ -175,7 +180,7 @@ public actor APIClient {
     return String(data: data, encoding: .utf8)
   }
 
-  private func describeDecodingError(_ error: Error) -> String {
+  private nonisolated func describeDecodingError(_ error: Error) -> String {
     guard let d = error as? DecodingError else { return error.localizedDescription }
     switch d {
     case .keyNotFound(let k, let c): return "missing key '\(k.stringValue)' at \(c.codingPath.map(\.stringValue).joined(separator: "."))"

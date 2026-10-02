@@ -26,6 +26,39 @@ import Testing
     #expect(weird.usdMove24h == nil)
   }
 
+  @Test func marketChartBatchDecodesPerCoinPayloadsAndFailures() throws {
+    let json = """
+    {"results":{"bitcoin":{"data":{"prices":[{"time":1,"value":2}],"volumes":[],"market_caps":[]},
+      "status":{"cached":true,"stale":false,"warmupRequested":false,"warming":false,"coverage":"full","points":1,"lastUpdated":5,"lastFetchedAt":null}}},
+     "failed":["unknown-coin"],"status":{"requested":2,"returned":1}}
+    """.data(using: .utf8)!
+    let r = try JSONDecoder().decode(MarketChartBatchResponse.self, from: json)
+    #expect(r.results["bitcoin"]?.data.prices == [MarketChartPoint(time: 1, value: 2)])
+    #expect(r.results["bitcoin"]?.status?.needsWarmup == false)
+    #expect(r.failed == ["unknown-coin"])
+  }
+
+  @Test func ninetyDayChartClipsToTheTrailingThirtyDays() {
+    let day = 86_400.0
+    let end = 1_800_000_000.0
+    let times = stride(from: end - 89 * day, through: end, by: day).map { $0 }
+    func pts(_ scale: Double) -> [MarketChartPoint] { times.map { MarketChartPoint(time: $0 * scale, value: $0) } }
+    let seconds = MarketChartResponse(data: .init(prices: pts(1), volumes: pts(1), market_caps: pts(1)),
+                                      status: ChartStatus(points: 90))
+    let clipped = seconds.clipped(toLastDays: 30)
+    #expect(clipped.data.prices.count == 31)
+    #expect(clipped.data.prices.first?.time == end - 30 * day)
+    #expect(clipped.data.prices.last?.time == end)
+    #expect(clipped.data.volumes.count == 31 && clipped.data.market_caps.count == 31)
+    #expect(clipped.status?.points == 31)
+    // Millisecond timestamps clip on the same boundary without being rewritten.
+    let millis = MarketChartResponse(data: .init(prices: pts(1000), volumes: [], market_caps: []), status: nil)
+    #expect(millis.clipped(toLastDays: 30).data.prices.count == 31)
+    #expect(millis.clipped(toLastDays: 30).data.prices.first?.time == (end - 30 * day) * 1000)
+    let empty = MarketChartResponse(data: .init(prices: [], volumes: [], market_caps: []), status: nil)
+    #expect(empty.clipped(toLastDays: 30).data.prices.isEmpty)
+  }
+
   @Test func watchlistGroupDecodesConvexDoc() throws {
     let json = """
     {"_id":"k1","_creationTime":1757000000000.5,"userId":"u1","name":"Core","slug":"core","isDefault":true,"createdAt":1757000000000,"updatedAt":1757000000001,"icon":"🚀","color":"blue"}

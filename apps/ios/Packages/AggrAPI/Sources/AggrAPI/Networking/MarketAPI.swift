@@ -24,6 +24,17 @@ public struct MarketAPI: Sendable {
     return try await client.get("/api/coingecko/market-chart", query: q)
   }
 
+  /// Route accepts at most this many ids per request; callers chunk larger lists.
+  public static let marketChartBatchLimit = 50
+
+  /// `/market-chart/batch` — several coins in one round trip. Coins whose server read failed are
+  /// listed in `failed` instead of failing the request.
+  public func marketCharts(ids: [String], days: String) async throws -> MarketChartBatchResponse {
+    precondition(ids.count <= Self.marketChartBatchLimit)
+    let q = [URLQueryItem(name: "ids", value: ids.joined(separator: ",")), URLQueryItem(name: "days", value: days)]
+    return try await client.get("/api/coingecko/market-chart/batch", query: q, timeout: 20)
+  }
+
   public func ohlc(coinId: String, days: String, precision: String? = nil) async throws -> OHLCResponse {
     var q = [URLQueryItem(name: "id", value: coinId), URLQueryItem(name: "days", value: days)]
     if let precision { q.append(.init(name: "precision", value: precision)) }

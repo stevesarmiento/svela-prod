@@ -43,9 +43,12 @@ public struct AnalysisDataService: Sendable {
   }
 
   /// The single-token sidebar uses its own 7d history, independently of report preparation.
+  /// Keyed like every other market-chart request (`("market-chart", id, days)`) so the token
+  /// page, watchlist aggregates and analysis share one entry per coin and range.
   public func priceChart(coinId: String) async throws -> ParsedChartData {
-    let response = try await cache.fetch(QueryCache.Key("token-chart", coinId, TimeScale.d7.rawValue), policy: .chart) { [market] in
-      try await market.marketChart(coinId: coinId, days: "7", vsCurrency: "usd")
+    let days = TimeScale.d7.marketChartDaysParam
+    let response = try await cache.fetch(QueryCache.Key("market-chart", coinId, days), policy: .chart) { [market] in
+      try await market.marketChart(coinId: coinId, days: days)
     }
     guard let parsed = ChartSeries.parseMarketChart(
       prices: response.data.prices.map { .init(time: $0.time, value: $0.value) },
@@ -74,9 +77,11 @@ public struct AnalysisDataService: Sendable {
 
   public func build(coinId: String, fallbackName: String? = nil, fallbackSymbol: String? = nil) async throws -> Bundle {
     let scale = TimeScale.d30
+    // 90 days at 4h buckets, the same request the token page's 1M view makes.
+    let days = scale.tokenChartDaysParam
     async let marketsTask = cache.fetch(QueryCache.Key("coingecko-markets", coinId), policy: .defaults) { [market] in try await market.markets(ids: [coinId]) }
-    async let chartTask = cache.fetch(QueryCache.Key("token-chart", coinId, scale.rawValue), policy: .chart) { [market] in
-      try await market.marketChart(coinId: coinId, days: scale.tokenChartDaysParam, vsCurrency: "usd")
+    async let chartTask = cache.fetch(QueryCache.Key("market-chart", coinId, days), policy: .chart) { [market] in
+      try await market.marketChart(coinId: coinId, days: days)
     }
     async let oiTask: OpenInterestResponse? = try? cache.fetch(QueryCache.Key("open-interest", coinId), policy: .openInterest) { [derivatives] in try await derivatives.openInterest(symbol: coinId) }
     async let liqTask: LiquidationHistoryResponse? = try? cache.fetch(QueryCache.Key("liquidations", coinId), policy: .liquidations) { [derivatives] in try await derivatives.liquidationHistory(symbol: coinId) }

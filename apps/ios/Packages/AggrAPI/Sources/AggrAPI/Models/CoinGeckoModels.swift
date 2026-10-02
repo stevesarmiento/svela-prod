@@ -32,6 +32,32 @@ public struct MarketChartResponse: Codable, Sendable, Hashable {
   public var status: ChartStatus?
 }
 
+/// `/api/coingecko/market-chart/batch` — one round trip for a watchlist. Each coin is the same
+/// `{ data, status }` payload as the single-coin route so it can seed per-coin cache entries.
+public struct MarketChartBatchResponse: Codable, Sendable, Hashable {
+  public var results: [String: MarketChartResponse]
+  public var failed: [String]
+  public init(results: [String: MarketChartResponse], failed: [String] = []) { self.results = results; self.failed = failed }
+}
+
+public extension MarketChartResponse {
+  /// The trailing `days` of a longer response. CoinGecko samples 2–90 day windows hourly, so a
+  /// 30-day series is an exact clip of the cached 90-day one and needs no extra request.
+  func clipped(toLastDays days: Int) -> MarketChartResponse {
+    func seconds(_ t: Double) -> Double { t > 1e10 ? t / 1000 : t }
+    guard let last = data.prices.last.map({ seconds($0.time) }) else { return self }
+    let start = last - Double(days) * 86_400
+    func clip(_ points: [MarketChartPoint]) -> [MarketChartPoint] {
+      guard let first = points.firstIndex(where: { seconds($0.time) >= start }) else { return [] }
+      return Array(points[first...])
+    }
+    var out = self
+    out.data = Series(prices: clip(data.prices), volumes: clip(data.volumes), market_caps: clip(data.market_caps))
+    out.status?.points = Double(out.data.prices.count)
+    return out
+  }
+}
+
 public struct GlobalMarketCapResponse: Codable, Sendable, Hashable {
   public struct Series: Codable, Sendable, Hashable {
     public var market_cap: [MarketChartPoint]
@@ -142,6 +168,7 @@ public struct CoinQuotesStatus: Codable, Sendable, Hashable {
 public struct CoinQuotesResponse: Codable, Sendable, Hashable {
   public var data: [String: CoinQuote]
   public var status: CoinQuotesStatus?
+  public init(data: [String: CoinQuote], status: CoinQuotesStatus? = nil) { self.data = data; self.status = status }
 }
 
 /// `CoinGeckoMarketRow` (`/api/coingecko/markets`)

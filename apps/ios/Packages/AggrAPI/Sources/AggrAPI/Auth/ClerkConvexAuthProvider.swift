@@ -59,10 +59,11 @@ public final class ClerkConvexAuthProvider: AuthProvider {
     authResult
   }
 
-  /// Forces an immediate templated-token refresh and pushes it to Convex (call on app foreground).
+  /// Pushes the current templated token to Convex if it changed (call on app foreground).
+  /// Clerk's own cache already refreshes tokens near expiry, so this never forces a network fetch.
   public func refreshNow() async {
     guard onIdToken != nil else { return }
-    await pushFreshToken(skipCache: true)
+    await pushFreshToken(skipCache: false)
   }
 
   // MARK: Private

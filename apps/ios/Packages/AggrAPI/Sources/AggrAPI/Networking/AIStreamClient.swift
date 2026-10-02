@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Streaming client for the Gemini-backed routes.
 /// - `/api/analyze`, `/api/analyze/compare`: `streamText` raw text chunks (`streamProtocol: "text"`).
@@ -18,15 +19,36 @@ public struct AIStreamClient: Sendable {
           let bytes = try await client.openAuthenticatedStream(path: path, body: body)
           switch proto {
           case .text:
-            var buffer = Data()
-            for try await byte in bytes {
-              buffer.append(byte)
-              if buffer.count >= 64 || byte == 0x0A {
-                if let s = String(data: buffer, encoding: .utf8) { continuation.yield(s); buffer.removeAll(keepingCapacity: true) }
+            // Coalesce: bytes land in a buffer and a 40ms ticker flushes the complete UTF-8 prefix,
+            // so the UI sees a few yields per second instead of one per 64 bytes, and a multi-byte
+            // character split across chunks is never decoded as a lossy partial.
+            let pending = Mutex(Data())
+            let flush: @Sendable (_ final: Bool) -> Void = { final in
+              pending.withLock { buffer in
+                guard !buffer.isEmpty else { return }
+                let count = final ? buffer.count : Self.completeUTF8PrefixLength(buffer)
+                guard count > 0 else { return }
+                continuation.yield(String(decoding: buffer.prefix(count), as: UTF8.self))
+                buffer.removeSubrange(buffer.startIndex..<buffer.startIndex + count)
               }
-              try Task.checkCancellation()
             }
-            if !buffer.isEmpty, let s = String(data: buffer, encoding: .utf8) { continuation.yield(s) }
+            let ticker = Task {
+              while !Task.isCancelled {
+                try await Task.sleep(for: .milliseconds(40))
+                flush(false)
+              }
+            }
+            do {
+              for try await byte in bytes {
+                pending.withLock { $0.append(byte) }
+                try Task.checkCancellation()
+              }
+            } catch {
+              ticker.cancel()
+              throw error
+            }
+            ticker.cancel()
+            flush(true)
           case .uiMessageSSE:
             for try await line in bytes.lines {
               try Task.checkCancellation()
@@ -48,11 +70,34 @@ public struct AIStreamClient: Sendable {
       continuation.onTermination = { _ in task.cancel() }
     }
   }
+
+  /// Length of the longest prefix that ends on a complete UTF-8 scalar (a trailing partial
+  /// sequence of up to 3 bytes is held back for the next flush).
+  static func completeUTF8PrefixLength(_ data: Data) -> Int {
+    let count = data.count
+    guard count > 0 else { return 0 }
+    var back = 0
+    var index = count - 1
+    while index >= 0, back < 4 {
+      let byte = data[data.startIndex + index]
+      if byte & 0xC0 != 0x80 {
+        let need: Int
+        if byte & 0x80 == 0 { need = 1 }
+        else if byte & 0xE0 == 0xC0 { need = 2 }
+        else if byte & 0xF0 == 0xE0 { need = 3 }
+        else if byte & 0xF8 == 0xF0 { need = 4 }
+        else { need = 1 }
+        return count - index >= need ? count : index
+      }
+      index -= 1; back += 1
+    }
+    return count
+  }
 }
 
 extension APIClient {
   /// Builds an authenticated POST request for streaming (90s timeout) plus the session to run it on.
-  func makeStreamingRequest(path: String, body: Data, skipTokenCache: Bool = false) async throws -> (URLRequest, URLSession) {
+  nonisolated func makeStreamingRequest(path: String, body: Data, skipTokenCache: Bool = false) async throws -> (URLRequest, URLSession) {
     var request = Request(method: "POST", path: path, body: body, timeout: 90, retries: 0, requiresAuth: true)
     request.retries = 0
     let (req, session) = try await buildURLRequest(request, skipTokenCache: skipTokenCache)
@@ -62,7 +107,7 @@ extension APIClient {
 
 extension APIClient {
   /// Only a rejected request may be replayed. Once successful bytes are returned, callers never retry.
-  func openAuthenticatedStream(path: String, body: Data) async throws -> URLSession.AsyncBytes {
+  nonisolated func openAuthenticatedStream(path: String, body: Data) async throws -> URLSession.AsyncBytes {
     for attempt in 0...1 {
       try Task.checkCancellation()
       let (request, session) = try await makeStreamingRequest(path: path, body: body, skipTokenCache: attempt == 1)
