@@ -86,6 +86,24 @@ final class AggrImageCache {
     cache.object(forKey: Key(url: url, variant: variant).cacheKey)
   }
 
+  /// Warms the memory cache from disk (or the network) ahead of the views that will show these
+  /// logos, so a cold launch paints cached artwork on the first frame even though the synchronous
+  /// peek never touches disk. Bounded, low priority, deduped against in-flight loads.
+  func prewarm(_ urls: [URL], variant: Variant = .logo, limit: Int = 80) {
+    var pending: [URL] = []
+    for url in urls where pending.count < limit {
+      let key = Key(url: url, variant: variant)
+      if cache.object(forKey: key.cacheKey) == nil, inflight[key] == nil, !pending.contains(url) { pending.append(url) }
+    }
+    guard !pending.isEmpty else { return }
+    Task(priority: .utility) { [weak self] in
+      for url in pending {
+        guard let self else { return }
+        _ = await self.image(for: url, variant: variant)
+      }
+    }
+  }
+
   func image(for url: URL, variant: Variant = .logo) async -> UIImage? {
     let key = Key(url: url, variant: variant)
     if let cached = cache.object(forKey: key.cacheKey) { return cached }

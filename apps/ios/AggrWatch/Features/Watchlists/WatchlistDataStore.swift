@@ -90,7 +90,11 @@ final class WatchlistDataStore {
   /// Replaces the bulk snapshot and pushes only changed values into the per-token boxes.
   private func publishQuotes(_ next: [String: CoinQuote]) {
     quotesSnapshot = next
-    if quotesById != next { quotesById = next; quotesRevision &+= 1 }
+    if quotesById != next {
+      quotesById = next; quotesRevision &+= 1
+      // Rows render as soon as quotes land; warm their logos so cached art paints with them.
+      AggrImageCache.shared.prewarm(next.values.flatMap { TokenLogo.logoCandidates(symbol: $0.symbol, imageURL: $0.image) })
+    }
     for (id, box) in boxes {
       let quote = next[id]
       if box.quote != quote { box.quote = quote }
