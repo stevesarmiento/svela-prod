@@ -3,8 +3,9 @@ import AggrCore
 import SwiftUI
 
 /// Full-page analysis with the token page's presentation: fixed header, logo glow, pull handle.
-/// A phone shows one scroll with a full-bleed chart, then Report / Market data tabs; a wide display
-/// shows the chart and market data as a sidebar beside the report.
+/// A phone pins the header, the full-bleed chart and the Report / Market data tabs; only the
+/// content beneath scrolls. A wide display shows the chart and market data as a sidebar beside
+/// the report.
 struct AnalysisPageView: View {
   let presentation: AnalysisPresentation
   let close: () -> Void
@@ -25,12 +26,15 @@ struct AnalysisPageView: View {
   var body: some View {
     GeometryReader { geometry in
       Group {
-        if geometry.size.width >= 760 { wide } else { phone }
-      }
-      .overlay(alignment: .top) {
-        AnalysisPageHeader(session: session, chrome: chrome, expandedHeight: headerHeight,
-                           topInset: geometry.safeAreaInsets.top, close: close)
-          .frame(height: headerHeight)
+        if geometry.size.width >= 760 {
+          wide.overlay(alignment: .top) {
+            AnalysisPageHeader(session: session, chrome: chrome, expandedHeight: headerHeight,
+                               topInset: geometry.safeAreaInsets.top, close: close)
+              .frame(height: headerHeight)
+          }
+        } else {
+          phone
+        }
       }
       .scrollEdgeEffectStyle(.soft, for: .top)
     }
@@ -51,25 +55,25 @@ struct AnalysisPageView: View {
   }
 
   private var phone: some View {
-    ScrollView {
-      VStack(spacing: 24) {
-        Color.clear.frame(height: headerHeight - 12)
-        // The chart spans the view; its readout keeps the page inset.
-        chartSection(inset: 16)
-        UnderlineTabs(options: [false, true], label: { $0 ? "Market data" : "Report" }, selection: $showMetrics,
-                      accessibilityLabel: "Analysis content", accessibilityIdentifier: "analysis-content-picker")
-          .padding(.horizontal, 16)
+    VStack(spacing: 0) {
+      AnalysisPageHeader(session: session, chrome: chrome, expandedHeight: headerHeight, topInset: 0, close: close)
+        .frame(height: headerHeight)
+      // The chart spans the view and stays put; its readout keeps the page inset.
+      chartSection(inset: 16)
+        .padding(.top, 8)
+      UnderlineTabs(options: [false, true], label: { $0 ? "Market data" : "Report" }, selection: $showMetrics,
+                    accessibilityLabel: "Analysis content", accessibilityIdentifier: "analysis-content-picker")
+        .padding(.horizontal, 16)
+        .padding(.top, 20)
+      ScrollView {
         Group { if showMetrics { metrics } else { AnalysisReport(session: session) } }
           .padding(.horizontal, 16)
+          .padding(.top, 20)
+          .padding(.bottom, 32)
       }
-      .padding(.bottom, 32)
+      .scrollEdgeEffectStyle(.soft, for: .top)
+      .accessibilityIdentifier(showMetrics ? "analysis-data-scroll" : "analysis-report-scroll")
     }
-    .onScrollGeometryChange(for: CGFloat.self) { geometry in
-      max(0, geometry.contentOffset.y + geometry.contentInsets.top)
-    } action: { _, offset in
-      chrome.update(scrollOffset: offset)
-    }
-    .accessibilityIdentifier(showMetrics ? "analysis-data-scroll" : "analysis-report-scroll")
   }
 
   private var wide: some View {

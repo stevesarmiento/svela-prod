@@ -27,10 +27,12 @@ struct IndicatorExplainPage<ChartView: View, Badges: View>: View {
   }
 
   var body: some View {
-    ScrollView {
+    VStack(spacing: 0) {
+      pageBar
+      // The chart spans the view and stays put with the header; chips and copy scroll beneath.
+      chart()
+      ScrollView {
       VStack(alignment: .leading, spacing: 16) {
-        // The chart spans the view like the analysis page's; chips and copy keep the page inset.
-        chart().padding(.horizontal, -16)
         ScrollView(.horizontal, showsIndicators: false) { HStack { badges() }.font(.caption).padding(.horizontal, 16) }
           .padding(.horizontal, -16)
           .horizontalEdgeFade(16)
@@ -62,9 +64,9 @@ struct IndicatorExplainPage<ChartView: View, Badges: View>: View {
       }
       .padding(16)
       .padding(.bottom, 32)
+      }
+      .scrollEdgeEffectStyle(.soft, for: .top)
     }
-    .scrollEdgeEffectStyle(.soft, for: .top)
-    .safeAreaInset(edge: .top, spacing: 0) { pageBar }
     .overlay(alignment: .top) {
       Capsule().fill(.secondary.opacity(0.5)).frame(width: 36, height: 4)
         .frame(height: 16).frame(maxWidth: .infinity)

@@ -448,15 +448,15 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertTrue(app.staticTexts["Current price"].exists)
     capture("Single analysis market metrics")
     let scroll = app.scrollViews["analysis-data-scroll"]
-    for _ in 0..<5 {
+    for _ in 0..<14 {
       if app.descendants(matching: .any)["Technical indicators"].firstMatch.isHittable { break }
-      scroll.swipeUp()
+      nudgeUp(scroll)
     }
     XCTAssertTrue(app.descendants(matching: .any)["Technical indicators"].firstMatch.isHittable)
     capture("Single analysis technical indicators and meters")
-    for _ in 0..<5 {
+    for _ in 0..<14 {
       if app.descendants(matching: .any)["Market structure"].firstMatch.isHittable { break }
-      scroll.swipeUp()
+      nudgeUp(scroll)
     }
     XCTAssertTrue(app.descendants(matching: .any)["Market structure"].firstMatch.isHittable)
     XCTAssertTrue(app.staticTexts["Open interest"].exists)
@@ -491,21 +491,21 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertTrue(app.descendants(matching: .any)["Returns"].firstMatch.waitForExistence(timeout: 5))
     let scroll = app.scrollViews["analysis-data-scroll"]
     capture("Comparison analysis returns and risk meters")
-    for _ in 0..<5 {
+    for _ in 0..<14 {
       if app.descendants(matching: .any)["Correlation · 30 days"].firstMatch.isHittable { break }
-      scroll.swipeUp()
+      nudgeUp(scroll)
     }
     XCTAssertTrue(app.descendants(matching: .any)["Correlation · 30 days"].firstMatch.isHittable)
     capture("Comparison analysis correlation matrix")
-    for _ in 0..<6 {
+    for _ in 0..<14 {
       if app.descendants(matching: .any)["Indicators"].firstMatch.isHittable { break }
-      scroll.swipeUp()
+      nudgeUp(scroll)
     }
     XCTAssertTrue(app.descendants(matching: .any)["Indicators"].firstMatch.isHittable)
     capture("Comparison analysis indicator posture")
     for _ in 0..<8 {
       if app.descendants(matching: .any)["Momentum & flow"].firstMatch.isHittable { break }
-      scroll.swipeUp()
+      nudgeUp(scroll)
     }
     XCTAssertTrue(app.descendants(matching: .any)["Momentum & flow"].firstMatch.isHittable)
     XCTAssertTrue(app.staticTexts["Taker buy"].firstMatch.exists)
@@ -1102,6 +1102,13 @@ final class WatchlistNavigationTests: XCTestCase {
       wait(for: [reappeared], timeout: 1)
       XCTAssertTrue(row.isHittable)
     }
+  }
+
+  /// Scrolls by about a third of the scroll view: the analysis pages pin their chart, so a full
+  /// page swipe can carry a section heading straight past the shorter visible area.
+  @MainActor private func nudgeUp(_ scroll: XCUIElement) {
+    let from = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75))
+    from.press(forDuration: 0.05, thenDragTo: scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)), withVelocity: .fast, thenHoldForDuration: 0.1)
   }
 
   @MainActor private func capture(_ name: String) {
