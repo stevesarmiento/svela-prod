@@ -32,6 +32,16 @@ enum PreviewData {
 
   ### Volatility and context
   The indicators show mixed signals. This longer paragraph helps check line wrapping, spacing, and scrolling at different Dynamic Type sizes.
+
+  **Signal Hierarchy**
+  Ranked by reliability and market impact, with 30-day context:
+  • **Primary Signal**: RSI holding above its midline - momentum intact on the weekly trend - high confidence
+  • **Secondary Signal**: Volume steady versus the prior week - no confirmation of a breakout yet - moderate implication
+  • **Tertiary Signal**: Hull Suite flat - 3-week range still intact - low risk of reversal
+
+  **Risk Framework:**
+  - **Key invalidation levels**: 3-week support and resistance bound the current range.
+  - **Volatility expectations**: Recent daily ranges suggest contained moves.
   """
 
   static func environment(state: State = .populated, signedIn: Bool = true, tab: AppTab = .overview) -> AppEnvironment {

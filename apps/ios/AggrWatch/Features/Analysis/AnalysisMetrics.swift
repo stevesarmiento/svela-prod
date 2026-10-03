@@ -2,13 +2,36 @@ import AggrAPI
 import AggrCore
 import SwiftUI
 
+/// Marks a metric row so its section can stripe rows like the token page's market stats while
+/// leaving captions and tables unstyled.
+extension ContainerValues {
+  @Entry var isAnalysisMetricRow = false
+}
+
+/// A titled group styled like the token page's Market Stats: a ruled uppercase heading, rows on
+/// alternating backgrounds, and any captions or tables left as they are.
 struct AnalysisMetricSection<Content: View>: View {
   let title: String
   @ViewBuilder var content: () -> Content
+
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text(title).font(.title3.weight(.semibold)).accessibilityAddTraits(.isHeader)
-      content()
+      RuledSectionHeading(title: title)
+      VStack(alignment: .leading, spacing: 0) {
+        Group(subviews: content()) { subviews in
+          // Stripe by position among rows only, resolved once per update rather than per element.
+          let rowIDs = subviews.filter { $0.containerValues.isAnalysisMetricRow }.map(\.id)
+          ForEach(subviews) { subview in
+            if subview.containerValues.isAnalysisMetricRow {
+              let index = rowIDs.firstIndex(of: subview.id) ?? 0
+              subview
+                .background(index.isMultiple(of: 2) ? Color.clear : Color.white.opacity(0.055), in: .rect(cornerRadius: 10))
+            } else {
+              subview.padding(.horizontal, 12).padding(.top, 10)
+            }
+          }
+        }
+      }
     }.frame(maxWidth: .infinity, alignment: .leading)
   }
 }
@@ -17,34 +40,40 @@ struct AnalysisMetricRow: View {
   let title: String
   let value: String
   var icon: String? = nil
-  var tint: Color = .primary
+  var tint: Color = .white
   var badge: String? = nil
   var meter: Double? = nil
   var domain: ClosedRange<Double> = 0...100
   var origin: Double? = nil
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   var body: some View {
     ViewThatFits(in: .horizontal) {
-      HStack(spacing: 12) { label; Spacer(minLength: 8); readout }
-      VStack(alignment: .leading, spacing: 6) { label; readout }
+      HStack(spacing: 12) { label; Spacer(minLength: 8); readout.fixedSize() }
+      VStack(alignment: .leading, spacing: 8) { label; readout.padding(.leading, 36) }
     }
+    .font(.system(.body, design: .rounded))
+    .padding(.horizontal, 12)
+    .padding(.vertical, 12)
+    .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+    .containerValue(\.isAnalysisMetricRow, true)
     .accessibilityElement(children: .combine)
   }
   private var label: some View {
-    HStack(spacing: 6) {
-      if let icon { Image(systemName: icon).font(.caption).frame(width: 18).accessibilityHidden(true) }
-      Text(title).font(.subheadline)
-    }.foregroundStyle(.secondary).fixedSize(horizontal: true, vertical: false)
+    HStack(spacing: 12) {
+      Image(systemName: icon ?? "circle.dotted").frame(width: 24).opacity(icon == nil ? 0 : 1).accessibilityHidden(true)
+      Text(title).fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: true)
+    }.foregroundStyle(.secondary)
   }
   private var readout: some View {
-    HStack(spacing: 7) {
+    HStack(spacing: 8) {
       if let meter, meter.isFinite {
         TickMeter(value: meter, min: domain.lowerBound, max: domain.upperBound,
-                  origin: origin.map { .value($0) } ?? .min, color: tint)
+                  origin: origin.map { .value($0) } ?? .min, color: tint == .white ? .secondary : tint)
       }
-      if !value.isEmpty { Text(value).font(.number(.subheadline, weight: .semibold)).foregroundStyle(tint) }
-      if let badge { AnalysisStatusBadge(text: badge, tint: tint) }
-    }.fixedSize(horizontal: true, vertical: false)
+      if !value.isEmpty { Text(value).fontWeight(.semibold).monospacedDigit().foregroundStyle(tint) }
+      if let badge { AnalysisStatusBadge(text: badge, tint: tint == .white ? .secondary : tint) }
+    }
   }
 }
 
@@ -65,14 +94,13 @@ struct AnalysisMarketMetrics: View {
   private var quote: IndicatorData.Quote.USD { data.quote.USD }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 22) {
+    VStack(alignment: .leading, spacing: 28) {
       AnalysisMetricSection(title: "Market metrics") {
         AnalysisMetricRow(title: "Current price", value: UsdFormat.price(bundle.series.last?.value ?? quote.price), icon: "dollarsign")
         AnalysisMetricRow(title: "Market cap", value: UsdFormat.largeUsd(quote.market_cap), icon: "dollarsign.bank.building")
         AnalysisMetricRow(title: "24h volume", value: UsdFormat.largeUsd(quote.volume_24h), icon: "chart.bar.xaxis",
                           badge: data.volumeAnalysis?.volumeTrend.capitalized)
       }
-      Hairline()
       AnalysisMetricSection(title: "Price levels") {
         // The web takes the last 21 observations, despite labeling them '21d'. Keep the calculation,
         // but state the actual window instead of describing intraday observations as daily bars.
@@ -82,9 +110,7 @@ struct AnalysisMarketMetrics: View {
                           icon: "tengesign", tint: .gainGreen)
         Text("Range of the latest 21 price observations.").font(.caption).foregroundStyle(.secondary)
       }
-      Hairline()
       technical
-      Hairline()
       structure
     }
     .accessibilityIdentifier("analysis-market-metrics")
@@ -98,7 +124,7 @@ struct AnalysisMarketMetrics: View {
       }
       if let bb = data.bollingerBands {
         AnalysisMetricRow(title: "Relative strength", value: AnalysisValueStyle.number(bb.currentValue), icon: "waveform.path.ecg.rectangle",
-                          tint: bb.currentValue > 70 ? .lossRed : bb.currentValue < 30 ? .gainGreen : .secondary,
+                          tint: bb.currentValue > 70 ? .lossRed : bb.currentValue < 30 ? .gainGreen : .white,
                           badge: bb.currentValue > 70 ? "Overbought" : bb.currentValue < 30 ? "Oversold" : "Neutral", meter: bb.currentValue)
         AnalysisMetricRow(title: "RSI bands", value: "\(AnalysisValueStyle.number(bb.lowerBand)) – \(AnalysisValueStyle.number(bb.upperBand))", icon: "fibrechannel")
         if let divergence = bb.divergence, divergence != "none" {
@@ -161,7 +187,7 @@ struct ComparativeStatsPanel: View {
   private var maxVol: Double { max(1, stats.tokens.compactMap(\.volatility30dAnnualizedPct).max() ?? 1) }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 22) {
+    VStack(alignment: .leading, spacing: 28) {
       Text("Benchmark: \(stats.benchmarkSymbol.uppercased())").font(.caption).foregroundStyle(.secondary)
       AnalysisMetricSection(title: "Returns") {
         comparisonTable(first: "7d", second: "30d") { t in
@@ -169,7 +195,6 @@ struct ComparativeStatsPanel: View {
           meterCell(t.return30dPct, domain: -maxReturn...maxReturn, origin: 0)
         }
       }
-      Hairline()
       AnalysisMetricSection(title: "Risk vs \(stats.benchmarkSymbol.uppercased())") {
         comparisonTable(first: "Volatility", second: "Beta") { t in
           meterCell(t.volatility30dAnnualizedPct, domain: 0...maxVol, tint: .orange, signed: false)
@@ -179,11 +204,8 @@ struct ComparativeStatsPanel: View {
         Text("Beta: recent move per 1% benchmark move. Volatility is annualized from 30 days of daily returns.")
           .font(.caption).foregroundStyle(.secondary)
       }
-      Hairline()
       correlation
-      Hairline()
       indicators
-      Hairline()
       momentum
     }.accessibilityIdentifier("analysis-comparative-metrics")
   }

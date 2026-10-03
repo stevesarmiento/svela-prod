@@ -121,9 +121,13 @@ struct StreamingMarkdownText: View {
         flushPara(); flushBullets()
         let level = line.prefix(while: { $0 == "#" }).count
         out.append(.heading(level, inline(String(line.drop(while: { $0 == "#" || $0 == " " })))))
-      } else if line.hasPrefix("- ") || line.hasPrefix("* ") || isOrderedItem(line) {
+      } else if let title = boldLineTitle(line) {
+        // Reports title their sections with a bold line ("**Signal Hierarchy**"), not `#` headings.
+        flushPara(); flushBullets()
+        out.append(.heading(2, inline(title)))
+      } else if let item = bulletItem(line) {
         flushPara()
-        bullets.append(String(line.drop(while: { $0 == "-" || $0 == "*" || $0.isNumber || $0 == "." || $0 == " " })))
+        bullets.append(item)
       } else {
         flushBullets()
         para.append(line)
@@ -131,6 +135,16 @@ struct StreamingMarkdownText: View {
     }
     flushPara(); flushBullets()
     return out
+  }
+
+  /// The item text after one bullet marker ("- ", "* ", "• ", "– " or "1. "). Only the marker is
+  /// removed, so a bold label that follows it ("**Primary Signal**: …") keeps its asterisks.
+  private nonisolated static func bulletItem(_ line: String) -> String? {
+    for marker in ["- ", "* ", "• ", "– "] where line.hasPrefix(marker) {
+      return String(line.dropFirst(marker.count)).trimmingCharacters(in: .whitespaces)
+    }
+    guard isOrderedItem(line), let dot = line.firstIndex(of: ".") else { return nil }
+    return String(line[line.index(after: dot)...]).trimmingCharacters(in: .whitespaces)
   }
 
   /// `^\d+\.\s` without a regular expression per line.
@@ -142,8 +156,28 @@ struct StreamingMarkdownText: View {
     return next < line.endIndex && line[next].isWhitespace
   }
 
+  /// A line that is one bold run and nothing else (an optional trailing colon allowed).
+  private nonisolated static func boldLineTitle(_ line: String) -> String? {
+    guard line.hasPrefix("**"), line.count > 4 else { return nil }
+    var body = line.dropFirst(2)
+    if body.hasSuffix(":") { body = body.dropLast() }
+    guard body.hasSuffix("**") else { return nil }
+    body = body.dropLast(2)
+    if body.hasSuffix(":") { body = body.dropLast() }
+    guard !body.isEmpty, !body.contains("**") else { return nil }
+    return String(body)
+  }
+
   private nonisolated static func inline(_ s: String) -> AttributedString {
-    (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
+    guard var attributed = try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) else {
+      return AttributedString(s)
+    }
+    // Bold labels inside body copy carry the hierarchy (the web renders `strong` in white);
+    // an explicit color beats the half-opacity style the paragraph applies.
+    for run in attributed.runs where run.inlinePresentationIntent?.contains(.stronglyEmphasized) == true {
+      attributed[run.range].foregroundColor = StreamingMarkdownText.headingColor
+    }
+    return attributed
   }
 }
 

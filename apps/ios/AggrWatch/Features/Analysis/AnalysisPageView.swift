@@ -187,8 +187,8 @@ struct AnalysisReport: View {
   }
 }
 
-/// Fixed header: close control with the full-size logo (or stacked logos for a comparison), the
-/// name beside it, and the regenerate control trailing. Only its scrim follows the scroll, so
+/// Fixed header: close control with the full-size logo (stacked logos for a comparison, which
+/// shows no name), the name beside it, and the regenerate control trailing. Only its scrim follows the scroll, so
 /// content stays readable as it passes underneath.
 struct AnalysisPageHeader: View {
   let session: AnalysisSession
@@ -211,7 +211,7 @@ struct AnalysisPageHeader: View {
         Button(action: close) {
           Group {
             if session.isComparison {
-              TokenAvatarStack(items: items, maxVisible: 4, size: logoSize * 0.72, usesGlass: true)
+              TokenAvatarStack(items: items, maxVisible: 4, size: logoSize, usesGlass: true)
             } else {
               TokenLogo(symbol: items.first?.symbol ?? "", imageURL: items.first?.imageURL, size: logoSize)
                 .glassEffect(.regular.interactive(), in: .circle)
@@ -224,11 +224,12 @@ struct AnalysisPageHeader: View {
         .accessibilityLabel("Close analysis")
         .accessibilityIdentifier("analysis-page-close")
 
-        Text(title)
-          .font(.system(size: session.isComparison ? titleSize * 0.85 : titleSize, weight: .medium, design: .rounded))
-          .foregroundStyle(session.isComparison ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+        // A comparison is identified by its logos alone; one token also shows its name.
+        Text(session.isComparison ? "" : title)
+          .font(.system(size: titleSize, weight: .medium, design: .rounded))
           .lineLimit(1).minimumScaleFactor(0.65)
           .frame(maxWidth: .infinity, alignment: .leading)
+          .accessibilityLabel(title)
           .accessibilityIdentifier("analysis-header-name")
 
         Button(action: session.regenerate) {

@@ -413,7 +413,7 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertTrue(token.waitForExistence(timeout: 5)); token.swipeLeft()
     app.buttons["Analyze selected"].tap()
     let report = app.staticTexts["Market overview"]
-    let metrics = app.staticTexts["Market metrics"]
+    let metrics = app.descendants(matching: .any)["Market metrics"].firstMatch
     XCTAssertTrue(report.waitForExistence(timeout: 10))
     XCTAssertTrue(metrics.waitForExistence(timeout: 10))
     XCTAssertTrue(report.isHittable && metrics.isHittable)
@@ -444,21 +444,21 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertTrue(picker.waitForExistence(timeout: 5))
     XCTAssertGreaterThan(picker.frame.minY, chart.frame.maxY - 1, "The content switch sits under the chart")
     picker.buttons["Market data"].tap()
-    XCTAssertTrue(app.staticTexts["Market metrics"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.descendants(matching: .any)["Market metrics"].firstMatch.waitForExistence(timeout: 10))
     XCTAssertTrue(app.staticTexts["Current price"].exists)
     capture("Single analysis market metrics")
     let scroll = app.scrollViews["analysis-data-scroll"]
     for _ in 0..<5 {
-      if app.staticTexts["Technical indicators"].isHittable { break }
+      if app.descendants(matching: .any)["Technical indicators"].firstMatch.isHittable { break }
       scroll.swipeUp()
     }
-    XCTAssertTrue(app.staticTexts["Technical indicators"].isHittable)
+    XCTAssertTrue(app.descendants(matching: .any)["Technical indicators"].firstMatch.isHittable)
     capture("Single analysis technical indicators and meters")
     for _ in 0..<5 {
-      if app.staticTexts["Market structure"].isHittable { break }
+      if app.descendants(matching: .any)["Market structure"].firstMatch.isHittable { break }
       scroll.swipeUp()
     }
-    XCTAssertTrue(app.staticTexts["Market structure"].isHittable)
+    XCTAssertTrue(app.descendants(matching: .any)["Market structure"].firstMatch.isHittable)
     XCTAssertTrue(app.staticTexts["Open interest"].exists)
     XCTAssertTrue(app.staticTexts["Order flow"].exists)
     capture("Single analysis market structure")
@@ -488,26 +488,26 @@ final class WatchlistNavigationTests: XCTestCase {
     capture("Comparison analysis report and aligned chart")
     let picker = app.descendants(matching: .any)["analysis-content-picker"].firstMatch
     picker.buttons["Market data"].tap()
-    XCTAssertTrue(app.staticTexts["Returns"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.descendants(matching: .any)["Returns"].firstMatch.waitForExistence(timeout: 5))
     let scroll = app.scrollViews["analysis-data-scroll"]
     capture("Comparison analysis returns and risk meters")
     for _ in 0..<5 {
-      if app.staticTexts["Correlation · 30 days"].isHittable { break }
+      if app.descendants(matching: .any)["Correlation · 30 days"].firstMatch.isHittable { break }
       scroll.swipeUp()
     }
-    XCTAssertTrue(app.staticTexts["Correlation · 30 days"].isHittable)
+    XCTAssertTrue(app.descendants(matching: .any)["Correlation · 30 days"].firstMatch.isHittable)
     capture("Comparison analysis correlation matrix")
     for _ in 0..<6 {
-      if app.staticTexts["Indicators"].isHittable { break }
+      if app.descendants(matching: .any)["Indicators"].firstMatch.isHittable { break }
       scroll.swipeUp()
     }
-    XCTAssertTrue(app.staticTexts["Indicators"].isHittable)
+    XCTAssertTrue(app.descendants(matching: .any)["Indicators"].firstMatch.isHittable)
     capture("Comparison analysis indicator posture")
     for _ in 0..<8 {
-      if app.staticTexts["Momentum & flow"].isHittable { break }
+      if app.descendants(matching: .any)["Momentum & flow"].firstMatch.isHittable { break }
       scroll.swipeUp()
     }
-    XCTAssertTrue(app.staticTexts["Momentum & flow"].isHittable)
+    XCTAssertTrue(app.descendants(matching: .any)["Momentum & flow"].firstMatch.isHittable)
     XCTAssertTrue(app.staticTexts["Taker buy"].firstMatch.exists)
     capture("Comparison analysis momentum flow and excess returns")
     picker.buttons["Report"].tap()
