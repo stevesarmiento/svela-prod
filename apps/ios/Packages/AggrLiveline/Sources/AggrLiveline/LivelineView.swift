@@ -60,6 +60,12 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart {
   private var comparisonContainer: CALayer?
   private var comparisonLayers: [String: CAShapeLayer] = [:]
   private var comparisonLayout: LivelineLayout?
+  /// Scrub dimming on promoted comparisons: the same lines twice, one group masked to the left of
+  /// the finger at full opacity and one masked to the right at reduced opacity. A scrub frame then
+  /// moves two masks instead of re-stroking every series into the bitmap.
+  private var comparisonBright: CALayer?
+  private var comparisonDim: CALayer?
+  private var comparisonDimLayers: [String: CAShapeLayer] = [:]
   #if DEBUG
   private(set) var displayLinkStartCount = 0
   var hasActiveDisplayLink: Bool { displayLink != nil }
@@ -223,24 +229,31 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart {
     guard comparisonContainer != nil else { return }
     comparisonContainer?.removeFromSuperlayer()
     comparisonContainer = nil; comparisonLayers = [:]; comparisonLayout = nil
+    comparisonBright = nil; comparisonDim = nil; comparisonDimLayers = [:]
     settleFrames = max(1, settleFrames)
   }
 
   /// A settled comparison has static geometry. Keep its lines on individual
   /// compositor layers so selection fades change opacity without repainting
-  /// the entire chart. Scrubbing, data, and viewport changes use the renderer.
+  /// the entire chart, and so scrubbing only moves two masks (bright left of
+  /// the finger, dimmed right of it) while the bitmap repaints axes and the
+  /// crosshair. Data and viewport changes use the renderer.
+  ///
+  /// Returns true when the bitmap does not need repainting this frame.
   private func updateComparisonLayers(isAnimating: Bool) -> Bool {
     let config = engine.configuration
     guard let input = engine.input, !config.seriesLabels.isEmpty,
           !config.fill, !config.dot, !config.badge, !config.extrema,
           input.band == nil, input.volume.isEmpty, input.projectionID == nil,
-          input.state == .ready, engine.reveal == 1, engine.inspectionTime == nil else {
+          input.state == .ready, engine.reveal == 1 else {
       clearComparisonLayers(); return false
     }
+    let inspecting = engine.inspectionTime != nil || engine.scrubAmount > 0
     let layout = renderer.layout(size: bounds.size, engine: engine)
     if comparisonLayout != layout { clearComparisonLayers() }
     if comparisonContainer == nil {
-      guard !isAnimating else { return false }
+      // Scrub geometry is static, so promotion is safe mid-scrub; other animations wait.
+      guard !isAnimating || inspecting else { return false }
       let container = CALayer()
       container.frame = bounds
       if config.grid {
@@ -256,32 +269,59 @@ public final class LivelineChartView: UIView, @preconcurrency AXChart {
         container.mask = mask
       }
       CATransaction.begin(); CATransaction.setDisableActions(true)
+      let bright = CALayer(), dim = CALayer()
+      for group in [bright, dim] {
+        group.frame = bounds
+        let mask = CALayer(); mask.backgroundColor = UIColor.black.cgColor; mask.frame = bounds
+        group.mask = mask
+      }
+      dim.isHidden = true
       for series in input.series {
         guard let spline = engine.splines[series.id], spline.points.count >= 2 else { continue }
-        let line = CAShapeLayer()
-        line.frame = bounds
-        line.contentsScale = window?.screen.scale ?? contentScaleFactor
-        line.path = renderer.curve(spline, id: series.id, multiplier: series.multiplier,
+        let path = renderer.curve(spline, id: series.id, multiplier: series.multiplier,
                                   layout: layout, reveal: 1, elapsed: engine.elapsed)
-        line.fillColor = nil; line.strokeColor = series.color.uiColor.cgColor
-        line.lineWidth = series.width; line.lineCap = .round; line.lineJoin = .round
-        line.lineDashPattern = series.dash.map { NSNumber(value: $0) }
-        line.opacity = Float(engine.alpha[series.id] ?? series.targetOpacity)
-        container.addSublayer(line)
-        comparisonLayers[series.id] = line
+        for (group, store) in [(bright, true), (dim, false)] {
+          let line = CAShapeLayer()
+          line.frame = bounds
+          line.contentsScale = window?.screen.scale ?? contentScaleFactor
+          line.path = path
+          line.fillColor = nil; line.strokeColor = series.color.uiColor.cgColor
+          line.lineWidth = series.width; line.lineCap = .round; line.lineJoin = .round
+          line.lineDashPattern = series.dash.map { NSNumber(value: $0) }
+          line.opacity = Float(engine.alpha[series.id] ?? series.targetOpacity)
+          group.addSublayer(line)
+          if store { comparisonLayers[series.id] = line } else { comparisonDimLayers[series.id] = line }
+        }
       }
+      container.addSublayer(bright); container.addSublayer(dim)
       layer.addSublayer(container)
       comparisonContainer = container; comparisonLayout = layout
+      comparisonBright = bright; comparisonDim = dim
       CATransaction.commit()
       // Replace the old painted lines with an axes-only backing image once.
       return false
     }
     CATransaction.begin(); CATransaction.setDisableActions(true)
+    let dimFactor = Float(1 - engine.scrubAmount * 0.6)
     for series in input.series {
-      comparisonLayers[series.id]?.opacity = Float(engine.alpha[series.id] ?? series.targetOpacity)
+      let alpha = Float(engine.alpha[series.id] ?? series.targetOpacity)
+      comparisonLayers[series.id]?.opacity = alpha
+      comparisonDimLayers[series.id]?.opacity = alpha * dimFactor
+    }
+    // Mirror the renderer: right of the finger dims while a scrub is in progress.
+    if config.scrub, engine.scrubAmount > 0.01, let inspection = engine.inspectionTime {
+      let scrubX = layout.toX(inspection)
+      let left = layout.plot.minX - 2
+      comparisonBright?.mask?.frame = CGRect(x: left, y: 0, width: max(0, scrubX - left), height: bounds.height)
+      comparisonDim?.mask?.frame = CGRect(x: scrubX, y: 0, width: max(0, bounds.width - scrubX), height: bounds.height)
+      comparisonDim?.isHidden = false
+    } else {
+      comparisonBright?.mask?.frame = bounds
+      comparisonDim?.isHidden = true
     }
     CATransaction.commit()
-    return true
+    // The crosshair, highlight and readouts live in the bitmap: repaint it while inspecting.
+    return !inspecting
   }
   private var visible: Bool {
     guard active, let window, !isHidden, alpha > 0, bounds.width > 0, bounds.height > 0,

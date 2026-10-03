@@ -293,8 +293,11 @@ final class LivelineRenderer {
     }
     if fades, let gradient = Self.fadeGradient {
       // Destination-out preserves the glass/background behind the chart.
+      let bandEnd = plot.minX + min(40, plot.width * 0.12)
       ctx.saveGState(); ctx.setBlendMode(.destinationOut)
-      ctx.drawLinearGradient(gradient, start: CGPoint(x: plot.minX, y: 0), end: CGPoint(x: plot.minX + min(40, plot.width * 0.12), y: 0), options: [.drawsBeforeStartLocation])
+      // Only the band left of `bandEnd` changes; clipping keeps the shader off the rest of the plot.
+      ctx.clip(to: CGRect(x: 0, y: 0, width: bandEnd, height: size.height))
+      ctx.drawLinearGradient(gradient, start: CGPoint(x: plot.minX, y: 0), end: CGPoint(x: bandEnd, y: 0), options: [.drawsBeforeStartLocation])
       ctx.restoreGState()
     }
     if isolate { ctx.endTransparencyLayer() }

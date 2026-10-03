@@ -197,10 +197,11 @@ private actor OverviewRequestGate {
   #expect(chart.rasterDrawCount == draws)
   #expect(abs(chart.compositedOpacity(for: "token-0")! - 0.18) < 0.001)
   #expect(chart.compositedOpacity(for: "token-1") == 1)
-  // Inspection switches back to the full renderer, then data refresh restores layers.
+  // Inspection keeps the lines on their layers (a scrub only moves the bright/dim masks) while
+  // the bitmap repaints for the crosshair; a data refresh rebuilds the layers.
   chart.accessibilityDecrement()
   try await settle()
-  #expect(chart.compositedSeriesCount == 0)
+  #expect(chart.compositedSeriesCount == 40)
   #expect(chart.rasterDrawCount > draws)
   input.id = "watchlist-next-range"
   apply(); try await settle()

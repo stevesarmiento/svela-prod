@@ -108,7 +108,7 @@ struct WatchlistCardView: View {
 
       HStack(spacing: 8) {
         if coinsCount > 0 {
-          TokenAvatarStack(items: coins.prefix(3).map { .init(symbol: $0.symbol, imageURL: $0.image) }, maxVisible: 3, size: 18, usesGlass: true)
+          TokenAvatarStack(items: coins.prefix(3).map { .init(symbol: $0.symbol, imageURL: $0.image) }, maxVisible: 3, size: 18, usesGlass: false)
           if coinsCount > 3 {
             Text("+\(coinsCount - 3)").font(.caption2).foregroundStyle(.white.opacity(0.6))
           }

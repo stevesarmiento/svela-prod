@@ -42,7 +42,9 @@ final class LivelineRenderBuffer {
       bitsPerComponent: 8,
       bytesPerRow: pixelWidth * 4,
       space: Self.colorSpace,
-      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+      // BGRA premultiplied-first is Core Animation's native layout: `layer.contents` can use the
+      // image as-is instead of re-rendering every frame into its own backing store.
+      bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
     )
     contexts[current] = fresh
     return fresh
