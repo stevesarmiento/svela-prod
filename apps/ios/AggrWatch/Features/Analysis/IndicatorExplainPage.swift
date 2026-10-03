@@ -32,11 +32,29 @@ struct IndicatorExplainPage<ChartView: View, Badges: View>: View {
         header
         Text("\(title) · \(request.timeframe) timeframe")
           .font(.footnote).foregroundStyle(.secondary)
-        chart().clipShape(.rect(cornerRadius: Theme.Radius.sm))
+        // The chart spans the view like the analysis page's; chips and copy keep the page inset.
+        chart().padding(.horizontal, -16)
         ScrollView(.horizontal, showsIndicators: false) { HStack { badges() }.font(.caption).padding(.horizontal, 16) }
           .padding(.horizontal, -16)
           .horizontalEdgeFade(16)
-        Divider()
+        HStack(alignment: .center, spacing: 12) {
+          Text("Explanation").font(.title2.weight(.semibold)).foregroundStyle(.white).accessibilityAddTraits(.isHeader)
+          Spacer(minLength: 0)
+          Button { run() } label: {
+            Image("ActionAnalyze").renderingMode(.template).resizable().scaledToFit()
+              .frame(width: 14, height: 14)
+              .frame(width: 36, height: 36)
+              .contentShape(Rectangle())
+          }
+          .disabled(isLoading)
+          .accessibilityLabel("Regenerate")
+          .accessibilityIdentifier("indicator-regenerate")
+          .glassEffect(.regular.interactive(), in: .circle)
+          .buttonStyle(.plain)
+          .tint(.white)
+          .foregroundStyle(.white)
+        }
+        .padding(.top, 8)
         if let error {
           ContentUnavailableView("Couldn't explain", systemImage: "exclamationmark.triangle", description: Text(error))
         } else if isLoading && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -66,39 +84,34 @@ struct IndicatorExplainPage<ChartView: View, Badges: View>: View {
     .onDisappear { streamTask?.cancel(); chunks?.discard() }
   }
 
-  /// Logo close control, the indicator name, and the Regenerate capsule, in the token page's chrome.
+  /// The full-size token logo, the indicator name centered, and a close control trailing.
   private var pageBar: some View {
-    HStack(spacing: 12) {
-      Button(action: close) {
-        TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 20)
-          .glassEffect(.regular.interactive(), in: .circle)
-          .frame(width: Theme.hitTarget, height: Theme.hitTarget, alignment: .leading)
-          .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .accessibilityLabel("Close explanation")
-      .accessibilityIdentifier("indicator-page-close")
+    ZStack {
       Text(title)
-        .font(.system(.headline, design: .rounded, weight: .semibold))
+        .font(.system(.title3, design: .rounded, weight: .semibold))
         .lineLimit(1).minimumScaleFactor(0.7)
+        .padding(.horizontal, Theme.hitTarget + 20)
+        .frame(maxWidth: .infinity)
         .accessibilityAddTraits(.isHeader)
-      Spacer(minLength: 8)
-      Button { run() } label: {
-        Image("ActionAnalyze").renderingMode(.template).resizable().scaledToFit()
-          .frame(width: 16, height: 16)
-          .frame(width: Theme.hitTarget, height: Theme.hitTarget)
-          .contentShape(Rectangle())
+      HStack {
+        TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 44)
+          .glassEffect(.regular, in: .circle)
+          .accessibilityHidden(true)
+        Spacer(minLength: 8)
+        Button(action: close) {
+          Image(systemName: "xmark").font(.body.weight(.semibold))
+            .frame(width: Theme.hitTarget, height: Theme.hitTarget)
+            .contentShape(Rectangle())
+        }
+        .accessibilityLabel("Close explanation")
+        .accessibilityIdentifier("indicator-page-close")
+        .glassEffect(.regular.interactive(), in: .circle)
+        .buttonStyle(.plain)
+        .tint(.white)
+        .foregroundStyle(.white)
       }
-      .disabled(isLoading)
-      .accessibilityLabel("Regenerate")
-      .accessibilityIdentifier("indicator-regenerate")
-      .padding(.horizontal, 4)
-      .glassEffect(.regular.interactive(), in: .capsule)
-      .buttonStyle(.plain)
-      .tint(.white)
-      .foregroundStyle(.white)
     }
-    .padding(.horizontal, 20)
+    .padding(.horizontal, 16)
     .padding(.top, 8)
     .padding(.bottom, 12)
   }
