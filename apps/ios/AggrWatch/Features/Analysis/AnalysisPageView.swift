@@ -2,19 +2,19 @@ import AggrAPI
 import AggrCore
 import SwiftUI
 
-/// Full-page analysis with the token page's presentation: collapsing header, logo glow, pull handle.
-/// A phone shows one scroll with the chart, then a Report / Market data switch; a wide display shows
-/// the chart and market data as a sidebar beside the report.
+/// Full-page analysis with the token page's presentation: fixed header, logo glow, pull handle.
+/// A phone shows one scroll with a full-bleed chart, then Report / Market data tabs; a wide display
+/// shows the chart and market data as a sidebar beside the report.
 struct AnalysisPageView: View {
   let presentation: AnalysisPresentation
   let close: () -> Void
   @Environment(AppEnvironment.self) private var env
   @State private var session: AnalysisSession
   @State private var showMetrics = false
-  /// Scroll offset lives on an observable object read only by the header, so a scroll frame never
-  /// re-runs the page (and its Swift Charts). Mirrors `TokenPageChrome`.
+  /// Scroll offset lives on an observable object read only by the header's scrim, so a scroll
+  /// frame never re-runs the page (and its Swift Charts). Mirrors `TokenPageChrome`.
   @State private var chrome = AnalysisPageChrome()
-  @ScaledMetric(relativeTo: .title) private var headerHeight = 120.0
+  @ScaledMetric(relativeTo: .title) private var headerHeight = 72.0
 
   init(presentation: AnalysisPresentation, close: @escaping () -> Void) {
     self.presentation = presentation
@@ -52,15 +52,16 @@ struct AnalysisPageView: View {
 
   private var phone: some View {
     ScrollView {
-      VStack(spacing: 28) {
-        Color.clear.frame(height: headerHeight - 16)
-        chartCard
-        SegmentedGlassPicker(options: [false, true], label: { $0 ? "Market data" : "Report" }, selection: $showMetrics,
-                             accessibilityLabel: "Analysis content", accessibilityIdentifier: "analysis-content-picker",
-                             segmentWidth: 120)
-        if showMetrics { metrics } else { AnalysisReport(session: session) }
+      VStack(spacing: 24) {
+        Color.clear.frame(height: headerHeight - 12)
+        // The chart spans the view; its readout keeps the page inset.
+        chartSection(inset: 16)
+        UnderlineTabs(options: [false, true], label: { $0 ? "Market data" : "Report" }, selection: $showMetrics,
+                      accessibilityLabel: "Analysis content", accessibilityIdentifier: "analysis-content-picker")
+          .padding(.horizontal, 16)
+        Group { if showMetrics { metrics } else { AnalysisReport(session: session) } }
+          .padding(.horizontal, 16)
       }
-      .padding(.horizontal, 16)
       .padding(.bottom, 32)
     }
     .onScrollGeometryChange(for: CGFloat.self) { geometry in
@@ -76,7 +77,7 @@ struct AnalysisPageView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 28) {
           Color.clear.frame(height: headerHeight - 16)
-          chartCard
+          chartSection(inset: 0)
           Hairline()
           metrics
         }
@@ -87,7 +88,7 @@ struct AnalysisPageView: View {
       Hairline(axis: .vertical)
       ScrollView {
         VStack(spacing: 28) {
-          Color.clear.frame(height: headerHeight - 16)
+          Color.clear.frame(height: headerHeight - 4)
           AnalysisReport(session: session)
         }
         .padding(24)
@@ -102,30 +103,30 @@ struct AnalysisPageView: View {
     }
   }
 
-  private var chartCard: some View {
-    GlassCard {
-      VStack(alignment: .leading, spacing: 12) {
-        if session.isComparison {
-          if session.stats != nil {
-            AnalysisComparisonChart(lines: session.chartLines).equatable()
-          } else if session.isLoading {
-            RingLoader("\(session.readyCount) of \(session.requestedIds.count) tokens ready").frame(maxWidth: .infinity, minHeight: 220)
-          } else {
-            Text("Comparison chart unavailable").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
-          }
-          if !session.includedIds.isEmpty && session.includedIds.count < session.requestedIds.count {
-            Text("Comparing \(session.includedIds.count) of \(session.requestedIds.count) tokens. Unavailable: \(session.missingSymbols).")
-              .font(.caption).foregroundStyle(.orange)
-          }
-        } else if let priceData = session.priceData {
-          AnalysisPriceChart(model: priceData).equatable()
-        } else if session.chartFailed {
-          Text("Price chart unavailable").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
+  /// Chart content without a container. `inset` applies to the readout rows only, so the plot
+  /// itself runs edge to edge.
+  @ViewBuilder private func chartSection(inset: CGFloat) -> some View {
+    VStack(alignment: .leading, spacing: 12) {
+      if session.isComparison {
+        if session.stats != nil {
+          AnalysisComparisonChart(lines: session.chartLines, inset: inset).equatable()
+        } else if session.isLoading {
+          RingLoader("\(session.readyCount) of \(session.requestedIds.count) tokens ready").frame(maxWidth: .infinity, minHeight: 220)
         } else {
-          RingLoader("Loading price history").frame(maxWidth: .infinity, minHeight: 220)
+          Text("Comparison chart unavailable").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
         }
+        if !session.includedIds.isEmpty && session.includedIds.count < session.requestedIds.count {
+          Text("Comparing \(session.includedIds.count) of \(session.requestedIds.count) tokens. Unavailable: \(session.missingSymbols).")
+            .font(.caption).foregroundStyle(.orange)
+            .padding(.horizontal, inset)
+        }
+      } else if let priceData = session.priceData {
+        AnalysisPriceChart(model: priceData, inset: inset).equatable()
+      } else if session.chartFailed {
+        Text("Price chart unavailable").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
+      } else {
+        RingLoader("Loading price history").frame(maxWidth: .infinity, minHeight: 220)
       }
-      .padding(16)
     }
   }
 
@@ -170,7 +171,7 @@ struct AnalysisReport: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Text("Market overview").font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
+      Text("Market overview").font(.title2.weight(.semibold)).foregroundStyle(.white).accessibilityAddTraits(.isHeader)
       if session.isLoading && session.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
         MultiStepLoader(steps: session.steps, interval: .milliseconds(2200))
       } else if session.failed {
@@ -186,8 +187,9 @@ struct AnalysisReport: View {
   }
 }
 
-/// Close control, name line and date caption moving into a compact header as the page scrolls.
-/// One token shows its logo and name; a comparison shows the stacked logos and the symbols.
+/// Fixed header: close control with the full-size logo (or stacked logos for a comparison), the
+/// name beside it, and the regenerate control trailing. Only its scrim follows the scroll, so
+/// content stays readable as it passes underneath.
 struct AnalysisPageHeader: View {
   let session: AnalysisSession
   let chrome: AnalysisPageChrome
@@ -195,70 +197,39 @@ struct AnalysisPageHeader: View {
   let topInset: CGFloat
   let close: () -> Void
   @Environment(AppEnvironment.self) private var env
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @ScaledMetric(relativeTo: .title) private var titleSize = 20.0
+  @ScaledMetric(relativeTo: .title) private var titleSize = 22.0
+  @ScaledMetric(relativeTo: .title) private var logoSize = 44.0
 
   var body: some View {
     let quotes = session.requestedIds.map { env.watchlistData.quote($0) }
     let items = zip(session.requestedIds, quotes).map { TokenAvatarStack.Item(symbol: $1?.symbol ?? $0, imageURL: $1?.image) }
-    let textScale = expandedHeight / 120
-    let progress = min(1, max(0, chrome.scrollOffset / max(1, expandedHeight - 64 * textScale)))
-    // Direct manipulation has no trailing spring. Reduce Motion switches between the two layouts.
-    let p = reduceMotion ? (progress < 0.5 ? 0.0 : 1.0) : progress
+    let scrim = min(1, max(0, chrome.scrollOffset / 40))
     let title = session.isComparison
       ? items.map { $0.symbol.uppercased() }.joined(separator: " · ")
       : LogoOverrides.cleanTokenName(quotes.first??.name ?? session.requestedIds.first)
-    GeometryReader { geometry in
-      let width = geometry.size.width
-      // The avatar stack overlaps each logo by 30%, so its width grows 14pt per extra logo.
-      let controlWidth: CGFloat = session.isComparison ? 20 + 14 * CGFloat(max(0, min(items.count, 4) - 1)) : 20
-      let nameX = 20 + controlWidth * (1 + 1.2 * p) + 12
-      let nameAvailable = max(0, width - nameX - 100)
-      ZStack(alignment: .topLeading) {
-        // Tint the existing blurred backdrop without the gray lift of a system material.
-        Rectangle().fill(Color.black.opacity(0.8))
-          .frame(width: width, height: 80 * textScale + topInset)
-          .mask(LinearGradient(stops: [.init(color: .black, location: 0),
-                                       .init(color: .black, location: (topInset + 56 * textScale) / (topInset + 80 * textScale)),
-                                       .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
-          .offset(y: -topInset)
-          .opacity(progress)
-          .allowsHitTesting(false)
-
+    HStack(spacing: 12) {
         Button(action: close) {
           Group {
             if session.isComparison {
-              TokenAvatarStack(items: items, maxVisible: 4, size: 20, usesGlass: true)
+              TokenAvatarStack(items: items, maxVisible: 4, size: logoSize * 0.72, usesGlass: true)
             } else {
-              TokenLogo(symbol: items.first?.symbol ?? "", imageURL: items.first?.imageURL, size: 20)
+              TokenLogo(symbol: items.first?.symbol ?? "", imageURL: items.first?.imageURL, size: logoSize)
                 .glassEffect(.regular.interactive(), in: .circle)
             }
           }
-          .scaleEffect(1 + 1.2 * p, anchor: .leading)
-          .frame(height: Theme.hitTarget, alignment: .leading)
+          .frame(minWidth: Theme.hitTarget, minHeight: Theme.hitTarget, alignment: .leading)
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .offset(x: 20, y: 8 + 6 * p)
         .accessibilityLabel("Close analysis")
         .accessibilityIdentifier("analysis-page-close")
 
-        if p < 0.5 {
-          Text(title)
-            .font(.system(size: session.isComparison ? titleSize * 0.85 : titleSize, weight: .medium, design: .rounded))
-            .foregroundStyle(session.isComparison ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-            .lineLimit(1).minimumScaleFactor(0.65)
-            .frame(width: nameAvailable, alignment: .leading)
-            .offset(x: nameX, y: 18 * textScale)
-            .opacity(max(0, 1 - Double(p) * 2))
-            .accessibilityIdentifier("analysis-header-name")
-            .allowsHitTesting(false)
-          Text("Analysis as of \(session.analysisDate.formatted(date: .abbreviated, time: .shortened))")
-            .font(.caption).foregroundStyle(.secondary)
-            .offset(x: 20, y: 64 * textScale)
-            .opacity(max(0, 1 - Double(p) * 2))
-            .allowsHitTesting(false)
-        }
+        Text(title)
+          .font(.system(size: session.isComparison ? titleSize * 0.85 : titleSize, weight: .medium, design: .rounded))
+          .foregroundStyle(session.isComparison ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+          .lineLimit(1).minimumScaleFactor(0.65)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .accessibilityIdentifier("analysis-header-name")
 
         Button(action: session.regenerate) {
           Image(systemName: "arrow.clockwise").font(.title3.weight(.semibold))
@@ -273,10 +244,21 @@ struct AnalysisPageHeader: View {
         .buttonStyle(.plain)
         .tint(.white)
         .foregroundStyle(.white)
-        .frame(width: width - 32, alignment: .trailing)
-        .offset(x: 16, y: 8)
       }
-      .frame(width: width, height: geometry.size.height, alignment: .topLeading)
+    .padding(.horizontal, 16)
+    .padding(.top, 8)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .background(alignment: .top) {
+      // Tint the existing blurred backdrop without the gray lift of a system material. The scrim
+      // reaches up through the status bar and is layout-neutral, so the header keeps its height.
+      Rectangle().fill(Color.black.opacity(0.8))
+        .frame(height: expandedHeight + topInset + 16)
+        .mask(LinearGradient(stops: [.init(color: .black, location: 0),
+                                     .init(color: .black, location: 0.72),
+                                     .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
+        .offset(y: -topInset)
+        .opacity(scrim)
+        .allowsHitTesting(false)
     }
   }
 }
@@ -300,12 +282,10 @@ struct AnalysisPageHeader: View {
     }
   }
 }
-#Preview("Compact analysis header") {
+#Preview("Analysis header") {
   PreviewHost(navigation: false) { _ in
-    let chrome = AnalysisPageChrome()
-    let _ = { chrome.scrollOffset = 160 }()
-    AnalysisPageHeader(session: AnalysisSession(coinIds: ["bitcoin"]), chrome: chrome, expandedHeight: 120, topInset: 0, close: {})
-      .frame(height: 120)
+    AnalysisPageHeader(session: AnalysisSession(coinIds: ["bitcoin"]), chrome: AnalysisPageChrome(), expandedHeight: 72, topInset: 0, close: {})
+      .frame(height: 72)
   }
 }
 #endif

@@ -418,7 +418,7 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertTrue(metrics.waitForExistence(timeout: 10))
     XCTAssertTrue(report.isHittable && metrics.isHittable)
     XCTAssertLessThan(metrics.frame.maxX, report.frame.minX)
-    XCTAssertFalse(app.segmentedControls["analysis-content-picker"].exists)
+    XCTAssertFalse(app.descendants(matching: .any)["analysis-content-picker"].firstMatch.exists)
     capture("Wide analysis sidebar and report")
     app.buttons["analysis-page-close"].tap()
   }
@@ -440,7 +440,7 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertFalse(app.staticTexts["Deep Analysis"].exists)
     XCTAssertTrue(app.buttons["analysis-page-close"].exists)
     capture("Single analysis report and price-volume-Hull chart")
-    let picker = app.segmentedControls["analysis-content-picker"]
+    let picker = app.descendants(matching: .any)["analysis-content-picker"].firstMatch
     XCTAssertTrue(picker.waitForExistence(timeout: 5))
     XCTAssertGreaterThan(picker.frame.minY, chart.frame.maxY - 1, "The content switch sits under the chart")
     picker.buttons["Market data"].tap()
@@ -486,7 +486,7 @@ final class WatchlistNavigationTests: XCTestCase {
     XCTAssertTrue(app.descendants(matching: .any)["analysis-comparison-chart"].firstMatch.waitForExistence(timeout: 15))
     XCTAssertFalse(app.staticTexts["Not enough overlapping history to chart these tokens."].exists)
     capture("Comparison analysis report and aligned chart")
-    let picker = app.segmentedControls["analysis-content-picker"]
+    let picker = app.descendants(matching: .any)["analysis-content-picker"].firstMatch
     picker.buttons["Market data"].tap()
     XCTAssertTrue(app.staticTexts["Returns"].waitForExistence(timeout: 5))
     let scroll = app.scrollViews["analysis-data-scroll"]

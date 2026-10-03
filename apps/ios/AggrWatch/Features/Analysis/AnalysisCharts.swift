@@ -30,6 +30,8 @@ struct AnalysisPriceChart: View, Equatable {
     }
   }
   let model: Model
+  /// Horizontal inset for the readout row; the plot itself spans the full width.
+  var inset: CGFloat = 0
   @State private var selectedDate: Date?
   private var prices: [TimePoint] { model.prices }
 
@@ -43,7 +45,7 @@ struct AnalysisPriceChart: View, Equatable {
     return (value / base - 1) * 100
   }
 
-  static func == (a: Self, b: Self) -> Bool { a.model == b.model }
+  static func == (a: Self, b: Self) -> Bool { a.model == b.model && a.inset == b.inset }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -56,6 +58,7 @@ struct AnalysisPriceChart: View, Equatable {
         PercentBadge(pct: change, compact: true)
         Spacer(minLength: 0)
       }
+      .padding(.horizontal, inset)
       if prices.count >= 2 { plot }
       else { Text("No price history available").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 220) }
     }
@@ -94,6 +97,8 @@ struct AnalysisPriceChart: View, Equatable {
 
 struct AnalysisComparisonChart: View, Equatable {
   let lines: [AnalysisChartSeries.Line]
+  /// Horizontal inset for the legend row; the plot itself spans the full width.
+  var inset: CGFloat = 0
   @State private var selectedDate: Date?
 
   /// Lines are time-aligned and sorted, so the inspected point is a binary search per line.
@@ -104,7 +109,7 @@ struct AnalysisComparisonChart: View, Equatable {
   private static let colors = ChartColors.pastel.map { Color(oklch: $0) }
   private func color(_ index: Int) -> Color { Self.colors[index % Self.colors.count] }
 
-  static func == (a: Self, b: Self) -> Bool { a.lines == b.lines }
+  static func == (a: Self, b: Self) -> Bool { a.lines == b.lines && a.inset == b.inset }
 
   var body: some View {
     // One lookup per line per body, shared by the legend and the selection marks.
@@ -119,6 +124,7 @@ struct AnalysisComparisonChart: View, Equatable {
           }.font(.number(.subheadline, weight: .regular))
         }
       }
+      .padding(.horizontal, inset)
       if lines.count >= 2 {
         Chart {
           RuleMark(y: .value("Baseline", 0)).foregroundStyle(Color.white.opacity(0.1)).lineStyle(.init(dash: [3, 3]))

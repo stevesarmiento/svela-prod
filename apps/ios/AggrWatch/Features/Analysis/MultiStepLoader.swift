@@ -46,6 +46,10 @@ struct MultiStepLoader: View {
 struct StreamingMarkdownText: View {
   let text: String
   @State private var parser = StreamingMarkdownParser()
+  /// Headings carry the structure in full white; body copy sits back at half opacity.
+  static let headingColor = Color.white
+  static let bodyColor = Color.white.opacity(0.5)
+  static let bulletColor = Color.white.opacity(0.3)
 
   var body: some View {
     let blocks = parser.blocks(for: text)
@@ -53,18 +57,20 @@ struct StreamingMarkdownText: View {
       ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
         switch block {
         case .heading(let level, let s):
-          Text(s).font(level <= 2 ? .title3.weight(.semibold) : .headline).padding(.top, 8)
+          Text(s).font(level <= 2 ? .title3.weight(.semibold) : .headline)
+            .foregroundStyle(Self.headingColor)
+            .padding(.top, 8)
         case .bullet(let items):
           VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
               HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("•").foregroundStyle(.secondary)
-                Text(item).lineSpacing(5)
+                Text("•").foregroundStyle(Self.bulletColor)
+                Text(item).lineSpacing(5).foregroundStyle(Self.bodyColor)
               }
             }
           }
         case .paragraph(let s):
-          Text(s).lineSpacing(5)
+          Text(s).lineSpacing(5).foregroundStyle(Self.bodyColor)
         }
       }
     }
