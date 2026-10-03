@@ -2,7 +2,7 @@ import AggrAPI
 import AggrCore
 import SwiftUI
 
-/// Port of `indicator-explain-dialog.tsx`: quote header, the same indicator chart, live stat chips, and the
+/// Port of `indicator-explain-dialog.tsx`: price in the header, the same indicator chart, live stat chips, and the
 /// streamed `/api/analyze-indicator` explanation with the multi-step loader while nothing has arrived.
 /// Presented as a full-screen page over the token page, with its close control and pull-to-dismiss.
 struct IndicatorExplainPage<ChartView: View, Badges: View>: View {
@@ -29,9 +29,6 @@ struct IndicatorExplainPage<ChartView: View, Badges: View>: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 16) {
-        header
-        Text("\(title) · \(request.timeframe) timeframe")
-          .font(.footnote).foregroundStyle(.secondary)
         // The chart spans the view like the analysis page's; chips and copy keep the page inset.
         chart().padding(.horizontal, -16)
         ScrollView(.horizontal, showsIndicators: false) { HStack { badges() }.font(.caption).padding(.horizontal, 16) }
@@ -84,62 +81,48 @@ struct IndicatorExplainPage<ChartView: View, Badges: View>: View {
     .onDisappear { streamTask?.cancel(); chunks?.discard() }
   }
 
-  /// The full-size token logo, the indicator name centered, and a close control trailing.
+  /// The full-size token logo with the price and 24h change beside it, and a close control trailing.
   private var pageBar: some View {
-    ZStack {
-      Text(title)
-        .font(.system(.title3, design: .rounded, weight: .semibold))
-        .lineLimit(1).minimumScaleFactor(0.7)
-        .padding(.horizontal, Theme.hitTarget + 20)
-        .frame(maxWidth: .infinity)
-        .accessibilityAddTraits(.isHeader)
-      HStack {
-        TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 44)
-          .glassEffect(.regular, in: .circle)
-          .accessibilityHidden(true)
-        Spacer(minLength: 8)
-        Button(action: close) {
-          Image(systemName: "xmark").font(.body.weight(.semibold))
-            .frame(width: Theme.hitTarget, height: Theme.hitTarget)
-            .contentShape(Rectangle())
+    let change = request.marketContext.change24hPct ?? quote?.priceChangePercentage24h
+    return HStack(spacing: 12) {
+      TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 44)
+        .glassEffect(.regular, in: .circle)
+        .accessibilityHidden(true)
+      VStack(alignment: .leading, spacing: 2) {
+        if let price = request.marketContext.priceUsd ?? quote?.currentPrice, price > 0 {
+          Text(UsdFormat.price(price)).font(.number(.title3, weight: .bold))
+            .contentTransition(.numericText()).lineLimit(1).minimumScaleFactor(0.6)
         }
-        .accessibilityLabel("Close explanation")
-        .accessibilityIdentifier("indicator-page-close")
-        .glassEffect(.regular.interactive(), in: .circle)
-        .buttonStyle(.plain)
-        .tint(.white)
-        .foregroundStyle(.white)
+        HStack(spacing: 5) {
+          if let change, change.isFinite {
+            Image(systemName: change >= 0 ? "arrow.up.right" : "arrow.down.right").font(.system(size: 10, weight: .bold))
+            Text(String(format: "%.2f%%", abs(change)))
+            Text("24h").foregroundStyle(.secondary).fontWeight(.regular)
+          } else {
+            Text("N/A").foregroundStyle(.secondary)
+          }
+        }
+        .font(.number(.footnote, weight: .bold))
+        .foregroundStyle((change ?? 0) >= 0 ? Color.gainGreen : Color.lossRed)
       }
+      .accessibilityElement(children: .combine)
+      .accessibilityLabel("\(displayName) price")
+      Spacer(minLength: 8)
+      Button(action: close) {
+        Image(systemName: "xmark").font(.body.weight(.semibold))
+          .frame(width: Theme.hitTarget, height: Theme.hitTarget)
+          .contentShape(Rectangle())
+      }
+      .accessibilityLabel("Close \(title) explanation")
+      .accessibilityIdentifier("indicator-page-close")
+      .glassEffect(.regular.interactive(), in: .circle)
+      .buttonStyle(.plain)
+      .tint(.white)
+      .foregroundStyle(.white)
     }
     .padding(.horizontal, 16)
     .padding(.top, 8)
     .padding(.bottom, 12)
-  }
-
-  private var header: some View {
-    let name = displayName
-    let change = request.marketContext.change24hPct ?? quote?.priceChangePercentage24h
-    return VStack(alignment: .leading, spacing: 4) {
-      HStack(spacing: 8) {
-        TokenLogo(symbol: quote?.symbol ?? coinId, imageURL: quote?.image, size: 20)
-        Text(name).font(.subheadline.weight(.bold))
-        Text("is currently").font(.subheadline).foregroundStyle(.secondary)
-      }
-      if let price = request.marketContext.priceUsd ?? quote?.currentPrice, price > 0 {
-        Text(UsdFormat.price(price)).font(.number(size: 30, weight: .bold)).contentTransition(.numericText()).lineLimit(1).minimumScaleFactor(0.6)
-      }
-      HStack(spacing: 6) {
-        if let change, change.isFinite {
-          Image(systemName: change >= 0 ? "arrow.up.right" : "arrow.down.right").font(.system(size: 9, weight: .bold))
-          Text(String(format: "%.2f%%", abs(change)))
-          Text("24h").foregroundStyle(.secondary).fontWeight(.regular)
-        } else {
-          Text("N/A").foregroundStyle(.secondary)
-        }
-      }
-      .font(.number(.caption, weight: .bold))
-      .foregroundStyle((change ?? 0) >= 0 ? Color.gainGreen : Color.lossRed)
-    }
   }
 
   /// `resolveExplainDisplayName`
