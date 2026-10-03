@@ -106,10 +106,10 @@ struct ProfileCardView: View {
       .frame(width: 56, height: 56).clipShape(.circle)
       VStack(alignment: .leading, spacing: 3) {
         Text(name).font(.headline)
-        if let email { Text(email).font(.caption).foregroundStyle(.secondary) }
+        if let email { Text(email).font(.footnote).foregroundStyle(.secondary) }
         HStack(spacing: 8) {
           Text(Self.memberId(seed: user?.id ?? "anonymous")).font(.number(.caption2, weight: .regular))
-          if let d = user?.createdAt { Text("Issued \(d.formatted(.dateTime.month(.abbreviated).day(.twoDigits).year()))").font(.caption2).foregroundStyle(.secondary) }
+          if let d = user?.createdAt { Text("Issued \(d.formatted(.dateTime.month(.abbreviated).day(.twoDigits).year()))").font(.footnote).foregroundStyle(.secondary) }
         }
       }
       Spacer()

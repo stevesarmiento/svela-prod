@@ -46,7 +46,7 @@ struct PriceChartCard: View {
       if store.error != nil {
         HStack(spacing: 8) {
           Text(store.hasObservedHistory ? "Couldn’t refresh chart" : "Price history unavailable")
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.footnote).foregroundStyle(.secondary)
           Button("Retry") { Task { await store.load(force: true) } }
             .font(.caption.weight(.semibold)).buttonStyle(.glass).controlSize(.small)
         }

@@ -156,7 +156,7 @@ struct SelectionNavigationModifier: ViewModifier {
             .transition(SelectionMotion.disclose(anchor: .bottom, edge: .bottom, reduceMotion: reduceMotion))
             if !env.selection.canAnalyze && !env.selection.isRemoving {
               Text("Select up to \(SelectionStore.maxAnalyzeTokens) different tokens to analyze.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.footnote).foregroundStyle(.secondary)
                 .padding(.horizontal, 20)
                 .transition(.opacity)
             }

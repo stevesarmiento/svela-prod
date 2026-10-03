@@ -113,17 +113,17 @@ struct AnalysisPageView: View {
         } else if session.isLoading {
           RingLoader("\(session.readyCount) of \(session.requestedIds.count) tokens ready").frame(maxWidth: .infinity, minHeight: 220)
         } else {
-          Text("Comparison chart unavailable").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
+          Text("Comparison chart unavailable").font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
         }
         if !session.includedIds.isEmpty && session.includedIds.count < session.requestedIds.count {
           Text("Comparing \(session.includedIds.count) of \(session.requestedIds.count) tokens. Unavailable: \(session.missingSymbols).")
-            .font(.caption).foregroundStyle(.orange)
+            .font(.footnote).foregroundStyle(.orange)
             .padding(.horizontal, inset)
         }
       } else if let priceData = session.priceData {
         AnalysisPriceChart(model: priceData, inset: inset).equatable()
       } else if session.chartFailed {
-        Text("Price chart unavailable").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
+        Text("Price chart unavailable").font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
       } else {
         RingLoader("Loading price history").frame(maxWidth: .infinity, minHeight: 220)
       }
@@ -170,25 +170,40 @@ struct AnalysisReport: View {
   let session: AnalysisSession
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text("Market overview").font(.title2.weight(.semibold)).foregroundStyle(.white).accessibilityAddTraits(.isHeader)
+    VStack(alignment: .leading, spacing: 20) {
+      HStack(alignment: .center, spacing: 12) {
+        Text("Market overview").font(.title2.weight(.semibold)).foregroundStyle(.white).accessibilityAddTraits(.isHeader)
+        Spacer(minLength: 0)
+        Button(action: session.regenerate) {
+          Image(systemName: "arrow.clockwise").font(.subheadline.weight(.semibold))
+            .frame(width: 36, height: 36)
+            .contentShape(Rectangle())
+        }
+        .disabled(session.isLoading)
+        .accessibilityLabel("Regenerate")
+        .accessibilityIdentifier("analysis-regenerate")
+        .glassEffect(.regular.interactive(), in: .circle)
+        .buttonStyle(.plain)
+        .tint(.white)
+        .foregroundStyle(.white)
+      }
       if session.isLoading && session.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
         MultiStepLoader(steps: session.steps, interval: .milliseconds(2200))
       } else if session.failed {
         Label("Analysis unavailable", systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
-        Text(session.text).foregroundStyle(.secondary)
+        Text(session.text).font(.body).lineSpacing(3).foregroundStyle(.secondary)
       } else {
         StreamingMarkdownText(text: session.text)
-        if session.isLoading { RingLoader("Writing analysis…", size: .small).font(.caption) }
-        else if !session.text.isEmpty { Text("AI-generated. Not financial advice.").font(.caption2).foregroundStyle(.tertiary) }
+        if session.isLoading { RingLoader("Writing analysis…", size: .small).font(.footnote) }
+        else if !session.text.isEmpty { Text("AI-generated. Not financial advice.").font(.footnote).foregroundStyle(.tertiary) }
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 
-/// Fixed header: close control with the full-size logo (stacked logos for a comparison, which
-/// shows no name), the name beside it, and the regenerate control trailing. Only its scrim follows the scroll, so
+/// Fixed header: the full-size logo (stacked logos for a comparison, which shows no name), the
+/// name beside it, and a close control trailing. Only its scrim follows the scroll, so
 /// content stays readable as it passes underneath.
 struct AnalysisPageHeader: View {
   let session: AnalysisSession
@@ -208,21 +223,16 @@ struct AnalysisPageHeader: View {
       ? items.map { $0.symbol.uppercased() }.joined(separator: " · ")
       : LogoOverrides.cleanTokenName(quotes.first??.name ?? session.requestedIds.first)
     HStack(spacing: 12) {
-        Button(action: close) {
-          Group {
-            if session.isComparison {
-              TokenAvatarStack(items: items, maxVisible: 4, size: logoSize, usesGlass: true)
-            } else {
-              TokenLogo(symbol: items.first?.symbol ?? "", imageURL: items.first?.imageURL, size: logoSize)
-                .glassEffect(.regular.interactive(), in: .circle)
-            }
+        Group {
+          if session.isComparison {
+            TokenAvatarStack(items: items, maxVisible: 4, size: logoSize, usesGlass: true)
+          } else {
+            TokenLogo(symbol: items.first?.symbol ?? "", imageURL: items.first?.imageURL, size: logoSize)
+              .glassEffect(.regular, in: .circle)
           }
-          .frame(minWidth: Theme.hitTarget, minHeight: Theme.hitTarget, alignment: .leading)
-          .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Close analysis")
-        .accessibilityIdentifier("analysis-page-close")
+        .frame(minHeight: Theme.hitTarget, alignment: .leading)
+        .accessibilityHidden(true)
 
         // A comparison is identified by its logos alone; one token also shows its name.
         Text(session.isComparison ? "" : title)
@@ -232,16 +242,14 @@ struct AnalysisPageHeader: View {
           .accessibilityLabel(title)
           .accessibilityIdentifier("analysis-header-name")
 
-        Button(action: session.regenerate) {
-          Image(systemName: "arrow.clockwise").font(.title3.weight(.semibold))
+        Button(action: close) {
+          Image(systemName: "xmark").font(.body.weight(.semibold))
             .frame(width: Theme.hitTarget, height: Theme.hitTarget)
             .contentShape(Rectangle())
         }
-        .disabled(session.isLoading)
-        .accessibilityLabel("Regenerate")
-        .accessibilityIdentifier("analysis-regenerate")
-        .padding(.horizontal, 4)
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .accessibilityLabel("Close analysis")
+        .accessibilityIdentifier("analysis-page-close")
+        .glassEffect(.regular.interactive(), in: .circle)
         .buttonStyle(.plain)
         .tint(.white)
         .foregroundStyle(.white)

@@ -110,13 +110,13 @@ struct PortfolioValueCard: View {
       if let error = store.marketError {
         VStack(alignment: .leading, spacing: 6) {
           Text("Couldn’t refresh total market cap: \(error)")
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.footnote).foregroundStyle(.secondary)
           Button("Retry market data") { Task { await store.loadSeries(force: true) } }.buttonStyle(.glass)
-            .font(.caption)
+            .font(.footnote)
         }
       } else if !store.marketLoading && store.marketSeries.isEmpty && !portfolio.isEmpty {
         Button("Retry market data") { Task { await store.loadSeries(force: true) } }.buttonStyle(.glass)
-          .font(.caption)
+          .font(.footnote)
       }
       TimeScalePicker(scales: TimeScale.overviewScales, selection: $store.scale)
         .padding(.top, 4)
@@ -134,12 +134,12 @@ private struct PortfolioValueReadout: View {
     VStack(alignment: .leading, spacing: 6) {
       Text("Your holdings").font(.subheadline).foregroundStyle(.secondary)
       AnimatedNumber(value: store.displayValueUsd, font: .number(size: 30))
-      if let note = store.coverageNote { Text(note).font(.caption).foregroundStyle(.secondary) }
+      if let note = store.coverageNote { Text(note).font(.footnote).foregroundStyle(.secondary) }
       if store.hasHoldings, range.isAvailable {
         MoveWithBadge(usdMove: range.deltaUsd, pct: range.deltaPct)
       }
       if store.hasHoldings, let note = store.chartNote {
-        Text(note).font(.caption2).foregroundStyle(.secondary)
+        Text(note).font(.footnote).foregroundStyle(.secondary)
       }
     }
   }
@@ -169,7 +169,7 @@ struct BreadthCard: View {
         HStack { ForEach(0..<4, id: \.self) { _ in SkeletonBlock(height: 28) } }
       }
       if !store.hasHoldings {
-        Text("Add a quantity to any watchlist coin to see your holdings value here.").font(.caption).foregroundStyle(.secondary)
+        Text("Add a quantity to any watchlist coin to see your holdings value here.").font(.footnote).foregroundStyle(.secondary)
       }
     }
     .padding(.vertical, 14)
@@ -228,7 +228,7 @@ struct EventsFeedList: View {
     let groups = store.newsGroups
     LazyVStack(alignment: .leading, spacing: 12) {
       if groups.isEmpty {
-        Text("No recent news yet.").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 4)
+        Text("No recent news yet.").font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 4)
       } else {
         ForEach(groups) { group in
           Text(group.label).font(.title3.weight(.bold)).padding(.top, 6)
@@ -275,7 +275,7 @@ struct EventCard: View {
         }
         Spacer()
         HStack(spacing: 6) {
-          RelativeTimeText(ms: event.occurredAtMs).font(.caption2.monospacedDigit()).foregroundStyle(.tertiary)
+          RelativeTimeText(ms: event.occurredAtMs).font(.footnote.monospacedDigit()).foregroundStyle(.tertiary)
           if let href = event.externalHref, let url = URL(string: href) {
             Button { openURL(url) } label: { Image(systemName: "eyeglasses").font(.caption) }.buttonStyle(.plain).foregroundStyle(.secondary)
           }

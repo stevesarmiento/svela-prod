@@ -50,27 +50,30 @@ struct StreamingMarkdownText: View {
   static let headingColor = Color.white
   static let bodyColor = Color.white.opacity(0.5)
   static let bulletColor = Color.white.opacity(0.3)
+  /// `.body` is 17pt on a 22pt line; three extra points give the 25pt reading rhythm.
+  static let lineSpacing: CGFloat = 3
 
   var body: some View {
     let blocks = parser.blocks(for: text)
-    VStack(alignment: .leading, spacing: 12) {
+    // 17pt regular body on a ~25pt line, paragraphs separated clearly, headings at 20pt.
+    VStack(alignment: .leading, spacing: 14) {
       ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
         switch block {
         case .heading(let level, let s):
           Text(s).font(level <= 2 ? .title3.weight(.semibold) : .headline)
             .foregroundStyle(Self.headingColor)
-            .padding(.top, 8)
+            .padding(.top, 10)
         case .bullet(let items):
-          VStack(alignment: .leading, spacing: 6) {
+          VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-              HStack(alignment: .firstTextBaseline, spacing: 8) {
+              HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Text("•").foregroundStyle(Self.bulletColor)
-                Text(item).lineSpacing(5).foregroundStyle(Self.bodyColor)
+                Text(item).lineSpacing(Self.lineSpacing).foregroundStyle(Self.bodyColor)
               }
             }
           }
         case .paragraph(let s):
-          Text(s).lineSpacing(5).foregroundStyle(Self.bodyColor)
+          Text(s).lineSpacing(Self.lineSpacing).foregroundStyle(Self.bodyColor)
         }
       }
     }

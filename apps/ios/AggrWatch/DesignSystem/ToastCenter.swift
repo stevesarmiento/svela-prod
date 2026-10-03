@@ -69,7 +69,7 @@ struct ToastOverlay: View {
           VStack(alignment: .leading, spacing: 1) {
             Text(toast.title).font(.subheadline.weight(.semibold))
             if let description = toast.description {
-              Text(description).font(.caption).foregroundStyle(.secondary)
+              Text(description).font(.footnote).foregroundStyle(.secondary)
             }
           }
           if let action = toast.action {

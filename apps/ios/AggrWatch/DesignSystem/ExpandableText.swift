@@ -95,7 +95,7 @@ struct ExpandableText: View {
   private func body(lineLimit: Int?) -> some View {
     Text(text)
       .font(.body)
-      .lineSpacing(5)
+      .lineSpacing(3)
       .foregroundStyle(Theme.secondaryText)
       .lineLimit(lineLimit)
       .frame(maxWidth: .infinity, alignment: .leading)

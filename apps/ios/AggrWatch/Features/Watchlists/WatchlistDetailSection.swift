@@ -39,7 +39,7 @@ struct GroupAggregateCard: View {
     let change = points.last?.value
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text("Equal-weight return · \(scale.label)").font(.caption).foregroundStyle(.secondary)
+        Text("Equal-weight return · \(scale.label)").font(.footnote).foregroundStyle(.secondary)
         Spacer()
         if let change { PercentBadge(pct: change) } else if loading { RingLoader(size: .small, tint: .secondary) } else { Text("—").foregroundStyle(.secondary) }
       }

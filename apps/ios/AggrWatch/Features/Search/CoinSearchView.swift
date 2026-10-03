@@ -150,12 +150,12 @@ struct CoinSearchView: View {
           VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
               Text(coin.symbol.uppercased()).font(.subheadline.weight(.semibold))
-              if let r = coin.marketCapRank, r > 0 { Text("#\(r)").font(.caption2).foregroundStyle(.secondary) }
+              if let r = coin.marketCapRank, r > 0 { Text("#\(r)").font(.caption).foregroundStyle(.secondary) }
               if inTarget {
                 Image(systemName: "bookmark.fill").font(.caption2).foregroundStyle(Color.accentColor)
               }
             }
-            Text(LogoOverrides.cleanTokenName(coin.name)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            Text(LogoOverrides.cleanTokenName(coin.name)).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
           }
           Spacer()
           VStack(alignment: .trailing, spacing: 3) {

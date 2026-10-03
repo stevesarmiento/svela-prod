@@ -43,7 +43,7 @@ struct MarketFeedSheet: View {
       }
       .safeAreaInset(edge: .bottom) {
         if let err = store.refreshError {
-          Text(err).font(.caption).foregroundStyle(.secondary).padding(8).frame(maxWidth: .infinity).background(.bar)
+          Text(err).font(.footnote).foregroundStyle(.secondary).padding(8).frame(maxWidth: .infinity).background(.bar)
         }
       }
     }
@@ -60,10 +60,10 @@ struct MarketFeedSheet: View {
       VStack(alignment: .leading, spacing: 6) {
         Text(a.title).font(.subheadline.weight(.medium)).foregroundStyle(.primary).multilineTextAlignment(.leading).lineLimit(3)
         HStack(spacing: 8) {
-          Text(FeedHelpers.relativeTime(ms: a.postedAtMs, nowMs: Date().timeIntervalSince1970 * 1000)).font(.caption2).foregroundStyle(.secondary)
+          Text(FeedHelpers.relativeTime(ms: a.postedAtMs, nowMs: Date().timeIntervalSince1970 * 1000)).font(.footnote).foregroundStyle(.secondary)
           sentimentBadge(a)
           if let src = a.sourceName, !src.isEmpty {
-            Text(src).font(.caption2).foregroundStyle(.secondary).padding(.horizontal, 6).padding(.vertical, 2).background(Theme.surface, in: .capsule)
+            Text(src).font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 6).padding(.vertical, 2).background(Theme.surface, in: .capsule)
           }
           Spacer()
           Image(systemName: "arrow.up.right").font(.caption2).foregroundStyle(.tertiary)
@@ -77,16 +77,16 @@ struct MarketFeedSheet: View {
   @ViewBuilder private func sentimentBadge(_ a: NewsArticle) -> some View {
     switch a.sentiment {
     case .bullish?:
-      Label("Bullish", systemImage: "thermometer.sun").font(.caption2).foregroundStyle(Color.gainGreen)
+      Label("Bullish", systemImage: "thermometer.sun").font(.footnote).foregroundStyle(Color.gainGreen)
         .padding(.horizontal, 6).padding(.vertical, 2).background(Color.gainGreen.opacity(0.12), in: .capsule)
     case .bearish?:
-      Label("Bearish", systemImage: "thermometer.snowflake").font(.caption2).foregroundStyle(Color.lossRed)
+      Label("Bearish", systemImage: "thermometer.snowflake").font(.footnote).foregroundStyle(Color.lossRed)
         .padding(.horizontal, 6).padding(.vertical, 2).background(Color.lossRed.opacity(0.12), in: .capsule)
     case .neutral?:
-      Label("Neutral", systemImage: "thermometer.low").font(.caption2).foregroundStyle(.secondary)
+      Label("Neutral", systemImage: "thermometer.low").font(.footnote).foregroundStyle(.secondary)
         .padding(.horizontal, 6).padding(.vertical, 2).background(Theme.surface, in: .capsule)
     case nil:
-      Label("Analyzing", systemImage: "arrow.turn.down.right").font(.caption2).foregroundStyle(.secondary).symbolEffect(.pulse)
+      Label("Analyzing", systemImage: "arrow.turn.down.right").font(.footnote).foregroundStyle(.secondary).symbolEffect(.pulse)
         .padding(.horizontal, 6).padding(.vertical, 2).background(Theme.surface, in: .capsule)
     }
   }

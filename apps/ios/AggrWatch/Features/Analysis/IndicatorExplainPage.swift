@@ -31,7 +31,7 @@ struct IndicatorExplainPage<ChartView: View, Badges: View>: View {
       VStack(alignment: .leading, spacing: 16) {
         header
         Text("\(title) · \(request.timeframe) timeframe")
-          .font(.caption).foregroundStyle(.secondary)
+          .font(.footnote).foregroundStyle(.secondary)
         chart().clipShape(.rect(cornerRadius: Theme.Radius.sm))
         ScrollView(.horizontal, showsIndicators: false) { HStack { badges() }.font(.caption).padding(.horizontal, 16) }
           .padding(.horizontal, -16)

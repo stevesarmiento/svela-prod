@@ -427,7 +427,7 @@ private struct CoinPanelRow: View {
           VStack(alignment: .leading, spacing: 2) {
             Text(row.symbol.uppercased()).font(.subheadline.weight(.semibold))
             Text(LogoOverrides.cleanTokenName(row.name))
-              .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+              .font(.footnote).foregroundStyle(.secondary).lineLimit(1)
           }
           Spacer()
           CoinPanelReadout(coinId: row.item.coinId, currentPrice: row.currentPrice, liveChange: liveChange,
@@ -460,7 +460,7 @@ private struct CoinPanelReadout: View {
       if let change, !changeUnavailable {
         MoveWithBadge(usdMove: price.flatMap { MarketMetrics.usdMove(priceUsd: $0, percentChange: change) }, pct: change, animated: false)
       } else {
-        Text("N/A").font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
+        Text("N/A").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
       }
     }
     .transaction { if inspecting { $0.animation = nil } }

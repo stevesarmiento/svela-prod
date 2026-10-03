@@ -115,7 +115,7 @@ struct GroupEditorSheet: View {
             .background(Theme.surface, in: .rect(cornerRadius: Theme.Radius.sm))
             .overlay(RoundedRectangle(cornerRadius: Theme.Radius.sm).strokeBorder(nameError == nil ? Theme.border : Color.lossRed.opacity(0.7)))
             .onChange(of: name) { _, v in if !v.trimmingCharacters(in: .whitespaces).isEmpty { nameError = nil } }
-          if let nameError { Text(nameError).font(.caption).foregroundStyle(Color.lossRed) }
+          if let nameError { Text(nameError).font(.footnote).foregroundStyle(Color.lossRed) }
         }
       }
       ColorGridPicker(selection: $color)

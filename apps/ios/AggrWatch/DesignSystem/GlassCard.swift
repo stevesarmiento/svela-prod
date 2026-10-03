@@ -24,7 +24,7 @@ struct SectionCard<Content: View>: View {
     VStack(alignment: .leading, spacing: Theme.Spacing.sm) {
       VStack(alignment: .leading, spacing: 2) {
         Text(title).font(.headline)
-        if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
+        if let subtitle { Text(subtitle).font(.footnote).foregroundStyle(.secondary) }
       }
       content()
     }

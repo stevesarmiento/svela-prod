@@ -108,7 +108,7 @@ struct AnalysisMarketMetrics: View {
                           icon: "tengesign", tint: .lossRed)
         AnalysisMetricRow(title: "Support", value: bundle.series.suffix(21).map(\.value).min().map { UsdFormat.price($0) } ?? "—",
                           icon: "tengesign", tint: .gainGreen)
-        Text("Range of the latest 21 price observations.").font(.caption).foregroundStyle(.secondary)
+        Text("Range of the latest 21 price observations.").font(.footnote).foregroundStyle(.secondary)
       }
       technical
       structure
@@ -144,7 +144,7 @@ struct AnalysisMarketMetrics: View {
                           meter: wt.wt1, domain: -extent...extent, origin: 0)
       }
       if data.marketVision == nil && data.bollingerBands == nil {
-        Text("Indicator history is unavailable.").font(.caption).foregroundStyle(.secondary)
+        Text("Indicator history is unavailable.").font(.footnote).foregroundStyle(.secondary)
       }
     }
   }
@@ -170,7 +170,7 @@ struct AnalysisMarketMetrics: View {
         }
       }
       if data.liquidationData == nil && data.orderFlow == nil {
-        Text("Derivatives data is unavailable for this asset.").font(.caption).foregroundStyle(.secondary)
+        Text("Derivatives data is unavailable for this asset.").font(.footnote).foregroundStyle(.secondary)
       }
       AnalysisMetricRow(title: "24h trend", value: AnalysisValueStyle.percent(quote.percent_change_24h),
                         icon: quote.percent_change_24h > 2 ? "chart.line.uptrend.xyaxis" : quote.percent_change_24h < -2 ? "chart.line.downtrend.xyaxis" : "chart.line.flattrend.xyaxis",
@@ -188,7 +188,7 @@ struct ComparativeStatsPanel: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 28) {
-      Text("Benchmark: \(stats.benchmarkSymbol.uppercased())").font(.caption).foregroundStyle(.secondary)
+      Text("Benchmark: \(stats.benchmarkSymbol.uppercased())").font(.footnote).foregroundStyle(.secondary)
       AnalysisMetricSection(title: "Returns") {
         comparisonTable(first: "7d", second: "30d") { t in
           meterCell(t.return7dPct, domain: -maxReturn...maxReturn, origin: 0)
@@ -202,7 +202,7 @@ struct ComparativeStatsPanel: View {
             .foregroundStyle((t.betaVsBenchmark ?? 0) > 1.5 ? Color.orange : .secondary)
         }
         Text("Beta: recent move per 1% benchmark move. Volatility is annualized from 30 days of daily returns.")
-          .font(.caption).foregroundStyle(.secondary)
+          .font(.footnote).foregroundStyle(.secondary)
       }
       correlation
       indicators
@@ -215,7 +215,7 @@ struct ComparativeStatsPanel: View {
       GridRow {
         Text("Token").frame(maxWidth: .infinity, alignment: .leading)
         Text(first); Text(second)
-      }.font(.caption).foregroundStyle(.secondary)
+      }.font(.footnote).foregroundStyle(.secondary)
       ForEach(stats.tokens) { token in
         GridRow { tokenName(token); cells(token) }
       }
@@ -224,7 +224,7 @@ struct ComparativeStatsPanel: View {
   private func tokenName(_ token: ComparativeStats.TokenStats) -> some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(token.symbol.uppercased()).fontWeight(.semibold)
-      if token.id == stats.benchmarkId { Text("benchmark").font(.caption2).foregroundStyle(.secondary) }
+      if token.id == stats.benchmarkId { Text("benchmark").font(.caption).foregroundStyle(.secondary) }
     }.frame(maxWidth: .infinity, alignment: .leading)
   }
   private func meterCell(_ value: Double?, domain: ClosedRange<Double>, origin: Double? = nil, tint: Color? = nil, signed: Bool = true) -> some View {
@@ -311,7 +311,7 @@ struct ComparativeStatsPanel: View {
                               tint: buy > 0.5 ? .gainGreen : .lossRed, meter: buy * 100, origin: 50)
           }
           if t.openInterestChangePct == nil && t.takerBuyRatio == nil {
-            Text("Derivatives data unavailable").font(.caption).foregroundStyle(.secondary)
+            Text("Derivatives data unavailable").font(.footnote).foregroundStyle(.secondary)
           }
           if t.id != stats.benchmarkId {
             AnalysisMetricRow(title: "Excess return · 7d", value: AnalysisValueStyle.percent(t.excessReturn7dPct, suffix: "pp"), tint: AnalysisValueStyle.color(t.excessReturn7dPct))

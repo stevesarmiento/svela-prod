@@ -91,11 +91,11 @@ private struct ScreenerContent: View {
           .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
           .listRowSeparator(.hidden)
         if let caption = store.coverageCaption {
-          Text(caption).font(.caption2).foregroundStyle(.secondary).listRowSeparator(.hidden)
+          Text(caption).font(.footnote).foregroundStyle(.secondary).listRowSeparator(.hidden)
         }
         FreshnessIndicator(lastUpdatedAtMs: store.lastUpdatedAtMs, isRefreshing: store.isFetching).listRowSeparator(.hidden)
         if let error = store.error {
-          HStack { Text(error).font(.caption).foregroundStyle(Color.lossRed); Spacer(); Button("Retry") { store.refetch() }.font(.caption) }
+          HStack { Text(error).font(.footnote).foregroundStyle(Color.lossRed); Spacer(); Button("Retry") { store.refetch() }.font(.footnote) }
         }
       }
       .listRowBackground(Color.clear)
@@ -154,7 +154,7 @@ struct ScreenerRowView: View {
         TokenLogo(symbol: row.symbol, imageURL: row.image, size: 22)
           .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1))
         Text(row.symbol.uppercased()).font(.subheadline.weight(.bold))
-        Text(LogoOverrides.cleanTokenName(row.name)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        Text(LogoOverrides.cleanTokenName(row.name)).font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
         Spacer()
         if loading { SkeletonBlock(height: 12, width: 64) } else { UsdText(value: row.currentPrice, font: .number(.footnote, weight: .regular)) }
       }
@@ -461,7 +461,7 @@ struct FilterEditorSheet: View {
               Button { metricId = m.id; withAnimation { stage = 1 } } label: {
                 VStack(alignment: .leading, spacing: 2) {
                   Text(m.label)
-                  if let d = m.description { Text(d).font(.caption2).foregroundStyle(.secondary) }
+                  if let d = m.description { Text(d).font(.footnote).foregroundStyle(.secondary) }
                 }
               }
             }
@@ -499,7 +499,7 @@ struct FilterEditorSheet: View {
         .padding(12).background(Theme.surface, in: .rect(cornerRadius: Theme.Radius.sm))
         .padding(.horizontal, 16)
         .onSubmit { apply() }
-      if let error { Text(error).font(.caption).foregroundStyle(Color.lossRed).padding(.horizontal, 16) }
+      if let error { Text(error).font(.footnote).foregroundStyle(Color.lossRed).padding(.horizontal, 16) }
       Spacer()
     }
   }
@@ -547,14 +547,14 @@ struct SmartPromptSheet: View {
           .focused($focused)
           .padding(14).background(.white.opacity(0.06), in: .rect(cornerRadius: 14))
           .onSubmit { Task { await submit(draft) } }
-        if let inlineError { Text(inlineError).font(.caption).foregroundStyle(Color.lossRed) }
+        if let inlineError { Text(inlineError).font(.footnote).foregroundStyle(Color.lossRed) }
         if store.isInterpreting {
-          HStack(spacing: 8) { RingLoader(size: .small, tint: .secondary); Text("Interpreting…").font(.caption).foregroundStyle(.secondary) }
+          HStack(spacing: 8) { RingLoader(size: .small, tint: .secondary); Text("Interpreting…").font(.footnote).foregroundStyle(.secondary) }
         }
         VStack(alignment: .leading, spacing: 8) {
           ForEach(examples, id: \.self) { ex in
             Button { draft = ex; Task { await submit(ex) } } label: {
-              Text(ex).font(.caption).multilineTextAlignment(.leading)
+              Text(ex).font(.footnote).multilineTextAlignment(.leading)
                 .padding(.horizontal, 10).padding(.vertical, 6)
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [3, 3])).foregroundStyle(.white.opacity(0.2)))
             }

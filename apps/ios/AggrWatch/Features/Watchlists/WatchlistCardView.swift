@@ -76,7 +76,7 @@ struct WatchlistCardView: View {
           Text(name).font(.headline).foregroundStyle(.white).lineLimit(1)
             .frame(maxWidth: .infinity, alignment: .leading)
           if coinsCount == 0 {
-            Text("No tokens yet").font(.caption).foregroundStyle(.white.opacity(0.6))
+            Text("No tokens yet").font(.footnote).foregroundStyle(.white.opacity(0.6))
           } else if let change = aggregateChange {
             HStack(spacing: 2) {
               if change.isEstimate { Text("≈").foregroundStyle(.white.opacity(0.5)) }

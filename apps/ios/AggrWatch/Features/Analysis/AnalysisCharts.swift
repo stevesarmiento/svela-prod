@@ -60,7 +60,7 @@ struct AnalysisPriceChart: View, Equatable {
       }
       .padding(.horizontal, inset)
       if prices.count >= 2 { plot }
-      else { Text("No price history available").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 220) }
+      else { Text("No price history available").font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 220) }
     }
     .accessibilityIdentifier("analysis-price-chart")
   }
@@ -148,7 +148,7 @@ struct AnalysisComparisonChart: View, Equatable {
         .frame(height: 220)
       } else {
         Text("Not enough overlapping history to chart these tokens.")
-          .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
+          .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 120)
       }
     }
     .accessibilityIdentifier("analysis-comparison-chart")
