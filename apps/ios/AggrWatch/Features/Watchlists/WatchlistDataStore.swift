@@ -47,6 +47,7 @@ final class WatchlistDataStore {
   private var bootstrapTask: Task<Void, Never>?
   private var quotesPollTask: Task<Void, Never>?
   private var aggregateTask: Task<Void, Never>?
+  @ObservationIgnored private var aggregateWarmingPolls = 0
   private var lastCoinIdsKey = ""
   private var lastMembershipKey = ""
   private var quotesRefreshTask: Task<Void, Never>?
@@ -316,7 +317,7 @@ final class WatchlistDataStore {
     let end = TimeScale.d1.rangeEndMs()
     var received: [String: ChartSeries] = [:]
     var failed = Set<String>()
-    _ = await Self.fetchMarketChartSeries(ids: allIds, days: "1", market: market, cache: cache, force: force) { [self] id, series in
+    let fetched = await Self.fetchMarketChartSeries(ids: allIds, days: "1", market: market, cache: cache, force: force) { [self] id, series in
       guard !Task.isCancelled, generation == subscriptionGeneration, requestID == aggregateRequestID,
             membership == bootstrap.membershipKey else { return }
       if let series { received[id] = series } else { failed.insert(id) }
@@ -340,9 +341,42 @@ final class WatchlistDataStore {
         if updated.count >= 2 || cached.isEmpty, updated != cached { aggregate1dByGroup[groupId] = updated }
       }
     }
+    guard !Task.isCancelled, generation == subscriptionGeneration, requestID == aggregateRequestID else { return }
+    // Warming series land on the server a few seconds later; re-poll them like the web does
+    // instead of leaving cards empty until the 5-minute refresh.
+    if await Self.invalidateWarmingSeries(ids: allIds, fetched: fetched, days: "1", cache: cache), aggregateWarmingPolls < Self.warmingPollLimit {
+      aggregateWarmingPolls += 1
+      aggregateTask?.cancel()
+      aggregateTask = Task { [weak self] in
+        try? await Task.sleep(for: Self.warmingPollInterval)
+        guard let self, !Task.isCancelled else { return }
+        await refreshAggregates(force: false)
+      }
+    } else {
+      aggregateWarmingPolls = 0
+    }
   }
 
   struct ChartSeries: Sendable { var points: [TimePoint]; var warming: Bool }
+
+  /// Mirrors the web's warm-cycle polling: up to this many 5 s re-polls while the server is still
+  /// warming a series, then back to the regular interval.
+  static let warmingPollLimit = 24
+  static let warmingPollInterval: Duration = .seconds(5)
+
+  /// True when any requested series is still warming, thin, or missing. Drops those coins' cached
+  /// entries (and the batch entries for this range) so the next non-forced fetch re-requests only
+  /// them instead of serving the same thin payload for the cache's stale window.
+  static func invalidateWarmingSeries(ids: [String], fetched: [String: ChartSeries], days: String, cache: QueryCache) async -> Bool {
+    let warming = ids.filter { id in
+      guard let series = fetched[id] else { return true }
+      return series.warming || series.points.count < 2
+    }
+    guard !warming.isEmpty else { return false }
+    for id in warming { await cache.invalidate(prefix: ["market-chart", id, days]) }
+    await cache.invalidate(prefix: ["market-chart-batch", days])
+    return true
+  }
 
   /// Shared market-chart entry: the token page, Compare, Overview and the watchlist aggregates all
   /// read `("market-chart", id, days)`, so a batch fetch here pre-warms every other surface.

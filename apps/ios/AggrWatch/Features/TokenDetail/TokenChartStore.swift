@@ -76,15 +76,20 @@ final class TokenChartStore {
       guard let self else { return }
       // Cache-first: a bulk watchlist fetch seeds this coin's quote entry.
       await refreshQuote()
+      var warmingPoll = false
       while !Task.isCancelled {
-        await load(force: false)
+        // A warming re-poll must bypass the cache: its entry stays "fresh" for two minutes and
+        // would hand back the same thin payload the server has since filled in.
+        await load(force: warmingPoll)
         let points = data.line.count
         let interval: Duration
         if (points < 2 || isWarmingUp) && fastPollCount < 24 {
           fastPollCount += 1
+          warmingPoll = true
           interval = .seconds(5)
         } else {
           fastPollCount = 0
+          warmingPoll = false
           interval = QueryPolicy.chart.refetchInterval ?? .seconds(120)
         }
         try? await Task.sleep(for: interval)

@@ -103,9 +103,11 @@ struct GroupCoinsChart: View {
     .task(id: "\(group.id)|\(scale.rawValue)|\(ids.joined(separator: ","))|\(env.isSceneActive)|\(isVisible)|\(env.foregroundRevision)") {
       guard env.isSceneActive, isVisible else { return }
       guard !ids.isEmpty else { byCoin = [:]; return }
+      var warmingPolls = 0
       while !Task.isCancelled {
         loading = byCoin.isEmpty
-        let fetched = await WatchlistDataStore.fetchMarketChartSeries(ids: ids, days: scale.marketChartDaysParam, market: env.market, cache: env.queryCache, force: false)
+        let days = scale.marketChartDaysParam
+        let fetched = await WatchlistDataStore.fetchMarketChartSeries(ids: ids, days: days, market: env.market, cache: env.queryCache, force: false)
         guard !Task.isCancelled else { return }
         byCoin = AggregateSeries.alignToSharedAxis(fetched.mapValues { ($0.points, $0.warming) })
           .mapValues { AggregateSeries.returnSeries($0) }
@@ -114,7 +116,12 @@ struct GroupCoinsChart: View {
           scrub.windowStart = byCoin.values.compactMap { $0.first?.epochSeconds }.min().map(Double.init)
         }
         loading = false
-        do { try await Task.sleep(for: QueryPolicy.aggregateChart.refetchInterval ?? .seconds(300)) } catch { return }
+        // Re-poll warming series every few seconds (bounded) so the chart fills in on its own.
+        let warming = await WatchlistDataStore.invalidateWarmingSeries(ids: ids, fetched: fetched, days: days, cache: env.queryCache)
+        let interval: Duration
+        if warming, warmingPolls < WatchlistDataStore.warmingPollLimit { warmingPolls += 1; interval = WatchlistDataStore.warmingPollInterval }
+        else { warmingPolls = 0; interval = QueryPolicy.aggregateChart.refetchInterval ?? .seconds(300) }
+        do { try await Task.sleep(for: interval) } catch { return }
       }
     }
   }

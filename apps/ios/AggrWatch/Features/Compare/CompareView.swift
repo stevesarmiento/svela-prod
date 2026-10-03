@@ -60,9 +60,15 @@ struct CompareView: View {
     }
     .task(id: "\(scale.rawValue)|\(membershipKey)|\(env.isSceneActive)|\(env.foregroundRevision)") {
       guard env.isSceneActive, !membershipKey.isEmpty else { return }
+      var warmingPolls = 0
       while !Task.isCancelled {
-        await loadSeries()
-        do { try await Task.sleep(for: QueryPolicy.aggregateChart.refetchInterval ?? .seconds(300)) } catch { return }
+        let warming = await loadSeries()
+        // Re-poll warming series every few seconds (bounded) so the chart fills in without a
+        // scale change; otherwise wait for the regular refresh.
+        let interval: Duration
+        if warming, warmingPolls < WatchlistDataStore.warmingPollLimit { warmingPolls += 1; interval = WatchlistDataStore.warmingPollInterval }
+        else { warmingPolls = 0; interval = QueryPolicy.aggregateChart.refetchInterval ?? .seconds(300) }
+        do { try await Task.sleep(for: interval) } catch { return }
       }
     }
   }
@@ -90,15 +96,18 @@ struct CompareView: View {
     .padding(.horizontal, 16)
   }
 
-  /// One market-chart fan-out over the union of coins (concurrency 5), then equal-weight series per group.
-  private func loadSeries() async {
+  /// One batched market-chart fetch over the union of coins, then equal-weight series per group.
+  /// Returns true when some series are still warming on the server and should be re-polled soon.
+  @discardableResult
+  private func loadSeries() async -> Bool {
     let data = env.watchlistData
-    guard !scale.isAggregateChangeUnavailable else { seriesByGroup = [:]; changeByCoin = [:]; return }
+    guard !scale.isAggregateChangeUnavailable else { seriesByGroup = [:]; changeByCoin = [:]; return false }
     let ids = data.bootstrap.allCoinIds
-    guard !ids.isEmpty else { seriesByGroup = [:]; changeByCoin = [:]; loading = false; return }
+    guard !ids.isEmpty else { seriesByGroup = [:]; changeByCoin = [:]; loading = false; return false }
     loading = seriesByGroup.isEmpty
-    let fetched = await WatchlistDataStore.fetchMarketChartSeries(ids: ids, days: scale.marketChartDaysParam, market: env.market, cache: env.queryCache, force: false)
-    guard !Task.isCancelled else { return }
+    let days = scale.marketChartDaysParam
+    let fetched = await WatchlistDataStore.fetchMarketChartSeries(ids: ids, days: days, market: env.market, cache: env.queryCache, force: false)
+    guard !Task.isCancelled else { return false }
     let end = scale.rangeEndMs()
     var out: [String: [TimePoint]] = [:]
     for g in data.groups {
@@ -111,6 +120,7 @@ struct CompareView: View {
     scrub.prices = fetched.mapValues(\.points)
     scrub.windowStart = out.values.compactMap { $0.first?.epochSeconds }.min().map(Double.init)
     loading = false
+    return await WatchlistDataStore.invalidateWarmingSeries(ids: ids, fetched: fetched, days: days, cache: env.queryCache)
   }
 }
 
@@ -370,13 +380,16 @@ private struct GroupHeaderBadge: View {
   let scrub: ComparisonScrubStore
 
   var body: some View {
-    let inspected = scrub.isScrubbing ? scrub.value(for: groupID) : nil
+    let scrubbing = scrub.isScrubbing
+    let inspected = scrubbing ? scrub.value(for: groupID) : nil
     let change = inspected ?? aggregateChange
     HStack(spacing: 5) {
       if scale.isAggregateChangeUnavailable {
         PercentBadge(pct: nil)
       } else if let change {
-        PercentBadge(pct: change)
+        // A morph per header per scrub step is the dominant scrub cost with many watchlists;
+        // the badge morphs only for data changes, and is plain text while the finger is down.
+        PercentBadge(pct: change, animated: !scrubbing)
         if isEstimate && inspected == nil {
           Text("est.").font(.system(.caption2, design: .rounded)).foregroundStyle(.secondary)
         }
