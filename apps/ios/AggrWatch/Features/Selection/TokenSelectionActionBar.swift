@@ -35,7 +35,7 @@ struct TokenSelectionActionBar: View {
             .padding(6)
             .glassEffect(.regular, in: .rect(cornerRadius: Theme.Radius.pill))
         }
-        // Aufn's content-sized pill: 312 × 84 pt for three segments at default text size.
+        // Compact pill: 264 × 84 pt for three segments at default text size.
         // Labels can wrap and height grows with Dynamic Type.
         .fontDesign(.rounded)
         .padding(.horizontal, 20)
@@ -57,7 +57,7 @@ struct TokenSelectionActionBar: View {
                     .font(.footnote.weight(.semibold))
             }
             .foregroundStyle(tint ?? .primary)
-            .frame(maxWidth: 96, minHeight: segmentHeight)
+            .frame(maxWidth: 80, minHeight: segmentHeight)
             .multilineTextAlignment(.center)
             .contentShape(.rect(cornerRadius: Theme.Radius.lg))
         }
