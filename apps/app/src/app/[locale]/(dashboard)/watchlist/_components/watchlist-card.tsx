@@ -27,25 +27,7 @@ import {
   useCoinGeckoWatchlistAggregateChartIsolated,
 } from "@/hooks/use-coingecko-watchlist-aggregate-chart-isolated"
 import { getTokenLogoURL } from "@/lib/logo-overrides"
-
-// Loading shine CSS
-const loadingShineStyle = `
-  .ck-qr-shine {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 500%;
-    height: 500%;
-    background: linear-gradient(135deg, oklch(1 0 0 / 0) 0%, oklch(1 0 0 / 0.1) 50%, oklch(1 0 0 / 0) 100%);
-    animation: ck-qr-slide-diagonal 0.5s infinite;
-    z-index: 1;
-    pointer-events: none;
-  }
-  @keyframes ck-qr-slide-diagonal {
-    0% { transform: translate(-100%, -100%); }
-    100% { transform: translate(100%, 100%); }
-  }
-`;
+import { CardLoadingShine } from "@/components/card-loading-shine"
 import { WatchlistGroupIcon } from "@/components/watchlist-group-icon"
 import { COLOR_THEMES } from "@/components/color-picker"
 import { Kbd } from "@v1/ui/kbd"
@@ -256,6 +238,8 @@ export interface WatchlistCardViewProps {
   isChartPending?: boolean
   /** Shows "—" for the up/down counts. */
   isLoading?: boolean
+  /** Stable identity that staggers this card's loading shine; defaults to `name`. */
+  loadingPhaseKey?: string
   selected?: boolean
   onSelect?: () => void
   /** Rendered top-right (e.g. the edit/delete menu). */
@@ -277,6 +261,7 @@ export function WatchlistCardView({
   isChartReady,
   isChartPending = false,
   isLoading = false,
+  loadingPhaseKey,
   selected = false,
   onSelect,
   actionsSlot,
@@ -341,11 +326,8 @@ export function WatchlistCardView({
         onSelect?.()
       }}
     >
-      {/* Inject loading shine CSS only once per card */}
-      <style>{loadingShineStyle}</style>
-      {/* Loading shine overlay */}
       {shouldShowLoadingState && (
-        <div className="ck-qr-shine" />
+        <CardLoadingShine phaseKey={loadingPhaseKey ?? name} />
       )}
       <div
         className="absolute inset-0 z-0 size-full opacity-40 dark:opacity-30"
@@ -530,6 +512,7 @@ export function WatchlistCard({
       isChartReady={isChartReady}
       isChartPending={isChartPending}
       isLoading={isLoading}
+      loadingPhaseKey={group._id}
       selected={selected}
       onSelect={handleSelect}
       actionsSlot={
