@@ -43,19 +43,6 @@ export interface MarketCapOverlay {
     lineStyle?: 'solid' | 'dotted' | 'dashed';
 }
 
-export interface ProjectionOverlay {
-    /** Drift path; first point anchors at the last real close. Points may be future-dated. */
-    base: Array<{ time: Time; value: number }>;
-    /** Upper (+1σ·√t) scenario path. */
-    bull: Array<{ time: Time; value: number }>;
-    /** Lower (−1σ·√t) scenario path. */
-    bear: Array<{ time: Time; value: number }>;
-    baseColor?: string;
-    bullColor?: string;
-    bearColor?: string;
-    lineWidth?: LineWidth;
-}
-
 export interface ChartHighlightRange {
     /** Start of the highlighted window (inclusive). */
     from: Time;
@@ -106,13 +93,6 @@ export interface UseChartInstanceOptions {
      * price ATH breaks visibly above the price line.
      */
     marketCap?: MarketCapOverlay | null;
-    /**
-     * Optional forward projection overlay (dashed base trend + bull/bear cone).
-     * Points are future-dated (past the last real bar); the controller adjusts
-     * the visible range when the overlay toggles on/off so the future region
-     * comes into (and out of) view.
-     */
-    projection?: ProjectionOverlay | null;
     /**
      * Highlight a time window with two vertical boundary lines.
      * When set, the non-highlighted portion of the price series is dimmed.

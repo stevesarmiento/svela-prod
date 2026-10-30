@@ -6,12 +6,11 @@ import { Card, CardContent, CardHeader } from "@v1/ui/card"
 import { cn } from "@v1/ui/cn"
 import { Badge } from "@v1/ui/badge"
 import { useCoinGeckoChartData } from '@/hooks/use-coingecko-chart-data'
-import { useChartInstance, type HullSuiteOverlay, type MarketCapOverlay, type ProjectionOverlay } from '@/hooks/use-chart-instance'
+import { useChartInstance, type HullSuiteOverlay, type MarketCapOverlay } from '@/hooks/use-chart-instance'
 import { usePriceCalculations } from '@/hooks/use-price-calculations'
 import type { CoinMarketData } from '@/types/coins'
 import { useHullSuite } from '@/hooks/use-hull-suite'
-import { usePriceProjection } from '@/hooks/use-price-projection'
-import { generatePastelColors, addOpacityToColor, CANDLE_UP_COLOR, CANDLE_DOWN_COLOR } from '@/lib/chart-colors'
+import { generatePastelColors, addOpacityToColor } from '@/lib/chart-colors'
 import { IconTriangleFill } from 'symbols-react'
 import { useQuery as useTanStackQuery } from '@tanstack/react-query'
 import { CoinsInternalApi } from '@/lib/effect/coins-internal-api'
@@ -741,25 +740,6 @@ export const PriceChart = memo(function PriceChart({
     }
   }, [marketCapData, marketCapColor])
 
-  // Forward projection (dashed base trend + bull/bear scenario curves).
-  // Always on. Never projects off a warming/stale tail — recomputes when the
-  // backfill lands. The Hull Suite MHULL line feeds the trend-slope blend;
-  // BBWP + RSI divergences are derived inside the hook from the same bars.
-  const projectionData = usePriceProjection(ohlcData, !isWarmingUp, hullSuiteData.MHULL)
-
-  const projectionOverlay = useMemo<ProjectionOverlay | null>(() => {
-    if (!projectionData) return null
-    return {
-      base: projectionData.base,
-      bull: projectionData.bull,
-      bear: projectionData.bear,
-      baseColor: isDarkMode ? 'oklch(1 0 0 / 0.55)' : 'oklch(0 0 0 / 0.55)',
-      bullColor: addOpacityToColor(CANDLE_UP_COLOR, 0.55),
-      bearColor: addOpacityToColor(CANDLE_DOWN_COLOR, 0.55),
-      lineWidth: 1,
-    }
-  }, [projectionData, isDarkMode])
-
   // NOTE: the realtime spot price is intentionally NOT merged here — it
   // flows to the chart as an O(1) last-bar update via the livePriceUsd
   // option. Including it in this memo re-mapped/re-sorted the entire
@@ -784,7 +764,6 @@ export const PriceChart = memo(function PriceChart({
     isDarkMode,
     hullSuite: hullSuiteOverlay,
     marketCap: showMarketCap ? marketCapOverlay : null,
-    projection: projectionOverlay,
     onCrosshairMove: handleCrosshairMove,
     onCrosshairTimeMove: handleCrosshairTimeMove,
     highlightRange,
